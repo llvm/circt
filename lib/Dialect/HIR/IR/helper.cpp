@@ -131,10 +131,7 @@ llvm::Optional<int64_t> getConstantIntValue(Value var) {
 
   auto integerAttr = constantOp.value().dyn_cast<IntegerAttr>();
   assert(integerAttr);
-  auto out = integerAttr.getValue().getZExtValue();
-  if (out > 100000)
-    constantOp->emitError() << "This should not be -ve.";
-  return out;
+  return integerAttr.getInt();
 }
 
 mlir::LogicalResult isConstantIntValue(mlir::Value var) {
@@ -430,5 +427,19 @@ Value emitRegisterAlloca(OpBuilder &builder, Type elementTy) {
       hir::MemrefType::get(builder.getContext(), 1, elementTy,
                            hir::DimKind::BANK),
       builder.getStringAttr("reg"), ports);
+}
+
+LogicalResult validatePositiveConstant(ArrayRef<Value> indices) {
+  for (auto idx : indices) {
+    auto idxValue = getConstantIntValue(idx);
+    if (!idxValue)
+      return idx.getDefiningOp()->emitError(
+          "Expected this to be a arith.constant");
+
+    if (*idxValue < 0)
+      return idx.getDefiningOp()->emitError(
+          "Expected this to be a +ve arith.constant");
+  }
+  return success();
 }
 } // namespace helper

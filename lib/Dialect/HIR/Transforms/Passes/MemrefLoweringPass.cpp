@@ -29,7 +29,7 @@ struct MemrefPortInterface {
 
 class MapMemrefToPortInterfaces {
 public:
-  void insert(Value mem, SmallVector<MemrefPortInterface> memPortInterfaces) {
+  void map(Value mem, SmallVector<MemrefPortInterface> memPortInterfaces) {
     assert(mem.getType().isa<hir::MemrefType>());
     assert(mapMemref2idx.find(mem) == mapMemref2idx.end());
     SmallVector<int64_t> portLocs;
@@ -50,7 +50,7 @@ public:
 
   size_t getNumPorts(Value mem) { return mapMemref2idx[mem].size(); }
 
-  MemrefPortInterface &get(Value mem, int64_t port) {
+  MemrefPortInterface &getInterface(Value mem, int64_t port) {
     return portInterfaceList[mapMemref2idx[mem][port]];
   }
   ArrayRef<MemrefPortInterface> getAllPortInterfaces() {
@@ -275,7 +275,7 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
 
   helper::declareExternalFuncForCall(callOp, inputBusNames);
 
-  mapMemrefToPortInterfaces.insert(op.res(), memrefPortInterfaces);
+  mapMemrefToPortInterfaces.map(op.res(), memrefPortInterfaces);
   return success();
 }
 
@@ -444,7 +444,7 @@ void MemrefLoweringPass::insertBusArguments(hir::FuncLike op) {
             portInterface);
         memrefPortInterfaces.push_back(portInterface);
       }
-      mapMemrefToPortInterfaces.insert(arg, memrefPortInterfaces);
+      mapMemrefToPortInterfaces.map(arg, memrefPortInterfaces);
     }
   }
   op.updateArguments(inputAttrs);
@@ -491,7 +491,7 @@ void MemrefLoweringPass::removeMemrefArguments(hir::FuncLike op) {
 
 LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   auto &portInterface =
-      mapMemrefToPortInterfaces.get(op.mem(), op.port().getValue());
+      mapMemrefToPortInterfaces.getInterface(op.mem(), op.port().getValue());
 
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
@@ -507,17 +507,17 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   if (portInterface.addrDataBusTensor) {
     assert(portInterface.addrEnableBusTensor);
     portInterface.addrEnableBusTensor = insertDataSendLogic(
-        builder, c1, portInterface.addrEnableBusTensor, op.filterIndices(BANK),
-        op.tstart(), op.offsetAttr());
+        builder, op.getLoc(), c1, portInterface.addrEnableBusTensor,
+        op.filterIndices(BANK), op.tstart(), op.offsetAttr());
     portInterface.addrDataBusTensor = insertDataSendLogic(
-        builder, addrTuple, portInterface.addrDataBusTensor,
+        builder, op.getLoc(), addrTuple, portInterface.addrDataBusTensor,
         op.filterIndices(BANK), op.tstart(), op.offsetAttr());
   }
   // Insert logic to send rd valid signal and receive the data after rdLatency.
   assert(portInterface.rdEnableBusTensor);
-  portInterface.rdEnableBusTensor =
-      insertDataSendLogic(builder, c1, portInterface.rdEnableBusTensor,
-                          op.filterIndices(BANK), op.tstart(), op.offsetAttr());
+  portInterface.rdEnableBusTensor = insertDataSendLogic(
+      builder, op.getLoc(), c1, portInterface.rdEnableBusTensor,
+      op.filterIndices(BANK), op.tstart(), op.offsetAttr());
 
   auto loadValue = insertDataRecvLogic(
       builder, op.getLoc(), op->getAttrOfType<mlir::ArrayAttr>("names"),
@@ -531,7 +531,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
 
 LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   auto &portInterface =
-      mapMemrefToPortInterfaces.get(op.mem(), op.port().getValue());
+      mapMemrefToPortInterfaces.getInterface(op.mem(), op.port().getValue());
 
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
@@ -546,21 +546,21 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   if (portInterface.addrDataBusTensor) {
     assert(portInterface.addrEnableBusTensor);
     portInterface.addrEnableBusTensor = insertDataSendLogic(
-        builder, c1, portInterface.addrEnableBusTensor, op.filterIndices(BANK),
-        op.tstart(), op.offsetAttr());
+        builder, op.getLoc(), c1, portInterface.addrEnableBusTensor,
+        op.filterIndices(BANK), op.tstart(), op.offsetAttr());
     portInterface.addrDataBusTensor = insertDataSendLogic(
-        builder, addrTuple, portInterface.addrDataBusTensor,
+        builder, op.getLoc(), addrTuple, portInterface.addrDataBusTensor,
         op.filterIndices(BANK), op.tstart(), op.offsetAttr());
   }
   // Insert logic to send wr valid and data.
   assert(portInterface.wrEnableBusTensor);
-  portInterface.wrEnableBusTensor =
-      insertDataSendLogic(builder, c1, portInterface.wrEnableBusTensor,
-                          op.filterIndices(BANK), op.tstart(), op.offsetAttr());
+  portInterface.wrEnableBusTensor = insertDataSendLogic(
+      builder, op.getLoc(), c1, portInterface.wrEnableBusTensor,
+      op.filterIndices(BANK), op.tstart(), op.offsetAttr());
 
-  portInterface.wrDataBusTensor =
-      insertDataSendLogic(builder, op.value(), portInterface.wrDataBusTensor,
-                          op.filterIndices(BANK), op.tstart(), op.offsetAttr());
+  portInterface.wrDataBusTensor = insertDataSendLogic(
+      builder, op.getLoc(), op.value(), portInterface.wrDataBusTensor,
+      op.filterIndices(BANK), op.tstart(), op.offsetAttr());
 
   opsToErase.push_back(op);
   return success();
@@ -594,7 +594,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
     assert(ports.size() == numPorts);
 
     for (size_t j = 0; j < ports.size(); j++) {
-      auto &portInterface = mapMemrefToPortInterfaces.get(operand, j);
+      auto &portInterface = mapMemrefToPortInterfaces.getInterface(operand, j);
       if (portInterface.addrEnableBusTensor) {
         auto addrEnableBusT = builder.create<hir::BusTensorOp>(
             builder.getUnknownLoc(),

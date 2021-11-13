@@ -70,5 +70,8 @@ mlir::Value insertMultiBusSelectLogic(mlir::OpBuilder &builder,
                                       mlir::Value trueBusT,
                                       mlir::Value falseBusT);
 mlir::Value emitRegisterAlloca(mlir::OpBuilder &builder, mlir::Type elementTy);
+
+mlir::LogicalResult
+validatePositiveConstant(mlir::ArrayRef<mlir::Value> indices);
 } // namespace helper
 #endif

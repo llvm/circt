@@ -6,7 +6,7 @@ def SimplifyCtrl : Pass<"hir-simplify-ctrl", "hir::FuncOp"> {
   let summary = "Simplifies ForOp and IfOp.";
 
   let constructor = "circt::hir::createSimplifyCtrlPass()";
-  let dependentDialects = ["circt::comb::CombDialect"];
+  let dependentDialects = ["circt::hw::HWDialect","circt::comb::CombDialect"];
 }
 
 def RegisterAllocation : Pass<"hir-register-alloc", "hir::FuncOp"> {
@@ -31,7 +31,7 @@ def MemrefLowering : Pass<"hir-lower-memref", "mlir::ModuleOp"> {
   let description = [{This pass lowers hir.memref to hir.bus for codegen.}];
 
   let constructor = "circt::hir::createMemrefLoweringPass()";
-  let dependentDialects = ["hir::HIRDialect"];
+  let dependentDialects = ["circt::hw::HWDialect","hir::HIRDialect"];
 }
 
 def ScheduleVerifier : Pass<"hir-schedule-verifier", "hir::FuncOp"> {

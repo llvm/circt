@@ -41,16 +41,13 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   assert(forOp.offset().getValue() == 0);
   Value iterTStart = forOp.tstart();
   auto *context = builder.getContext();
-
   // insert the unrolled body.
 
   for (int i = lb; i < ub; i += step) {
-    Value loopIV = builder
-                       .create<mlir::arith::ConstantOp>(builder.getUnknownLoc(),
-                                                        IndexType::get(context),
-                                                        builder.getIndexAttr(0))
-                       .getResult();
-
+    auto loopIVOp = builder.create<mlir::arith::ConstantOp>(
+        builder.getUnknownLoc(), IndexType::get(context),
+        builder.getIndexAttr(i));
+    helper::setNames(loopIVOp, forOp.getInductionVarName());
     BlockAndValueMapping operandMap;
     // Latch the captures and update them as the new captures for the next
     // iteration.
@@ -61,7 +58,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
                          iterTStart, builder.getI64IntegerAttr(0)));
     }
     operandMap.map(iterTimeVar, iterTStart);
-    operandMap.map(forOp.getInductionVar(), loopIV);
+    operandMap.map(forOp.getInductionVar(), loopIVOp.getResult());
 
     // Copy the loop body.
     for (auto &operation : loopBodyBlock) {

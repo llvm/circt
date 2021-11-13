@@ -25,9 +25,13 @@ static Type getBusElementType(Value bus) {
   return ty.getElementType();
 }
 
-Value insertDataSendLogic(OpBuilder &builder, Value data, Value rootDataBusT,
-                          ArrayRef<Value> indices, Value tVar,
-                          IntegerAttr offsetAttr) {
+Value insertDataSendLogic(OpBuilder &builder, Location errorLoc, Value data,
+                          Value rootDataBusT, ArrayRef<Value> indices,
+                          Value tVar, IntegerAttr offsetAttr) {
+  if (failed(helper::validatePositiveConstant(indices))) {
+    emitError(errorLoc) << "Could not validate the indices for this op.";
+    assert(false);
+  }
   auto funcOp =
       builder.getInsertionBlock()->getParent()->getParentOfType<hir::FuncOp>();
   OpBuilder funcOpBuilder(funcOp);
