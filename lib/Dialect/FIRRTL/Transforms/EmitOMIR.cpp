@@ -61,7 +61,7 @@ private:
   void emitValue(Attribute node, llvm::json::OStream &jsonStream);
   void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream);
 
-  SmallString<8> addSymbol(FlatSymbolRefAttr symbol) {
+  SmallString<8> addSymbolImpl(Attribute symbol) {
     unsigned id;
     auto it = symbolIndices.find(symbol);
     if (it != symbolIndices.end()) {
@@ -75,11 +75,37 @@ private:
     ("{{" + Twine(id) + "}}").toVector(str);
     return str;
   }
+  SmallString<8> addSymbol(hw::InnerRefAttr symbol) {
+    return addSymbolImpl(symbol);
+  }
+  SmallString<8> addSymbol(FlatSymbolRefAttr symbol) {
+    return addSymbolImpl(symbol);
+  }
   SmallString<8> addSymbol(StringAttr symbolName) {
     return addSymbol(FlatSymbolRefAttr::get(symbolName));
   }
   SmallString<8> addSymbol(Operation *op) {
     return addSymbol(SymbolTable::getSymbolName(op));
+  }
+
+  /// Returns an operation's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(Operation *op);
+  /// Returns a port's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
+  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// to that operation.
+  hw::InnerRefAttr getInnerRefTo(Operation *op);
+  /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
+  /// to that port.
+  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
+
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
   }
 
   /// Whether any errors have occurred in the current `runOnOperation`.
@@ -97,6 +123,7 @@ private:
   SmallDenseMap<Attribute, unsigned> symbolIndices;
   /// Temporary `firrtl.nla` operations to be deleted at the end of the pass.
   SmallVector<NonLocalAnchor> removeTempNLAs;
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 };
 } // namespace
 
@@ -145,6 +172,7 @@ void EmitOMIRPass::runOnOperation() {
   symbols.clear();
   symbolIndices.clear();
   removeTempNLAs.clear();
+  moduleNamespaces.clear();
   CircuitOp circuitOp = getOperation();
 
   // Gather the relevant annotations from the circuit. On the one hand these are
@@ -500,7 +528,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
     jsonStream.attribute("info", buf);
     jsonStream.attribute("name", "ports");
     jsonStream.attributeArray("value", [&] {
-      for (auto &port : module.getPorts()) {
+      for (auto port : llvm::enumerate(module.getPorts())) {
         jsonStream.object([&] {
           // Emit the `ref` field.
           buf.assign("OMDontTouchedReferenceTarget:~");
@@ -508,18 +536,17 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
           buf.push_back('|');
           buf.append(addSymbol(module));
           buf.push_back('>');
-          // TODO: This should really use a symbol on the port.
-          buf.append(port.name.getValue());
+          buf.append(addSymbol(getInnerRefTo(module, port.index())));
           jsonStream.attribute("ref", buf);
 
           // Emit the `direction` field.
           buf.assign("OMString:");
-          buf.append(port.isOutput() ? "Output" : "Input");
+          buf.append(port.value().isOutput() ? "Output" : "Input");
           jsonStream.attribute("direction", buf);
 
           // Emit the `width` field.
           buf.assign("OMBigInt:");
-          Twine(port.type.getBitWidthOrSentinel()).toVector(buf);
+          Twine(port.value().type.getBitWidthOrSentinel()).toVector(buf);
           jsonStream.attribute("width", buf);
         });
       }
@@ -664,7 +691,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // Serialize the local or non-local module/instance hierarchy path.
   if (tracker.nla) {
     bool notFirst = false;
-    StringAttr instName;
+    hw::InnerRefAttr instName;
     for (auto modAndName : llvm::zip(tracker.nla.modpath().getValue(),
                                      tracker.nla.namepath().getValue())) {
       auto symAttr = std::get<0>(modAndName).cast<FlatSymbolRefAttr>();
@@ -675,22 +702,22 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
         target.push_back('/');
       notFirst = true;
       if (instName) {
-        // TODO: This should *really* drop a symbol to represent the instance
-        // name. See below.
-        target.append(instName.getValue());
+        target.append(addSymbol(instName));
         target.push_back(':');
       }
       target.append(addSymbol(module));
-      instName = nameAttr;
 
-      // Find an instance with the given name in this module.
+      // Find an instance with the given name in this module. Ensure it has a
+      // symbol that we can refer to.
+      instName = {};
       module->walk([&](InstanceOp instOp) {
-        if (instOp.nameAttr() == nameAttr) {
-          LLVM_DEBUG(llvm::dbgs()
-                     << "Marking NLA-participating instance " << nameAttr
-                     << " in module " << symAttr << " as dont-touch\n");
-          AnnotationSet::addDontTouch(instOp);
-        }
+        if (instOp.nameAttr() != nameAttr)
+          return;
+        LLVM_DEBUG(llvm::dbgs()
+                   << "Marking NLA-participating instance " << nameAttr
+                   << " in module " << symAttr << " as dont-touch\n");
+        AnnotationSet::addDontTouch(instOp);
+        instName = getInnerRefTo(instOp);
       });
     }
   } else {
@@ -703,21 +730,18 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
   // Serialize any potential component *inside* the module that this target may
   // specifically refer to.
-  StringRef componentName;
+  hw::InnerRefAttr componentName;
   if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
-    // TODO: This should *really* drop a symbol placeholder into the JSON. But
-    // we currently don't have any symbols for these FIRRTL ops. May be solved
-    // through NLAs.
-    componentName = tracker.op->getAttrOfType<StringAttr>("name").getValue();
+    componentName = getInnerRefTo(tracker.op);
     AnnotationSet::addDontTouch(tracker.op);
-    LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted `" << componentName
-                            << "` as dont-touch\n");
+    LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
+                            << " as dont-touch\n");
   } else if (!isa<FModuleOp>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;
     return jsonStream.value("<error>");
   }
-  if (!componentName.empty()) {
+  if (componentName) {
     // Check if the targeted component is going to be emitted as an instance.
     // This is trivially the case for `InstanceOp`s, but also for `MemOp`s that
     // get converted to an instance during lowering to HW dialect and generator
@@ -726,25 +750,58 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       if (type == "OMMemberInstanceTarget") {
         if (auto instOp = dyn_cast<InstanceOp>(tracker.op)) {
           target.push_back('/');
-          target.append(instOp.name());
+          target.append(addSymbol(componentName));
           target.push_back(':');
           target.append(addSymbol(instOp.moduleNameAttr()));
           return;
         }
         if (auto memOp = dyn_cast<MemOp>(tracker.op)) {
           target.push_back('/');
-          target.append(memOp.name());
+          target.append(addSymbol(componentName));
           target.push_back(':');
           target.append(memOp.getSummary().getFirMemoryName());
           return;
         }
       }
       target.push_back('>');
-      target.append(componentName);
+      target.append(addSymbol(componentName));
     }();
   }
 
   jsonStream.value(target);
+}
+
+StringAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
+  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  if (attr)
+    return attr;
+  auto module = op->getParentOfType<FModuleOp>();
+  auto name = getModuleNamespace(module).newName("omir_sym");
+  attr = StringAttr::get(op->getContext(), name);
+  op->setAttr("inner_sym", attr);
+  return attr;
+}
+
+StringAttr EmitOMIRPass::getOrAddInnerSym(FModuleLike module, size_t portIdx) {
+  auto attr = module.getPortSymbolAttr(portIdx);
+  if (attr && !attr.getValue().empty())
+    return attr;
+  auto name = getModuleNamespace(module).newName("omir_sym");
+  attr = StringAttr::get(module.getContext(), name);
+  module.setPortSymbolAttr(portIdx, attr);
+  return attr;
+}
+
+hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(Operation *op) {
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
+      getOrAddInnerSym(op));
+}
+
+hw::InnerRefAttr EmitOMIRPass::getInnerRefTo(FModuleLike module,
+                                             size_t portIdx) {
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
+                               getOrAddInnerSym(module, portIdx));
 }
 
 //===----------------------------------------------------------------------===//
