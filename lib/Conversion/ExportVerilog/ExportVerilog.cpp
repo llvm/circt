@@ -2014,20 +2014,23 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
     return true;
 
-  // If this operation has multiple uses, we can't generally inline it.
-  if (!op->getResult(0).hasOneUse()) {
-    // We don't want `hw.name` affecting inline vs not, so count the number of
-    // non-`hw.name` users and get the rest of this branch on that being more
-    // than 1. Do this after the above check since this is more expensive.
+  // We don't want `hw.name` affecting inline vs not, so count the number of
+  // non-`hw.name` users and get the rest of this branch on that being more than
+  // 1. Make this a separate function since it is more expensive than the
+  // `hasOneUse()` check, so run it only if that check fails.
+  auto hasOneNonHwNameUse = [op]() {
     size_t nonHwNameUserCount = 0;
     for (auto user : op->getResult(0).getUsers())
       if (!isa<NameOp>(user))
         nonHwNameUserCount++;
+    return nonHwNameUserCount == 1;
+  };
 
-    if (nonHwNameUserCount != 1)
-      // ... unless it is nullary and duplicable, then we can emit it inline.
-      if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
-        return false;
+  // If this operation has multiple uses, we can't generally inline it.
+  if (!op->getResult(0).hasOneUse() && !hasOneNonHwNameUse()) {
+    // ... unless it is nullary and duplicable, then we can emit it inline.
+    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
+      return false;
   }
 
   // If it isn't structurally possible to inline this expression, emit it out
