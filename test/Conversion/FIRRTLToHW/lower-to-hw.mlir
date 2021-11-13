@@ -1345,7 +1345,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // module connectNarraow:
   //   input clock: Clock
   //   input a: UInt<1>[2]
-  //   output b: UInt<2>[2]
+  //   output b: UInt<3>[2]
 
   //   reg r: UInt<2>[2], clock
   //   r <= a
@@ -1369,6 +1369,28 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %11 = hw.array_create %8, %10 : i3
     // CHECK-NEXT: sv.assign %.b.output, %11 : !hw.array<2xi3>
     // CHECK-NEXT: hw.output %0 : !hw.array<2xi3>
+  }
+
+  // CHECK-LABEL: hw.module @partialConnectVector
+  firrtl.module @partialConnectVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<3>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
+    %r = firrtl.reg %clock  : !firrtl.vector<uint<2>, 2>
+    firrtl.partialconnect %r, %a : !firrtl.vector<uint<2>, 2>, !firrtl.vector<uint<3>, 2>
+    firrtl.partialconnect %b, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<2>, 2>
+    // CHECK:      %2 = hw.array_get %a[%false] : !hw.array<2xi3>
+    // CHECK-NEXT: %3 = comb.extract %2 from 0 : (i3) -> i2
+    // CHECK-NEXT: %4 = hw.array_get %a[%true] : !hw.array<2xi3>
+    // CHECK-NEXT: %5 = comb.extract %4 from 0 : (i3) -> i2
+    // CHECK-NEXT: %6 = hw.array_create %3, %5 : i2
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r, %6 : !hw.array<2xi2>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %7 = hw.array_get %1[%false] : !hw.array<2xi2>
+    // CHECK-NEXT: %8 = comb.extract %7 from 0 : (i2) -> i1
+    // CHECK-NEXT: %9 = hw.array_get %1[%true] : !hw.array<2xi2>
+    // CHECK-NEXT: %10 = comb.extract %9 from 0 : (i2) -> i1
+    // CHECK-NEXT: %11 = hw.array_create %8, %10 : i1
+    // CHECK-NEXT: sv.assign %.b.output, %11 : !hw.array<2xi1>
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xi1>
   }
 
   // CHECK-LABEL: hw.module @SubIndex

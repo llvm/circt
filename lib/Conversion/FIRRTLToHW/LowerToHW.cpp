@@ -936,7 +936,8 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
             .getResult(0);
 
   if (connectSrc.getType().isa<FVectorType>()) {
-    // TODO: Probably we can apply PadPrimOp for each elements.
+    // If we are trying to connect a vector, we need to check both of the width
+    // of connections.
     auto srcBaseType =
         connectSrc.getType().cast<FIRRTLType>().getVectorBaseType();
     auto destBaseType = flipValue.getType()
@@ -945,10 +946,13 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
                             .getVectorBaseType();
     if (!srcBaseType || !destBaseType)
       return {};
-    if (srcBaseType.getBitWidthOrSentinel() == -1 ||
-        destBaseType.getBitWidthOrSentinel() == -1 ||
-        (srcBaseType.getBitWidthOrSentinel() !=
-         destBaseType.getBitWidthOrSentinel()))
+    assert(srcBaseType.getBitWidthOrSentinel() != -1 &&
+           destBaseType.getBitWidthOrSentinel() != -1 &&
+           "width must be inferred");
+
+    if (srcBaseType.getBitWidthOrSentinel() !=
+        destBaseType.getBitWidthOrSentinel())
+      // TODO: Probably we can apply PadPrimOp for each elements.
       return {};
   } else {
     // We know it must be the destination operand due to the types, but the
@@ -1658,6 +1662,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     auto baseSourceType =
         value.getType().cast<FIRRTLType>().getVectorBaseType();
     auto baseResultType = getVectorBaseType(result.getType());
+    // If one of them is not simple vector, stop lowering.
     if (!baseSourceType || !baseDestType || !baseResultType)
       return {};
 
@@ -1673,8 +1678,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     auto resultType = builder.getIntegerType(destWidth);
     if (srcWidth > unsigned(destWidth)) {
       auto extract = [&](Value value) {
-        return builder.createOrFold<comb::ExtractOp>(resultType, result, 0);
-        builder.emitError("operand should not be a truncation");
+        return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
       };
       return mapArray(result, extract);
     }
