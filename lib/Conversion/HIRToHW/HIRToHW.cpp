@@ -55,7 +55,7 @@ private:
 
 private:
   OpBuilder *builder;
-  BlockAndValueMapping mapHIRToHWValue;
+  HIRToHWMapping mapHIRToHWValue;
   llvm::DenseMap<StringRef, uint64_t> mapFuncNameToInstanceCount;
   SmallVector<Operation *> opsToErase;
   Value clk;
@@ -210,8 +210,8 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   uint64_t i;
   for (i = 0; i < sendBuses.size(); i++) {
     auto placeHolderSSAVar = mapHIRToHWValue.lookup(sendBuses[i]);
-    placeHolderSSAVar.replaceAllUsesWith(instanceOp.getResult(i));
-    mapHIRToHWValue.map(sendBuses[i], instanceOp.getResult(i));
+    mapHIRToHWValue.replaceAllHWUses(placeHolderSSAVar,
+                                     instanceOp.getResult(i));
   }
 
   // Map the CallOp return vars to instance op return vars.
@@ -410,8 +410,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusSendOp op) {
   }
   auto newBus = builder->create<comb::MuxOp>(
       builder->getUnknownLoc(), value.getType(), tstart, value, defaultValue);
-  placeHolderBus.replaceAllUsesWith(newBus);
-  mapHIRToHWValue.map(op.bus(), newBus);
+  mapHIRToHWValue.replaceAllHWUses(placeHolderBus, newBus);
   return success();
 }
 
@@ -597,25 +596,24 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorInsertElementOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusAssignOp op) {
-  // dest is predefined using a placeholder.
-  mapHIRToHWValue.lookup(op.dest()).replaceAllUsesWith(
-      mapHIRToHWValue.lookup(op.src()));
-  mapHIRToHWValue.map(op.dest(), mapHIRToHWValue.lookup(op.src()));
+  auto hwDest = mapHIRToHWValue.lookup(op.dest());
+  assert(isa<sv::ConstantXOp>(hwDest.getDefiningOp()));
+  auto hwSrc = mapHIRToHWValue.lookup(op.src());
+  mapHIRToHWValue.replaceAllHWUses(hwDest, hwSrc);
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusTensorAssignOp op) {
   // dest is predefined using a placeholder.
-  mapHIRToHWValue.lookup(op.dest()).replaceAllUsesWith(
-      mapHIRToHWValue.lookup(op.src()));
-  mapHIRToHWValue.map(op.dest(), mapHIRToHWValue.lookup(op.src()));
+  mapHIRToHWValue.replaceAllHWUses(mapHIRToHWValue.lookup(op.dest()),
+                                   mapHIRToHWValue.lookup(op.src()));
   return success();
 }
 LogicalResult HIRToHWPass::visitOp(hir::BusTensorAssignElementOp op) {
   auto hwArray = mapHIRToHWValue.lookup(op.tensor());
   auto hwElement = mapHIRToHWValue.lookup(op.bus());
   if (!hwArray.getType().isa<hw::ArrayType>()) {
-    hwArray.replaceAllUsesWith(hwElement);
+    mapHIRToHWValue.replaceAllHWUses(hwArray, hwElement);
     mapHIRToHWValue.map(op.tensor(), hwElement);
     return success();
   }
@@ -629,7 +627,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorAssignElementOp op) {
           indices,
           op.tensor().getType().dyn_cast<hir::BusTensorType>().getShape())
           .getValue();
-  arrayElements[idx].replaceAllUsesWith(hwElement);
+  arrayElements[arrayElements.size() - idx - 1].replaceAllUsesWith(hwElement);
   return success();
 }
 
@@ -661,8 +659,8 @@ LogicalResult HIRToHWPass::visitOp(hir::DelayOp op) {
 }
 
 LogicalResult HIRToHWPass::visitHWOp(Operation *operation) {
-
-  auto *clonedOperation = builder->clone(*operation, mapHIRToHWValue);
+  auto operandMap = mapHIRToHWValue.getBlockAndValueMapping();
+  auto *clonedOperation = builder->clone(*operation, operandMap);
   for (size_t i = 0; i < operation->getNumResults(); i++) {
     mapHIRToHWValue.map(operation->getResult(i), clonedOperation->getResult(i));
   }

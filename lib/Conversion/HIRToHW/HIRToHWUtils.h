@@ -1,6 +1,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/helper.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 
@@ -53,3 +54,40 @@ Value insertConstArrayGetLogic(OpBuilder &builder, Value arr, int idx);
 
 Value getClkFromHWModule(hw::HWModuleOp op);
 Value getResetFromHWModule(hw::HWModuleOp op);
+
+class HIRToHWMapping {
+private:
+  DenseMap<Value, Value> mapHIRToHWValue;
+
+public:
+  Value lookup(Value hirValue) {
+    assert(mapHIRToHWValue.find(hirValue) != mapHIRToHWValue.end());
+    return mapHIRToHWValue.lookup(hirValue);
+  }
+  void map(Value hirValue, Value hwValue) {
+    assert(hirValue.getParentRegion()->getParentOfType<hir::FuncOp>());
+    assert(hwValue.getParentRegion()->getParentOfType<hw::HWModuleOp>());
+    mapHIRToHWValue[hirValue] = hwValue;
+  }
+
+  BlockAndValueMapping getBlockAndValueMapping() {
+    BlockAndValueMapping blockAndValueMap;
+    for (auto keyValue : mapHIRToHWValue) {
+      blockAndValueMap.map(keyValue.getFirst(), keyValue.getSecond());
+    }
+    return blockAndValueMap;
+  }
+
+  // This function ensures that all the 'hirValue -> from' get updated
+  // to 'hirValue -> to'.
+  // There can be multiple such values because of assign ops in hir dialect.
+  void replaceAllHWUses(Value from, Value to) {
+    assert(from.getParentRegion()->getParentOfType<hw::HWModuleOp>());
+    assert(to.getParentRegion()->getParentOfType<hw::HWModuleOp>());
+    from.replaceAllUsesWith(to);
+    for (auto keyValue : mapHIRToHWValue) {
+      if (keyValue.getSecond() == from)
+        mapHIRToHWValue[keyValue.getFirst()] = to;
+    }
+  }
+};

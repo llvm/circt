@@ -266,9 +266,9 @@ void MemrefLoweringPass::initUnConnectedPorts(hir::FuncOp op) {
   OpBuilder builder(op);
   auto *returnOperation = &op.body().front().back();
   builder.setInsertionPoint(returnOperation);
-  // for (auto memoryInterface : memrefInfo.getAllMemoryInterfaces()) {
-  //  initUnconnectedMemoryInterface(builder, memoryInterface);
-  //}
+  for (auto memoryInterface : memrefInfo.getAllMemoryInterfaces()) {
+    initUnconnectedMemoryInterface(builder, memoryInterface);
+  }
 }
 
 SmallVector<Value> filterMemrefArgs(Block::BlockArgListType args) {

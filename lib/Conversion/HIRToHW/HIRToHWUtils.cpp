@@ -175,8 +175,6 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
                       Value reset) {
   assert(input.getType().isa<mlir::IntegerType>() ||
          input.getType().isa<hw::ArrayType>());
-  builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
-                                  "getDelayedValue start.");
   auto nameAttr = name ? builder->getStringAttr(name.getValue()) : StringAttr();
 
   Type regTy;
@@ -239,8 +237,6 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
   }
 
   assert(input.getType() == output.getType());
-  builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
-                                  "getDelayedValue end.");
   return output;
 }
 

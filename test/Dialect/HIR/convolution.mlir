@@ -1,100 +1,126 @@
-#r_bram = {"rd_latency"=1}
-#r_reg = {"rd_latency"=1}
-#w_reg = {"wr_latency"=1}
-#w_bram = {"wr_latency"=1}
 // RUN: circt-opt %s
-hir.func.extern @weighted_average at %t(%wndw : !hir.memref<(bank 3)x(bank 3)xi32> ports [#r_reg,#w_reg]) -> (%res: i32 delay 2)
+#bram_r = {"rd_latency"=1}
+#reg_r = {"rd_latency"=0}
+#bram_w = {"wr_latency"=1}
+#reg_w = {"wr_latency"=1}
 
-hir.func @convolution at %t(
-%A :!hir.memref<16x16xi32> ports [#r_bram],
-%B :!hir.memref<16x16xi32> ports [#w_bram]){
+hir.func.extern @i32mult_dsp48 at %t (%a: i32, %b: i32) ->(%p: i32 delay 2)
 
-  %buff = hir.alloca("bram") :!hir.memref<(bank 3)x16xi32> ports [#r_bram,#w_bram]
-  %wndw = hir.alloca("bram") :!hir.memref<(bank 3)x(bank 3)xi32> ports [#r_reg, #w_reg]
+hir.func @hir_convolution at %t(
+%img :!hir.memref<8x8xi32> ports [#bram_r],
+%kernel :!hir.memref<2x2xi32> ports [#bram_r],
+%output : !hir.memref<8x8xi32>ports [#bram_w]){
 
-  %0 =  arith.constant 0 :index  
-  %1 =  arith.constant 1 :index
-  %2 =  arith.constant 2 :index
-  %3 =  arith.constant 3 :index
-  %4 =  arith.constant 4 :index
-  %ub = arith.constant 15:index
-  %c0_i4 = arith.constant 0 :i4 
-  %c1_i4 = arith.constant 1 :i4
-  %ub_i4 = arith.constant 15 :i4
+  %c0_i4 = hw.constant  0:i4
+  %c7_i4 = hw.constant  7:i4
+  %c1_i4 = hw.constant  1:i4
+  %c0_i2 = hw.constant  0:i2
+  %c1_i2 = hw.constant  1:i2
+  %c2_i2 = hw.constant  2:i2
+  %c0_i32 = hw.constant  0:i32
+  %0 = arith.constant  0:index
+  %4 = arith.constant  4:index
+  %2 = arith.constant  2:index
+  %3 = arith.constant  3:index
 
-  //Read from input. Update line buffer. Input values to each row of window.
-  hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1 ){
-    hir.probe %i name "i" : i4
-    %tf=hir.for %j : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%tj = %ti + 1 ){
-      %v =  hir.load %A[port 0][%i, %j] at %tj 
-      : !hir.memref<16x16xi32>
-      %v0 = hir.load %buff[port 0][%0,%j] at %tj
-      : !hir.memref<(bank 3)x16xi32>
-      %v1 = hir.load %buff[port 0][%1,%j] at %tj
-      : !hir.memref<(bank 3)x16xi32>
-      %v2 = hir.load %buff[port 0][%2,%j] at %tj
-      : !hir.memref<(bank 3)x16xi32>
+  %true = hw.constant true
+  //hir.if %true at time(%ti=%t) ->(i1){
+  //  %tt = hw.constant 1:i1
+  //  hir.yield (%tt):(i1)
+  //}else{
+  //  %ff = hw.constant 0:i1
+  //  hir.yield (%ff): (i1)
+  //}
+  //hir.while %true iter_time(%ti = %t + 1 ){
+  //  hir.probe %ti name "ti":!hir.time
+  //  hir.next_iter condition %true at %ti + 10
+  //}
 
-      %j1 = hir.delay %j by 1 at %tj :i4
-      hir.store %v1 to %buff[port 1][%0,%j1] at %tj + 1 
-      : !hir.memref<(bank 3)x16xi32>
-      hir.store %v2 to %buff[port 1][%1,%j1] at %tj + 1 
-      : !hir.memref<(bank 3)x16xi32>
-      hir.store %v to %buff[port 1][%2,%j1] at %tj + 1 
-      : !hir.memref<(bank 3)x16xi32>
+  //hir.for %i : i4 = %c0_i4  to %c7_i4  step %c1_i4 iter_time(%ti = %t + 1 ){
+  //  hir.probe %i name "i":i4
+  //  hir.probe %ti name "ti":!hir.time
+  //  %tj_end=hir.for %j : i4 =%c0_i4  to %c7_i4  step %c1_i4 iter_time(%tj = %ti + 1 ){
+  //    hir.probe %j name "j":i4
+  //    hir.probe %tj name "tj":!hir.time
+  //    %ti1_end=hir.for %i1 : i2 = %c0_i2 to %c2_i2 step %c1_i2 iter_time(%ti1 = %tj + 1 ){
+  //      hir.probe %i1 name "i1":i2
+  //      hir.probe %ti1 name "ti1":!hir.time
+  //      %tj1_end=hir.for %j1 : i2 = %c0_i2 to %c2_i2 step %c1_i2 iter_time(%tj1 = %ti1 + 1 ){
+  //        %is_first_j1_iter = hir.is_first_iter:i1
+  //        hir.probe %j1 name "j1":i2
+  //        hir.probe %tj1 name "tj1":!hir.time
+  //        hir.next_iter at %tj1 + 1
+  //      }
+  //      hir.probe %tj1_end name "tj1_end":!hir.time
+  //      hir.next_iter at %tj1_end + 10
+  //    }
+  //    hir.probe %ti1_end name "ti1_end":!hir.time
+  //    hir.next_iter at %ti1_end + 1
+  //  }
+  //  hir.probe %tj_end name "tj_end":!hir.time
+  //  hir.next_iter at %tj_end + 1
+  //}
 
-      hir.store %v1 to %wndw[port 1][%0,%0] at %tj + 1
-      : !hir.memref<(bank 3)x(bank 3)xi32>
-      hir.store %v2 to %wndw[port 1][%1,%0] at %tj + 1
-      : !hir.memref<(bank 3)x(bank 3)xi32>
-      hir.store %v to %wndw[port 1][%2,%0] at %tj + 1
-      : !hir.memref<(bank 3)x(bank 3)xi32>
-      hir.next_iter at %tj + 1
+  //hir.comment "debug end"
+
+  %val = hir.alloca("reg") :!hir.memref<(bank 1)xi32> ports [#reg_r,#reg_w]
+
+    //Read from input. Update line buffer. Input values to each row of window.
+  %ti_end=hir.for %i : i4 = %c0_i4  to %c7_i4  step %c1_i4 iter_time(%ti = %t + 1 ){
+    hir.probe %i name "i":i4
+    hir.probe %ti name "ti":!hir.time
+    %tj_end=hir.for %j : i4 =%c0_i4  to %c7_i4  step %c1_i4 iter_time(%tj = %ti + 1 ){
+
+      hir.store %c0_i32 to %val[port 1][%0] at %tj + 3
+      : !hir.memref<(bank 1)xi32>
+
+      %ti1_end=hir.for %i1 : i2 = %c0_i2 to %c2_i2 step %c1_i2 iter_time(%ti1 = %tj + 1 ){
+        hir.probe %i1 name "i1":i2
+        hir.probe %ti1 name "ti1":!hir.time
+        %tj1_end=hir.for %j1 : i2 = %c0_i2 to %c2_i2 step %c1_i2 iter_time(%tj1 = %ti1 + 1 ){
+          %i1_i4 = comb.concat %c0_i2,%i1 : i2,i2
+          %idx1_i4 = comb.add %i,%i1_i4  : i4
+          %j1_i4 = comb.concat %c0_i2,%j1 : i2,i2
+          %idx2_i4 = comb.add %j,%j1_i4  : i4
+          %idx1 = comb.extract %idx1_i4 from 0:(i4)->(i3)
+          %idx2 = comb.extract %idx2_i4 from 0:(i4)->(i3)
+          hir.probe %idx1_i4 name "idx1_i4":i4
+          hir.probe %idx2_i4 name "idx2_i4":i4
+          hir.probe %tj1 name "tj1":!hir.time
+          %v1 = hir.load %img[port 0][%idx1,%idx2] at %tj1  
+          : !hir.memref<8x8xi32>
+          %i1_i1 = comb.extract %i1 from 0:(i2)->(i1)
+          %j1_i1 = comb.extract %j1 from 0:(i2)->(i1)
+          %v2 = hir.load %kernel[port 0][%i1_i1,%j1_i1] at %tj1  
+          : !hir.memref<2x2xi32>
+
+          %mul = hir.call "i32mult_dsp48_inst" @i32mult_dsp48(%v1,%v2) at %tj1+1:
+          !hir.func<(i32,i32) -> (i32 delay 2)>
+
+          %v3 = hir.load %val[port 0][%0] at %tj1 + 3
+          : !hir.memref<(bank 1)xi32>
+
+          %res = comb.add %mul,%v3 :i32
+
+          hir.store %res to %val[port 1][%0] at %tj1+3
+          : !hir.memref<(bank 1)xi32>
+
+          hir.next_iter at %tj1 + 1
+        }
+        hir.next_iter at %tj1_end + 1
+      }
+
+      %v = hir.load %val[port 0][%0] at %ti1_end + 3
+      : !hir.memref<(bank 1)xi32>
+      %i3 = hir.delay %i by 3 at %ti1_end : i4 
+      %j3 = hir.delay %j by 3 at %ti1_end : i4 
+      %i3_i3 = comb.extract %i3 from 0:(i4)->(i3)
+      %j3_i3 = comb.extract %j3 from 0:(i4)->(i3)
+      hir.store %v to %output[port 0][%i3_i3,%j3_i3] at %ti1_end+3
+      : !hir.memref<8x8xi32>
+      hir.next_iter at %ti1_end + 1
     }
-    hir.next_iter at %tf + 1
-  }
-
-  hir.for %i : i4 = %c0_i4  to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1 ){
-    %tf=hir.for %j : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%tj = %ti + 1 ){
-      hir.for %k1:index = %0 to %3 step %1 iter_time(%tk1 = %tj){
-        hir.for %k2:index = %0 to %2 step %1 iter_time(%tk2 = %tk1){
-          %v = hir.load %wndw[port 0][%k1,%k2] at %tk2 + 1
-          : !hir.memref<(bank 3)x(bank 3)xi32>
-          %k2Plus1 = arith.addi %k2, %1: index
-          hir.store %v to %wndw[port 1][%k1,%k2Plus1] at %tk2 + 1
-            :!hir.memref<(bank 3)x(bank 3)xi32>
-          hir.comment "probe start."
-          hir.probe %v name "v" : i32
-          hir.comment "probe end."
-          hir.next_iter at %tk2
-        }{unroll}
-        hir.next_iter at %tk1 
-      }{unroll}
-      hir.next_iter at %tj + 1
-    }
-    hir.next_iter at %tf + 1
-  }
-
-  hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1 ){
-    %t_end=hir.for %j : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%tj = %ti + 1 ){
-      %b1 = comb.icmp ugt %i, %c1_i4 : i4
-      %b2 = comb.icmp ugt %j, %c1_i4 : i4
-      %b3 = comb.and %b1, %b2  : i1
-
-      hir.if %b3  at time(%tf = %tj){
-        %v = hir.call @weighted_average(%wndw) at %tf + 2
-          :!hir.func<(!hir.memref<(bank 3)x(bank 3)xi32> ports [#r_reg,#w_reg]) -> (i32 delay 2)>
-        %i4 = hir.delay %i by 4 at %tf : i4 
-        %j4 = hir.delay %j by 4 at %tf : i4 
-        hir.store %v to %B[port 0][%i4,%j4] at %tf + 4
-          :!hir.memref<16x16xi32>
-        hir.yield
-      }else{
-        hir.yield
-      }      
-      hir.next_iter at %tj + 1
-    }
-    hir.next_iter at %t_end + 1
+    hir.next_iter at %tj_end + 1
   }
   hir.return
 }
