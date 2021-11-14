@@ -1341,34 +1341,55 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<2xarray<2xi1>>
   }
 
-  // CHECK-LABEL: hw.module @connectNarrow
-  // module connectNarraow:
+  // CHECK-LABEL: hw.module @connectNarrowVector
+  // module connectNarrowVector:
   //   input clock: Clock
   //   input a: UInt<1>[2]
-  //   output b: UInt<3>[2]
+  //   input b: SInt<1>[2]
+  //   output c: UInt<3>[2]
+  //   output d: SInt<3>[2]
 
-  //   reg r: UInt<2>[2], clock
-  //   r <= a
-  //   b <= r
-  firrtl.module @connectNarrow(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<3>, 2>) {
-    %r = firrtl.reg %clock  : !firrtl.vector<uint<2>, 2>
-    firrtl.connect %r, %a : !firrtl.vector<uint<2>, 2>, !firrtl.vector<uint<1>, 2>
-    firrtl.connect %b, %r : !firrtl.vector<uint<3>, 2>, !firrtl.vector<uint<2>, 2>
-    // CHECK:      %2 = hw.array_get %a[%false] : !hw.array<2xi1>
-    // CHECK-NEXT: %3 = comb.concat %false, %2 : i1, i1
-    // CHECK-NEXT: %4 = hw.array_get %a[%true] : !hw.array<2xi1>
-    // CHECK-NEXT: %5 = comb.concat %false, %4 : i1, i1
-    // CHECK-NEXT: %6 = hw.array_create %3, %5 : i2
+  //   reg r1: UInt<2>[2], clock
+  //   reg r2: SInt<2>[2], clock
+  //   r1 <= a
+  //   c <= r1
+  //   r2 <= b
+  //   d <= r2
+  firrtl.module @connectNarrowVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<2>, 2>, in %b: !firrtl.vector<sint<2>, 2>, out %c: !firrtl.vector<uint<4>, 2>, out %d: !firrtl.vector<sint<4>, 2>) {
+    %r1 = firrtl.reg %clock  : !firrtl.vector<uint<3>, 2>
+    %r2 = firrtl.reg %clock  : !firrtl.vector<sint<3>, 2>
+    firrtl.connect %r1, %a : !firrtl.vector<uint<3>, 2>, !firrtl.vector<uint<2>, 2>
+    firrtl.connect %r2, %b : !firrtl.vector<sint<3>, 2>, !firrtl.vector<sint<2>, 2>
+
+    firrtl.connect %c, %r1 : !firrtl.vector<uint<4>, 2>, !firrtl.vector<uint<3>, 2>
+    firrtl.connect %d, %r2 : !firrtl.vector<sint<4>, 2>, !firrtl.vector<sint<3>, 2>
+    // CHECK:      %4 = hw.array_get %a[%false] : !hw.array<2xi2>
+    // CHECK-NEXT: %5 = comb.concat %false, %4 : i1, i2
+    // CHECK-NEXT: %6 = hw.array_get %a[%true] : !hw.array<2xi2>
+    // CHECK-NEXT: %7 = comb.concat %false, %6 : i1, i2
+    // CHECK-NEXT: %8 = hw.array_create %5, %7 : i3
+    // CHECK-NEXT: %9 = hw.array_get %b[%false] : !hw.array<2xi2>
+    // CHECK-NEXT: %10 = comb.sext %9 : (i2) -> i3
+    // CHECK-NEXT: %11 = hw.array_get %b[%true] : !hw.array<2xi2>
+    // CHECK-NEXT: %12 = comb.sext %11 : (i2) -> i3
+    // CHECK-NEXT: %13 = hw.array_create %10, %12 : i3
     // CHECK-NEXT: sv.always posedge %clock  {
-    // CHECK-NEXT:   sv.passign %r, %6 : !hw.array<2xi2>
+    // CHECK-NEXT:   sv.passign %r1, %8 : !hw.array<2xi3>
+    // CHECK-NEXT:   sv.passign %r2, %13 : !hw.array<2xi3>
     // CHECK-NEXT: }
-    // CHECK-NEXT: %7 = hw.array_get %1[%false] : !hw.array<2xi2>
-    // CHECK-NEXT: %8 = comb.concat %false, %7 : i1, i2
-    // CHECK-NEXT: %9 = hw.array_get %1[%true] : !hw.array<2xi2>
-    // CHECK-NEXT: %10 = comb.concat %false, %9 : i1, i2
-    // CHECK-NEXT: %11 = hw.array_create %8, %10 : i3
-    // CHECK-NEXT: sv.assign %.b.output, %11 : !hw.array<2xi3>
-    // CHECK-NEXT: hw.output %0 : !hw.array<2xi3>
+    // CHECK-NEXT: %14 = hw.array_get %2[%false] : !hw.array<2xi3>
+    // CHECK-NEXT: %15 = comb.concat %false, %14 : i1, i3
+    // CHECK-NEXT: %16 = hw.array_get %2[%true] : !hw.array<2xi3>
+    // CHECK-NEXT: %17 = comb.concat %false, %16 : i1, i3
+    // CHECK-NEXT: %18 = hw.array_create %15, %17 : i4
+    // CHECK-NEXT: sv.assign %.c.output, %18 : !hw.array<2xi4>
+    // CHECK-NEXT: %19 = hw.array_get %3[%false] : !hw.array<2xi3>
+    // CHECK-NEXT: %20 = comb.sext %19 : (i3) -> i4
+    // CHECK-NEXT: %21 = hw.array_get %3[%true] : !hw.array<2xi3>
+    // CHECK-NEXT: %22 = comb.sext %21 : (i3) -> i4
+    // CHECK-NEXT: %23 = hw.array_create %20, %22 : i4
+    // CHECK-NEXT: sv.assign %.d.output, %23 : !hw.array<2xi4>
+    // CHECK-NEXT: hw.output %0, %1 : !hw.array<2xi4>, !hw.array<2xi4>
   }
 
   // CHECK-LABEL: hw.module @partialConnectVector
