@@ -5,6 +5,9 @@
 #reg_w = {"wr_latency"=1}
 hir.func.extern @mult at %t (%a:i32, %b:i32) -> (%result:i32 delay 2)
 
+//hir.func.extern @readA at %t(
+//  %Ai :!hir.memref<16x16xi32> ports [#bram_r],
+//  %Aw : !hir.memref<16x(bank 16)xi32> ports [#bram_w])
 hir.func @readA at %t(
   %Ai :!hir.memref<16x16xi32> ports [#bram_r],
   %Aw : !hir.memref<16x(bank 16)xi32> ports [#bram_w]){
@@ -33,6 +36,9 @@ hir.func @readA at %t(
   hir.return
 }
 
+//hir.func.extern @readB at %t(
+//  %Bi : !hir.memref<16x16xi32> ports [#bram_r], 
+//  %Bw : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_w]) -> (%t_done:!hir.time)
 hir.func @readB at %t(
   %Bi : !hir.memref<16x16xi32> ports [#bram_r], 
   %Bw : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_w]) -> (%t_done:!hir.time){
@@ -73,6 +79,10 @@ hir.func @readB at %t(
   hir.return (%t_exec) : (!hir.time)
 } 
 
+//hir.func.extern @kernel at %t(
+//  %A : !hir.memref<16x(bank 16)xi32> ports [#bram_r],
+//  %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_r],
+//  %C: !hir.memref<16x(bank 16)xi32> ports [#bram_w]) 
 hir.func @kernel at %t(
   %A : !hir.memref<16x(bank 16)xi32> ports [#bram_r],
   %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_r],
@@ -134,6 +144,9 @@ hir.func @kernel at %t(
   hir.return 
 }
 
+//hir.func.extern @writeC at %t(
+//  %Cr: !hir.memref<16x(bank 16)xi32> ports [#bram_r],
+//  %Co : !hir.memref<16x16xi32> ports [#bram_w]) 
 hir.func @writeC at %t(
   %Cr: !hir.memref<16x(bank 16)xi32> ports [#bram_r],
   %Co : !hir.memref<16x16xi32> ports [#bram_w]) {

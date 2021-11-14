@@ -24,13 +24,13 @@ hir.func @hir_convolution at %t(
   %3 = arith.constant  3:index
 
   %true = hw.constant true
-  hir.if %true at time(%ti=%t) ->(i1){
-    %tt = hw.constant 1:i1
-    hir.yield (%tt):(i1)
-  }else{
-    %ff = hw.constant 0:i1
-    hir.yield (%ff): (i1)
-  }
+  //hir.if %true at time(%ti=%t) ->(i1){
+  //  %tt = hw.constant 1:i1
+  //  hir.yield (%tt):(i1)
+  //}else{
+  //  %ff = hw.constant 0:i1
+  //  hir.yield (%ff): (i1)
+  //}
   //hir.while %true iter_time(%ti = %t + 1 ){
   //  hir.probe %ti name "ti":!hir.time
   //  hir.next_iter condition %true at %ti + 10

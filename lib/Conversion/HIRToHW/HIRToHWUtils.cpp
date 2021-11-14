@@ -120,25 +120,32 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
   return portMap;
 }
 
-static Operation *getConstantXArray(OpBuilder *builder, hw::ArrayType hwTy) {
-  assert(hwTy);
-  Value constXValue =
-      getConstantX(builder, hir::BusType::get(builder->getContext(),
-                                              hwTy.getElementType()))
-          ->getResult(0);
-  uint64_t size = hwTy.getSize();
+Operation *
+getConstantXArray(OpBuilder *builder, Type hirTy,
+                  DenseMap<Value, SmallVector<Value>> &mapArrayToElements) {
+  assert(hirTy.isa<hir::BusTensorType>());
+  auto hwTy = *helper::convertToHWType(hirTy);
+  auto hwArrayTy = hwTy.dyn_cast<hw::ArrayType>();
+  // If its a bus_tensor of size 1 then do not update mapArrayToElements;
+  if (!hwArrayTy) {
+    return getConstantX(builder, hwTy);
+  }
   SmallVector<Value> constXCopies;
-  for (uint64_t i = 0; i < size; i++) {
+  for (uint64_t i = 0; i < hwArrayTy.getSize(); i++) {
+    Value constXValue =
+        getConstantX(builder, hir::BusType::get(builder->getContext(),
+                                                hwArrayTy.getElementType()))
+            ->getResult(0);
     constXCopies.push_back(constXValue);
   }
-  return builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(),
-                                            constXCopies);
+  auto arrOp = builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(),
+                                                  constXCopies);
+  mapArrayToElements[arrOp.getResult()] = constXCopies;
+  return arrOp;
 }
 
-Operation *getConstantX(OpBuilder *builder, Type originalTy) {
-  auto hwTy = *helper::convertToHWType(originalTy);
-  if (auto hwArrayTy = hwTy.dyn_cast<hw::ArrayType>())
-    return getConstantXArray(builder, hwArrayTy);
+Operation *getConstantX(OpBuilder *builder, Type hirTy) {
+  auto hwTy = *helper::convertToHWType(hirTy);
   assert(hwTy.isa<IntegerType>());
   return builder->create<sv::ConstantXOp>(builder->getUnknownLoc(), hwTy);
 }
@@ -168,7 +175,8 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
                       Value reset) {
   assert(input.getType().isa<mlir::IntegerType>() ||
          input.getType().isa<hw::ArrayType>());
-
+  builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
+                                  "getDelayedValue start.");
   auto nameAttr = name ? builder->getStringAttr(name.getValue()) : StringAttr();
 
   Type regTy;
@@ -231,6 +239,8 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
   }
 
   assert(input.getType() == output.getType());
+  builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
+                                  "getDelayedValue end.");
   return output;
 }
 

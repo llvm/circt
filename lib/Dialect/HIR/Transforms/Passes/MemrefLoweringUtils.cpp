@@ -13,11 +13,11 @@
 using namespace circt;
 using namespace hir;
 
-static Type getBusTypeFormTensor(Value tensor) {
-  return hir::BusType::get(
-      tensor.getContext(),
-      tensor.getType().dyn_cast<hir::BusTensorType>().getElementType());
-}
+// static Type getBusTypeFormTensor(Value tensor) {
+//  return hir::BusType::get(
+//      tensor.getContext(),
+//      tensor.getType().dyn_cast<hir::BusTensorType>().getElementType());
+//}
 
 static Type getBusElementType(Value bus) {
   auto ty = bus.getType().dyn_cast<hir::BusType>();
@@ -25,54 +25,31 @@ static Type getBusElementType(Value bus) {
   return ty.getElementType();
 }
 
-Value insertDataSendLogic(OpBuilder &builder, Location errorLoc, Value data,
-                          Value rootDataBusT, ArrayRef<Value> indices,
-                          Value tVar, IntegerAttr offsetAttr) {
-  if (failed(helper::validatePositiveConstant(indices))) {
-    emitError(errorLoc) << "Could not validate the indices for this op.";
-    assert(false);
-  }
-  auto funcOp =
-      builder.getInsertionBlock()->getParent()->getParentOfType<hir::FuncOp>();
-  OpBuilder funcOpBuilder(funcOp);
-  funcOpBuilder.setInsertionPointToStart(&funcOp.getFuncBody().front());
-  Value nextDataBusT = funcOpBuilder.create<hir::BusTensorOp>(
-      funcOpBuilder.getUnknownLoc(), rootDataBusT.getType());
+Value insertDataSendLogic(
+    OpBuilder &builder, Location errorLoc,
+    std::function<Value(OpBuilder &, Type)> declTopLevelBus, Value data,
+    Value rootDataBus, Value tVar, IntegerAttr offsetAttr) {
+  assert(offsetAttr.getInt() == 0);
+  Value nextDataBus = declTopLevelBus(
+      builder, rootDataBus.getType().dyn_cast<hir::BusType>().getElementType());
 
-  auto c1 = builder.create<hw::ConstantOp>(
-      builder.getUnknownLoc(), builder.getI1Type(),
-      mlir::IntegerAttr::get(builder.getI1Type(), 1));
-  auto attrC0 = IntegerAttr::get(c1.getType(), 0);
-
-  assert(rootDataBusT.getType().isa<hir::BusTensorType>());
+  assert(rootDataBus.getType().isa<hir::BusType>());
 
   auto i1BusTy = hir::BusType::get(builder.getContext(), builder.getI1Type());
-  auto tBus = builder.create<hir::BusOp>(builder.getUnknownLoc(), i1BusTy);
-  builder
-      .create<hir::BusSendOp>(builder.getUnknownLoc(), c1, tBus, tVar,
-                              offsetAttr)
-      ->setAttr("default", attrC0);
+  auto tBus =
+      builder.create<hir::CastOp>(builder.getUnknownLoc(), i1BusTy, tVar);
 
-  auto nextDataBus = builder.create<hir::BusTensorGetElementOp>(
-      builder.getUnknownLoc(), getBusTypeFormTensor(nextDataBusT), nextDataBusT,
-      indices);
-  auto dataBus = builder.create<hir::BusOp>(builder.getUnknownLoc(),
-                                            nextDataBus.getType());
-  builder.create<hir::BusSendOp>(builder.getUnknownLoc(), data, dataBus, tVar,
-                                 offsetAttr);
-  auto selectedData =
+  auto dataBus = builder.create<hir::CastOp>(builder.getUnknownLoc(),
+                                             nextDataBus.getType(), data);
+  auto selectedDataBus =
       helper::insertBusSelectLogic(builder, tBus, dataBus, nextDataBus);
 
-  auto newDataBusT = builder.create<hir::BusTensorInsertElementOp>(
-      builder.getUnknownLoc(), nextDataBusT.getType(), selectedData,
-      nextDataBusT, indices);
-  builder.create<hir::BusTensorAssignOp>(builder.getUnknownLoc(), rootDataBusT,
-                                         newDataBusT);
-  return nextDataBusT;
+  builder.create<hir::BusAssignOp>(builder.getUnknownLoc(), rootDataBus,
+                                   selectedDataBus);
+  return nextDataBus;
 }
 
-Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
-                          Value dataBusT, ArrayRef<Value> indices,
+Value insertDataRecvLogic(OpBuilder &builder, Location errorLoc, Value dataBus,
                           int64_t rdLatency, Value tVar,
                           IntegerAttr offsetAttr) {
 
@@ -82,34 +59,179 @@ Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
           ? offsetAttr
           : builder.getI64IntegerAttr(offsetAttr.getInt() + rdLatency);
 
-  auto dataBus = builder.create<hir::BusTensorGetElementOp>(
-      builder.getUnknownLoc(), getBusTypeFormTensor(dataBusT), dataBusT,
-      indices);
-
   auto receiveOp = builder.create<hir::BusRecvOp>(
-      loc, getBusElementType(dataBus), dataBus, tVar, recvOffsetAttr);
+      builder.getUnknownLoc(), getBusElementType(dataBus), dataBus, tVar,
+      recvOffsetAttr);
 
-  if (names)
-    receiveOp->setAttr("names", names);
   return receiveOp.getResult();
 }
 
-Value insertDataTensorSendLogic(OpBuilder &builder, Value enableBusT,
-                                Value currentDataBusT, Value rootDataBusT) {
+MemoryInterface emitMemoryInterface(OpBuilder &builder,
+                                    hir::MemrefType memrefTy,
+                                    MemrefPortInterface portInterface,
+                                    int64_t bank) {
+  auto uLoc = builder.getUnknownLoc();
+  MemoryInterface memoryInterface(memrefTy);
+  Value bankIdx =
+      builder.create<mlir::arith::ConstantOp>(uLoc, builder.getIndexAttr(bank));
+  if (portInterface.addrEnableBusTensor) {
+    auto addrEnBus = builder.create<hir::BusOp>(
+        uLoc, hir::BusType::get(builder.getContext(),
+                                portInterface.addrEnableBusTensor.getType()
+                                    .dyn_cast<hir::BusTensorType>()
+                                    .getElementType()));
+    builder.create<hir::BusTensorAssignElementOp>(
+        uLoc, portInterface.addrEnableBusTensor, bankIdx, addrEnBus);
+    memoryInterface.setAddrEnableBus(addrEnBus);
+    assert(portInterface.addrDataBusTensor);
+    auto addrDataBus = builder.create<hir::BusOp>(
+        uLoc, hir::BusType::get(builder.getContext(),
+                                portInterface.addrDataBusTensor.getType()
+                                    .dyn_cast<hir::BusTensorType>()
+                                    .getElementType()));
+    builder.create<hir::BusTensorAssignElementOp>(
+        uLoc, portInterface.addrDataBusTensor, bankIdx, addrDataBus);
+    memoryInterface.setAddrDataBus(addrDataBus);
+  }
+  if (portInterface.rdEnableBusTensor) {
+    auto rdEnBus = builder.create<hir::BusOp>(
+        uLoc, hir::BusType::get(builder.getContext(),
+                                portInterface.rdEnableBusTensor.getType()
+                                    .dyn_cast<hir::BusTensorType>()
+                                    .getElementType()));
+    builder.create<hir::BusTensorAssignElementOp>(
+        uLoc, portInterface.rdEnableBusTensor, bankIdx, rdEnBus);
+    memoryInterface.setRdEnableBus(rdEnBus);
+    assert(portInterface.rdDataBusTensor);
+    auto busTy = hir::BusType::get(builder.getContext(),
+                                   portInterface.rdDataBusTensor.getType()
+                                       .dyn_cast<hir::BusTensorType>()
+                                       .getElementType());
+    auto rdDataBus = builder.create<hir::BusTensorGetElementOp>(
+        uLoc, busTy, portInterface.rdDataBusTensor, bankIdx);
+    memoryInterface.setRdDataBus(rdDataBus, portInterface.rdLatency);
+  }
+  if (portInterface.wrEnableBusTensor) {
+    auto wrEnBus = builder.create<hir::BusOp>(
+        uLoc, hir::BusType::get(builder.getContext(),
+                                portInterface.wrEnableBusTensor.getType()
+                                    .dyn_cast<hir::BusTensorType>()
+                                    .getElementType()));
+    builder.create<hir::BusTensorAssignElementOp>(
+        uLoc, portInterface.wrEnableBusTensor, bankIdx, wrEnBus);
+    memoryInterface.setWrEnableBus(wrEnBus);
+    assert(portInterface.wrDataBusTensor);
+    auto wrDataBus = builder.create<hir::BusOp>(
+        uLoc, hir::BusType::get(builder.getContext(),
+                                portInterface.wrDataBusTensor.getType()
+                                    .dyn_cast<hir::BusTensorType>()
+                                    .getElementType()));
+    builder.create<hir::BusTensorAssignElementOp>(
+        uLoc, portInterface.wrDataBusTensor, bankIdx, wrDataBus);
+    memoryInterface.setWrDataBus(wrDataBus);
+  }
 
-  auto funcOp =
-      builder.getInsertionBlock()->getParent()->getParentOfType<hir::FuncOp>();
-  OpBuilder funcOpBuilder(funcOp);
-  funcOpBuilder.setInsertionPointToStart(&funcOp.getFuncBody().front());
-  Value nextDataBusT = funcOpBuilder.create<hir::BusTensorOp>(
-      funcOpBuilder.getUnknownLoc(), rootDataBusT.getType());
+  return memoryInterface;
+}
 
-  assert(rootDataBusT.getType().isa<hir::BusTensorType>());
+SmallVector<SmallVector<MemoryInterface>> emitMemoryInterfacesForEachPortBank(
+    OpBuilder &builder, hir::MemrefType memrefTy,
+    SmallVector<MemrefPortInterface> memrefPortInterfaces) {
 
-  auto selectedDataBusT = helper::insertMultiBusSelectLogic(
-      builder, enableBusT, currentDataBusT, nextDataBusT);
+  int64_t numBanks = memrefTy.getNumBanks();
+  SmallVector<SmallVector<MemoryInterface>> mapPortBankToMemoryInterface;
 
-  builder.create<hir::BusTensorAssignOp>(builder.getUnknownLoc(), rootDataBusT,
-                                         selectedDataBusT);
-  return nextDataBusT;
+  for (size_t port = 0; port < memrefPortInterfaces.size(); port++) {
+    SmallVector<MemoryInterface> mapBankToMemoryInterface;
+    for (int64_t bank = 0; bank < numBanks; bank++) {
+      auto memoryInterface = emitMemoryInterface(
+          builder, memrefTy, memrefPortInterfaces[port], bank);
+      mapBankToMemoryInterface.push_back(memoryInterface);
+    }
+    mapPortBankToMemoryInterface.push_back(mapBankToMemoryInterface);
+  }
+  return mapPortBankToMemoryInterface;
+}
+
+Value getBusFromTensor(OpBuilder &builder, Value busT, int64_t idx) {
+  auto uLoc = builder.getUnknownLoc();
+  auto numBanks =
+      busT.getType().dyn_cast<hir::BusTensorType>().getNumElements();
+  SmallVector<Value> cIdx;
+  if (numBanks > 1) {
+    cIdx.push_back(builder.create<mlir::arith::ConstantOp>(
+        uLoc, builder.getIndexAttr(idx)));
+  } else {
+    cIdx = SmallVector<Value>({});
+  }
+  auto busTy = hir::BusType::get(
+      builder.getContext(),
+      busT.getType().dyn_cast<hir::BusTensorType>().getElementType());
+  builder.create<hir::CommentOp>(uLoc, "debug start");
+  auto out =
+      builder.create<hir::BusTensorGetElementOp>(uLoc, busTy, busT, cIdx);
+  builder.create<hir::CommentOp>(uLoc, "debug end");
+  return out;
+}
+
+void emitBusTensorAssignElementLogic(OpBuilder &builder, Value bus, Value busT,
+                                     int64_t idx) {
+  auto uLoc = builder.getUnknownLoc();
+  auto numBanks =
+      busT.getType().dyn_cast<hir::BusTensorType>().getNumElements();
+  SmallVector<Value> cIdx;
+  if (numBanks > 1) {
+    cIdx.push_back(builder.create<mlir::arith::ConstantOp>(
+        uLoc, builder.getIndexAttr(idx)));
+  } else {
+    cIdx = SmallVector<Value>({});
+  }
+
+  builder.create<hir::BusTensorAssignElementOp>(uLoc, busT, cIdx, bus);
+}
+
+void emitCallOpOperandsForMemrefPort(
+    OpBuilder &builder, MemrefInfo &memrefInfo, Value mem,
+    SmallVectorImpl<Value> &operands, SmallVectorImpl<Type> &inputTypes,
+    SmallVectorImpl<DictionaryAttr> &inputAttrs) {
+  assert(mem.getType().isa<MemrefType>());
+  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"send"}));
+  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"recv"}));
+  for (size_t j = 0; j < memrefInfo.getNumPorts(mem); j++) {
+    auto duplicate = memrefInfo.emitDuplicatePortInterface(builder, mem, j);
+    if (duplicate.addrEnableBusTensor) {
+      operands.push_back(duplicate.addrEnableBusTensor);
+      inputTypes.push_back(duplicate.addrEnableBusTensor.getType());
+      inputAttrs.push_back(sendAttr);
+
+      assert(duplicate.addrDataBusTensor);
+      operands.push_back(duplicate.addrDataBusTensor);
+      inputTypes.push_back(duplicate.addrDataBusTensor.getType());
+      inputAttrs.push_back(sendAttr);
+    }
+
+    if (duplicate.rdEnableBusTensor) {
+      operands.push_back(duplicate.rdEnableBusTensor);
+      inputTypes.push_back(duplicate.rdEnableBusTensor.getType());
+      inputAttrs.push_back(sendAttr);
+
+      assert(duplicate.rdDataBusTensor);
+      operands.push_back(duplicate.rdDataBusTensor);
+      inputTypes.push_back(duplicate.rdDataBusTensor.getType());
+      inputAttrs.push_back(recvAttr);
+    }
+
+    if (duplicate.wrEnableBusTensor) {
+      operands.push_back(duplicate.wrEnableBusTensor);
+      inputTypes.push_back(duplicate.wrEnableBusTensor.getType());
+      inputAttrs.push_back(sendAttr);
+
+      assert(duplicate.wrDataBusTensor);
+      operands.push_back(duplicate.wrDataBusTensor);
+      inputTypes.push_back(duplicate.wrDataBusTensor.getType());
+      inputAttrs.push_back(sendAttr);
+    }
+  }
 }

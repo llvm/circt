@@ -734,18 +734,18 @@ def BusTensorAssignOp: HIR_Op<"bus_tensor.assign",[]>{
 }
 
 def BusTensorAssignElementOp :HIR_Op<"bus_tensor.assign_element",[]>{
-  let summary = "Extract a bus from a bus tensor";
+  let summary = "Assign a bus to a bus_tensor element.";
   let description = [{
-    This op extracts a single bus from a tensor of buses.
+    This op assigns a single bus to a bus_tensor element.
       Examples:
-      ```mlir %1 = hir.bus_tensor.get_element %x[%0] : tensor<4x!hir.bus<...>>```
+      ```mlir hir.bus_tensor.assign_element %b to %x[%0] : !hir.bus<i32> to hir.bus_tensor<i32>```
   }];
 
-  let arguments = (ins HIR_BusTensorType: $tensor, Variadic<Index>: $indices);
-  let results = (outs HIR_BusType: $res);
+  let arguments = (ins HIR_BusTensorType: $tensor, Variadic<Index>: $indices, HIR_BusType:$bus);
+  let results = (outs );
 
-  let assemblyFormat = [{ $tensor `[`$indices`]` custom<WithSSANames>(attr-dict) `:`
-    type($tensor) `->` type($res) }];
+  let assemblyFormat = [{ $tensor `[`$indices`]` `,` $bus   custom<WithSSANames>(attr-dict) `:`
+   type($tensor) `,` type($bus) }];
 }
 
 def BusTensorGetElementOp :HIR_Op<"bus_tensor.get_element",[NoSideEffect]>{

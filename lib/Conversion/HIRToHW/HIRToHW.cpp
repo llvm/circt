@@ -32,6 +32,7 @@ private:
   LogicalResult visitOp(hir::BusRecvOp);
   LogicalResult visitOp(hir::BusSendOp);
   LogicalResult visitOp(hir::BusTensorAssignOp);
+  LogicalResult visitOp(hir::BusTensorAssignElementOp);
   LogicalResult visitOp(hir::BusTensorGetElementOp);
   LogicalResult visitOp(hir::BusTensorInsertElementOp);
   LogicalResult visitOp(hir::BusTensorMapOp);
@@ -61,6 +62,7 @@ private:
   Value reset;
   hw::HWModuleOp hwModuleOp;
   size_t uniqueInt = 0;
+  DenseMap<Value, SmallVector<Value>> mapArrayToElements;
 };
 
 LogicalResult HIRToHWPass::visitOp(hir::BusMapOp op) {
@@ -128,7 +130,8 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorMapOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusTensorOp op) {
-  auto *constantXOp = getConstantX(builder, op.getType());
+  auto *constantXOp =
+      getConstantXArray(builder, op.getType(), mapArrayToElements);
   auto placeHolderSSAVar = constantXOp->getResult(0);
   auto name = helper::getOptionalName(constantXOp, 0);
   if (name)
@@ -448,9 +451,17 @@ void HIRToHWPass::updateHIRToHWMapForFuncInputs(
           hwModuleOp.getBodyBlock()->getArgument(modulePortInfo.argNum);
       mapHIRToHWValue.map(funcArgs[i], hwArg);
     } else {
-      mapHIRToHWValue.map(
-          funcArgs[i],
-          getConstantX(builder, funcArgs[i].getType())->getResult(0));
+      if (funcArgs[i].getType().isa<hir::BusType>())
+        mapHIRToHWValue.map(
+            funcArgs[i],
+            getConstantX(builder, funcArgs[i].getType())->getResult(0));
+      else if (funcArgs[i].getType().isa<hir::BusTensorType>())
+        mapHIRToHWValue.map(funcArgs[i],
+                            getConstantXArray(builder, funcArgs[i].getType(),
+                                              mapArrayToElements)
+                                ->getResult(0));
+      else
+        assert(false);
     }
   }
 }
@@ -600,6 +611,28 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorAssignOp op) {
   mapHIRToHWValue.map(op.dest(), mapHIRToHWValue.lookup(op.src()));
   return success();
 }
+LogicalResult HIRToHWPass::visitOp(hir::BusTensorAssignElementOp op) {
+  auto hwArray = mapHIRToHWValue.lookup(op.tensor());
+  auto hwElement = mapHIRToHWValue.lookup(op.bus());
+  if (!hwArray.getType().isa<hw::ArrayType>()) {
+    hwArray.replaceAllUsesWith(hwElement);
+    mapHIRToHWValue.map(op.tensor(), hwElement);
+    return success();
+  }
+  auto arrayElements = mapArrayToElements[hwArray];
+  SmallVector<Value> indices;
+  for (auto idx : op.indices()) {
+    indices.push_back(idx);
+  }
+  auto idx =
+      helper::calcLinearIndex(
+          indices,
+          op.tensor().getType().dyn_cast<hir::BusTensorType>().getShape())
+          .getValue();
+  arrayElements[idx].replaceAllUsesWith(hwElement);
+  return success();
+}
+
 LogicalResult HIRToHWPass::visitOp(hir::BusBroadcastOp op) {
   auto busTensorTy = op.res().getType().dyn_cast<hir::BusTensorType>();
   auto hwBus = mapHIRToHWValue.lookup(op.bus());
@@ -682,6 +715,8 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::BusAssignOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusTensorAssignOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::BusTensorAssignElementOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::ReturnOp>(operation))
     return visitOp(op);

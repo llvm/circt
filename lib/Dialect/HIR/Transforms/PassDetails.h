@@ -5,9 +5,16 @@
 #include "circt/Dialect/HIR/Transforms/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
+
+namespace mlir {
+namespace arith {
+class ArithmeticDialect;
+} // namespace arith
+} // namespace mlir
 
 namespace circt {
 namespace hw {

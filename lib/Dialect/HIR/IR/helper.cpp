@@ -387,6 +387,12 @@ llvm::Optional<Type> convertToHWType(Type type) {
 Value insertBusSelectLogic(OpBuilder &builder, Value selectBus, Value trueBus,
                            Value falseBus) {
   auto uLoc = builder.getUnknownLoc();
+  if (trueBus.getType() != falseBus.getType()) {
+    trueBus.getDefiningOp()->emitError("type mismatch. Below is trueBus")
+        << ", falseBus type = " << falseBus.getType();
+    assert(false);
+  }
+
   return builder
       .create<hir::BusMapOp>(
           builder.getUnknownLoc(),

@@ -31,7 +31,7 @@ def MemrefLowering : Pass<"hir-lower-memref", "mlir::ModuleOp"> {
   let description = [{This pass lowers hir.memref to hir.bus for codegen.}];
 
   let constructor = "circt::hir::createMemrefLoweringPass()";
-  let dependentDialects = ["circt::hw::HWDialect","hir::HIRDialect"];
+  let dependentDialects = ["mlir::arith::ArithmeticDialect","circt::hw::HWDialect","circt::comb::CombDialect","hir::HIRDialect"];
 }
 
 def ScheduleVerifier : Pass<"hir-schedule-verifier", "hir::FuncOp"> {
