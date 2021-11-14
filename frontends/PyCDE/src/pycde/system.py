@@ -4,7 +4,7 @@
 
 import builtins
 
-from pycde.devicedb import PrimitiveDB
+from pycde.devicedb import PrimitiveDB, PhysicalRegion
 
 from .module import _SpecializedModule
 from .pycde_types import types
@@ -97,6 +97,11 @@ class System:
       ret = basename + "_" + str(ctr)
     self.symbols[ret] = None
     return ret
+
+  def create_physical_region(self, name):
+    with self._get_ip():
+      physical_region = PhysicalRegion(name)
+    return physical_region
 
   def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
     """Wrapper for a callback (which actually builds the CIRCT op) which

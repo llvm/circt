@@ -7,6 +7,8 @@ import typing
 
 from circt.dialects import msft
 
+from mlir.ir import StringAttr, ArrayAttr
+
 PrimitiveType = msft.PrimitiveType
 
 
@@ -34,6 +36,37 @@ class PhysLocation:
   def __str__(self) -> str:
     loc = self._loc
     return f"PhysLocation<{loc.devtype}, x:{loc.x}, y:{loc.y}, num:{loc.num}>"
+
+
+class PhysicalRegion:
+  __slots__ = ["_physical_region"]
+
+  def __init__(self, name: str, bounds: list = None):
+    if bounds is None:
+      bounds = []
+    name_attr = StringAttr.get(name)
+    bounds_attr = ArrayAttr.get(bounds)
+    self._physical_region = msft.PhysicalRegionOp(name_attr, bounds_attr)
+
+  def add_bounds(self, x_bounds: tuple, y_bounds: tuple):
+    """Add a new bounding box to the region."""
+    if (len(x_bounds) != 2):
+      raise ValueError(f"expected lower and upper x bounds, got: {x_bounds}")
+    if (len(y_bounds) != 2):
+      raise ValueError(f"expected lower and upper y bounds, got: {y_bounds}")
+
+    x_min, x_max = x_bounds
+    y_min, y_max = y_bounds
+    bounds = msft.PhysicalBoundsAttr.get(x_min, x_max, y_min, y_max)
+
+    self._physical_region.add_bounds(bounds)
+
+    return self
+
+  def get_ref(self):
+    """Get a pair suitable for add_attribute to attach to an operation."""
+    name = self._physical_region.sym_name.value
+    return ("loc", msft.PhysicalRegionRefAttr.get(name))
 
 
 class PrimitiveDB:

@@ -99,12 +99,13 @@ class Instance:
   def _attach_attribute(self, attr_key: str, attr: ir.Attribute):
     if isinstance(attr, PhysLocation):
       assert attr_key.startswith("loc:")
-      db = self.root_instance.placedb._db
       attr = attr._loc
-      rc = db.add_placement(attr, self.path_attr, attr_key[4:],
-                            self.instOp.operation)
-      if not rc:
-        raise ValueError("Failed to place")
+
+    db = self.root_instance.placedb._db
+    rc = db.add_placement(attr, self.path_attr, attr_key[4:],
+                          self.instOp.operation)
+    if not rc:
+      raise ValueError("Failed to place")
 
     if attr_key not in self.instOp.attributes:
       cases = []

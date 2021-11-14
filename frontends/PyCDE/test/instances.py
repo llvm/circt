@@ -95,6 +95,13 @@ instance_attrs.lookup(pycde.AppID("UnParameterized")).add_attribute(loc)
 loc = placement(["memory", "bank"], PrimitiveType.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("UnParameterized",
                                   "Nothing")).add_attribute(loc)
+
+region1 = t.create_physical_region("region1").add_bounds((0, 10), (0, 10))
+region1.add_bounds((10, 20), (10, 20))
+ref = region1.get_ref()
+instance_attrs.lookup(pycde.AppID("UnParameterized",
+                                  "Nothing")).add_attribute(ref)
+
 test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
@@ -117,4 +124,8 @@ t.print()
 # OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
 # OUTPUT-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
 # OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
+# OUTPUT-DAG:  set_instance_assignment -name PLACE_REGION "X0 Y0 X10 Y10;X10 Y10 X20 Y20" -to $parent|UnParameterized|Nothing
+# OUTPUT-DAG:  set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|UnParameterized|Nothing
+# OUTPUT-DAG:  set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|UnParameterized|Nothing
+# OUTPUT-DAG:  set_instance_assignment -name REGION_NAME region1 -to $parent|UnParameterized|Nothing
 t.emit_outputs()
