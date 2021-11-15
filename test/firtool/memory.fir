@@ -58,7 +58,7 @@ circuit Qux:
 ; CHECK-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
 ; CHECK-NEXT:    %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i1>
 ; CHECK-NEXT:    %[[v2:.+]] = sv.reg  : !hw.inout<i4>
-; CHECK-NEXT:    sv.alwaysff(posedge %R0_clk)  {
+; CHECK-NEXT:    sv.always posedge %R0_clk {
 ; CHECK-NEXT:      sv.passign %[[v0]], %R0_en : i1
 ; CHECK-NEXT:      sv.passign %[[v2]], %R0_addr : i4
 ; CHECK-NEXT:    }
@@ -72,13 +72,13 @@ circuit Qux:
 ; CHECK-NEXT:    %[[v9:.+]] = sv.array_index_inout %[[vMemory]][%RW0_addr] : !hw.inout<uarray<16xi8>>, i4
 ; CHECK-NEXT:    %[[v10:.+]] = sv.read_inout %[[v9]] : !hw.inout<i8>
 ; CHECK-NEXT:    %[[v11:.+]] = comb.mux %[[v8]], %[[v10]], %[[vx_i8]] : i8
-; CHECK-NEXT:    sv.alwaysff(posedge %RW0_clk)  {
+; CHECK-NEXT:    sv.always posedge %RW0_clk {
 ; CHECK-NEXT:      %[[vv12:.+]] = comb.and %RW0_en, %RW0_wmask, %RW0_wmode : i1
 ; CHECK-NEXT:      sv.if %[[vv12]]  {
 ; CHECK-NEXT:        sv.passign %[[v9]], %RW0_wdata : i8
 ; CHECK-NEXT:      }
 ; CHECK-NEXT:    }
-; CHECK-NEXT:    sv.alwaysff(posedge %W0_clk)  {
+; CHECK-NEXT:    sv.always posedge %W0_clk {
 ; CHECK-NEXT:      %[[v12:.+]] = comb.and %W0_en, %W0_mask : i1
 ; CHECK-NEXT:      sv.if %[[v12]]  {
 ; CHECK-NEXT:        %[[v13:.+]] = sv.array_index_inout %[[vMemory]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4

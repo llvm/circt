@@ -87,8 +87,8 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
     auto reg = b.create<sv::RegOp>(data.getType());
 
     // pipeline stage
-    b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock,
-                             [&]() { b.create<sv::PAssignOp>(reg, data); });
+    b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock,
+                           [&]() { b.create<sv::PAssignOp>(reg, data); });
     data = b.create<sv::ReadInOutOp>(reg);
   }
 
@@ -170,7 +170,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
-      b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock, [&]() {
+      b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
             en, b.createOrFold<comb::AndOp>(wmask.value(), wmode));
         b.create<sv::IfOp>(wcond, [&]() {
@@ -233,8 +233,8 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Build a new always block with write port logic.
     auto alwaysBlock = [&] {
-      return b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock,
-                                      [&]() { writeLogic(); });
+      return b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock,
+                                    [&]() { writeLogic(); });
     };
 
     switch (mem.writeUnderWrite) {
@@ -250,7 +250,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
               writeProcesses.lookup(mem.writeClockIDs[i])) {
         OpBuilder::InsertionGuard guard(b);
         b.setInsertionPointToEnd(
-            cast<sv::AlwaysFFOp>(existingAlwaysBlock).getBodyBlock());
+            cast<sv::AlwaysOp>(existingAlwaysBlock).getBodyBlock());
         writeLogic();
       } else {
         writeProcesses[i] = alwaysBlock();
