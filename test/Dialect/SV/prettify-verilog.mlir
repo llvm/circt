@@ -202,3 +202,34 @@ hw.module @unary_sink_crash(%arg0: i1) {
     }
   }
 }
+
+
+// CHECK-LABEL: hw.module @unary_sink_no_duplicate
+// https://github.com/llvm/circt/issues/2097
+hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i11) {
+  %ones = hw.constant 15: i4
+
+  // CHECK-NOT: comb.xor
+ 
+  // We normally duplicate unary operations like this one so they can be inlined
+  // into the using expressions.  However, not all users can be inlined *into*.
+  // Things like extract/sext do not support this, so do not duplicate if used
+  // by one of them.
+
+  // CHECK: comb.xor %arg0,
+  %0 = comb.xor %arg0, %ones : i4
+ 
+ // CHECK-NOT: comb.xor
+ 
+  %a = comb.extract %0 from 0 : (i4) -> i1
+  %b = comb.extract %0 from 1 : (i4) -> i1
+  %c = comb.extract %0 from 2 : (i4) -> i2
+  %d = comb.sext %0 : (i4) -> i7
+
+
+  // CHECK: hw.output
+  %r = comb.concat %a, %b, %c, %d : i1, i1, i2, i7
+  hw.output %r : i11
+}
+
+
