@@ -7,7 +7,6 @@ from __future__ import annotations
 from .support import get_user_loc
 
 import circt.support as support
-from circt.dialects import comb, hw, msft, seq
 
 import mlir.ir as ir
 
@@ -25,6 +24,7 @@ class Value:
       type = value.type
     type = PyCDEType(type)
 
+    from .dialects import hw
     if isinstance(type.strip, hw.ArrayType):
       return ListValue(value, type)
     if isinstance(type.strip, hw.StructType):
@@ -36,6 +36,7 @@ class Value:
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
   def reg(self, clk, rst=None, name=None):
+    from .dialects import seq
     if name is None:
       name = self.name
     if name is not None:
@@ -47,13 +48,18 @@ class Value:
       else:
         name = name + "__reg1"
     with get_user_loc():
-      return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
+      return seq.CompRegOp(self.value.type,
+                           input=self.value,
+                           clk=clk,
+                           reset=rst,
+                           name=name)
 
   @property
   def name(self):
     owner = self.value.owner
     if hasattr(owner, "attributes") and "name" in owner.attributes:
       return ir.StringAttr(owner.attributes["name"]).value
+    from circt.dialects import msft
     if isinstance(owner, ir.Block) and isinstance(owner.owner,
                                                   msft.MSFTModuleOp):
       mod = owner.owner
@@ -96,10 +102,11 @@ class BitVectorValue(Value):
       raise ValueError("Integer / bitvector slices do not support steps")
 
     from .pycde_types import types
+    from .dialects import comb
     ret_type = types.int(idxs[1] - idxs[0])
+
     with get_user_loc():
-      extracted = comb.ExtractOp.create(idxs[0], ret_type, self.value)
-      ret = Value.get(extracted.result)
+      ret = comb.ExtractOp(idxs[0], ret_type, self.value)
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
       return ret
@@ -125,8 +132,9 @@ class ListValue(Value):
                                        ir.IntegerType):
         raise TypeError("Subscript on array must be either int or MLIR int"
                         f" Value, not {type(sub)}.")
+    from .dialects import hw
     with get_user_loc():
-      v = Value.get(hw.ArrayGetOp.create(self.value, idx))
+      v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
       return v
@@ -145,16 +153,71 @@ class StructValue(Value):
     fields = self.type.strip.get_fields()
     if sub not in [name for name, _ in fields]:
       raise ValueError(f"Struct field '{sub}' not found in {self.type}")
+    from .dialects import hw
     with get_user_loc():
-      return Value.get(hw.StructExtractOp.create(self.value, sub))
+      return hw.StructExtractOp(self.value, sub)
 
   def __getattr__(self, attr):
     ty = self.type.strip
     fields = ty.get_fields()
     if attr in [name for name, _ in fields]:
+      from .dialects import hw
       with get_user_loc():
-        v = Value.get(hw.StructExtractOp.create(self.value, attr))
+        v = hw.StructExtractOp(self.value, attr)
         if self.name:
           v.name = f"{self.name}__{attr}"
         return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
+
+
+def wrap_opviews_with_values(dialect, module_name):
+  """Wraps all of a dialect's OpView classes to have their create method return
+     a PyCDE Value instead of an OpView. The wrapped classes are inserted into
+     the provided module."""
+  import sys
+  module = sys.modules[module_name]
+
+  for attr in dir(dialect):
+    cls = getattr(dialect, attr)
+
+    if isinstance(cls, type) and issubclass(cls, ir.OpView):
+
+      class ValueOpView(Value):
+        _opview_cls = cls
+
+        def __init__(self, *args, **kwargs):
+          from .pycde_types import PyCDEType
+          from .dialects import hw
+
+          created = self._opview_cls.create(*args, **kwargs)
+          if isinstance(created, support.NamedValueOpView):
+            created = created.opview
+
+          assert len(created.results) == 1
+          value = created.results[0]
+          type = PyCDEType(value.type)
+
+          if isinstance(type.strip, hw.ArrayType):
+            constructor = ListValue
+          elif isinstance(type.strip, hw.StructType):
+            constructor = StructValue
+          elif isinstance(type.strip, ir.IntegerType):
+            constructor = BitVectorValue
+          else:
+            constructor = RegularValue
+
+          self._inst = constructor(value, type)
+
+        def __getitem__(self, sub):
+          return self._inst[sub]
+
+        def __getattr__(self, attr):
+          return getattr(self._inst, attr)
+
+        def __len__(self):
+          return len(self._inst)
+
+      wrapped_class = ValueOpView
+      setattr(module, attr, wrapped_class)
+    else:
+      setattr(module, attr, cls)

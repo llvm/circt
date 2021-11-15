@@ -3,7 +3,7 @@
 
 from pycde import System, module, generator, types
 
-from circt.dialects import hw
+from pycde.dialects import hw
 
 
 @module
@@ -11,11 +11,11 @@ class GeneratorOptions:
 
   @generator
   def generator_a(mod):
-    hw.ConstantOp.create(types.i32, 1)
+    hw.ConstantOp(types.i32, 1)
 
   @generator
   def generator_b(mod):
-    hw.ConstantOp.create(types.i32, 2)
+    hw.ConstantOp(types.i32, 2)
 
 
 # CHECK: hw.constant 1

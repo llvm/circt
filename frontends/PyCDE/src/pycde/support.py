@@ -1,5 +1,4 @@
 import circt.support as support
-from circt.dialects import hw
 
 import mlir.ir as ir
 
@@ -55,10 +54,12 @@ def get_user_loc() -> ir.Location:
 def create_const_zero(type: ir.Type):
   """Create a 'default' constant value of zero. Used for creating dummy values
   to connect to extern modules with input ports we want to ignore."""
+  from .dialects import hw
   width = hw.get_bitwidth(type)
+
   with get_user_loc():
-    zero = hw.ConstantOp.create(ir.IntegerType.get_signless(width), 0)
-    return hw.BitcastOp(type, zero.result)
+    zero = hw.ConstantOp(ir.IntegerType.get_signless(width), 0)
+    return hw.BitcastOp(type, zero)
 
 
 class OpOperandConnect(support.OpOperand):
@@ -73,6 +74,7 @@ def obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
   assert x is not None
   from .value import Value
+  from .dialects import hw
 
   type = support.type_to_pytype(type)
   if isinstance(type, hw.TypeAliasType):
@@ -95,7 +97,7 @@ def obj_to_value(x, type, result_type=None):
     if not isinstance(type, ir.IntegerType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
     with get_user_loc():
-      return Value.get(hw.ConstantOp.create(type, x).result)
+      return hw.ConstantOp(type, x)
 
   if isinstance(x, list):
     if not isinstance(type, hw.ArrayType):
@@ -107,7 +109,7 @@ def obj_to_value(x, type, result_type=None):
     list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
     # CIRCT's ArrayCreate op takes the array in reverse order.
     with get_user_loc():
-      return Value.get(hw.ArrayCreateOp.create(reversed(list_of_vals)).result)
+      return hw.ArrayCreateOp(reversed(list_of_vals))
 
   if isinstance(x, dict):
     if not isinstance(type, hw.StructType):
@@ -122,14 +124,13 @@ def obj_to_value(x, type, result_type=None):
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")
     with get_user_loc():
-      return Value.get(
-          hw.StructCreateOp.create(elem_name_values,
-                                   result_type=result_type).result)
+      return hw.StructCreateOp(elem_name_values, result_type=result_type)
 
   raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
 
 
 def create_type_string(ty):
+  from .dialects import hw
   ty = support.type_to_pytype(ty)
   if isinstance(ty, hw.TypeAliasType):
     return ty.name

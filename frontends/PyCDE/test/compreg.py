@@ -5,7 +5,7 @@
 import pycde
 from pycde import types, module, Input, Output
 
-from circt.dialects import seq
+from pycde.dialects import seq
 from pycde.module import generator
 
 import sys
@@ -19,8 +19,8 @@ class CompReg:
 
   @generator
   def build(ports):
-    compreg = seq.CompRegOp.create(types.i8, clk=ports.clk, input=ports.input)
-    ports.output = compreg.data
+    compreg = seq.CompRegOp(types.i8, clk=ports.clk, input=ports.input)
+    ports.output = compreg
 
 
 mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])

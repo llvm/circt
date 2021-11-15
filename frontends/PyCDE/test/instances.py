@@ -3,7 +3,7 @@
 # RUN: FileCheck %s --input-file %t/Test.tcl --check-prefix=OUTPUT
 
 import pycde
-import circt.dialects.hw
+import pycde.dialects.hw
 
 from pycde.attributes import placement
 from pycde.devicedb import PhysLocation, PrimitiveType
@@ -34,7 +34,7 @@ class Test:
 
   @pycde.generator
   def build(_):
-    c1 = circt.dialects.hw.ConstantOp.create(pycde.types.i1, 1)
+    c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
     UnParameterized(x=c1)
     UnParameterized(x=c1)
 
