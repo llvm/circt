@@ -31,6 +31,7 @@ using namespace circt::firrtl;
 
 using ValueVector = llvm::SmallVector<Value, 3>;
 using ValueVectorList = std::vector<ValueVector>;
+using NameUniquer = std::function<std::string(Operation *)>;
 
 //===----------------------------------------------------------------------===//
 // Utils
@@ -2293,23 +2294,17 @@ bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
 
-static std::string getInstanceName(Operation *op) {
-  if (auto instOp = dyn_cast<handshake::InstanceOp>(op); instOp)
-    return instOp.getModule().str();
-  else
-    return getBareSubModuleName(op);
-}
-
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
-                         ConversionPatternRewriter &rewriter) {
+                         ConversionPatternRewriter &rewriter,
+                         NameUniquer &instanceNameGen) {
   rewriter.setInsertionPointAfter(oldOp);
 
   // Create a instance operation.
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), subModuleOp, getInstanceName(oldOp));
+      oldOp->getLoc(), subModuleOp, instanceNameGen(oldOp));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
@@ -2365,6 +2360,11 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
   rewriter.eraseOp(oldOp);
 }
 
+static std::string getInstanceName(Operation *op) {
+  auto instOp = dyn_cast<handshake::InstanceOp>(op);
+  return instOp ? instOp.getModule().str() : getBareSubModuleName(op);
+}
+
 //===----------------------------------------------------------------------===//
 // HandshakeToFIRRTL lowering Pass
 //===----------------------------------------------------------------------===//
@@ -2404,6 +2404,12 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     rewriter.setInsertionPointToStart(circuitOp.getBody());
     auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
 
+    NameUniquer instanceUniquer = [&](Operation *op) {
+      std::string instName = getInstanceName(op);
+      unsigned id = instanceNameCntr[instName]++;
+      return instName + std::to_string(id);
+    };
+
     // Traverse and convert each operation in funcOp.
     for (Operation &op : *topModuleOp.getBody()) {
       if (isa<handshake::ReturnOp>(op))
@@ -2434,8 +2440,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0,
-                     rewriter);
+        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0, rewriter,
+                     instanceUniquer);
       }
     }
     rewriter.eraseOp(funcOp);
@@ -2446,6 +2452,11 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   }
 
 private:
+  /// Maintain a map from module names to the # of times the module has been
+  /// instantiated inside this module. This is used to generate unique names for
+  /// each instance.
+  mutable std::map<std::string, unsigned> instanceNameCntr;
+
   /// Top level FIRRTL circuit operation, which we'll emit into. Marked as
   /// mutable due to circuitOp.getBody() being non-const.
   mutable CircuitOp circuitOp;
