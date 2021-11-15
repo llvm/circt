@@ -133,5 +133,5 @@ t.print()
 # OUTPUT-DAG:  set_instance_assignment -name PLACE_REGION "X0 Y0 X10 Y10;X10 Y10 X20 Y20" -to $parent|UnParameterized|Nothing
 # OUTPUT-DAG:  set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|UnParameterized|Nothing
 # OUTPUT-DAG:  set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|UnParameterized|Nothing
-# OUTPUT-DAG:  set_instance_assignment -name REGION_NAME region1 -to $parent|UnParameterized|Nothing
+# OUTPUT-DAG:  set_instance_assignment -name REGION_NAME region_0 -to $parent|UnParameterized|Nothing
 t.emit_outputs()
