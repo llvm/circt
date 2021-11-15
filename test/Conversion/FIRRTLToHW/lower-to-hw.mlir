@@ -1410,7 +1410,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %9 = hw.array_get %1[%true] : !hw.array<2xi2>
     // CHECK-NEXT: %10 = comb.extract %9 from 0 : (i2) -> i1
     // CHECK-NEXT: %11 = hw.array_create %8, %10 : i1
-    // CHECK-NEXT: sv.assign %.b.output, %11 : !hw.array<2xi1>
+    // CHECK-NEXT: %12 = sv.array_index_inout %.b.output[%false] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT: %13 = hw.array_get %11[%false] : !hw.array<2xi1>
+    // CHECK-NEXT: sv.assign %12, %13 : i1
+    // CHECK-NEXT: %14 = sv.array_index_inout %.b.output[%true] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT: %15 = hw.array_get %11[%true] : !hw.array<2xi1>
+    // CHECK-NEXT: sv.assign %14, %15 : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<2xi1>
   }
 
@@ -1435,5 +1440,27 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<2xi1>
   }
 
+<<<<<<< HEAD
 >>>>>>> 73564647 ([FIRRTL/LowerToHW] Add initialization and lowering around connect)
+=======
+  // CHECK-LABEL: hw.module @partialConnectDifferentVectorLength
+  firrtl.module @partialConnectDifferentVectorLength(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 2>) {
+    %r1 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 3>
+    firrtl.connect %r1, %a : !firrtl.vector<uint<1>, 3>, !firrtl.vector<uint<1>, 3>
+    firrtl.partialconnect %b, %r1 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 3>
+    // CHECK:      sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r1, %a : !hw.array<3xi1>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %2 = hw.array_get %1[%c0_i2] : !hw.array<3xi1>
+    // CHECK-NEXT: %3 = hw.array_get %1[%c1_i2] : !hw.array<3xi1>
+    // CHECK-NEXT: %4 = hw.array_create %2, %3 : i1
+    // CHECK-NEXT: %5 = sv.array_index_inout %.b.output[%false] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT: %6 = hw.array_get %4[%false] : !hw.array<2xi1>
+    // CHECK-NEXT: sv.assign %5, %6 : i1
+    // CHECK-NEXT: %7 = sv.array_index_inout %.b.output[%true] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT: %8 = hw.array_get %4[%true] : !hw.array<2xi1>
+    // CHECK-NEXT: sv.assign %7, %8 : i1
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xi1>
+  }
+>>>>>>> 148d1eda (fix index mismatch and add test)
 }
