@@ -468,8 +468,8 @@ hw.module @issue595(%arr: !hw.array<128xi1>) {
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
-  // CHECK: assign _T = _T_1[6'h0+:32];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
+  // CHECK: assign _T = _T_1[6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -491,8 +491,8 @@ hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
-  // CHECK: assign _T = _T_1[6'h0+:32];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
+  // CHECK: assign _T = _T_1[6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -513,8 +513,8 @@ hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
-  // CHECK: assign _T = _T_1[6'h0+:32];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
+  // CHECK: assign _T = _T_1[6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -530,15 +530,15 @@ hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
   %0 = hw.array_create %x, %x, %x, %x : i3
   // CHECK: wire [3:0][2:0] _T = 
   %1 = hw.array_slice %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
-  // CHECK: assign o1 = _T[2'h1+:2];
+  // CHECK: assign o1 = _T[2'h1 +: 2];
 
   %c1_i7 = hw.constant 1 : i7
 
   /// This can be inlined.
-  // CHECK: assign o2 = arr[7'h1+:64];
+  // CHECK: assign o2 = arr[7'h1 +: 64];
   %2 = hw.array_slice %arr at %c1_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
-  // CHECK: assign o3 = arr[y + 7'h1+:64];
+  // CHECK: assign o3 = arr[y + 7'h1 +: 64];
   %sum = comb.add %y, %c1_i7 : i7
   %3 = hw.array_slice %arr at %sum : (!hw.array<128xi1>) -> !hw.array<64xi1>
 

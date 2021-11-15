@@ -144,7 +144,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:   assign r33 = cond ? a : b;
 // CHECK-NEXT:   assign r34 = ~a;
-// CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a+:3] : [[WIRE0]][b+:3];
+// CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
 // CHECK-NEXT:   assign r37 = [[WIRE2]][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};

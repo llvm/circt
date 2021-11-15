@@ -1784,7 +1784,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
-  os << "+:" << dstWidth << ']';
+  os << " +: " << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
@@ -1830,11 +1830,10 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
   os << '[';
   emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
   if (op.decrement())
-    os << " -";
+    os << " -: ";
   else
-    os << " +";
-  os << ": " << op.width();
-  os << ']';
+    os << " +: ";
+  os << op.width() << ']';
   return {Selection, prec.signedness};
 }
 
@@ -1843,10 +1842,10 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
   os << '[';
   emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
   if (op.decrement())
-    os << " -";
+    os << " -: ";
   else
-    os << " +";
-  os << ": " << op.width();
+    os << " +: ";
+  os << op.width();
   os << ']';
   return info;
 }
