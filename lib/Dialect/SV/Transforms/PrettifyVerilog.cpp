@@ -114,6 +114,13 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   if (op->use_empty() || op->hasOneUse())
     return false;
 
+  // If this operation has any users that cannot inline the operation, then
+  // don't duplicate any of them.
+  for (auto *user : op->getUsers()) {
+    if (isa<comb::ExtractOp, hw::ArraySliceOp, comb::SExtOp>(user))
+      return false;
+  }
+
   // Duplicating unary operations can move them across blocks (down the region
   // tree).  Make sure to keep referenced constants local.
   auto cloneConstantOperandsIfNeeded = [&](Operation *op) {

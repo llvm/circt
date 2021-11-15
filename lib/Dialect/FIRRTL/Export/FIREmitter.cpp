@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Translation.h"
@@ -64,10 +66,12 @@ struct Emitter {
   void emitStatement(PartialConnectOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
-  // TODO: Handle MemoryPortOp
-  // TODO: Handle CMemOp
-  // TODO: Handle MemOp
-  // TODO: Handle SMemOp
+  void emitStatement(MemOp op);
+  void emitStatement(InvalidValueOp op);
+  void emitStatement(CombMemOp op);
+  void emitStatement(SeqMemOp op);
+  void emitStatement(MemoryPortOp op);
+  void emitStatement(MemoryPortAccessOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -129,8 +133,12 @@ struct Emitter {
   HANDLE(XorRPrimOp, "xorr");
 #undef HANDLE
 
+  // Attributes
+  void emitAttribute(MemDirAttr attr);
+  void emitAttribute(RUWAttr attr);
+
   // Types
-  void emitType(FIRRTLType type);
+  void emitType(Type type);
 
   // Locations
   void emitLocation(Location loc);
@@ -187,6 +195,9 @@ private:
     auto it = valueNamesStorage.insert(str);
     valueNames.insert({value, it.first->getKey()});
   }
+
+  /// The current circuit namespace valid within the call to `emitCircuit`.
+  CircuitNamespace circuitNamespace;
 };
 } // namespace
 
@@ -194,11 +205,12 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
+  circuitNamespace.add(op);
   indent() << "circuit " << op.name() << " :\n";
   addIndent();
   for (auto &bodyOp : *op.getBody()) {
     if (encounteredError)
-      return;
+      break;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<FModuleOp, FExtModuleOp>([&](auto op) {
           emitModule(op);
@@ -209,6 +221,7 @@ void Emitter::emitCircuit(CircuitOp op) {
         });
   }
   reduceIndent();
+  circuitNamespace.clear();
 }
 
 /// Emit an entire module.
@@ -288,7 +301,9 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
 
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
-static bool isEmittedInline(Operation *op) { return isExpression(op); }
+static bool isEmittedInline(Operation *op) {
+  return isExpression(op) && !isa<InvalidValueOp>(op);
+}
 
 void Emitter::emitStatementsInBlock(Block &block) {
   for (auto &bodyOp : block) {
@@ -299,7 +314,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              PartialConnectOp, InstanceOp, AttachOp>(
+              PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryPortAccessOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -473,6 +489,123 @@ void Emitter::emitStatement(AttachOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(MemOp op) {
+  SmallString<16> portName(op.name());
+  portName.push_back('.');
+  auto portNameBaseLen = portName.size();
+  for (auto result : llvm::zip(op.getResults(), op.portNames())) {
+    portName.resize(portNameBaseLen);
+    portName.append(std::get<1>(result).cast<StringAttr>().getValue());
+    addValueName(std::get<0>(result), portName);
+  }
+
+  indent() << "mem " << op.name() << " :";
+  emitLocationAndNewLine(op);
+  addIndent();
+
+  indent() << "data-type => ";
+  emitType(op.getDataType());
+  os << "\n";
+  indent() << "depth => " << op.depth() << "\n";
+  indent() << "read-latency => " << op.readLatency() << "\n";
+  indent() << "write-latency => " << op.writeLatency() << "\n";
+
+  SmallString<16> reader, writer, readwriter;
+  for (std::pair<StringAttr, MemOp::PortKind> port : op.getPorts()) {
+    auto add = [&](SmallString<16> &to, StringAttr name) {
+      if (!to.empty())
+        to.push_back(' ');
+      to.append(name.getValue());
+    };
+    switch (port.second) {
+    case MemOp::PortKind::Read:
+      add(reader, port.first);
+      break;
+    case MemOp::PortKind::Write:
+      add(writer, port.first);
+      break;
+    case MemOp::PortKind::ReadWrite:
+      add(readwriter, port.first);
+      break;
+    }
+  }
+  if (!reader.empty())
+    indent() << "reader => " << reader << "\n";
+  if (!writer.empty())
+    indent() << "writer => " << writer << "\n";
+  if (!readwriter.empty())
+    indent() << "readwriter => " << readwriter << "\n";
+
+  indent() << "read-under-write => ";
+  emitAttribute(op.ruw());
+  os << "\n";
+
+  reduceIndent();
+}
+
+void Emitter::emitStatement(SeqMemOp op) {
+  indent() << "smem " << op.name() << " : ";
+  emitType(op.getType());
+  os << " ";
+  emitAttribute(op.ruw());
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(CombMemOp op) {
+  indent() << "cmem " << op.name() << " : ";
+  emitType(op.getType());
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(MemoryPortOp op) {
+  // Nothing to output for this operation.
+  addValueName(op.data(), op.name());
+}
+
+void Emitter::emitStatement(MemoryPortAccessOp op) {
+  indent();
+
+  // Print the port direction and name.
+  auto port = cast<MemoryPortOp>(op.port().getDefiningOp());
+  emitAttribute(port.direction());
+  os << " mport " << port.name() << " = ";
+
+  // Print the memory name.
+  auto *mem = port.memory().getDefiningOp();
+  if (auto seqMem = dyn_cast<SeqMemOp>(mem))
+    os << seqMem.name();
+  else
+    os << cast<CombMemOp>(mem).name();
+
+  // Print the address.
+  os << "[";
+  emitExpression(op.index());
+  os << "], ";
+
+  // Print the clock.
+  emitExpression(op.clock());
+
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(InvalidValueOp op) {
+  // Only emit this invalid value if it is used somewhere else than the RHS of
+  // a connect.
+  if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
+        return use.getOperandNumber() == 1 &&
+               isa<ConnectOp, PartialConnectOp>(use.getOwner());
+      }))
+    return;
+
+  auto name = circuitNamespace.newName("_invalid");
+  addValueName(op, name);
+  indent() << "wire " << name << " : ";
+  emitType(op.getType());
+  emitLocationAndNewLine(op);
+  indent() << name << " is invalid";
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitExpression(Value value) {
   // Handle the trivial case where we already have a name for this value which
   // we can use.
@@ -553,14 +686,45 @@ void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
   os << ")";
 }
 
+void Emitter::emitAttribute(MemDirAttr attr) {
+  switch (attr) {
+  case MemDirAttr::Infer:
+    os << "infer";
+    break;
+  case MemDirAttr::Read:
+    os << "read";
+    break;
+  case MemDirAttr::Write:
+    os << "write";
+    break;
+  case MemDirAttr::ReadWrite:
+    os << "rdwr";
+    break;
+  }
+}
+
+void Emitter::emitAttribute(RUWAttr attr) {
+  switch (attr) {
+  case RUWAttr::Undefined:
+    os << "undefined";
+    break;
+  case RUWAttr::Old:
+    os << "old";
+    break;
+  case RUWAttr::New:
+    os << "new";
+    break;
+  }
+}
+
 /// Emit a FIRRTL type into the output.
-void Emitter::emitType(FIRRTLType type) {
+void Emitter::emitType(Type type) {
   auto emitWidth = [&](Optional<int32_t> width) {
     if (!width.hasValue())
       return;
     os << "<" << *width << ">";
   };
-  TypeSwitch<FIRRTLType>(type)
+  TypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { os << "Clock"; })
       .Case<ResetType>([&](auto) { os << "Reset"; })
       .Case<AsyncResetType>([&](auto) { os << "AsyncReset"; })
@@ -592,6 +756,10 @@ void Emitter::emitType(FIRRTLType type) {
         os << "}";
       })
       .Case<FVectorType>([&](auto type) {
+        emitType(type.getElementType());
+        os << "[" << type.getNumElements() << "]";
+      })
+      .Case<CMemoryType>([&](auto type) {
         emitType(type.getElementType());
         os << "[" << type.getNumElements() << "]";
       })

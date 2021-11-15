@@ -1,10 +1,11 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF,exprInEventControl | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
   %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
+  %partSelectReg = sv.reg : !hw.inout<i42>
  
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'd11;
@@ -22,7 +23,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     } else {
   // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond & forceWire)
       %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
-      %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [@wire1] }
+      %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
       %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond, %verb_tmp : i1
@@ -100,9 +101,17 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT:   if (cond)
     sv.if %cond {
       %c42 = hw.constant 42 : i42
-
       // CHECK-NEXT: wire42 = 42'h2A;
       sv.bpassign %wire42, %c42 : i42
+      %c40 = hw.constant 42 : i40
+
+      %c2_i3 = hw.constant 2 : i3
+      // CHECK-NEXT: partSelectReg[3'h2 +: 40] = 40'h2A;
+      %a = sv.indexed_part_select_inout %partSelectReg[%c2_i3 : 40] : !hw.inout<i42>, i3
+      sv.bpassign %a, %c40 : i40
+      // CHECK-NEXT: partSelectReg[3'h2 -: 40] = 40'h2A;
+      %b = sv.indexed_part_select_inout %partSelectReg[%c2_i3 decrement: 40] : !hw.inout<i42>, i3
+      sv.bpassign %b, %c40 : i40
     } else {
       // CHECK: wire42 = param_y;
       sv.bpassign %wire42, %param_y : i42
@@ -391,6 +400,30 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   hw.output %regout, %memout : i8, i8
 }
 
+hw.module @reg_1(%in4: i4, %in8: i8) -> (a : i3, b : i5) {
+  // CHECK-LABEL: module reg_1(
+
+  // CHECK: reg [17:0] myReg2
+  %myReg2 = sv.reg : !hw.inout<i18>
+
+  // CHECK-EMPTY:
+  // CHECK-NEXT: assign myReg2[4'h7 +: 8] = in8;
+  // CHECK-NEXT: assign myReg2[4'h7 -: 8] = in8;
+
+  %c2_i3 = hw.constant 7 : i4
+  %a1 = sv.indexed_part_select_inout %myReg2[%c2_i3 : 8] : !hw.inout<i18>, i4
+  sv.assign %a1, %in8 : i8
+  %b1 = sv.indexed_part_select_inout %myReg2[%c2_i3 decrement: 8] : !hw.inout<i18>, i4
+  sv.assign %b1, %in8 : i8
+  %c3_i3 = hw.constant 3 : i4
+  %r1 = sv.read_inout %myReg2 : !hw.inout<i18>
+  %c = sv.indexed_part_select %r1[%c3_i3 : 3] : i18,i4
+  %d = sv.indexed_part_select %r1[%in4 decrement:5] :i18, i4
+  // CHECK-NEXT: assign a = myReg2[4'h3 +: 3];
+  // CHECK-NEXT: assign b = myReg2[in4 -: 5];
+  hw.output %c, %d : i3,i5
+}
+
 // CHECK-LABEL: issue508
 // https://github.com/llvm/circt/issues/508
 hw.module @issue508(%in1: i1, %in2: i1) {
@@ -435,8 +468,8 @@ hw.module @issue595(%arr: !hw.array<128xi1>) {
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
-  // CHECK: assign _T = _T_1[6'h0+:32];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
+  // CHECK: assign _T = _T_1[6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -458,8 +491,8 @@ hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
-  // CHECK: assign _T = _T_1[6'h0+:32];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
+  // CHECK: assign _T = _T_1[6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -480,23 +513,48 @@ hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
-  // CHECK: assign _T = _T_1[6'h0+:32];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
+  // CHECK: assign _T = _T_1[6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
   hw.output
 }
 
+// CHECK-LABEL: module slice_inline_ports
+hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
+ -> (o1: !hw.array<2xi3>, o2: !hw.array<64xi1>, o3: !hw.array<64xi1>) {
+
+  // array_create cannot be inlined into the slice.
+  %c1_i2 = hw.constant 1 : i2
+  %0 = hw.array_create %x, %x, %x, %x : i3
+  // CHECK: wire [3:0][2:0] _T = 
+  %1 = hw.array_slice %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
+  // CHECK: assign o1 = _T[2'h1 +: 2];
+
+  %c1_i7 = hw.constant 1 : i7
+
+  /// This can be inlined.
+  // CHECK: assign o2 = arr[7'h1 +: 64];
+  %2 = hw.array_slice %arr at %c1_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
+
+  // CHECK: assign o3 = arr[y + 7'h1 +: 64];
+  %sum = comb.add %y, %c1_i7 : i7
+  %3 = hw.array_slice %arr at %sum : (!hw.array<128xi1>) -> !hw.array<64xi1>
+
+  hw.output %1, %2, %3: !hw.array<2xi3>, !hw.array<64xi1>, !hw.array<64xi1>
+}
+
+
+
 // CHECK-LABEL: if_multi_line_expr1
 hw.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) {
   %tmp6 = sv.reg  : !hw.inout<i25>
 
-  // CHECK:      if (reset)
+  // CHECK: if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
-  // CHECK-NEXT: else begin
-  // CHECK-NEXT:   automatic logic [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
-  // CHECK-NEXT:   tmp6 <= _tmp & 25'h3039;
+  // CHECK-NEXT: else
+  // CHECK-NEXT:   tmp6 <= {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
   // CHECK-NEXT: end
   sv.alwaysff(posedge %clock)  {
     %0 = comb.sext %really_long_port : (i11) -> i25
@@ -517,8 +575,8 @@ hw.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) {
   %c12345_i25 = hw.constant 12345 : i25
   %0 = comb.sext %really_long_port : (i11) -> i25
   %1 = comb.and %0, %c12345_i25 : i25
-  // CHECK:        wire [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
-  // CHECK-NEXT:   wire [24:0] _T = _tmp & 25'h3039;
+  // CHECK:   wire [24:0] _T = {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
+
 
   // CHECK:      if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
@@ -609,10 +667,9 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 // CHECK-LABEL: module issue728(
 hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK:  always @(posedge clock) begin
-  // CHECK:    automatic logic _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:    automatic logic _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
   // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    if (_tmp & _tmp_0)
+  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
+  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
   // CHECK:      $fwrite(32'h80000002, "this cond is split");
   // CHECK:  end // always @(posedge)
   sv.always posedge %clock  {
@@ -628,13 +685,10 @@ hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija:
 // CHECK-LABEL: module issue728ifdef(
 hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK: always @(posedge clock) begin
-  // CHECK:      automatic logic _tmp;
-  // CHECK:      automatic logic _tmp_0;
   // CHECK:    $fwrite(32'h80000002, "force output");
   // CHECK:    `ifdef FUN_AND_GAMES
-  // CHECK:      _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:      _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
-  // CHECK:      if (_tmp & _tmp_0)
+  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
+  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
   // CHECK:        $fwrite(32'h80000002, "this cond is split");
   // CHECK:    `endif
   // CHECK: end // always @(posedge)
@@ -844,7 +898,7 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
     // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
     // CHECK: automatic logic [41:0] _T_0 = b;
-    %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [@regSym]}
+    %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [#hw.innerNameRef<@DontDuplicateSideEffectingVerbatim::@regSym>]}
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
     // CHECK: a = _T;
@@ -877,10 +931,10 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, aa1,reg2 = reg2 )
   sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}},reg2 = {{6}} )" 
           (%add, %xor)  : i8,i8
-          {symbols = [@verbatim_reg1, @verbatim_M2, 
-          @verbatim_inout_2, @verbatim_b1, @verbatim_reg2]}
+          {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_reg1>, @verbatim_M2, 
+          @verbatim_inout_2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>, #hw.innerNameRef<@verbatim_M1::@verbatim_reg2>]}
   // CHECK: Wire : wire25
-  sv.verbatim " Wire : {{0}}" {symbols = [@verbatim_wireSym1]}
+  sv.verbatim " Wire : {{0}}" {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_wireSym1>]}
 }
 
 // CHECK-LABEL: module verbatim_M2(
@@ -892,7 +946,7 @@ hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
   sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
                 (%add, %xor)  : i8,i8 
-                {symbols = [@verbatim_M1, @verbatim_M2, @verbatim_b1]}
+                {symbols = [@verbatim_M1, @verbatim_M2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>]}
 }
 
 // CHECK-LABEL: module InlineAutomaticLogicInit(
@@ -948,15 +1002,12 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   // CHECK: initial begin
   sv.initial {
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
-    // CHECK: automatic logic [41:0] _tmp = {{..}}31{really_really_long_port[10]}}, really_really_long_port};
-    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + _tmp;
-    // CHECK: automatic logic [41:0] _tmp_6 = [[THING]] * [[THING]]
-    // CHECK: automatic logic [41:0] _tmp_7 = [[THING]] * [[THING]]
-    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = _tmp_6 * _tmp_7;
+    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + {{..}}31{really_really_long_port[10]}},
+    // CHECK: really_really_long_port};
+    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
+    // CHECK:                                           [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
 
     // Check the indentation level of temporaries.  Issue #1625
-    // CHECK: {{^    }}automatic logic [41:0] _tmp_8;
-    // CHECK: {{^    }}automatic logic [41:0] _tmp_9;
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
 
     %thing2 = comb.sext %really_really_long_port : (i11) -> i42
@@ -1009,29 +1060,46 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 
+// CHECK-LABEL: module extInst2
+// CHECK-NEXT:     input                signed_0, _i, _j, _k
+hw.module @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> () {}
+
 // CHECK-LABEL: module remoteInstDut
 hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   %mywire = sv.wire : !hw.inout<i1>
   %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
   %myreg = sv.reg : !hw.inout<i1>
   %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
+  %signed = sv.wire  : !hw.inout<i1>
+  %mywire_rd1 = sv.read_inout %signed : !hw.inout<i1>
+  %output = sv.reg : !hw.inout<i1>
+  %myreg_rd1 = sv.read_inout %output: !hw.inout<i1>
   %0 = hw.constant 1 : i1
   hw.instance "a1" sym @bindInst @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
-// CHECK: wire a2__k
+  hw.instance "signed" sym @bindInst3 @extInst2(signed: %mywire_rd1 : i1, _i: %myreg_rd1 : i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
+// CHECK: wire signed__k
+// CHECK-NEXT: wire a2__k
 // CHECK-NEXT: wire a1__k
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
+// CHECK-NEXT: wire signed_0
+// CHECK-NEXT: reg  output_1
 // CHECK: assign a1__k = 1'h1
-// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT: // extInst a1
+// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst a1
 // CHECK: assign a2__k = 1'h1
-// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT: // extInst a2
+// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst a2
+// CHECK:  assign signed__k = 1'h1
+// CHECK-NEXT:  /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst2 signed_2
+// CHECK-NEXT:    .signed_0 (signed_0)
 }
 
 hw.module @bindInMod() {
-  sv.bind @bindInst in @remoteInstDut
+  sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
+  sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>
 }
 
 // CHECK-LABEL: module bindInMod();
@@ -1042,9 +1110,14 @@ hw.module @bindInMod() {
 // CHECK-NEXT:   ._k (a1__k)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
+// CHECK-NEXT:  bind remoteInstDut extInst2 signed_2 (
+// CHECK-NEXT:    .signed_0 (signed_0),
+// CHECK-NEXT:    ._i       (output_1),
+// CHECK-NEXT:    ._j       (j),
+// CHECK-NEXT:    ._k       (signed__k)
 // CHECK: endmodule
 
-sv.bind @bindInst2 in @remoteInstDut
+sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 
 // CHECK-LABEL: bind remoteInstDut extInst a2 (
 // CHECK-NEXT:   ._h (mywire),

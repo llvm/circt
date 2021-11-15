@@ -160,7 +160,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
 ; nlas. 
 
 ; expected-error @+2 {{unapplied annotations with target '~NLAParse|A_companion' and payload '[{class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0 : i64, name = "A", type = "companion"}]'}}
-; expected-error @+1 {{unapplied annotations with target '~NLAParse|NLAParse/dut:DUT/foobar:FooBar>clock' and payload '[{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64, target = []}, {class = "firrtl.transforms.DontTouchAnnotation", target = []}]'}}
+; expected-error @+1 {{unapplied annotations with target '~NLAParse|FooBar>clock' and payload '[{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64, target = []}, {class = "firrtl.transforms.DontTouchAnnotation", target = []}]'}}
 circuit NLAParse : %[[
   {
    "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", 

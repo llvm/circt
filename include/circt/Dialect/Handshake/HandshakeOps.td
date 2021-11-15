@@ -14,8 +14,8 @@
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
 def FuncOp : Op<Handshake_Dialect, "func", [
-   NativeOpTrait<"IsIsolatedFromAbove">,
-   NativeOpTrait<"FunctionLike">,
+   IsolatedFromAbove,
+   FunctionLike,
    Symbol,
    RegionKindInterface
 ]> {
@@ -35,23 +35,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
   let builders =
        [OpBuilder<(ins "StringRef":$name, "FunctionType":$type,
-                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-                      CArg<"ArrayRef<NamedAttrList>", "{}">:$argAttrs),
-                      [{
-                     $_state.addAttribute(SymbolTable::getSymbolAttrName(),
-                                         $_builder.getStringAttr(name));
-                     $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-                     $_state.attributes.append(attrs.begin(), attrs.end());
-                     $_state.addRegion();
-
-                     // Not needed?? Arguments are already included in attrs
-                     /* assert(type.getNumInputs() == argAttrs.size());
-                      SmallString<8> argAttrName;
-                      for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
-                        if (auto argDict = argAttrs[i].getDictionary())
-                          $_state.addAttribute(getArgAttrName(i, argAttrName),
-                      argDict);*/
-                   }]>];
+                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>];
 
   let extraClassDeclaration = [{
     // Add an entry block to an empty function, and set up the block arguments
@@ -63,9 +47,6 @@ def FuncOp : Op<Handshake_Dialect, "func", [
           .getValue()
           .cast<FunctionType>();
     }
-    // bool isVarArg() {
-    //   return getType().getUnderlyingType()->isFunctionVarArg();
-    // }
 
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<handshake::FuncOp>;
@@ -80,6 +61,31 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
 
+    /// Returns the names of the arguments to this function.
+    ArrayAttr getArgNames() {
+      return (*this)->getAttrOfType<ArrayAttr>("argNames");
+    }
+
+    /// Returns the names of the results from this function.
+    ArrayAttr getResNames() {
+      return (*this)->getAttrOfType<ArrayAttr>("resNames");
+    }
+
+    /// Returns the argument name at the given index.
+    StringAttr getArgName(unsigned idx) {
+      return getArgNames()[idx].cast<StringAttr>();
+    }
+
+    /// Returns the result name at the given index.
+    StringAttr getResName(unsigned idx) {
+      return getResNames()[idx].cast<StringAttr>();
+    }
+
+    /// Resolve argument and result names. This can be used during building of
+    /// a handshake.func operation to ensure that names provided by an incoming
+    /// operation fulfills the name requirements of the handshake function.
+    void resolveArgAndResNames();
+
     /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
@@ -93,41 +99,9 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     }
   }];
 
-  let verifier = [{
-    // If this function is external there is nothing to do.
-    if (isExternal())
-      return success();
-
-    // Verify that the argument list of the function and the arg list of the
-    // entry block line up.  The trait already verified that the number of
-    // arguments is the same between the signature and the block.
-    auto fnInputTypes = getType().getInputs();
-    Block &entryBlock = front();
-
-    for (unsigned i = 0, e = entryBlock.getNumArguments(); i != e; ++i)
-      if (fnInputTypes[i] != entryBlock.getArgument(i).getType())
-        return emitOpError("type of entry block argument #")
-               << i << '(' << entryBlock.getArgument(i).getType()
-               << ") must match the type of the corresponding argument in "
-               << "function signature(" << fnInputTypes[i] << ')';
-
-    return success();
-  }];
-  let printer = [{
-    FunctionType fnType = getType();
-    mlir::function_like_impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
-        /*isVariadic=*/true, fnType.getResults());
-  }];
-  let parser = [{
-    auto buildFuncType =
-        [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-           mlir::function_like_impl::VariadicFlag, std::string &) {
-      return builder.getFunctionType(argTypes, results);
-    };
-
-    return mlir::function_like_impl::parseFunctionLikeOp(parser, result,
-        /*allowVariadic=*/true, buildFuncType);
-  }];
+  let verifier = [{ return ::verify$cppClass(*this); }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 // InstanceOp
@@ -135,15 +109,15 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	 is similar to a function call, except that different instances of the
-	 same module are guaranteed to have their own distinct state.
-    The instantiated module is encoded as a
-    symbol reference attribute named "module".
+	  is similar to a function call, except that different instances of the
+	  same module are guaranteed to have their own distinct state.
+    The instantiated module is encoded as a symbol reference attribute named
+    "module". An instance operation takes a control input as its last argument
+    and returns a control output as its last result.
 
     Example:
-
     ```mlir
-    %2 = handshake.instance @my_add(%0, %1) : (f32, f32) -> f32
+    %2:2 = handshake.instance @my_add(%0, %1, %ctrl) : (f32, f32, none) -> (f32, none)
     ```
   }];
 
@@ -155,12 +129,14 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
       $_state.addTypes(module.getType().getResults());
+      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", module);
       $_state.addTypes(results);
+      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "StringRef":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
@@ -185,11 +161,18 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("module");
     }
+
+    /// Get the control operand of this instance op
+    Value getControl() {
+      return getOperands().back();
+    }
   }];
 
   let assemblyFormat = [{
     $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
   }];
+
+  let verifier = [{ return ::verify$cppClass(*this); }];
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -307,7 +290,8 @@ def MergeOp : Handshake_Op<"merge", [
 
 def MuxOp : Handshake_Op<"mux", [
   NoSideEffect, MergeLikeOpInterface,
-  DeclareOpInterfaceMethods<ExecutableOpInterface>
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "mux operation";
   let description = [{
@@ -330,7 +314,8 @@ def MuxOp : Handshake_Op<"mux", [
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
   NoSideEffect, MergeLikeOpInterface, HasClock,
-  DeclareOpInterfaceMethods<ExecutableOpInterface>
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "control merge operation";
   let description = [{
@@ -382,7 +367,9 @@ def BranchOp : Handshake_Op<"branch", [
 }
 
 def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "conditional branch operation";
   let description = [{
@@ -450,20 +437,21 @@ def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
 
 def ConstantOp : Handshake_Op<"constant", [
   NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<GeneralOpInterface>
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "constant operation";
   let description = [{
-    The "handshake.const" has a constant value.When triggered by its
-    single input, it sends the constant value to its single
+    The "handshake.const" has a constant value. When triggered by its
+    single `ctrl` input, it sends the constant value to its single
     successor.
   }];
 
-  let arguments = (ins AnyType, AnyAttr : $value);
+  let arguments = (ins AnyAttr:$value, AnyType:$ctrl);
   let results = (outs AnyType);
 
   // let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$operand)>];
+  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$ctrl)>];
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
@@ -519,13 +507,16 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
 def MemoryOp : Handshake_Op<"memory", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<MemoryOpInterface>, HasClock
+  DeclareOpInterfaceMethods<MemoryOpInterface>, HasClock,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "memory";
   let description = [{
     Each MemoryOp represents an independent memory or memory region (BRAM or external memory).
     It receives memory access requests from load and store operations. For every request,
     it returns data (for load) and a data-less token indicating completion.
+    The memory op represents a flat, unidimensional memory.
     Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
     Outputs: all load outputs, ordered the same as
     load addresses (lddata1, lddata2, ...), followed by all none outputs,
@@ -555,6 +546,52 @@ def MemoryOp : Handshake_Op<"memory", [
     }
     MemRefType getMemRefType() {
       return (*this)->getAttrOfType<TypeAttr>("type").getValue().cast<MemRefType>();
+    }
+  }];
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
+def ExternalMemoryOp : Handshake_Op<"extmemory", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
+]> {
+  let summary = "external memory";
+  let description = [{
+    An ExternalMemoryOp represents a wrapper around a memref input to a
+    handshake function. The semantics of the load/store operands are identical
+    to what is decribed for MemoryOp. The only difference is that the first
+    operand to this operand is a `memref` value.
+    Upon lowering to FIRRTL, a handshake interface will be created in the
+    top-level component for each load- and store which connected to this memory.
+
+    Example:
+
+    ```mlir
+    handshake.func @main(%i: index, %v: i32, %mem : memref<10xi32>, %ctrl: none) -> none {
+      %stCtrl = "handshake.extmemory"[ld = 0, st = 1](%mem : memref<10xi32>)(%vout, %addr) {id = 0 : i32} : (i32, index) -> (none)
+      %vout, %addr = "handshake.store"(%v, %i, %ctrl) : (i32, index, none) -> (i32, index)
+      ...
+    }
+    ```
+  }];
+  let arguments = (ins AnyMemRef:$memref,
+                       Variadic<AnyType>:$inputs,
+                       I32Attr : $ldCount,
+                       I32Attr : $stCount,
+                       I32Attr : $id);
+  let results = (outs Variadic<AnyType>:$outputs);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<(
+      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ldCount, "int":$stCount,
+      "int":$id)>
+  ];
+  let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` type($memref) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+
+  let extraClassDeclaration = [{
+    MemRefType getMemRefType() {
+      return (*this)->getOperand(0).getType().cast<MemRefType>();
     }
   }];
 }

@@ -41,7 +41,7 @@ circuit Foo : %[[
         "id": "OMID:2",
         "fields": [
           {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-          {"info": "", "name": "instancePath", "value": "OMMemberInstanceTarget:~Foo|Bar>mem1"}
+          {"info": "", "name": "finalPath", "value": "OMMemberInstanceTarget:~Foo|Bar>longint"}
         ]
       },
       {
@@ -49,7 +49,14 @@ circuit Foo : %[[
         "id": "OMID:3",
         "fields": [
           {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem2"}
+          {"info": "", "name": "finalPath", "value": "OMMemberReferenceTarget:~Foo|Bar>shortint"}
+        ]
+      },
+      {
+        "info": "",
+        "id": "OMID:4",
+        "fields": [
+          {"info": "", "name": "containingModule", "value": "OMInstanceTarget:~Foo|Foo"}
         ]
       }
     ]
@@ -58,17 +65,20 @@ circuit Foo : %[[
   extmodule MySRAM:
     defname = MySRAM
   module Foo :
-    inst bar of Bar
+    input unsigned : UInt<17>
+    output signed : UInt<19>
+    inst parameter of Bar
+    signed <= unsigned
   module Bar :
-    inst mem1 of MySRAM
-    mem mem2 :
+    inst longint of MySRAM
+    mem shortint :
         data-type => UInt<42>
         depth => 8
         read-latency => 0
         write-latency => 1
         reader => port
         read-under-write => undefined
-    mem2.port is invalid
+    shortint.port is invalid
 
 ; CHECK-LABEL: FILE "omir.json"
 
@@ -109,9 +119,26 @@ circuit Foo : %[[
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
 
 ; CHECK:       "id": "OMID:2"
-; CHECK:       "name": "instancePath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/bar:Bar/mem1:MySRAM"
+; CHECK:       "name": "finalPath"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/longint_0:MySRAM"
 
 ; CHECK:       "id": "OMID:3"
-; CHECK:       "name": "instancePath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/bar:Bar/mem2:FIRRTLMem_{{[^"]+}}"
+; CHECK:       "name": "finalPath"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:FIRRTLMem_{{[^"]+}}"
+
+; CHECK:       "id": "OMID:4"
+; CHECK:       "name": "containingModule"
+; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
+; CHECK:       "name": "ports"
+; CHECK-NEXT:  "value": [
+; CHECK-NEXT:    {
+; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>unsigned_0",
+; CHECK-NEXT:      "direction": "OMString:Input",
+; CHECK-NEXT:      "width": "OMBigInt:17"
+; CHECK-NEXT:    }
+; CHECK-NEXT:    {
+; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>signed_1",
+; CHECK-NEXT:      "direction": "OMString:Output",
+; CHECK-NEXT:      "width": "OMBigInt:19"
+; CHECK-NEXT:    }
+; CHECK-NEXT:  ]

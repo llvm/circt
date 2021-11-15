@@ -4,7 +4,7 @@
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @min_reduction_tree(
-// CHECK-SAME:                                       %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none {
+// CHECK-SAME:                                       %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (index) -> index
 // CHECK:           %[[VAL_3:.*]]:14 = "handshake.fork"(%[[VAL_2]]) {control = false} : (index) -> (index, index, index, index, index, index, index, index, index, index, index, index, index, index)
 // CHECK:           %[[VAL_4:.*]]:3 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none, none)

@@ -105,6 +105,30 @@ def MemoryOpInterface : OpInterface<"MemoryOpInterface"> {
   ];
 }
 
+def NamedIOInterface : OpInterface<"NamedIOInterface"> {
+  let description =
+      [{"Provides detailed names for the operands and results of an operation."}];
+
+  let methods = [
+    InterfaceMethod<
+        "Get the name of an operand.",
+        "std::string", "getOperandName", (ins "unsigned" : $idx),
+        "",
+        [{
+          // Return the default name of an operand.
+          return "in" + std::to_string(idx);
+        }]>,
+    InterfaceMethod<
+        "Get the name of a result.",
+        "std::string", "getResultName", (ins "unsigned" : $idx),
+        "",
+        [{
+          // Return the default name of a result.
+          return "out" + std::to_string(idx);
+        }]>
+  ];
+}
+
 def HasClock : NativeOpTrait<"HasClock">;
 
 #endif // HANDSHAKE_OP_INTERFACES

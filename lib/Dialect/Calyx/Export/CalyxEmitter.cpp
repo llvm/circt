@@ -98,7 +98,8 @@ private:
               LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp>(
             [&](auto op) { library = "core"; })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
-              SrshLibOp>([&](auto op) { library = "binary_operators"; })
+              SrshLibOp, MultPipeLibOp, DivPipeLibOp>(
+            [&](auto op) { library = "binary_operators"; })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           llvm_unreachable("Type matching failed for this operation.");
@@ -238,8 +239,12 @@ private:
         buffer << addressSymbol() << identifier;
         // The only time we may omit the value is when it is a Boolean attribute
         // with value 1.
-        if (!isBooleanAttribute || intAttr.getValue() != 1)
-          buffer << LParen() << value << RParen();
+        if (!isBooleanAttribute || intAttr.getValue() != 1) {
+          // Retrieve the unsigned representation of the value.
+          SmallVector<char, 4> s;
+          value.toStringUnsigned(s, /*Radix=*/10);
+          buffer << LParen() << s << RParen();
+        }
         buffer << space();
       }
     }
@@ -467,7 +472,7 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
                 SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
-                NotLibOp, OrLibOp, XorLibOp>(
+                NotLibOp, OrLibOp, XorLibOp, MultPipeLibOp, DivPipeLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
@@ -510,7 +515,7 @@ void Emitter::emitInstance(InstanceOp op) {
 }
 
 void Emitter::emitRegister(RegisterOp reg) {
-  size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
+  size_t bitWidth = reg.in().getType().getIntOrFloatBitWidth();
   indent() << getAttributes(reg) << reg.instanceName() << space() << equals()
            << space() << "std_reg" << LParen() << std::to_string(bitWidth)
            << RParen() << semicolonEndL();

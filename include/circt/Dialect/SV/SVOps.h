@@ -17,12 +17,14 @@
 #include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
 namespace hw {
 class InstanceOp;
 class SymbolCache;
+class InnerRefAttr;
 } // namespace hw
 
 namespace sv {

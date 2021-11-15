@@ -12,6 +12,7 @@ add_circt_dialect_library(CIRCTMSFT
   MSFTDialect.cpp
   MSFTOps.cpp
   MSFTPasses.cpp
+  ExportQuartusTcl.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT
@@ -33,5 +34,3 @@ add_circt_dialect_library(CIRCTMSFT
    )
 
 add_dependencies(circt-headers MLIRMSFTIncGen)
-
-add_subdirectory(TclExport)

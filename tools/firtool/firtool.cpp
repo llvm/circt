@@ -197,6 +197,7 @@ enum OutputFormatKind {
   OutputMLIR,
   OutputVerilog,
   OutputSplitVerilog,
+  OutputVerilogIR,
   OutputDisabled
 };
 
@@ -207,6 +208,8 @@ static cl::opt<OutputFormatKind> outputFormat(
                clEnumValN(OutputSplitVerilog, "split-verilog",
                           "Emit Verilog (one file per module; specify "
                           "directory with -o=<dir>)"),
+               clEnumValN(OutputVerilogIR, "verilog-ir",
+                          "Emit IR after Verilog lowering"),
                clEnumValN(OutputDisabled, "disable-output",
                           "Do not output anything")),
     cl::init(OutputMLIR));
@@ -306,6 +309,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       return success();
     case OutputVerilog:
     case OutputSplitVerilog:
+    case OutputVerilogIR:
       llvm::errs()
           << "verilog emission is not supported in -parse-only mode.\n";
       return failure();
@@ -368,8 +372,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  if (imconstprop && !disableOptimization)
+  bool nonConstAsyncResetValueIsError = false;
+  if (imconstprop && !disableOptimization) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+    nonConstAsyncResetValueIsError = true;
+  }
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -405,8 +412,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
-      outputFormat == OutputSplitVerilog) {
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
+      outputFormat == OutputSplitVerilog || outputFormat == OutputVerilogIR) {
+    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
+                                         nonConstAsyncResetValueIsError));
     pm.addPass(sv::createHWMemSimImplPass(replSeqMem));
 
     if (extractTestCode)
@@ -422,7 +430,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
 
   // Add passes specific to Verilog emission if we're going there.
-  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
+      outputFormat == OutputVerilogIR) {
     // Legalize unsupported operations within the modules.
     pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
@@ -442,12 +451,17 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       break;
     case OutputSplitVerilog:
       pm.addPass(createExportSplitVerilogPass(outputFilename));
-      // Run module hierarchy emission after verilog emission, which ensures we
-      // pick up any changes that verilog emission made.
-      if (exportModuleHierarchy)
-        pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+      break;
+    case OutputVerilogIR:
+      // Run the ExportVerilog pass to get its lowering, but discard the output.
+      pm.addPass(createExportVerilogPass(llvm::nulls()));
       break;
     }
+
+    // Run module hierarchy emission after verilog emission, which ensures we
+    // pick up any changes that verilog emission made.
+    if (exportModuleHierarchy)
+      pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
   }
 
   // Load the emitter options from the command line. Command line options if
@@ -457,7 +471,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (failed(pm.run(module.get())))
     return failure();
 
-  if (outputFormat == OutputMLIR) {
+  if (outputFormat == OutputMLIR || outputFormat == OutputVerilogIR) {
     auto outputTimer = ts.nest("Print .mlir output");
     module->print(outputFile.getValue()->os());
   }

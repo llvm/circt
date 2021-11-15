@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace mlir;
@@ -26,6 +27,19 @@ using namespace circt::staticlogic;
 
 static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
                                         OperationState &result) {
+  // Parse optional initiation interval.
+  auto parsedII = parser.parseOptionalKeyword("II");
+  if (parsedII.succeeded()) {
+    if (parser.parseEqual())
+      return failure();
+
+    IntegerAttr ii;
+    if (parser.parseAttribute(ii))
+      return failure();
+
+    result.addAttribute("II", ii);
+  }
+
   // Parse iter_args assignment list.
   SmallVector<OpAsmParser::OperandType> regionArgs, operands;
   if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
@@ -60,6 +74,10 @@ static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
 }
 
 static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
+  // Print the initiation interval.
+  if (op.II().hasValue())
+    p << " II = " << ' ' << op.II().getValue();
+
   // Print iter_args assignment list.
   p << " iter_args(";
   llvm::interleaveComma(
@@ -82,7 +100,7 @@ static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
 
 static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
   // Verify the condition block is "combinational" based on an allowlist of
-  // Standard ops.
+  // Arithmetic ops.
   Block &conditionBlock = op.condition().front();
   Operation *nonCombinational;
   WalkResult conditionWalk = conditionBlock.walk([&](Operation *op) {
@@ -137,6 +155,45 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
   // definitions and uses of `iter_args`.
 
   return success();
+}
+
+void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
+                            TypeRange resultTypes, IntegerAttr ii,
+                            ValueRange iterArgs) {
+  OpBuilder::InsertionGuard g(builder);
+
+  state.addTypes(resultTypes);
+  state.addAttribute("II", ii);
+  state.addOperands(iterArgs);
+
+  Region *condRegion = state.addRegion();
+  Block &condBlock = condRegion->emplaceBlock();
+  condBlock.addArguments(iterArgs.getTypes());
+  builder.setInsertionPointToEnd(&condBlock);
+  builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
+
+  Region *stagesRegion = state.addRegion();
+  Block &stagesBlock = stagesRegion->emplaceBlock();
+  stagesBlock.addArguments(iterArgs.getTypes());
+  builder.setInsertionPointToEnd(&stagesBlock);
+  builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
+                                       ValueRange());
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineStageOp
+//===----------------------------------------------------------------------===//
+
+void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
+                            TypeRange resultTypes) {
+  OpBuilder::InsertionGuard g(builder);
+
+  state.addTypes(resultTypes);
+
+  Region *region = state.addRegion();
+  Block &block = region->emplaceBlock();
+  builder.setInsertionPointToEnd(&block);
+  builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 }
 
 //===----------------------------------------------------------------------===//

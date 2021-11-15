@@ -25,7 +25,7 @@ static bool isWireOrReg(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
-  return isWireOrReg(op) && !AnnotationSet(op).hasDontTouch();
+  return isWireOrReg(op) && !hasDontTouch(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -189,7 +189,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
-    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+    if (!source.isOverdefined() && hasDontTouch(value))
       source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
@@ -219,7 +219,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
-    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+    if (!source.isOverdefined() && hasDontTouch(value))
       source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
@@ -476,7 +476,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     BlockArgument modulePortVal = fModule.getArgument(resultNo);
 
     // Mark don't touch results as overdefined
-    if (AnnotationSet::get(modulePortVal).hasDontTouch())
+    if (hasDontTouch(modulePortVal))
       markOverdefined(modulePortVal);
 
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);

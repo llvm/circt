@@ -102,10 +102,18 @@ static bool matchConstantOp(Operation *op, APInt &value) {
 
 /// Returns true if there exists only a single memref::LoadOp which loads from
 /// the memory referenced by loadOp.
-static bool singleLoadFromMemory(memref::LoadOp loadOp) {
-  return llvm::count_if(loadOp.memref().getUses(), [](auto &user) {
-           return dyn_cast<memref::LoadOp>(user.getOwner());
+static bool singleLoadFromMemory(Value memref) {
+  return llvm::count_if(memref.getUses(), [](OpOperand &user) {
+           return isa<memref::LoadOp>(user.getOwner());
          }) <= 1;
+}
+
+/// Returns true if there are no memref::StoreOp uses with the referenced
+/// memory.
+static bool noStoresToMemory(Value memref) {
+  return llvm::none_of(memref.getUses(), [](OpOperand &user) {
+    return isa<memref::StoreOp>(user.getOwner());
+  });
 }
 
 /// Creates a DictionaryAttr containing a unit attribute 'name'. Used for
@@ -513,7 +521,7 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
   rewriter.create<calyx::AssignOp>(loc, reg.write_en(),
                                    state.getConstant(rewriter, loc, 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort());
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 }
 
 static calyx::GroupOp buildWhileIterArgAssignments(
@@ -665,7 +673,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              memref::StoreOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
+                             AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
                              IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
@@ -694,6 +702,7 @@ private:
                         arith::ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, MulIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -790,38 +799,42 @@ private:
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::LoadOp loadOp) const {
-  auto memoryInterface =
-      getComponentState().getMemoryInterface(loadOp.memref());
-  if (singleLoadFromMemory(loadOp)) {
-    /// Single load from memory; Combinational case - we do not have to consider
-    /// adding registers in front of the memory.
+  Value memref = loadOp.memref();
+  auto memoryInterface = getComponentState().getMemoryInterface(memref);
+  if (noStoresToMemory(memref) && singleLoadFromMemory(memref)) {
+    // Single load from memory; we do not need to write the
+    // output to a register. This is essentially a "combinational read" under
+    // current Calyx semantics with memory, and thus can be done in a
+    // combinational group. Note that if any stores are done to this memory,
+    // we require that the load and store be in separate non-combinational
+    // groups to avoid reading and writing to the same memory in the same group.
     auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
     assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
                        loadOp.getIndices());
 
-    /// We refrain from replacing the loadOp result with
-    /// memoryInterface.readData, since multiple loadOp's need to be converted
-    /// to a single memory's ReadData. If this replacement is done now, we lose
-    /// the link between which SSA memref::LoadOp values map to which groups for
-    /// loading a value from the Calyx memory. At this point of lowering, we
-    /// keep the memref::LoadOp SSA value, and do value replacement _after_
-    /// control has been generated (see LateSSAReplacement). This is *vital* for
-    /// things such as InlineCombGroups to be able to properly track which
-    /// memory assignment groups belong to which accesses.
+    // We refrain from replacing the loadOp result with
+    // memoryInterface.readData, since multiple loadOp's need to be converted
+    // to a single memory's ReadData. If this replacement is done now, we lose
+    // the link between which SSA memref::LoadOp values map to which groups for
+    // loading a value from the Calyx memory. At this point of lowering, we
+    // keep the memref::LoadOp SSA value, and do value replacement _after_
+    // control has been generated (see LateSSAReplacement). This is *vital* for
+    // things such as InlineCombGroups to be able to properly track which
+    // memory assignment groups belong to which accesses.
     getComponentState().registerEvaluatingGroup(loadOp.getResult(), combGroup);
   } else {
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
     assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
                        loadOp.getIndices());
 
-    /// Multiple loads from the same memory; In this case, we _may_ have a
-    /// structural hazard in the design we generate. To get around this, we
-    /// conservatively place a register in front of each load operation, and
-    /// replace all uses of the loaded value with the register output. Proper
-    /// handling of this requires the combinational group inliner/scheduler to
-    /// be aware of when a combinational expression references multiple loaded
-    /// values from the same memory, and then schedule assignments to temporary
-    /// registers to get around the structural hazard.
+    // Multiple loads from the same memory; In this case, we _may_ have a
+    // structural hazard in the design we generate. To get around this, we
+    // conservatively place a register in front of each load operation, and
+    // replace all uses of the loaded value with the register output. Proper
+    // handling of this requires the combinational group inliner/scheduler to
+    // be aware of when a combinational expression references multiple loaded
+    // values from the same memory, and then schedule assignments to temporary
+    // registers to get around the structural hazard.
     auto reg = createReg(getComponentState(), rewriter, loadOp.getLoc(),
                          getComponentState().getUniqueName("load"),
                          loadOp.getMemRefType().getElementTypeBitWidth());
@@ -839,10 +852,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       getComponentState().getMemoryInterface(storeOp.memref());
   auto group = createGroupForOp<calyx::GroupOp>(rewriter, storeOp);
 
-  /// This is a sequential group, so register it as being scheduleable for the
-  /// block.
-  getComponentState().addBlockScheduleable(storeOp->getBlock(),
-                                           cast<calyx::GroupOp>(group));
+  // This is a sequential group, so register it as being scheduleable for the
+  // block.
+  getComponentState().addBlockScheduleable(storeOp->getBlock(), group);
   assignAddressPorts(rewriter, storeOp.getLoc(), group, memoryInterface,
                      storeOp.getIndices());
   rewriter.setInsertionPointToEnd(group.getBody());
@@ -852,6 +864,42 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       storeOp.getLoc(), memoryInterface.writeEn(),
       getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     MulIOp mul) const {
+  Location loc = mul.getLoc();
+  Type width = mul.result().getType(), one = rewriter.getI1Type();
+  auto multPipe =
+      getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
+          rewriter, loc, {width, width, one, one, one, width, one});
+  // Pass the result from the MulIOp to the Calyx primitive.
+  mul.result().replaceAllUsesWith(multPipe.out());
+  auto reg = createReg(getComponentState(), rewriter, mul.getLoc(),
+                       getComponentState().getUniqueName("mult_reg"),
+                       width.getIntOrFloatBitWidth());
+  // Multiplication pipelines are not combinational, so a GroupOp is required.
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, mul);
+  getComponentState().addBlockScheduleable(mul->getBlock(), group);
+
+  rewriter.setInsertionPointToEnd(group.getBody());
+  rewriter.create<calyx::AssignOp>(loc, multPipe.left(), mul.lhs());
+  rewriter.create<calyx::AssignOp>(loc, multPipe.right(), mul.rhs());
+  // Write the output to this register.
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), multPipe.out());
+  // The write enable port is high when the pipeline is done.
+  rewriter.create<calyx::AssignOp>(loc, reg.write_en(), multPipe.done());
+  rewriter.create<calyx::AssignOp>(
+      loc, multPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
+  // The group is done when the register write is complete.
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+
+  // Register the values for the pipeline.
+  getComponentState().registerEvaluatingGroup(multPipe.out(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.left(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.right(), group);
+
   return success();
 }
 
@@ -869,6 +917,10 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  // Externalize memories by default. This makes it easier for the native
+  // compiler to provide initialized memories.
+  memoryOp->setAttr("external",
+                    IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          CalyxMemoryInterface(memoryOp));
   return success();
@@ -1700,21 +1752,22 @@ private:
         clonedAssignOp->moveBefore(originGroup.getBody(),
                                    originGroup.getBody()->end());
       }
-      auto src = assignOp.src();
-      auto srcDefOp = src.getDefiningOp();
+      Value src = assignOp.src();
 
       /// Things which stop recursive inlining (or in other words, what
       /// breaks combinational paths).
       /// - Component inputs
       /// - Register and memory reads
       /// - Constant ops (constant ops are not evaluated by any group)
+      /// - Multiplication pipelines are sequential.
       /// - 'While' return values (these are registers, however, 'while'
       ///   return values have at the current point of conversion not yet
       ///   been rewritten to their register outputs, see comment in
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, scf::WhileOp>(srcDefOp))
+              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
+              src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -1927,7 +1980,7 @@ public:
     target.addIllegalDialect<ArithmeticDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
-                      ReturnOp, arith::ConstantOp, IndexCastOp>();
+                      MulIOp, ReturnOp, arith::ConstantOp, IndexCastOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
@@ -2097,8 +2150,6 @@ void SCFToCalyxPass::runOnOperation() {
     signalPassFailure();
     return;
   }
-
-  getOperation().dump();
 }
 
 //===----------------------------------------------------------------------===//

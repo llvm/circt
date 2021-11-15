@@ -38,7 +38,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CompRegOp reg, ArrayRef<Value> operands,
+  matchAndRewrite(CompRegOp reg, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 

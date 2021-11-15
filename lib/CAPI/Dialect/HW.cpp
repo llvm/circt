@@ -154,3 +154,13 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl) {
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl) {
   return wrap(unwrap(decl).cast<ParamDeclAttr>().getValue());
 }
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<ParamVerbatimAttr>();
+}
+MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text) {
+  auto textAttr = unwrap(text).cast<StringAttr>();
+  MLIRContext *ctx = textAttr.getContext();
+  auto type = NoneType::get(ctx);
+  return wrap(ParamVerbatimAttr::get(ctx, textAttr, type));
+}

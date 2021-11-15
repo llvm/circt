@@ -27,12 +27,6 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 // Values represented in `MSFT.td`.
 typedef int32_t CirctMSFTPrimitiveType;
 
-/// Emits tcl for the specified module using the provided callback and user
-/// data
-MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
-                                                       MlirStringCallback,
-                                                       void *userData);
-
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//
@@ -75,6 +69,16 @@ MLIR_CAPI_EXPORTED void circtMSFTSwitchInstanceAttrGetCases(
 
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTGetInstance(MlirOperation root,
                                                       MlirAttribute path);
+
+MLIR_CAPI_EXPORTED bool circtMSFTAttributeIsAPhysicalBoundsAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext, uint64_t, uint64_t,
+                                             uint64_t, uint64_t);
+
+MLIR_CAPI_EXPORTED bool
+    circtMSFTAttributeIsAPhysicalRegionRefAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtMSFTPhysicalRegionRefAttrGet(MlirContext, MlirStringRef);
 
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.

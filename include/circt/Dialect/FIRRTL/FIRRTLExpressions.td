@@ -10,13 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
-                      "arbitrary integer attribute with sign"> {
-  let storageType = [{ ::mlir::IntegerAttr }];
-  let returnType = [{ ::llvm::APSInt }];
-  let constBuilderCall = "IntegerAttr::get($_builder.getContext(), $0)";
-  let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
-}
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Types.td"
 
 def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
   let cppNamespace = "::circt::firrtl";
@@ -554,16 +549,21 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
     `firrtl.verbatim.expr` allows operand substitutions with `{{0}}` syntax.
   }];
 
-  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands);
+  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands,
+                       DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs FIRRTLType:$result);
   let assemblyFormat = [{
-    $text attr-dict (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result)
+    $text (`(` $operands^ `)`)?
+    `:` functional-type($operands, $result) attr-dict
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "StringRef":$text),
-               "build(odsBuilder, odsState, resultType, text, ValueRange{});">
+    OpBuilder<(ins "Type":$resultType, "Twine":$text,
+                   CArg<"ValueRange", "{}">:$operands,
+                   CArg<"ArrayRef<Attribute>", "{}">:$symbols), [{
+      build(odsBuilder, odsState, resultType, odsBuilder.getStringAttr(text),
+            operands, odsBuilder.getArrayAttr(symbols));
+    }]>
   ];
 }
 
@@ -583,16 +583,21 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
     `firrtl.verbatim.wire` allows operand substitutions with `{{0}}` syntax.
   }];
 
-  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands);
+  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands,
+                       DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs FIRRTLType:$result);
   let assemblyFormat = [{
-    $text attr-dict (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result)
+    $text (`(` $operands^ `)`)?
+    `:` functional-type($operands, $result) attr-dict
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "StringRef":$text),
-               "build(odsBuilder, odsState, resultType, text, ValueRange{});">
+    OpBuilder<(ins "Type":$resultType, "Twine":$text,
+                   CArg<"ValueRange", "{}">:$operands,
+                   CArg<"ArrayRef<Attribute>", "{}">:$symbols), [{
+      build(odsBuilder, odsState, resultType, odsBuilder.getStringAttr(text),
+            operands, odsBuilder.getArrayAttr(symbols));
+    }]>
   ];
 }
 

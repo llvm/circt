@@ -186,25 +186,23 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   auto ctx = top.getContext();
   if (!anno)
     return;
-  if (auto _dir = anno.get("directory"))
-    if (auto dir = _dir.cast<StringAttr>()) {
-      SmallVector<NamedAttribute> old;
-      for (auto i : top->getAttrs())
-        old.push_back(i);
-      old.emplace_back(Identifier::get(attrBase, ctx),
-                       hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
-      top->setAttrs(old);
-    }
-  if (auto _file = anno.get("filename"))
-    if (auto file = _file.cast<StringAttr>()) {
-      SmallVector<NamedAttribute> old;
-      for (auto i : top->getAttrs())
-        old.push_back(i);
-      old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
-                       hw::OutputFileAttr::getFromFilename(
-                           ctx, file.getValue(), /*excludeFromFileList=*/true));
-      top->setAttrs(old);
-    }
+  if (auto dir = anno.getAs<StringAttr>("directory")) {
+    SmallVector<NamedAttribute> old;
+    for (auto i : top->getAttrs())
+      old.push_back(i);
+    old.emplace_back(Identifier::get(attrBase, ctx),
+                     hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
+    top->setAttrs(old);
+  }
+  if (auto file = anno.getAs<StringAttr>("filename")) {
+    SmallVector<NamedAttribute> old;
+    for (auto i : top->getAttrs())
+      old.push_back(i);
+    old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+                     hw::OutputFileAttr::getFromFilename(
+                         ctx, file.getValue(), /*excludeFromFileList=*/true));
+    top->setAttrs(old);
+  }
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -245,8 +243,10 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
-  CircuitLoweringState(CircuitOp circuitOp, bool warn)
-      : circuitOp(circuitOp), enableAnnotationWarning(warn) {}
+  CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
+                       bool nonConstAsyncResetValueIsError)
+      : circuitOp(circuitOp), enableAnnotationWarning(enableAnnotationWarning),
+        nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {}
 
   Operation *getNewModule(Operation *oldModule) {
     auto it = oldToNewModuleMap.find(oldModule);
@@ -268,6 +268,7 @@ struct CircuitLoweringState {
 
 private:
   friend struct FIRRTLModuleLowering;
+  friend struct FIRRTLLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
   void operator=(const CircuitLoweringState &) = delete;
 
@@ -285,6 +286,10 @@ private:
 
   // Control access to binds.
   std::mutex bindsMutex;
+
+  /// If true, non-constant reset values of async reset registers are printed as
+  /// errors and cause the pass to abort. Otherwise they are warnings.
+  const bool nonConstAsyncResetValueIsError = true;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -302,6 +307,11 @@ void CircuitLoweringState::processRemainingAnnotations(
     // This can occur for example if an annotation marks something in the IR as
     // not to be processed by a pass, but that pass hasn't run anyway.
     if (a.isClass(
+            // If the class is `circt.nonlocal`, it's not really an annotation,
+            // but part of a path specifier for another annotation which is
+            // non-local.  We can ignore these path specifiers since there will
+            // be a warning produced for the real annotation.
+            "circt.nonlocal",
             // The following are either consumed by a pass running before
             // LowerToHW, or they have no effect if the pass doesn't run at all.
             // If the accompanying pass runs on the HW dialect, then LowerToHW
@@ -342,6 +352,9 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
+  void setNonConstAsyncResetValueIsError() {
+    nonConstAsyncResetValueIsError = true;
+  }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -368,10 +381,13 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
+                                 bool nonConstAsyncResetValueIsError) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
+  if (nonConstAsyncResetValueIsError)
+    pass->setNonConstAsyncResetValueIsError();
   return pass;
 }
 
@@ -396,14 +412,18 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(circuit, enableAnnotationWarning);
+  CircuitLoweringState state(circuit, enableAnnotationWarning,
+                             nonConstAsyncResetValueIsError);
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass, "firrtl.assert");
-  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass, "firrtl.assume");
-  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass, "firrtl.cover");
+  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass,
+                "firrtl.extract.assert");
+  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass,
+                "firrtl.extract.assume");
+  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass,
+                "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
                                          coverAnnoClass);
 
@@ -420,6 +440,9 @@ void FIRRTLModuleLowering::runOnOperation() {
         .Case<FExtModuleOp>([&](auto extModule) {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
+        })
+        .Case<NonLocalAnchor>([&](auto nla) {
+          // Just drop it.
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -697,6 +720,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
+    hwPort.sym = firrtlPort.sym;
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -1085,16 +1109,16 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   /// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
   Value getReadInOutOp(Value v);
 
-  void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
-  void addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
-                          ::ResetType resetStyle, sv::EventControl resetEdge,
-                          Value reset, std::function<void(void)> body = {},
-                          std::function<void(void)> resetBody = {});
-  void addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
-                          std::function<void(void)> body = {}) {
-    addToAlwaysFFBlock(clockEdge, clock, ::ResetType(), sv::EventControl(),
-                       Value(), body, std::function<void(void)>());
+  void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
+                        ::ResetType resetStyle, sv::EventControl resetEdge,
+                        Value reset, std::function<void(void)> body = {},
+                        std::function<void(void)> resetBody = {});
+  void addToAlwaysBlock(Value clock, std::function<void(void)> body = {}) {
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clock, ::ResetType(),
+                     sv::EventControl(), Value(), body,
+                     std::function<void(void)>());
   }
+
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
@@ -1271,11 +1295,10 @@ private:
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
-  llvm::SmallDenseMap<std::pair<Value, Region *>, sv::AlwaysOp> alwaysBlocks;
-
-  using AlwaysFFKeyType = std::tuple<Block *, sv::EventControl, Value,
-                                     ::ResetType, sv::EventControl, Value>;
-  llvm::SmallDenseMap<AlwaysFFKeyType, sv::AlwaysFFOp> alwaysFFBlocks;
+  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
+                                   ::ResetType, sv::EventControl, Value>;
+  llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
+      alwaysBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
@@ -1649,44 +1672,69 @@ Value FIRRTLLowering::getReadInOutOp(Value v) {
   return result;
 }
 
-void FIRRTLLowering::addToAlwaysBlock(Value clock,
-                                      std::function<void(void)> fn) {
-  auto &op = alwaysBlocks[{clock, builder.getBlock()->getParent()}];
-  if (op) {
-    runWithInsertionPointAtEndOfBlock(fn, op.body());
-    // Move the earlier always block(s) down to where the last would have been
-    // inserted.  This ensures that any values used by the always blocks are
-    // defined ahead of the uses, which leads to better generated Verilog.
-    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
-  } else {
-    op = builder.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, fn);
-  }
-}
+void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
+                                      ::ResetType resetStyle,
+                                      sv::EventControl resetEdge, Value reset,
+                                      std::function<void(void)> body,
+                                      std::function<void(void)> resetBody) {
+  auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
+                           resetEdge, reset}];
+  auto &alwaysOp = op.first;
+  auto &insideIfOp = op.second;
 
-void FIRRTLLowering::addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
-                                        ::ResetType resetStyle,
-                                        sv::EventControl resetEdge, Value reset,
-                                        std::function<void(void)> body,
-                                        std::function<void(void)> resetBody) {
-  auto &op = alwaysFFBlocks[std::make_tuple(
-      builder.getBlock(), clockEdge, clock, resetStyle, resetEdge, reset)];
-  if (op) {
-    runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
-    runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
-
-    // Move the earlier always block(s) down to where the last would have been
-    // inserted.  This ensures that any values used by the always blocks are
-    // defined ahead of the uses, which leads to better generated Verilog.
-    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
-  } else {
+  if (!alwaysOp) {
     if (reset) {
-      op = builder.create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
-                                          resetEdge, reset, body, resetBody);
+      assert(resetStyle != ::ResetType::NoReset);
+      // Here, we want to create the folloing structure with sv.always and
+      // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
+      // list.
+      //
+      // sv.always @(clockEdge or reset) {
+      //   sv.if (reset) {
+      //     resetBody
+      //   } else {
+      //     body
+      //   }
+      // }
+
+      auto createIfOp = [&]() {
+        // It is weird but intended. Here we want to create an empty sv.if with
+        // an else block.
+        insideIfOp = builder.create<sv::IfOp>(
+            reset, []() {}, []() {});
+      };
+      if (resetStyle == ::ResetType::AsyncReset) {
+        sv::EventControl events[] = {clockEdge, resetEdge};
+        Value clocks[] = {clock, reset};
+
+        alwaysOp = builder.create<sv::AlwaysOp>(events, clocks, [&]() {
+          if (resetEdge == sv::EventControl::AtNegEdge)
+            llvm_unreachable("negative edge for reset is not expected");
+          createIfOp();
+        });
+      } else {
+        alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, createIfOp);
+      }
     } else {
       assert(!resetBody);
-      op = builder.create<sv::AlwaysFFOp>(clockEdge, clock, body);
+      alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock);
+      insideIfOp = nullptr;
     }
   }
+
+  if (reset) {
+    assert(insideIfOp && "reset body must be initialized before");
+    runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.thenRegion());
+    runWithInsertionPointAtEndOfBlock(body, insideIfOp.elseRegion());
+  } else {
+    runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
+  }
+
+  // Move the earlier always block(s) down to where the last would have been
+  // inserted.  This ensures that any values used by the always blocks are
+  // defined ahead of the uses, which leads to better generated Verilog.
+  alwaysOp->moveBefore(builder.getInsertionBlock(),
+                       builder.getInsertionPoint());
 }
 
 void FIRRTLLowering::addToIfDefBlock(StringRef cond,
@@ -1841,27 +1889,22 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return setLowering(op, Value());
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
-  auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
-
-  if (!AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation"))
-    return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
-  auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-  auto symName = op.nameAttr();
-  // Prepend the name of the module to make the symbol name unique in the symbol
-  // table, it is already unique in the module. Checking if the name is unique
-  // in the SymbolTable is non-trivial.
-  if (symName && !symName.getValue().empty())
+  auto symName = op.inner_symAttr();
+  auto name = op.nameAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    // Prepend the name of the module to make the symbol name unique in the
+    // symbol table, it is already unique in the module. Checking if the name is
+    // unique in the SymbolTable is non-trivial.
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    symName.getValue());
-  else
-    // If marked with DontTouch but does not have a name, then add a symbol
-    // name. Note: Same symbol name for all such wires in the module.
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__"));
+                                    name.getValue());
+  }
 
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
+  return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -1879,8 +1922,12 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
     operands.push_back(lowered);
   }
 
+  ArrayAttr symbols = op.symbolsAttr();
+  if (!symbols)
+    symbols = ArrayAttr::get(op.getContext(), {});
+
   return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
-                                           operands);
+                                           operands, symbols);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -1889,16 +1936,21 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
 
-  // Node operations are logical noops, but may carry annotations.  Don't touch
-  // indicates we should keep it as a wire.
+  // Node operations are logical noops, but may carry annotations or be referred
+  // to through an inner name. If a don't touch is present, ensure that we have
+  // a symbol name so we can keep the node as a wire.
+  auto symName = op.inner_symAttr();
+  auto name = op.nameAttr();
   if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation")) {
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName) {
     // name may be empty
-    auto name = op->getAttrOfType<StringAttr>("name");
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    auto symName = builder.getStringAttr(Twine("__") + moduleName +
-                                         Twine("__") + name.getValue());
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
 
+  if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
   }
@@ -1990,11 +2042,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   // Add symbol if DontTouch annotation present.
+  auto symName = op.inner_symAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName)
+    symName = op.nameAttr();
   auto regResult =
-      AnnotationSet::removeAnnotations(op,
-                                       "firrtl.transforms.DontTouchAnnotation")
-          ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
-          : builder.create<sv::RegOp>(resultType, op.nameAttr());
+      builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
@@ -2018,7 +2072,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  auto symName = op.inner_symAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName)
+    symName = op.nameAttr();
+  auto regResult =
+      builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
@@ -2026,20 +2086,23 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
-    if (!firrtl::isConstant(op.resetValue()))
-      return op.emitError(
-                   "register with async reset requires constant reset value")
-                 .attachNote(op.resetValue().getLoc())
-             << "reset value defined here:";
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
-                       ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
-                       resetSignal, std::function<void()>(), resetFn);
+    if (!firrtl::isConstant(op.resetValue())) {
+      auto diag = circuitState.nonConstAsyncResetValueIsError
+                      ? op.emitError()
+                      : op.emitWarning();
+      diag << "register with async reset requires constant reset value";
+      diag.attachNote(op.resetValue().getLoc()) << "reset value defined here:";
+      if (circuitState.nonConstAsyncResetValueIsError)
+        return failure();
+    }
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
+                     resetSignal, std::function<void()>(), resetFn);
   } else { // sync reset
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
-                       ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
-                       resetSignal, std::function<void()>(), resetFn);
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
+                     resetSignal, std::function<void()>(), resetFn);
   }
-
   initializeRegister(regResult, resetSignal);
   return success();
 }
@@ -2177,7 +2240,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
-      /*sym_name=*/StringAttr());
+      /*sym_name=*/op.inner_symAttr());
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
@@ -2253,12 +2316,11 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
   // a parallel context.
-  StringAttr symbol;
-  if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
-    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
-    auto instanceSymbol = SymbolRefAttr::get(symbol);
-    auto moduleSymbol = SymbolRefAttr::get(theModule.getNameAttr());
-    auto bindOp = builder.create<sv::BindOp>(instanceSymbol, moduleSymbol);
+  StringAttr symbol = oldInstance.inner_symAttr();
+  if (oldInstance.lowerToBind()) {
+    if (!symbol)
+      symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
     if (auto outputFile = oldInstance->getAttr("output_file"))
@@ -2272,7 +2334,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto newInstance = builder.create<hw::InstanceOp>(
       newModule, oldInstance.nameAttr(), operands, parameters, symbol);
 
-  if (symbol)
+  if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users
@@ -2699,8 +2761,12 @@ LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
     operands.push_back(lowered);
   }
 
+  ArrayAttr symbols = op.symbolsAttr();
+  if (!symbols)
+    symbols = ArrayAttr::get(op.getContext(), {});
+
   return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
-                                           operands);
+                                           operands, symbols);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2735,9 +2801,8 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal)
       return failure();
 
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal, [&]() {
-      builder.create<sv::PAssignOp>(destVal, srcVal);
-    });
+    addToAlwaysBlock(clockVal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2749,13 +2814,12 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
-                       regResetOp.resetSignal().getType().isa<AsyncResetType>()
-                           ? ::ResetType::AsyncReset
-                           : ::ResetType::SyncReset,
-                       sv::EventControl::AtPosEdge, resetSignal, [&]() {
-                         builder.create<sv::PAssignOp>(destVal, srcVal);
-                       });
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     regResetOp.resetSignal().getType().isa<AsyncResetType>()
+                         ? ::ResetType::AsyncReset
+                         : ::ResetType::SyncReset,
+                     sv::EventControl::AtPosEdge, resetSignal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2788,9 +2852,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal)
       return failure();
 
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal, [&]() {
-      builder.create<sv::PAssignOp>(destVal, srcVal);
-    });
+    addToAlwaysBlock(clockVal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2805,10 +2868,9 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
                           ? ::ResetType::AsyncReset
                           : ::ResetType::SyncReset;
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
-                       sv::EventControl::AtPosEdge, resetSignal, [&]() {
-                         builder.create<sv::PAssignOp>(destVal, srcVal);
-                       });
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
+                     sv::EventControl::AtPosEdge, resetSignal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 

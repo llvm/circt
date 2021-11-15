@@ -2,6 +2,8 @@
 
 If you are mainly interested in using CIRCT from Python scripts, you need to compile both LLVM/MLIR and CIRCT with Python bindings enabled. Furthermore, you must use a unified build, where LLVM/MLIR and CIRCT are compiled together in one step. 
 
+CIRCT also includes an experimental, opinionated frontend for CIRCT's Python bindings, called [PyCDE](/PyCDE).
+
 ## Installing and Building with Wheels
 
 CIRCT provides a `setup.py` script that take care of configuring and building LLVM/MLIR, CIRCT, and CIRCT's Python bindings. You can install the CIRCT Python bindings with the `pip install` command:

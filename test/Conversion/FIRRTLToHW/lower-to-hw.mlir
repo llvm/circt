@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw  %s | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics %s | FileCheck %s
 
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
@@ -210,6 +210,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Nodes with no names are just dropped.
     %22 = firrtl.node %in2 {name = ""} : !firrtl.uint<2>
 
+    // CHECK-NEXT: [[WIRE:%n3]] = sv.wire sym @nodeSym : !hw.inout<i2>
+    // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
+    %n3 = firrtl.node sym @nodeSym %in2 : !firrtl.uint<2>
+
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : i1, i2
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
@@ -273,13 +277,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
     // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
-    // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}})"([[VERB1]]) : (i42) -> i32
+    // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> i32 {symbols = [@Simple]}
+    // CHECK: [[VERB3:%.+]] = sv.verbatim.expr "$size({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> !hw.inout<i32> {symbols = [@Simple]}
+    // CHECK: [[VERB3READ:%.+]] = sv.read_inout [[VERB3]]
     // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : i1, i42
     // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : i11, i32
-    // CHECK: = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
+    // CHECK: [[ADD:%.+]] = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
+    // CHECK: [[VERB3EXT:%.+]] = comb.concat {{%.+}}, [[VERB3READ]] : i12, i32
+    // CHECK: [[ADDEXT:%.+]] = comb.concat {{%.+}}, [[ADD]] : i1, i43
+    // CHECK: = comb.add [[VERB3EXT]], [[ADDEXT]] : i44
     %56 = firrtl.verbatim.expr "MAGIC_CONSTANT" : () -> !firrtl.uint<42>
-    %57 = firrtl.verbatim.expr "$bits({{0}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32>
-    %58 = firrtl.add %56, %57 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+    %57 = firrtl.verbatim.expr "$bits({{0}}, {{1}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32> {symbols = [@Simple]}
+    %58 = firrtl.verbatim.wire "$size({{0}}, {{1}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32> {symbols = [@Simple]}
+    %59 = firrtl.add %56, %57 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+    %60 = firrtl.add %58, %59 : (!firrtl.uint<32>, !firrtl.uint<43>) -> !firrtl.uint<44>
 
     // Issue #353
     // CHECK: [[PADRES_EXT:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
@@ -581,9 +592,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind @[[bazSymbol:.+]] in @bindTest
+  // CHECK: sv.bind #hw.innerNameRef<@bindTest::@[[bazSymbol:.+]]>
   // CHECK-NOT: output_file
-  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] in @bindTest {
+  // CHECK-NEXT: sv.bind #hw.innerNameRef<@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
@@ -693,7 +704,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %4 = firrtl.mux(%cond, %value, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     %5 = firrtl.mux(%reset, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: sv.alwaysff(posedge %clock)  {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.passign %count, %2 : i2
     // CHECK-NEXT: }
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -727,9 +738,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
     // CHECK-NEXT: %reg2 = sv.reg : !hw.inout<i32>
     // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
-    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT: }(syncreset : posedge %reset) {
-    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg2, %c0_i32 : i32
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT: } else {
@@ -751,10 +764,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %4 = comb.add %2, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
-    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT:   sv.passign %reg, %6 : i32
-    // CHECK-NEXT: }(asyncreset : posedge %reset) {
-    // CHECK-NEXT:   sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:     sv.passign %reg, %6 : i32
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
     %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
@@ -932,7 +947,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   //CHECK-LABEL: hw.module @test_partialconnect(%clock: i1) {
-  //CHECK: sv.alwaysff(posedge %clock)
+  //CHECK: sv.always posedge %clock
   firrtl.module @test_partialconnect(in %clock : !firrtl.clock) {
     %b = firrtl.reg %clock {name = "pcon"} : !firrtl.uint<1>
     %a = firrtl.constant 0 : !firrtl.uint<2>
@@ -1062,8 +1077,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r = firrtl.regreset %clock, %reset_n, %c0_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %r : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: sv.alwaysff(posedge %clock)
-    // CHECK-NOT: sv.alwaysff
+    // CHECK: sv.always posedge %clock
+    // CHECK-NOT: sv.always
     // CHECK: hw.output
   }
 
@@ -1137,18 +1152,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @AsyncResetThroughWires(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
     %c9000_ui42 = firrtl.constant 9000 : !firrtl.uint<42>
     %c9001_ui42 = firrtl.constant 9001 : !firrtl.uint<42>
+    // expected-note @+1 {{reset value defined here}}
     %constWire = firrtl.wire : !firrtl.uint<42>
     firrtl.connect %constWire, %c9000_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
     firrtl.connect %constWire, %c9001_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
-    // The following should not error because the reset values are constant.
+    // The following is warning because the reset values are not constant at compile time.
+    // expected-warning @+1 {{register with async reset requires constant reset value}}
     %r0 = firrtl.regreset %clock, %arst, %constWire : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
   // CHECK-LABEL: hw.module @AsyncResetThroughNodes(
   firrtl.module @AsyncResetThroughNodes(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
     %c1337_ui42 = firrtl.constant 1337 : !firrtl.uint<42>
+    // expected-note @+1 {{reset value defined here}}
     %constNode = firrtl.node %c1337_ui42 : !firrtl.uint<42>
-    // The following should not error because the reset values are constant.
+    // The following is warning because the reset values are not constant at compile time.
+    // expected-warning @+1 {{register with async reset requires constant reset value}}
     %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
@@ -1188,4 +1207,45 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+
+  // CHECK-LABEL: hw.module.extern @InnerNamesExt
+  // CHECK-SAME:  (
+  // CHECK-SAME:    clockIn: i1 {hw.exportPort = @extClockInSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    clockOut: i1 {hw.exportPort = @extClockOutSym}
+  // CHECK-SAME:  )
+  firrtl.extmodule @InnerNamesExt(
+    in clockIn: !firrtl.clock sym @extClockInSym,
+    out clockOut: !firrtl.clock sym @extClockOutSym
+  )
+
+  // CHECK-LABEL: hw.module @InnerNames
+  // CHECK-SAME:  (
+  // CHECK-SAME:    %value: i42 {hw.exportPort = @portValueSym}
+  // CHECK-SAME:    %clock: i1 {hw.exportPort = @portClockSym}
+  // CHECK-SAME:    %reset: i1 {hw.exportPort = @portResetSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    out: i1 {hw.exportPort = @portOutSym}
+  // CHECK-SAME:  )
+  firrtl.module @InnerNames(
+    in %value: !firrtl.uint<42> sym @portValueSym,
+    in %clock: !firrtl.clock sym @portClockSym,
+    in %reset: !firrtl.uint<1> sym @portResetSym,
+    out %out: !firrtl.uint<1> sym @portOutSym
+  ) {
+    firrtl.instance instName sym @instSym @BitCast1()
+    // CHECK: hw.instance "instName" sym @instSym @BitCast1
+    %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
+    // CHECK: [[WIRE:%nodeName]] = sv.wire sym @nodeSym : !hw.inout<i42>
+    // CHECK-NEXT: sv.assign [[WIRE]], %value
+    %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
+    // CHECK: %wireName = sv.wire sym @wireSym : !hw.inout<i42>
+    %regName = firrtl.reg sym @regSym %clock : !firrtl.uint<42>
+    // CHECK: %regName = sv.reg sym @regSym : !hw.inout<i42>
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    // CHECK: %regResetName = sv.reg sym @regResetSym : !hw.inout<i42>
+    %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    // CHECK: {{%.+}} = hw.instance "memName" sym @memSym
+    firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }

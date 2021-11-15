@@ -177,12 +177,14 @@ class CosimTestRunner:
         checkCount += 1
         if checkCount > 200:
           raise Exception(f"Cosim never wrote cfg file: {portFileName}")
-      portFile = open(portFileName, "r")
-      for line in portFile.readlines():
-        m = re.match("port: (\\d+)", line)
-        if m is not None:
-          port = int(m.group(1))
-      portFile.close()
+      port = -1
+      while port < 0:
+        portFile = open(portFileName, "r")
+        for line in portFile.readlines():
+          m = re.match("port: (\\d+)", line)
+          if m is not None:
+            port = int(m.group(1))
+        portFile.close()
 
       # Wait for the simulation to start accepting RPC connections.
       checkCount = 0

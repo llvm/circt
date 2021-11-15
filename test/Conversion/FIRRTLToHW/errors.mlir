@@ -74,8 +74,7 @@ firrtl.circuit "Div" {
 firrtl.circuit "Foo" {
   // expected-note @+1 {{reset value defined here:}}
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
-    // expected-error @+2 {{register with async reset requires constant reset value}}
-    // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
+    // expected-warning @+1 {{register with async reset requires constant reset value}}
     %0 = firrtl.regreset %clock, %reset, %v : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
@@ -87,8 +86,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
     // expected-note @+1 {{reset value defined here:}}
     %node = firrtl.node %v : !firrtl.uint<8>
-    // expected-error @+2 {{register with async reset requires constant reset value}}
-    // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
+    // expected-warning @+1 {{register with async reset requires constant reset value}}
     %1 = firrtl.regreset %clock, %reset, %node : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
   }
 }

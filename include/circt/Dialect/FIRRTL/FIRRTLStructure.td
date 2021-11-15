@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Types.td"
+
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
        NoRegionArguments]> {
@@ -139,8 +141,8 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     annotations to anchor to in the global scope.  This lets components of the
     path point to a common entity.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, 
-                      StringArrayAttr:$namepath);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       FlatSymbolRefArrayAttr:$modpath, StrArrayAttr:$namepath);
   let results = (outs);
   let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
 }

@@ -27,7 +27,7 @@ sys = System([WireNames])
 sys.generate()
 sys.run_passes()
 sys.print()
-# CHECK-LABEL:  hw.module @WireNames(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {
+# CHECK-LABEL:  hw.module @WireNames(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {{.*}} {
 # CHECK:    %c1_i32 = hw.constant 1 : i32
 # CHECK:    %c2_i32 = hw.constant 2 : i32
 # CHECK:    %c3_i32 = hw.constant 3 : i32
@@ -46,5 +46,3 @@ sys.print()
 # CHECK:    %{{.+}} = hw.array_get %0[%sel] : !hw.array<4xi32>
 # CHECK:    hw.output %1, %2 : i32, i32
 # CHECK:  }
-
-sys.print_verilog()

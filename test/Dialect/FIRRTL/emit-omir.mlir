@@ -43,7 +43,7 @@ firrtl.circuit "EmptyNode" attributes {annotations = [{class = "freechips.rocket
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22info\22: \22\22
+// CHECK-SAME:  \22info\22: \22UnlocatableSourceInfo\22
 // CHECK-SAME:  \22id\22: \22OMID:0\22
 // CHECK-SAME:  \22fields\22: []
 
@@ -168,23 +168,29 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 }
 // CHECK-LABEL: firrtl.circuit "LocalTrackers" {
 // CHECK-NEXT:    firrtl.module @A() {
-// CHECK-NEXT:      %c = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+// CHECK-NEXT:      %c = firrtl.wire sym [[SYMC:@[a-zA-Z0-9_]+]] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @LocalTrackers() {
-// CHECK-NEXT:      firrtl.instance a {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} @A()
-// CHECK-NEXT:      %b = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+// CHECK-NEXT:      firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} @A()
+// CHECK-NEXT:      %b = firrtl.wire sym [[SYMB:@[a-zA-Z0-9_]+]] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
 // CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}\22
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget2\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}>c\22
+// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget3\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]1[}][}]}}>b\22
+// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]2[}][}]}}>{{[{][{]3[}][}]}}\22
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget4\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]1[}][}]}}>a\22
-// CHECK-SAME:  symbols = [@A, @LocalTrackers]
+// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]2[}][}]}}>{{[{][{]4[}][}]}}\22
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @A,
+// CHECK-SAME:    #hw.innerNameRef<@A::[[SYMC:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    @LocalTrackers,
+// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    #hw.innerNameRef<@LocalTrackers::[[SYMA:@[a-zA-Z0-9_]+]]>
+// CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
 // Trackers as Non-Local Annotations
@@ -206,10 +212,18 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
   }
 }
 // CHECK-LABEL: firrtl.circuit "NonLocalTrackers"
+// CHECK:       firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]]
+// CHECK:       firrtl.instance b sym [[SYMB:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
-// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{[{][{]0[}][}]}}/b:{{[{][{]1[}][}]}}/a:{{[{][{]2[}][}]}}\22
-// CHECK-SAME:  symbols = [@NonLocalTrackers, @B, @A]
+// CHECK-SAME:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[{][{]4[}][}]}}\22
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @NonLocalTrackers,
+// CHECK-SAME:    #hw.innerNameRef<@NonLocalTrackers::[[SYMB:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    @B,
+// CHECK-SAME:    #hw.innerNameRef<@B::[[SYMA:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    @A
+// CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
 // Targets that are allowed to lose their tracker
@@ -228,14 +242,14 @@ firrtl.circuit "DeletedTargets" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "DeletedTargets"
 // CHECK:       sv.verbatim
 // CHECK-SAME:  \22name\22: \22a\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22value\22: \22OMDeleted:\22
 // CHECK-SAME:  \22name\22: \22b\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22value\22: \22OMDeleted:\22
 // CHECK-SAME:  \22name\22: \22c\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22value\22: \22OMDeleted:\22
 
 //===----------------------------------------------------------------------===//
-// Make SRAM Paths Absolute
+// Make SRAM Paths Absolute (`SetOMIRSRAMPaths`)
 //===----------------------------------------------------------------------===//
 
 firrtl.circuit "SRAMPaths" attributes {annotations = [{
@@ -250,7 +264,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
         // it actually gets emitted as a `OMMemberInstanceTarget`. These can
         // change back and forth as the FIRRTL passes work on the IR, and the
         // OMIR output should reflect the final target.
-        instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+        finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
       }
     },
     {
@@ -258,7 +272,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
       id = "OMID:1",
       fields = {
         omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-        instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 1, type = "OMMemberReferenceTarget"}}
+        finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 1, type = "OMMemberReferenceTarget"}}
       }
     }
   ]
@@ -275,36 +289,140 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
 // CHECK-NEXT:    firrtl.extmodule @MySRAM()
 // CHECK-NEXT:    firrtl.module @Submodule() {
-// CHECK-NEXT:      firrtl.instance mem1
+// CHECK-NEXT:      firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
 // CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        @MySRAM()
-// CHECK-NEXT:      firrtl.mem
+// CHECK-NEXT:      firrtl.mem sym [[SYMMEM2:@[a-zA-Z0-9_]+]]
 // CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        name = "mem2"
 // CHECK-SAME:        : !firrtl.bundle
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @SRAMPaths() {
-// CHECK-NEXT:      firrtl.instance sub
+// CHECK-NEXT:      firrtl.instance sub sym [[SYMSUB:@[a-zA-Z0-9_]+]]
 // CHECK-NOT:         circt.nonlocal
 // CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        @Submodule()
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
+
 // CHECK-SAME:  \22id\22: \22OMID:0\22
 // CHECK-SAME:    \22name\22: \22omType\22
 // CHECK-SAME:    \22value\22: [
 // CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22\0A
+// CHECK-SAME:      \22OMString:OMSRAM\22
 // CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22instancePath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}/mem1:{{[{][{]2[}][}]}}\22
+// CHECK-SAME:    \22name\22: \22finalPath\22
+// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]3[}][}]}}:{{[{][{]4[}][}]}}\22
+
 // CHECK-SAME:  \22id\22: \22OMID:1\22
 // CHECK-SAME:    \22name\22: \22omType\22
 // CHECK-SAME:    \22value\22: [
 // CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22\0A
+// CHECK-SAME:      \22OMString:OMSRAM\22
 // CHECK-SAME:    ]
-// CHECK-SAME:    \22name\22: \22instancePath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}/mem2:FIRRTLMem_{{[^\\]+}}\22
-// CHECK-SAME:  symbols = [@SRAMPaths, @Submodule, @MySRAM]
+// CHECK-SAME:    \22name\22: \22finalPath\22
+// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]5[}][}]}}:FIRRTLMem_{{[^\\]+}}\22
+
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @SRAMPaths,
+// CHECK-SAME:    #hw.innerNameRef<@SRAMPaths::[[SYMSUB:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    @Submodule,
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>,
+// CHECK-SAME:    @MySRAM,
+// CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM2:@[a-zA-Z0-9_]+]]>
+// CHECK-SAME:  ]
+
+//===----------------------------------------------------------------------===//
+// Add module port information to the OMIR (`SetOMIRPorts`)
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "AddPorts" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        containingModule = {
+          info = #loc,
+          index = 0,
+          value = {
+            omir.tracker,
+            id = 0,
+            path = "~AddPorts|AddPorts",
+            type = "OMInstanceTarget"
+          }
+        }
+      }
+    },
+    {
+      info = #loc,
+      id = "OMID:1",
+      fields = {
+        containingModule = {
+          info = #loc,
+          index = 0,
+          value = {
+            omir.tracker,
+            id = 1,
+            path = "~AddPorts|AddPorts>w",
+            type = "OMReferenceTarget"
+          }
+        }
+      }
+    }
+  ]
+}]} {
+  firrtl.module @AddPorts(in %x: !firrtl.uint<17>, out %y: !firrtl.uint<19>) attributes {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
+    %w = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}]} : !firrtl.uint<17>
+    firrtl.connect %y, %x : !firrtl.uint<19>, !firrtl.uint<17>
+  }
+}
+// CHECK-LABEL: firrtl.circuit "AddPorts"
+// CHECK:       firrtl.module @AddPorts
+// CHECK-SAME:    in %x: !firrtl.uint<17> sym [[SYMX:@[a-zA-Z0-9_]+]]
+// CHECK-SAME:    out %y: !firrtl.uint<19> sym [[SYMY:@[a-zA-Z0-9_]+]]
+// CHECK:       %w = firrtl.wire sym [[SYMW:@[a-zA-Z0-9_]+]]
+// CHECK:       sv.verbatim
+
+// CHECK-SAME:  \22id\22: \22OMID:0\22
+// CHECK-SAME:    \22name\22: \22containingModule\22
+// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~AddPorts|{{[{][{]0[}][}]}}\22
+// CHECK-SAME:    \22name\22: \22ports\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
+// CHECK-SAME:        \22direction\22: \22OMString:Input\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:17\22
+// CHECK-SAME:      }
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
+// CHECK-SAME:        \22direction\22: \22OMString:Output\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:19\22
+// CHECK-SAME:      }
+// CHECK-SAME:    ]
+
+// CHECK-SAME:  \22id\22: \22OMID:1\22
+// CHECK-SAME:    \22name\22: \22containingModule\22
+// CHECK-SAME:    \22value\22: \22OMReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]3[}][}]}}\22
+// CHECK-SAME:    \22name\22: \22ports\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
+// CHECK-SAME:        \22direction\22: \22OMString:Input\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:17\22
+// CHECK-SAME:      }
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
+// CHECK-SAME:        \22direction\22: \22OMString:Output\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:19\22
+// CHECK-SAME:      }
+// CHECK-SAME:    ]
+
+// CHECK-SAME:  symbols = [
+// CHECK-SAME:    @AddPorts,
+// CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMX]]>,
+// CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMY]]>,
+// CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMW]]>
+// CHECK-SAME:  ]

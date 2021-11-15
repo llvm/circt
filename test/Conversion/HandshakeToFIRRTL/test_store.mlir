@@ -1,20 +1,20 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.module @handshake_store_in_ui8_ui64_out_ui8_ui64
-// CHECK: %[[IN_DATA_VALID:.+]] = firrtl.subfield %arg0(0)
-// CHECK: %[[IN_DATA_READY:.+]] = firrtl.subfield %arg0(1)
-// CHECK: %[[IN_DATA_DATA:.+]] = firrtl.subfield %arg0(2)
-// CHECK: %[[IN_ADDR_VALID:.+]] = firrtl.subfield %arg1(0)
-// CHECK: %[[IN_ADDR_READY:.+]] = firrtl.subfield %arg1(1)
-// CHECK: %[[IN_ADDR_DATA:.+]] = firrtl.subfield %arg1(2)
-// CHECK: %[[IN_CONTROL_VALID:.+]] = firrtl.subfield %arg2(0)
-// CHECK: %[[IN_CONTROL_READY:.+]] = firrtl.subfield %arg2(1)
-// CHECK: %[[OUT_DATA_VALID:.+]] = firrtl.subfield %arg3(0)
-// CHECK: %[[OUT_DATA_READY:.+]] = firrtl.subfield %arg3(1)
-// CHECK: %[[OUT_DATA_DATA:.+]] = firrtl.subfield %arg3(2)
-// CHECK: %[[OUT_ADDR_VALID:.+]] = firrtl.subfield %arg4(0)
-// CHECK: %[[OUT_ADDR_READY:.+]] = firrtl.subfield %arg4(1)
-// CHECK: %[[OUT_ADDR_DATA:.+]] = firrtl.subfield %arg4(2)
+// CHECK:           firrtl.module @handshake_store_in_ui8_ui64_out_ui8_ui64(in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_3:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_4:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
+// CHECK: %[[IN_DATA_VALID:.+]] = firrtl.subfield %[[VAL_0]](0)
+// CHECK: %[[IN_DATA_READY:.+]] = firrtl.subfield %[[VAL_0]](1)
+// CHECK: %[[IN_DATA_DATA:.+]] = firrtl.subfield %[[VAL_0]](2)
+// CHECK: %[[IN_ADDR_VALID:.+]] = firrtl.subfield %[[VAL_1]](0)
+// CHECK: %[[IN_ADDR_READY:.+]] = firrtl.subfield %[[VAL_1]](1)
+// CHECK: %[[IN_ADDR_DATA:.+]] = firrtl.subfield %[[VAL_1]](2)
+// CHECK: %[[IN_CONTROL_VALID:.+]] = firrtl.subfield %[[VAL_2]](0)
+// CHECK: %[[IN_CONTROL_READY:.+]] = firrtl.subfield %[[VAL_2]](1)
+// CHECK: %[[OUT_DATA_VALID:.+]] = firrtl.subfield %[[VAL_3]](0)
+// CHECK: %[[OUT_DATA_READY:.+]] = firrtl.subfield %[[VAL_3]](1)
+// CHECK: %[[OUT_DATA_DATA:.+]] = firrtl.subfield %[[VAL_3]](2)
+// CHECK: %[[OUT_ADDR_VALID:.+]] = firrtl.subfield %[[VAL_4]](0)
+// CHECK: %[[OUT_ADDR_READY:.+]] = firrtl.subfield %[[VAL_4]](1)
+// CHECK: %[[OUT_ADDR_DATA:.+]] = firrtl.subfield %[[VAL_4]](2)
 
 // CHECK: %[[ALL_VALID_WIRE:inputsValid]] = firrtl.wire : !firrtl.uint<1>
 
@@ -37,10 +37,9 @@
 // CHECK: firrtl.connect %[[OUT_DATA_VALID]], %[[ALL_VALID_WIRE]]
 // CHECK: firrtl.connect %[[OUT_ADDR_VALID]], %[[ALL_VALID_WIRE]]
 
-// CHECK-LABEL: firrtl.module @main
+// CHECK: firrtl.module @main(in %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_26:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_27:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_28:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_29:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_30:.*]]: !firrtl.clock, in %[[VAL_31:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_32:.*]], %[[VAL_33:.*]], %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]] = firrtl.instance handshake_store0  @handshake_store_in_ui8_ui64_out_ui8_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG3:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out [[ARG4:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: none, ...) -> (i8, index, none) {
-  // CHECK: {{.+}} = firrtl.instance "" @handshake_store_in_ui8_ui64_out_ui8_ui64
   %0:2 = "handshake.store"(%arg0, %arg1, %arg2) : (i8, index, none) -> (i8, index)
-
   handshake.return %0#0, %0#1, %arg2 : i8, index, none
 }

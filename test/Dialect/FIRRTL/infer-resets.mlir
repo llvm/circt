@@ -559,3 +559,151 @@ firrtl.circuit "FullAsyncExcluded" {
     firrtl.connect %inst_io_in, %io_in : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
+
+
+// -----
+
+// Local wire as async reset should be moved before all its uses.
+firrtl.circuit "WireShouldDominate" {
+  // CHECK-LABEL: firrtl.module @WireShouldDominate
+  firrtl.module @WireShouldDominate(in %clock: !firrtl.clock) {
+    %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    %localReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK-NEXT: %localReset = firrtl.wire
+    // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+  }
+}
+
+// Local node as async reset should be moved before all its uses if its input
+// value dominates the target location in the module.
+firrtl.circuit "MovableNodeShouldDominate" {
+  // CHECK-LABEL: firrtl.module @MovableNodeShouldDominate
+  firrtl.module @MovableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // does not block move of node
+    %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT: %localReset = firrtl.node sym @theReset %0
+    // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+  }
+}
+
+// Local node as async reset should be replaced by a wire and moved before all
+// its uses if its input value does not dominate the target location in the
+// module.
+firrtl.circuit "UnmovableNodeShouldDominate" {
+  // CHECK-LABEL: firrtl.module @UnmovableNodeShouldDominate
+  firrtl.module @UnmovableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK-NEXT: %localReset = firrtl.wire sym @theReset
+    // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT: firrtl.connect %localReset, %0
+  }
+}
+
+// Move of local async resets should work across blocks.
+firrtl.circuit "MoveAcrossBlocks1" {
+  // CHECK-LABEL: firrtl.module @MoveAcrossBlocks1
+  firrtl.module @MoveAcrossBlocks1(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    // <-- should move reset here
+    firrtl.when %ui1 {
+      %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    }
+    firrtl.when %ui1 {
+      %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+      %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    }
+    // CHECK-NEXT: %localReset = firrtl.wire
+    // CHECK-NEXT: firrtl.when %ui1 {
+    // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: }
+    // CHECK-NEXT: firrtl.when %ui1 {
+    // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT:   firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT: }
+  }
+}
+
+firrtl.circuit "MoveAcrossBlocks2" {
+  // CHECK-LABEL: firrtl.module @MoveAcrossBlocks2
+  firrtl.module @MoveAcrossBlocks2(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    // <-- should move reset here
+    firrtl.when %ui1 {
+      %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+      %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    }
+    firrtl.when %ui1 {
+      %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    }
+    // CHECK-NEXT: %localReset = firrtl.wire
+    // CHECK-NEXT: firrtl.when %ui1 {
+    // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT:   firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT: }
+    // CHECK-NEXT: firrtl.when %ui1 {
+    // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: }
+  }
+}
+
+firrtl.circuit "MoveAcrossBlocks3" {
+  // CHECK-LABEL: firrtl.module @MoveAcrossBlocks3
+  firrtl.module @MoveAcrossBlocks3(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    // <-- should move reset here
+    %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    firrtl.when %ui1 {
+      %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+      %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    }
+    // CHECK-NEXT: %localReset = firrtl.wire
+    // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: firrtl.when %ui1 {
+    // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT:   firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT: }
+  }
+}
+
+firrtl.circuit "MoveAcrossBlocks4" {
+  // CHECK-LABEL: firrtl.module @MoveAcrossBlocks4
+  firrtl.module @MoveAcrossBlocks4(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
+    // <-- should move reset here
+    firrtl.when %ui1 {
+      %reg = firrtl.reg %clock : !firrtl.uint<8> // gets wired to localReset
+    }
+    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
+    %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK-NEXT: %localReset = firrtl.wire
+    // CHECK-NEXT: firrtl.when %ui1 {
+    // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
+    // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-NEXT: }
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.asAsyncReset %ui1
+    // CHECK-NEXT: firrtl.connect %localReset, [[TMP]]
+  }
+}
+
+firrtl.circuit "SubAccess" {
+  firrtl.module @SubAccess(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
+    // CHECK-LABEL: firrtl.module @SubAccess
+    portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<2>
+    %arr = firrtl.wire : !firrtl.vector<uint<8>, 1>
+    %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
+    firrtl.connect %2, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
+    // CHECK-NEXT:  firrtl.connect %[[v0]], %in : !firrtl.uint<8>, !firrtl.uint<8>
+
+  }
+}

@@ -4,7 +4,7 @@ func @affine_applies() {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @affine_applies(
-// CHECK-SAME:                                   %[[VAL_0:.*]]: none, ...) -> none {
+// CHECK-SAME:                                   %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]]:18 = "handshake.fork"(%[[VAL_0]]) {control = true} : (none) -> (none, none, none, none, none, none, none, none, none, none, none, none, none, none, none, none, none, none)
 // CHECK:           %[[VAL_2:.*]] = "handshake.constant"(%[[VAL_1]]#16) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_3:.*]]:2 = "handshake.fork"(%[[VAL_2]]) {control = false} : (index) -> (index, index)

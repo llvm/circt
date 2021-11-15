@@ -1,27 +1,22 @@
 // RUN: circt-opt -lower-handshake-to-firrtl %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.module @handshake_join_2ins_1outs_ctrl(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) {
- // CHECK:   %0 = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
- // CHECK:   %1 = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
- // CHECK:   %2 = firrtl.subfield %arg1(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
- // CHECK:   %3 = firrtl.subfield %arg1(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
- // CHECK:   %4 = firrtl.subfield %arg2(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
- // CHECK:   %5 = firrtl.subfield %arg2(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
- // CHECK:   %6 = firrtl.and %2, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
- // CHECK:   firrtl.connect %4, %6 : !firrtl.uint<1>, !firrtl.uint<1>
- // CHECK:   %7 = firrtl.and %5, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
- // CHECK:   firrtl.connect %1, %7 : !firrtl.uint<1>, !firrtl.uint<1>
- // CHECK:   firrtl.connect %3, %7 : !firrtl.uint<1>, !firrtl.uint<1>
- // CHECK: }
-
-// CHECK-LABEL: firrtl.module @test_join(
-// CHECK-SAME: in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK-LABEL:   firrtl.circuit "test_join"   {
+// CHECK:           firrtl.module @handshake_join_2ins_1outs_ctrl(in %[[VAL_0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) {
+// CHECK:             %[[VAL_3:.*]] = firrtl.subfield %[[VAL_0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_4:.*]] = firrtl.subfield %[[VAL_0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_5:.*]] = firrtl.subfield %[[VAL_1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_6:.*]] = firrtl.subfield %[[VAL_1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_7:.*]] = firrtl.subfield %[[VAL_2]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_8:.*]] = firrtl.subfield %[[VAL_2]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:             %[[VAL_9:.*]] = firrtl.and %[[VAL_5]], %[[VAL_3]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:             firrtl.connect %[[VAL_7]], %[[VAL_9]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             %[[VAL_10:.*]] = firrtl.and %[[VAL_8]], %[[VAL_9]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:             firrtl.connect %[[VAL_4]], %[[VAL_10]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:             firrtl.connect %[[VAL_6]], %[[VAL_10]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:           }
+// CHECK:           firrtl.module @test_join(in %[[VAL_11:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_12:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_13:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_14:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_15:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_16:.*]]: !firrtl.clock, in %[[VAL_17:.*]]: !firrtl.uint<1>) {
+// CHECK:             %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = firrtl.instance handshake_join0  @handshake_join_2ins_1outs_ctrl(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>)
 handshake.func @test_join(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, none) {
-
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2 = firrtl.instance "" @handshake_join_2ins_1outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>)
   %0 = "handshake.join"(%arg0, %arg1) {control = true}: (none, none) -> none
   handshake.return %0, %arg2 : none, none
 }

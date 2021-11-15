@@ -23,7 +23,7 @@ module {
     %c108 = arith.constant 108 : index
     %c109 = arith.constant 109 : index
     %c2 = arith.constant 2 : index
-  	 %3 = call @muladd(%c104, %c2, %c103) : (index, index, index) -> index
+  	%3 = call @muladd(%c104, %c2, %c103) : (index, index, index) -> index
     %c3 = arith.constant 3 : index
     %4 = arith.muli %c105, %c3 : index
     %5 = arith.addi %3, %4 : index

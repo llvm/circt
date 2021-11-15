@@ -62,8 +62,6 @@ control the output.
 
 The current set of "tool capability" Lowering Options is:
 
- * `useAlwaysFF` (default=`false`).  If true, emits `sv.alwaysff` as
-    Verilog `always_ff` statements.  Otherwise, print them as `always` statements.
  * `noAlwaysComb` (default=`false`).  If true, emits `sv.alwayscomb` as Verilog
    `always @(*)` statements.  Otherwise, print them as `always_comb`.
  * `allowExprInEventControl` (default=`false`).   If true, expressions are

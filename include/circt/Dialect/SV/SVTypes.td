@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SV_SVTYPES
+#define CIRCT_DIALECT_SV_SVTYPES
+
+include "circt/Dialect/SV/SVDialect.td"
+
+// TODO: The following should go into a `SVTypesImpl.td` if we ever actually
+// define any SV-specific types. Doing so will keep this `SVTypes.td` file
+// includable for other dialects, without polluting their output with SV types.
 class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
@@ -43,28 +51,4 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
-// This type is an array of FlatSymbolRefAttr.
-//TODO: This should be moved to mlir, it does not depend on HW dialect.
-def SymRefArrayAttr: ArrayAttrBase<
-    And<[
-      // Guarantee this is an ArrayAttr first
-      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-      // Guarantee all elements are DictionaryAttr or SubAnnotationAttr
-      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
-            "[&](::mlir::Attribute attr) { return attr.isa<"
-            "::mlir::FlatSymbolRefAttr>();})">]>,
-    ""> {
-  let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
-
-def StringArrayAttr: ArrayAttrBase<
-    And<[
-      // Guarantee this is an ArrayAttr first
-      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-      // Guarantee all elements are StringAttr
-      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
-            "[&](::mlir::Attribute attr) { return attr.isa<"
-            "::mlir::StringAttr>();})">]>,
-    ""> {
-  let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
+#endif // CIRCT_DIALECT_SV_SVTYPES

@@ -5,7 +5,7 @@ import circt
 from circt.dialects import hw
 
 from mlir.ir import (Context, Location, InsertionPoint, IntegerType,
-                     IntegerAttr, Module, TypeAttr)
+                     IntegerAttr, Module, StringAttr, TypeAttr)
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -17,7 +17,7 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
 
     def build(module):
-      constI32 = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
+      constI32 = hw.ConstantOp(IntegerAttr.get(i32, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
       # CHECK: All arguments must be the same type to create an array
@@ -73,3 +73,7 @@ with Context() as ctx, Location.unknown():
   pdecl = hw.ParamDeclAttr.get_nodefault("param2", TypeAttr.get(i32))
   # CHECK: #hw.param.decl<"param2": i32>
   print(pdecl)
+
+  pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
+  # CHECK: #hw.param.verbatim<"this is verbatim">
+  print(pverbatim)

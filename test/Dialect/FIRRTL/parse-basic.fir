@@ -859,6 +859,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clock: Clock
     input cond: UInt<1>
     input enable: UInt<1>
+    input not_reset: UInt<1>
     input value: UInt<42>
 
     ; rocket-chip properties
@@ -906,10 +907,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; just set to 1; the actual check `^value !== 'x` is implicit.
     when cond:
       printf(clock, enable, "assertNotX:%d:value must not be X!", value)
-    ; CHECK: [[TMP1:%.+]] = firrtl.xorr %value
-    ; CHECK: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP1]])
-    ; CHECK: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
-    ; CHECK: firrtl.assert %clock, [[TMP3]], %enable, "value must not be X!"
+    ; CHECK: [[TMP1:%.+]] = firrtl.not %cond
+    ; CHECK: [[TMP2:%.+]] = firrtl.xorr %value
+    ; CHECK: [[TMP3:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP2]])
+    ; CHECK: [[TMP4:%.+]] = firrtl.or [[TMP1]], [[TMP3]]
+    ; CHECK: firrtl.assert %clock, [[TMP4]], %enable, "value must not be X!"
     ; CHECK-SAME: name = "notX"
 
     ; Chisel built-in assertions
@@ -974,3 +976,34 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_voodoo"
+
+    ; New flavor of when-encoded verification that also includes an assert
+    assert(clock, cond, enable, "hello")
+    node not_cond = eq(cond, UInt<1>(0))
+    when not_cond:
+      printf(clock, enable, "Assertion failed: hello")
+    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello"
+    ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello"
+    ; CHECK-SAME: name = "chisel3_builtin"
+
+    when not_reset:
+      assert(clock, cond, enable, "hello outside reset")
+      node not_cond2 = eq(cond, UInt<1>(0))
+      when not_cond2:
+        printf(clock, enable, "Assertion failed: hello outside reset")
+    ; CHECK: firrtl.when %not_reset {
+    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello outside reset"
+    ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond2
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello outside reset"
+    ; CHECK-SAME: name = "chisel3_builtin"
+    ; CHECK: }
+
+    ; Check that the above doesn't error if the assert is a double user of the
+    ; condition.
+    when not_reset:
+      assert(clock, UInt<1>(1), UInt<1>(1), "double user assert")
+      node not_cond3 = eq(UInt<1>(1), UInt<1>(0))
+      when not_cond3:
+        printf(clock, UInt<1>(1), "Assertion failed: double user assert")
+    ; CHECK-NOT: firrtl.assert %clock, {{.+}} "double user assert"

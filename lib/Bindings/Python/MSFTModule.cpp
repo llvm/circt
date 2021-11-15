@@ -119,12 +119,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("DSP", PrimitiveType::DSP)
       .export_values();
 
-  m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
-    circt::python::PyFileAccumulator accum(fileObject, false);
-    py::gil_scoped_release();
-    mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
-  });
-
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(
@@ -198,6 +192,32 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num_cases", [](MlirAttribute self) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
+
+  mlir_attribute_subclass(m, "PhysicalBoundsAttr",
+                          circtMSFTAttributeIsAPhysicalBoundsAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, uint64_t xMin, uint64_t xMax, uint64_t yMin,
+             uint64_t yMax, MlirContext ctxt) {
+            auto physicalBounds =
+                circtMSFTPhysicalBoundsAttrGet(ctxt, xMin, xMax, yMin, yMax);
+            return cls(physicalBounds);
+          },
+          "Create a PhysicalBounds attribute", py::arg("cls"), py::arg("xMin"),
+          py::arg("xMax"), py::arg("yMin"), py::arg("yMax"),
+          py::arg("context") = py::none());
+
+  mlir_attribute_subclass(m, "PhysicalRegionRefAttr",
+                          circtMSFTAttributeIsAPhysicalRegionRefAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, std::string name, MlirContext ctxt) {
+            auto physicalBounds = circtMSFTPhysicalRegionRefAttrGet(
+                ctxt, mlirStringRefCreateFromCString(name.c_str()));
+            return cls(physicalBounds);
+          },
+          "Create a PhysicalRegionRef attribute", py::arg("cls"),
+          py::arg("name"), py::arg("context") = py::none());
 
   py::class_<PrimitiveDB>(m, "PrimitiveDB")
       .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())

@@ -1,4 +1,6 @@
-# RUN: %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: rm -rf %t
+# RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
+# RUN: FileCheck %s --input-file %t/PolynomialCompute.sv --check-prefix=OUTPUT
 
 from __future__ import annotations
 
@@ -6,6 +8,8 @@ import pycde
 from pycde import (Input, Output, module, externmodule, generator, types, dim)
 from pycde.dialects import comb, hw
 from circt.support import connect
+
+import sys
 
 
 @module
@@ -67,6 +71,8 @@ class CoolPolynomialCompute:
 @externmodule("parameterized_extern")
 def ExternWithParams(a, b):
 
+  typedef1 = types.struct({"a": types.i1}, "exTypedef")
+
   class M:
     pass
 
@@ -102,7 +108,9 @@ class PolynomialSystem:
     ports.y = poly.y
 
 
-poly = pycde.System([PolynomialSystem])
+poly = pycde.System([PolynomialSystem],
+                    name="PolynomialSystem",
+                    output_directory=sys.argv[1])
 poly.print()
 
 print("Generating 1...")
@@ -110,18 +118,18 @@ poly.generate(iters=1)
 
 print("Printing...")
 poly.print()
-# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) {
+# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) attributes {fileName = "PolynomialSystem.sv"} {
 # CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
 # CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
-# CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32)
-# CHECK:         hw.instance "M" @parameterized_extern<a: i64 = 8, b: i64 = 3>() -> ()
+# CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32
+# CHECK:         msft.instance @M @parameterized_extern() <a: i64 = 8, b: i64 = 3> : () -> ()
 # CHECK:         msft.output %example.y : i32
 # CHECK:       }
 # CHECK:       msft.module @PolyComputeForCoeff_62_42_6 {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module @PolyComputeForCoeff_1_2_3_4_5 {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
-# CHECK:       hw.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
-# CHECK:       hw.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
+# CHECK:       msft.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
+# CHECK:       msft.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
 
 print("Generating rest...")
 poly.generate()
@@ -131,10 +139,10 @@ poly.run_passes()
 poly.print()
 # CHECK-LABEL: === Post-generate IR...
 # CHECK: hw.module @PolynomialSystem
-# CHECK: %example.y = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
-# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %0: i32) -> (y: i32)
-# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %1: i32) -> (y: i32)
-# CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
+# CHECK: %[[EXAMPLE_Y:.+]] = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
+# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
+# CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42
@@ -147,10 +155,8 @@ poly.print()
 # CHECK: hw.constant 5
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
-print("\n\n=== Verilog ===")
-# CHECK-LABEL: === Verilog ===
-poly.print_verilog()
+poly.emit_outputs()
 
-# CHECK-LABEL:   module PolyComputeForCoeff_62_42_6(
-# CHECK:    input  [31:0] x,
-# CHECK:    output [31:0] y);
+# OUTPUT-LABEL:   module PolyComputeForCoeff_62_42_6(
+# OUTPUT:    input  [31:0] x,
+# OUTPUT:    output [31:0] y);

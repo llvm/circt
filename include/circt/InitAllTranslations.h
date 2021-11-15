@@ -33,7 +33,6 @@ inline void registerAllTranslations() {
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();
     llhd::registerToVerilogTranslation();
-    msft::registerMSFTTclTranslation();
     return true;
   }();
   (void)initOnce;

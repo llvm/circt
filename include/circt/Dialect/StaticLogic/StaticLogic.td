@@ -109,6 +109,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   }];
 
   let arguments = (ins
+    OptionalAttr<I64Attr>:$II,
     Variadic<AnyType>:$iterArgs
   );
 
@@ -131,6 +132,17 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
 
   let verifier = [{
     return ::verify$cppClass(*this);
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$II,
+                   "mlir::ValueRange":$iterArgs)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block &getCondBlock() { return condition().front(); }
+    Block &getStagesBlock() { return stages().front(); }
   }];
 }
 
@@ -174,6 +186,15 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
 
   let assemblyFormat = [{
     (`when` $when^)? $body (`:` type($results)^)? attr-dict
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block &getBodyBlock() { return body().front(); }
   }];
 }
 

@@ -47,11 +47,12 @@ class Value:
         name = f"{basename}__reg{int(reg_num)+1}"
       else:
         name = name + "__reg1"
-    return seq.CompRegOp.create(self.value.type,
-                                input=self.value,
-                                clk=clk,
-                                reset=rst,
-                                name=name)
+    with get_user_loc():
+      return seq.CompRegOp.create(self.value.type,
+                                  input=self.value,
+                                  clk=clk,
+                                  reset=rst,
+                                  name=name)
 
   @property
   def name(self):
@@ -103,10 +104,12 @@ class BitVectorValue(Value):
     from .pycde_types import types
     from .dialects import comb
     ret_type = types.int(idxs[1] - idxs[0])
-    ret = comb.ExtractOp.create(idxs[0], ret_type, self.value)
-    if self.name is not None:
-      ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
-    return ret
+
+    with get_user_loc():
+      ret = comb.ExtractOp.create(idxs[0], ret_type, self.value)
+      if self.name is not None:
+        ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      return ret
 
   def __len__(self):
     return self.type.width

@@ -1,11 +1,12 @@
-// RUN: circt-translate %s --export-quartus-tcl -verify-diagnostics -split-input-file
+// RUN: circt-opt %s --lower-msft-to-hw=tops=top -verify-diagnostics -split-input-file
 
 hw.module.extern @Foo()
 
 // expected-error @+1 {{Could not place 1 instances}}
-hw.module @top() {
+msft.module @top {} () -> () {
   // expected-error @+1 {{PhysLoc attribute must be inside an instance switch attribute}}
-  hw.instance "foo1" @Foo() -> () {"loc:" = #msft.physloc<DSP, 0, 0, 0> }
+  msft.instance @foo1 @Foo() {"loc:" = #msft.physloc<DSP, 0, 0, 0> } : () -> ()
+  msft.output
 }
 
 // -----
@@ -13,7 +14,19 @@ hw.module @top() {
 hw.module.extern @Foo()
 
 // expected-error @+1 {{Could not place 1 instances}}
-hw.module @top() {
-  // expected-error @+1 {{'hw.instance' op PhysLoc attributes must have names starting with 'loc'}}
-  hw.instance "foo1" @Foo() -> ()  {"phys:" = #msft.switch.inst< @top[] = #msft.physloc<DSP, 0, 0, 0> > }
+msft.module @top {} () -> () {
+  // expected-error @+1 {{'msft.instance' op referenced non-existant PhysicalRegion named region1}}
+  msft.instance @foo1 @Foo() {"loc" = #msft.switch.inst<@top[]=#msft.physical_region_ref<@region1>>} : () -> ()
+  msft.output
+}
+
+// -----
+
+hw.module.extern @Foo()
+
+// expected-error @+1 {{Could not place 1 instances}}
+msft.module @top {} () -> () {
+  // expected-error @+1 {{'msft.instance' op PhysLoc attributes must have names starting with 'loc'}}
+  msft.instance @foo1 @Foo() {"phys:" = #msft.switch.inst< @top[] = #msft.physloc<DSP, 0, 0, 0> > } : () -> ()
+  msft.output
 }

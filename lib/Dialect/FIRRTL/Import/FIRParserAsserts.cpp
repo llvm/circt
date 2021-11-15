@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
 using namespace circt;
@@ -253,6 +254,56 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
   else
     return success();
 
+  // Check if the condition of the `WhenOp` is a trivial inversion operation,
+  // and remove any immediately preceding verification ops that ensure this
+  // condition. This caters to the following pattern emitted by Chisel:
+  //
+  //     assert(clock, cond, enable, ...)
+  //     node N = eq(cond, UInt<1>(0))
+  //     when N:
+  //       printf(clock, enable, ...)
+  Value flippedCond = whenStmt.condition();
+  if (auto node = flippedCond.getDefiningOp<NodeOp>())
+    flippedCond = node.input();
+  if (auto notOp = flippedCond.getDefiningOp<NotPrimOp>()) {
+    flippedCond = notOp.input();
+  } else if (auto eqOp = flippedCond.getDefiningOp<EQPrimOp>()) {
+    auto isConst0 = [](Value v) {
+      if (auto constOp = v.getDefiningOp<ConstantOp>())
+        return constOp.value().isZero();
+      return false;
+    };
+    if (isConst0(eqOp.lhs()))
+      flippedCond = eqOp.rhs();
+    else if (isConst0(eqOp.rhs()))
+      flippedCond = eqOp.lhs();
+    else
+      flippedCond = {};
+  } else {
+    flippedCond = {};
+  }
+
+  // If we have found such a condition, erase any verification ops that use it
+  // and that match the op we are about to assemble. This is necessary since the
+  // `printf` op actually carries all the information we need for the assert,
+  // while the actual `assert` has none of it. This makes me sad.
+  if (flippedCond) {
+    // Use a set to catch cases where a verification op is a double user of the
+    // flipped condition.
+    SmallPtrSet<Operation *, 1> opsToErase;
+    for (const auto &user : flippedCond.getUsers()) {
+      TypeSwitch<Operation *>(user).Case<AssertOp, AssumeOp, CoverOp>(
+          [&](auto op) {
+            if (op.clock() == printOp.clock() &&
+                op.enable() == printOp.cond() &&
+                op.predicate() == flippedCond && !op.isConcurrent())
+              opsToErase.insert(op);
+          });
+    }
+    for (auto op : opsToErase)
+      op->erase();
+  }
+
   builder.setInsertionPointAfter(whenStmt);
 
   // CAREFUL: Since the assertions are encoded as "when something wrong, then
@@ -293,20 +344,19 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     // practice the Scala impl of ExtractTestCode just discards that `%d` label
     // and replaces it with `notX`. Also prepare the condition to be checked
     // here.
-    Value predicate;
+    Value notCond = builder.create<NotPrimOp>(whenStmt.condition());
+    Value predicate = notCond;
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
       if (printOp.operands().size() != 1) {
         printOp.emitError("printf-encoded assertNotX requires one operand");
         return failure();
       }
-      // Construct a `whenCond | (value !== 1'bx)` predicate.
+      // Construct a `!whenCond | (value !== 1'bx)` predicate.
       predicate = builder.create<XorRPrimOp>(printOp.operands()[0]);
       predicate = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
                                                  "{{0}} !== 1'bx", predicate);
-      predicate = builder.create<OrPrimOp>(whenStmt.condition(), predicate);
-    } else {
-      predicate = builder.create<NotPrimOp>(whenStmt.condition());
+      predicate = builder.create<OrPrimOp>(notCond, predicate);
     }
 
     // CAVEAT: The Scala impl of ExtractTestCode explicitly sets `emitSVA` to

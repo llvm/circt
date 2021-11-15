@@ -174,4 +174,3 @@ def TypeAliasType : HWType<"TypeAlias"> {
     TypedeclOp getTypeDecl(const SymbolCache &cache);
   }];
 }
-

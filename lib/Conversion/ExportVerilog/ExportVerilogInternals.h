@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TRANSLATION_EXPORT_VERILOG_EXPORTVERILOGINTERNAL_H
-#define TRANSLATION_EXPORT_VERILOG_EXPORTVERILOGINTERNAL_H
+#ifndef CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
+#define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -18,16 +18,20 @@ struct LoweringOptions;
 namespace ExportVerilog {
 class GlobalNameResolver;
 
+/// If the given `op` is a declaration, return the attribute that dictates its
+/// name. For things like wires and registers this will be the `name` attribute,
+/// for instances this is `instanceName`, etc.
+StringAttr getDeclarationName(Operation *op);
+
 /// This class keeps track of global names at the module/interface level.
 /// It is built in a global pass over the entire design and then frozen to allow
 /// concurrent accesses.
 struct GlobalNameTable {
   GlobalNameTable(GlobalNameTable &&) = default;
 
-  /// Return the string to use for the specified parameter name in the specified
-  /// module.  Parameters may be renamed for a variety of reasons (e.g.
-  /// conflicting with ports or verilog keywords), and this returns the
-  /// legalized name to use.
+  /// Return the string to use for the specified port in the specified module.
+  /// Ports may be renamed for a variety of reasons (e.g. conflicting with
+  /// Verilog keywords), and this returns the legalized name to use.
   StringRef getPortVerilogName(Operation *module,
                                const hw::PortInfo &port) const {
     auto it = renamedPorts.find(std::make_pair(module, port.getId()));
@@ -36,7 +40,7 @@ struct GlobalNameTable {
 
   /// Return the string to use for the specified parameter name in the specified
   /// module.  Parameters may be renamed for a variety of reasons (e.g.
-  /// conflicting with ports or verilog keywords), and this returns the
+  /// conflicting with ports or Verilog keywords), and this returns the
   /// legalized name to use.
   StringRef getParameterVerilogName(Operation *module,
                                     StringAttr paramName) const {
@@ -44,6 +48,20 @@ struct GlobalNameTable {
     return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
+  /// Return the string to use for the specified declaration. The operation is
+  /// commonly a declaration within the module, like `WireOp` and friends, which
+  /// have a `name` attribute. Values may be renamed for a variety of reasons
+  /// (e.g. conflicting with ports or Verilog keywords), and this returns the
+  /// legalized name to use.
+  StringRef getDeclarationVerilogName(Operation *op) const {
+    auto it = renamedDecls.find(op);
+    auto attr = it != renamedDecls.end() ? it->second : getDeclarationName(op);
+    return attr ? attr.getValue() : "";
+  }
+
+  /// Return the string to use for the specified interface. Interfaces and their
+  /// signals may be renamed for a variety of reasons (e.g. conflicting with
+  /// Verilog keywords), and this returns the legalized name to use.
   StringRef getInterfaceVerilogName(Operation *op) const {
     auto it = renamedInterfaceOp.find(op);
     auto attr = it != renamedInterfaceOp.end() ? it->second
@@ -69,6 +87,10 @@ private:
         StringAttr::get(oldName.getContext(), newName);
   }
 
+  void addRenamedDeclaration(Operation *declOp, StringRef newName) {
+    renamedDecls[declOp] = StringAttr::get(declOp->getContext(), newName);
+  }
+
   void addRenamedInterfaceOp(Operation *interfaceOp, StringRef newName) {
     renamedInterfaceOp[interfaceOp] =
         StringAttr::get(interfaceOp->getContext(), newName);
@@ -82,6 +104,9 @@ private:
   /// This contains entries for any parameters that got renamed.  The key is a
   /// moduleop/paramName tuple, the value is the name to use.
   DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
+
+  /// This contains entries for any declarations that got renamed.
+  DenseMap<Operation *, StringAttr> renamedDecls;
 
   /// This contains entries for interface operations (sv.interface,
   /// sv.interface.signal, and sv.interface.modport) that need to be renamed
@@ -162,4 +187,4 @@ GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
 
 } // namespace circt
 
-#endif // TRANSLATION_EXPORT_VERILOG_EXPORTVERILOGINTERNAL_H
+#endif // CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H

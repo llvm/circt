@@ -53,7 +53,7 @@ circuit Qux:
     rwDataOut <= memory.rw.rdata
 ; CHECK:  hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 ; CHECK:  hw.module @FIRRTLMem_1_1_1_8_16_1_1_1_0_1_a(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1) -> (R0_data: i8, RW0_rdata: i8) {
-; CHECK-NEXT:    %[[vtrue:.+]] = hw.constant true
+; CHECK:    %[[vtrue:.+]] = hw.constant true
 ; CHECK-NEXT:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
 ; CHECK-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
 ; CHECK-NEXT:    %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i1>

@@ -158,11 +158,11 @@ hw.module @Cover(%arg0: i1) {
 
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
-sv.bind @A in @Assume
+sv.bind #hw.innerNameRef<@assume::@A>
 
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
-sv.bind @A in @NotAModule
+sv.bind #hw.innerNameRef<@NotAModule::@A>
 
 
 // -----
@@ -172,11 +172,30 @@ hw.module @InternSrcMod() {
   hw.output
 }
 // expected-error @+1 {{Referenced instance isn't marked as doNotPrint}}
-sv.bind @A in @InternSrcMod
+sv.bind #hw.innerNameRef<@InternSrcMod::@A>
 
 // -----
 
 hw.module @test() {
   // expected-error @+1 {{op invalid parameter value @test}}
   %param_x = sv.localparam : i42 {value = @test}
+}
+
+// -----
+
+hw.module @part_select1() {
+  %selWire = sv.wire : !hw.inout<i10>
+  %c2 = hw.constant 2 : i3
+  // expected-error @+1 {{slice width should not be greater than input width}}
+  %xx1 = sv.indexed_part_select_inout %selWire[%c2:11] :  !hw.inout<i10>, i3
+}
+
+// -----
+
+hw.module @part_select1() {
+  %selWire = sv.wire : !hw.inout<i10>
+  %c2 = hw.constant 2 : i3
+  %r1 = sv.read_inout %selWire : !hw.inout<i10>
+  // expected-error @+1 {{slice width should not be greater than input width}}
+  %c = sv.indexed_part_select %r1[%c2 : 20] : i10,i3
 }

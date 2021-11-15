@@ -8,8 +8,7 @@ from typing import Union
 from pycde.devicedb import PhysLocation, PrimitiveDB, PlacementDB
 from .appid import AppID
 
-import circt.dialects.hw as hw
-from circt import msft
+from circt.dialects import hw, msft
 
 import mlir.ir as ir
 
@@ -23,7 +22,7 @@ class Instance:
 
   def __init__(self,
                module: type,
-               instOp: hw.InstanceOp,
+               instOp: msft.InstanceOp,
                parent: Instance,
                sys: system.System,
                primdb: PrimitiveDB = None):
@@ -62,11 +61,11 @@ class Instance:
 
   @property
   def name(self):
-    return ir.StringAttr(self.instOp.instanceName).value
+    return ir.StringAttr(self.instOp.sym_name).value
 
   @property
   def name_attr(self):
-    return ir.StringAttr(self.instOp.instanceName)
+    return ir.StringAttr(self.instOp.sym_name)
 
   @property
   def is_root(self):
@@ -83,10 +82,10 @@ class Instance:
   def walk(self, callback):
     """Descend the instance hierarchy, calling back on each instance."""
     circt_mod = self.sys._get_circt_mod(self.module)
-    if isinstance(circt_mod, hw.HWModuleExternOp):
+    if isinstance(circt_mod, msft.MSFTModuleExternOp):
       return
     for op in circt_mod.entry_block:
-      if not isinstance(op, hw.InstanceOp):
+      if not isinstance(op, msft.InstanceOp):
         continue
 
       assert "moduleName" in op.attributes
@@ -100,12 +99,13 @@ class Instance:
   def _attach_attribute(self, attr_key: str, attr: ir.Attribute):
     if isinstance(attr, PhysLocation):
       assert attr_key.startswith("loc:")
-      db = self.root_instance.placedb._db
       attr = attr._loc
-      rc = db.add_placement(attr, self.path_attr, attr_key[4:],
-                            self.instOp.operation)
-      if not rc:
-        raise ValueError("Failed to place")
+
+    db = self.root_instance.placedb._db
+    rc = db.add_placement(attr, self.path_attr, attr_key[4:],
+                          self.instOp.operation)
+    if not rc:
+      raise ValueError("Failed to place")
 
     if attr_key not in self.instOp.attributes:
       cases = []

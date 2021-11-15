@@ -144,6 +144,49 @@ installs pycapnp via 'pip3'. The capnp compile requires libtool.
 Alternatively, you can use a docker image we provide via
 `utils/run-docker.sh`.
 
+## Windows: notes on setting up with Ninja
+
+Building on Windows using MSVC + Ninja + Python support is straight forward,
+though full of landmines. Here are some notes:
+
+- Ninja and cmake must be run in a VS Developer Command shell. If you use
+Powershell and don't want to start the VS GUI, you can run:
+```powershell
+> $vsPath = &(Join-Path ${env:ProgramFiles(x86)} "\Microsoft Visual Studio\Installer\vswhere.exe") -property installationpath
+> Import-Module (Get-ChildItem $vsPath -Recurse -File -Filter Microsoft.VisualStudio.DevShell.dll).FullName
+> Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation
+```
+
+- VSCode's cmake configure does not operate properly with Python support. The
+symptom is that the build will complete, but importing `circt` or `mlir` crashes
+Python. Doing everything from the command line is the only way CIRCT compiles
+have been made to work.
+
+Cheat sheet for powershell:
+
+```powershell
+# Install cmake, ninja, and Visual Studio
+> python -m pip install psutil pyyaml numpy pybind11
+
+> $vsPath = &(Join-Path ${env:ProgramFiles(x86)} "\Microsoft Visual Studio\Installer\vswhere.exe") -property installationpath
+> Import-Module (Get-ChildItem $vsPath -Recurse -File -Filter Microsoft.VisualStudio.DevShell.dll).FullName
+> Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation
+
+> cd <circt clone>
+> cmake -B<build_dir> llvm/llvm `
+    -GNinja `
+    -DLLVM_ENABLE_PROJECTS=mlir `
+    -DCMAKE_BUILD_TYPE=Debug `
+    -DLLVM_TARGETS_TO_BUILD=X86 `
+    -DLLVM_ENABLE_ASSERTIONS=ON `
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON `
+    -DLLVM_EXTERNAL_PROJECTS=circt `
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR="$(PWD)" `
+    -DCIRCT_BINDINGS_PYTHON_ENABLED=ON `
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+> ninja -C<build_dir> check-circt
+```
+
 ## Submitting changes to CIRCT
 
 The project is small so there are few formal process yet.  We generally follow

@@ -138,6 +138,72 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Port Symbols
+    //===------------------------------------------------------------------===//
+
+    // Getters
+    InterfaceMethod<"Get the port symbols attribute",
+    "ArrayAttr", "getPortSymbolsAttr", (ins), [{}], [{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getPortSymbolsAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the port symbols",
+    "ArrayRef<Attribute>", "getPortSymbols", (ins), [{}], [{
+      return $_op.getPortSymbolsAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a port's symbol attribute",
+    "StringAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
+      return $_op.getPortSymbols()[portIndex].template cast<StringAttr>();
+    }]>,
+
+    InterfaceMethod<"Get a port's symbol",
+    "StringRef", "getPortSymbol", (ins "size_t":$portIndex), [{}], [{
+      return $_op.getPortSymbolAttr(portIndex).getValue();
+    }]>,
+
+    // Setters
+    InterfaceMethod<"Set the port symbols attribute", "void",
+    "setPortSymbolsAttr", (ins "ArrayAttr":$symbols), [{}], [{
+      if (llvm::all_of(symbols.getValue(), [](Attribute symbol) {
+         return symbol.cast<StringAttr>().getValue().empty(); }))
+        symbols = ArrayAttr::get($_op.getContext(), {});
+      assert(symbols.getValue().empty() ||
+             symbols.getValue().size() == $_op.getNumPorts());
+      $_op->setAttr(FModuleLike::getPortSymbolsAttrName(), symbols);
+    }]>,
+
+    InterfaceMethod<"Set the port symbols", "void",
+    "setPortSymbols", (ins "ArrayRef<Attribute>":$symbols), [{}], [{
+      if (llvm::all_of(symbols, [](Attribute symbol) {
+         return symbol.cast<StringAttr>().getValue().empty(); }))
+        symbols = {};
+      assert(symbols.empty() || symbols.size() == $_op.getNumPorts());
+      $_op.setPortSymbolsAttr(ArrayAttr::get($_op.getContext(), symbols));
+    }]>,
+
+    InterfaceMethod<"Set a port's symbol attribute", "void",
+    "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
+    [{
+      SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
+                                     $_op.getPortSymbols().end());
+      if (symbols.empty()) {
+        auto emptyString = StringAttr::get($_op.getContext(), "");
+        symbols.resize($_op.getNumPorts(), emptyString);
+      }
+      assert(symbols.size() == $_op.getNumPorts());
+      symbols[portIndex] = symbol;
+      $_op.setPortSymbols(symbols);
+    }]>,
+
+    InterfaceMethod<"Set a port's symbol", "void",
+    "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
+      $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
+        symbol));
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
 
@@ -170,6 +236,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Get the attribute name for port annotations.
     static StringRef getPortAnnotationsAttrName() {
       return "portAnnotations";
+    }
+
+    /// Get the attribute name for port symbols.
+    static StringRef getPortSymbolsAttrName() {
+      return "portSyms";
     }
   }];
 

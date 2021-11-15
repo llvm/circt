@@ -13,6 +13,7 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
+#include "RearrangableOStream.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -47,6 +48,7 @@ using namespace ExportVerilog;
 #define DEBUG_TYPE "export-verilog"
 
 constexpr int INDENT_AMOUNT = 2;
+constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -54,7 +56,7 @@ namespace {
 enum VerilogPrecedence {
   // Normal precedence levels.
   Symbol,          // Atomic symbol like "foo" and {a,b}
-  Selection,       // () , [] , :: , .
+  Selection,       // () , [] , :: , ., $signed()
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
@@ -121,14 +123,13 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
 }
 
 /// Return the verilog name of the operations that can define a symbol.
+/// Except for <WireOp, RegOp, LocalParamOp, InstanceOp>, check global state
+/// `getDeclarationVerilogName` for them.
 static StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   return TypeSwitch<Operation *, StringRef>(symOp)
       .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
-      .Case<InstanceOp>([&](InstanceOp op) { return op.getName().getValue(); })
-      .Case<WireOp>([&](WireOp op) { return op.name(); })
-      .Case<RegOp>([&](RegOp op) { return op.name(); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
@@ -145,7 +146,8 @@ static StringRef getSymOpName(Operation *symOp) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp, XMROp>(op))
+  if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
+          IndexedPartSelectOp, ParamValueOp, XMROp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -287,23 +289,23 @@ static StringRef getVerilogDeclWord(Operation *op,
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
 /// where names are pre-legalized during prepare.
-static StringRef getNameRemotely(Value value,
-                                 const ModulePortInfo &modulePorts) {
+static StringRef getNameRemotely(Value value, const ModulePortInfo &modulePorts,
+                                 HWModuleOp mod,
+                                 const GlobalNameTable &globalNames) {
   if (auto barg = value.dyn_cast<BlockArgument>())
-    return modulePorts.inputs[barg.getArgNumber()].getName();
+    return globalNames.getPortVerilogName(
+        mod, modulePorts.inputs[barg.getArgNumber()]);
 
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
     auto *wireInput = readinout.input().getDefiningOp();
     if (!wireInput)
       return {};
 
-    if (auto wire = dyn_cast<WireOp>(wireInput))
-      return wire.name();
-    if (auto reg = dyn_cast<RegOp>(wireInput))
-      return reg.name();
+    if (isa<WireOp, RegOp>(wireInput))
+      return globalNames.getDeclarationVerilogName(wireInput);
   }
   if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
-    return localparam.name();
+    return globalNames.getDeclarationVerilogName(localparam);
   return {};
 }
 
@@ -604,11 +606,42 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  SmallVector<Operation *, 8> symOps;
-  for (auto sym : symAttrs)
-    if (auto symOp =
-            state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
-      symOps.push_back(symOp);
+  SmallVector<SmallString<12>, 8> symOps;
+  auto namify = [&](Attribute sym, SymbolCache::Item item) {
+    // CAVEAT: These accesses can reach into other modules through inner name
+    // references, which are currently being processed. Do not add those remote
+    // operations to this module's `names`, which is reserved for things named
+    // *within* this module. Instead, you have to rely on those remote
+    // operations to have been named inside the global names table. If they
+    // haven't, take a look at name name legalization first.
+    if (auto itemOp = item.getOp()) {
+      if (item.hasPort()) {
+        auto portInfos = getAllModulePortInfos(itemOp);
+        return state.globalNames.getPortVerilogName(itemOp,
+                                                    portInfos[item.getPort()]);
+      }
+      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp>(itemOp))
+        return state.globalNames.getDeclarationVerilogName(itemOp);
+      StringRef symOpName = getSymOpName(itemOp);
+      if (!symOpName.empty())
+        return symOpName;
+      itemOp->emitError("cannot get name for symbol ") << sym;
+    } else {
+      op->emitError("cannot get name for symbol ") << sym;
+    }
+    return StringRef("<INVALID>");
+  };
+
+  for (auto sym : symAttrs) {
+    if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
+      if (auto symOp = state.symbolCache.getDefinition(fsym))
+        symOps.push_back(namify(sym, symOp));
+    if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+      auto symOp =
+          state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+      symOps.push_back(namify(sym, symOp));
+    }
+  }
 
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
@@ -655,22 +688,7 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        Operation *symOp = symOps[symOpNum];
-        // Get the verilog name of the operation, add the name if not already
-        // done.
-        if (names.hasName(symOp)) {
-          os << names.getName(symOp);
-        } else {
-          StringRef symOpName = getSymOpName(symOp);
-          if (!symOpName.empty()) {
-            os << symOpName;
-          } else {
-            std::string opStr;
-            llvm::raw_string_ostream tName(opStr);
-            tName << *symOp;
-            op->emitError("cannot get name for symbol: " + tName.str());
-          }
-        }
+        os << symOps[symOpNum];
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -911,8 +929,8 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        printUnpackedTypePostfix(arrayType.getElementType(), os);
         os << "[0:" << (arrayType.getSize() - 1) << "]";
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {
         // Interface instantiations have parentheses like a module with no
@@ -944,8 +962,10 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     APInt value = intAttr.getValue();
 
     // We omit the width specifier if the value is <= 32-bits in size, which
-    // makes this more compatible with unknown width extmodules.
-    if (intTy.getWidth() > 32) {
+    // makes this more compatible with unknown width extmodules.  Additionally,
+    // special case a zero valued parameter.  This is canonically stored as
+    // 64-bits.  However, we don't want to print 64'd0 here.
+    if (!value.isZero() && intTy.getWidth() > 32) {
       // Sign comes out before any width specifier.
       if (intTy.isSigned() && value.isNegative()) {
         os << '-';
@@ -1121,6 +1141,10 @@ public:
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
                 /*signRequirement*/ NoRequirement);
+
+    // Emitted expression might break the line length constraint so align it
+    // here.
+    formatOutBuffer();
   }
 
 private:
@@ -1147,6 +1171,7 @@ private:
                           bool isSelfDeterminedUnsignedValue = false);
 
   void retroactivelyEmitExpressionIntoTemporary(Operation *op);
+  void formatOutBuffer();
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
@@ -1207,6 +1232,8 @@ private:
     return emitSubExpr(op->getOperand(0), LowestPrecedence, OOLUnary);
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
+  SubExprInfo visitSV(IndexedPartSelectInOutOp op);
+  SubExprInfo visitSV(IndexedPartSelectOp op);
 
   // Other
   using TypeOpVisitor::visitTypeOp;
@@ -1255,7 +1282,7 @@ private:
   SubExprInfo visitComb(ShrSOp op) {
     // >>> is only an arithmetic shift right when both operands are signed.
     // Otherwise it does a logical shift.
-    return emitBinary(op, LowestPrecedence, ">>>",
+    return emitBinary(op, Shift, ">>>",
                       EB_RequireSignedOperands | EB_ForceResultSigned |
                           EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
@@ -1349,6 +1376,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (emitBinaryFlags & EB_ForceResultSigned) {
     os << ')';
     signedness = IsSigned;
+    prec = Selection;
   }
 
   return {prec, signedness};
@@ -1360,6 +1388,49 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
   auto signedness =
       emitSubExpr(op->getOperand(0), Selection, OOLUnary).signedness;
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
+}
+
+/// This function split the output buffer into multiple lines if the emitted
+/// length is larger than the constraint.
+void ExprEmitter::formatOutBuffer() {
+  // If the output already satisfies the constraint, skip here.
+  if (outBuffer.size() <= state.options.emittedLineLength)
+    return;
+
+  SmallVector<char> tmpOutBuffer;
+  llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
+  auto it = outBuffer.begin();
+  unsigned currentIndex = 0;
+
+  while (it != outBuffer.end()) {
+    // Split by a white space.
+    auto next = std::find(it, outBuffer.end(), ' ');
+    unsigned tokenLength = std::distance(it, next);
+
+    if (!tmpOutBuffer.empty() &&
+        currentIndex + tokenLength > state.options.emittedLineLength) {
+      // It breaks the line constraint, so insert a newline and indent.
+      tmpOs << '\n';
+      tmpOs.indent(state.currentIndent *
+                   SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
+      currentIndex = tokenLength;
+      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+    } else {
+      currentIndex += tokenLength;
+      // If `tmpOutBuffer` is not empty, there exists a token before the
+      // current token so insert a white space.
+      if (!tmpOutBuffer.empty()) {
+        currentIndex += 1;
+        tmpOs << ' ';
+      }
+      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+    }
+
+    if (next == outBuffer.end())
+      break;
+    it = next + 1;
+  }
+  outBuffer = std::move(tmpOutBuffer);
 }
 
 /// We eagerly emit single-use expressions inline into big expression trees...
@@ -1450,11 +1521,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     addPrefix("$signed(");
     os << ')';
     expInfo.signedness = IsSigned;
+    expInfo.precedence = Selection;
   } else if (signRequirement == RequireUnsigned &&
              expInfo.signedness == IsSigned) {
     addPrefix("$unsigned(");
     os << ')';
     expInfo.signedness = IsUnsigned;
+    expInfo.precedence = Selection;
   } else if (expInfo.precedence > parenthesizeIfLooserThan) {
     // If this subexpression would bind looser than the expression it is bound
     // into, then we need to parenthesize it.  Insert the parentheses
@@ -1487,14 +1560,23 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    retroactivelyEmitExpressionIntoTemporary(op);
+    auto emitExpressionIntoTemporary = [&]() {
+      retroactivelyEmitExpressionIntoTemporary(op);
 
-    // Lop this off the buffer we emitted.
-    outBuffer.resize(subExprStartIndex);
+      // Lop this off the buffer we emitted.
+      outBuffer.resize(subExprStartIndex);
 
-    // Try again, now it will get emitted as a out-of-line leaf.
-    return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
-                       signRequirement);
+      // Try again, now it will get emitted as a out-of-line leaf.
+      return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
+                         signRequirement);
+    };
+
+    // If op has multiple uses or op is a too large expression, we have to spill
+    // the expression.
+    if (!op->hasOneUse() ||
+        outBuffer.size() - subExprStartIndex >
+            state.options.maximumNumberOfTokensPerExpression)
+      return emitExpressionIntoTemporary();
   }
 
   // Remember that we emitted this.
@@ -1705,7 +1787,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
-  os << "+:" << dstWidth << ']';
+  os << " +: " << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
@@ -1744,6 +1826,31 @@ SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
   os << ']';
   return {Selection, arrayPrec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
+  auto prec = emitSubExpr(op.input(), Selection, OOLUnary);
+  os << '[';
+  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
+  if (op.decrement())
+    os << " -: ";
+  else
+    os << " +: ";
+  os << op.width() << ']';
+  return {Selection, prec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
+  auto info = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
+  os << '[';
+  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
+  if (op.decrement())
+    os << " -: ";
+  else
+    os << " +: ";
+  os << op.width();
+  os << ']';
+  return info;
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
@@ -1856,37 +1963,24 @@ static bool isExpressionUnableToInline(Operation *op) {
 
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
-    // It cannot be an arbitrary expression.
-    if (isa<ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-
-    // Indexing into an array cannot be done in the same line as the array
-    // creation.
     //
-    // This is done to avoid creating incorrect constructs like the following
-    // (which is a bit extract):
-    //
+    // It cannot be an arbitrary expression, e.g. this is invalid:
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
-    // And illegal constructs like:
-    //
-    //     assign bar = ({{a}, {b}, {c}, {d}})[idx];
-    if (isa<ArrayCreateOp>(op) && isa<ArrayGetOp>(user))
-      return true;
+    // To handle these, we push the subexpression into a temporary.
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp>(user))
+      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
 
     // Sign extend (when the operand isn't a single bit) requires a bitselect
-    // syntactically.
+    // syntactically so it uses its expression multiple times.
     if (auto sext = dyn_cast<SExtOp>(user)) {
       auto sextOperandType = sext.getOperand().getType().cast<IntegerType>();
       if (sextOperandType.getWidth() != 1 &&
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
-    // ArraySliceOp uses its operand twice, so we want to assign it first then
-    // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
-      return true;
 
     // Always blocks must have a name in their sensitivity list, not an expr.
     if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
@@ -1963,11 +2057,15 @@ void NameCollector::collectNames(Block &block) {
     // Instances have a instance name to recognize but we don't need to look
     // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
-      names.addName(&op, instance.instanceName());
+      names.addName(
+          &op,
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(instance));
       continue;
     }
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
-      names.addName(interface.getResult(), interface.name());
+      names.addName(
+          interface.getResult(),
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(interface));
       continue;
     }
 
@@ -2018,7 +2116,9 @@ void NameCollector::collectNames(Block &block) {
 
     // Notice and renamify named declarations.
     if (isa<WireOp, RegOp, LocalParamOp>(op))
-      names.addName(op.getResult(0), op.getAttrOfType<StringAttr>("name"));
+      names.addName(
+          op.getResult(0),
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(&op));
 
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
@@ -2096,10 +2196,10 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
+  StmtEmitter(ModuleEmitter &emitter, RearrangableOStream &outStream,
               ModuleNameManager &names)
-      : EmitterBase(emitter.state, stringStream), emitter(emitter),
-        stringStream(outBuffer), outBuffer(outBuffer), names(names) {}
+      : EmitterBase(emitter.state, outStream), emitter(emitter),
+        rearrangableStream(outStream), names(names) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
@@ -2108,7 +2208,7 @@ public:
   /// Emit the declaration for the temporary operation. If the operation is not
   /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
   /// return false. If the operation *is* a constant, also emit the initializer
-  /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
+  /// and semicolon, e.g. `localparam K = 1'h0;`, and return true.
   bool emitDeclarationForTemporary(Operation *op);
 
 private:
@@ -2205,19 +2305,23 @@ public:
   ModuleEmitter &emitter;
 
 private:
-  llvm::raw_svector_ostream stringStream;
-  // All statements are emitted into a temporary buffer, this is it.
-  SmallVectorImpl<char> &outBuffer;
+  /// This is the current ostream we're emiting to, when we know it is a
+  /// rearrangableStream.
+  RearrangableOStream &rearrangableStream;
 
-  // Track the legalized names.
+  /// Track the legalized names.
   ModuleNameManager &names;
 
-  // This is the index of the start of the current statement being emitted.
-  size_t statementBeginningIndex = 0;
+  /// This is the index of the start of the current statement being emitted.
+  RearrangableOStream::Cursor statementBeginning;
 
   /// This is the index of the end of the declaration region of the current
   /// 'begin' block, used to emit variable declarations.
-  size_t blockDeclarationInsertPointIndex = 0;
+  RearrangableOStream::Cursor blockDeclarationInsertPoint;
+
+  /// This keeps track of the number of statements emitted, important for
+  /// determining if we need to put out a begin/end marker in a block
+  /// declaration.
   size_t numStatementsEmitted = 0;
 };
 
@@ -2230,11 +2334,11 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
-  assert(statementBeginningIndex >= blockDeclarationInsertPointIndex &&
-         "indexes out of order");
+  SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions, names)
+  ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
+  os.write(exprBuffer.data(), exprBuffer.size());
 
   // It is possible that the emitted expression was too large to fit on a line
   // and needs to be split.  If so, the new subexpressions that need emitting
@@ -2243,41 +2347,64 @@ void StmtEmitter::emitExpression(Value exp,
   if (tooLargeSubExpressions.empty())
     return;
 
-  // Pop this statement off and save it to the side.
-  std::string thisStmt(outBuffer.begin() + statementBeginningIndex,
-                       outBuffer.end());
-  outBuffer.resize(statementBeginningIndex);
-
   // If we are working on a procedural statement, we need to emit the
   // declarations for each variable separately from the assignments to them.
   // Otherwise we just emit inline 'wire' declarations.
+  RearrangableOStream::Cursor declStartCursor, declEndCursor;
   if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
-    std::string stuffAfterDeclarations(
-        outBuffer.begin() + blockDeclarationInsertPointIndex, outBuffer.end());
-    outBuffer.resize(blockDeclarationInsertPointIndex);
+    // Split the current segment to make sure the cursors we are about to create
+    // don't get invalidated by statement reordering.
+    rearrangableStream.splitCurrentSegment();
+
+    // We're about to emit new things that we want to rearrange.
+    declStartCursor = rearrangableStream.getCursor();
+
+    // Emit the declarations into the stream.
     for (auto *expr : tooLargeSubExpressions) {
+      // TODO: This results in a lot of things like this:
+      //   automatic logic _tmp;
+      //   automatic logic _tmp_0;
+      // which could be turned into a comma separated list and properly
+      // justified.  We could collect these and emit them all at once when
+      // we recurse up to finishing off the procedural statement.  That would
+      // also eliminate the need for blockDeclarationInsertPoint to be so
+      // 'global'.
       if (!emitDeclarationForTemporary(expr))
         os << ";\n";
       ++numStatementsEmitted;
     }
-    blockDeclarationInsertPointIndex = outBuffer.size();
-    outBuffer.append(stuffAfterDeclarations.begin(),
-                     stuffAfterDeclarations.end());
+    declEndCursor = rearrangableStream.getCursor();
   }
 
+  /// Generating new statements will change `statementBeginning`, so make sure
+  /// to keep track of what it is.
+  auto prevStmtBeginning = statementBeginning;
+
   // Emit each stmt expression in turn.
+  auto stmtStartCursor = rearrangableStream.getCursor();
   for (auto *expr : tooLargeSubExpressions) {
-    statementBeginningIndex = outBuffer.size();
     ++numStatementsEmitted;
     emitStatementExpression(expr);
   }
 
-  // Re-add this statement now that all the preceeding ones are out.
-  statementBeginningIndex = outBuffer.size();
-  outBuffer.append(thisStmt.begin(), thisStmt.end());
+  // Rearrange all of the generated text for these statements to before the
+  // previous statement we were emitting, and restore statementBeginning to the
+  // right place.
+  statementBeginning = rearrangableStream.moveRangeBefore(
+      prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
+  if (!declStartCursor.isInvalid()) {
+    // Scoop up all of the stuff we just emitted, and move it to the
+    // blockDeclarationInsertPoint.
+    blockDeclarationInsertPoint = rearrangableStream.moveRangeBefore(
+        blockDeclarationInsertPoint, declStartCursor, declEndCursor);
+  }
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
+  // Know where the start of this statement is in case any out-of-band precursor
+  // statements need to be emitted.
+  statementBeginning = rearrangableStream.getCursor();
+
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
@@ -2735,13 +2862,13 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   //
   // Solve this by emitting the statements, determining if we need to
   // emit the begin, and if so, emit the begin retroactively.
-  size_t beginInsertPoint = outBuffer.size();
+  RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
   emitLocationInfoAndNewLine(locationOps);
 
   // Change the blockDeclarationInsertPointIndex for the statements in this
   // block, and restore it back when we move on to code after the block.
-  llvm::SaveAndRestore<size_t> X(blockDeclarationInsertPointIndex,
-                                 outBuffer.size());
+  llvm::SaveAndRestore<RearrangableOStream::Cursor> X(
+      blockDeclarationInsertPoint, rearrangableStream.getCursor());
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
 
@@ -2750,9 +2877,7 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     return;
 
   // Otherwise we emit the begin and end logic.
-  StringRef beginStr = " begin";
-  outBuffer.insert(outBuffer.begin() + beginInsertPoint, beginStr.begin(),
-                   beginStr.end());
+  rearrangableStream.insertLiteral(beginInsertPoint, " begin");
 
   indent() << "end";
   if (!multiLineComment.empty())
@@ -2862,11 +2987,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef opString = "always";
-  if (state.options.useAlwaysFF)
-    opString = "always_ff";
-
-  indent() << opString << " @(" << stringifyEventControl(op.clockEdge()) << " ";
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " ";
   emitExpression(op.clock(), ops);
   if (op.resetStyle() == ResetType::AsyncReset) {
     os << " or " << stringifyEventControl(*op.resetEdge()) << " ";
@@ -2877,7 +2998,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   // Build the comment string, leave out the signal expressions (since they
   // can be large).
   std::string comment;
-  comment += opString.str() + " @(";
+  comment += "always_ff @(";
   comment += stringifyEventControl(op.clockEdge());
   if (op.resetStyle() == ResetType::AsyncReset) {
     comment += " or ";
@@ -2954,10 +3075,10 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
-  StringRef prefix = "";
-  if (op->hasAttr("doNotPrint")) {
-    prefix = "// ";
-    indent() << "// This instance is elsewhere emitted as a bind statement.\n";
+  bool doNotPrint = op->hasAttr("doNotPrint");
+  if (doNotPrint) {
+    indent() << "/* This instance is elsewhere emitted as a bind statement.\n";
+    addIndent();
   }
 
   SmallPtrSet<Operation *, 8> ops;
@@ -2966,7 +3087,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
-  indent() << prefix << getVerilogModuleName(moduleOp);
+  indent() << getVerilogModuleName(moduleOp);
 
   // If this is a parameterized module, then emit the parameters.
   if (!op.parameters().empty()) {
@@ -2989,7 +3110,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       } else {
         os << ",\n";
       }
-      os.indent(state.currentIndent + INDENT_AMOUNT) << prefix << '.';
+      os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
       os << state.globalNames.getParameterVerilogName(moduleOp,
                                                       param.getName());
       os << '(';
@@ -3001,7 +3122,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
     if (printed) {
       os << '\n';
-      indent() << prefix << ')';
+      indent() << ')';
     }
   }
 
@@ -3057,7 +3178,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent() << prefix;
+    indent();
     if (!isZeroWidth) {
       // If this is a real port we're printing, then it isn't the first one. Any
       // subsequent ones will need a comma.
@@ -3098,10 +3219,14 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   if (!isFirst || isZeroWidth) {
     emitLocationInfoAndNewLine(ops);
     ops.clear();
-    indent() << prefix;
+    indent();
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
+  if (doNotPrint) {
+    reduceIndent();
+    indent() << "*/\n";
+  }
   return success();
 }
 
@@ -3160,10 +3285,6 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 }
 
 void StmtEmitter::emitStatement(Operation *op) {
-  // Know where the start of this statement is in case any out of band precuror
-  // statements need to be emitted.
-  statementBeginningIndex = outBuffer.size();
-
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op)) {
     if (emitter.outOfLineExpressions.count(op)) {
@@ -3174,6 +3295,10 @@ void StmtEmitter::emitStatement(Operation *op) {
   }
 
   ++numStatementsEmitted;
+
+  // Know where the start of this statement is in case any out-of-band precursor
+  // statements need to be emitted.
+  statementBeginning = rearrangableStream.getCursor();
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
@@ -3302,7 +3427,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    statementBeginningIndex = outBuffer.size();
+    statementBeginning = rearrangableStream.getCursor();
 
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
@@ -3359,7 +3484,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // temporary declaration, put it after the already-emitted declarations.
     // This is important to maintain incrementally after each statement, because
     // each statement can generate spills when they are overly-long.
-    blockDeclarationInsertPointIndex = outBuffer.size();
+    blockDeclarationInsertPoint = rearrangableStream.getCursor();
   }
 
   os << '\n';
@@ -3383,10 +3508,10 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  SmallString<128> outputBuffer;
+  RearrangableOStream outputBuffer;
   ModuleNameManager names;
   StmtEmitter(*this, outputBuffer, names).emitStatement(op);
-  os << outputBuffer;
+  outputBuffer.print(os);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3419,8 +3544,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
-           << childVerilogName.getValue() << ' ' << inst.getName().getValue()
-           << " (";
+           << childVerilogName.getValue() << ' '
+           << state.globalNames.getDeclarationVerilogName(inst) << " (";
 
   ModulePortInfo parentPortInfo = parentMod.getPorts();
   SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
@@ -3428,6 +3553,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : childPortInfo) {
+    auto portName = state.globalNames.getPortVerilogName(childMod, elt);
+    elt.name = Builder(inst.getContext()).getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
@@ -3477,7 +3604,8 @@ void ModuleEmitter::emitBind(BindOp op) {
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
-    auto name = getNameRemotely(portVal, parentPortInfo);
+    auto name =
+        getNameRemotely(portVal, parentPortInfo, parentMod, state.globalNames);
     if (name.empty()) {
       // Non stable names will come from expressions.  Since we are lowering the
       // instance also, we can ensure that expressions feeding bound instances
@@ -3501,8 +3629,8 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
   auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   os << "bind " << instantiator << " "
-     << cast<InterfaceOp>(*interface).sym_name() << " " << instance.name()
-     << " (.*);\n\n";
+     << cast<InterfaceOp>(*interface).sym_name() << " "
+     << state.globalNames.getDeclarationVerilogName(instance) << " (.*);\n\n";
 }
 
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
@@ -3722,10 +3850,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   reduceIndent();
 
   // Emit the body of the module.
-  SmallString<128> outputBuffer;
+  RearrangableOStream outputBuffer;
   StmtEmitter(*this, outputBuffer, names)
       .emitStatementBlock(*module.getBodyBlock());
-  os << outputBuffer;
+  outputBuffer.print(os);
   os << "endmodule\n\n";
 
   currentModuleOp = HWModuleOp();
@@ -3866,20 +3994,34 @@ struct SharedEmitterState {
 /// of an explicit output file attribute.
 void SharedEmitterState::gatherFiles(bool separateModules) {
 
-  /// Collect all the instance symbols from the specified module and add them
-  /// to the IRCache.  Instances only exist at the top level of the module.
-  /// Also keep track of any modules that contain bind operations.  These are
-  /// non-hierarchical references which we need to be careful about during
-  /// emission.
+  /// Collect all the inner names from the specified module and add them to the
+  /// IRCache.  Declarations (named things) only exist at the top level of the
+  /// module.  Also keep track of any modules that contain bind operations.
+  /// These are non-hierarchical references which we need to be careful about
+  /// during emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
-    for (Operation &op : *moduleOp.getBodyBlock()) {
+    moduleOp.walk([&](Operation *op) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-        if (auto name = symOp.getNameAttr())
-          symbolCache.addDefinition(name, symOp);
+      if (auto name = op->getAttrOfType<StringAttr>(
+              hw::InnerName::getInnerNameAttrName()))
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
-    }
+    });
+  };
+  /// Collect any port marked as being referenced via symbol.
+  auto collectPorts = [&](auto moduleOp) {
+    auto numArgs = moduleOp.getNumArguments();
+    for (size_t p = 0; p != numArgs; ++p)
+      for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p);
+    for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
+      for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
+        if (auto sym = resultAttr.second.dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p + numArgs);
   };
 
   SmallString<32> outputPath;
@@ -3942,6 +4084,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
+          collectPorts(mod);
           collectInstanceSymbolsAndBinds(mod);
 
           // Emit into a separate file named after the module.
@@ -3966,9 +4109,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<HWModuleExternOp>([&](auto op) {
+        .Case<HWModuleExternOp>([&](HWModuleExternOp op) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
+          collectPorts(op);
           if (separateModules)
             separateFile(op, "extern_modules.sv");
           else
@@ -3982,7 +4126,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
         })
-        .Case<HWGeneratorSchemaOp>([&](auto schemaOp) {
+        .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
         })
         .Case<TypeScopeOp>([&](TypeScopeOp op) {
