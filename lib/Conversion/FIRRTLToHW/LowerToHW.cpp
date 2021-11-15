@@ -1493,14 +1493,16 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
     auto srcWidth = sourceType.cast<IntType>().getWidthOrSentinel();
     auto destWidth = destType.cast<IntType>().getWidthOrSentinel();
     auto resultType = builder.getIntegerType(destWidth);
+    if (destWidth == srcWidth)
+      return value;
+
     if (srcWidth > destWidth) {
-      if (allowTruncate) {
+      if (allowTruncate)
         return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
-      } else {
-        builder.emitError("operand should not be a truncation");
-        success = false;
-        return Value();
-      }
+
+      builder.emitError("operand should not be a truncation");
+      success = false;
+      return Value();
     }
 
     if (sourceType.cast<IntType>().isSigned())
