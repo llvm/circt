@@ -56,7 +56,7 @@ struct HandshakeDotPrintPass
     os << "Digraph G {\n";
     os.indent();
     os << "splines=spline;\n";
-    dotPrint(os, "TOP", topLevelOp);
+    dotPrint(os, "TOP", topLevelOp, /*isTop=*/true);
     os.unindent();
     os << "}\n";
     outfile.close();
@@ -66,7 +66,7 @@ private:
   /// Prints an instance of a handshake.func to the graph. Returns the unique
   /// name that was assigned to the instance.
   std::string dotPrint(mlir::raw_indented_ostream &os, StringRef parentName,
-                       handshake::FuncOp f);
+                       handshake::FuncOp f, bool isTop);
 
   /// Maintain a mapping of module names and the number of times one of those
   /// modules have been instantiated in the design. This is used to generate
@@ -145,8 +145,7 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
   std::string opDialectName = op->getName().getStringRef().str();
   std::replace(opDialectName.begin(), opDialectName.end(), '.', '_');
   std::string opName =
-      (instanceName + "." + opDialectName + "_" + std::to_string(opIDs[op]))
-          .str();
+      (instanceName + "." + opDialectName + std::to_string(opIDs[op])).str();
 
   outfile << "\"" << opName << "\""
           << " [";
@@ -251,7 +250,7 @@ static bool isControlOperand(Operation *op, Value v) {
 }
 
 static std::string getLocalName(StringRef instanceName, StringRef suffix) {
-  return (instanceName + "_" + suffix).str();
+  return (instanceName + "." + suffix).str();
 }
 
 static std::string getArgName(handshake::FuncOp op, unsigned index) {
@@ -331,7 +330,7 @@ static void tryAddExtraEdgeInfo(mlir::raw_indented_ostream &os, Operation *from,
       auto resName = fromNamedOpInterface.getResultName(resIdx);
       os << " output=\"" << resName << "\"";
     } else
-      os << " outputIdx=" << resIdx;
+      os << " output=\"out" << resIdx << "\"";
   }
 
   if (to) {
@@ -343,21 +342,24 @@ static void tryAddExtraEdgeInfo(mlir::raw_indented_ostream &os, Operation *from,
       auto opName = toNamedOpInterface.getOperandName(opIdx);
       os << " input=\"" << opName << "\"";
     } else
-      os << " inputIdx=" << opIdx;
+      os << " input=\"in" << opIdx << "\"";
   }
 }
 
 std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
                                             StringRef parentName,
-                                            handshake::FuncOp f) {
+                                            handshake::FuncOp f, bool isTop) {
   // Prints DOT representation of the dataflow graph, used for debugging.
   DenseMap<Block *, unsigned> blockIDs;
   std::map<std::string, unsigned> opTypeCntrs;
   DenseMap<Operation *, unsigned> opIDs;
   auto name = f.getName();
   unsigned thisId = instanceIdMap[name.str()]++;
-  std::string instanceName =
-      parentName.str() + "." + name.str() + "_" + std::to_string(thisId);
+  std::string instanceName = parentName.str() + "." + name.str();
+  // Follow submodule naming convention from FIRRTL lowering:
+  if (!isTop)
+    instanceName += std::to_string(thisId);
+
   unsigned i = 0;
 
   // Sequentially scan across the operations in the function and assign instance
@@ -438,7 +440,7 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
           instOp->getParentOfType<ModuleOp>().lookupSymbol<handshake::FuncOp>(
               instOp.getModule());
       assert(calledFuncOp);
-      auto subInstanceName = dotPrint(os, instanceName, calledFuncOp);
+      auto subInstanceName = dotPrint(os, instanceName, calledFuncOp, false);
 
       // Create a mapping between the instance arguments and the arguments to
       // the module which it instantiated.
