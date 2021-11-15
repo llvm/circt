@@ -175,7 +175,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
             en, b.createOrFold<comb::AndOp>(wmask.value(), wmode));
         b.create<sv::IfOp>(wcond, [&]() {
           b.create<sv::PAssignOp>(
-              b.create<sv::IndexedPartSelectInOutOp>(
+              b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
                   b.createOrFold<ConstantOp>(b.getIntegerType(32),
                                              wmask.index() * mem.maskGran),
@@ -221,7 +221,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
         b.create<sv::IfOp>(wcond, [&]() {
           auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
           b.create<sv::PAssignOp>(
-              b.create<sv::IndexedPartSelectInOutOp>(
+              b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slot,
                   b.createOrFold<ConstantOp>(b.getIntegerType(32),
                                              wmask.index() * mem.maskGran),
