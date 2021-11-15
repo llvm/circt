@@ -198,24 +198,24 @@ def wrap_opviews_with_values(dialect, module_name):
           type = PyCDEType(value.type)
 
           if isinstance(type.strip, hw.ArrayType):
-            self._value_cls = ListValue
+            constructor = ListValue
           elif isinstance(type.strip, hw.StructType):
-            self._value_cls = StructValue
+            constructor = StructValue
           elif isinstance(type.strip, ir.IntegerType):
-            self._value_cls = BitVectorValue
+            constructor = BitVectorValue
           else:
-            self._value_cls = RegularValue
+            constructor = RegularValue
 
-          self._value_cls.__init__(self, value, type)
+          self._inst = constructor(value, type)
 
         def __getitem__(self, sub):
-          return self._value_cls.__getitem__(self, sub)
+          return self._inst[sub]
 
         def __getattr__(self, attr):
-          return self._value_cls.__getattr__(self, attr)
+          return getattr(self._inst, attr)
 
         def __len__(self):
-          return self._value_cls.__len__(self)
+          return len(self._inst)
 
       wrapped_class = ValueOpView
       setattr(module, attr, wrapped_class)
