@@ -25,11 +25,17 @@ def Handshake_Dialect : Dialect {
   let cppNamespace = "::circt::handshake";
 }
 
+def HasSingleUseResults : PredOpTrait<
+  "all results should have exactly one use",
+  CPred<[{ llvm::all_of(getOperation()->getResults(), [&](auto res) { return res.hasOneUse(); }) }]>>;
+
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
          traits #[HasParent<"handshake::FuncOp">,
-         DeclareOpInterfaceMethods<NamedIOInterface>]> {
+         DeclareOpInterfaceMethods<NamedIOInterface>,
+         HasSingleUseResults
+         ]> {
 }
 
 include "circt/Dialect/Handshake/HandshakeOps.td"

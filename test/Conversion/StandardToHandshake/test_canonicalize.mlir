@@ -5,13 +5,14 @@ module {
   // CHECK-LABEL: handshake.func @simple(
   // CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
   handshake.func @simple(%arg0: none, ...) -> none {
+    %c:2 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none)
 
     // CHECK: %[[VAL_1:.*]] = "handshake.constant"(%[[VAL_0:.*]]) {value = 1 : index} : (none) -> index
-    %0 = "handshake.constant"(%arg0) {value = 1 : index} : (none) -> index
+    %0 = "handshake.constant"(%c#0) {value = 1 : index} : (none) -> index
 
     // CHECK-NOT: %[[TMP_0:.*]] = "handshake.branch"(%[[VAL_0:.*]]) {control = true} : (none) -> none
     // CHECK-NOT: %[[TMP_1:.*]] = "handshake.branch"(%[[VAL_1:.*]]) {control = false} : (index) -> index
-    %1 = "handshake.branch"(%arg0) {control = true} : (none) -> none
+    %1 = "handshake.branch"(%c#1) {control = true} : (none) -> none
     %2 = "handshake.branch"(%0) {control = false} : (index) -> index
 
     // CHECK-NOT: %[[TMP_2:.*]] = "handshake.merge"(%[[TMP_0:.*]]) : (none) -> none
@@ -45,20 +46,14 @@ module {
     handshake.return %result, %arg2 : none, none
   }
 
-  // CHECK-LABEL: cmerge_with_control_ignored
-  handshake.func @cmerge_with_control_ignored(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
-    // CHECK: "handshake.merge"(%{{.+}}, %{{.+}})
-    // CHECK-NOT: "handshake.control_merge"
-    %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
-    handshake.return %result, %arg2 : none, none
-  }
-
   // CHECK-LABEL: sunk_constant
   handshake.func @sunk_constant(%arg0: none) -> (none) {
+    // CHECK-NOT: handshake.fork
     // CHECK-NOT: handshake.constant
     // CHECK-NOT: handshake.sink
-    %0 = "handshake.constant"(%arg0) { value = 24 : i8 } : (none) -> i8
+    %c:2 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none)
+    %0 = "handshake.constant"(%c#0) { value = 24 : i8 } : (none) -> i8
     "handshake.sink"(%0) : (i8) -> ()
-    handshake.return %arg0: none
+    handshake.return %c#1: none
   }
 }
