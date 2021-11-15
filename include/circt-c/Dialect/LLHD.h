@@ -44,6 +44,29 @@ MLIR_CAPI_EXPORTED MlirType llhdSignalTypeGetElementType(MlirType);
 /// Get the inner type of a pointer.
 MLIR_CAPI_EXPORTED MlirType llhdPointerTypeGetElementType(MlirType);
 
+//===----------------------------------------------------------------------===//
+// Attributes
+//===----------------------------------------------------------------------===//
+
+/// Check if an attribute is a time attribute.
+MLIR_CAPI_EXPORTED bool llhdAttrIsATimeAttr(MlirAttribute);
+
+/// Create a time attribute.
+MLIR_CAPI_EXPORTED MlirAttribute llhdTimeAttrGet(MlirContext ctx,
+                                                 MlirStringRef timeUnit,
+                                                 uint64_t seconds,
+                                                 uint64_t delta,
+                                                 uint64_t epsilon);
+
+/// Get the time unit of a time attribute.
+MLIR_CAPI_EXPORTED MlirStringRef llhdTimeAttrGetTimeUnit(MlirAttribute);
+/// Get the seconds component of a time attribute.
+MLIR_CAPI_EXPORTED uint64_t llhdTimeAttrGetSeconds(MlirAttribute);
+/// Get the delta component of a time attribute.
+MLIR_CAPI_EXPORTED uint64_t llhdTimeAttrGetDelta(MlirAttribute);
+/// Get the epsilon component of a time attribute.
+MLIR_CAPI_EXPORTED uint64_t llhdTimeAttrGetEpsilon(MlirAttribute);
+
 #ifdef __cplusplus
 }
 #endif

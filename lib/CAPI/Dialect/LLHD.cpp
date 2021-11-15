@@ -63,3 +63,40 @@ MlirType llhdSignalTypeGetElementType(MlirType type) {
 MlirType llhdPointerTypeGetElementType(MlirType type) {
   return wrap(unwrap(type).cast<PtrType>().getUnderlyingType());
 }
+
+//===----------------------------------------------------------------------===//
+// Attributes
+//===----------------------------------------------------------------------===//
+
+/// Check if an attribute is a time attribute.
+bool llhdAttrIsATimeAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<TimeAttr>();
+}
+
+/// Create a time attribute.
+MlirAttribute llhdTimeAttrGet(MlirContext ctx, MlirStringRef timeUnit,
+                              uint64_t seconds, uint64_t delta,
+                              uint64_t epsilon) {
+  return wrap(
+      TimeAttr::get(unwrap(ctx), seconds, unwrap(timeUnit), delta, epsilon));
+}
+
+/// Get the time unit of a time attribute.
+MlirStringRef llhdTimeAttrGetTimeUnit(MlirAttribute attr) {
+  return wrap(unwrap(attr).cast<TimeAttr>().getTimeUnit());
+}
+
+/// Get the seconds component of a time attribute.
+uint64_t llhdTimeAttrGetSeconds(MlirAttribute attr) {
+  return unwrap(attr).cast<TimeAttr>().getTime();
+}
+
+/// Get the delta component of a time attribute.
+uint64_t llhdTimeAttrGetDelta(MlirAttribute attr) {
+  return unwrap(attr).cast<TimeAttr>().getDelta();
+}
+
+/// Get the epsilon component of a time attribute.
+uint64_t llhdTimeAttrGetEpsilon(MlirAttribute attr) {
+  return unwrap(attr).cast<TimeAttr>().getEpsilon();
+}
