@@ -1133,7 +1133,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
-  Value mapArray(Value array, std::function<Value(Value)> fn);
+  Value mapArray(Value array, llvm::unique_function<Value(Value)> fn);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1491,10 +1491,11 @@ static Type getVectorBaseType(Type srcType) {
 }
 
 /// Apply `fn` to each array element and construct new array.
-Value FIRRTLLowering::mapArray(Value array, std::function<Value(Value)> fn) {
+Value FIRRTLLowering::mapArray(Value array,
+                               llvm::unique_function<Value(Value)> fn) {
   SmallVector<Value> resultBuffer;
   bool success = true;
-  std::function<void(Value, Type)> recurse = [&](Value value, Type type) {
+  llvm::unique_function<void(Value, Type)> recurse = [&](Value value, Type type) {
     TypeSwitch<Type>(type)
         .Case<hw::ArrayType>([&](auto a) {
           int size = resultBuffer.size();
