@@ -75,16 +75,14 @@ circuit Qux:
 ; CHECK-NEXT:    sv.alwaysff(posedge %RW0_clk)  {
 ; CHECK-NEXT:      %[[vv12:.+]] = comb.and %RW0_en, %RW0_wmask, %RW0_wmode : i1
 ; CHECK-NEXT:      sv.if %[[vv12]]  {
-; CHECK-NEXT:         %[[vv13:.+]] = sv.indexed_part_select_inout %[[v9]][%[[c0_i32:.+]] : 8] :
-; CHECK-NEXT:        sv.passign %[[vv13]], %RW0_wdata : i8
+; CHECK-NEXT:        sv.passign %[[v9]], %RW0_wdata : i8
 ; CHECK-NEXT:      }
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    sv.alwaysff(posedge %W0_clk)  {
 ; CHECK-NEXT:      %[[v12:.+]] = comb.and %W0_en, %W0_mask : i1
 ; CHECK-NEXT:      sv.if %[[v12]]  {
 ; CHECK-NEXT:        %[[v13:.+]] = sv.array_index_inout %[[vMemory]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
-; CHECK-NEXT:        %[[v14:.+]] = sv.indexed_part_select_inout %[[v13]][%[[c0_i32]] : 8] :
-; CHECK-NEXT:        sv.passign %[[v14]], %W0_data : i8
+; CHECK-NEXT:        sv.passign %[[v13]], %W0_data : i8
 ; CHECK-NEXT:      }
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    hw.output %[[v6]], %[[v11]] : i8, i8

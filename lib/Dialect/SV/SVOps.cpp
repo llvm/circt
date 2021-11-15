@@ -1108,6 +1108,12 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   return success();
 }
 
+OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
+  if (getType() == input().getType())
+    return input();
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // IndexedPartSelectOp
 //===----------------------------------------------------------------------===//

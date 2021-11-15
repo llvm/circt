@@ -91,8 +91,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
 //CHECK-NEXT:      sv.if %[[rwwcond]]  {
 //CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:        %[[vv16:.+]] = sv.indexed_part_select_inout %[[rwslot]][%[[c0_i32]] : 16] : !hw.inout<i16>, i32
-//CHECK-NEXT:        sv.passign %[[vv16]], %[[rw_wdata_0]]
+//CHECK-NEXT:        sv.passign %[[rwslot]], %[[rw_wdata_0]]
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  %[[v14:.+]] = comb.extract %wo_mask_0 from 0 : (i1) -> i1
@@ -102,8 +101,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:    sv.if %[[wcond]]  {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
 //CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:      %[[v216:.+]] = sv.indexed_part_select_inout %[[wslot]][%[[c0_i32]] : 16] : !hw.inout<i16>, i32
-//CHECK-NEXT:      sv.passign %[[v216]], %[[v15]]
+//CHECK-NEXT:      sv.passign %[[wslot]], %[[v15]]
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
