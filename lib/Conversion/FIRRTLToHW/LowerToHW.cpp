@@ -1515,14 +1515,16 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
       [&](Value value, FIRRTLType sourceType, FIRRTLType destType) {
         TypeSwitch<FIRRTLType>(sourceType)
             .Case<FVectorType>([&](auto a) {
+              auto destVectorType = destType.cast<FVectorType>();
               int size = resultBuffer.size();
-              auto dest = destType.cast<FVectorType>();
               for (size_t i = 0, e = std::min(a.getNumElements(),
-                                              dest.getNumElements());
+                                              destVectorType.getNumElements());
                    i != e; ++i) {
-                auto iIdx = getOrCreateIntConstant(llvm::Log2_64_Ceil(e), i);
+                auto iIdx = getOrCreateIntConstant(
+                    llvm::Log2_64_Ceil(a.getNumElements()), i);
                 auto arrayIndex = builder.create<hw::ArrayGetOp>(value, iIdx);
-                recurse(arrayIndex, a.getElementType(), dest.getElementType());
+                recurse(arrayIndex, a.getElementType(),
+                        destVectorType.getElementType());
                 if (!success)
                   return;
               }
@@ -1958,13 +1960,13 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
   if (isZeroBitFIRRTLType(op->getResult(0).getType()))
     return setLowering(op, Value());
 
-  Value value = getLoweredValue(op.input());
+  Value value = getPossiblyInoutLoweredValue(op.input());
   assert(value && "subindex lowering failed");
   auto iIdx = getOrCreateIntConstant(
       llvm::Log2_64_Ceil(
           op.input().getType().cast<FVectorType>().getNumElements()),
       op.index());
-  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
+  return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -3008,7 +3010,35 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     return success();
   }
 
-  builder.create<sv::AssignOp>(destVal, srcVal);
+  if (destType.isGround() || destType == srcVal.getType()) {
+    builder.create<sv::AssignOp>(destVal, srcVal);
+    return success();
+  }
+  // destVal <- srcVal
+  std::function<void(Value, Value, FIRRTLType, FIRRTLType)> recurse =
+      [&](Value dest, Value value, FIRRTLType sourceType, FIRRTLType destType) {
+        TypeSwitch<FIRRTLType>(sourceType)
+            .Case<FVectorType>([&](auto a) {
+              auto destVectorType = destType.cast<FVectorType>();
+              for (size_t i = 0, e = std::min(a.getNumElements(),
+                                              destVectorType.getNumElements());
+                   i != e; ++i) {
+                auto iIdx = getOrCreateIntConstant(
+                    llvm::Log2_64_Ceil(a.getNumElements()), i);
+                auto arrayIndex =
+                    builder.create<sv::ArrayIndexInOutOp>(dest, iIdx);
+                auto arrayRead = builder.create<hw::ArrayGetOp>(value, iIdx);
+                recurse(arrayIndex, arrayRead, a.getElementType(),
+                        destVectorType.getElementType());
+              }
+            })
+            .Case<IntType>(
+                [&](auto) { builder.create<sv::AssignOp>(dest, value); })
+            .Default([&](auto) { llvm_unreachable(""); });
+      };
+
+  recurse(destVal, srcVal, op.src().getType().cast<FIRRTLType>(),
+          destType.cast<FIRRTLType>());
   return success();
 }
 
