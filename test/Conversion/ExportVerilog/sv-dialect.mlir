@@ -521,6 +521,32 @@ hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
   hw.output
 }
 
+// CHECK-LABEL: module slice_inline_ports
+hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
+ -> (o1: !hw.array<2xi3>, o2: !hw.array<64xi1>, o3: !hw.array<64xi1>) {
+
+  // array_create cannot be inlined into the slice.
+  %c1_i2 = hw.constant 1 : i2
+  %0 = hw.array_create %x, %x, %x, %x : i3
+  // CHECK: wire [3:0][2:0] _T = 
+  %1 = hw.array_slice %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
+  // CHECK: assign o1 = _T[2'h1+:2];
+
+  %c1_i7 = hw.constant 1 : i7
+
+  /// This can be inlined.
+  // CHECK: assign o2 = arr[7'h1+:64];
+  %2 = hw.array_slice %arr at %c1_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
+
+  // CHECK: assign o3 = arr[y + 7'h1+:64];
+  %sum = comb.add %y, %c1_i7 : i7
+  %3 = hw.array_slice %arr at %sum : (!hw.array<128xi1>) -> !hw.array<64xi1>
+
+  hw.output %1, %2, %3: !hw.array<2xi3>, !hw.array<64xi1>, !hw.array<64xi1>
+}
+
+
+
 // CHECK-LABEL: if_multi_line_expr1
 hw.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) {
   %tmp6 = sv.reg  : !hw.inout<i25>

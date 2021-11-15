@@ -111,7 +111,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE2:.+]] = '{foo: c, bar: a};
+// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:.+]] = array2d[a];
+// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -145,10 +146,10 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r34 = ~a;
 // CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a+:3] : [[WIRE0]][b+:3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = array2d[a][b];
+// CHECK-NEXT:   assign r37 = [[WIRE2]][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:   assign r41 = '{foo: _T_1.foo, bar: b};
+// CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
 // CHECK-NEXT: endmodule
 
 

@@ -1961,37 +1961,24 @@ static bool isExpressionUnableToInline(Operation *op) {
 
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
-    // It cannot be an arbitrary expression.
-    if (isa<ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-
-    // Indexing into an array cannot be done in the same line as the array
-    // creation.
     //
-    // This is done to avoid creating incorrect constructs like the following
-    // (which is a bit extract):
-    //
+    // It cannot be an arbitrary expression, e.g. this is invalid:
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
-    // And illegal constructs like:
-    //
-    //     assign bar = ({{a}, {b}, {c}, {d}})[idx];
-    if (isa<ArrayCreateOp>(op) && isa<ArrayGetOp>(user))
-      return true;
+    // To handle these, we push the subexpression into a temporary.
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp>(user))
+      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
 
     // Sign extend (when the operand isn't a single bit) requires a bitselect
-    // syntactically.
+    // syntactically so it uses its expression multiple times.
     if (auto sext = dyn_cast<SExtOp>(user)) {
       auto sextOperandType = sext.getOperand().getType().cast<IntegerType>();
       if (sextOperandType.getWidth() != 1 &&
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
-    // ArraySliceOp uses its operand twice, so we want to assign it first then
-    // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
-      return true;
 
     // Always blocks must have a name in their sensitivity list, not an expr.
     if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
