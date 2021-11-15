@@ -181,6 +181,12 @@ LogicalResult AffineToStaticLogic::solveSchedulingProblem(
 /// Create the pipeline op for a loop nest.
 LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     SmallVectorImpl<AffineForOp> &loopNest) {
+  // Scheduling analyis only considers the innermost loop nest for now.
+  auto forOp = loopNest.back();
+
+  // Retrieve the cyclic scheduling problem for this loop.
+  CyclicProblem &problem = schedulingAnalysis->getProblem(forOp);
+
   auto outerLoop = loopNest.front();
   auto innerLoop = loopNest.back();
   ImplicitLocOpBuilder builder(outerLoop.getLoc(), outerLoop);
@@ -200,12 +206,15 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
+  auto ii =
+      builder.getI64IntegerAttr(problem.getInitiationInterval().getValue());
+
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);
   iterArgs.append(innerLoop.getIterOperands().begin(),
                   innerLoop.getIterOperands().end());
 
-  auto pipeline = builder.create<PipelineWhileOp>(resultTypes, iterArgs);
+  auto pipeline = builder.create<PipelineWhileOp>(resultTypes, ii, iterArgs);
 
   // Create the condition, which currently just compares the induction variable
   // to the upper bound.

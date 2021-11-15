@@ -109,6 +109,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   }];
 
   let arguments = (ins
+    OptionalAttr<I64Attr>:$II,
     Variadic<AnyType>:$iterArgs
   );
 
@@ -135,7 +136,8 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::ValueRange":$iterArgs)>
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$II,
+                   "mlir::ValueRange":$iterArgs)>
   ];
 
   let extraClassDeclaration = [{
