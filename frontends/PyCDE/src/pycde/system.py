@@ -98,7 +98,7 @@ class System:
     self.symbols[ret] = None
     return ret
 
-  def create_physical_region(self, name):
+  def create_physical_region(self, name: str = None):
     with self._get_ip():
       physical_region = PhysicalRegion(name)
     return physical_region

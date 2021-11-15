@@ -39,11 +39,23 @@ class PhysLocation:
 
 
 class PhysicalRegion:
+  _counter = 0
+  _used_names = set([])
+
   __slots__ = ["_physical_region"]
 
-  def __init__(self, name: str, bounds: list = None):
+  def __init__(self, name: str = None, bounds: list = None):
+    if name is None or name in PhysicalRegion._used_names:
+      prefix = name if name is not None else "region"
+      name = f"{prefix}_{PhysicalRegion._counter}"
+      while name in PhysicalRegion._used_names:
+        PhysicalRegion._counter += 1
+        name = f"{prefix}_{PhysicalRegion._counter}"
+    PhysicalRegion._used_names.add(name)
+
     if bounds is None:
       bounds = []
+
     name_attr = StringAttr.get(name)
     bounds_attr = ArrayAttr.get(bounds)
     self._physical_region = msft.PhysicalRegionOp(name_attr, bounds_attr)

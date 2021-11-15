@@ -96,11 +96,17 @@ loc = placement(["memory", "bank"], PrimitiveType.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("UnParameterized",
                                   "Nothing")).add_attribute(loc)
 
-region1 = t.create_physical_region("region1").add_bounds((0, 10), (0, 10))
+region1 = t.create_physical_region("region_0").add_bounds((0, 10), (0, 10))
 region1.add_bounds((10, 20), (10, 20))
 ref = region1.get_ref()
 instance_attrs.lookup(pycde.AppID("UnParameterized",
                                   "Nothing")).add_attribute(ref)
+
+region_anon = t.create_physical_region()
+assert region_anon._physical_region.sym_name.value == "region_1"
+
+region_explicit = t.create_physical_region("region_1")
+assert region_explicit._physical_region.sym_name.value == "region_1_1"
 
 test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
