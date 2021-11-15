@@ -423,15 +423,6 @@ FIRRTLType FIRRTLType::getWidthlessType() {
       });
 }
 
-FIRRTLType FIRRTLType::getVectorBaseType() {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
-      .Case<IntType>([&](auto intType) { return intType; })
-      .Case<FVectorType>([&](FVectorType vectorType) {
-        return vectorType.getElementType().getVectorBaseType();
-      })
-      .Default([&](auto) { return FIRRTLType(); });
-}
-
 /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
 /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
 /// types but without a specified bitwidth.  Return -2 if this isn't a simple

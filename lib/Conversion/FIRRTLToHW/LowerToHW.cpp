@@ -1481,16 +1481,6 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
-/// Returns a base type from a vector type.
-static Type getVectorBaseType(Type srcType) {
-  return TypeSwitch<Type, Type>(srcType)
-      .Case<IntegerType>([&](auto intType) { return intType; })
-      .Case<hw::ArrayType>([&](auto vectorType) {
-        return getVectorBaseType(vectorType.getElementType());
-      })
-      .Default([&](auto) { return Type(); });
-}
-
 Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
                                               FIRRTLType sourceType,
                                               FIRRTLType destType,
