@@ -70,10 +70,6 @@ static bool hasSingleUse(Value v) {
   return std::distance(users.begin(), users.end()) == 1;
 }
 
-static bool allResultsHaveSingleUse(Operation *op) {
-  return llvm::all_of(op->getResults(), hasSingleUse);
-}
-
 // Fetch values from the value map and consume them
 std::vector<llvm::Any>
 fetchValues(ArrayRef<mlir::Value> values,
@@ -422,8 +418,7 @@ static ParseResult verifyFuncOp(handshake::FuncOp op) {
   // Verify that any non-handshake operation result has a single use. Handshake
   // operations themselves validate this through the HasSingleUseResults trait.
   for (auto &subOp : op.getOps()) {
-    if (subOp.getDialect()->getNamespace() ==
-        HandshakeDialect::getDialectNamespace())
+    if (isa<HandshakeDialect>(subOp.getDialect()))
       continue;
     for (auto res : llvm::enumerate(subOp.getResults())) {
       if (!hasSingleUse(res.value()))
