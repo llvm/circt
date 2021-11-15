@@ -1111,3 +1111,12 @@ hw.module @addSubParam<p1: i4>(%a: i4) -> (o1: i4, o2: i4, o3: i4) {
   hw.output %b, %c, %d : i4, i4, i4
 }
 
+// CHECK-LABEL: muxConstantsFold
+hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
+  // CHECK-NEXT: %0 = comb.sext %cond : (i1) -> i25
+  %c0_i25 = hw.constant 0 : i25
+  %c-1_i25 = hw.constant -1 : i25
+  %0 = comb.mux %cond, %c-1_i25, %c0_i25 : i25
+  // CHECK-NEXT: hw.output %0
+  hw.output %0 : i25
+}

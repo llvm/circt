@@ -1699,12 +1699,13 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       return success();
     }
 
-    // When both inputs are constants and differ by only one bit, we can
-    // simplify by splitting the mux into up to three contiguous chunks: one
-    // for the differing bit and up to two for the bits that are the same.
-    // E.g. mux(a, 3'h2, 0) -> concat(0, mux(a, 1, 0), 0) -> concat(0, a, 0)
+    // Check for mux of two constants.  There are many ways to simplify them.
     APInt value2;
     if (matchPattern(op.falseValue(), m_RConstant(value2))) {
+      // When both inputs are constants and differ by only one bit, we can
+      // simplify by splitting the mux into up to three contiguous chunks: one
+      // for the differing bit and up to two for the bits that are the same.
+      // E.g. mux(a, 3'h2, 0) -> concat(0, mux(a, 1, 0), 0) -> concat(0, a, 0)
       APInt xorValue = value ^ value2;
       if (xorValue.isPowerOf2()) {
         unsigned leadingZeros = xorValue.countLeadingZeros();
@@ -1735,6 +1736,13 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
               op.getLoc(), op.trueValue(), 0, trailingZeros));
 
         rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), operands);
+        return success();
+      }
+
+      // If the true value is all ones and the false is all zeros then we have a
+      // sext pattern.
+      if (value.isAllOnes() && value2.isZero()) {
+        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), op.cond());
         return success();
       }
     }
