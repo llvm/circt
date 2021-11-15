@@ -1481,6 +1481,9 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
+/// Return the lowered array value whose type is converted into `destType`.
+/// We have to care about the extension/truncation/signedness of each element.
+/// If returns a null value for complex arrays such as arrays with bundles.
 Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
                                               FIRRTLType sourceType,
                                               FIRRTLType destType,
@@ -1493,6 +1496,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
     auto srcWidth = sourceType.cast<IntType>().getWidthOrSentinel();
     auto destWidth = destType.cast<IntType>().getWidthOrSentinel();
     auto resultType = builder.getIntegerType(destWidth);
+
     if (srcWidth == destWidth)
       return value;
 
@@ -1511,6 +1515,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
     return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
 
+  // This recursive function constructs the output array.
   std::function<void(Value, FIRRTLType, FIRRTLType)> recurse =
       [&](Value src, FIRRTLType srcType, FIRRTLType destType) {
         TypeSwitch<FIRRTLType>(srcType)
@@ -3011,7 +3016,11 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     return success();
   }
 
-  if (srcVal.getType().isa<hw::ArrayType>()) {
+  if (srcVal.getType().isa<hw::ArrayType>() && destType != op.src().getType()) {
+    // If the connection is about array and types do not match, it might be a
+    // connection between vectors with different lengths. For such cases, we can
+    // not use usual assignments. It is necessary to assign each elements
+    // recursively.
     std::function<void(Value, Value, Type, Type)> recurse = [&](Value dest,
                                                                 Value src,
                                                                 Type dstType,
