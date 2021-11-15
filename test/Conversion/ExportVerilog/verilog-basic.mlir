@@ -397,6 +397,17 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   hw.output
 }
 
+// https://github.com/llvm/circt/issues/2168
+// CHECK-LABEL: module shrs_parens(
+hw.module @shrs_parens(%a: i18, %b: i18, %c: i1) -> (o: i18) {
+  // CHECK: assign o = a + $signed($signed(b) >>> c);
+  %c0_i17 = hw.constant 0 : i17
+  %0 = comb.concat %c0_i17, %c : i17, i1
+  %1 = comb.shrs %b, %0 : i18
+  %2 = comb.add %a, %1 : i18
+  hw.output %2 : i18
+}
+
 // https://github.com/llvm/circt/issues/755
 // CHECK-LABEL: module UnaryParensIssue755(
 // CHECK: assign b = |(~a);
@@ -407,7 +418,6 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   %1 = comb.icmp ne %0, %c0_i8 : i8
   hw.output %1 : i1
 }
-
 
 // Inner name references to ports which are renamed to avoid collisions with
 // reserved Verilog keywords.

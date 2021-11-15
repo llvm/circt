@@ -56,7 +56,7 @@ namespace {
 enum VerilogPrecedence {
   // Normal precedence levels.
   Symbol,          // Atomic symbol like "foo" and {a,b}
-  Selection,       // () , [] , :: , .
+  Selection,       // () , [] , :: , ., $signed()
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
@@ -1376,6 +1376,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (emitBinaryFlags & EB_ForceResultSigned) {
     os << ')';
     signedness = IsSigned;
+    prec = Selection;
   }
 
   return {prec, signedness};
@@ -1520,11 +1521,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     addPrefix("$signed(");
     os << ')';
     expInfo.signedness = IsSigned;
+    expInfo.precedence = Selection;
   } else if (signRequirement == RequireUnsigned &&
              expInfo.signedness == IsSigned) {
     addPrefix("$unsigned(");
     os << ')';
     expInfo.signedness = IsUnsigned;
+    expInfo.precedence = Selection;
   } else if (expInfo.precedence > parenthesizeIfLooserThan) {
     // If this subexpression would bind looser than the expression it is bound
     // into, then we need to parenthesize it.  Insert the parentheses
