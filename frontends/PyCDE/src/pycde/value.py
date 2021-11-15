@@ -48,11 +48,11 @@ class Value:
       else:
         name = name + "__reg1"
     with get_user_loc():
-      return seq.CompRegOp.create(self.value.type,
-                                  input=self.value,
-                                  clk=clk,
-                                  reset=rst,
-                                  name=name)
+      return seq.CompRegOp(self.value.type,
+                           input=self.value,
+                           clk=clk,
+                           reset=rst,
+                           name=name)
 
   @property
   def name(self):
@@ -106,7 +106,7 @@ class BitVectorValue(Value):
     ret_type = types.int(idxs[1] - idxs[0])
 
     with get_user_loc():
-      ret = comb.ExtractOp.create(idxs[0], ret_type, self.value)
+      ret = comb.ExtractOp(idxs[0], ret_type, self.value)
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
       return ret
@@ -134,7 +134,7 @@ class ListValue(Value):
                         f" Value, not {type(sub)}.")
     from .dialects import hw
     with get_user_loc():
-      v = hw.ArrayGetOp.create(self.value, idx)
+      v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
       return v
@@ -155,7 +155,7 @@ class StructValue(Value):
       raise ValueError(f"Struct field '{sub}' not found in {self.type}")
     from .dialects import hw
     with get_user_loc():
-      return hw.StructExtractOp.create(self.value, sub)
+      return hw.StructExtractOp(self.value, sub)
 
   def __getattr__(self, attr):
     ty = self.type.strip
@@ -163,7 +163,7 @@ class StructValue(Value):
     if attr in [name for name, _ in fields]:
       from .dialects import hw
       with get_user_loc():
-        v = hw.StructExtractOp.create(self.value, attr)
+        v = hw.StructExtractOp(self.value, attr)
         if self.name:
           v.name = f"{self.name}__{attr}"
         return v
@@ -182,14 +182,40 @@ def wrap_opviews_with_values(dialect, module_name):
 
     if isinstance(cls, type) and issubclass(cls, ir.OpView):
 
-      class ValueOpView(cls):
+      class ValueOpView(Value):
+        _opview_cls = cls
 
-        @classmethod
-        def create(cls, *args, **kwargs):
-          created = super().create(*args, **kwargs)
+        def __init__(self, *args, **kwargs):
+          from .pycde_types import PyCDEType
+          from .dialects import hw
+
+          created = self._opview_cls.create(*args, **kwargs)
           if isinstance(created, support.NamedValueOpView):
             created = created.opview
-          return Value.get(created)
+
+          assert len(created.results) == 1
+          value = created.results[0]
+          type = PyCDEType(value.type)
+
+          if isinstance(type.strip, hw.ArrayType):
+            self._value_cls = ListValue
+          elif isinstance(type.strip, hw.StructType):
+            self._value_cls = StructValue
+          elif isinstance(type.strip, ir.IntegerType):
+            self._value_cls = BitVectorValue
+          else:
+            self._value_cls = RegularValue
+
+          self._value_cls.__init__(self, value, type)
+
+        def __getitem__(self, sub):
+          return self._value_cls.__getitem__(self, sub)
+
+        def __getattr__(self, attr):
+          return self._value_cls.__getattr__(self, attr)
+
+        def __len__(self):
+          return self._value_cls.__len__(self)
 
       wrapped_class = ValueOpView
       setattr(module, attr, wrapped_class)

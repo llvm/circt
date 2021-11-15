@@ -34,7 +34,7 @@ class Test:
 
   @pycde.generator
   def build(_):
-    c1 = pycde.dialects.hw.ConstantOp.create(pycde.types.i1, 1)
+    c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
     UnParameterized(x=c1)
     UnParameterized(x=c1)
 

@@ -58,8 +58,8 @@ def create_const_zero(type: ir.Type):
   width = hw.get_bitwidth(type)
 
   with get_user_loc():
-    zero = hw.ConstantOp.create(ir.IntegerType.get_signless(width), 0)
-    return hw.BitcastOp.create(type, zero)
+    zero = hw.ConstantOp(ir.IntegerType.get_signless(width), 0)
+    return hw.BitcastOp(type, zero)
 
 
 class OpOperandConnect(support.OpOperand):
@@ -97,7 +97,7 @@ def obj_to_value(x, type, result_type=None):
     if not isinstance(type, ir.IntegerType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
     with get_user_loc():
-      return hw.ConstantOp.create(type, x)
+      return hw.ConstantOp(type, x)
 
   if isinstance(x, list):
     if not isinstance(type, hw.ArrayType):
@@ -109,7 +109,7 @@ def obj_to_value(x, type, result_type=None):
     list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
     # CIRCT's ArrayCreate op takes the array in reverse order.
     with get_user_loc():
-      return hw.ArrayCreateOp.create(reversed(list_of_vals))
+      return hw.ArrayCreateOp(reversed(list_of_vals))
 
   if isinstance(x, dict):
     if not isinstance(type, hw.StructType):
@@ -124,7 +124,7 @@ def obj_to_value(x, type, result_type=None):
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")
     with get_user_loc():
-      return hw.StructCreateOp.create(elem_name_values, result_type=result_type)
+      return hw.StructCreateOp(elem_name_values, result_type=result_type)
 
   raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
 

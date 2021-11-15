@@ -19,7 +19,7 @@ class CompReg:
 
   @generator
   def build(ports):
-    compreg = seq.CompRegOp.create(types.i8, clk=ports.clk, input=ports.input)
+    compreg = seq.CompRegOp(types.i8, clk=ports.clk, input=ports.input)
     ports.output = compreg
 
 
