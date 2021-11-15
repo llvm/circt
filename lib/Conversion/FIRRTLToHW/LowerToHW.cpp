@@ -940,8 +940,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
 
   if (!destTy.isGround()) {
-    // If the connection type is not ground type and they doesn't match, we give
-    // up.
+    // If types are not ground type and they don't match, we give up.
     if (destTy != connectSrc.getType().cast<FIRRTLType>())
       return {};
   } else if (destTy.getBitWidthOrSentinel() !=
