@@ -203,8 +203,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                 circtMSFTPhysicalBoundsAttrGet(ctxt, xMin, xMax, yMin, yMax);
             return cls(physicalBounds);
           },
-          "Create a PhysicalBounds attribute", py::arg("class"),
-          py::arg("xMin"), py::arg("xMax"), py::arg("yMin"), py::arg("yMax"),
+          "Create a PhysicalBounds attribute", py::arg("cls"), py::arg("xMin"),
+          py::arg("xMax"), py::arg("yMin"), py::arg("yMax"),
           py::arg("context") = py::none());
 
   mlir_attribute_subclass(m, "PhysicalRegionRefAttr",
@@ -216,7 +216,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                 ctxt, mlirStringRefCreateFromCString(name.c_str()));
             return cls(physicalBounds);
           },
-          "Create a PhysicalRegionRef attribute", py::arg("class"),
+          "Create a PhysicalRegionRef attribute", py::arg("cls"),
           py::arg("name"), py::arg("context") = py::none());
 
   py::class_<PrimitiveDB>(m, "PrimitiveDB")
