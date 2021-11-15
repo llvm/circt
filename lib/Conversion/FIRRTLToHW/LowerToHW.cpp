@@ -1990,8 +1990,6 @@ LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
-  if (getLoweredValue(op) || !op.input())
-    return success();
   if (isZeroBitFIRRTLType(op->getResult(0).getType()))
     return setLowering(op, Value());
 
