@@ -1133,7 +1133,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
-  Value mapArray(Value array, llvm::unique_function<Value(Value)> fn);
+  Value getExtOrTruncArrayValue(Value array, FIRRTLType sourceType,
+                                FIRRTLType destType, bool allowTruncate);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1490,35 +1491,65 @@ static Type getVectorBaseType(Type srcType) {
       .Default([&](auto) { return Type(); });
 }
 
-/// Apply `fn` to each array element and construct new array.
-Value FIRRTLLowering::mapArray(Value array,
-                               llvm::unique_function<Value(Value)> fn) {
+Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
+                                              FIRRTLType sourceType,
+                                              FIRRTLType destType,
+                                              bool allowTruncate) {
   SmallVector<Value> resultBuffer;
   bool success = true;
-  llvm::unique_function<void(Value, Type)> recurse = [&](Value value, Type type) {
-    TypeSwitch<Type>(type)
-        .Case<hw::ArrayType>([&](auto a) {
-          int size = resultBuffer.size();
-          for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-            auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
-            auto arrayIndex = builder.create<hw::ArrayGetOp>(value, iIdx);
-            recurse(arrayIndex, a.getElementType());
-            if (!success)
-              return;
-          }
-          SmallVector<Value> temp(resultBuffer.begin() + size,
-                                  resultBuffer.end());
-          auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
-          resultBuffer.resize(size);
-          resultBuffer.push_back(array);
-        })
-        .Case<IntegerType>([&](auto) { resultBuffer.push_back(fn(value)); })
-        .Default([&](auto) { success = false; });
+
+  // Helper function to cast each element of array to dest type.
+  auto cast = [&](Value value, FIRRTLType sourceType, FIRRTLType destType) {
+    auto srcWidth = sourceType.cast<IntType>().getWidthOrSentinel();
+    auto destWidth = destType.cast<IntType>().getWidthOrSentinel();
+    auto resultType = builder.getIntegerType(destWidth);
+    if (srcWidth > destWidth) {
+      if (allowTruncate) {
+        return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
+      } else {
+        builder.emitError("operand should not be a truncation");
+        success = false;
+        return Value();
+      }
+    }
+
+    if (sourceType.cast<IntType>().isSigned())
+      return builder.createOrFold<comb::SExtOp>(resultType, value);
+    auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
+    return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
+
+  std::function<void(Value, FIRRTLType, FIRRTLType)> recurse =
+      [&](Value value, FIRRTLType sourceType, FIRRTLType destType) {
+        TypeSwitch<FIRRTLType>(sourceType)
+            .Case<FVectorType>([&](auto a) {
+              int size = resultBuffer.size();
+              auto dest = destType.cast<FVectorType>();
+              for (size_t i = 0, e = std::min(a.getNumElements(),
+                                              dest.getNumElements());
+                   i != e; ++i) {
+                auto iIdx = getOrCreateIntConstant(llvm::Log2_64_Ceil(e), i);
+                auto arrayIndex = builder.create<hw::ArrayGetOp>(value, iIdx);
+                recurse(arrayIndex, a.getElementType(), dest.getElementType());
+                if (!success)
+                  return;
+              }
+              SmallVector<Value> temp(resultBuffer.begin() + size,
+                                      resultBuffer.end());
+              auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
+              resultBuffer.resize(size);
+              resultBuffer.push_back(array);
+            })
+            .Case<IntType>([&](auto) {
+              resultBuffer.push_back(cast(value, sourceType, destType));
+            })
+            .Default([&](auto) { success = false; });
+      };
+
   if (!success)
     return Value();
 
-  recurse(array, array.getType());
+  recurse(array, sourceType, destType);
   assert(resultBuffer.size() == 1);
   return resultBuffer[0];
 }
@@ -1553,40 +1584,13 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   }
 
   if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
-    // srcWidth == unsigned(destWidth) --> ok
-    // srcWidth > unsigned(destWidth)  --> error
-    // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
-
-    auto baseDestType = destType.cast<FIRRTLType>().getVectorBaseType();
-    auto baseSourceType =
-        value.getType().cast<FIRRTLType>().getVectorBaseType();
-    auto baseResultType = getVectorBaseType(result.getType());
-    if (!baseSourceType || !baseDestType || !baseResultType)
-      return {};
-
-    auto srcWidth = baseResultType.cast<IntegerType>().getWidth();
-    auto destWidth = baseDestType.cast<IntType>().getWidthOrSentinel();
-    if (destWidth == -1)
-      return {};
-
-    if (srcWidth == unsigned(destWidth))
+    // Types already match.
+    if (destType == value.getType())
       return result;
 
-    if (srcWidth > unsigned(destWidth)) {
-      builder.emitError("operand should not be a truncation");
-      return {};
-    }
-
-    auto resultType = builder.getIntegerType(destWidth);
-    auto isSigned = baseSourceType.getPassiveType().cast<IntType>().isSigned();
-    auto extend = [&](Value value) {
-      if (isSigned)
-        return builder.createOrFold<comb::SExtOp>(resultType, value);
-      auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
-      return builder.createOrFold<comb::ConcatOp>(zero, value);
-    };
-
-    return mapArray(result, extend);
+    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
+                                   destType.cast<FIRRTLType>(),
+                                   /* allowTruncate */ false);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1639,44 +1643,13 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   }
 
   if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
-    // srcWidth == unsigned(destWidth) --> ok
-    // srcWidth > unsigned(destWidth)  --> insert extract
-    // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
-
-    auto baseDestType = destType.cast<FIRRTLType>().getVectorBaseType();
-    auto baseSourceType =
-        value.getType().cast<FIRRTLType>().getVectorBaseType();
-    auto baseResultType = getVectorBaseType(result.getType());
-    // If one of them is not simple vector, stop lowering.
-    if (!baseSourceType || !baseDestType || !baseResultType)
-      return {};
-
-    auto srcWidth = baseResultType.cast<IntegerType>().getWidth();
-    auto destWidth = baseDestType.cast<IntType>().getWidthOrSentinel();
-
-    if (srcWidth == unsigned(destWidth))
+    // Types already match.
+    if (destType == value.getType())
       return result;
 
-    if (destWidth == 0)
-      return {};
-
-    auto resultType = builder.getIntegerType(destWidth);
-    if (srcWidth > unsigned(destWidth)) {
-      auto extract = [&](Value value) {
-        return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
-      };
-      return mapArray(result, extract);
-    }
-
-    auto isSigned = baseSourceType.getPassiveType().cast<IntType>().isSigned();
-    auto extend = [&](Value value) {
-      if (isSigned)
-        return builder.createOrFold<comb::SExtOp>(resultType, value);
-      auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
-      return builder.createOrFold<comb::ConcatOp>(zero, value);
-    };
-
-    return mapArray(result, extend);
+    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
+                                   destType.cast<FIRRTLType>(),
+                                   /* allowTruncate */ true);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1993,14 +1966,13 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
   if (isZeroBitFIRRTLType(op->getResult(0).getType()))
     return setLowering(op, Value());
 
-  auto resultType = lowerType(op->getResult(0).getType());
   Value value = getLoweredValue(op.input());
-  assert(resultType && value && "subindex type lowering failed");
+  assert(value && "subindex lowering failed");
   auto iIdx = getOrCreateIntConstant(
-      log2(op.input().getType().cast<FVectorType>().getNumElements() + 1),
+      llvm::Log2_64_Ceil(
+          op.input().getType().cast<FVectorType>().getNumElements()),
       op.index());
-
-  return setLoweringTo<hw::ArrayGetOp>(op, resultType, value, iIdx);
+  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -2176,7 +2148,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
       TypeSwitch<Type>(type)
           .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
             for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-              auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
+              auto iIdx = getOrCreateIntConstant(llvm::Log2_64_Ceil(e), i);
               auto arrayIndex =
                   builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
               recurse(arrayIndex, a.getElementType());
