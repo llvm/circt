@@ -935,38 +935,22 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
                 connectSrc)
             .getResult(0);
 
-  if (connectSrc.getType().isa<FVectorType>()) {
-    // If we are trying to connect a vector, we need to check both of the width
-    // of connections.
-    auto srcBaseType =
-        connectSrc.getType().cast<FIRRTLType>().getVectorBaseType();
-    auto destBaseType = flipValue.getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .getVectorBaseType();
-    if (!srcBaseType || !destBaseType)
-      return {};
-    assert(srcBaseType.getBitWidthOrSentinel() != -1 &&
-           destBaseType.getBitWidthOrSentinel() != -1 &&
-           "width must be inferred");
+  // We know it must be the destination operand due to the types, but the
+  // source may not match the destination width.
+  auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
 
-    if (srcBaseType.getBitWidthOrSentinel() !=
-        destBaseType.getBitWidthOrSentinel())
-      // TODO: Probably we can apply PadPrimOp for each elements.
+  if (!destTy.isGround()) {
+    // If the connection type is not ground type and they doesn't match, we give
+    // up.
+    if (destTy != connectSrc.getType().cast<FIRRTLType>())
       return {};
-  } else {
-    // We know it must be the destination operand due to the types, but the
-    // source may not match the destination width.
-    auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-    if (destTy.getBitWidthOrSentinel() !=
-        connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
-      // The only type mismatchs we care about is due to integer width
-      // differences.
-      auto destWidth = destTy.getBitWidthOrSentinel();
-      assert(destWidth != -1 && "must know integer widths");
-      connectSrc =
-          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
-    }
+  } else if (destTy.getBitWidthOrSentinel() !=
+             connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+    // The only type mismatchs we care about is due to integer width
+    // differences.
+    auto destWidth = destTy.getBitWidthOrSentinel();
+    assert(destWidth != -1 && "must know integer widths");
+    connectSrc = builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
   }
 
   // Remove the connect and use its source as the value for the output.
