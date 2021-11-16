@@ -45,7 +45,8 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
       // Rebase the current index on the parent field's index.
       id += bundleType.getFieldID(subfieldOp.fieldIndex());
     } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
-      auto vecType = subindexOp.input().getType().cast<FVectorType>();
+      value = subindexOp.input();
+      auto vecType = value.getType().cast<FVectorType>();
       // Rebase the current index on the parent field's index.
       id += vecType.getFieldID(subindexOp.index());
     } else {
