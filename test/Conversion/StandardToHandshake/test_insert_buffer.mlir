@@ -83,6 +83,6 @@ module {
     // ALL: "handshake.buffer"
     "handshake.sink"(%25#1) : (index) -> ()
     // ALL: "handshake.buffer"
-    return %25#0 : none
+    handshake.return %25#0 : none
   }
 }

@@ -37,7 +37,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 // CHECK:           "handshake.sink"(%[[VAL_26]]) : (i32) -> ()
 // CHECK:           %[[VAL_27:.*]] = arith.xori %[[VAL_9]]#0, %[[VAL_11]]#0 : i32
 // CHECK:           "handshake.sink"(%[[VAL_27]]) : (i32) -> ()
-// CHECK:           return %[[VAL_13]]#0, %[[VAL_18]]#0, %[[VAL_4]] : f32, i32, none
+// CHECK:           handshake.return %[[VAL_13]]#0, %[[VAL_18]]#0, %[[VAL_4]] : f32, i32, none
 // CHECK:         }
 // CHECK:       }
 

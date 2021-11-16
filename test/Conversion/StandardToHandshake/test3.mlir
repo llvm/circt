@@ -139,7 +139,7 @@ func @more_imperfectly_nested_loops() {
 // CHECK:           %[[VAL_16]] = "handshake.branch"(%[[VAL_131]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_132:.*]]:2 = "handshake.control_merge"(%[[VAL_23]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_132]]#1) : (index) -> ()
-// CHECK:           return %[[VAL_132]]#0 : none
+// CHECK:           handshake.return %[[VAL_132]]#0 : none
 // CHECK:         }
 // CHECK:       }
 

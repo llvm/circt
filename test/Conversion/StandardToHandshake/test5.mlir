@@ -22,7 +22,7 @@ func @dfs_block_order() -> (i32) {
 // CHECK:           %[[VAL_6]] = "handshake.branch"(%[[VAL_12]]) {control = false} : (i32) -> i32
 // CHECK:           %[[VAL_10]] = "handshake.branch"(%[[VAL_14]]#1) {control = true} : (none) -> none
 // CHECK:           %[[VAL_8]] = "handshake.branch"(%[[VAL_15]]) {control = false} : (i32) -> i32
-// CHECK:           return %[[VAL_11]], %[[VAL_9]]#0 : i32, none
+// CHECK:           handshake.return %[[VAL_11]], %[[VAL_9]]#0 : i32, none
 // CHECK:         }
 // CHECK:       }
 

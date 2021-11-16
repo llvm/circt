@@ -44,7 +44,7 @@ func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
 // CHECK:           %[[VAL_40:.*]] = "handshake.branch"(%[[VAL_39]]#0) {control = true} : (none) -> none
 // CHECK:           %[[VAL_41:.*]]:2 = "handshake.control_merge"(%[[VAL_40]], %[[VAL_38]]) {control = true} : (none, none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_41]]#1) : (index) -> ()
-// CHECK:           return %[[VAL_41]]#0 : none
+// CHECK:           handshake.return %[[VAL_41]]#0 : none
 // CHECK:         }
 // CHECK:       }
 

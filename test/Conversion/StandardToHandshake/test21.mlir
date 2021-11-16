@@ -121,7 +121,7 @@ func @loop_min_max(%arg0: index) {
 // CHECK:           %[[VAL_23]] = "handshake.branch"(%[[VAL_118]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_119:.*]]:2 = "handshake.control_merge"(%[[VAL_34]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_119]]#1) : (index) -> ()
-// CHECK:           return %[[VAL_119]]#0 : none
+// CHECK:           handshake.return %[[VAL_119]]#0 : none
 // CHECK:         }
 // CHECK:       }
 

@@ -23,7 +23,7 @@ func @load_store () -> () {
 // CHECK:   %[[VAL7:.*]], %[[ADDR]] = "handshake.load"(%[[VAL6]]#0, %[[VAL0]]#0, %[[VAL2]]#1) : (index, f32, none) -> (f32, index)
 // CHECK:   %[[VAL8:.*]] = "handshake.join"(%[[VAL2]]#0, %[[VAL1]]#0) {control = true} : (none, none) -> none
 // CHECK:   %[[VAL9]]:2 = "handshake.store"(%[[VAL7]], %[[VAL6]]#1, %[[VAL8]]) : (f32, index, none) -> (f32, index)
-// CHECK:   return %[[VAL4]] : none
+// CHECK:   handshake.return %[[VAL4]] : none
 // CHECK: }
 
 // -----
@@ -53,5 +53,5 @@ func @affine_map_addr () -> () {
 // CHECK-NEXT:   %[[VAL11:.*]] = arith.addi %[[VAL6]]#1, %[[VAL10]] : index
 // CHECK-NEXT:   %[[VAL12:.*]] = "handshake.join"(%[[VAL2]]#0, %[[VAL1]]#0) {control = true} : (none, none) -> none
 // CHECK-NEXT:   %[[VAL13]]:2 = "handshake.store"(%[[VAL9]], %[[VAL11]], %[[VAL12]]) : (f32, index, none) -> (f32, index)
-// CHECK-NEXT:   return %[[VAL4]] : none
+// CHECK-NEXT:   handshake.return %[[VAL4]] : none
 // CHECK-NEXT: }

@@ -24,15 +24,15 @@ module {
     %6 = "handshake.constant"(%5#0) {value = 42 : index} : (none) -> index
     %7 = arith.addi %4, %6 : index
     "handshake.sink"(%7) : (index) -> ()
-    return %5#1 : none
+    handshake.return %5#1 : none
   }
 
   // CHECK-LABEL: cmerge_with_control_used
   handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) -> (none, index, none) {
     // CHECK: "handshake.control_merge"(%{{.+}}, %{{.+}})
-    // CHECK: return
+    // CHECK: handshake.return
     %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
-    return %result, %index, %arg2 : none, index, none
+    handshake.return %result, %index, %arg2 : none, index, none
   }
 
   // CHECK-LABEL: cmerge_with_control_sunk
@@ -42,7 +42,7 @@ module {
     // CHECK-NOT: "handshake.sink"
     %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
     "handshake.sink"(%index) : (index) -> ()
-    return %result, %arg2 : none, none
+    handshake.return %result, %arg2 : none, none
   }
 
   // CHECK-LABEL: cmerge_with_control_ignored
@@ -50,7 +50,7 @@ module {
     // CHECK: "handshake.merge"(%{{.+}}, %{{.+}})
     // CHECK-NOT: "handshake.control_merge"
     %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
-    return %result, %arg2 : none, none
+    handshake.return %result, %arg2 : none, none
   }
 
   // CHECK-LABEL: sunk_constant
@@ -59,6 +59,6 @@ module {
     // CHECK-NOT: handshake.sink
     %0 = "handshake.constant"(%arg0) { value = 24 : i8 } : (none) -> i8
     "handshake.sink"(%0) : (i8) -> ()
-    return %arg0: none
+    handshake.return %arg0: none
   }
 }

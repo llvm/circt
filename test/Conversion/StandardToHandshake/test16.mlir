@@ -23,7 +23,7 @@ func @affine_apply_ceildiv(%arg0: index) -> index {
 // CHECK:           %[[VAL_17:.*]] = arith.subi %[[VAL_7]]#2, %[[VAL_16]]#1 : index
 // CHECK:           %[[VAL_18:.*]] = arith.addi %[[VAL_16]]#0, %[[VAL_9]]#1 : index
 // CHECK:           %[[VAL_19:.*]] = select %[[VAL_11]]#0, %[[VAL_17]], %[[VAL_18]] : index
-// CHECK:           return %[[VAL_19]], %[[VAL_4]]#3 : index, none
+// CHECK:           handshake.return %[[VAL_19]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
 // CHECK:       }
 
