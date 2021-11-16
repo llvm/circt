@@ -3,7 +3,7 @@
 // RUN: verilator --lint-only --top-module A %t1.sv
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv
-// RUN: verilator --lint-only --top-module TESTSIMPLE %t1.sv
+// RUN: verilator --lint-only -Wno-WIDTH --top-module TESTSIMPLE %t1.sv
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 // RUN: verilator --lint-only --top-module StructDecls %t1.sv
