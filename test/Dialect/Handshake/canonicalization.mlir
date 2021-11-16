@@ -71,3 +71,15 @@ handshake.func @sunk_constant(%arg0: none) -> (none) {
   "handshake.sink"(%0) : (i8) -> ()
   handshake.return %arg0: none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @unused_fork_result(
+// CHECK-SAME:                                       %[[VAL_0:.*]]: none, ...) -> (none, none)
+// CHECK:           %[[VAL_1:.*]]:2 = "handshake.fork"(%[[VAL_0]]) {control = true} : (none) -> (none, none)
+// CHECK:           handshake.return %[[VAL_1]]#0, %[[VAL_1]]#1 : none, none
+// CHECK:         }
+handshake.func @unused_fork_result(%arg0: none) -> (none, none) {
+  %0:3 = "handshake.fork"(%arg0) { control = true } : (none) -> (none, none, none)
+  handshake.return %0#0, %0#2 : none, none
+}
