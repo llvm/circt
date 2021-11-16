@@ -30,6 +30,15 @@
 
 #include "circt/Dialect/StaticLogic/StaticLogicDialect.h.inc"
 
+// Represents a recurrence-constrained minimum initiation interval. The ii
+// represents the numerical value itself, and the iter arg def and use hold the
+// definition and use of Values that constrain the ii.
+struct RecMII {
+  uint64_t ii;
+  mlir::Value iterArgDef;
+  mlir::OpOperand *iterArgUse;
+};
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.h.inc"
 

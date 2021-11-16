@@ -152,10 +152,22 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
              << inner;
 
   // Verify that the II is satisfied by the definitions and uses of `iter_args`.
-  if (op.II().hasValue() && op.II().getValue() < op.computeInitiationInterval())
-    return op.emitOpError("computed minimum II of ")
-           << op.computeInitiationInterval()
-           << " was greater than specified II of " << op.II().getValue();
+  if (op.II().hasValue()) {
+    RecMII recMII = op.computeRecMII();
+
+    if (op.II().getValue() < recMII.ii) {
+      auto error = op.emitOpError("computed minimum II of ")
+                   << recMII.ii << " was greater than specified II of "
+                   << op.II().getValue();
+
+      error.attachNote(recMII.iterArgUse->get().getLoc()) << "this iter arg";
+      error.attachNote(recMII.iterArgUse->getOwner()->getLoc())
+          << "iter arg used here";
+      error.attachNote(recMII.iterArgDef.getLoc()) << "iter arg defined here";
+
+      return error;
+    }
+  }
 
   return success();
 }
@@ -188,12 +200,16 @@ PipelineTerminatorOp PipelineWhileOp::getTerminator() {
   return cast<PipelineTerminatorOp>(getStagesBlock().getTerminator());
 }
 
-/// Compute the distance between the two stages.
-uint64_t PipelineWhileOp::computeDistance(PipelineStageOp from,
-                                          PipelineStageOp to) {
+/// Compute the number of stages between the two stages.
+uint64_t PipelineWhileOp::computeNumStages(PipelineStageOp from,
+                                           PipelineStageOp to) {
+  // If from and to are the same, distance is 0.
+  if (from == to)
+    return 0;
+
   // Ensure these are valid stages within this pipeline.
   assert(from && to && from->getParentOp() == getOperation() &&
-         to->getParentOp() == getOperation());
+         to->getParentOp() == getOperation() && from->isBeforeInBlock(to));
 
   // Traverse the linked list to determine the distance.
   uint64_t distance = 0;
@@ -206,9 +222,10 @@ uint64_t PipelineWhileOp::computeDistance(PipelineStageOp from,
   return distance;
 }
 
-/// Compute the initiation interval based on the iter args defs and uses.
-uint64_t PipelineWhileOp::computeInitiationInterval() {
-  uint64_t maxDistance = 0;
+/// Compute the recurrence-constrained minimum initiation interval, based on the
+/// iter_args definitions and uses.
+RecMII PipelineWhileOp::computeRecMII() {
+  RecMII recMII{0, nullptr, nullptr};
 
   // Check the uses of the pipeline's block iter args, and the definitions of
   // the pipeline's terminator iter args.
@@ -225,15 +242,17 @@ uint64_t PipelineWhileOp::computeInitiationInterval() {
     auto definingStage = defIterArg.getDefiningOp<PipelineStageOp>();
     for (auto &use : useIterArg.getUses()) {
       auto usingStage = use.getOwner()->getParentOfType<PipelineStageOp>();
-      uint64_t distance = computeDistance(definingStage, usingStage);
-      if (distance > maxDistance)
-        maxDistance = distance;
+      uint64_t numStages = computeNumStages(definingStage, usingStage);
+      if (numStages > recMII.ii)
+        recMII = RecMII{numStages, defIterArg, &use};
     }
   }
 
   // The pipeline's semantics state that the maximum distance must be less than
   // the II, so the smallest possible II is one more than the maximum distance.
-  return maxDistance + 1;
+  recMII.ii = recMII.ii + 1;
+
+  return recMII;
 }
 
 //===----------------------------------------------------------------------===//

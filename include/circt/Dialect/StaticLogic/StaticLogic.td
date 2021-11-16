@@ -150,11 +150,12 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     // Get the terminator of the pipeline.
     PipelineTerminatorOp getTerminator();
 
-    // Compute the distance between the two stages.
-    uint64_t computeDistance(PipelineStageOp, PipelineStageOp);
+    // Compute the number of stages between the two stages.
+    uint64_t computeNumStages(PipelineStageOp, PipelineStageOp);
 
-    // Compute the initiation interval based on the iter_args def-use chains.
-    uint64_t computeInitiationInterval();
+    // Compute the recurrence-constrained minimum initiation interval, based on
+    // the iter_args definitions and uses.
+    RecMII computeRecMII();
   }];
 }
 
