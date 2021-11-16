@@ -17,8 +17,10 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/STLExtras.h"
@@ -90,11 +92,19 @@ struct Literal {
 
 /// Necessary information to wire up a port with tapped data or memory location.
 struct PortWiring {
+  using Target = hw::SymbolCache::Item;
+
   unsigned portNum;
+  /// The different instance paths that lead to this port.
   ArrayRef<InstancePath> prefices;
+  /// The operation or module port being wire to this data tap module port.
+  Target target;
+  /// An additional string suffix to append to the hierarchical name.
   SmallString<16> suffix;
   /// If set, the port should output a constant literal.
   Literal literal;
+
+  PortWiring() : target(nullptr) {}
 };
 
 } // namespace
@@ -298,6 +308,26 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     assert(it.second && "ambiguous tap annotation");
   }
 
+  /// Returns an operation's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(Operation *op);
+  /// Returns a port's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
+  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// to that operation.
+  hw::InnerRefAttr getInnerRefTo(Operation *op);
+  /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
+  /// to that port.
+  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
+
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
+  }
+
   DenseMap<Key, Annotation> annos;
   DenseMap<Key, Operation *> tappedOps;
   DenseMap<Key, Port> tappedPorts;
@@ -306,6 +336,9 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   /// The name of the directory where data and mem tap modules should be
   /// output.
   StringAttr maybeExtractDirectory = {};
+
+  /// Cached module namespaces.
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 };
 
 void GrandCentralTapsPass::runOnOperation() {
@@ -529,23 +562,40 @@ void GrandCentralTapsPass::runOnOperation() {
         // Determine the module at which the hierarchical name should start.
         Operation *opInRootModule =
             shortestPrefix->empty() ? path.back() : shortestPrefix->front();
-        StringRef rootModule =
-            opInRootModule->getParentOfType<FModuleLike>().moduleName();
+        auto rootModule = opInRootModule->getParentOfType<FModuleLike>();
+
+        SmallVector<Attribute> symbols;
+        SmallString<128> hname;
+        auto addSymbol = [&](Attribute symbol) {
+          auto id = symbols.size();
+          symbols.push_back(symbol);
+          if (!hname.empty())
+            hname += '.';
+          ("{{" + Twine(id) + "}}").toVector(hname);
+        };
 
         // Concatenate the prefix into a proper full hierarchical name.
-        SmallString<128> hname(rootModule);
-        for (auto inst : shortestPrefix.getValue()) {
-          hname += '.';
-          hname += inst.name();
+        addSymbol(
+            FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
+        for (auto inst : shortestPrefix.getValue())
+          addSymbol(getInnerRefTo(inst));
+        if (port.target.getOp()) {
+          if (port.target.hasPort())
+            addSymbol(
+                getInnerRefTo(port.target.getOp(), port.target.getPort()));
+          else
+            addSymbol(getInnerRefTo(port.target.getOp()));
         }
-        hname += '.';
-        hname += port.suffix;
+        if (!port.suffix.empty()) {
+          hname += '.';
+          hname += port.suffix;
+        }
         LLVM_DEBUG(llvm::dbgs() << "  - Connecting as " << hname << "\n");
 
         // Add a verbatim op that assigns this module port.
         auto arg = impl.getArgument(port.portNum);
         auto hnameExpr = builder.create<VerbatimExprOp>(
-            arg.getType().cast<FIRRTLType>(), hname);
+            arg.getType().cast<FIRRTLType>(), hname, ValueRange{}, symbols);
         builder.create<ConnectOp>(arg, hnameExpr);
       }
 
@@ -611,7 +661,8 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
                           << " anno " << portAnno.anno.getDict() << "\n");
   auto key = getKey(portAnno.anno);
   auto portName = blackBox.extModule.getPortNameAttr(portAnno.portNum);
-  PortWiring wiring = {portAnno.portNum, {}, {}, {}};
+  PortWiring wiring;
+  wiring.portNum = portAnno.portNum;
 
   // Lookup the sibling annotation no the target. This may not exist, e.g. in
   // the case of a `LiteralDataTapKey`, in which use the annotation on the
@@ -625,7 +676,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       wiring.prefices = instancePaths.getAbsolutePaths(port.first);
-      wiring.suffix = cast<FModuleLike>(port.first).getPortName(port.second);
+      wiring.target = PortWiring::Target(port.first, port.second);
       portWiring.push_back(std::move(wiring));
       return;
     }
@@ -642,23 +693,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
         return;
       }
 
-      // We currently require the target to be named.
-      // TODO: If we were to use proper cross-module reference ops in the IR
-      // then this could be anonymous, with ExportVerilog resolving the name
-      // at the last moment.
-      auto name = op->getAttrOfType<StringAttr>("name");
-      if (!name) {
-        auto diag =
-            op->emitError("declaration targeted by data tap must have a name");
-        diag.attachNote(blackBox.extModule->getLoc())
-            << "used by ReferenceDataTapKey on port " << portName << " here:";
-        signalPassFailure();
-        return;
-      }
-
       wiring.prefices =
           instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-      wiring.suffix = name.getValue();
+      wiring.target = PortWiring::Target(op);
       portWiring.push_back(std::move(wiring));
       return;
     }
@@ -740,19 +777,6 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       return;
     }
 
-    // Extract the name of the memory.
-    // TODO: This would be better handled through a proper cross-module
-    // reference preserved in the IR, such that ExportVerilog can insert a
-    // proper name here at the last moment.
-    auto name = op->getAttrOfType<StringAttr>("name");
-    if (!name) {
-      auto diag = op->emitError("target of memory tap must have a name");
-      diag.attachNote(blackBox.extModule->getLoc())
-          << "used by MemTapAnnotation on port " << portName << " here:";
-      signalPassFailure();
-      return;
-    }
-
     // Extract the memory location we're supposed to access.
     auto word = portAnno.anno.getMember<IntegerAttr>("word");
     if (!word) {
@@ -772,8 +796,8 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     // in the IR that can properly inject the memory array on emission.
     wiring.prefices =
         instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-    (Twine(name.getValue()) + ".Memory[" +
-     llvm::utostr(word.getValue().getLimitedValue()) + "]")
+    wiring.target = PortWiring::Target(op);
+    ("Memory[" + Twine(word.getValue().getLimitedValue()) + "]")
         .toVector(wiring.suffix);
     portWiring.push_back(std::move(wiring));
     return;
@@ -783,6 +807,40 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   // list only adds annotations that we handle in one of the if statements
   // above.
   llvm_unreachable("portAnnos is never populated with unsupported annos");
+}
+
+StringAttr GrandCentralTapsPass::getOrAddInnerSym(Operation *op) {
+  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  if (attr)
+    return attr;
+  auto module = op->getParentOfType<FModuleOp>();
+  auto name = getModuleNamespace(module).newName("gct_sym");
+  attr = StringAttr::get(op->getContext(), name);
+  op->setAttr("inner_sym", attr);
+  return attr;
+}
+
+StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
+                                                  size_t portIdx) {
+  auto attr = module.getPortSymbolAttr(portIdx);
+  if (attr && !attr.getValue().empty())
+    return attr;
+  auto name = getModuleNamespace(module).newName("gct_sym");
+  attr = StringAttr::get(module.getContext(), name);
+  module.setPortSymbolAttr(portIdx, attr);
+  return attr;
+}
+
+hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
+      getOrAddInnerSym(op));
+}
+
+hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
+                                                     size_t portIdx) {
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
+                               getOrAddInnerSym(module, portIdx));
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralTapsPass() {

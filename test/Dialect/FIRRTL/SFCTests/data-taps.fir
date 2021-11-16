@@ -14,35 +14,35 @@ circuit Top :
     input reset : Reset
     output io : { flip in : UInt<1>, out : UInt<1>}
 
-    inst bb of BlackBox
-    bb.out is invalid
-    bb.in is invalid
-    bb.in <= io.in
-    io.out <= bb.out
+    inst localparam of BlackBox
+    localparam.out is invalid
+    localparam.in is invalid
+    localparam.in <= io.in
+    io.out <= localparam.out
 
-    mem M :
+    mem always :
       data-type => UInt<1>
       depth => 2
       read-latency => 0
       write-latency => 1
       writer => w
       read-under-write => undefined
-    M.w.clk <= clock
-    M.w.en <= UInt<1>(1)
-    M.w.addr <= UInt<1>(0)
-    M.w.data <= io.in
-    M.w.mask <= UInt<1>(1)
+    always.w.clk <= clock
+    always.w.en <= UInt<1>(1)
+    always.w.addr <= UInt<1>(0)
+    always.w.data <= io.in
+    always.w.mask <= UInt<1>(1)
 
   module ChildWrapper :
     input clock : Clock
     input reset : Reset
     output io : { flip in : UInt<1>, out : UInt<1>}
 
-    inst child of Child
-    child.clock <= clock
-    child.reset <= reset
-    child.io.in <= io.in
-    io.out <= child.io.out
+    inst signed of Child
+    signed.clock <= clock
+    signed.reset <= reset
+    signed.io.in <= io.in
+    io.out <= signed.io.out
 
   extmodule DataTap_2 :
     output _1 : UInt<1>
@@ -59,9 +59,9 @@ circuit Top :
     input reset : UInt<1>
     output io : { flip in : UInt<1>, out : UInt<1>}
 
-    inst child of ChildWrapper
-    child.clock <= clock
-    child.reset <= reset
+    inst unsigned of ChildWrapper
+    unsigned.clock <= clock
+    unsigned.reset <= reset
     wire in : UInt<1>
     wire out : UInt<1>
     inst DataTap_2 of DataTap_2
@@ -70,21 +70,21 @@ circuit Top :
     in <= DataTap_2._0
     out <= DataTap_2._1
     node _child_io_in_T = and(io.in, in)
-    child.io.in <= _child_io_in_T
-    node _io_out_T = and(child.io.out, out)
+    unsigned.io.in <= _child_io_in_T
+    node _io_out_T = and(unsigned.io.out, out)
     io.out <= _io_out_T
     inst MemTap_2 of MemTap_2
 
 ; CHECK: module DataTap_2_impl_0(
 ; CHECK:   output  _1, _0
 ; CHECK: );
-; CHECK:   assign _1 = Top.child.child.bb.foo.bar.out;
-; CHECK:   assign _0 = Top.child.child.bb.foo.bar.in;
+; CHECK:   assign _1 = Top.unsigned_0.signed_0.localparam_0.foo.bar.out;
+; CHECK:   assign _0 = Top.unsigned_0.signed_0.localparam_0.foo.bar.in;
 ; CHECK: endmodule
 
 ; CHECK: module MemTap_2_impl_0(
 ; CHECK:   output  _1, _0
 ; CHECK: );
-; CHECK:   assign _1 = Top.child.child.M.Memory[1];
-; CHECK:   assign _0 = Top.child.child.M.Memory[0];
+; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_1.Memory[1];
+; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_1.Memory[0];
 ; CHECK: endmodule
