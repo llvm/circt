@@ -620,7 +620,8 @@ void EmitterBase::emitTextWithSubstitutions(
         return state.globalNames.getPortVerilogName(itemOp,
                                                     portInfos[item.getPort()]);
       }
-      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp>(itemOp))
+      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
+              itemOp))
         return state.globalNames.getDeclarationVerilogName(itemOp);
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
@@ -4005,6 +4006,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
         symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
+      // HACK: This is to make interface-related operations work as they are at
+      // the moment, with names being stored in `sym_name` instead of
+      // `inner_sym`.
+      if (auto instOp = dyn_cast<InterfaceInstanceOp>(op))
+        if (auto attr = instOp.sym_nameAttr())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), attr.getValue(),
+                                    op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });

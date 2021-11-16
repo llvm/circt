@@ -66,8 +66,16 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: firrtl.module @View_mapping
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
-// CHECK-NEXT: sv.verbatim "assign View.foo = dut.a;"
-// CHECK-NEXT: sv.verbatim "assign View.bar = dut.b;"
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:   @InterfaceGroundType
+// CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@a>
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.bar = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:   @InterfaceGroundType
+// CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
 
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
@@ -340,8 +348,10 @@ firrtl.circuit "VecOfVec" attributes {
 // CHECK-LABEL: firrtl.circuit "VecOfVec"
 
 // CHECK:      firrtl.module @View_mapping
-// CHECK-NEXT:    assign View.foo[0][0]
-// CHECK-NEXT:    assign View.foo[0][1]
+// CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][0]
+// CHECK-SAME:      #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-NEXT:    assign {{[{][{]0[}][}]}}.foo[0][1]
+// CHECK-SAME:      #hw.innerNameRef<@DUT::@__View_Foo__>
 
 // CHECK:      sv.interface {{.+}} @Foo
 // CHECK:        sv.interface.signal @foo : !hw.uarray<1xuarray<2xi3>>
@@ -457,7 +467,7 @@ firrtl.circuit "InterfacePort" attributes {
 
 // The Grand Central annotations are removed.
 // CHECK: firrtl.module @DUT
-// CHECK-SAME: %a: !firrtl.uint<4> [{a}]
+// CHECK-SAME: %a: !firrtl.uint<4> sym @a [{a}]
 
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
@@ -774,12 +784,36 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
 
 // CHECK-LABEL: firrtl.circuit "NestedInterfaceVectorTypes"
 // CHECK:         firrtl.module @View_mapping
-// CHECK-NEXT:      sv.verbatim "assign View.bar[0][0] = dut.a0;"
-// CHECK-NEXT:      sv.verbatim "assign View.bar[0][1] = dut.a1;"
-// CHECK-NEXT:      sv.verbatim "assign View.bar[0][2] = dut.a2;"
-// CHECK-NEXT:      sv.verbatim "assign View.bar[1][0] = dut.b0;"
-// CHECK-NEXT:      sv.verbatim "assign View.bar[1][1] = dut.b1;"
-// CHECK-NEXT:      sv.verbatim "assign View.bar[1][2] = dut.b2;"
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        @NestedInterfaceVectorTypes
+// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@a0>
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        @NestedInterfaceVectorTypes
+// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@a1>
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[0][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        @NestedInterfaceVectorTypes
+// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@a2>
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][0] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        @NestedInterfaceVectorTypes
+// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@b0>
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][1] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        @NestedInterfaceVectorTypes
+// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@b1>
+// CHECK-NEXT:      sv.verbatim "assign {{[{][{]0[}][}]}}.bar[1][2] = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:        @NestedInterfaceVectorTypes
+// CHECK-SAME:        #hw.innerNameRef<@NestedInterfaceVectorTypes::@dut>
+// CHECK-SAME:        #hw.innerNameRef<@DUT::@b2>
 // CHECK:         sv.interface {
 // CHECK-SAME:      @Foo
 // CHECK-NEXT:      sv.verbatim "// description of bar"
@@ -890,7 +924,10 @@ firrtl.circuit "ParentIsMainModule" attributes {
 //
 // CHECK-LABEL: firrtl.circuit "ParentIsMainModule"
 // CHECK:       firrtl.module @View_mapping
-// CHECK-NEXT:    sv.verbatim "assign View.foo = ParentIsMainModule.a;"
+// CHECK-NEXT:    sv.verbatim "assign {{[{][{]0[}][}]}}.foo = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}};"
+// CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@__View_Foo__>
+// CHECK-SAME:      @ParentIsMainModule
+// CHECK-SAME:      #hw.innerNameRef<@ParentIsMainModule::@a>
 
 // -----
 
