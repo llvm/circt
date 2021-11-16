@@ -851,6 +851,49 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
 
 // -----
 
+firrtl.circuit "ParentIsMainModule" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "foo",
+        id = 1 : i64}],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @ParentIsMainModule() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %a = firrtl.wire {annotations = [
+      {a},
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 1 : i64}]} : !firrtl.uint<2>
+    firrtl.instance View_companion @View_companion()
+  }
+}
+
+// Check that this doesn't error out and that the XMR is generated correctly.
+//
+// CHECK-LABEL: firrtl.circuit "ParentIsMainModule"
+// CHECK:       firrtl.module @View_mapping
+// CHECK-NEXT:    sv.verbatim "assign View.foo = ParentIsMainModule.a;"
+
+// -----
+
 firrtl.circuit "YAMLOutputEmptyInterface" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",

@@ -445,8 +445,9 @@ private:
   /// Mapping of ID to leaf ground type associated with that ID.
   DenseMap<Attribute, Value> leafMap;
 
-  /// Mapping of ID to parent instance and module.
-  DenseMap<Attribute, std::pair<InstanceOp, FModuleOp>> parentIDMap;
+  /// Mapping of ID to parent instance and module.  If this module is the top
+  /// module, then the first tuple member will be None.
+  DenseMap<Attribute, std::pair<Optional<InstanceOp>, FModuleOp>> parentIDMap;
 
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
@@ -641,11 +642,15 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
-        auto srcPaths =
-            instancePaths->getAbsolutePaths(getEnclosingModule(leafValue));
+        auto enclosing = getEnclosingModule(leafValue);
+        auto srcPaths = instancePaths->getAbsolutePaths(enclosing);
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
         llvm::SmallString<128> srcRef;
+        if (enclosing == getOperation().getMainModule()) {
+          srcRef.append(enclosing.moduleName());
+          srcRef.append(".");
+        }
         for (auto path : srcPaths[0]) {
           srcRef.append(path.name());
           srcRef.append(".");
@@ -1211,11 +1216,15 @@ void GrandCentralPass::runOnOperation() {
             // is instantiated exatly once.
             if (tpe.getValue() == "parent") {
               // Assert that the parent is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "parent");
-              if (!instance)
-                return false;
+              // Allow for this to be the main module in the circuit.
+              Optional<InstanceOp> instance;
+              if (op != circuitOp.getMainModule()) {
+                instance = exactlyOneInstance(op, "parent");
+                if (!instance && circuitOp.getMainModule() != op)
+                  return false;
+              }
 
-              parentIDMap[id] = {instance.getValue(), cast<FModuleOp>(op)};
+              parentIDMap[id] = {instance, cast<FModuleOp>(op)};
               return true;
             }
 
@@ -1279,8 +1288,13 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "parentIDMap:\n";
     for (auto id : ids) {
       auto value = parentIDMap.lookup(id);
-      llvm::dbgs() << "  - " << id.getValue() << ": " << value.first.name()
-                   << ":" << value.second.getName() << "\n";
+      StringRef name;
+      if (value.first)
+        name = value.first.getValue().name();
+      else
+        name = value.second.getName();
+      llvm::dbgs() << "  - " << id.getValue() << ": " << name << ":"
+                   << value.second.getName() << "\n";
     }
     ids.clear();
     for (auto tuple : leafMap)
