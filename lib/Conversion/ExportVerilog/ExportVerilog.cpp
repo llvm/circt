@@ -1788,8 +1788,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   os << '[';
   bool padTo32Bits = false;
   if (auto defO = op.lowIndex().getDefiningOp())
-  if ( (!isa<ConstantOp>(defO)) && hw::getBitWidth(op.lowIndex().getType()) < 32 )
-    padTo32Bits = true;
+    if ((!isa<ConstantOp>(defO)) &&
+        hw::getBitWidth(op.lowIndex().getType()) < 32)
+      padTo32Bits = true;
   if (padTo32Bits)
     os << "(0 + ";
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
