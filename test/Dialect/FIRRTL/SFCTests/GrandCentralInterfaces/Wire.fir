@@ -172,28 +172,28 @@ circuit Top :
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_mapping.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_mapping.sv
     ; CHECK:          module MyView_mapping();
-    ; CHECK-NEXT:       assign MyView.uint = dut.w_uint;
-    ; CHECK-NEXT:       assign MyView.vec[0] = dut.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.vec[1] = dut.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][0] = dut.w_multivec_0_0;
-    ; CHECK-NEXT:       assign MyView.multivec[0][1] = dut.w_multivec_0_1;
-    ; CHECK-NEXT:       assign MyView.multivec[0][2] = dut.w_multivec_0_2;
-    ; CHECK-NEXT:       assign MyView.multivec[1][0] = dut.w_multivec_1_0;
-    ; CHECK-NEXT:       assign MyView.multivec[1][1] = dut.w_multivec_1_1;
-    ; CHECK-NEXT:       assign MyView.multivec[1][2] = dut.w_multivec_1_2;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = dut.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = dut.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = dut.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].uint = dut.w_vecOfBundle_1_uint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.sint = dut.w_otherOther_other_sint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.uint = dut.w_otherOther_other_uint;
-    ; CHECK-NEXT:       assign MyView.sub_uint = dut.submodule.w_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vec[0] = dut.submodule.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.sub_vec[1] = dut.submodule.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].sint = dut.submodule.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].uint = dut.submodule.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].sint = dut.submodule.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = dut.submodule.w_vecOfBundle_1_uint;
+    ; CHECK-NEXT:       assign MyView.uint = Top.dut.w_uint;
+    ; CHECK-NEXT:       assign MyView.vec[0] = Top.dut.w_vec_0;
+    ; CHECK-NEXT:       assign MyView.vec[1] = Top.dut.w_vec_1;
+    ; CHECK-NEXT:       assign MyView.multivec[0][0] = Top.dut.w_multivec_0_0;
+    ; CHECK-NEXT:       assign MyView.multivec[0][1] = Top.dut.w_multivec_0_1;
+    ; CHECK-NEXT:       assign MyView.multivec[0][2] = Top.dut.w_multivec_0_2;
+    ; CHECK-NEXT:       assign MyView.multivec[1][0] = Top.dut.w_multivec_1_0;
+    ; CHECK-NEXT:       assign MyView.multivec[1][1] = Top.dut.w_multivec_1_1;
+    ; CHECK-NEXT:       assign MyView.multivec[1][2] = Top.dut.w_multivec_1_2;
+    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = Top.dut.w_vecOfBundle_0_sint;
+    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = Top.dut.w_vecOfBundle_0_uint;
+    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = Top.dut.w_vecOfBundle_1_sint;
+    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].uint = Top.dut.w_vecOfBundle_1_uint;
+    ; CHECK-NEXT:       assign MyView.otherOther.other.sint = Top.dut.w_otherOther_other_sint;
+    ; CHECK-NEXT:       assign MyView.otherOther.other.uint = Top.dut.w_otherOther_other_uint;
+    ; CHECK-NEXT:       assign MyView.sub_uint = Top.dut.submodule.w_uint;
+    ; CHECK-NEXT:       assign MyView.sub_vec[0] = Top.dut.submodule.w_vec_0;
+    ; CHECK-NEXT:       assign MyView.sub_vec[1] = Top.dut.submodule.w_vec_1;
+    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].sint = Top.dut.submodule.w_vecOfBundle_0_sint;
+    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].uint = Top.dut.submodule.w_vecOfBundle_0_uint;
+    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].sint = Top.dut.submodule.w_vecOfBundle_1_sint;
+    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = Top.dut.submodule.w_vecOfBundle_1_uint;
     ; CHECK:          endmodule
 
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"

@@ -428,20 +428,24 @@ hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar
 hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
+  %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
   // CHECK: wire [3:0] parameter_2;
   // CHECK: reg  [3:0] localparam_3;
+  // CHECK: Interface shortint();
   hw.output %signed : i1
 }
 sv.verbatim "VERB: module symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symA>]}
 sv.verbatim "VERB: module symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symB>]}
 sv.verbatim "VERB: module symC `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symC>]}
 sv.verbatim "VERB: module symD `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symD>]}
+sv.verbatim "VERB: module symE `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symE>]}
 sv.verbatim "VERB: module.extern symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symA>]}
 sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symB>]}
 // CHECK: VERB: module symA `signed_0`
 // CHECK: VERB: module symB `unsigned_1`
 // CHECK: VERB: module symC `parameter_2`
 // CHECK: VERB: module symD `localparam_3`
+// CHECK: VERB: module symE `shortint_4`
 // CHECK: VERB: module.extern symA `foo`
 // CHECK: VERB: module.extern symB `bar`
 
