@@ -1,4 +1,4 @@
-// RUN: TESTNAME=instance
+// RUN: TESTNAME=instancee
 
 // === Lower testbench to LLVMIR
 // RUN:   mlir-opt %s -convert-scf-to-std                                      \
@@ -24,11 +24,11 @@
 // RUN: | FileCheck %s
 
 
-func private @instance_call(i32, i32) -> ()
-func private @instance_await() -> (i32)
+func private @instancee_call(i32, i32) -> ()
+func private @instancee_await() -> (i32)
 func private @printI64(i32)
 func private @printComma()
-func @test_instance() -> i32 {
+func @test_instancee() -> i32 {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   %c10 = arith.constant 10 : index
@@ -38,13 +38,13 @@ func @test_instance() -> i32 {
   // Call
   scf.for %i = %c0 to %c10 step %c1 {
     %0 = arith.index_cast %i : index to i32
-    call @instance_call(%0, %c5_i32) : (i32, i32) -> ()
+    call @instancee_call(%0, %c5_i32) : (i32, i32) -> ()
   }
 
   // Await
   scf.for %i = %c0 to %c10 step %c1 {
     %0 = arith.index_cast %i : index to i32
-    %res = call @instance_await() : () -> (i32)
+    %res = call @instancee_await() : () -> (i32)
     call @printI64(%res) : (i32) -> ()
     call @printComma() : () -> ()
   }

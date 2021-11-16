@@ -7,10 +7,10 @@
 
 // === Build handshake simulator
 // RUN: circt-opt -lower-std-to-handshake %s.kernel                            \
-// RUN: | tee ${TESTNAME}_handshake.mlir                                       \
-// RUN: | circt-opt -canonicalize='top-down=true region-simplify=true' -handshake-insert-buffer='strategies=all' -lower-handshake-to-firrtl \
-// RUN: | firtool --format=mlir --lower-to-hw --verilog > ${TESTNAME}.sv
-// RUN: hlt-wrapgen --ref %s.kernel --kernel ${TESTNAME}_handshake.mlir --name ${TESTNAME} -o .
+// RUN: | circt-opt -canonicalize='top-down=true region-simplify=true' -handshake-insert-buffer='strategies=all' > ${TESTNAME}_handshake.mlir
+// RUN: circt-opt -lower-handshake-to-firrtl ${TESTNAME}_handshake.mlir > ${TESTNAME}_handshake_firrtl.mlir
+// RUN: firtool --format=mlir --lower-to-hw --verilog ${TESTNAME}_handshake_firrtl.mlir > ${TESTNAME}.sv
+// RUN: hlt-wrapgen --ref %s.kernel --kernel ${TESTNAME}_handshake_firrtl.mlir --name ${TESTNAME} --type=handshakeFIRRTL -o .
 // RUN: cp %circt_obj_root/tools/hlt/Simulator/hlt_verilator_CMakeLists.txt CMakeLists.txt
 // RUN: cmake -DHLT_TESTNAME=${TESTNAME} -DCMAKE_BUILD_TYPE=RelWithDebInfo . 
 // RUN: make all -j$(nproc)

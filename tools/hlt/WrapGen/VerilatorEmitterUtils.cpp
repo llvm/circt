@@ -38,8 +38,8 @@ LogicalResult emitVerilatorType(llvm::raw_ostream &os, Location loc,
         return success();
       })
       .Default([&](auto type) {
-        return emitError(loc)
-               << "No known conversion from type to verilator type: " << type;
+        return emitError(loc) << "No known conversion from '" << type
+                              << "' to a verilator type:";
       });
 }
 
