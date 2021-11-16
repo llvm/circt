@@ -104,5 +104,23 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
   return success();
 }
 
+LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
+  for (auto &subOp : funcOp.getOps()) {
+    for (auto res : llvm::enumerate(subOp.getResults())) {
+      if (!res.value().hasOneUse())
+        return subOp.emitOpError()
+               << "result " << res.index() << " has multiple uses.";
+    }
+  }
+
+  Block &entryBlock = funcOp.front();
+  for (auto barg : enumerate(entryBlock.getArguments())) {
+    if (!barg.value().hasOneUse())
+      return funcOp.emitOpError()
+             << "argument " << barg.index() << " has multiple uses.";
+  }
+  return success();
+}
+
 } // namespace handshake
 } // namespace circt

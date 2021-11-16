@@ -165,11 +165,6 @@ def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let dependentDialects = ["handshake::HandshakeDialect"];
 }
 
-def HandshakeCanonicalize : Pass<"handshake-canonicalize", "handshake::FuncOp"> {
-  let summary = "Canonicalize Handshake IR";
-  let constructor = "circt::createHandshakeCanonicalizePass()";
-}
-
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
   let summary = "Remove block structure in Handshake IR";
   let constructor = "circt::createHandshakeRemoveBlockPass()";

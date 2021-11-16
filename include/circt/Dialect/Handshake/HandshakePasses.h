@@ -20,11 +20,13 @@
 
 namespace circt {
 namespace handshake {
+class FuncOp;
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeDotPrintPass();
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeOpCountPass();
+std::unique_ptr<mlir::Pass> createHandshakeMaterializeForksSinksPass();
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
 /// graph. In doing so, we detect whether there are any cycles in this graph, as
@@ -35,6 +37,17 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
                                    InstanceGraph &instanceGraph,
                                    std::string &topLevel,
                                    SmallVectorImpl<std::string> &sortedFuncs);
+
+// Checks all block arguments and values within op to ensure that all
+// values have exactly one use.
+LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp op);
+
+// Adds sink operations to any unused value in f.
+LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter);
+
+// Adds fork operations to any value with multiple uses in f.
+LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter);
+void insertFork(Value result, bool isLazy, OpBuilder &rewriter);
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
