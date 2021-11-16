@@ -203,23 +203,15 @@ PipelineTerminatorOp PipelineWhileOp::getTerminator() {
 /// Compute the number of stages between the two stages.
 uint64_t PipelineWhileOp::computeNumStages(PipelineStageOp from,
                                            PipelineStageOp to) {
-  // If from and to are the same, distance is 0.
-  if (from == to)
+  // If from and to are non-null and the same, distance is 0.
+  if (from && to && from == to)
     return 0;
 
   // Ensure these are valid stages within this pipeline.
   assert(from && to && from->getParentOp() == getOperation() &&
          to->getParentOp() == getOperation() && from->isBeforeInBlock(to));
 
-  // Traverse the linked list to determine the distance.
-  uint64_t distance = 0;
-  Operation *current = from;
-  while (current != to) {
-    current = from->getNextNode();
-    ++distance;
-  }
-
-  return distance;
+  return std::distance(from->getIterator(), to->getIterator());
 }
 
 /// Compute the recurrence-constrained minimum initiation interval, based on the
