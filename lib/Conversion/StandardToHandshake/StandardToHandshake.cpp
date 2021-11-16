@@ -12,6 +12,7 @@
 #include "circt/Conversion/StandardToHandshake.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Analysis/AffineStructures.h"
@@ -538,35 +539,6 @@ LogicalResult addBranchOps(handshake::FuncOp f,
   return success();
 }
 
-// Create sink for every unused result
-LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  BlockValues liveOuts;
-
-  for (Block &block : f) {
-    for (Operation &op : block) {
-      // Do not add sinks for unused MLIR operations which the rewriter will
-      // later remove We have already replaced these ops with their handshake
-      // equivalents
-      // TODO: should we use other indicator for op that has been erased?
-      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-              mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
-        continue;
-
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults())
-        if (result.use_empty()) {
-          rewriter.setInsertionPointAfter(&op);
-          auto sinkOp = rewriter.create<SinkOp>(op.getLoc(), result);
-          if (result.getType().isa<NoneType>())
-            sinkOp->setAttr("control", rewriter.getBoolAttr(true));
-        }
-    }
-  }
-  return success();
-}
-
 LogicalResult connectConstantsToControl(handshake::FuncOp f,
                                         ConversionPatternRewriter &rewriter) {
   // Create new constants which have a control-only input to trigger them
@@ -597,53 +569,6 @@ LogicalResult connectConstantsToControl(handshake::FuncOp f,
       rewriter.eraseOp(op);
     }
   }
-  return success();
-}
-
-void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
-  for (int i = 0, e = op->getNumOperands(); i < e; ++i)
-    if (op->getOperand(i) == oldVal) {
-      op->setOperand(i, newVal);
-      break;
-    }
-  return;
-}
-
-void insertFork(Operation *op, Value result, bool isLazy, OpBuilder &rewriter) {
-  // Get successor operations
-  std::vector<Operation *> opsToProcess;
-  for (auto &u : result.getUses())
-    opsToProcess.push_back(u.getOwner());
-
-  // Insert fork after op
-  rewriter.setInsertionPointAfter(op);
-  Operation *newOp;
-  if (isLazy)
-    newOp =
-        rewriter.create<LazyForkOp>(op->getLoc(), result, opsToProcess.size());
-  else
-    newOp = rewriter.create<ForkOp>(op->getLoc(), result, opsToProcess.size());
-
-  // Modify operands of successor
-  // opsToProcess may have multiple instances of same operand
-  // Replace uses one by one to assign different fork outputs to them
-  for (int i = 0, e = opsToProcess.size(); i < e; ++i)
-    replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
-}
-
-// Insert Fork Operation for every operation with more than one successor
-LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  for (Operation &op : f.getOps()) {
-    // Ignore terminators, and don't add Forks to Forks.
-    if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
-      for (auto result : op.getResults()) {
-        // If there is a result and it is used more than once
-        if (!result.use_empty() && !result.hasOneUse())
-          insertFork(&op, result, false, rewriter);
-      }
-    }
-  }
-
   return success();
 }
 
@@ -909,9 +834,8 @@ void addLazyForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     Value res = getBlockControlValue(&block);
-    Operation *op = res.getDefiningOp();
     if (!res.hasOneUse())
-      insertFork(op, res, true, rewriter);
+      insertFork(res, true, rewriter);
   }
 }
 
@@ -923,7 +847,7 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse())
-            insertFork(&op, result, false, rewriter);
+            insertFork(result, false, rewriter);
         }
       }
     }
@@ -1430,7 +1354,7 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
     for (auto result : op->getResults()) {
       // If there is a result and it is used more than once
       if (!result.use_empty() && !result.hasOneUse())
-        insertFork(op, result, false, rewriter);
+        insertFork(result, false, rewriter);
     }
   }
 };
@@ -1711,33 +1635,11 @@ struct HandshakeDataflowPass
   }
 };
 
-struct HandshakeCanonicalizePass
-    : public HandshakeCanonicalizeBase<HandshakeCanonicalizePass> {
-  void runOnOperation() override {
-    auto Op = getOperation();
-    OpBuilder builder(Op);
-    (void)addForkOps(Op, builder);
-    (void)addSinkOps(Op, builder);
-
-    for (auto &block : Op)
-      for (auto &nestedOp : block)
-        for (mlir::Value out : nestedOp.getResults())
-          if (!out.hasOneUse()) {
-            nestedOp.emitError("does not have exactly one use");
-            signalPassFailure();
-          }
-  }
-};
 } // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::createHandshakeDataflowPass() {
   return std::make_unique<HandshakeDataflowPass>();
-}
-
-std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-circt::createHandshakeCanonicalizePass() {
-  return std::make_unique<HandshakeCanonicalizePass>();
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
