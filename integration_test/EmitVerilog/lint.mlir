@@ -3,7 +3,7 @@
 // RUN: verilator --lint-only --top-module A %t1.sv
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv
-// RUN: verilator --lint-only --top-module TESTSIMPLE %t1.sv
+// RUN: verilator --lint-only -Wno-WIDTH --top-module TESTSIMPLE %t1.sv
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 // RUN: verilator --lint-only --top-module StructDecls %t1.sv
@@ -82,6 +82,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
 
   %one = hw.constant 1 : i4
   %aPlusOne = comb.add %a, %one : i4
+  sv.verbatim "/* verilator lint_off WIDTH */"
   %29 = hw.array_slice %array at %aPlusOne: (!hw.array<10xi4>) -> !hw.array<3xi4>
 
 
