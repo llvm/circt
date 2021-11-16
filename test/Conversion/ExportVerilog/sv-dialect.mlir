@@ -529,7 +529,6 @@ hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
   %c1_i2 = hw.constant 1 : i2
   %0 = hw.array_create %x, %x, %x, %x : i3
   // CHECK: wire [3:0][2:0] _T = 
-  // CHECK: wire [6:0] _T_0 = y + 7'h1;
   %1 = hw.array_slice %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
   // CHECK: assign o1 = _T[2'h1 +: 2];
 
@@ -539,7 +538,7 @@ hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
   // CHECK: assign o2 = arr[7'h1 +: 64];
   %2 = hw.array_slice %arr at %c1_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
-  // CHECK: assign o3 = arr[_T_0 +: 64];
+  // CHECK: assign o3 = arr[(0 + y + 7'h1) +: 64];
   %sum = comb.add %y, %c1_i7 : i7
   %3 = hw.array_slice %arr at %sum : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
