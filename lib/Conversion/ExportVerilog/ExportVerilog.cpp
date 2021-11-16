@@ -1787,7 +1787,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
   bool padTo32Bits = false;
-  if (auto defO = op.lowIndex().getDefiningOp())
+  if (auto *defO = op.lowIndex().getDefiningOp())
     if ((!isa<ConstantOp>(defO)) &&
         hw::getBitWidth(op.lowIndex().getType()) < 32)
       padTo32Bits = true;
