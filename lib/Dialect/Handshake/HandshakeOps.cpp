@@ -29,6 +29,8 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/Debug.h"
 
+#include <set>
+
 using namespace circt;
 using namespace circt::handshake;
 
@@ -134,9 +136,43 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 
+namespace {
+
+struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
+  using mlir::OpRewritePattern<ForkOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ForkOp op,
+                                PatternRewriter &rewriter) const override {
+    std::set<unsigned> unusedIndexes;
+
+    for (auto res : llvm::enumerate(op.getResults()))
+      if (res.value().getUses().empty())
+        unusedIndexes.insert(res.index());
+
+    if (unusedIndexes.size() == 0)
+      return failure();
+
+    // Create a new fork op, dropping the unused results.
+    rewriter.setInsertionPoint(op);
+    auto newFork =
+        rewriter.create<ForkOp>(op.getLoc(), op.getOperand(),
+                                op.getNumResults() - unusedIndexes.size());
+    rewriter.updateRootInPlace(op, [&] {
+      unsigned i = 0;
+      for (auto oldRes : llvm::enumerate(op.getResults()))
+        if (unusedIndexes.count(oldRes.index()) == 0)
+          oldRes.value().replaceAllUsesWith(newFork.getResult(i++));
+    });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+} // namespace
+
 void handshake::ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
+  results.insert<EliminateUnusedForkResultsPattern>(context);
 }
 
 void handshake::ForkOp::execute(std::vector<llvm::Any> &ins,
