@@ -115,7 +115,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   // Descend into vectors by creating subindex ops.
   if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i) {
-      auto subindex = builder.createOrFold<firrtl::SubfieldOp>(value, i);
+      auto subindex = builder.createOrFold<firrtl::SubindexOp>(value, i);
       invalidateOutputs(builder, subindex, invalidCache, flip);
       if (subindex.use_empty())
         subindex.getDefiningOp()->erase();
@@ -149,7 +149,7 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
   if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i)
       reduceXor(builder, into,
-                builder.createOrFold<firrtl::SubfieldOp>(value, i));
+                builder.createOrFold<firrtl::SubindexOp>(value, i));
     return;
   }
   if (type.isa<firrtl::UIntType, firrtl::SIntType>())
