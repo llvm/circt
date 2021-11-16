@@ -154,13 +154,16 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
   }
 
   SmallVector<Value> inputBuses;
-  SmallVector<StringRef> inputBusNames;
+  SmallVector<std::string> inputBusNames;
   SmallVector<DictionaryAttr> inputBusAttrs;
   SmallVector<Type> inputBusTypes;
   auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
                                             builder.getStrArrayAttr({"send"}));
   auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
                                             builder.getStrArrayAttr({"recv"}));
+  if (op.mem_type() == "bram") {
+    assert(true);
+  }
   for (size_t portNum = 0; portNum < memrefPortInterfaces.size(); portNum++) {
     std::string portPrefix = "p" + std::to_string(portNum) + "_";
     auto portInterface = memrefPortInterfaces[portNum];

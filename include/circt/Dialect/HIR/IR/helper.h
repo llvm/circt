@@ -55,9 +55,10 @@ llvm::Optional<mlir::StringRef> getOptionalName(mlir::Operation *operation,
                                                 int64_t resultNum);
 llvm::Optional<mlir::StringRef> getOptionalName(mlir::Value v);
 llvm::Optional<circt::Type> getElementType(circt::Type);
-circt::Operation *declareExternalFuncForCall(
-    circt::hir::CallOp callOp, circt::SmallVector<circt::StringRef> inputNames,
-    circt::SmallVector<circt::StringRef> resultNames = {});
+circt::Operation *
+declareExternalFuncForCall(circt::hir::CallOp callOp,
+                           circt::SmallVector<std::string> inputNames,
+                           circt::SmallVector<std::string> resultNames = {});
 mlir::Value materializeIntegerConstant(mlir::OpBuilder &builder, int value,
                                        int64_t width);
 llvm::Optional<mlir::Type> convertToHWType(mlir::Type type);

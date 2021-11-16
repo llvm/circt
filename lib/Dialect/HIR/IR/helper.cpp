@@ -288,8 +288,8 @@ llvm::Optional<Type> getElementType(circt::Type ty) {
 }
 
 Operation *declareExternalFuncForCall(hir::CallOp callOp,
-                                      SmallVector<StringRef> inputNames,
-                                      SmallVector<StringRef> resultNames) {
+                                      SmallVector<std::string> inputNames,
+                                      SmallVector<std::string> resultNames) {
   if (callOp.getCalleeDecl())
     return NULL;
   OpBuilder builder(callOp);
@@ -307,12 +307,21 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp,
   // declOp.getFuncBody().front();
   assert(inputNames.size() == callOp.getFuncType().getInputTypes().size());
   inputNames.push_back("t");
-  declOp->setAttr("argNames", builder.getStrArrayAttr(inputNames));
+  SmallVector<mlir::StringRef> inputNamesRef;
+  for (size_t i = 0; i < inputNames.size(); i++) {
+    inputNamesRef.push_back(inputNames[i]);
+  }
+  declOp->setAttr("argNames", builder.getStrArrayAttr(inputNamesRef));
 
+  SmallVector<mlir::StringRef> resultNamesRef;
+  for (size_t i = 0; i < resultNames.size(); i++) {
+    resultNamesRef.push_back(resultNames[i]);
+  }
   if (resultNames.size() > 0) {
     assert(resultNames.size() == callOp.getFuncType().getResultTypes().size());
-    declOp->setAttr("resultNames", builder.getStrArrayAttr(resultNames));
+    declOp->setAttr("resultNames", builder.getStrArrayAttr(resultNamesRef));
   }
+
   if (auto params = callOp->getAttr("params"))
     declOp->setAttr("params", params);
   return declOp;
