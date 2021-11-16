@@ -119,7 +119,7 @@ $ ninja check-circt-integration # Run the integration tests.
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
-and MLIR frameworks. The `-DCMAKE_EXPOERT_COMPILE_COMMANDS=ON` flag generates
+and MLIR frameworks. The `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` flag generates
 a `build/compile_commands.json` file, which can be used by editors (or plugins)
 for autocomplete and/or IDE-like features.
 
