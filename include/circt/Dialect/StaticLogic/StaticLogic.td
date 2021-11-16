@@ -141,8 +141,20 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   ];
 
   let extraClassDeclaration = [{
+    // Get the condition block.
     Block &getCondBlock() { return condition().front(); }
+
+    // Get the stages block.
     Block &getStagesBlock() { return stages().front(); }
+
+    // Get the terminator of the pipeline.
+    PipelineTerminatorOp getTerminator();
+
+    // Compute the distance between the two stages.
+    uint64_t computeDistance(PipelineStageOp, PipelineStageOp);
+
+    // Compute the initiation interval based on the iter_args def-use chains.
+    uint64_t computeInitiationInterval();
   }];
 }
 

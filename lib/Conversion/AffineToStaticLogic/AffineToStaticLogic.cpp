@@ -238,8 +238,7 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   stageBlock.getTerminator()->insertOperands(0, {incResult});
 
   // Add the induction variable result to the terminator iter args.
-  auto stagesTerminator =
-      cast<PipelineTerminatorOp>(stagesBlock.getTerminator());
+  auto stagesTerminator = pipeline.getTerminator();
   stagesTerminator.iter_argsMutable().append({stage.getResult(0)});
 
   // Remove the loop nest from the IR.

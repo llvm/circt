@@ -151,8 +151,11 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
                  "'staticlogic.pipeline.terminator' ops, found ")
              << inner;
 
-  // TODO: once there is an II attribute, verify that the II is satisfied by the
-  // definitions and uses of `iter_args`.
+  // Verify that the II is satisfied by the definitions and uses of `iter_args`.
+  if (op.II().hasValue() && op.II().getValue() < op.computeInitiationInterval())
+    return op.emitOpError("computed minimum II of ")
+           << op.computeInitiationInterval()
+           << " was greater than specified II of " << op.II().getValue();
 
   return success();
 }
@@ -178,6 +181,59 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
   builder.setInsertionPointToEnd(&stagesBlock);
   builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
                                        ValueRange());
+}
+
+/// Get the terminator of the pipeline.
+PipelineTerminatorOp PipelineWhileOp::getTerminator() {
+  return cast<PipelineTerminatorOp>(getStagesBlock().getTerminator());
+}
+
+/// Compute the distance between the two stages.
+uint64_t PipelineWhileOp::computeDistance(PipelineStageOp from,
+                                          PipelineStageOp to) {
+  // Ensure these are valid stages within this pipeline.
+  assert(from && to && from->getParentOp() == getOperation() &&
+         to->getParentOp() == getOperation());
+
+  // Traverse the linked list to determine the distance.
+  uint64_t distance = 0;
+  Operation *current = from;
+  while (current != to) {
+    current = from->getNextNode();
+    ++distance;
+  }
+
+  return distance;
+}
+
+/// Compute the initiation interval based on the iter args defs and uses.
+uint64_t PipelineWhileOp::computeInitiationInterval() {
+  uint64_t maxDistance = 0;
+
+  // Check the uses of the pipeline's block iter args, and the definitions of
+  // the pipeline's terminator iter args.
+  auto useIterArgs = getStagesBlock().getArguments();
+  auto defIterArgs = getTerminator().iter_args();
+  assert(useIterArgs.size() == defIterArgs.size());
+
+  for (size_t i = 0; i < useIterArgs.size(); ++i) {
+    Value useIterArg = useIterArgs[i];
+    Value defIterArg = defIterArgs[i];
+
+    // For each iter arg, find the maximum distance from the stage in which it
+    // is defined to latest the stage in which it is used.
+    auto definingStage = defIterArg.getDefiningOp<PipelineStageOp>();
+    for (auto &use : useIterArg.getUses()) {
+      auto usingStage = use.getOwner()->getParentOfType<PipelineStageOp>();
+      uint64_t distance = computeDistance(definingStage, usingStage);
+      if (distance > maxDistance)
+        maxDistance = distance;
+    }
+  }
+
+  // The pipeline's semantics state that the maximum distance must be less than
+  // the II, so the smallest possible II is one more than the maximum distance.
+  return maxDistance + 1;
 }
 
 //===----------------------------------------------------------------------===//
