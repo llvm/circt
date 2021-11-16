@@ -203,12 +203,14 @@ PipelineTerminatorOp PipelineWhileOp::getTerminator() {
 /// Compute the number of stages between the two stages.
 uint64_t PipelineWhileOp::computeNumStages(PipelineStageOp from,
                                            PipelineStageOp to) {
-  // If from and to are non-null and the same, distance is 0.
-  if (from && to && from == to)
+  assert(from && to && "must specify non-null stages");
+
+  // If from and to are the same, the number of stages is 0.
+  if (from == to)
     return 0;
 
   // Ensure these are valid stages within this pipeline.
-  assert(from && to && from->getParentOp() == getOperation() &&
+  assert(from->getParentOp() == getOperation() &&
          to->getParentOp() == getOperation() && from->isBeforeInBlock(to));
 
   return std::distance(from->getIterator(), to->getIterator());
