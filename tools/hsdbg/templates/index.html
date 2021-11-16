@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<title> Handshake interactive viewer</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #f1f1f1;
+  }
+</style>
+
+<script>
+  window.onload = function () {
+    var image = document.getElementById("img");
+    var cycle = document.getElementById("cycle");
+    async function updateStatus() {
+      image.src = image.src.split("?")[0] + "?" + new Date().getTime();
+      let response = await fetch('/cycle?format=json');
+      let jsonresp = await response.json();
+      cycle.innerHTML = jsonresp.cycle;
+      console.log(jsonresp);
+    }
+    setInterval(updateStatus, 100);
+  }
+</script>
+
+<body>
+  <div style="text-align: center;">
+    <h1>Handshake interactive viewer</h1>
+    <h2>Cycle: <span id="cycle"></span></h2>
+    <img id="img" src="http://localhost:8080/image.svg" />
+  </div>
+
+</body>
+
+</html>
