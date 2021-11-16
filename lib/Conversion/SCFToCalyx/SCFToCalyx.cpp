@@ -15,6 +15,7 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -676,11 +677,14 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
                              IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
-                  [&](auto) {
-                    /// Skip: these special cases will be handled separately.
-                    return true;
-                  })
+              .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp,
+                             staticlogic::PipelineWhileOp,
+                             staticlogic::PipelineStageOp,
+                             staticlogic::PipelineRegisterOp,
+                             staticlogic::PipelineTerminatorOp>([&](auto) {
+                /// Skip: these special cases will be handled separately.
+                return true;
+              })
               .Default([&](auto op) {
                 op->emitError() << "Unhandled operation during BuildOpGroups()";
                 return false;
@@ -2130,9 +2134,13 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
+    llvm::outs() << "before pattern:\n";
+    getOperation()->dump();
     LogicalResult partialPatternRes = runPartialPattern(
         pat.pattern,
         /*runOnce=*/pat.strategy == LoweringPattern::Strategy::Once);
+    llvm::outs() << "after pattern:\n";
+    getOperation()->dump();
     if (succeeded(partialPatternRes))
       continue;
     signalPassFailure();
