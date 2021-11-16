@@ -74,5 +74,6 @@ mlir::Value emitRegisterAlloca(mlir::OpBuilder &builder, mlir::Type elementTy);
 
 mlir::LogicalResult
 validatePositiveConstant(mlir::ArrayRef<mlir::Value> indices);
+mlir::Value emitIntegerBusOp(mlir::OpBuilder &builder, int64_t width);
 } // namespace helper
 #endif

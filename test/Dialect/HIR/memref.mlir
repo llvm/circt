@@ -59,7 +59,7 @@ hir.func @test_nobank at %t(
 //  %c1_i1 = arith.constant 1:i1
 //  %c1_i2 = arith.constant 1:i2
 //
-//  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
+//  %a = hir.alloca("bram") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
 //  %a_w = hir.memref.extract %a[port 1] :!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_wr]
 //  
 //  hir.comment "load" 
@@ -70,25 +70,25 @@ hir.func @test_nobank at %t(
 //  hir.return
 //}
 //
-//hir.func.extern @foo at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) 
-//hir.func.extern @foo2 at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) 
-//hir.func.extern @bar at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_wr])
-//
-//hir.func @test3 at %t(){
-//  %0 = arith.constant 0:index
-//  %1 = arith.constant 1:index
-//  %c1_i1 = arith.constant 1:i1
-//  %c1_i2 = arith.constant 1:i2
-//  %c1_i48 = arith.constant 1:i48
-//
-//  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
-//  %a_r = hir.memref.extract %a[port 0] :!hir.memref<(bank 2)x(bank 3)x2x4xi8> port [#reg_rd]
-//  hir.call @foo(%a_r) at %t : !hir.func<(!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) -> ()>
-//  hir.call @foo2(%a_r) at %t : !hir.func<(!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) -> ()>
-//  %a_w = hir.memref.extract %a[port 1] :!hir.memref<(bank 2)x(bank 3)x2x4xi8> port [#reg_wr]
-//  hir.call @bar(%a_w) at %t : !hir.func<(!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_wr]) -> ()>
-//  hir.return
-//}
+hir.func.extern @foo at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#bram_rd]) 
+hir.func.extern @foo2 at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports[#bram_rd]) 
+hir.func.extern @bar at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#bram_wr])
+
+hir.func @test3 at %t(){
+  %0 = arith.constant 0:index
+  %1 = arith.constant 1:index
+  %c1_i1 = arith.constant 1:i1
+  %c1_i2 = arith.constant 1:i2
+  %c1_i48 = arith.constant 1:i48
+
+  %a = hir.alloca("bram") : !hir.memref<(bank 2)x(bank 3)x2x4xi8>ports[#bram_rd,#bram_wr]
+  %a_r = hir.memref.extract %a[port 0] :!hir.memref<(bank 2)x(bank 3)x2x4xi8> port [#reg_rd]
+  hir.call @foo(%a_r) at %t : !hir.func<(!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) -> ()>
+  hir.call @foo2(%a_r) at %t : !hir.func<(!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) -> ()>
+  %a_w = hir.memref.extract %a[port 1] :!hir.memref<(bank 2)x(bank 3)x2x4xi8> port [#reg_wr]
+  hir.call @bar(%a_w) at %t : !hir.func<(!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_wr]) -> ()>
+  hir.return
+}
 //
 //
 //hir.func @test4 at %t() -> (%res: i8){
@@ -98,7 +98,7 @@ hir.func @test_nobank at %t(
 //  %c1_i2 = arith.constant 1:i2
 //  %c1_i48 = arith.constant 1:i48
 //
-//  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#bram_rd,#bram_wr]
+//  %a = hir.alloca("bram") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#bram_rd,#bram_wr]
 //  %u = hir.load %a[port 0][%0,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
 //  %v = hir.load %a[port 0][%1,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
 //  %r = comb.add %u, %v :i8
@@ -116,7 +116,7 @@ hir.func @test_nobank at %t(
 //  %c1_i2 = arith.constant 1:i2
 //  %c1_i48 = arith.constant 1.0:i48
 //
-//  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
+//  %a = hir.alloca("bram") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
 //  %u = hir.load %a[port 0][%0,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
 //  hir.store %u to %a[port 1][%0,%0,%c1_i1,%c1_i2] at %t + 1: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
 //  hir.return

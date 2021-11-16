@@ -457,4 +457,11 @@ LogicalResult validatePositiveConstant(ArrayRef<Value> indices) {
   }
   return success();
 }
+
+Value emitIntegerBusOp(OpBuilder &builder, int64_t width) {
+  assert(width > 0);
+  return builder.create<hir::BusOp>(
+      builder.getUnknownLoc(),
+      hir::BusType::get(builder.getContext(), builder.getIntegerType(width)));
+}
 } // namespace helper

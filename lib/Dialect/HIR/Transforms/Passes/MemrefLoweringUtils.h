@@ -470,8 +470,6 @@ public:
   bool hasAddrBus(Value mem, int64_t port) {
     return mem.getType().dyn_cast<hir::MemrefType>().getNumElementsPerBank() >
            1;
-    // FIXME: Why below does not work?
-    // return getInterface(mem, port, 0)->hasAddrBus();
   }
   bool hasRdBus(Value mem, int64_t port) {
     return getInterface(mem, port, 0)->hasRdBus();
@@ -485,3 +483,18 @@ void emitCallOpOperandsForMemrefPort(
     OpBuilder &builder, MemrefInfo &memrefInfo, Value mem,
     SmallVectorImpl<Value> &operands, SmallVectorImpl<Type> &inputTypes,
     SmallVectorImpl<DictionaryAttr> &inputAttrs);
+
+Value emitAddrEnableBus(OpBuilder &builder, hir::MemrefType memrefTy);
+Value emitAddrDataBus(OpBuilder &builder, hir::MemrefType memrefTy);
+Value emitRdEnableBus(OpBuilder &builder, hir::MemrefType memrefTy);
+Value emitRdDataBus(OpBuilder &builder, hir::MemrefType memrefTy);
+Value emitWrEnableBus(OpBuilder &builder, hir::MemrefType memrefTy);
+Value emitWrDataBus(OpBuilder &builder, hir::MemrefType memrefTy);
+
+std::string createHWMemoryName(llvm::StringRef memKind,
+                               hir::MemrefType memrefTy, ArrayAttr memPorts);
+void emitMemoryInstance(OpBuilder &builder, hir::MemrefType memrefTy,
+                        ArrayRef<MemoryInterface> memoryInterfaces,
+                        llvm::StringRef memKind, llvm::StringRef memName,
+                        llvm::Optional<std::string> instanceName, Value tstart);
+Value getRegionTimeVar(Operation *);

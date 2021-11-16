@@ -75,30 +75,18 @@ MemoryInterface emitMemoryInterface(OpBuilder &builder,
   Value bankIdx =
       builder.create<mlir::arith::ConstantOp>(uLoc, builder.getIndexAttr(bank));
   if (portInterface.addrEnableBusTensor) {
-    auto addrEnBus = builder.create<hir::BusOp>(
-        uLoc, hir::BusType::get(builder.getContext(),
-                                portInterface.addrEnableBusTensor.getType()
-                                    .dyn_cast<hir::BusTensorType>()
-                                    .getElementType()));
+    auto addrEnBus = emitAddrEnableBus(builder, memrefTy);
     builder.create<hir::BusTensorAssignElementOp>(
         uLoc, portInterface.addrEnableBusTensor, bankIdx, addrEnBus);
     memoryInterface.setAddrEnableBus(addrEnBus);
     assert(portInterface.addrDataBusTensor);
-    auto addrDataBus = builder.create<hir::BusOp>(
-        uLoc, hir::BusType::get(builder.getContext(),
-                                portInterface.addrDataBusTensor.getType()
-                                    .dyn_cast<hir::BusTensorType>()
-                                    .getElementType()));
+    auto addrDataBus = emitAddrDataBus(builder, memrefTy);
     builder.create<hir::BusTensorAssignElementOp>(
         uLoc, portInterface.addrDataBusTensor, bankIdx, addrDataBus);
     memoryInterface.setAddrDataBus(addrDataBus);
   }
   if (portInterface.rdEnableBusTensor) {
-    auto rdEnBus = builder.create<hir::BusOp>(
-        uLoc, hir::BusType::get(builder.getContext(),
-                                portInterface.rdEnableBusTensor.getType()
-                                    .dyn_cast<hir::BusTensorType>()
-                                    .getElementType()));
+    auto rdEnBus = emitRdEnableBus(builder, memrefTy);
     builder.create<hir::BusTensorAssignElementOp>(
         uLoc, portInterface.rdEnableBusTensor, bankIdx, rdEnBus);
     memoryInterface.setRdEnableBus(rdEnBus);
@@ -112,20 +100,12 @@ MemoryInterface emitMemoryInterface(OpBuilder &builder,
     memoryInterface.setRdDataBus(rdDataBus, portInterface.rdLatency);
   }
   if (portInterface.wrEnableBusTensor) {
-    auto wrEnBus = builder.create<hir::BusOp>(
-        uLoc, hir::BusType::get(builder.getContext(),
-                                portInterface.wrEnableBusTensor.getType()
-                                    .dyn_cast<hir::BusTensorType>()
-                                    .getElementType()));
+    auto wrEnBus = emitWrEnableBus(builder, memrefTy);
     builder.create<hir::BusTensorAssignElementOp>(
         uLoc, portInterface.wrEnableBusTensor, bankIdx, wrEnBus);
     memoryInterface.setWrEnableBus(wrEnBus);
     assert(portInterface.wrDataBusTensor);
-    auto wrDataBus = builder.create<hir::BusOp>(
-        uLoc, hir::BusType::get(builder.getContext(),
-                                portInterface.wrDataBusTensor.getType()
-                                    .dyn_cast<hir::BusTensorType>()
-                                    .getElementType()));
+    auto wrDataBus = emitWrDataBus(builder, memrefTy);
     builder.create<hir::BusTensorAssignElementOp>(
         uLoc, portInterface.wrDataBusTensor, bankIdx, wrDataBus);
     memoryInterface.setWrDataBus(wrDataBus);
@@ -234,4 +214,128 @@ void emitCallOpOperandsForMemrefPort(
       inputAttrs.push_back(sendAttr);
     }
   }
+}
+
+Value emitAddrEnableBus(OpBuilder &builder, hir::MemrefType memrefTy) {
+  return helper::emitIntegerBusOp(builder, 1);
+}
+Value emitAddrDataBus(OpBuilder &builder, hir::MemrefType memrefTy) {
+  auto width = helper::clog2(memrefTy.getNumElementsPerBank());
+  auto i1Bus = helper::emitIntegerBusOp(builder, width);
+  return i1Bus;
+}
+Value emitRdEnableBus(OpBuilder &builder, hir::MemrefType memrefTy) {
+  return helper::emitIntegerBusOp(builder, 1);
+}
+Value emitRdDataBus(OpBuilder &builder, hir::MemrefType memrefTy) {
+  auto width = helper::getBitWidth(memrefTy.getElementType()).getValue();
+  auto i1Bus = helper::emitIntegerBusOp(builder, width);
+  return i1Bus;
+}
+Value emitWrEnableBus(OpBuilder &builder, hir::MemrefType memrefTy) {
+  return helper::emitIntegerBusOp(builder, 1);
+}
+
+Value emitWrDataBus(OpBuilder &builder, hir::MemrefType memrefTy) {
+  auto width = helper::getBitWidth(memrefTy.getElementType()).getValue();
+  auto i1Bus = helper::emitIntegerBusOp(builder, width);
+  return i1Bus;
+}
+
+std::string createHWMemoryName(llvm::StringRef memKind,
+                               hir::MemrefType memrefTy, ArrayAttr memPorts) {
+  std::string name =
+      memKind.str() + "_" + std::to_string(memrefTy.getNumElementsPerBank()) +
+      "x" +
+      std::to_string(helper::getBitWidth(memrefTy.getElementType()).getValue());
+  for (auto port : memPorts) {
+    name += "_";
+    if (helper::isRead(port))
+      name += "r";
+    if (helper::isWrite(port))
+      name += "w";
+  }
+  return name;
+}
+
+/// Emit CallOps for each bank of the memref that will instantiate the
+/// hw memory, and connect the memory interfaces of all the ports with it.
+void emitMemoryInstance(OpBuilder &builder, hir::MemrefType memrefTy,
+                        ArrayRef<MemoryInterface> memoryInterfaces,
+                        llvm::StringRef memKind, llvm::StringRef memName,
+                        llvm::Optional<std::string> instanceName,
+                        Value tstart) {
+
+  auto elementWidth = helper::getBitWidth(memrefTy.getElementType()).getValue();
+  auto addrWidth = helper::clog2(memrefTy.getNumElementsPerBank());
+  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"send"}));
+  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"recv"}));
+
+  // Create the inputs for the call op that instantiates the memory.
+  SmallVector<Value> inputBuses;
+  SmallVector<std::string> inputBusNames;
+  SmallVector<DictionaryAttr> inputBusAttrs;
+  SmallVector<Type> inputBusTypes;
+  for (size_t port = 0; port < memoryInterfaces.size(); port++) {
+    std::string portPrefix = "p" + std::to_string(port) + "_";
+    auto memoryInterface = memoryInterfaces[port];
+    if (memoryInterface.hasAddrBus()) {
+      assert(memrefTy.getNumElementsPerBank() > 1);
+      inputBuses.push_back(memoryInterface.getAddrEnBus());
+      inputBusTypes.push_back(memoryInterface.getAddrEnBus().getType());
+      inputBusAttrs.push_back(recvAttr);
+      inputBusNames.push_back(portPrefix + "addr_en");
+      inputBuses.push_back(memoryInterface.getAddrDataBus());
+      inputBusTypes.push_back(memoryInterface.getAddrDataBus().getType());
+      inputBusAttrs.push_back(recvAttr);
+      inputBusNames.push_back(portPrefix + "addr_data");
+    }
+    if (memoryInterface.hasRdBus()) {
+      inputBuses.push_back(memoryInterface.getRdEnBus());
+      inputBusTypes.push_back(memoryInterface.getRdEnBus().getType());
+      inputBusAttrs.push_back(recvAttr);
+      inputBusNames.push_back(portPrefix + "rd_en");
+      inputBuses.push_back(memoryInterface.getRdDataBus());
+      inputBusTypes.push_back(memoryInterface.getRdDataBus().getType());
+      inputBusAttrs.push_back(sendAttr);
+      inputBusNames.push_back(portPrefix + "rd_data");
+    }
+    if (memoryInterface.hasWrBus()) {
+      inputBuses.push_back(memoryInterface.getWrEnBus());
+      inputBusTypes.push_back(memoryInterface.getWrEnBus().getType());
+      inputBusAttrs.push_back(recvAttr);
+      inputBusNames.push_back(portPrefix + "wr_en");
+      inputBuses.push_back(memoryInterface.getWrDataBus());
+      inputBusTypes.push_back(memoryInterface.getWrDataBus().getType());
+      inputBusAttrs.push_back(recvAttr);
+      inputBusNames.push_back(portPrefix + "wr_data");
+    }
+  }
+
+  Type funcTy = hir::FuncType::get(builder.getContext(), inputBusTypes,
+                                   inputBusAttrs, {}, {});
+  auto instanceNameAttr = instanceName
+                              ? builder.getStringAttr(instanceName.getValue())
+                              : StringAttr();
+  auto memNameAttr = FlatSymbolRefAttr::get(builder.getContext(), memName);
+  auto callOp = builder.create<hir::CallOp>(
+      builder.getUnknownLoc(), SmallVector<Type>(), instanceNameAttr,
+      memNameAttr, TypeAttr::get(funcTy), inputBuses, tstart,
+      builder.getI64IntegerAttr(0));
+
+  auto params = builder.getDictionaryAttr(
+      {builder.getNamedAttr("ELEMENT_WIDTH",
+                            builder.getI64IntegerAttr(elementWidth)),
+       builder.getNamedAttr("ADDR_WIDTH",
+                            builder.getI64IntegerAttr(addrWidth))});
+
+  callOp->setAttr("params", params);
+
+  helper::declareExternalFuncForCall(callOp, inputBusNames);
+}
+
+Value getRegionTimeVar(Operation *operation) {
+  return operation->getParentRegion()->getArguments().back();
 }

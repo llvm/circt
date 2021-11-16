@@ -37,7 +37,6 @@ private:
   MemrefPortInterface defineBusesForMemrefPort(OpBuilder &, hir::MemrefType,
                                                Attribute,
                                                llvm::Optional<StringRef> name);
-  LogicalResult createBusInstantiationsAndCallOp(hir::AllocaOp);
   void initUnConnectedPorts(hir::FuncOp);
 
 private:
@@ -50,19 +49,6 @@ private:
 //------------------------------------------------------------------------------
 // Helper functions.
 //------------------------------------------------------------------------------
-
-static mlir::FlatSymbolRefAttr createUniqueFuncName(MLIRContext *context,
-                                                    StringRef name,
-                                                    ArrayRef<int64_t> params) {
-  std::string newName(name);
-  newName += "_";
-  for (size_t i = 0; i < params.size(); i++) {
-    if (i > 0)
-      newName += "x";
-    newName += std::to_string(params[i]);
-  }
-  return FlatSymbolRefAttr::get(context, newName);
-}
 
 Value createLinearAddr(OpBuilder &builder, Location loc,
                        ArrayRef<Value> indices) {
@@ -136,103 +122,6 @@ MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
     }
   }
   return portInterface;
-}
-
-LogicalResult
-MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
-  Value tstartRegion = op->getParentRegion()->getArguments().back();
-  hir::MemrefType memrefTy = op.getType().dyn_cast<hir::MemrefType>();
-  ArrayAttr ports = op.ports();
-  OpBuilder builder(op);
-  builder.setInsertionPoint(op);
-  SmallVector<MemrefPortInterface> memrefPortInterfaces;
-
-  for (auto port : ports) {
-    auto portInterface = defineBusesForMemrefPort(
-        builder, memrefTy, port, helper::getOptionalName(op, 0));
-    memrefPortInterfaces.push_back(portInterface);
-  }
-
-  SmallVector<Value> inputBuses;
-  SmallVector<std::string> inputBusNames;
-  SmallVector<DictionaryAttr> inputBusAttrs;
-  SmallVector<Type> inputBusTypes;
-  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"send"}));
-  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"recv"}));
-  if (op.mem_type() == "bram") {
-    assert(true);
-  }
-  for (size_t portNum = 0; portNum < memrefPortInterfaces.size(); portNum++) {
-    std::string portPrefix = "p" + std::to_string(portNum) + "_";
-    auto portInterface = memrefPortInterfaces[portNum];
-    if (portInterface.addrEnableBusTensor) {
-      inputBuses.push_back(portInterface.addrEnableBusTensor);
-      inputBusTypes.push_back(portInterface.addrEnableBusTensor.getType());
-      inputBusAttrs.push_back(recvAttr);
-      inputBusNames.push_back(portPrefix + "addr_en");
-      inputBuses.push_back(portInterface.addrDataBusTensor);
-      inputBusTypes.push_back(portInterface.addrDataBusTensor.getType());
-      inputBusAttrs.push_back(recvAttr);
-      inputBusNames.push_back(portPrefix + "addr_data");
-    }
-
-    if (portInterface.rdEnableBusTensor) {
-      inputBuses.push_back(portInterface.rdEnableBusTensor);
-      inputBusTypes.push_back(portInterface.rdEnableBusTensor.getType());
-      inputBusAttrs.push_back(recvAttr);
-      inputBusNames.push_back(portPrefix + "rd_en");
-      inputBuses.push_back(portInterface.rdDataBusTensor);
-      inputBusTypes.push_back(portInterface.rdDataBusTensor.getType());
-      inputBusAttrs.push_back(sendAttr);
-      inputBusNames.push_back(portPrefix + "rd_data");
-    }
-
-    if (portInterface.wrEnableBusTensor) {
-      inputBuses.push_back(portInterface.wrEnableBusTensor);
-      inputBusTypes.push_back(portInterface.wrEnableBusTensor.getType());
-      inputBusAttrs.push_back(recvAttr);
-      inputBusNames.push_back(portPrefix + "wr_en");
-      inputBuses.push_back(portInterface.wrDataBusTensor);
-      inputBusTypes.push_back(portInterface.wrDataBusTensor.getType());
-      inputBusAttrs.push_back(recvAttr);
-      inputBusNames.push_back(portPrefix + "wr_data");
-    }
-  }
-  Type funcTy = hir::FuncType::get(builder.getContext(), inputBusTypes,
-                                   inputBusAttrs, {}, {});
-
-  auto elementWidth = helper::getBitWidth(memrefTy.getElementType()).getValue();
-  auto addrWidth = helper::clog2(memrefTy.getNumElementsPerBank());
-  auto tensorSize = memrefTy.getNumBanks();
-
-  auto memModuleName = createUniqueFuncName(
-      builder.getContext(), op.mem_type().str(),
-      {memrefTy.getNumBanks(), memrefTy.getNumElementsPerBank(), elementWidth});
-  auto instanceName = helper::getOptionalName(op, 0);
-  auto instanceNameAttr = instanceName
-                              ? builder.getStringAttr(instanceName.getValue())
-                              : StringAttr();
-  auto callOp = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(), instanceNameAttr,
-      memModuleName, TypeAttr::get(funcTy), inputBuses, tstartRegion,
-      IntegerAttr());
-
-  auto params = builder.getDictionaryAttr(
-      {builder.getNamedAttr("ELEMENT_WIDTH",
-                            builder.getI64IntegerAttr(elementWidth)),
-       builder.getNamedAttr("ADDR_WIDTH", builder.getI64IntegerAttr(addrWidth)),
-       builder.getNamedAttr("TENSOR_SIZE",
-                            builder.getI64IntegerAttr(tensorSize))});
-
-  callOp->setAttr("params", params);
-
-  helper::declareExternalFuncForCall(callOp, inputBusNames);
-
-  memrefInfo.map(op.res(), emitMemoryInterfacesForEachPortBank(
-                               builder, memrefTy, memrefPortInterfaces));
-  return success();
 }
 
 static void initUnconnectedMemoryInterface(OpBuilder &builder,
@@ -558,11 +447,72 @@ LogicalResult MemrefLoweringPass::visitOp(hir::FuncExternOp op) {
 }
 
 LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
-  // Add comment.
   OpBuilder builder(op);
   builder.setInsertionPoint(op);
-  if (failed(createBusInstantiationsAndCallOp(op)))
-    return failure();
+  auto memrefTy = op.getResult().getType().dyn_cast<hir::MemrefType>();
+  // Declare buses and create MemoryInterface objects for each port-bank of the
+  // memref.
+  SmallVector<SmallVector<MemoryInterface>> memoryInterfacesPerBankPerPort;
+  for (auto bank = 0; bank < memrefTy.getNumBanks(); bank++) {
+    SmallVector<MemoryInterface> memoryInterfacesPerPort;
+    for (size_t port = 0; port < op.ports().size(); port++) {
+      MemoryInterface memoryInterface(memrefTy);
+      if (memrefTy.getNumElementsPerBank() > 1) {
+        auto addrEnBus = emitAddrEnableBus(builder, memrefTy);
+        auto addrDataBus = emitAddrDataBus(builder, memrefTy);
+        memoryInterface.setAddrEnableBus(addrEnBus);
+        memoryInterface.setAddrDataBus(addrDataBus);
+      }
+      if (helper::isRead(op.ports()[port])) {
+        auto rdEnBus = emitRdEnableBus(builder, memrefTy);
+        auto rdDataBus = emitRdDataBus(builder, memrefTy);
+        memoryInterface.setRdEnableBus(rdEnBus);
+        memoryInterface.setRdDataBus(
+            rdDataBus, helper::getRdLatency(op.ports()[port]).getValue());
+      }
+      if (helper::isWrite(op.ports()[port])) {
+        auto wrEnBus = emitWrEnableBus(builder, memrefTy);
+        auto wrDataBus = emitWrDataBus(builder, memrefTy);
+        memoryInterface.setWrEnableBus(wrEnBus);
+        memoryInterface.setWrDataBus(wrDataBus);
+      }
+      memoryInterfacesPerPort.push_back(memoryInterface);
+    }
+    memoryInterfacesPerBankPerPort.push_back(memoryInterfacesPerPort);
+  }
+
+  // Emit separate instances of hw memory for all banks, and connect the memory
+  // interfaces.
+  for (auto bank = 0; bank < memrefTy.getNumBanks(); bank++) {
+    auto memName = createHWMemoryName(op.mem_type(), memrefTy, op.ports());
+    Optional<std::string> instanceName;
+    auto resultName = helper::getOptionalName(op);
+    if (resultName) {
+      instanceName =
+          resultName.getValue().str() + "_bank" + std::to_string(bank);
+    }
+    emitMemoryInstance(builder, memrefTy, memoryInterfacesPerBankPerPort[bank],
+                       op.mem_type(), memName, instanceName,
+                       getRegionTimeVar(op));
+  }
+
+  // Associate the memory interfaces with the memref in memInfo.
+  // FIXME: convert everything(MemInfo,emitMemoryInterfacesForEachPortBank) to
+  // per-bank-per-port. That makes more sense.
+  SmallVector<SmallVector<MemoryInterface>> memoryInterfacesPerPortPerBank;
+  auto numBanks = memoryInterfacesPerBankPerPort.size();
+  auto numPorts = memoryInterfacesPerBankPerPort[0].size();
+  for (size_t port = 0; port < numPorts; port++) {
+    SmallVector<MemoryInterface> memoryInterfacesPerBank;
+    for (size_t bank = 0; bank < numBanks; bank++) {
+      memoryInterfacesPerBank.push_back(
+          memoryInterfacesPerBankPerPort[bank][port]);
+    }
+    memoryInterfacesPerPortPerBank.push_back(memoryInterfacesPerBank);
+  }
+  memrefInfo.map(op.res(), memoryInterfacesPerPortPerBank);
+
+  // Remove the alloca op.
   opsToErase.push_back(op);
   return success();
 }
