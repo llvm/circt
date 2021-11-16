@@ -1786,7 +1786,14 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
 
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
+  bool padTo32Bits = false;
+  if (!isa<ConstantOp>(op.lowIndex().getDefiningOp()) && hw::getBitWidth(op.lowIndex().getType()) < 32 )
+    padTo32Bits = true;
+  if (padTo32Bits)
+    os << "{ 0 + ";
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
+  if (padTo32Bits)
+    os << "}";
   os << " +: " << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
@@ -1968,22 +1975,10 @@ static bool isExpressionUnableToInline(Operation *op) {
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
     // To handle these, we push the subexpression into a temporary.
-    if (isa<ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-
-    // Can inline constant lowIndex
-    if (isa<ArraySliceOp>(user))
-      if (!isa<ConstantOp>(op) && !isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-
-    if (isa<ArrayGetOp>(user))
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
-
-    if (isa<ArrayCreateOp>(op))
-      return true;
 
     // Sign extend (when the operand isn't a single bit) requires a bitselect
     // syntactically so it uses its expression multiple times.
