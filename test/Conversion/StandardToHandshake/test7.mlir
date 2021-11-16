@@ -32,7 +32,7 @@ func @simple_loop() {
 // CHECK:           %[[VAL_11]] = "handshake.branch"(%[[VAL_24]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_25:.*]]:2 = "handshake.control_merge"(%[[VAL_17]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_25]]#1) : (index) -> ()
-// CHECK:           handshake.return %[[VAL_25]]#0 : none
+// CHECK:           return %[[VAL_25]]#0 : none
 // CHECK:         }
 // CHECK:       }
 

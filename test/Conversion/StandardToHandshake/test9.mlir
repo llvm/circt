@@ -72,7 +72,7 @@ func @affine_dma_wait(%arg0: index) {
 // CHECK:           %[[VAL_31]] = "handshake.branch"(%[[VAL_65]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_66:.*]]:2 = "handshake.control_merge"(%[[VAL_46]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_66]]#1) : (index) -> ()
-// CHECK:           handshake.return %[[VAL_66]]#0 : none
+// CHECK:           return %[[VAL_66]]#0 : none
 // CHECK:         }
 // CHECK:       }
 

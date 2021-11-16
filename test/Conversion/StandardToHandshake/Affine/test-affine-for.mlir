@@ -56,7 +56,7 @@ func @empty_body () -> () {
 // CHECK:   %34 = "handshake.branch"(%30) {control = false} : (index) -> index
 // CHECK:   %35:2 = "handshake.control_merge"(%falseResult_3) {control = true} : (none) -> (none, index)
 // CHECK:   "handshake.sink"(%35#1) : (index) -> ()
-// CHECK:   handshake.return %35#0 : none
+// CHECK:   return %35#0 : none
 // CHECK: }
 
 // -----
@@ -127,7 +127,7 @@ func @load_store () -> () {
 // CHECK:   %42 = "handshake.branch"(%38) {control = false} : (index) -> index
 // CHECK:   %43:2 = "handshake.control_merge"(%falseResult_3) {control = true} : (none) -> (none, index)
 // CHECK:   "handshake.sink"(%43#1) : (index) -> ()
-// CHECK:   handshake.return %43#0 : none
+// CHECK:   return %43#0 : none
 // CHECK: }
 
 // TODO: affine expr in loop bounds

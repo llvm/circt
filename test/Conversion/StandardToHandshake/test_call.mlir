@@ -5,7 +5,7 @@ func @bar(%0 : i32) -> i32 {
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (i32) -> i32
-// CHECK:           handshake.return %[[VAL_2]], %[[VAL_1]] : i32, none
+// CHECK:           return %[[VAL_2]], %[[VAL_1]] : i32, none
 // CHECK:         }
 
   return %0 : i32
@@ -17,9 +17,9 @@ func @foo(%0 : i32) -> i32 {
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (i32) -> i32
 // CHECK:           %[[VAL_3:.*]]:2 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none)
-// CHECK:           %[[VAL_4:.*]]:2 = handshake.instance @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)
+// CHECK:           %[[VAL_4:.*]]:2 = instance @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)
 // CHECK:           "handshake.sink"(%[[VAL_4]]#1) {control = true} : (none) -> ()
-// CHECK:           handshake.return %[[VAL_4]]#0, %[[VAL_3]]#1 : i32, none
+// CHECK:           return %[[VAL_4]]#0, %[[VAL_3]]#1 : i32, none
 // CHECK:         }
 
   %a1 = call @bar(%0) : (i32) -> i32
@@ -70,7 +70,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_27:.*]] = "handshake.branch"(%[[VAL_25]]#0) {control = false} : (i32) -> i32
 // CHECK:           %[[VAL_28:.*]]:2 = "handshake.control_merge"(%[[VAL_26]], %[[VAL_19]]) {control = true} : (none, none) -> (none, index)
 // CHECK:           %[[VAL_29:.*]] = "handshake.mux"(%[[VAL_28]]#1, %[[VAL_27]], %[[VAL_20]]) : (index, i32, i32) -> i32
-// CHECK:           handshake.return %[[VAL_29]], %[[VAL_28]]#0 : i32, none
+// CHECK:           return %[[VAL_29]], %[[VAL_28]]#0 : i32, none
 // CHECK:         }
 func @main(%arg0 : i32, %arg1 : i32, %cond : i1) -> i32 {
   cond_br %cond, ^bb1, ^bb2
