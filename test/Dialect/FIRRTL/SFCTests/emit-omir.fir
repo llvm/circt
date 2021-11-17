@@ -66,6 +66,7 @@ circuit Foo : %[[
     defname = MySRAM
   module Foo :
     input unsigned : UInt<17>
+    input zeroW : UInt<0>
     output signed : UInt<19>
     inst parameter of Bar
     signed <= unsigned
