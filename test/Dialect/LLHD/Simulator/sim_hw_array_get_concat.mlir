@@ -36,7 +36,7 @@ llhd.entity @root () -> () {
 
     %array = hw.array_concat %array1, %array2 : !hw.array<2xi8>, !hw.array<2xi8>
     %get = hw.array_get %array[%index] : !hw.array<4xi8>
-    %slice = hw.array_slice %array at %indexz : (!hw.array<4xi8>) -> !hw.array<2xi8>
+    %slice = hw.indexed_part_select %array at %indexz : (!hw.array<4xi8>) -> !hw.array<2xi8>
 
     %concatsig = llhd.sig "concat" %arrayinit : !hw.array<4xi8> 
     %getsig = llhd.sig "get" %0 : i8

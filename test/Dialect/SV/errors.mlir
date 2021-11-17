@@ -194,8 +194,8 @@ hw.module @part_select1() {
 
 hw.module @part_select1() {
   %selWire = sv.wire : !hw.inout<i10>
-  %c2 = hw.constant 2 : i3
+  %c2 = hw.constant 2 : i4
   %r1 = sv.read_inout %selWire : !hw.inout<i10>
-  // expected-error @+1 {{slice width should not be greater than input width}}
-  %c = sv.indexed_part_select %r1[%c2 : 20] : i10,i3
+  // expected-error @+1 {{result size cannot be greater than input size}}
+  %c = hw.indexed_part_select %r1 at %c2 : (i10) -> i20
 }

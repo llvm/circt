@@ -97,8 +97,8 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
 
   // CHECK-NEXT: = arith.constant 13 : i10
   %idx = arith.constant 13 : i10
-  // CHECK-NEXT: = hw.array_slice %arg2 at %c13_i10 : (!hw.array<1000xi8>) -> !hw.array<24xi8>
-  %subArray = hw.array_slice %arg2 at %idx : (!hw.array<1000xi8>) -> !hw.array<24xi8>
+  // CHECK-NEXT: = hw.indexed_part_select %arg2 at %c13_i10 : (!hw.array<1000xi8>) -> !hw.array<24xi8>
+  %subArray = hw.indexed_part_select %arg2 at %idx : (!hw.array<1000xi8>) -> !hw.array<24xi8>
   // CHECK-NEXT: [[ARR1:%.+]] = hw.array_create [[RES9]], [[RES10]] : i19
   %arrCreated = hw.array_create %small1, %small2 : i19
   // CHECK-NEXT: [[ARR2:%.+]] = hw.array_create [[RES9]], [[RES10]], {{.+}} : i19

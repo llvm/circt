@@ -47,7 +47,7 @@ func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
   // CHECK-NEXT: %10 = llvm.getelementptr %8[%6, %9] : (!llvm.ptr<array<2 x i32>>, i32, i2) -> !llvm.ptr<i32>
   // CHECK-NEXT: %11 = llvm.bitcast %10 : !llvm.ptr<i32> to !llvm.ptr<array<1 x i32>>
   // CHECK-NEXT: llvm.load %11 : !llvm.ptr<array<1 x i32>>
-  %1 = hw.array_slice %arg1 at %arg0 : (!hw.array<2xi32>) -> !hw.array<1xi32>
+  %1 = hw.indexed_part_select %arg1 at %arg0 : (!hw.array<2xi32>) -> !hw.array<1xi32>
 
   // CHECK-NEXT: %[[UNDEF:.*]] = llvm.mlir.undef : !llvm.array<4 x i32>
   // CHECK-NEXT: %[[E1:.*]] = llvm.extractvalue %arg1[0 : i32] : !llvm.array<2 x i32>

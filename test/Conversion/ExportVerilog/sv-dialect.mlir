@@ -105,12 +105,12 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.bpassign %wire42, %c42 : i42
       %c40 = hw.constant 42 : i40
 
-      %c2_i3 = hw.constant 2 : i3
-      // CHECK-NEXT: partSelectReg[3'h2 +: 40] = 40'h2A;
-      %a = sv.indexed_part_select_inout %partSelectReg[%c2_i3 : 40] : !hw.inout<i42>, i3
+      %c2_i6 = hw.constant 2 : i6
+      // CHECK-NEXT: partSelectReg[6'h2 +: 40] = 40'h2A;
+      %a = sv.indexed_part_select_inout %partSelectReg[%c2_i6 : 40] : !hw.inout<i42>, i6
       sv.bpassign %a, %c40 : i40
-      // CHECK-NEXT: partSelectReg[3'h2 -: 40] = 40'h2A;
-      %b = sv.indexed_part_select_inout %partSelectReg[%c2_i3 decrement: 40] : !hw.inout<i42>, i3
+      // CHECK-NEXT: partSelectReg[6'h2 -: 40] = 40'h2A;
+      %b = sv.indexed_part_select_inout %partSelectReg[%c2_i6 decrement: 40] : !hw.inout<i42>, i6
       sv.bpassign %b, %c40 : i40
     } else {
       // CHECK: wire42 = param_y;
@@ -400,26 +400,26 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   hw.output %regout, %memout : i8, i8
 }
 
-hw.module @reg_1(%in4: i4, %in8: i8) -> (a : i3, b : i5) {
+hw.module @reg_1(%in4: i5, %in8: i8) -> (a : i3, b : i5) {
   // CHECK-LABEL: module reg_1(
 
   // CHECK: reg [17:0] myReg2
   %myReg2 = sv.reg : !hw.inout<i18>
 
   // CHECK-EMPTY:
-  // CHECK-NEXT: assign myReg2[4'h7 +: 8] = in8;
-  // CHECK-NEXT: assign myReg2[4'h7 -: 8] = in8;
+  // CHECK-NEXT: assign myReg2[5'h7 +: 8] = in8;
+  // CHECK-NEXT: assign myReg2[5'h7 -: 8] = in8;
 
-  %c2_i3 = hw.constant 7 : i4
-  %a1 = sv.indexed_part_select_inout %myReg2[%c2_i3 : 8] : !hw.inout<i18>, i4
+  %c2_i3 = hw.constant 7 : i5
+  %a1 = sv.indexed_part_select_inout %myReg2[%c2_i3 : 8] : !hw.inout<i18>, i5
   sv.assign %a1, %in8 : i8
-  %b1 = sv.indexed_part_select_inout %myReg2[%c2_i3 decrement: 8] : !hw.inout<i18>, i4
+  %b1 = sv.indexed_part_select_inout %myReg2[%c2_i3 decrement: 8] : !hw.inout<i18>, i5
   sv.assign %b1, %in8 : i8
-  %c3_i3 = hw.constant 3 : i4
+  %c3_i3 = hw.constant 3 : i5
   %r1 = sv.read_inout %myReg2 : !hw.inout<i18>
-  %c = sv.indexed_part_select %r1[%c3_i3 : 3] : i18,i4
-  %d = sv.indexed_part_select %r1[%in4 decrement:5] :i18, i4
-  // CHECK-NEXT: assign a = myReg2[4'h3 +: 3];
+  %c = hw.indexed_part_select %r1 at %c3_i3 : (i18) -> i3
+  %d = hw.indexed_part_select %r1 at %in4 decrement : (i18) -> i5
+  // CHECK-NEXT: assign a = myReg2[5'h3 +: 3];
   // CHECK-NEXT: assign b = myReg2[in4 -: 5];
   hw.output %c, %d : i3,i5
 }
@@ -470,8 +470,8 @@ hw.module @issue595(%arr: !hw.array<128xi1>) {
 
   // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
   // CHECK: assign _T = _T_1[6'h0 +: 32];
-  %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
-  %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
+  %1 = hw.indexed_part_select %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
+  %2 = hw.indexed_part_select %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
   hw.output
 }
@@ -493,8 +493,8 @@ hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
 
   // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
   // CHECK: assign _T = _T_1[6'h0 +: 32];
-  %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
-  %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
+  %1 = hw.indexed_part_select %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
+  %2 = hw.indexed_part_select %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
   hw.output
 }
@@ -515,8 +515,8 @@ hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
 
   // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
   // CHECK: assign _T = _T_1[6'h0 +: 32];
-  %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
-  %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
+  %1 = hw.indexed_part_select %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
+  %2 = hw.indexed_part_select %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
   hw.output
 }
@@ -529,18 +529,18 @@ hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
   %c1_i2 = hw.constant 1 : i2
   %0 = hw.array_create %x, %x, %x, %x : i3
   // CHECK: wire [3:0][2:0] _T = 
-  %1 = hw.array_slice %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
+  %1 = hw.indexed_part_select %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
   // CHECK: assign o1 = _T[2'h1 +: 2];
 
   %c1_i7 = hw.constant 1 : i7
 
   /// This can be inlined.
   // CHECK: assign o2 = arr[7'h1 +: 64];
-  %2 = hw.array_slice %arr at %c1_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
+  %2 = hw.indexed_part_select %arr at %c1_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
   // CHECK: assign o3 = arr[y + 7'h1 +: 64];
   %sum = comb.add %y, %c1_i7 : i7
-  %3 = hw.array_slice %arr at %sum : (!hw.array<128xi1>) -> !hw.array<64xi1>
+  %3 = hw.indexed_part_select %arr at %sum : (!hw.array<128xi1>) -> !hw.array<64xi1>
 
   hw.output %1, %2, %3: !hw.array<2xi3>, !hw.array<64xi1>, !hw.array<64xi1>
 }

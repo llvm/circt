@@ -1114,66 +1114,23 @@ OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-//===----------------------------------------------------------------------===//
-// IndexedPartSelectOp
-//===----------------------------------------------------------------------===//
+static LogicalResult verifyIndexedPartSelectOp(IndexedPartSelectInOutOp op) {
+  unsigned inputWidth = 0;
+  unsigned resultWidth = op.width();
+  if (auto i = op.input()
+                   .getType()
+                   .template cast<InOutType>()
+                   .getElementType()
+                   .template dyn_cast<IntegerType>())
+    inputWidth = i.getWidth();
+  else
+    return op->emitError("input element type must be Integer");
 
-void IndexedPartSelectOp::build(OpBuilder &builder, OperationState &result,
-                                Value input, Value base, int32_t width,
-                                bool decrement) {
-  auto resultType = (IntegerType::get(builder.getContext(), width));
-  build(builder, result, resultType, input, base, width, decrement);
-}
-
-LogicalResult IndexedPartSelectOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
-  auto width = attrs.get("width");
-  if (!width)
-    return failure();
-
-  results.push_back(
-      IntegerType::get(context, width.cast<IntegerAttr>().getInt()));
-  return success();
-}
-
-static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
-  return TypeSwitch<Operation *, LogicalResult>(op)
-      .Case<IndexedPartSelectOp, IndexedPartSelectInOutOp>(
-          [&](auto p) -> LogicalResult {
-            unsigned inputWidth = 0, resultWidth = 0;
-            auto width = p.width();
-            if (isa<IndexedPartSelectInOutOp>(p)) {
-              if (auto i = p.input()
-                               .getType()
-                               .template cast<InOutType>()
-                               .getElementType()
-                               .template dyn_cast<IntegerType>())
-                inputWidth = i.getWidth();
-              else
-                return op->emitError("input element type must be Integer");
-              if (auto resType = p.getType()
-                                     .template cast<InOutType>()
-                                     .getElementType()
-                                     .template dyn_cast<IntegerType>())
-                resultWidth = resType.getWidth();
-              else
-                return op->emitError("result element type must be Integer");
-            } else {
-              resultWidth = p.getType().template cast<IntegerType>().getWidth();
-              inputWidth =
-                  p.input().getType().template cast<IntegerType>().getWidth();
-            }
-            if (width > inputWidth)
-              return op->emitError(
-                  "slice width should not be greater than input width");
-            if (width != resultWidth)
-              return op->emitError("result width must be equal to slice width");
-            return success();
-          })
-      .Default([&](auto) { return failure(); });
-
+  if (resultWidth > inputWidth)
+    return op->emitError("slice width should not be greater than input width");
+  if (llvm::Log2_64_Ceil(inputWidth) !=
+      op.base().getType().getIntOrFloatBitWidth())
+    return op->emitError("base width must match clog2 of input width");
   return success();
 }
 

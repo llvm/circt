@@ -155,11 +155,11 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     %tmpx = sv.constantX : i1
     // CHECK-NEXT: sv.passign %combWire, %x_i1 : i1
     sv.passign %combWire, %tmpx : i1
-    // CHECK-NEXT: %[[c2_i3:.+]] = hw.constant 2 : i3
-    // CHECK-NEXT: %[[v0:.+]] = sv.indexed_part_select_inout %selReg[%[[c2_i3]] : 1] : !hw.inout<i10>, i3
+    // CHECK-NEXT: %[[c2_i3:.+]] = hw.constant 2 : i4
+    // CHECK-NEXT: %[[v0:.+]] = sv.indexed_part_select_inout %selReg[%[[c2_i3]] : 1] : !hw.inout<i10>, i4
     // CHECK-NEXT: sv.passign %[[v0]], %x_i1 : i1
-    %c2 = hw.constant 2 : i3
-    %xx1 = sv.indexed_part_select_inout %selReg[%c2:1] :  !hw.inout<i10>, i3
+    %c2 = hw.constant 2 : i4
+    %xx1 = sv.indexed_part_select_inout %selReg[%c2:1] :  !hw.inout<i10>, i4
     sv.passign %xx1, %tmpx : i1
     // CHECK-NEXT: sv.force %combWire2, %x_i1 : i1
     sv.force %combWire2, %tmpx : i1
@@ -254,25 +254,25 @@ hw.module @XMR_src(%a : i23) {
   sv.assign %xmr1, %a : i23
 }
 
-  hw.module @part_select(%in4 : i4, %in8 : i8) -> (a : i3, b : i5) {
+  hw.module @part_select(%in4 : i5, %in8 : i8) -> (a : i3, b : i5) {
   // CHECK-LABEL: hw.module @part_select
 
     %myReg2 = sv.reg : !hw.inout<i18>
-    %c2_i3 = hw.constant 7 : i4
-    // CHECK: = sv.indexed_part_select_inout %myReg2[%[[c7_i4:.+]] : 8] : !hw.inout<i18>, i4
-    %a1 = sv.indexed_part_select_inout %myReg2 [%c2_i3:8] : !hw.inout<i18>, i4
+    %c2_i3 = hw.constant 7 : i5
+    // CHECK: = sv.indexed_part_select_inout %myReg2[%[[c7_i4:.+]] : 8] : !hw.inout<i18>, i5
+    %a1 = sv.indexed_part_select_inout %myReg2 [%c2_i3:8] : !hw.inout<i18>, i5
     sv.assign %a1, %in8 : i8
-    // CHECK:  = sv.indexed_part_select_inout %myReg2[%[[c7_i4]] decrement : 8] : !hw.inout<i18>, i4
-    %b1 = sv.indexed_part_select_inout %myReg2 [%c2_i3 decrement:8] : !hw.inout<i18>, i4
+    // CHECK:  = sv.indexed_part_select_inout %myReg2[%[[c7_i4]] decrement : 8] : !hw.inout<i18>, i5
+    %b1 = sv.indexed_part_select_inout %myReg2 [%c2_i3 decrement:8] : !hw.inout<i18>, i5
     sv.assign %b1, %in8 : i8
-    %c3_i3 = hw.constant 3 : i4
+    %c3_i5 = hw.constant 3 : i5
     %rc = sv.read_inout %myReg2 : !hw.inout<i18>
-    %c = sv.indexed_part_select %rc [%c3_i3:3] : i18, i4
+    %c = hw.indexed_part_select %rc at %c3_i5 : (i18) -> i3
     // CHECK: %[[v2:.+]] = sv.read_inout %myReg2 : !hw.inout<i18>
-    // CHECK: = sv.indexed_part_select %[[v2]][%[[c3_i4:.+]] : 3] : i18, i4
+    // CHECK: hw.indexed_part_select %[[v2]] at %c3_i5 : (i18) -> i3
     %rd = sv.read_inout %myReg2 : !hw.inout<i18>
-    %d = sv.indexed_part_select %rd [%in4 decrement:5] : i18, i4
+    %d = hw.indexed_part_select %rd at %in4 decrement : (i18) -> i5
     // CHECK: %[[v4:.+]] = sv.read_inout %myReg2 : !hw.inout<i18>
-    // CHECK: = sv.indexed_part_select %[[v4]][%[[in4:.+]]  decrement : 5] : i18, i4
+    // CHECK: hw.indexed_part_select %[[v4]] at %in4 decrement : (i18) -> i5
     hw.output %c, %d : i3, i5
 }

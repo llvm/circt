@@ -68,7 +68,7 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
                        BlockAndValueMapping &) const final {
     return isa<ConstantOp>(op) || isa<BitcastOp>(op) ||
            isa<ArrayCreateOp>(op) || isa<ArrayConcatOp>(op) ||
-           isa<ArraySliceOp>(op) || isa<ArrayGetOp>(op) ||
+           isa<IndexedPartSelectOp>(op) || isa<ArrayGetOp>(op) ||
            isa<StructCreateOp>(op) || isa<StructInjectOp>(op) ||
            isa<UnionCreateOp>(op) || isa<UnionExtractOp>(op);
   }

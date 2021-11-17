@@ -60,8 +60,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %34 = comb.xor %a, %allone : i4
 
   %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : i4
-  %slice1 = hw.array_slice %arrCreated at %a : (!hw.array<9xi4>) -> !hw.array<3xi4>
-  %slice2 = hw.array_slice %arrCreated at %b : (!hw.array<9xi4>) -> !hw.array<3xi4>
+  %slice1 = hw.indexed_part_select %arrCreated at %a : (!hw.array<9xi4>) -> !hw.array<3xi4>
+  %slice2 = hw.indexed_part_select %arrCreated at %b : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4

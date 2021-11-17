@@ -614,7 +614,7 @@ public:
         builder->getIntegerType(llvm::Log2_64_Ceil(type.getSize()));
     Value lsbConst = builder->create<hw::ConstantOp>(loc(), idxTy, lsb);
     Value newSlice =
-        builder->create<hw::ArraySliceOp>(loc(), dstTy, s, lsbConst);
+        builder->create<hw::IndexedPartSelectOp>(loc(), dstTy, s, lsbConst);
     return Slice(this, lsb, newSlice);
   }
 
@@ -632,7 +632,8 @@ public:
     else if (lsbWidth < expIdxWidth)
       assert(false && "LSB Value must not be smaller than expected.");
     auto dstTy = hw::ArrayType::get(type.getElementType(), size);
-    Value newSlice = builder->create<hw::ArraySliceOp>(loc(), dstTy, s, lsb);
+    Value newSlice =
+        builder->create<hw::IndexedPartSelectOp>(loc(), dstTy, s, lsb);
     return Slice(this, llvm::Optional<int64_t>(), newSlice);
   }
   Slice &name(const Twine &name) { return GasketComponent::name<Slice>(name); }

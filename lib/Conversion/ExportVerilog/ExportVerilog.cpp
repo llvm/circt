@@ -147,7 +147,7 @@ static StringRef getSymOpName(Operation *symOp) {
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
-          IndexedPartSelectOp, ParamValueOp, XMROp>(op))
+          ParamValueOp, XMROp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1234,14 +1234,13 @@ private:
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectInOutOp op);
-  SubExprInfo visitSV(IndexedPartSelectOp op);
 
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
   SubExprInfo visitTypeOp(BitcastOp op);
   SubExprInfo visitTypeOp(ParamValueOp op);
-  SubExprInfo visitTypeOp(ArraySliceOp op);
+  SubExprInfo visitTypeOp(IndexedPartSelectOp op);
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
   SubExprInfo visitTypeOp(ArrayConcatOp op);
@@ -1782,13 +1781,21 @@ SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
 
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
-SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
+SubExprInfo ExprEmitter::visitTypeOp(IndexedPartSelectOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
 
-  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
+  unsigned dstWidth;
+  if (hw::type_isa<hw::ArrayType>(op.getType()))
+    dstWidth = type_cast<ArrayType>(op.getType()).getSize();
+  else
+    dstWidth = getBitWidth(op.getType());
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
-  os << " +: " << dstWidth << ']';
+  if (op.decrement())
+    os << " -: ";
+  else
+    os << " +: ";
+  os << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
@@ -1839,19 +1846,6 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
     os << " +: ";
   os << op.width() << ']';
   return {Selection, prec.signedness};
-}
-
-SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
-  auto info = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
-  os << '[';
-  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
-  if (op.decrement())
-    os << " -: ";
-  else
-    os << " +: ";
-  os << op.width();
-  os << ']';
-  return info;
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
@@ -1969,7 +1963,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
     // To handle these, we push the subexpression into a temporary.
-    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp>(user))
+    if (isa<ExtractOp, IndexedPartSelectOp, ArrayGetOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;

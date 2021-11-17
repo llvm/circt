@@ -123,38 +123,3 @@ def LocalParamOp : SVOp<"localparam",
 
   let verifier = "return ::verify$cppClass(*this);";
 }
-
-def IndexedPartSelectOp
- : SVOp<"indexed_part_select",
-        [NoSideEffect, InferTypeOpInterface]> {
-  let summary = "Read several contiguous bits of an int type."
-                "This is an indexed part-select operator."
-                "The base is an integer expression and the width is an "
-                " integer constant. The bits start from base and the number "
-                "of bits selected is equal to width. If $decrement is true, "
-                " then part select decrements starting from $base."
-                "See SV Spec 11.5.1.";
-  let arguments = (ins HWIntegerType:$input, HWIntegerType:$base, I32Attr:$width,
-                      UnitAttr:$decrement);
-  let results = (outs HWIntegerType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
-                                                CArg<"bool", "false">:$decrement)>
-  ];
-
-  let verifier = "return ::verifyIndexedPartSelectOp(*this);";
-
-  let extraClassDeclaration = [{
-    /// Infer the return types of this operation.
-    static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
-                                          ValueRange operands,
-                                          DictionaryAttr attrs,
-                                          mlir::RegionRange regions,
-                                          SmallVectorImpl<Type> &results);
-  }];
-
-  let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
-                        " attr-dict `:` type($input) `,` type($base)";
-}

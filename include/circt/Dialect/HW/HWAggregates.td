@@ -75,16 +75,16 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
   ];
 }
 
-def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
+def IndexedPartSelectOp : HWOp<"indexed_part_select", [NoSideEffect]> {
   let summary = "Get a range of values from an array";
   let description = [{
-    Extracts a sub-range from an array. The range is from `lowIndex` to
-    `lowIndex` + the number of elements in the return type, non-inclusive on
-    the high end. For instance,
+    Extracts a sub-range of contiguous bits from a vector or packed array.
+    The range is from `lowIndex` to `lowIndex` + the number of elements in
+    the return type, non-inclusive on the high end. For instance,
 
     ```
     // Slices 16 elements starting at '%offset'.
-    %subArray = hw.slice %largerArray at %offset :
+    %subArray = hw.indexed_part_select %largerArray at %offset :
         (!hw.array<1024xi8>) -> !hw.array<16xi8>
     ```
 
@@ -101,19 +101,41 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
     behavior.
   }];
 
-  let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
-  let results = (outs ArrayType:$dst);
+  let arguments = (ins HWValueType:$input, HWIntegerType:$lowIndex,
+                                                  UnitAttr:$decrement);
+  let results = (outs HWValueType:$dst);
+
+  let builders = [
+    OpBuilder<(ins "Type":$dst, "Value":$input, "Value":$lowIndex),
+              "build(odsBuilder, odsState, dst, input, lowIndex, false);">
+  ];
+
   let verifier = [{
-    unsigned inputSize = type_cast<ArrayType>(input().getType()).getSize();
+    unsigned inputSize;
+    if (hw::type_isa<hw::ArrayType>(input().getType()))
+      inputSize = type_cast<ArrayType>(input().getType()).getSize();
+    else {
+      auto w = getBitWidth(input().getType());
+      if (w == -1)
+        return emitOpError("cannot determine width of input");
+      inputSize = w;
+    }
+    unsigned resultSize;
+    if (hw::type_isa<hw::ArrayType>(getType()))
+      resultSize = type_cast<ArrayType>(getType()).getSize();
+    else
+      resultSize = getBitWidth(getType());
+    if (inputSize  < resultSize)
+      return emitOpError("result size cannot be greater than input size");
     if (llvm::Log2_64_Ceil(inputSize) !=
           lowIndex().getType().getIntOrFloatBitWidth())
       return emitOpError(
-        "ArraySlice: index width must match clog2 of array size");
+        "index width must match clog2 of input size");
     return success();
   }];
 
   let assemblyFormat = [{
-    $input `at` $lowIndex attr-dict `:`
+    $input `at` $lowIndex attr-dict (`decrement` $decrement^)? `:`
       `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` type($dst)
   }];
 }

@@ -1811,8 +1811,8 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
 
       auto combined = rewriter.create<hw::ArrayConcatOp>(
           op->getLoc(), ValueRange({shrOp.hidden(), shrOp.base()}));
-      rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, arrTy, combined,
-                                                    transformed.amount());
+      rewriter.replaceOpWithNewOp<hw::IndexedPartSelectOp>(
+          op, arrTy, combined, transformed.amount());
 
       return success();
     }
@@ -2390,11 +2390,11 @@ namespace {
 /// Pattern: array_slice(input, lowIndex) =>
 ///   load(bitcast(gep(store(input, alloca), zext(lowIndex))))
 struct ArraySliceOpConversion
-    : public ConvertOpToLLVMPattern<hw::ArraySliceOp> {
-  using ConvertOpToLLVMPattern<hw::ArraySliceOp>::ConvertOpToLLVMPattern;
+    : public ConvertOpToLLVMPattern<hw::IndexedPartSelectOp> {
+  using ConvertOpToLLVMPattern<hw::IndexedPartSelectOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::ArraySliceOp op, OpAdaptor adaptor,
+  matchAndRewrite(hw::IndexedPartSelectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto dstTy = typeConverter->convertType(op.dst().getType());

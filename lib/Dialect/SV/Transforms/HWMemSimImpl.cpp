@@ -102,6 +102,9 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   if (mem.maskGran == 0)
     mem.maskGran = mem.dataWidth;
   auto maskBits = mem.dataWidth / mem.maskGran;
+  auto logDataWidth = llvm::Log2_64_Ceil(mem.dataWidth);
+  if (!logDataWidth)
+    logDataWidth = 1;
   // Each mask bit controls mask-granularity number of data bits.
   auto dataType = b.getIntegerType(mem.dataWidth);
 
@@ -177,7 +180,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
           b.create<sv::PAssignOp>(
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slotReg,
-                  b.createOrFold<ConstantOp>(b.getIntegerType(32),
+                  b.createOrFold<ConstantOp>(b.getIntegerType(logDataWidth),
                                              wmask.index() * mem.maskGran),
                   mem.maskGran),
               dataValues[wmask.index()]);
@@ -223,7 +226,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
           b.create<sv::PAssignOp>(
               b.createOrFold<sv::IndexedPartSelectInOutOp>(
                   slot,
-                  b.createOrFold<ConstantOp>(b.getIntegerType(32),
+                  b.createOrFold<ConstantOp>(b.getIntegerType((logDataWidth)),
                                              wmask.index() * mem.maskGran),
                   mem.maskGran),
               dataValues[wmask.index()]);

@@ -1212,10 +1212,10 @@ static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
   if (p.parseType(type))
     return p.emitError(p.getCurrentLocation(), "Expected type");
   auto arrType = type_dyn_cast<ArrayType>(type);
-  if (!arrType)
-    return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
+  if (!arrType && !isHWIntegerType(type) )
+    return p.emitError(p.getCurrentLocation(), "Expected !hw.array or integer type");
   srcType = type;
-  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType ? arrType.getSize() : getBitWidth(type));
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
 }

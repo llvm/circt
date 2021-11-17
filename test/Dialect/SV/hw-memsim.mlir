@@ -90,8 +90,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %[[rw_wmask_0]], %rw_wmode_0
 //CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
 //CHECK-NEXT:      sv.if %[[rwwcond]]  {
-//CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:        sv.passign %[[rwslot]], %[[rw_wdata_0]]
+//CHECK:        sv.passign %[[rwslot]], %[[rw_wdata_0]]
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  %[[v14:.+]] = comb.extract %wo_mask_0 from 0 : (i1) -> i1
@@ -100,8 +99,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:    %[[wcond:.+]] = comb.and %wo_en_0, %[[v14]]
 //CHECK-NEXT:    sv.if %[[wcond]]  {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
-//CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:      sv.passign %[[wslot]], %[[v15]]
+//CHECK:      sv.passign %[[wslot]], %[[v15]]
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
@@ -169,8 +167,8 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK-NEXT:     %[[v22:.+]] = comb.and %W0_en, %[[v14]] : i1
   // CHECK-NEXT:     sv.if %[[v22]]  {
   // CHECK-NEXT:       %[[v26:.+]] = sv.array_index_inout %[[Memory]][%W0_addr] : !hw.inout<uarray<16xi32>>, i4
-  // CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-  // CHECK-NEXT:      %[[v220:.+]] = sv.indexed_part_select_inout %[[v26]][%[[c0_i32]] : 8] : !hw.inout<i32>, i32
+  // CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i5
+  // CHECK-NEXT:      %[[v220:.+]] = sv.indexed_part_select_inout %[[v26]][%[[c0_i32]] : 8] : !hw.inout<i32>, i5
   // CHECK-NEXT:      sv.passign %[[v220]], %[[v15]] : i8
 
   hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_b, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 16 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 3 : ui32, writeUnderWrite = 1 : i32}
@@ -210,8 +208,8 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK:    %[[v34:.+]] = comb.and %[[v21:.+]], %[[v30]] : i1
   // CHECK:    sv.if %[[v34]]  {
   // CHECK:      %[[v36:.+]] = sv.array_index_inout %[[Memory0]][%[[v117:.+]]] :
-  // CHECK:      %c0_i32 = hw.constant 0 : i32
-  // CHECK:      %[[v36:.+]] = sv.indexed_part_select_inout %33[%c0_i32 : 16] : !hw.inout<i32>, i32
+  // CHECK:      %[[c0_i32:.+]] = hw.constant 0 : i5
+  // CHECK:      %[[v36:.+]] = sv.indexed_part_select_inout %33[%[[c0_i32]] : 16] : !hw.inout<i32>
   // CHECK:      sv.passign %[[v36]], %[[v31]] : i16
   // CHECK:    }
   // CHECK:  hw.output %[[v13]] : i32
@@ -252,13 +250,13 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK:      %[[v86:.+]] = comb.and %[[v69:.+]], %[[v82]] : i1
 // CHECK:      sv.if %[[v86]]  {
 // CHECK:        %[[v88:.+]] = sv.array_index_inout %[[Memory0]][%[[v63:.+]]] :
-// CHECK:        %[[vv83:.+]] = sv.indexed_part_select_inout %[[v88]][%[[c0_i32:.+]] : 8] : !hw.inout<i16>, i32
+// CHECK:        %[[vv83:.+]] = sv.indexed_part_select_inout %[[v88]][%[[c0_i32:.+]] : 8] : !hw.inout<i16>, i4
 // CHECK:        sv.passign %[[vv83]], %[[v83]] : i8
 // CHECK:      }
 // CHECK:      sv.if %[[v87:.+]]  {
 // CHECK:        %[[v88:.+]] = sv.array_index_inout %[[Memory0]][%[[v63]]] : !hw.inout<uarray<10xi16>>, i4
-// CHECK:        %[[c8_i32:.+]] = hw.constant 8 : i32
-// CHECK:        %[[vv83:.+]] = sv.indexed_part_select_inout %[[v88]][%[[c8_i32]] : 8] : !hw.inout<i16>, i32
+// CHECK:        %[[c8_i32:.+]] = hw.constant -8 : i4
+// CHECK:        %[[vv83:.+]] = sv.indexed_part_select_inout %[[v88]][%[[c8_i32]] : 8] : !hw.inout<i16>, i4
 // CHECK:        sv.passign %[[vv83]], %[[v85]] : i8
 // CHECK:      }
 // CHECK:    }
