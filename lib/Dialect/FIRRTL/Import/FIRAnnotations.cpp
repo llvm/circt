@@ -172,6 +172,23 @@ splitAndAppendTarget(NamedAttrList &annotation, StringRef target,
   return targetPair;
 }
 
+struct ExpandedAndSplitNonLocal {
+  SmallVector<std::tuple<std::string, std::string, std::string>> nlaTargets;
+  std::string leafTarget;
+  llvm::Optional<ArrayAttr> leafSubfields;
+};
+
+// Calls `expandNonLocal` and `splitAndAppendTarget` and combines their results
+// in a struct.
+ExpandedAndSplitNonLocal expandAndSplitNonLocal(StringRef target,
+                                                NamedAttrList &fields,
+                                                MLIRContext *context) {
+  auto nlaTargets = expandNonLocal(target);
+  auto leafTarget =
+      splitAndAppendTarget(fields, std::get<0>(nlaTargets.back()), context);
+  return {nlaTargets, leafTarget.first.str(), leafTarget.second};
+}
+
 /// Return an input \p target string in canonical form.  This converts a Legacy
 /// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
 /// subfield/subindex references are preserved.
@@ -316,28 +333,23 @@ static std::string addNLATargets(
     size_t &nlaNumber, NamedAttrList &metadata,
     llvm::StringMap<llvm::SmallVector<Attribute>> &mutableAnnotationMap) {
 
-  auto nlaTargets = expandNonLocal(targetStrRef);
+  auto expanded = expandAndSplitNonLocal(targetStrRef, metadata, context);
 
   FlatSymbolRefAttr nlaSym;
-  if (nlaTargets.size() > 1) {
-    nlaSym = buildNLA(circuit, ++nlaNumber, nlaTargets);
+  if (expanded.nlaTargets.size() > 1) {
+    nlaSym = buildNLA(circuit, ++nlaNumber, expanded.nlaTargets);
     metadata.append("circt.nonlocal", nlaSym);
   }
 
-  for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+  for (int i = 0, e = expanded.nlaTargets.size() - 1; i < e; ++i) {
     NamedAttrList pathmetadata;
     pathmetadata.append("circt.nonlocal", nlaSym);
     pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
+    mutableAnnotationMap[std::get<0>(expanded.nlaTargets[i])].push_back(
         DictionaryAttr::get(context, pathmetadata));
   }
 
-  // Annotations on the element instance.
-  auto leafTarget =
-      splitAndAppendTarget(metadata, std::get<0>(nlaTargets.back()), context)
-          .first;
-
-  return leafTarget.str();
+  return expanded.leafTarget;
 }
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
@@ -1357,25 +1369,24 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
           if (!maybeSourceTarget)
             return false;
-          auto NLATargets = expandNonLocal(*maybeSourceTarget);
-          auto leafTarget = splitAndAppendTarget(
-              source, std::get<0>(NLATargets.back()), context);
+          auto expanded =
+              expandAndSplitNonLocal(*maybeSourceTarget, source, context);
           FlatSymbolRefAttr nlaSym;
-          if (NLATargets.size() > 1) {
-            nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
+          if (expanded.nlaTargets.size() > 1) {
+            nlaSym = buildNLA(circuit, ++nlaNumber, expanded.nlaTargets);
             source.append("circt.nonlocal", nlaSym);
           }
           source.append("type", StringAttr::get(context, "source"));
-          newAnnotations[leafTarget.first].push_back(
+          newAnnotations[expanded.leafTarget].push_back(
               DictionaryAttr::get(context, source));
-          addDontTouch(leafTarget.first, leafTarget.second);
+          addDontTouch(expanded.leafTarget, expanded.leafSubfields);
 
-          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+          for (int i = 0, e = expanded.nlaTargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
             pathmetadata.append("circt.nonlocal", nlaSym);
             pathmetadata.append("class",
                                 StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+            newAnnotations[std::get<0>(expanded.nlaTargets[i])].push_back(
                 DictionaryAttr::get(context, pathmetadata));
           }
 
@@ -1485,24 +1496,22 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
-        auto NLATargets = expandNonLocal(*canonTarget);
-        auto leafTarget =
-            splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
-                .first;
-        if (NLATargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, NLATargets);
+        auto expanded = expandAndSplitNonLocal(*canonTarget, foo, context);
+        if (expanded.nlaTargets.size() > 1) {
+          buildNLA(circuit, ++nlaNumber, expanded.nlaTargets);
           foo.append("circt.nonlocal",
                      FlatSymbolRefAttr::get(context, *canonTarget));
         }
-        newAnnotations[leafTarget].push_back(DictionaryAttr::get(context, foo));
+        newAnnotations[expanded.leafTarget].push_back(
+            DictionaryAttr::get(context, foo));
 
-        for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+        for (int i = 0, e = expanded.nlaTargets.size() - 1; i < e; ++i) {
           NamedAttrList pathmetadata;
           pathmetadata.append("circt.nonlocal",
                               FlatSymbolRefAttr::get(context, *canonTarget));
           pathmetadata.append("class",
                               StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(NLATargets[i])].push_back(
+          newAnnotations[std::get<0>(expanded.nlaTargets[i])].push_back(
               DictionaryAttr::get(context, pathmetadata));
         }
       }
@@ -1632,33 +1641,34 @@ bool circt::firrtl::scatterCustomAnnotations(
                         StringAttr::get(context, isSource ? "source" : "sink"));
 
           // Handle subfield and non-local targets.
-          auto NLATargets = expandNonLocal(*canonTarget);
-          auto leafTarget = splitAndAppendTarget(
-              fields, std::get<0>(NLATargets.back()), context);
-          if (NLATargets.size() > 1) {
-            buildNLA(circuit, ++nlaNumber, NLATargets);
+          auto expanded = expandAndSplitNonLocal(*canonTarget, fields, context);
+          FlatSymbolRefAttr nlaSym;
+          if (expanded.nlaTargets.size() > 1) {
+            nlaSym = buildNLA(circuit, ++nlaNumber, expanded.nlaTargets);
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
           }
-          newAnnotations[leafTarget.first].push_back(
+          newAnnotations[expanded.leafTarget].push_back(
               DictionaryAttr::get(context, fields));
 
           // Add a don't touch annotation to whatever this annotation targets.
-          addDontTouch(leafTarget.first, leafTarget.second);
+          addDontTouch(expanded.leafTarget, expanded.leafSubfields);
 
           // Keep track of the enclosing module.
           annotatedModules.insert(
-              (StringRef(std::get<0>(NLATargets.back())).split("|").first +
-               "|" + std::get<1>(NLATargets.back()))
+              (StringRef(std::get<0>(expanded.nlaTargets.back()))
+                   .split("|")
+                   .first +
+               "|" + std::get<1>(expanded.nlaTargets.back()))
                   .str());
 
           // Annotate instances along the NLA path.
-          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+          for (int i = 0, e = expanded.nlaTargets.size() - 1; i < e; ++i) {
             NamedAttrList fields;
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
             fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+            newAnnotations[std::get<0>(expanded.nlaTargets[i])].push_back(
                 DictionaryAttr::get(context, fields));
           }
         }
@@ -1729,12 +1739,10 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
-        auto nlaTargets = expandNonLocal(*canonTarget);
-        auto leafTarget = splitAndAppendTarget(
-            fields, std::get<0>(nlaTargets.back()), context);
+        auto expanded = expandAndSplitNonLocal(*canonTarget, fields, context);
 
         // Add a don't touch annotation to whatever this annotation targets.
-        addDontTouch(leafTarget.first, leafTarget.second);
+        addDontTouch(expanded.leafTarget, expanded.leafSubfields);
       }
 
       auto targets = tryGetAs<ArrayAttr>(dict, dict, "targets", loc, clazz);
@@ -1755,24 +1763,22 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
-        auto nlaTargets = expandNonLocal(*canonTarget);
-        auto leafTarget = splitAndAppendTarget(
-            fields, std::get<0>(nlaTargets.back()), context);
-        if (nlaTargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, nlaTargets);
+        auto expanded = expandAndSplitNonLocal(*canonTarget, fields, context);
+        if (expanded.nlaTargets.size() > 1) {
+          buildNLA(circuit, ++nlaNumber, expanded.nlaTargets);
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
         }
-        newAnnotations[leafTarget.first].push_back(
+        newAnnotations[expanded.leafTarget].push_back(
             DictionaryAttr::get(context, fields));
 
         // Annotate instances along the NLA path.
-        for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+        for (int i = 0, e = expanded.nlaTargets.size() - 1; i < e; ++i) {
           NamedAttrList fields;
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
           fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
+          newAnnotations[std::get<0>(expanded.nlaTargets[i])].push_back(
               DictionaryAttr::get(context, fields));
         }
       }
