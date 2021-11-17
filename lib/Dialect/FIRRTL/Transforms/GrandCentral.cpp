@@ -934,7 +934,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       return None;
 
     auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
-    auto signalSym = hw::InnerRefAttr::get(iface.sym_nameAttr(), name);
+    // auto signalSym = hw::InnerRefAttr::get(iface.sym_nameAttr(), name);
     // TODO: The `append(name.getValue())` in the following should actually be
     // `append(signalSym)`, but this requires that `computeField` and the
     // functions it calls always return a type for which we can construct an
