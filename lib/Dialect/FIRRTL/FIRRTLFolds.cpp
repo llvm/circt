@@ -1162,6 +1162,11 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+void PadPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.add<patterns::PadInvalid>(context);
+}
+
 OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
   auto inputType = input.getType().cast<IntType>();

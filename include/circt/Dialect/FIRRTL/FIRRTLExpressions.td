@@ -480,6 +480,7 @@ def PadPrimOp : PrimOp<"pad"> {
   }];
 
   let parseValidator = "impl::validateOneOperandOneConst";
+  let hasCanonicalizer = true;
 }
 
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
