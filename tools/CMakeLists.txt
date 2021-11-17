@@ -1,4 +1,5 @@
 
+add_subdirectory(circt-lsp-server)
 add_subdirectory(circt-opt)
 add_subdirectory(circt-reduce)
 add_subdirectory(circt-rtl-sim)
