@@ -308,7 +308,7 @@ hw.module @ExternMods(%a_in: i8) {
   hw.instance "xyz3" @AParameterizedExtModule<CFG: none = #hw.param.verbatim<"\"STRING\"">>(in: %a_in: i8) -> (out: i1)
 }
 
-hw.module.extern @MyParameterizedExtModule<DEFAULT: i64, DEPTH: f64, FORMAT: none,
+hw.module.extern @MyParameterizedExtModule<DEFAULT: i32, DEPTH: f64, FORMAT: none,
      WIDTH: i8>(%in: i8) -> (out: i1)
 
 // CHECK-LABEL: module UseInstances
@@ -328,7 +328,7 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK: );
   %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
   %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule<
-     DEFAULT: i64 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
+     DEFAULT: i32 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
      WIDTH: i8 = 32
   >(in: %a_in: i8) -> (out: i1)
   hw.output %xyz.out, %xyz2.out : i1, i1

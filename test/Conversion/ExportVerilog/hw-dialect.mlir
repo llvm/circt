@@ -713,13 +713,13 @@ hw.module @Chi() -> (Chi_output : i0) {
    // CHECK-NEXT: ) bar ();
 
    hw.instance "bar" @Bar1360<
-     WIDTH0: i64 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
+     WIDTH0: i32 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
      WIDTH4: si68 = -88888888888888888, Wtricky: i40 = 4294967295
    >() -> ()
    hw.output
  }
  hw.module.extern @Bar1360<
-     WIDTH0: i64, WIDTH1: i4, WIDTH2: i40, WIDTH3: si4, WIDTH4: si68, Wtricky: i40
+     WIDTH0: i32, WIDTH1: i4, WIDTH2: i40, WIDTH3: si4, WIDTH4: si68, Wtricky: i40
    >() attributes {verilogName = "RealBar"}
 
 // CHECK-LABEL: module Issue1563(

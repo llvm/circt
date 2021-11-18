@@ -963,10 +963,8 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     APInt value = intAttr.getValue();
 
     // We omit the width specifier if the value is <= 32-bits in size, which
-    // makes this more compatible with unknown width extmodules.  Additionally,
-    // special case a zero valued parameter.  This is canonically stored as
-    // 64-bits.  However, we don't want to print 64'd0 here.
-    if (!value.isZero() && intTy.getWidth() > 32) {
+    // makes this more compatible with unknown width extmodules.
+    if (intTy.getWidth() > 32) {
       // Sign comes out before any width specifier.
       if (intTy.isSigned() && value.isNegative()) {
         os << '-';
