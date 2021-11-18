@@ -63,8 +63,8 @@
 // CHECK: firrtl.module @test_fork(in %[[VAL_34:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_35:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_36:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_37:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_38:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_39:.*]]: !firrtl.clock, in %[[VAL_40:.*]]: !firrtl.uint<1>) {
 // CHECK:   %[[VAL_41:.*]], %[[VAL_42:.*]], %[[VAL_43:.*]], %[[VAL_44:.*]], %[[VAL_45:.*]] = firrtl.instance handshake_fork0  @handshake_fork_1ins_2outs_ctrl(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
 handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
-  %0:2 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none)
-  handshake.return %0#0, %0#1, %arg1 : none, none, none
+  %0:2 = fork [2] %arg0 : none
+  return %0#0, %0#1, %arg1 : none, none, none
 }
 
 // -----
@@ -81,6 +81,6 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // CHECK: firrtl.module @test_fork_data(in %[[VAL_37:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_38:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_39:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_40:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_41:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_42:.*]]: !firrtl.clock, in %[[VAL_43:.*]]: !firrtl.uint<1>) {
 // CHECK:             %[[VAL_44:.*]], %[[VAL_45:.*]], %[[VAL_46:.*]], %[[VAL_47:.*]], %[[VAL_48:.*]] = firrtl.instance handshake_fork0  @handshake_fork_in_ui64_out_ui64_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
 handshake.func @test_fork_data(%arg0: index, %arg1: none, ...) -> (index, index, none) {
-  %0:2 = "handshake.fork"(%arg0) {control = false} : (index) -> (index, index)
-  handshake.return %0#0, %0#1, %arg1 : index, index, none
+  %0:2 = fork [2] %arg0 : index
+  return %0#0, %0#1, %arg1 : index, index, none
 }

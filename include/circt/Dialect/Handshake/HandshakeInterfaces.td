@@ -129,6 +129,25 @@ def NamedIOInterface : OpInterface<"NamedIOInterface"> {
   ];
 }
 
+def ControlInterface : OpInterface<"ControlInterface"> {
+  let description =
+      [{"Provides information on whether this operation is a control operation."}];
+
+  let methods = [
+    InterfaceMethod<
+        "Returns true if this operation is a control operation.",
+        "bool",
+        "isControl",
+        (ins),
+        "",
+        [{
+          auto ctrlAttr = $_op->template getAttrOfType<BoolAttr>("control");
+          if(!ctrlAttr)
+            return false;
+          return ctrlAttr.getValue();
+        }]>];
+}
+
 def HasClock : NativeOpTrait<"HasClock">;
 
 #endif // HANDSHAKE_OP_INTERFACES

@@ -17,6 +17,6 @@
 // CHECK:           firrtl.module @test_join(in %[[VAL_11:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_12:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_13:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_14:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_15:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_16:.*]]: !firrtl.clock, in %[[VAL_17:.*]]: !firrtl.uint<1>) {
 // CHECK:             %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = firrtl.instance handshake_join0  @handshake_join_2ins_1outs_ctrl(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>)
 handshake.func @test_join(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, none) {
-  %0 = "handshake.join"(%arg0, %arg1) {control = true}: (none, none) -> none
-  handshake.return %0, %arg2 : none, none
+  %0 = join %arg0, %arg1 : none
+  return %0, %arg2 : none, none
 }
