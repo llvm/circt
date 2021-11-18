@@ -1101,7 +1101,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
         if (value.isNegative() && !value.isMinSignedValue()) {
           os << " - ";
           allOperandsSigned &=
-            emitOperand(IntegerAttr::get(op.getType(), -value));
+              emitOperand(IntegerAttr::get(op.getType(), -value));
           continue;
         }
       }
