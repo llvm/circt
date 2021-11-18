@@ -1520,9 +1520,9 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
           auto destVectorType = destType.cast<FVectorType>();
           unsigned size = resultBuffer.size();
           unsigned indexWidth =
-              llvm::Log2_64_Ceil(srcVectorType.getNumElements() == 1
-                                     ? 1
-                                     : srcVectorType.getNumElements());
+              srcVectorType.getNumElements() == 1
+                  ? 1
+                  : llvm::Log2_64_Ceil(srcVectorType.getNumElements());
           for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
                                           destVectorType.getNumElements());
                i != e; ++i) {
@@ -3036,7 +3036,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
                                             destVectorType.getNumElements());
                  i != e; ++i) {
               auto idx =
-                  getOrCreateIntConstant(llvm::Log2_64_Ceil(e == 1 ? 1 : e), i);
+                  getOrCreateIntConstant(e == 1 ? 1 : llvm::Log2_64_Ceil(e), i);
               auto destInOutOp =
                   builder.create<sv::ArrayIndexInOutOp>(dest, idx);
               auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
