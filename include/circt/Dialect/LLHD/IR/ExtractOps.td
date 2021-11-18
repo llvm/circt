@@ -69,6 +69,33 @@ def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
   let hasFolder = true;
 }
 
+def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
+    [NoSideEffect,
+     SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+     SigIndexBitWidthConstraint<"lowBit", "input">]> {
+
+  let summary = "Extract a range of bits from an integer pointer";
+  let description = [{
+    The `llhd.ptr.extract` operation allows to access a range of bits
+    of the `$input` operand, starting at the index given by the `$lowBit`
+    operand. The result length is defined by the result type.
+  }];
+
+  let arguments = (ins LLHD_PtrType<[HWIntegerType]>:$input,
+                       HWIntegerType:$lowBit);
+  let results = (outs LLHD_PtrType<[HWIntegerType]>: $result);
+
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
+    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+  }];
+  let hasFolder = true;
+}
+
 //===----------------------------------------------------------------------===//
 // Array Operations
 //===----------------------------------------------------------------------===//
@@ -124,6 +151,57 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
   let hasCanonicalizeMethod = true;
 }
 
+def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
+    [NoSideEffect,
+     SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+     SameSigArrayElementTypeConstraint<"result", "input">,
+     SigIndexBitWidthConstraint<"lowIndex", "input">]> {
+
+  let summary = "Get a range of consecutive values from a pointer to an array";
+  let description = [{
+    The `llhd.ptr.array_slice` operation allows to access a sub-range of the
+    `$input` operand, starting at the index given by the `$lowIndex`
+    operand. The resulting slice length is defined by the result type.
+    Returns a pointer aliasing the elements of the slice.
+
+    Width of 'lowIndex' is defined to be the precise number of bits required to
+    index the 'input' array. More precisely: for an input array of size M,
+    the width of 'lowIndex' is ceil(log2(M)). Lower and upper bound indexes
+    which are larger than the size of the 'input' array results in undefined
+    behavior.
+
+    Example:
+
+    ```mlir
+    %3 = llhd.ptr.array_slice %input at %lowIndex :
+      (!llhd.ptr<!hw.array<4xi8>>) -> !llhd.ptr<!hw.array<2xi8>>
+    ```
+  }];
+
+  let arguments = (ins LLHD_PtrType<[ArrayType]>: $input,
+                       HWIntegerType: $lowIndex);
+  let results = (outs LLHD_PtrType<[ArrayType]>: $result);
+
+  let assemblyFormat = [{
+    $input `at` $lowIndex attr-dict `:` functional-type($input, $result)
+  }];
+
+  let extraClassDeclaration = [{
+    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
+    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+    hw::ArrayType getInputArrayType() {
+      return input().getType().cast<llhd::PtrType>().getUnderlyingType()
+        .cast<hw::ArrayType>();
+    }
+    hw::ArrayType getResultArrayType() {
+      return result().getType().cast<llhd::PtrType>().getUnderlyingType()
+        .cast<hw::ArrayType>();
+    }
+  }];
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+}
+
 def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
     [NoSideEffect,
      SigIndexBitWidthConstraint<"index", "input">,
@@ -157,12 +235,45 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
   let hasCanonicalizeMethod = true;
 }
 
+def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
+    [NoSideEffect,
+     SigIndexBitWidthConstraint<"index", "input">,
+     SigArrayElementTypeConstraint<"result", "input">]> {
+
+  let summary = "Extract an element from a pointer to an array.";
+  let description = [{
+    The `llhd.ptr.array_get` operation allows to access the element of the
+    `$input` operand at position `$index`. A new pointer aliasing the element
+    will be returned.
+
+    Example:
+
+    ```mlir
+    // Returns a !llhd.ptr<i8>
+    %0 = llhd.ptr.array_get %arr[%index] : !llhd.ptr<!hw.array<4xi8>>
+    ```
+  }];
+
+  let arguments = (ins LLHD_PtrType<[ArrayType]>:$input, HWIntegerType:$index);
+  let results = (outs LLHD_PtrType<[HWNonInOutType]>: $result);
+
+  let assemblyFormat = "$input `[` $index `]` attr-dict `:` type($input)";
+
+  let extraClassDeclaration = [{
+    hw::ArrayType getArrayType() {
+      return input().getType().cast<llhd::PtrType>()
+      .getUnderlyingType().cast<hw::ArrayType>();
+    }
+  }];
+  let hasCanonicalizeMethod = true;
+}
+
 //===----------------------------------------------------------------------===//
 // Structure Operations
 //===----------------------------------------------------------------------===//
 
-def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract",
-    [NoSideEffect, InferTypeOpInterface]> {
+def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
     The `llhd.sig.struct_extract` operation allows access to the field of the
@@ -188,13 +299,35 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract",
       return input().getType().cast<llhd::SigType>().getUnderlyingType()
         .cast<hw::StructType>();
     }
+  }];
+}
 
-    /// Infer the return types of this operation.
-    static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
-                                          ValueRange operands,
-                                          DictionaryAttr attrs,
-                                          mlir::RegionRange regions,
-                                          SmallVectorImpl<Type> &results);
+def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [NoSideEffect,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>, InferTypeOpInterface]> {
+  let summary = "Extract a field from a pointer to a struct.";
+  let description = [{
+    The `llhd.ptr.struct_extract` operation allows access to the field of the
+    `$input` operand given by its name via the `$field` attribute.
+    A new pointer aliasing the field will be returned.
+
+    Example:
+
+    ```mlir
+    // Returns a !llhd.ptr<i8>
+    %0 = llhd.ptr.struct_extract %struct["foo"]
+      : !llhd.ptr<!hw.struct<foo: i8, bar: i16>>
+    ```
+  }];
+
+  let arguments = (ins LLHD_PtrType<[StructType]>:$input, StrAttr:$field);
+  let results = (outs LLHD_PtrType<[HWNonInOutType]>:$result);
+
+  let assemblyFormat = "$input `[` $field `]` attr-dict `:` type($input)";
+
+  let extraClassDeclaration = [{
+    hw::StructType getStructType() {
+      return input().getType().cast<llhd::PtrType>().getUnderlyingType()
+        .cast<hw::StructType>();
+    }
   }];
 }
