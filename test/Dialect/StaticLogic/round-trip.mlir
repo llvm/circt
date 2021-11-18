@@ -153,10 +153,10 @@ func @test5(%arg0: memref<?xi32>) {
   %c2 = arith.constant 2 : index
   %c10 = arith.constant 10 : index
   // CHECK: staticlogic.pipeline.while
-  // CHECK-NOT: II
+  // CHECK-SAME: II = 1
   // CHECK-SAME: iter_args(%arg1 = %c2)
   // CHECK-SAME: (index) -> ()
-  staticlogic.pipeline.while iter_args(%arg1 = %c2) : (index) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg1 = %c2) : (index) -> () {
     %0 = arith.cmpi ult, %arg1, %c10 : index
     staticlogic.pipeline.register %0 : i1
   } do {

@@ -4,7 +4,7 @@ func @combinational_condition() {
   %c0_i32 = arith.constant 0 : i32
   %0 = memref.alloc() : memref<8xi32>
   // expected-error @+1 {{'staticlogic.pipeline.while' op condition must have a combinational body, found %1 = memref.load %0[%c0] : memref<8xi32>}}
-  staticlogic.pipeline.while iter_args(%arg0 = %c0_i32) : (i32) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %c0_i32) : (i32) -> () {
     %c0 = arith.constant 0 : index
     %1 = memref.load %0[%c0] : memref<8xi32>
     %2 = arith.cmpi ult, %1, %arg0 : i32
@@ -23,7 +23,7 @@ func @combinational_condition() {
 func @single_condition() {
   %false = arith.constant 0 : i1
   // expected-error @+1 {{'staticlogic.pipeline.while' op condition must terminate with a single result, found 'i1', 'i1'}}
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     staticlogic.pipeline.register %arg0, %arg0 : i1, i1
   } do {
     staticlogic.pipeline.stage {
@@ -39,7 +39,7 @@ func @single_condition() {
 func @boolean_condition() {
   %c0_i32 = arith.constant 0 : i32
   // expected-error @+1 {{'staticlogic.pipeline.while' op condition must terminate with an i1 result, found 'i32'}}
-  staticlogic.pipeline.while iter_args(%arg0 = %c0_i32) : (i32) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %c0_i32) : (i32) -> () {
     staticlogic.pipeline.register %arg0 : i32
   } do {
     staticlogic.pipeline.stage {
@@ -55,7 +55,7 @@ func @boolean_condition() {
 func @only_stages() {
   %false = arith.constant 0 : i1
   // expected-error @+1 {{'staticlogic.pipeline.while' op stages must contain at least one stage}}
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     staticlogic.pipeline.terminator iter_args(), results() : () -> ()
@@ -68,7 +68,7 @@ func @only_stages() {
 func @only_stages() {
   %false = arith.constant 0 : i1
   // expected-error @+1 {{'staticlogic.pipeline.while' op stages may only contain 'staticlogic.pipeline.stage' or 'staticlogic.pipeline.terminator' ops, found %0 = arith.addi %arg0, %arg0 : i1}}
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     %0 = arith.addi %arg0, %arg0 : i1
@@ -81,7 +81,7 @@ func @only_stages() {
 
 func @mismatched_register_types() {
   %false = arith.constant 0 : i1
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     %0 = staticlogic.pipeline.stage {
@@ -97,7 +97,7 @@ func @mismatched_register_types() {
 
 func @mismatched_iter_args_types() {
   %false = arith.constant 0 : i1
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     staticlogic.pipeline.stage {
@@ -113,7 +113,7 @@ func @mismatched_iter_args_types() {
 
 func @invalid_iter_args() {
   %false = arith.constant 0 : i1
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> (i1) {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> (i1) {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     staticlogic.pipeline.stage {
@@ -129,7 +129,7 @@ func @invalid_iter_args() {
 
 func @mismatched_result_types() {
   %false = arith.constant 0 : i1
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> (i1) {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> (i1) {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     %0 = staticlogic.pipeline.stage {
@@ -145,7 +145,7 @@ func @mismatched_result_types() {
 
 func @invalid_results() {
   %false = arith.constant 0 : i1
-  staticlogic.pipeline.while iter_args(%arg0 = %false) : (i1) -> (i1) {
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> (i1) {
     staticlogic.pipeline.register %arg0 : i1
   } do {
     %0 = staticlogic.pipeline.stage {
