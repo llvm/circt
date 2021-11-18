@@ -1,19 +1,19 @@
 module {
   handshake.func @baz(%a: i32, %ctrl : none) -> (i32, none) {
-    %0:2 = "handshake.fork"(%a) {control = false} : (i32) -> (i32, i32)
+    %0:2 = fork [2] %a : i32
     %1 = arith.addi %0#0, %0#1 : i32
     handshake.return %1, %ctrl : i32, none
   }
 
   handshake.func @bar(%a: i32, %ctrl : none) -> (i32, none) {
-    %c:2 = handshake.instance @baz(%a, %ctrl) : (i32, none) -> (i32, none)
-    "handshake.sink"(%c#1) {control = true} : (none) -> ()
+    %c:2 = instance @baz(%a, %ctrl) : (i32, none) -> (i32, none)
+    sink %c#1 : none
     handshake.return %c#0, %ctrl : i32, none
   }
 
   handshake.func @instancee(%a: i32, %ctrl : none) -> (i32, none) {
-    %b:2 = handshake.instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
-    "handshake.sink"(%b#1) {control = true} : (none) -> ()
+    %b:2 = instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
+    sink %b#1 : none
     handshake.return %b#0, %ctrl : i32, none
   }
 }

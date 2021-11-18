@@ -2,7 +2,9 @@ func @min(%arg0: i32, %arg1: i32) -> (i32) {
   br ^bb1(%arg0, %arg1 : i32, i32)
 ^bb1(%a0 : i32, %a1 : i32):
   %1 = arith.cmpi sle, %a0, %a1 : i32
-  cond_br %1, ^bb2(%a0 : i32), ^bb1(%a1, %a0 : i32, i32)
+  br ^bb1_r(%1, %a0, %a1 : i1,i32, i32)
+^bb1_r(%cond : i1, %a0r : i32, %a1r : i32):
+  cond_br %1, ^bb2(%a0 : i32), ^bb1(%a1r, %a0r : i32, i32)
 ^bb2(%r : i32):
   return %r : i32
 }

@@ -6,8 +6,8 @@
 namespace circt {
 namespace hlt {
 
-template <typename TVerilatorPort>
-struct HandshakePort : public TVerilatorPort {
+template <typename TSimPort>
+struct HandshakePort : public TSimPort {
   HandshakePort() {}
   HandshakePort(CData *readySig, CData *validSig)
       : readySig(readySig), validSig(validSig){};
@@ -27,8 +27,8 @@ struct HandshakePort : public TVerilatorPort {
   std::string name;
 };
 
-struct HandshakeInPort : public HandshakePort<VerilatorInPort> {
-  using HandshakePort<VerilatorInPort>::HandshakePort;
+struct HandshakeInPort : public HandshakePort<SimulatorInPort> {
+  using HandshakePort<SimulatorInPort>::HandshakePort;
   void reset() override { *(this->validSig) = !1; }
   bool ready() override {
     // An input port is ready to accept inputs when an input is not already
@@ -47,8 +47,8 @@ struct HandshakeInPort : public HandshakePort<VerilatorInPort> {
   }
 };
 
-struct HandshakeOutPort : public HandshakePort<VerilatorOutPort> {
-  using HandshakePort<VerilatorOutPort>::HandshakePort;
+struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
+  using HandshakePort<SimulatorOutPort>::HandshakePort;
   void reset() override { *(this->readySig) = !1; }
   bool valid() override { return *(this->validSig) == 1; }
   virtual void read() {
@@ -101,6 +101,75 @@ struct HandshakeDataOutPort : HandshakeDataPort<TData, HandshakeOutPort> {
     HandshakeDataPortImpl::read();
     return *(this->dataSig);
   }
+};
+
+// A HandshakeMemoryInterface represents a wrapper around a handshake.extmemory
+// operation. It is initialized with a set of load- and store ports which, when
+// transacting, will access the pointer provided to the memory interface during
+// simulation. The memory interface inherits from SimulatorInPort due to
+// handshake circuits receiving a memory interface as a memref input.
+template <typename TData>
+class HandshakeMemoryInterface : SimulatorInPort {
+
+  struct StorePort {
+    std::shared_ptr<HandshakeDataInPort<TData>> data;
+    std::shared_ptr<HandshakeInPort> addr;
+    std::shared_ptr<HandshakeOutPort> done;
+  };
+
+  struct LoadPort {
+    std::shared_ptr<HandshakeInPort> addr;
+    std::shared_ptr<HandshakeOutPort> done;
+    std::shared_ptr<HandshakeDataOutPort<TData>> data;
+  };
+
+public:
+  HandshakeMemoryInterface(size_t size) : memorySize(size) {}
+
+  void setMemory(TData *memory) {
+    if (memory_ptr != nullptr)
+      assert(memory_ptr == memory &&
+             "The memory should always point to the same base address "
+             "throughout simulation.");
+    memory_ptr = memory;
+  }
+
+  void transact() {}
+
+  virtual ~HandshakeMemoryInterface() = default;
+
+  void addStorePort(std::shared_ptr<HandshakeInPort> &dataPort,
+                    std::shared_ptr<HandshakeInPort> &addrPort,
+                    std::shared_ptr<HandshakeOutPort> &donePort) {
+    storePorts.push_back(StorePort{dataPort, addrPort, donePort});
+  }
+
+  void addLoadPort(std::shared_ptr<HandshakeInPort> &addrPort,
+                   std::shared_ptr<HandshakeOutPort> &donePort,
+                   std::shared_ptr<HandshakeOutPort> &dataPort) {
+    loadPorts.push_back(LoadPort{addrPort, donePort, dataPort});
+  }
+
+private:
+  TData read(uint32_t addr) {
+    assert(memory_ptr != nullptr && "Memory not set.");
+    assert(addr < memorySize && "Address out of bounds.");
+    return memory_ptr[addr];
+  }
+  void write(uint32_t addr, TData data) {
+    assert(memory_ptr != nullptr && "Memory not set.");
+    assert(addr < memorySize && "Address out of bounds.");
+    memory_ptr[addr] = data;
+  }
+
+  std::vector<StorePort> storePorts;
+  std::vector<LoadPort> loadPorts;
+
+  // The memory pointer is set by the simulation engine during execution.
+  TData *memory_ptr = nullptr;
+
+  // The size of the memory associated with this interface.
+  size_t memorySize;
 };
 
 template <typename TInput, typename TOutput, typename TModel>

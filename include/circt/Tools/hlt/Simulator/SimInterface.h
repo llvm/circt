@@ -68,6 +68,25 @@ std::ostream &operator<<(std::ostream &out, const SimBase &b) {
   return out;
 }
 
+// A SimulatorPort represents a mapping between a software-like in/output
+// variable and its underlying representation in the simulator.
+struct SimulatorPort : SimBase {
+  virtual void reset() = 0;
+  virtual ~SimulatorPort() = default;
+};
+
+// A SimulatorInPort represents a mapping from a software-like input variable
+// to its underlying representation in the simulator.
+struct SimulatorInPort : public SimulatorPort {
+  virtual bool ready() = 0;
+};
+
+// A SimulatorOutPort represents a mapping from a software-like output variable
+// to its underlying representation in the simulator.
+struct SimulatorOutPort : public SimulatorPort {
+  virtual bool valid() = 0;
+};
+
 template <typename TInput, typename TOutput>
 class SimInterface : public SimBase {
 public:
@@ -95,6 +114,33 @@ public:
 
   /// Returns the current timestep of the simulator.
   virtual uint64_t time() = 0;
+
+  template <typename T, typename... Args>
+  T *addInputPort(Args... args) {
+    static_assert(std::is_base_of<SimulatorInPort, T>::value,
+                  "Port must inherit from SimulatorInPort");
+    auto ptr = new T(args...);
+    inPorts.push_back(std::move(std::unique_ptr<SimulatorInPort>(ptr)));
+    return ptr;
+  }
+
+  template <typename T, typename... Args>
+  T *addOutputPort(Args... args) {
+    static_assert(std::is_base_of<SimulatorOutPort, T>::value,
+                  "Port must inherit from SimulatorOutPort");
+    auto ptr = new T(args...);
+    outPorts.push_back(std::move(std::unique_ptr<SimulatorOutPort>(ptr)));
+    return ptr;
+  }
+
+protected:
+  // There should be exactly as many inPorts as the software interface of this
+  // simulator has input arguments.
+  std::vector<std::unique_ptr<SimulatorInPort>> inPorts;
+
+  // There should be exactly as many outPorts as the software interface of this
+  // simulator has output arguments.
+  std::vector<std::unique_ptr<SimulatorOutPort>> outPorts;
 };
 
 } // namespace hlt

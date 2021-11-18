@@ -26,19 +26,6 @@ struct VerilatorGenericInterface {
   CData *nReset = nullptr;
 };
 
-struct VerilatorPort : SimBase {
-  virtual void reset() = 0;
-  virtual ~VerilatorPort() = default;
-};
-
-struct VerilatorInPort : public VerilatorPort {
-  virtual bool ready() = 0;
-};
-
-struct VerilatorOutPort : public VerilatorPort {
-  virtual bool valid() = 0;
-};
-
 template <typename TInput, typename TOutput, typename TModel>
 class VerilatorSimInterface : public SimInterface<TInput, TOutput> {
 public:
@@ -61,12 +48,12 @@ public:
   uint64_t time() override { return ctx->time(); }
 
   bool inReady() override {
-    return std::all_of(inPorts.begin(), inPorts.end(),
+    return std::all_of(this->inPorts.begin(), this->inPorts.end(),
                        [](auto &port) { return port->ready(); });
   }
 
   bool outValid() override {
-    return std::all_of(outPorts.begin(), outPorts.end(),
+    return std::all_of(this->outPorts.begin(), this->outPorts.end(),
                        [](auto &port) { return port->valid(); });
   }
 
@@ -74,9 +61,9 @@ public:
 
   void dump(std::ostream &out) const override {
     out << "Port states:\n";
-    for (auto &inPort : inPorts)
+    for (auto &inPort : this->inPorts)
       out << *inPort << "\n";
-    for (auto &outPort : outPorts)
+    for (auto &outPort : this->outPorts)
       out << *outPort << "\n";
     out << "\n";
   }
@@ -95,9 +82,9 @@ public:
       *interface.nReset = !1;
 
     // Reset in- and output ports
-    for (auto &port : inPorts)
+    for (auto &port : this->inPorts)
       port->reset();
-    for (auto &port : outPorts)
+    for (auto &port : this->outPorts)
       port->reset();
 
     // Run for a few cycles with reset.
@@ -119,24 +106,6 @@ public:
     // Close trace if opened.
     trace->close();
 #endif
-  }
-
-  template <typename T, typename... Args>
-  T *addInputPort(Args... args) {
-    static_assert(std::is_base_of<VerilatorInPort, T>::value,
-                  "Port must inherit from VerilatorInPort");
-    auto ptr = new T(args...);
-    inPorts.push_back(std::move(std::unique_ptr<VerilatorInPort>(ptr)));
-    return ptr;
-  }
-
-  template <typename T, typename... Args>
-  T *addOutputPort(Args... args) {
-    static_assert(std::is_base_of<VerilatorOutPort, T>::value,
-                  "Port must inherit from VerilatorOutPort");
-    auto ptr = new T(args...);
-    outPorts.push_back(std::move(std::unique_ptr<VerilatorOutPort>(ptr)));
-    return ptr;
   }
 
 protected:
@@ -167,8 +136,6 @@ protected:
   // Pointer to the verilated model.
   std::unique_ptr<TModel> dut;
   std::unique_ptr<VerilatedContext> ctx;
-  std::vector<std::unique_ptr<VerilatorInPort>> inPorts;
-  std::vector<std::unique_ptr<VerilatorOutPort>> outPorts;
   VerilatorGenericInterface interface;
 
 #if VM_TRACE
