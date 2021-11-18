@@ -1249,7 +1249,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-<<<<<<< HEAD
   // CHECK-LABEL: hw.module @regInitRandomReuse
   firrtl.module @regInitRandomReuse(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %o1: !firrtl.uint<2>, out %o2: !firrtl.uint<4>, out %o3: !firrtl.uint<32>, out %o4: !firrtl.uint<100>) {
     %r1 = firrtl.reg %clock  : !firrtl.uint<2>
@@ -1286,7 +1285,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %o3, %r3 : !firrtl.uint<32>, !firrtl.uint<32>
     firrtl.connect %o4, %r4 : !firrtl.uint<100>, !firrtl.uint<100>
   }
-=======
   // CHECK-LABEL: hw.module @init1DVector
   firrtl.module @init1DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %r = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
@@ -1296,8 +1294,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   %2 = comb.extract %RANDOM from 0 : (i32) -> i1
     // CHECK-NEXT:   sv.bpassign %1, %2 : i1
     // CHECK-NEXT:   %3 = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
-    // CHECK-NEXT:   %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:   %4 = comb.extract %RANDOM_0 from 0 : (i32) -> i1
+    // CHECK-NEXT:   %4 = comb.extract %RANDOM from 1 : (i32) -> i1
     // CHECK-NEXT:   sv.bpassign %3, %4 : i1
     // CHECK-NEXT: }
 
@@ -1319,17 +1316,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   %3 = comb.extract %RANDOM from 0 : (i32) -> i1
     // CHECK-NEXT:   sv.bpassign %2, %3 : i1
     // CHECK-NEXT:   %4 = sv.array_index_inout %1[%true] : !hw.inout<array<2xi1>>, i1
-    // CHECK-NEXT:   %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:   %5 = comb.extract %RANDOM_0 from 0 : (i32) -> i1
+    // CHECK-NEXT:   %5 = comb.extract %RANDOM from 1 : (i32) -> i1
     // CHECK-NEXT:   sv.bpassign %4, %5 : i1
     // CHECK-NEXT:   %6 = sv.array_index_inout %r[%true] : !hw.inout<array<2xarray<2xi1>>>, i1
     // CHECK-NEXT:   %7 = sv.array_index_inout %6[%false] : !hw.inout<array<2xi1>>, i1
-    // CHECK-NEXT:   %RANDOM_1 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:   %8 = comb.extract %RANDOM_1 from 0 : (i32) -> i1
+    // CHECK-NEXT:   %8 = comb.extract %RANDOM from 2 : (i32) -> i1
     // CHECK-NEXT:   sv.bpassign %7, %8 : i1
     // CHECK-NEXT:   %9 = sv.array_index_inout %6[%true] : !hw.inout<array<2xi1>>, i1
-    // CHECK-NEXT:   %RANDOM_2 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:   %10 = comb.extract %RANDOM_2 from 0 : (i32) -> i1
+    // CHECK-NEXT:   %10 = comb.extract %RANDOM from 3 : (i32) -> i1
     // CHECK-NEXT:   sv.bpassign %9, %10 : i1
     // CHECK-NEXT: }
     firrtl.connect %r, %a : !firrtl.vector<vector<uint<1>, 2>, 2>, !firrtl.vector<vector<uint<1>, 2>, 2>
@@ -1440,9 +1434,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<2xi1>
   }
 
-<<<<<<< HEAD
->>>>>>> 73564647 ([FIRRTL/LowerToHW] Add initialization and lowering around connect)
-=======
   // CHECK-LABEL: hw.module @partialConnectDifferentVectorLength
   firrtl.module @partialConnectDifferentVectorLength(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 2>) {
     %r1 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 3>
@@ -1462,5 +1453,4 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assign %7, %8 : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<2xi1>
   }
->>>>>>> 148d1eda (fix index mismatch and add test)
 }
