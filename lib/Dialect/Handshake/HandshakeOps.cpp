@@ -1124,8 +1124,8 @@ static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
   if (memrefType.getShape().size() != 1)
     return op.emitOpError() << "memref must have only a single dimension.";
 
-  unsigned st_count = op.stCount();
-  unsigned ld_count = op.ldCount();
+  unsigned stCount = op.stCount();
+  unsigned ldCount = op.ldCount();
   int addressCount = memrefType.getShape().size();
 
   auto inputType = op.inputs().getType();
@@ -1134,21 +1134,21 @@ static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
 
   unsigned numOperands = static_cast<int>(op.inputs().size());
   unsigned numResults = static_cast<int>(op.outputs().size());
-  if (numOperands != (1 + addressCount) * st_count + addressCount * ld_count)
+  if (numOperands != (1 + addressCount) * stCount + addressCount * ldCount)
     return op.emitOpError("number of operands ")
            << numOperands << " does not match number expected of "
-           << 2 * st_count + ld_count << " with " << addressCount
+           << 2 * stCount + ldCount << " with " << addressCount
            << " address inputs per port";
 
-  if (numResults != st_count + 2 * ld_count)
+  if (numResults != stCount + 2 * ldCount)
     return op.emitOpError("number of results ")
            << numResults << " does not match number expected of "
-           << st_count + 2 * ld_count << " with " << addressCount
+           << stCount + 2 * ldCount << " with " << addressCount
            << " address inputs per port";
 
-  Type addressType = st_count > 0 ? inputType[1] : inputType[0];
+  Type addressType = stCount > 0 ? inputType[1] : inputType[0];
 
-  for (unsigned i = 0; i < st_count; i++) {
+  for (unsigned i = 0; i < stCount; i++) {
     if (inputType[2 * i] != dataType)
       return op.emitOpError("data type for store port ")
              << i << ":" << inputType[2 * i] << " doesn't match memory type "
@@ -1158,27 +1158,27 @@ static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
              << i << ":" << inputType[2 * i + 1]
              << " doesn't match address type " << addressType;
   }
-  for (unsigned i = 0; i < ld_count; i++) {
-    Type ldAddressType = inputType[2 * st_count + i];
+  for (unsigned i = 0; i < ldCount; i++) {
+    Type ldAddressType = inputType[2 * stCount + i];
     if (ldAddressType != addressType)
       return op.emitOpError("address type for load port ")
              << i << ":" << ldAddressType << " doesn't match address type "
              << addressType;
   }
-  for (unsigned i = 0; i < ld_count; i++) {
+  for (unsigned i = 0; i < ldCount; i++) {
     if (outputType[i] != dataType)
       return op.emitOpError("data type for load port ")
              << i << ":" << outputType[i] << " doesn't match memory type "
              << dataType;
   }
-  for (unsigned i = 0; i < st_count; i++) {
-    Type syncType = outputType[ld_count + i];
+  for (unsigned i = 0; i < stCount; i++) {
+    Type syncType = outputType[ldCount + i];
     if (!syncType.isa<NoneType>())
       return op.emitOpError("data type for sync port for store port ")
              << i << ":" << syncType << " is not 'none'";
   }
-  for (unsigned i = 0; i < ld_count; i++) {
-    Type syncType = outputType[ld_count + st_count + i];
+  for (unsigned i = 0; i < ldCount; i++) {
+    Type syncType = outputType[ldCount + stCount + i];
     if (!syncType.isa<NoneType>())
       return op.emitOpError("data type for sync port for load port ")
              << i << ":" << syncType << " is not 'none'";
@@ -1256,60 +1256,6 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute(
         "stCount", builder.getIntegerAttr(i32Type, control_outputs - outputs));
   }
-}
-
-static ParseResult parseMemoryOp(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
-  SmallVector<Type, 1> operandTypes;
-  SmallVector<Type, 1> resultTypes;
-  Type addressRawType[1];
-  Type dataRawType[1];
-  ArrayRef<Type> addressType(addressRawType);
-  ArrayRef<Type> dataType(dataRawType);
-  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
-  if (parser.parseOperandList(allOperands))
-    return failure();
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-  if (parser.parseColon())
-    return failure();
-  if (parser.parseType(addressRawType[0]))
-    return failure();
-
-  int st_count = result.attributes.get("st_count").cast<IntegerAttr>().getInt();
-  int ld_count = result.attributes.get("ld_count").cast<IntegerAttr>().getInt();
-  Type type = result.attributes.get("type").cast<TypeAttr>().getValue();
-  dataRawType[0] = type.cast<MemRefType>().getElementType();
-
-  Type noneType = parser.getBuilder().getNoneType();
-  for (int i = 0; i < st_count; i++) {
-    operandTypes.push_back(dataRawType[0]);
-    operandTypes.push_back(addressRawType[0]);
-  }
-  for (int i = 0; i < ld_count; i++) {
-    operandTypes.push_back(addressRawType[0]);
-  }
-  for (int i = 0; i < ld_count; i++) {
-    resultTypes.push_back(dataRawType[0]);
-  }
-  for (int i = 0; i < st_count + ld_count; i++) {
-    resultTypes.push_back(noneType);
-  }
-
-  result.addTypes(resultTypes);
-  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
-                             result.operands))
-    return failure();
-  return success();
-}
-
-void printMemoryOp(OpAsmPrinter &p, MemoryOp op) {
-  p << ' ';
-  p << op.getOperation()->getOperands();
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{});
-  p << ' ' << ":";
-  p << ' ';
-  p << op.inputs().getType()[1];
 }
 
 bool handshake::MemoryOp::allocateMemory(
