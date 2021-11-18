@@ -226,6 +226,10 @@ mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
   return retval;
 }
 
+static unsigned getBitWidthFromVectorSize(unsigned size) {
+  return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -1520,9 +1524,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
           auto destVectorType = destType.cast<FVectorType>();
           unsigned size = resultBuffer.size();
           unsigned indexWidth =
-              srcVectorType.getNumElements() == 1
-                  ? 1
-                  : llvm::Log2_64_Ceil(srcVectorType.getNumElements());
+              getBitWidthFromVectorSize(srcVectorType.getNumElements());
           for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
                                           destVectorType.getNumElements());
                i != e; ++i) {
@@ -1977,7 +1979,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
   }
 
   auto iIdx = getOrCreateIntConstant(
-      llvm::Log2_64_Ceil(
+      getBitWidthFromVectorSize(
           op.input().getType().cast<FVectorType>().getNumElements()),
       op.index());
   return setLoweringTo<hw::ArrayGetOp>(op, resultType, value, iIdx);
@@ -2156,7 +2158,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
       TypeSwitch<Type>(type)
           .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
             for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-              auto iIdx = getOrCreateIntConstant(llvm::Log2_64_Ceil(e), i);
+              auto iIdx = getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
               auto arrayIndex =
                   builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
               recurse(arrayIndex, a.getElementType());
@@ -3040,7 +3042,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
                                             destVectorType.getNumElements());
                  i != e; ++i) {
               auto idx =
-                  getOrCreateIntConstant(e == 1 ? 1 : llvm::Log2_64_Ceil(e), i);
+                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
               auto destInOutOp =
                   builder.create<sv::ArrayIndexInOutOp>(dest, idx);
               auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
