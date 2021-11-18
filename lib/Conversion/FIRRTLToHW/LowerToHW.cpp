@@ -1488,7 +1488,6 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
                                               FIRRTLType destType,
                                               bool allowTruncate) {
   SmallVector<Value> resultBuffer;
-  bool success = true;
 
   // Helper function to cast each element of array to dest type.
   auto cast = [&](Value value, FIRRTLType sourceType, FIRRTLType destType) {
@@ -1503,8 +1502,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
       if (allowTruncate)
         return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
 
-      builder.emitError("operand should not be a truncation");
-      success = false;
+      array.getDefiningOp()->emitError("operand should not be a truncation");
       return Value();
     }
 
@@ -1515,40 +1513,47 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
   };
 
   // This recursive function constructs the output array.
-  std::function<void(Value, FIRRTLType, FIRRTLType)> recurse =
-      [&](Value src, FIRRTLType srcType, FIRRTLType destType) {
-        TypeSwitch<FIRRTLType>(srcType)
-            .Case<FVectorType>([&](auto srcVectorType) {
-              auto destVectorType = destType.cast<FVectorType>();
-              int size = resultBuffer.size();
-              for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
-                                              destVectorType.getNumElements());
-                   i != e; ++i) {
-                auto iIdx = getOrCreateIntConstant(
-                    llvm::Log2_64_Ceil(srcVectorType.getNumElements()), i);
-                auto arrayIndex = builder.create<hw::ArrayGetOp>(src, iIdx);
-                recurse(arrayIndex, srcVectorType.getElementType(),
-                        destVectorType.getElementType());
-                if (!success)
-                  return;
-              }
-              SmallVector<Value> temp(resultBuffer.begin() + size,
-                                      resultBuffer.end());
-              auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
-              resultBuffer.resize(size);
-              resultBuffer.push_back(array);
-            })
-            .Case<IntType>([&](auto) {
-              resultBuffer.push_back(cast(src, srcType, destType));
-            })
-            .Default([&](auto) { success = false; });
-      };
+  std::function<LogicalResult(Value, FIRRTLType, FIRRTLType)> recurse =
+      [&](Value src, FIRRTLType srcType, FIRRTLType destType) -> LogicalResult {
+    return TypeSwitch<FIRRTLType, LogicalResult>(srcType)
+        .Case<FVectorType>([&](auto srcVectorType) {
+          auto destVectorType = destType.cast<FVectorType>();
+          unsigned size = resultBuffer.size();
+          unsigned indexWidth =
+              llvm::Log2_64_Ceil(srcVectorType.getNumElements() == 1
+                                     ? 1
+                                     : srcVectorType.getNumElements());
+          for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
+                                          destVectorType.getNumElements());
+               i != e; ++i) {
+            auto iIdx = getOrCreateIntConstant(indexWidth, i);
+            auto arrayIndex = builder.create<hw::ArrayGetOp>(src, iIdx);
+            if (failed(recurse(arrayIndex, srcVectorType.getElementType(),
+                               destVectorType.getElementType())))
+              return failure();
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(array);
+          return success();
+        })
+        .Case<IntType>([&](auto) {
+          if (auto result = cast(src, srcType, destType)) {
+            resultBuffer.push_back(result);
+            return success();
+          }
+          return failure();
+        })
+        .Default([&](auto) { return failure(); });
+  };
 
-  if (!success)
+  if (failed(recurse(array, sourceType, destType)))
     return Value();
 
-  recurse(array, sourceType, destType);
-  assert(resultBuffer.size() == 1);
+  assert(resultBuffer.size() == 1 &&
+         "resultBuffer must only contain result array if `success` if true");
   return resultBuffer[0];
 }
 
@@ -3030,7 +3035,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
             for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
                                             destVectorType.getNumElements());
                  i != e; ++i) {
-              auto idx = getOrCreateIntConstant(llvm::Log2_64_Ceil(e), i);
+              auto idx =
+                  getOrCreateIntConstant(llvm::Log2_64_Ceil(e == 1 ? 1 : e), i);
               auto destInOutOp =
                   builder.create<sv::ArrayIndexInOutOp>(dest, idx);
               auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
