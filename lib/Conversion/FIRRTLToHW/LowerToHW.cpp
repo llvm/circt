@@ -2158,7 +2158,8 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
       TypeSwitch<Type>(type)
           .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
             for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-              auto iIdx = getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
+              auto iIdx =
+                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
               auto arrayIndex =
                   builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
               recurse(arrayIndex, a.getElementType());
