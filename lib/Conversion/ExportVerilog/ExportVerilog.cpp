@@ -966,7 +966,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     // makes this more compatible with unknown width extmodules.
     if (intTy.getWidth() > 32) {
       // Sign comes out before any width specifier.
-      if (intTy.isSigned() && value.isNegative()) {
+      if (value.isNegative() && (intTy.isSigned() || intTy.isSignless())) {
         os << '-';
         value = -value;
       }
@@ -1093,6 +1093,20 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << '(';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+    // Handle the special case of (a + b + -42) as (a + b - 42).
+    // TODO: Also handle (a + b + x*-1).
+    if (expr.getOpcode() == PEO::Add) {
+      if (auto integer = op.dyn_cast<IntegerAttr>()) {
+        const APInt &value = integer.getValue();
+        if (value.isNegative() && !value.isMinSignedValue()) {
+          os << " - ";
+          allOperandsSigned &=
+            emitOperand(IntegerAttr::get(op.getType(), -value));
+          continue;
+        }
+      }
+    }
+
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }

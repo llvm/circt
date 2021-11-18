@@ -237,7 +237,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(64'd14000240888948784983),
+// CHECK-NEXT:     .DEFAULT(-64'd4446503184760766633),
 // CHECK-NEXT:     .DEPTH(3.242000e+01),
 // CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
 // CHECK-NEXT:     .WIDTH(32)
@@ -911,13 +911,13 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
 // CHECK: #(parameter param = 1,
 // CHECK:   parameter wire_0 = 2) (
 hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
-// CHECK: input [16:0]{{ *}}a,
+  // CHECK: input [16:0]{{ *}}a,
   (%a: !hw.int<17>,
-// CHECK: input [param + 4294967295:0] b);
+  // CHECK: input [param - 1:0] b);
    %b: !hw.int<#hw.param.decl.ref<"param">>) {
 
   // Check that the parameter name renamification propagates.
-// CHECK: wire [wire_0 + 4294967295:0] paramWire;
+  // CHECK: wire [wire_0 - 1:0] paramWire;
   %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
 
 }
