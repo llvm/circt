@@ -1458,4 +1458,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @ArrayLength1(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<2>, 2>, out %b: !firrtl.vector<uint<2>, 1>) {
     firrtl.partialconnect %b, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<2>, 2>
   }
+
+  // CHECK-LABEL: hw.module @SubindexDestination
+  firrtl.module @SubindexDestination(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 1>, out %b: !firrtl.vector<uint<1>, 1>) {
+    %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 1>
+    %1 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:      %false = hw.constant false
+    // CHECK-NEXT: %.b.output = sv.wire  : !hw.inout<array<1xi1>>
+    // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<1xi1>>
+    // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%false] : !hw.inout<array<1xi1>>, i1
+    // CHECK-NEXT: %2 = hw.array_get %a[%false] : !hw.array<1xi1>
+    // CHECK-NEXT: sv.assign %1, %2 : i1
+    // CHECK-NEXT: hw.output %0 : !hw.array<1xi1>
+  }
 }

@@ -1982,7 +1982,12 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
       getBitWidthFromVectorSize(
           op.input().getType().cast<FVectorType>().getNumElements()),
       op.index());
-  return setLoweringTo<hw::ArrayGetOp>(op, resultType, value, iIdx);
+
+  // It might be written if value has an inout typeso lower to sv::ArrayIndexInOutOp.
+  if (value.getType().isa<sv::InOutType>())
+    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
+  // Otherwise, hw::ArrayGetOp
+  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
