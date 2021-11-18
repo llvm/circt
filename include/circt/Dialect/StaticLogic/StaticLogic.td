@@ -79,6 +79,10 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     pipeline stucture that executes while a condition is true. For more details,
     see: https://llvm.discourse.group/t/rfc-representing-pipelined-loops/4171.
 
+    A pipeline captures the result of scheduling, and is not generally safe to
+    transform, besides lowering to hardware dialects. For more discussion about
+    relaxing this, see: https://github.com/llvm/circt/issues/2204.
+
     This is the top-level operation representing a high-level pipeline. It is
     not isolated from above, but could be if this is helpful. A pipeline
     contains two regions: `condition` and `stages`.
@@ -109,7 +113,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   }];
 
   let arguments = (ins
-    OptionalAttr<I64Attr>:$II,
+    I64Attr:$II,
     Variadic<AnyType>:$iterArgs
   );
 

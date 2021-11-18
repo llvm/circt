@@ -27,18 +27,12 @@ using namespace circt::staticlogic;
 
 static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
                                         OperationState &result) {
-  // Parse optional initiation interval.
-  auto parsedII = parser.parseOptionalKeyword("II");
-  if (parsedII.succeeded()) {
-    if (parser.parseEqual())
-      return failure();
-
-    IntegerAttr ii;
-    if (parser.parseAttribute(ii))
-      return failure();
-
-    result.addAttribute("II", ii);
-  }
+  // Parse initiation interval.
+  IntegerAttr ii;
+  if (parser.parseKeyword("II") || parser.parseEqual() ||
+      parser.parseAttribute(ii))
+    return failure();
+  result.addAttribute("II", ii);
 
   // Parse iter_args assignment list.
   SmallVector<OpAsmParser::OperandType> regionArgs, operands;
@@ -75,8 +69,7 @@ static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
 
 static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
   // Print the initiation interval.
-  if (op.II().hasValue())
-    p << " II = " << ' ' << op.II().getValue();
+  p << " II = " << ' ' << op.II();
 
   // Print iter_args assignment list.
   p << " iter_args(";
@@ -150,9 +143,6 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
                  "stages may only contain 'staticlogic.pipeline.stage' or "
                  "'staticlogic.pipeline.terminator' ops, found ")
              << inner;
-
-  // TODO: once there is an II attribute, verify that the II is satisfied by the
-  // definitions and uses of `iter_args`.
 
   return success();
 }
