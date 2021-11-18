@@ -1971,7 +1971,11 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
 
   auto resultType = lowerType(op->getResult(0).getType());
   Value value = getPossiblyInoutLoweredValue(op.input());
-  assert(value && "subindex lowering failed");
+  if (!resultType || !value) {
+    op.emitError() << "input lowering failed";
+    return failure();
+  }
+
   auto iIdx = getOrCreateIntConstant(
       llvm::Log2_64_Ceil(
           op.input().getType().cast<FVectorType>().getNumElements()),
