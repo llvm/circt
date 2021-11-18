@@ -105,5 +105,8 @@ class SignalBundle:
 
 @dataclass
 class Target:
+  # A Target defines the level of abstraction which we're trying to visually
+  # simulate. bundleType and moduleType should be assigned to the classes of
+  # the specific implementation for the target abstraction.
   bundleType: type
   moduleType: type
