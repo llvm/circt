@@ -1502,7 +1502,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
       if (allowTruncate)
         return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
 
-      array.getDefiningOp()->emitError("operand should not be a truncation");
+      builder.emitError("operand should not be a truncation");
       return Value();
     }
 
@@ -1553,7 +1553,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
     return Value();
 
   assert(resultBuffer.size() == 1 &&
-         "resultBuffer must only contain result array if `success` if true");
+         "resultBuffer must only contain a result array if `success` is true");
   return resultBuffer[0];
 }
 
