@@ -1983,7 +1983,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
           op.input().getType().cast<FVectorType>().getNumElements()),
       op.index());
 
-  // It might be written if value has an inout typeso lower to sv::ArrayIndexInOutOp.
+  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
   if (value.getType().isa<sv::InOutType>())
     return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
   // Otherwise, hw::ArrayGetOp
