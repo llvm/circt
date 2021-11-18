@@ -54,15 +54,19 @@ private:
   LogicalResult visitRegion(mlir::Region &);
 
 private:
+  Operation *getEmittedHWModuleOp(StringRef hwModuleName);
+
+private:
   OpBuilder *builder;
   HIRToHWMapping mapHIRToHWValue;
   llvm::DenseMap<StringRef, uint64_t> mapFuncNameToInstanceCount;
-  SmallVector<Operation *> opsToErase;
   Value clk;
   Value reset;
   hw::HWModuleOp hwModuleOp;
+  mlir::ModuleOp mlirModuleOp; // Enclosing module{}
   size_t uniqueInt = 0;
   DenseMap<Value, SmallVector<Value>> mapArrayToElements;
+  DenseMap<StringRef, Operation *> mapNameToHWModuleOp;
 };
 
 LogicalResult HIRToHWPass::visitOp(hir::BusMapOp op) {
@@ -74,6 +78,17 @@ LogicalResult HIRToHWPass::visitOp(hir::BusMapOp op) {
     mapHIRToHWValue.map(op.getResult(i), results[i]);
 
   return success();
+}
+
+Operation *HIRToHWPass::getEmittedHWModuleOp(StringRef hwModuleName) {
+  auto *operation = mapNameToHWModuleOp[hwModuleName];
+  assert(operation);
+  auto hwModuleOp = dyn_cast<hw::HWModuleOp>(operation);
+  auto hwModuleExternOp = dyn_cast<hw::HWModuleExternOp>(operation);
+  assert(hwModuleOp || hwModuleExternOp);
+  if (hwModuleOp)
+    return hwModuleOp;
+  return hwModuleExternOp;
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
@@ -187,22 +202,11 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
                 op.callee().str() + "_inst" +
                 std::to_string(mapFuncNameToInstanceCount[op.callee()]++));
 
-  auto calleeHWModule = dyn_cast_or_null<hw::HWModuleOp>(op.getCalleeDecl());
-  auto calleeHWModuleExtern =
-      dyn_cast_or_null<hw::HWModuleExternOp>(op.getCalleeDecl());
-  if (!(calleeHWModule || calleeHWModuleExtern)) {
-    op.emitError() << "Could not find decl for the hw module.";
-    return success();
-  }
+  auto *calleeHWModule = getEmittedHWModuleOp(op.callee());
   hw::InstanceOp instanceOp;
-  if (calleeHWModule)
-    instanceOp = builder->create<hw::InstanceOp>(
-        op.getLoc(), calleeHWModule, instanceName, hwInputs,
-        getHWParams(op->getAttr("params")), StringAttr());
-  else
-    instanceOp = builder->create<hw::InstanceOp>(
-        op.getLoc(), calleeHWModuleExtern, instanceName, hwInputs,
-        getHWParams(op->getAttr("params")), StringAttr());
+  instanceOp = builder->create<hw::InstanceOp>(
+      op.getLoc(), calleeHWModule, instanceName, hwInputs,
+      getHWParams(op->getAttr("params")), StringAttr());
 
   // Map callop input send buses to the results of the instance op and replace
   // all prev uses of the placeholder hw ssa vars corresponding to these send
@@ -228,10 +232,12 @@ LogicalResult HIRToHWPass::visitOp(hir::CastOp op) {
         dyn_cast<mlir::arith::ConstantOp>(op.input().getDefiningOp());
     assert(constantOp);
     auto value = constantOp.value().dyn_cast<mlir::IntegerAttr>().getInt();
-    mapHIRToHWValue.map(op.res(),
-                        builder->create<hw::ConstantOp>(
-                            builder->getUnknownLoc(),
-                            IntegerAttr::get(op.res().getType(), value)));
+    mapHIRToHWValue.map(
+        op.res(),
+        builder->create<hw::ConstantOp>(
+            builder->getUnknownLoc(),
+            IntegerAttr::get(*helper::convertToHWType(op.res().getType()),
+                             value)));
     return success();
   }
 
@@ -365,8 +371,8 @@ LogicalResult HIRToHWPass::visitOp(hir::ReturnOp op) {
   auto funcOp = op->getParentOfType<hir::FuncOp>();
 
   auto portMap =
-      getHWModulePortMap(*builder, funcOp.getFuncType(), funcOp.getInputNames(),
-                         funcOp.getResultNames());
+      getHWModulePortMap(*builder, op.getLoc(), funcOp.getFuncType(),
+                         funcOp.getInputNames(), funcOp.getResultNames());
   auto funcArgs = funcOp.getFuncBody().front().getArguments();
 
   // hwOutputs are the outputs to be returned in the hw module.
@@ -424,19 +430,15 @@ Value instantiateBusSelectLogic(OpBuilder &builder, Value selectBus,
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
-  builder = new OpBuilder(op);
-  builder->setInsertionPoint(op);
-  auto portMap = getHWModulePortMap(*builder, op.getFuncType(),
+  auto portMap = getHWModulePortMap(*builder, op.getLoc(), op.getFuncType(),
                                     op.getInputNames(), op.getResultNames());
-  auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
-
-  builder->create<hw::HWModuleExternOp>(
+  auto name = builder->getStringAttr(op.getName());
+  auto verilogNameAttr = op->getAttrOfType<StringAttr>("verilogName");
+  auto hwOp = builder->create<hw::HWModuleExternOp>(
       op.getLoc(), name, portMap.getPortInfoList(),
-      op.getNameAttr().getValue().str(),
+      verilogNameAttr ? verilogNameAttr.getValue() : op.getName(),
       getHWParams(op->getAttr("params"), true));
-
-  delete (builder);
-  opsToErase.push_back(op);
+  mapNameToHWModuleOp[op.getName()] = hwOp;
   return success();
 }
 
@@ -466,14 +468,14 @@ void HIRToHWPass::updateHIRToHWMapForFuncInputs(
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
-  this->builder = new OpBuilder(op);
-  this->builder->setInsertionPoint(op);
-  auto portMap = getHWModulePortMap(*builder, op.getFuncType(),
+  auto portMap = getHWModulePortMap(*builder, op.getLoc(), op.getFuncType(),
                                     op.getInputNames(), op.getResultNames());
   auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
 
   this->hwModuleOp = builder->create<hw::HWModuleOp>(op.getLoc(), name,
                                                      portMap.getPortInfoList());
+  mapNameToHWModuleOp[op.getName()] = hwModuleOp;
+  OpBuilder::InsertionGuard guard(*this->builder);
   this->builder->setInsertionPointToStart(hwModuleOp.getBodyBlock());
 
   updateHIRToHWMapForFuncInputs(
@@ -483,8 +485,6 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
   this->reset = getResetFromHWModule(hwModuleOp);
   auto visitResult = visitRegion(op.getFuncBody());
 
-  opsToErase.push_back(op);
-  delete (builder);
   return visitResult;
 }
 
@@ -732,21 +732,31 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
 }
 
 void HIRToHWPass::runOnOperation() {
-  ModuleOp moduleOp = getOperation();
-  WalkResult result = moduleOp.walk([this](Operation *operation) -> WalkResult {
-    if (auto op = dyn_cast<hir::FuncOp>(operation)) {
-      if (failed(visitOp(op)))
-        return WalkResult::interrupt();
-    } else if (auto op = dyn_cast<hir::FuncExternOp>(operation)) {
-      if (failed(visitOp(op)))
-        return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
+  this->mlirModuleOp = getOperation();
+  this->builder = new OpBuilder(mlirModuleOp.getLoc().getContext());
+  this->builder->setInsertionPointToStart(mlirModuleOp.getBody(0));
+  WalkResult result =
+      mlirModuleOp.walk([this](Operation *operation) -> WalkResult {
+        if (auto op = dyn_cast<hir::FuncOp>(operation)) {
+          if (failed(visitOp(op)))
+            return WalkResult::interrupt();
+        } else if (auto op = dyn_cast<hir::FuncExternOp>(operation)) {
+          if (failed(visitOp(op)))
+            return WalkResult::interrupt();
+        }
+        return WalkResult::advance();
+      });
 
   if (result.wasInterrupted()) {
     signalPassFailure();
     return;
+  }
+
+  // erase unnecessary ops.
+  SmallVector<Operation *> opsToErase;
+  for (auto &operation : getOperation()) {
+    if (!isa<hw::HWDialect>(operation.getDialect()))
+      opsToErase.push_back(&operation);
   }
   helper::eraseOps(opsToErase);
 }

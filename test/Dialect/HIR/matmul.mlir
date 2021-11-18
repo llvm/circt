@@ -53,7 +53,7 @@ hir.func @readB at %t(
     %c4_i5 = hw.constant 4:i5 
 
   //Write to register array B.
-  %buff = hir.alloca("reg") : !hir.memref<(bank 1)xi32> ports [#reg_r, #reg_w]
+  %buff = hir.alloca "reg"  : !hir.memref<(bank 1)xi32> ports [#reg_r, #reg_w]
 
   hir.for %j : i5 = %c0_i5 to %c16_i5 step %c1_i5 iter_time(%tj = %t + 1){
     %tk_end =hir.for %k : i5 = %c0_i5 to %c16_i5 step %c1_i5 iter_time(%tk = %tj + 1){
@@ -99,8 +99,8 @@ hir.func @kernel at %t(
     %c0_i32 = hw.constant 0:i32 
 
    hir.for %i : i5 = %c0_i5  to %c16_i5  step %c1_i5  iter_time(%ti = %t + 1){
-     %A_reg = hir.alloca("reg") : !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_r,#reg_w]
-     %i_reg = hir.alloca("reg") : !hir.memref<(bank 16)xi4> ports[#reg_r,#reg_w]
+     %A_reg = hir.alloca "reg"  : !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_r,#reg_w]
+     %i_reg = hir.alloca "reg"  : !hir.memref<(bank 16)xi4> ports[#reg_r,#reg_w]
      %i_i4 = comb.extract %i from 0 : (i5)->(i4)
      hir.for %k:index = %0 to %16 step %1 iter_time(%tk = %ti){
        %a = hir.load %A[port 0][%i_i4,%k] at %tk : !hir.memref<16x(bank 16)xi32>
@@ -121,7 +121,7 @@ hir.func @kernel at %t(
      }
 
      hir.for %j :index = %0 to %16 step %1 iter_time(%tj = %ti){
-      %C_reg = hir.alloca("reg") : !hir.memref<(bank 17)xi32> ports[#reg_r,#reg_w]
+      %C_reg = hir.alloca "reg"  : !hir.memref<(bank 17)xi32> ports[#reg_r,#reg_w]
       hir.store %c0_i32 to %C_reg[port 1][%0] at %tj + 3 : !hir.memref<(bank 17)xi32>
       %tk_end=hir.for %k:index = %0 to %16 step %1 iter_time(%tk = %tj){
         %a = hir.load %A_reg[port 0][%j, %k] at %tk + 2  : !hir.memref<(bank 16)x(bank 16)xi32>
@@ -179,9 +179,9 @@ hir.func @matmul at %t(
   %Bi : !hir.memref<16x16xi32> ports [#bram_r], 
   %Co : !hir.memref<16x16xi32> ports [#bram_w]) {
 
-  %A = hir.alloca("bram") : !hir.memref<16x(bank 16)xi32> ports [#bram_r, #bram_w]
-  %B = hir.alloca("reg") : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_r,#reg_w]
-  %C = hir.alloca("reg") : !hir.memref<16x(bank 16)xi32> ports [#bram_r,#bram_w]
+  %A = hir.alloca "bram"  : !hir.memref<16x(bank 16)xi32> ports [#bram_r, #bram_w]
+  %B = hir.alloca "reg"  : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_r,#reg_w]
+  %C = hir.alloca "bram"  : !hir.memref<16x(bank 16)xi32> ports [#bram_r,#bram_w]
   %Ar = hir.memref.extract %A[port 0] :!hir.memref<16x(bank 16)xi32> port [#bram_r]
   %Aw = hir.memref.extract %A[port 1] :!hir.memref<16x(bank 16)xi32> port [#bram_w]
   %Br = hir.memref.extract %B[port 0] :!hir.memref<(bank 16)x(bank 16)xi32> port [#reg_r]

@@ -42,6 +42,16 @@ def HIR_BusTensorType: DialectType<HIR_Dialect,
 CPred<"$_self.isa<BusTensorType>()">, "HIR bus_tensor type ">,
     BuildableType<"BusTensorType::get($_builder.getContext())">;
 
+//Attrs
+def MemKindREGAttr : StrEnumAttrCase<"reg">;
+def MemKindBRAMAttr : StrEnumAttrCase<"bram">;
+def MemKindLUTRAMAttr : StrEnumAttrCase<"lutram">;
+def MemKindURAMAttr : StrEnumAttrCase<"uram">;
+
+def MemKindAttr : StrEnumAttr<"MemKindAttr",
+  "Defines the type of the hardware memory",
+  [MemKindREGAttr, MemKindBRAMAttr, MemKindURAMAttr, MemKindLUTRAMAttr]>;
+
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
@@ -332,10 +342,10 @@ def AllocaOp :HIR_Op<"alloca",[]> {
     ```%w = hir.alloc("bram") : !hir.memref<...>```
   }];
 
-  let arguments = (ins StrAttr:$mem_type, ArrayAttr: $ports);
+  let arguments = (ins MemKindAttr:$mem_kind, ArrayAttr: $ports);
   let results = (outs HIR_MemrefType:$res);
 
-  let assemblyFormat = [{`(`$mem_type`)` custom<WithSSANames>(attr-dict) 
+  let assemblyFormat = [{$mem_kind custom<WithSSANames>(attr-dict) 
     `:` type($res) `ports` $ports}];
   let verifier =[{return verify$cppClass(*this);}];
 }

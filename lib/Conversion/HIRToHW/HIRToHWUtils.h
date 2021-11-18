@@ -29,6 +29,7 @@ std::pair<SmallVector<Value>, SmallVector<Value>>
 filterCallOpArgs(hir::FuncType funcTy, OperandRange args);
 
 FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
+                                         mlir::Location errorLoc,
                                          hir::FuncType funcTy,
                                          ArrayAttr inputNames,
                                          ArrayAttr resultNames);

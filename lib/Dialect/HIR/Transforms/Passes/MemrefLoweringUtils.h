@@ -493,8 +493,11 @@ Value emitWrDataBus(OpBuilder &builder, hir::MemrefType memrefTy);
 
 std::string createHWMemoryName(llvm::StringRef memKind,
                                hir::MemrefType memrefTy, ArrayAttr memPorts);
+std::string createVerilogMemoryName(llvm::StringRef memKind,
+                                    ArrayAttr memPorts);
 void emitMemoryInstance(OpBuilder &builder, hir::MemrefType memrefTy,
                         ArrayRef<MemoryInterface> memoryInterfaces,
-                        llvm::StringRef memKind, llvm::StringRef memName,
+                        llvm::StringRef memKind, llvm::StringRef verilogName,
+                        llvm::StringRef memName,
                         llvm::Optional<std::string> instanceName, Value tstart);
 Value getRegionTimeVar(Operation *);

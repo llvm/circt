@@ -484,7 +484,8 @@ LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
   // Emit separate instances of hw memory for all banks, and connect the memory
   // interfaces.
   for (auto bank = 0; bank < memrefTy.getNumBanks(); bank++) {
-    auto memName = createHWMemoryName(op.mem_type(), memrefTy, op.ports());
+    auto memName = createHWMemoryName(op.mem_kind(), memrefTy, op.ports());
+    auto memVerilogName = createVerilogMemoryName(op.mem_kind(), op.ports());
     Optional<std::string> instanceName;
     auto resultName = helper::getOptionalName(op);
     if (resultName) {
@@ -492,7 +493,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
           resultName.getValue().str() + "_bank" + std::to_string(bank);
     }
     emitMemoryInstance(builder, memrefTy, memoryInterfacesPerBankPerPort[bank],
-                       op.mem_type(), memName, instanceName,
+                       op.mem_kind(), memVerilogName, memName, instanceName,
                        getRegionTimeVar(op));
   }
 

@@ -188,6 +188,14 @@ llvm::Optional<int64_t> getRdLatency(Attribute port) {
   return llvm::None;
 }
 
+llvm::Optional<int64_t> getWrLatency(Attribute port) {
+  auto portDict = port.dyn_cast<DictionaryAttr>();
+  auto wrLatencyAttr = portDict.getNamed("wr_latency");
+  if (wrLatencyAttr)
+    return wrLatencyAttr.getValue().second.dyn_cast<IntegerAttr>().getInt();
+  return llvm::None;
+}
+
 bool isWrite(Attribute port) {
   auto portDict = port.dyn_cast<DictionaryAttr>();
   auto wrLatencyAttr = portDict.getNamed("wr_latency");
@@ -287,7 +295,7 @@ llvm::Optional<Type> getElementType(circt::Type ty) {
   return llvm::None;
 }
 
-Operation *declareExternalFuncForCall(hir::CallOp callOp,
+Operation *declareExternalFuncForCall(hir::CallOp callOp, StringRef verilogName,
                                       SmallVector<std::string> inputNames,
                                       SmallVector<std::string> resultNames) {
   if (callOp.getCalleeDecl())
@@ -324,6 +332,7 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp,
 
   if (auto params = callOp->getAttr("params"))
     declOp->setAttr("params", params);
+  declOp->setAttr("verilogName", builder.getStringAttr(verilogName));
   return declOp;
 }
 

@@ -80,6 +80,7 @@ filterCallOpArgs(hir::FuncType funcTy, OperandRange args) {
 }
 
 FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
+                                         mlir::Location errorLoc,
                                          hir::FuncType funcTy,
                                          ArrayAttr inputNames,
                                          ArrayAttr resultNames) {
@@ -89,14 +90,16 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
   uint64_t i;
   for (i = 0; i < funcTy.getInputTypes().size(); i++) {
     auto originalTy = funcTy.getInputTypes()[i];
-    auto hwTy = *helper::convertToHWType(originalTy);
-    assert(hwTy);
+    auto hwTy = helper::convertToHWType(originalTy);
+    if (!hwTy)
+      emitError(errorLoc) << "Type " << originalTy
+                          << "could not be converted to a compatible hw type.";
     auto attr = funcTy.getInputAttrs()[i];
     auto name = inputNames[i].dyn_cast<StringAttr>();
     if (helper::isBusLikeType(originalTy) && isSendBus(attr)) {
-      portMap.addFuncInput(name, hw::PortDirection::OUTPUT, hwTy);
+      portMap.addFuncInput(name, hw::PortDirection::OUTPUT, *hwTy);
     } else {
-      portMap.addFuncInput(name, hw::PortDirection::INPUT, hwTy);
+      portMap.addFuncInput(name, hw::PortDirection::INPUT, *hwTy);
     }
   }
 

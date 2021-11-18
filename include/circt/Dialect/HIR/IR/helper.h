@@ -41,6 +41,7 @@ int64_t extractDelayFromDict(mlir::DictionaryAttr dict);
 llvm::Optional<mlir::ArrayAttr>
 extractMemrefPortsFromDict(mlir::DictionaryAttr dict);
 llvm::Optional<int64_t> getRdLatency(mlir::Attribute port);
+llvm::Optional<int64_t> getWrLatency(mlir::Attribute port);
 bool isWrite(mlir::Attribute port);
 bool isRead(mlir::Attribute port);
 llvm::StringRef extractBusPortFromDict(mlir::DictionaryAttr dict);
@@ -57,6 +58,7 @@ llvm::Optional<mlir::StringRef> getOptionalName(mlir::Value v);
 llvm::Optional<circt::Type> getElementType(circt::Type);
 circt::Operation *
 declareExternalFuncForCall(circt::hir::CallOp callOp,
+                           llvm::StringRef verilogName,
                            circt::SmallVector<std::string> inputNames,
                            circt::SmallVector<std::string> resultNames = {});
 mlir::Value materializeIntegerConstant(mlir::OpBuilder &builder, int value,

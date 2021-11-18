@@ -251,18 +251,31 @@ std::string createHWMemoryName(llvm::StringRef memKind,
   for (auto port : memPorts) {
     name += "_";
     if (helper::isRead(port))
-      name += "r";
+      name += "r" + std::to_string(helper::getRdLatency(port).getValue());
     if (helper::isWrite(port))
-      name += "w";
+      name += "w" + std::to_string(helper::getWrLatency(port).getValue());
   }
   return name;
 }
 
+std::string createVerilogMemoryName(llvm::StringRef memKind,
+                                    ArrayAttr memPorts) {
+  std::string name = memKind.str();
+  for (auto port : memPorts) {
+    name += "_";
+    if (helper::isRead(port))
+      name += "r" + std::to_string(helper::getRdLatency(port).getValue());
+    if (helper::isWrite(port))
+      name += "w" + std::to_string(helper::getWrLatency(port).getValue());
+  }
+  return name;
+}
 /// Emit CallOps for each bank of the memref that will instantiate the
 /// hw memory, and connect the memory interfaces of all the ports with it.
 void emitMemoryInstance(OpBuilder &builder, hir::MemrefType memrefTy,
                         ArrayRef<MemoryInterface> memoryInterfaces,
-                        llvm::StringRef memKind, llvm::StringRef memName,
+                        llvm::StringRef memKind, llvm::StringRef verilogName,
+                        llvm::StringRef memName,
                         llvm::Optional<std::string> instanceName,
                         Value tstart) {
 
@@ -325,15 +338,19 @@ void emitMemoryInstance(OpBuilder &builder, hir::MemrefType memrefTy,
       memNameAttr, TypeAttr::get(funcTy), inputBuses, tstart,
       builder.getI64IntegerAttr(0));
 
-  auto params = builder.getDictionaryAttr(
-      {builder.getNamedAttr("ELEMENT_WIDTH",
-                            builder.getI64IntegerAttr(elementWidth)),
-       builder.getNamedAttr("ADDR_WIDTH",
-                            builder.getI64IntegerAttr(addrWidth))});
-
+  DictionaryAttr params;
+  if (memKind != "reg") {
+    params = builder.getDictionaryAttr(
+        {builder.getNamedAttr("ELEMENT_WIDTH",
+                              builder.getI64IntegerAttr(elementWidth)),
+         builder.getNamedAttr("ADDR_WIDTH",
+                              builder.getI64IntegerAttr(addrWidth))});
+  } else {
+    params = builder.getDictionaryAttr({builder.getNamedAttr(
+        "ELEMENT_WIDTH", builder.getI64IntegerAttr(elementWidth))});
+  }
   callOp->setAttr("params", params);
-
-  helper::declareExternalFuncForCall(callOp, inputBusNames);
+  helper::declareExternalFuncForCall(callOp, verilogName, inputBusNames);
 }
 
 Value getRegionTimeVar(Operation *operation) {

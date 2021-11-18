@@ -120,6 +120,30 @@ LogicalResult verifyAllocaOp(hir::AllocaOp op) {
                << "specified port is not a write port.";
     }
   }
+  if (op.mem_kind() == "reg") {
+    if (op.res()
+            .getType()
+            .dyn_cast<hir::MemrefType>()
+            .getNumElementsPerBank() != 1)
+      return op.emitError("'reg' must have all dims banked.");
+    if (op.ports().size() != 2)
+      return op.emitError("'reg' must two ports, read and write.");
+    if (helper::isWrite(op.ports()[0]))
+      return op.emitError("'reg' port 0 must be read-only.");
+    if (helper::isRead(op.ports()[1]))
+      return op.emitError("'reg' port 1 must be write-only.");
+    if (helper::getRdLatency(op.ports()[0]).getValue() != 0)
+      return op.emitError("'reg' read latency must be 0.");
+    if (helper::getWrLatency(op.ports()[1]).getValue() != 1)
+      return op.emitError("'reg' write latency must be 1.");
+  } else {
+    if (op.res()
+            .getType()
+            .dyn_cast<hir::MemrefType>()
+            .getNumElementsPerBank() == 1)
+      op.emitWarning("Your probably want to use 'reg' since there is only one "
+                     "element per bank.");
+  }
   return success();
 }
 

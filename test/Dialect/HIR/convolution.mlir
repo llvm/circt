@@ -63,7 +63,7 @@ hir.func @hir_convolution at %t(
 
   //hir.comment "debug end"
 
-  %val = hir.alloca("reg") :!hir.memref<(bank 1)xi32> ports [#reg_r,#reg_w]
+  %val = hir.alloca "reg"  :!hir.memref<(bank 1)xi32> ports [#reg_r,#reg_w]
 
     //Read from input. Update line buffer. Input values to each row of window.
   %ti_end=hir.for %i : i4 = %c0_i4  to %c7_i4  step %c1_i4 iter_time(%ti = %t + 1 ){
