@@ -542,8 +542,14 @@ struct AnnotationRemover : public Reduction {
     auto emptyArray = ArrayAttr::get(op->getContext(), {});
     if (op->hasAttr("annotations"))
       op->setAttr("annotations", emptyArray);
-    if (op->hasAttr("portAnnotations"))
-      op->setAttr("portAnnotations", emptyArray);
+    if (op->hasAttr("portAnnotations")) {
+      auto attr = emptyArray;
+      if (isa<firrtl::InstanceOp>(op))
+        attr = ArrayAttr::get(
+            op->getContext(),
+            SmallVector<Attribute>(op->getNumResults(), emptyArray));
+      op->setAttr("portAnnotations", attr);
+    }
     return success();
   }
   std::string getName() const override { return "annotation-remover"; }
