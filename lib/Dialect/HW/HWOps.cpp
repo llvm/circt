@@ -441,7 +441,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 ModulePortInfo hw::getModulePortInfo(Operation *op) {
-  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+  assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> inputs, outputs;
@@ -474,7 +474,7 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
-  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+  assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> results;
