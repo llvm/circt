@@ -678,7 +678,7 @@ void EmitterBase::emitTextWithSubstitutions(
         auto sym = symAttrs[symOpNum];
         SmallString<12> symVerilogName;
         if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
-          if (auto symOp = state.symbolCache.getDefinition(fsym))
+          if (auto *symOp = state.symbolCache.getDefinition(fsym))
             symVerilogName = namify(sym, symOp);
         if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
           auto symOp =
