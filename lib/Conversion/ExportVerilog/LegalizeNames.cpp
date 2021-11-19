@@ -131,7 +131,7 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
 
   // Legalize the port names.
   size_t portIdx = 0;
-  for (const PortInfo &port : getAllModulePortInfos(module)) {
+  for (const PortInfo &port : globalNameTable.getPortsInfo(module)) {
     auto newName = nameResolver.getLegalName(port.name);
     if (newName != port.name.getValue())
       globalNameTable.addRenamedPort(module, port, newName);

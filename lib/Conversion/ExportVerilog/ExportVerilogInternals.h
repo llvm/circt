@@ -69,6 +69,27 @@ struct GlobalNameTable {
     return attr.getValue();
   }
 
+  /// Return the getAllModulePortInfos for mod, return cached if it exists else
+  /// cache it.
+  SmallVector<hw::PortInfo> getPortsInfo(Operation *mod) {
+    auto it = modPortInfos.find(mod);
+    SmallVector<hw::PortInfo> result;
+    if (it == modPortInfos.end()) {
+      result = hw::getAllModulePortInfos(mod);
+      modPortInfos[mod] = result;
+    } else
+      result = it->getSecond();
+    return result;
+  }
+
+  /// Return the cached result for getAllModulePortInfos for mod.
+  SmallVector<hw::PortInfo> getPortsInfo(Operation *mod) const {
+    auto it = modPortInfos.find(mod);
+    if (it == modPortInfos.end())
+      return hw::getAllModulePortInfos(mod);
+    return it->getSecond();
+  }
+
 private:
   friend class GlobalNameResolver;
   GlobalNameTable() {}
@@ -112,6 +133,9 @@ private:
   /// sv.interface.signal, and sv.interface.modport) that need to be renamed
   /// due to conflicts.
   DenseMap<Operation *, StringAttr> renamedInterfaceOp;
+
+  /// This caches the result of getAllModulePortInfos.
+  DenseMap<Operation *, SmallVector<hw::PortInfo>> modPortInfos;
 };
 
 //===----------------------------------------------------------------------===//
