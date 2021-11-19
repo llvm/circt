@@ -15,8 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 def TypeScopeOp : HWOp<"type_scope",
-      [Symbol, SymbolTable, SingleBlock, NoTerminator, NoRegionArguments,
-      HasParent<"mlir::ModuleOp">]> {
+      [Symbol, SymbolTable, SingleBlock, NoTerminator, NoRegionArguments]> {
   let summary = "Type declaration wrapper.";
   let description = [{
     An operation whose one body block contains type declarations. This op
