@@ -606,7 +606,6 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  SmallVector<SmallString<12>, 8> symOps;
   auto namify = [&](Attribute sym, SymbolCache::Item item) {
     // CAVEAT: These accesses can reach into other modules through inner name
     // references, which are currently being processed. Do not add those remote
@@ -631,21 +630,10 @@ void EmitterBase::emitTextWithSubstitutions(
     return StringRef("<INVALID>");
   };
 
-  for (auto sym : symAttrs) {
-    if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
-      if (auto symOp = state.symbolCache.getDefinition(fsym))
-        symOps.push_back(namify(sym, symOp));
-    if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
-      auto symOp =
-          state.symbolCache.getDefinition(isym.getModule(), isym.getName());
-      symOps.push_back(namify(sym, symOp));
-    }
-  }
-
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
-  unsigned numSymOps = symOps.size();
+  unsigned numSymOps = symAttrs.size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
     while (1) {
@@ -687,7 +675,17 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        os << symOps[symOpNum];
+        auto sym = symAttrs[symOpNum];
+        SmallString<12> symVerilogName;
+        if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
+          if (auto symOp = state.symbolCache.getDefinition(fsym))
+            symVerilogName = namify(sym, symOp);
+        if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+          auto symOp =
+              state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+          symVerilogName = namify(sym, symOp);
+        }
+        os << symVerilogName;
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
