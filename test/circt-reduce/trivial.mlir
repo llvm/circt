@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test %S/trivial.sh --test-arg firtool --keep-best=0 | FileCheck %s
+// RUN: circt-reduce %s --test %S/test.sh --test-arg firtool --test-arg "error: sink \"x1.x\" not fully initialized" --keep-best=0 | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK-NOT: firrtl.module @FooFooFoo

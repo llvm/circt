@@ -432,6 +432,23 @@ struct OperationPruner : public Reduction {
   SymbolCache symbols;
 };
 
+/// A sample reduction pattern that removes FIRRTL annotations from ports and
+/// operations.
+struct AnnotationRemover : public Reduction {
+  bool match(Operation *op) override {
+    return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
+  }
+  LogicalResult rewrite(Operation *op) override {
+    auto emptyArray = ArrayAttr::get(op->getContext(), {});
+    if (op->hasAttr("annotations"))
+      op->setAttr("annotations", emptyArray);
+    if (op->hasAttr("portAnnotations"))
+      op->setAttr("portAnnotations", emptyArray);
+    return success();
+  }
+  std::string getName() const override { return "annotation-remover"; }
+};
+
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
 /// if the port is not used or just invalidated.
 struct RootPortPruner : public Reduction {
@@ -550,6 +567,7 @@ void circt::createAllReductions(
   add(std::make_unique<OperandForwarder<1>>());
   add(std::make_unique<OperandForwarder<2>>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<AnnotationRemover>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
 }
