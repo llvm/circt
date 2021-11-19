@@ -66,6 +66,20 @@ private:
   SmallDenseMap<Operation *, SymbolUserMap, 2> userMaps;
 };
 
+/// Check that all connections to a value are invalids.
+static bool onlyInvalidated(Value arg) {
+  return llvm::all_of(arg.getUses(), [](OpOperand &use) {
+    auto *op = use.getOwner();
+    if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
+      return false;
+    if (use.getOperandNumber() != 0)
+      return false;
+    if (!op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>())
+      return false;
+    return true;
+  });
+}
+
 //===----------------------------------------------------------------------===//
 // Reduction
 //===----------------------------------------------------------------------===//
@@ -306,6 +320,11 @@ static void pruneUnusedOps(Operation *initialOp) {
   }
 }
 
+static void pruneUnusedOps(Value value) {
+  if (auto *op = value.getDefiningOp())
+    pruneUnusedOps(op);
+}
+
 /// Check whether an operation interacts with flows in any way, which can make
 /// replacement and operand forwarding harder in some cases.
 static bool isFlowSensitiveOp(Operation *op) {
@@ -432,6 +451,87 @@ struct OperationPruner : public Reduction {
   SymbolCache symbols;
 };
 
+/// A sample reduction pattern that removes ports from FIRRTL modules if they
+/// are either unused inputs or outputs that are only invalidated.
+struct PortPruner : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+
+  bool match(Operation *op) override {
+    auto moduleOp = dyn_cast<firrtl::FModuleOp>(op);
+    return moduleOp && llvm::any_of(moduleOp.getArguments(), onlyInvalidated);
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto moduleOp = cast<firrtl::FModuleOp>(op);
+    LLVM_DEBUG(llvm::dbgs()
+               << "Pruning ports of `" << moduleOp.getName() << "`\n");
+
+    // Make a list of ports we can likely remove.
+    SmallVector<unsigned> removable;
+    for (unsigned i = 0, e = moduleOp.getNumPorts(); i != e; ++i)
+      if (onlyInvalidated(moduleOp.getArgument(i)))
+        removable.push_back(i);
+    assert(!removable.empty() &&
+           "shouldn't work on module with no prunable ports");
+
+    // Erase any users of the ports we are going to remove.
+    for (auto argIdx : removable) {
+      LLVM_DEBUG(llvm::dbgs() << "  - Removing port `"
+                              << moduleOp.getPortName(argIdx) << "`\n");
+      SmallVector<Value> maybeUnused;
+      for (auto userOp : llvm::make_early_inc_range(
+               moduleOp.getArgument(argIdx).getUsers())) {
+        maybeUnused.append(userOp->operand_begin(), userOp->operand_end());
+        userOp->erase();
+      }
+      for (auto v : maybeUnused)
+        pruneUnusedOps(v);
+    }
+
+    // Actually remove the ports.
+    moduleOp.erasePorts(removable);
+
+    // Update all instances of this module to reflect the change.
+    for (auto userOp :
+         symbols.getNearestSymbolUserMap(moduleOp).getUsers(moduleOp)) {
+      auto instOp = dyn_cast<firrtl::InstanceOp>(userOp);
+      if (!instOp || instOp.moduleName() != moduleOp.getName())
+        continue;
+      LLVM_DEBUG(llvm::dbgs()
+                 << "  - Updating instance `" << instOp.name()
+                 << "` in module `"
+                 << instOp->getParentOfType<firrtl::FModuleOp>().getName()
+                 << "`\n");
+
+      // Replace the removed instance port uses with corresponding wire
+      // declarations, and invalidate the output fields.
+      ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+      SmallDenseMap<Type, Value, 8> invalidCache;
+      for (auto i : removable) {
+        auto result = instOp.getResult(i);
+        auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+                                          instOp.getPortNameStr(i));
+        auto wire = builder.create<firrtl::WireOp>(
+            result.getType(), name, instOp.getPortAnnotation(i), StringAttr{});
+        invalidateOutputs(builder, wire, invalidCache,
+                          instOp.getPortDirection(i) == firrtl::Direction::In);
+        result.replaceAllUsesWith(wire);
+      }
+
+      // Remove the ports from the instance, which creates a new instance op and
+      // we can remove the old one.
+      instOp.erasePorts(builder, removable);
+      instOp->erase();
+    }
+    return success();
+  }
+
+  std::string getName() const override { return "port-pruner"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
+};
+
 /// A sample reduction pattern that removes FIRRTL annotations from ports and
 /// operations.
 struct AnnotationRemover : public Reduction {
@@ -466,18 +566,7 @@ struct RootPortPruner : public Reduction {
     auto module = cast<firrtl::FModuleOp>(op);
     SmallVector<unsigned> dropPorts;
     for (unsigned i = 0, e = module.getNumPorts(); i != e; ++i) {
-      bool onlyInvalidated =
-          llvm::all_of(module.getArgument(i).getUses(), [](OpOperand &use) {
-            auto *op = use.getOwner();
-            if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
-              return false;
-            if (use.getOperandNumber() != 0)
-              return false;
-            if (!op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>())
-              return false;
-            return true;
-          });
-      if (onlyInvalidated) {
+      if (onlyInvalidated(module.getArgument(i))) {
         dropPorts.push_back(i);
         for (auto user : module.getArgument(i).getUsers())
           user->erase();
@@ -567,6 +656,7 @@ void circt::createAllReductions(
   add(std::make_unique<OperandForwarder<1>>());
   add(std::make_unique<OperandForwarder<2>>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<PortPruner>());
   add(std::make_unique<AnnotationRemover>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
