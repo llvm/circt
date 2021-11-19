@@ -80,7 +80,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<OutputOp, InstanceOp, TypeScopeOp>(
+        .template Case<OutputOp, InstanceOp, TypeScopeOp, TypedeclOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitStmt(expr, args...);
             })
@@ -121,43 +121,6 @@ public:
   HANDLE(OutputOp, Unhandled);
   HANDLE(InstanceOp, Unhandled);
   HANDLE(TypeScopeOp, Unhandled);
-#undef HANDLE
-};
-
-/// This helps visit TypeScopeOp child nodes.
-template <typename ConcreteType, typename ResultType = void,
-          typename... ExtraArgs>
-class TypeScopeVisitor {
-public:
-  ResultType dispatchTypeScopeVisitor(Operation *op, ExtraArgs... args) {
-    auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<TypedeclOp>([&](auto expr) -> ResultType {
-          return thisCast->visitTypeScope(expr, args...);
-        })
-        .Default([&](auto expr) -> ResultType {
-          return thisCast->visitInvalidTypeScope(op, args...);
-        });
-  }
-
-  /// This callback is invoked on any non-type scope operations.
-  ResultType visitInvalidTypeScope(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown HW type scope node");
-    abort();
-  }
-
-  /// This callback is invoked on any type scope operations that are not
-  /// handled by the concrete visitor.
-  ResultType visitUnhandledTypeScope(Operation *op, ExtraArgs... args) {
-    return ResultType();
-  }
-
-#define HANDLE(OPTYPE, OPKIND)                                                 \
-  ResultType visitTypeScope(OPTYPE op, ExtraArgs... args) {                    \
-    return static_cast<ConcreteType *>(this)->visit##OPKIND##TypeScope(        \
-        op, args...);                                                          \
-  }
-
   HANDLE(TypedeclOp, Unhandled);
 #undef HANDLE
 };
