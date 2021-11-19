@@ -12,7 +12,7 @@
 // CHECK:   firrtl.connect %[[VAL_7]], %[[VAL_4]] : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK: }
 // CHECK: firrtl.module @test_branch(in %[[VAL_8:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_9:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_10:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_11:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_12:.*]]: !firrtl.clock, in %[[VAL_13:.*]]: !firrtl.uint<1>) {
-// CHECK:   %[[VAL_14:.*]], %[[VAL_15:.*]] = firrtl.instance handshake_branch  @handshake_branch_in_ui64_out_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+// CHECK:   %[[VAL_14:.*]], %[[VAL_15:.*]] = firrtl.instance handshake_branch0  @handshake_branch_in_ui64_out_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 handshake.func @test_branch(%arg0: index, %arg1: none, ...) -> (index, none) {
   %0 = "handshake.branch"(%arg0) {control = false}: (index) -> index
   handshake.return %0, %arg1 : index, none

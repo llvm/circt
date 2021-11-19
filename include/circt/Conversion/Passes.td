@@ -16,6 +16,24 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
+// AffineToStaticLogic
+//===----------------------------------------------------------------------===//
+
+def AffineToStaticLogic : FunctionPass<"convert-affine-to-staticlogic"> {
+  let summary = "Convert Affine dialect to StaticLogic pipelines";
+  let description = [{
+    This pass analyzes Affine loops and control flow, creates a Scheduling
+    problem using the Calyx operator library, solves the problem, and lowers
+    the loops to a StaticLogic pipeline.
+  }];
+  let constructor = "circt::createAffineToStaticLogic()";
+  let dependentDialects = [
+    "circt::staticlogic::StaticLogicDialect",
+    "mlir::arith::ArithmeticDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
@@ -145,11 +163,6 @@ def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createHandshakeDataflowPass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
-}
-
-def HandshakeCanonicalize : Pass<"handshake-canonicalize", "handshake::FuncOp"> {
-  let summary = "Canonicalize Handshake IR";
-  let constructor = "circt::createHandshakeCanonicalizePass()";
 }
 
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {

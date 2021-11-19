@@ -35,4 +35,13 @@ def HandshakeOpCount : Pass<"handshake-op-count", "mlir::ModuleOp"> {
   let constructor = "circt::handshake::createHandshakeOpCountPass()";
 }
 
+def HandshakeMaterializeForksSinks : Pass<"handshake-materialize-forks-sinks", "handshake::FuncOp"> {
+  let summary = "Materialize fork and sink operations.";
+  let description = [{
+    This pass analyses a handshake.func operation and inserts fork and sink
+    operations ensuring that all values have exactly one use.
+  }];
+  let constructor = "circt::handshake::createHandshakeMaterializeForksSinksPass()";
+}
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

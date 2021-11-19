@@ -6,10 +6,11 @@ func @test1(%arg0: memref<?xi32>) -> i32 {
   %c10 = arith.constant 10 : index
   %c0_i32 = arith.constant 0 : i32
   // CHECK: staticlogic.pipeline.while
+  // CHECK-SAME: II = 1
   // CHECK-SAME: iter_args(%arg1 = %c0, %arg2 = %c0_i32)
   // CHECK-SAME: (index, i32) -> i32
   // CHECK-SAME: {
-  %0 = staticlogic.pipeline.while iter_args(%arg1 = %c0, %arg2 = %c0_i32) : (index, i32) -> i32 {
+  %0 = staticlogic.pipeline.while II = 1 iter_args(%arg1 = %c0, %arg2 = %c0_i32) : (index, i32) -> i32 {
     %1 = arith.cmpi ult, %arg1, %c10 : index
     staticlogic.pipeline.register %1 : i1
   // CHECK: } do {
@@ -38,9 +39,10 @@ func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   %c3 = arith.constant 3 : index
   %c10 = arith.constant 10 : index
   // CHECK: staticlogic.pipeline.while
+  // CHECK-SAME: II = 1
   // CHECK-SAME: iter_args(%arg2 = %c0)
   // CHECK-SAME: (index) -> ()
-  staticlogic.pipeline.while iter_args(%arg2 = %c0) : (index) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg2 = %c0) : (index) -> () {
     %0 = arith.cmpi ult, %arg2, %c10 : index
     staticlogic.pipeline.register %0 : i1
   } do {
@@ -80,9 +82,10 @@ func @test3(%arg0: memref<?xi32>) {
   %1 = memref.alloca() : memref<1xi32>
   %2 = memref.alloca() : memref<1xi32>
   // CHECK: staticlogic.pipeline.while
+  // CHECK-SAME: II = 1
   // CHECK-SAME: iter_args(%arg1 = %c0)
   // CHECK-SAME: (index) -> ()
-  staticlogic.pipeline.while iter_args(%arg1 = %c0) : (index) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg1 = %c0) : (index) -> () {
     %3 = arith.cmpi ult, %arg1, %c10 : index
     staticlogic.pipeline.register %3 : i1
   } do {
@@ -115,9 +118,10 @@ func @test4(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   %c10 = arith.constant 10 : index
   %c1_i32 = arith.constant 1 : i32
   // CHECK: staticlogic.pipeline.while
+  // CHECK-SAME: II = 1
   // CHECK-SAME: iter_args(%arg2 = %c0)
   // CHECK-SAME: (index) -> ()
-  staticlogic.pipeline.while iter_args(%arg2 = %c0) : (index) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg2 = %c0) : (index) -> () {
     %0 = arith.cmpi ult, %arg2, %c10 : index
     staticlogic.pipeline.register %0 : i1
   } do {
@@ -149,9 +153,10 @@ func @test5(%arg0: memref<?xi32>) {
   %c2 = arith.constant 2 : index
   %c10 = arith.constant 10 : index
   // CHECK: staticlogic.pipeline.while
+  // CHECK-SAME: II = 1
   // CHECK-SAME: iter_args(%arg1 = %c2)
   // CHECK-SAME: (index) -> ()
-  staticlogic.pipeline.while iter_args(%arg1 = %c2) : (index) -> () {
+  staticlogic.pipeline.while II = 1 iter_args(%arg1 = %c2) : (index) -> () {
     %0 = arith.cmpi ult, %arg1, %c10 : index
     staticlogic.pipeline.register %0 : i1
   } do {

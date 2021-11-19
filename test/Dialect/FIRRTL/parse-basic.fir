@@ -29,7 +29,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "name_thing",
-  ; CHECK: parameters = {DEFAULT = 0 : i64,
+  ; CHECK: parameters = {DEFAULT = 0 : i32,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,
   ; CHECK:               FORMAT = "xyz_timeout=%d\0A",
   ; CHECK:               WIDTH = 32 : i8}}

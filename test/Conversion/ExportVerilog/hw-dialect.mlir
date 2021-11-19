@@ -8,7 +8,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %uarray: !hw.uarray<16xi8>,
                         %postUArray: i8,
                         %structA: !hw.struct<foo: i2, bar:i4>,
-                        %arrOfStructA: !hw.array<5 x struct<foo: i2>>
+                        %arrOfStructA: !hw.array<5 x struct<foo: i2>>,
+                        %array1: !hw.array<1xi1>
                         ) -> (
   r0: i4, r2: i4, r4: i4, r6: i4,
   r7: i4, r8: i4, r9: i4, r10: i4,
@@ -20,7 +21,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   r29: i12, r30: i2, r31: i9, r33: i4, r34: i4,
   r35: !hw.array<3xi4>, r36: i12, r37: i4,
   r38: !hw.array<6xi4>,
-  r40: !hw.struct<foo: i2, bar:i4>, r41: !hw.struct<foo: i2, bar: i4>
+  r40: !hw.struct<foo: i2, bar:i4>, r41: !hw.struct<foo: i2, bar: i4>,
+  r42: i1
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -77,14 +79,16 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %40 = hw.struct_inject %structA["bar"], %a : !hw.struct<foo: i2, bar: i4>
   %41 = hw.struct_create (%c, %a) : !hw.struct<foo: i2, bar: i4>
   %42 = hw.struct_inject %41["bar"], %b : !hw.struct<foo: i2, bar: i4>
+  %false = hw.constant false
+  %43 = hw.array_get %array1[%false] : !hw.array<1xi1>
 
   hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42 :
+              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42, %43:
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
    i12, i2, i9, i4, i4, !hw.array<3xi4>, i12, i4, !hw.array<6xi4>,
-   !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>
+   !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1
 }
 // CHECK-LABEL: module TESTSIMPLE(
 // CHECK-NEXT:   input  [3:0]                                              a, b,
@@ -94,6 +98,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
+// CHECK-NEXT:   input  [0:0]                                              array1,
 // CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9,
 // CHECK-NEXT:   output [3:0]                                              r10, r11, r12, r13, r14, r15,
 // CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21,
@@ -107,11 +112,13 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   output [11:0]                                             r36,
 // CHECK-NEXT:   output [3:0]                                              r37,
 // CHECK-NEXT:   output [5:0][3:0]                                         r38,
-// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40, r41);
+// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40, r41,
+// CHECK-NEXT:   output                                                    r42);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE2:.+]] = '{foo: c, bar: a};
+// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:.+]] = array2d[a];
+// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -143,12 +150,13 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:   assign r33 = cond ? a : b;
 // CHECK-NEXT:   assign r34 = ~a;
-// CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a+:3] : [[WIRE0]][b+:3];
+// CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = array2d[a][b];
+// CHECK-NEXT:   assign r37 = [[WIRE2]][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:   assign r41 = '{foo: _T_1.foo, bar: b};
+// CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
+// CHECK-NEXT:   assign r42 = array1[1'h0];
 // CHECK-NEXT: endmodule
 
 
@@ -229,7 +237,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(64'd14000240888948784983),
+// CHECK-NEXT:     .DEFAULT(-64'd4446503184760766633),
 // CHECK-NEXT:     .DEPTH(3.242000e+01),
 // CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
 // CHECK-NEXT:     .WIDTH(32)
@@ -705,13 +713,13 @@ hw.module @Chi() -> (Chi_output : i0) {
    // CHECK-NEXT: ) bar ();
 
    hw.instance "bar" @Bar1360<
-     WIDTH0: i64 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
+     WIDTH0: i32 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
      WIDTH4: si68 = -88888888888888888, Wtricky: i40 = 4294967295
    >() -> ()
    hw.output
  }
  hw.module.extern @Bar1360<
-     WIDTH0: i64, WIDTH1: i4, WIDTH2: i40, WIDTH3: si4, WIDTH4: si68, Wtricky: i40
+     WIDTH0: i32, WIDTH1: i4, WIDTH2: i40, WIDTH3: si4, WIDTH4: si68, Wtricky: i40
    >() attributes {verilogName = "RealBar"}
 
 // CHECK-LABEL: module Issue1563(
@@ -777,7 +785,7 @@ hw.module @ModuleWithLocInfo()  {
 // CHECK-LABEL: module SignedshiftResultSign
 // Issue #1681: https://github.com/llvm/circt/issues/1681
 hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
-  // CHECK: assign b = ($signed($signed(a) >>> a[6:0])) ^ 18'hB28;
+  // CHECK: assign b = $signed($signed(a) >>> a[6:0]) ^ 18'hB28;
   %c2856_i18 = hw.constant 2856 : i18
   %c0_i11 = hw.constant 0 : i11
   %0 = comb.extract %a from 0 : (i18) -> i7
@@ -785,6 +793,15 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
   %2 = comb.shrs %a, %1 : i18
   %3 = comb.xor %2, %c2856_i18 : i18
   hw.output %3 : i18
+}
+// CHECK-LABEL: module SignedShiftRightPrecendence
+hw.module @SignedShiftRightPrecendence(%p: i1, %x: i45) -> (o: i45) {
+  // CHECK: assign o = $signed($signed(x) >>> (p ? 45'h5 : 45'h8))
+  %c5_i45 = hw.constant 5 : i45
+  %c8_i45 = hw.constant 8 : i45
+  %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
+  %1 = comb.shrs %x, %0 : i45
+  hw.output %1 : i45
 }
 
 // CHECK-LABEL: module parameters
@@ -894,13 +911,13 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
 // CHECK: #(parameter param = 1,
 // CHECK:   parameter wire_0 = 2) (
 hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
-// CHECK: input [16:0]{{ *}}a,
+  // CHECK: input [16:0]{{ *}}a,
   (%a: !hw.int<17>,
-// CHECK: input [param + 4294967295:0] b);
+  // CHECK: input [param - 1:0] b);
    %b: !hw.int<#hw.param.decl.ref<"param">>) {
 
   // Check that the parameter name renamification propagates.
-// CHECK: wire [wire_0 + 4294967295:0] paramWire;
+  // CHECK: wire [wire_0 - 1:0] paramWire;
   %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
 
 }

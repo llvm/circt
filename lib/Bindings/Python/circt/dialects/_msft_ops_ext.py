@@ -127,3 +127,12 @@ class MSFTModuleExternOp(_hw_ext.ModuleLike):
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
+
+
+class PhysicalRegionOp:
+
+  def add_bounds(self, bounds):
+    existing_bounds = [b for b in _ir.ArrayAttr(self.attributes["bounds"])]
+    existing_bounds.append(bounds)
+    new_bounds = _ir.ArrayAttr.get(existing_bounds)
+    self.attributes["bounds"] = new_bounds

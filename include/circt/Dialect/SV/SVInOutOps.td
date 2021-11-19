@@ -172,6 +172,7 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                                           SmallVectorImpl<Type> &results);
   }];
 
+  let hasFolder = true;
   let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
                         " attr-dict `:` type($input) `,` type($base)";
 }

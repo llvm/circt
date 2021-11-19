@@ -13,6 +13,10 @@
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
+namespace arith {
+class ArithmeticDialect;
+} // namespace arith
+
 namespace scf {
 class SCFDialect;
 } // namespace scf

@@ -12,6 +12,7 @@
 #include "circt/Conversion/StandardToHandshake.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Analysis/AffineStructures.h"
@@ -73,213 +74,6 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
     }
     block.erase();
   }
-}
-
-static bool isControlOp(Operation *op) {
-  return op->hasAttr("control") &&
-         op->getAttrOfType<BoolAttr>("control").getValue();
-}
-
-static void dotPrintNode(llvm::raw_fd_ostream &outfile, Operation *op,
-                         DenseMap<Operation *, unsigned> &opIDs) {
-  outfile << "\t\t";
-  outfile << "\"" + op->getName().getStringRef().str() + "_" +
-                 to_string(opIDs[op]) + "\"";
-  outfile << " [";
-
-  /// Fill color
-  outfile << "fillcolor = ";
-  outfile
-      << llvm::TypeSwitch<Operation *, std::string>(op)
-             .Case<handshake::ForkOp, handshake::LazyForkOp, handshake::MuxOp,
-                   handshake::JoinOp>([&](auto) { return "lavender"; })
-             .Case<handshake::BufferOp>([&](auto) { return "lightgreen"; })
-             .Case<handshake::ReturnOp>([&](auto) { return "gold"; })
-             .Case<handshake::SinkOp, handshake::ConstantOp>(
-                 [&](auto) { return "gainsboro"; })
-             .Case<handshake::MemoryOp, handshake::LoadOp, handshake::StoreOp>(
-                 [&](auto) { return "coral"; })
-             .Case<handshake::MergeOp, handshake::ControlMergeOp,
-                   handshake::BranchOp, handshake::ConditionalBranchOp>(
-                 [&](auto) { return "lightblue"; })
-             .Default([&](auto) { return "moccasin"; });
-
-  /// Shape
-  outfile << ", shape=";
-  if (op->getDialect()->getNamespace() == "handshake")
-    outfile << "box";
-  else
-    outfile << "oval";
-
-  /// Label
-  outfile << ", label=\"";
-  outfile << llvm::TypeSwitch<Operation *, std::string>(op)
-                 .Case<handshake::ConstantOp>([&](auto op) {
-                   return std::to_string(
-                       op->template getAttrOfType<mlir::IntegerAttr>("value")
-                           .getValue()
-                           .getSExtValue());
-                 })
-                 .Case<handshake::ControlMergeOp>(
-                     [&](auto) { return "cmerge"; })
-                 .Case<handshake::ConditionalBranchOp>(
-                     [&](auto) { return "cbranch"; })
-                 .Case<arith::AddIOp>([&](auto) { return "+"; })
-                 .Case<arith::SubIOp>([&](auto) { return "-"; })
-                 .Case<arith::AndIOp>([&](auto) { return "&"; })
-                 .Case<arith::OrIOp>([&](auto) { return "|"; })
-                 .Case<arith::XOrIOp>([&](auto) { return "^"; })
-                 .Case<arith::MulIOp>([&](auto) { return "*"; })
-                 .Case<arith::ShRSIOp, arith::ShRUIOp>(
-                     [&](auto) { return ">>"; })
-                 .Case<arith::ShLIOp>([&](auto) { return "<<"; })
-                 .Case<arith::CmpIOp>([&](arith::CmpIOp op) {
-                   switch (op.predicate()) {
-                   case arith::CmpIPredicate::eq:
-                     return "==";
-                   case arith::CmpIPredicate::ne:
-                     return "!=";
-                   case arith::CmpIPredicate::uge:
-                   case arith::CmpIPredicate::sge:
-                     return ">=";
-                   case arith::CmpIPredicate::ugt:
-                   case arith::CmpIPredicate::sgt:
-                     return ">";
-                   case arith::CmpIPredicate::ule:
-                   case arith::CmpIPredicate::sle:
-                     return "<=";
-                   case arith::CmpIPredicate::ult:
-                   case arith::CmpIPredicate::slt:
-                     return "<";
-                   }
-                   llvm_unreachable("unhandled cmpi predicate");
-                 })
-                 .Default([&](auto op) {
-                   auto opDialect = op->getDialect()->getNamespace();
-                   std::string label = op->getName().getStringRef().str();
-                   if (opDialect == "handshake")
-                     label.erase(0, StringLiteral("handshake.").size());
-
-                   return label;
-                 });
-  outfile << "\"";
-
-  /// Style; add dashed border for control nodes
-  outfile << ", style=\"filled";
-  if (isControlOp(op))
-    outfile << ", dashed";
-
-  outfile << "\"";
-
-  outfile << "]\n";
-}
-
-/// Returns true if v is used as a control operand in op
-static bool isControlOperand(Operation *op, Value v) {
-  if (isControlOp(op))
-    return true;
-
-  return llvm::TypeSwitch<Operation *, bool>(op)
-      .Case<handshake::MuxOp, handshake::ConditionalBranchOp>(
-          [&](auto op) { return v == op.getOperand(0); })
-      .Case<handshake::ControlMergeOp>([&](auto) { return true; })
-      .Default([](auto) { return false; });
-}
-
-template <typename FuncOp>
-void dotPrint(FuncOp f, StringRef name) {
-  // Prints DOT representation of the dataflow graph, used for debugging.
-  DenseMap<Block *, unsigned> blockIDs;
-  DenseMap<Operation *, unsigned> opIDs;
-  unsigned i = 0;
-  unsigned j = 0;
-
-  for (Block &block : f) {
-    blockIDs[&block] = i++;
-    for (Operation &op : block)
-      opIDs[&op] = j++;
-  }
-
-  std::error_code ec;
-  llvm::raw_fd_ostream outfile(name.str() + ".dot", ec);
-
-  outfile << "Digraph G {\n\tsplines=spline;\n";
-
-  for (Block &block : f) {
-    outfile << "\tsubgraph cluster_" + to_string(blockIDs[&block]) + " {\n";
-    outfile << "\tnode [shape=box style=filled fillcolor=\"white\"]\n";
-    outfile << "\tcolor = \"darkgreen\"\n";
-    outfile << "\t\tlabel = \" block " + to_string(blockIDs[&block]) + "\"\n";
-
-    for (Operation &op : block)
-      dotPrintNode(outfile, &op, opIDs);
-
-    for (Operation &op : block) {
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults()) {
-        for (auto &u : result.getUses()) {
-          Operation *useOp = u.getOwner();
-          if (useOp->getBlock() == &block) {
-            outfile << "\t\t";
-            outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                           to_string(opIDs[&op]) + "\"";
-            outfile << " -> ";
-            outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
-                           to_string(opIDs[useOp]) + "\"";
-
-            if (isControlOp(&op) || isControlOperand(useOp, result))
-              outfile << " [style=\"dashed\"]\n";
-
-            outfile << "\n";
-          }
-        }
-      }
-    }
-
-    /// Annotate block argument uses
-    for (auto barg : enumerate(block.getArguments())) {
-      std::string argName = "arg" + std::to_string(barg.index());
-      outfile << "\t\"" << argName << "\" [shape=diamond";
-      if (barg.index() == block.getNumArguments() - 1)
-        outfile << ", style=dashed";
-      outfile << "]\n";
-      for (auto useOp : barg.value().getUsers()) {
-        outfile << argName << " -> \""
-                << useOp->getName().getStringRef().str() + "_" +
-                       to_string(opIDs[useOp]) + "\"";
-        if (isControlOperand(useOp, barg.value()))
-          outfile << " [style=\"dashed\"]";
-        outfile << "\n";
-      }
-    }
-
-    outfile << "\t}\n";
-
-    for (Operation &op : block) {
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults()) {
-        for (auto &u : result.getUses()) {
-          Operation *useOp = u.getOwner();
-          if (useOp->getBlock() != &block) {
-            outfile << "\t\t";
-            outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                           to_string(opIDs[&op]) + "\"";
-            outfile << " -> ";
-            outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
-                           to_string(opIDs[useOp]) + "\"";
-            outfile << " [minlen = 3]\n";
-          }
-        }
-      }
-    }
-  }
-
-  outfile << "\t}\n";
-  outfile.close();
 }
 
 LogicalResult setControlOnlyPath(handshake::FuncOp f,
@@ -745,35 +539,6 @@ LogicalResult addBranchOps(handshake::FuncOp f,
   return success();
 }
 
-// Create sink for every unused result
-LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  BlockValues liveOuts;
-
-  for (Block &block : f) {
-    for (Operation &op : block) {
-      // Do not add sinks for unused MLIR operations which the rewriter will
-      // later remove We have already replaced these ops with their handshake
-      // equivalents
-      // TODO: should we use other indicator for op that has been erased?
-      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-              mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
-        continue;
-
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults())
-        if (result.use_empty()) {
-          rewriter.setInsertionPointAfter(&op);
-          auto sinkOp = rewriter.create<SinkOp>(op.getLoc(), result);
-          if (result.getType().isa<NoneType>())
-            sinkOp->setAttr("control", rewriter.getBoolAttr(true));
-        }
-    }
-  }
-  return success();
-}
-
 LogicalResult connectConstantsToControl(handshake::FuncOp f,
                                         ConversionPatternRewriter &rewriter) {
   // Create new constants which have a control-only input to trigger them
@@ -804,53 +569,6 @@ LogicalResult connectConstantsToControl(handshake::FuncOp f,
       rewriter.eraseOp(op);
     }
   }
-  return success();
-}
-
-void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
-  for (int i = 0, e = op->getNumOperands(); i < e; ++i)
-    if (op->getOperand(i) == oldVal) {
-      op->setOperand(i, newVal);
-      break;
-    }
-  return;
-}
-
-void insertFork(Operation *op, Value result, bool isLazy, OpBuilder &rewriter) {
-  // Get successor operations
-  std::vector<Operation *> opsToProcess;
-  for (auto &u : result.getUses())
-    opsToProcess.push_back(u.getOwner());
-
-  // Insert fork after op
-  rewriter.setInsertionPointAfter(op);
-  Operation *newOp;
-  if (isLazy)
-    newOp =
-        rewriter.create<LazyForkOp>(op->getLoc(), result, opsToProcess.size());
-  else
-    newOp = rewriter.create<ForkOp>(op->getLoc(), result, opsToProcess.size());
-
-  // Modify operands of successor
-  // opsToProcess may have multiple instances of same operand
-  // Replace uses one by one to assign different fork outputs to them
-  for (int i = 0, e = opsToProcess.size(); i < e; ++i)
-    replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
-}
-
-// Insert Fork Operation for every operation with more than one successor
-LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  for (Operation &op : f.getOps()) {
-    // Ignore terminators, and don't add Forks to Forks.
-    if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
-      for (auto result : op.getResults()) {
-        // If there is a result and it is used more than once
-        if (!result.use_empty() && !result.hasOneUse())
-          insertFork(&op, result, false, rewriter);
-      }
-    }
-  }
-
   return success();
 }
 
@@ -1116,9 +834,8 @@ void addLazyForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     Value res = getBlockControlValue(&block);
-    Operation *op = res.getDefiningOp();
     if (!res.hasOneUse())
-      insertFork(op, res, true, rewriter);
+      insertFork(res, true, rewriter);
   }
 }
 
@@ -1130,7 +847,7 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse())
-            insertFork(&op, result, false, rewriter);
+            insertFork(result, false, rewriter);
         }
       }
     }
@@ -1637,7 +1354,7 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
     for (auto result : op->getResults()) {
       // If there is a result and it is used more than once
       if (!result.use_empty() && !result.hasOneUse())
-        insertFork(op, result, false, rewriter);
+        insertFork(result, false, rewriter);
     }
   }
 };
@@ -1918,33 +1635,11 @@ struct HandshakeDataflowPass
   }
 };
 
-struct HandshakeCanonicalizePass
-    : public HandshakeCanonicalizeBase<HandshakeCanonicalizePass> {
-  void runOnOperation() override {
-    auto Op = getOperation();
-    OpBuilder builder(Op);
-    (void)addForkOps(Op, builder);
-    (void)addSinkOps(Op, builder);
-
-    for (auto &block : Op)
-      for (auto &nestedOp : block)
-        for (mlir::Value out : nestedOp.getResults())
-          if (!out.hasOneUse()) {
-            nestedOp.emitError("does not have exactly one use");
-            signalPassFailure();
-          }
-  }
-};
 } // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::createHandshakeDataflowPass() {
   return std::make_unique<HandshakeDataflowPass>();
-}
-
-std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-circt::createHandshakeCanonicalizePass() {
-  return std::make_unique<HandshakeCanonicalizePass>();
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>

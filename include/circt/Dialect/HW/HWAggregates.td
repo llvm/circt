@@ -123,6 +123,7 @@ class IndexBitWidthConstraint<string index, string input>
                    input, index,
                    [{
     IntegerType::get($_self.getContext(),
+                     type_cast<ArrayType>($_self).getSize() == 1 ? 1 :
                      llvm::Log2_64_Ceil(type_cast<ArrayType>($_self).getSize()))
                    }]>;
 

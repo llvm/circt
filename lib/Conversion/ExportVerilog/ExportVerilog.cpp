@@ -56,7 +56,7 @@ namespace {
 enum VerilogPrecedence {
   // Normal precedence levels.
   Symbol,          // Atomic symbol like "foo" and {a,b}
-  Selection,       // () , [] , :: , .
+  Selection,       // () , [] , :: , ., $signed()
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
@@ -620,7 +620,8 @@ void EmitterBase::emitTextWithSubstitutions(
         return state.globalNames.getPortVerilogName(itemOp,
                                                     portInfos[item.getPort()]);
       }
-      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp>(itemOp))
+      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
+              itemOp))
         return state.globalNames.getDeclarationVerilogName(itemOp);
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
@@ -962,12 +963,10 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     APInt value = intAttr.getValue();
 
     // We omit the width specifier if the value is <= 32-bits in size, which
-    // makes this more compatible with unknown width extmodules.  Additionally,
-    // special case a zero valued parameter.  This is canonically stored as
-    // 64-bits.  However, we don't want to print 64'd0 here.
-    if (!value.isZero() && intTy.getWidth() > 32) {
+    // makes this more compatible with unknown width extmodules.
+    if (intTy.getWidth() > 32) {
       // Sign comes out before any width specifier.
-      if (intTy.isSigned() && value.isNegative()) {
+      if (value.isNegative() && (intTy.isSigned() || intTy.isSignless())) {
         os << '-';
         value = -value;
       }
@@ -1094,6 +1093,20 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     os << '(';
   bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
   for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+    // Handle the special case of (a + b + -42) as (a + b - 42).
+    // TODO: Also handle (a + b + x*-1).
+    if (expr.getOpcode() == PEO::Add) {
+      if (auto integer = op.dyn_cast<IntegerAttr>()) {
+        const APInt &value = integer.getValue();
+        if (value.isNegative() && !value.isMinSignedValue()) {
+          os << " - ";
+          allOperandsSigned &=
+              emitOperand(IntegerAttr::get(op.getType(), -value));
+          continue;
+        }
+      }
+    }
+
     os << operatorStr;
     allOperandsSigned &= emitOperand(op);
   }
@@ -1282,7 +1295,7 @@ private:
   SubExprInfo visitComb(ShrSOp op) {
     // >>> is only an arithmetic shift right when both operands are signed.
     // Otherwise it does a logical shift.
-    return emitBinary(op, LowestPrecedence, ">>>",
+    return emitBinary(op, Shift, ">>>",
                       EB_RequireSignedOperands | EB_ForceResultSigned |
                           EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
@@ -1376,6 +1389,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (emitBinaryFlags & EB_ForceResultSigned) {
     os << ')';
     signedness = IsSigned;
+    prec = Selection;
   }
 
   return {prec, signedness};
@@ -1520,11 +1534,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     addPrefix("$signed(");
     os << ')';
     expInfo.signedness = IsSigned;
+    expInfo.precedence = Selection;
   } else if (signRequirement == RequireUnsigned &&
              expInfo.signedness == IsSigned) {
     addPrefix("$unsigned(");
     os << ')';
     expInfo.signedness = IsUnsigned;
+    expInfo.precedence = Selection;
   } else if (expInfo.precedence > parenthesizeIfLooserThan) {
     // If this subexpression would bind looser than the expression it is bound
     // into, then we need to parenthesize it.  Insert the parentheses
@@ -1784,7 +1800,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
-  os << "+:" << dstWidth << ']';
+  os << " +: " << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
@@ -1830,11 +1846,10 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
   os << '[';
   emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
   if (op.decrement())
-    os << " -";
+    os << " -: ";
   else
-    os << " +";
-  os << ": " << op.width();
-  os << ']';
+    os << " +: ";
+  os << op.width() << ']';
   return {Selection, prec.signedness};
 }
 
@@ -1843,10 +1858,10 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
   os << '[';
   emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
   if (op.decrement())
-    os << " -";
+    os << " -: ";
   else
-    os << " +";
-  os << ": " << op.width();
+    os << " +: ";
+  os << op.width();
   os << ']';
   return info;
 }
@@ -1961,37 +1976,24 @@ static bool isExpressionUnableToInline(Operation *op) {
 
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
-    // It cannot be an arbitrary expression.
-    if (isa<ExtractOp>(user))
-      if (!isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-
-    // Indexing into an array cannot be done in the same line as the array
-    // creation.
     //
-    // This is done to avoid creating incorrect constructs like the following
-    // (which is a bit extract):
-    //
+    // It cannot be an arbitrary expression, e.g. this is invalid:
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
-    // And illegal constructs like:
-    //
-    //     assign bar = ({{a}, {b}, {c}, {d}})[idx];
-    if (isa<ArrayCreateOp>(op) && isa<ArrayGetOp>(user))
-      return true;
+    // To handle these, we push the subexpression into a temporary.
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp>(user))
+      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
 
     // Sign extend (when the operand isn't a single bit) requires a bitselect
-    // syntactically.
+    // syntactically so it uses its expression multiple times.
     if (auto sext = dyn_cast<SExtOp>(user)) {
       auto sextOperandType = sext.getOperand().getType().cast<IntegerType>();
       if (sextOperandType.getWidth() != 1 &&
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
-    // ArraySliceOp uses its operand twice, so we want to assign it first then
-    // use that variable in the ArraySliceOp expression.
-    if (isa<ArraySliceOp>(user) && !isa<ConstantOp>(op))
-      return true;
 
     // Always blocks must have a name in their sensitivity list, not an expr.
     if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
@@ -4016,6 +4018,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
         symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
+      // HACK: This is to make interface-related operations work as they are at
+      // the moment, with names being stored in `sym_name` instead of
+      // `inner_sym`.
+      if (auto instOp = dyn_cast<InterfaceInstanceOp>(op))
+        if (auto attr = instOp.sym_nameAttr())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), attr.getValue(),
+                                    op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pycde
 from pycde import (Input, Output, module, externmodule, generator, types, dim)
-from circt.dialects import comb, hw
+from pycde.dialects import comb, hw
 from circt.support import connect
 
 import sys
@@ -38,18 +38,17 @@ def PolynomialCompute(coefficients: Coefficients):
       x = mod.x
       taps = list()
       for power, coeff in enumerate(coefficients.coeff):
-        coeffVal = hw.ConstantOp.create(types.i32, coeff)
+        coeffVal = hw.ConstantOp(types.i32, coeff)
         if power == 0:
-          newPartialSum = coeffVal.result
+          newPartialSum = coeffVal
         else:
           partialSum = taps[-1]
           if power == 1:
             currPow = x
           else:
             x_power = [x for i in range(power)]
-            currPow = comb.MulOp.create(*x_power)
-          newPartialSum = comb.AddOp.create(
-              partialSum, comb.MulOp.create(coeffVal, currPow))
+            currPow = comb.MulOp(*x_power)
+          newPartialSum = comb.AddOp(partialSum, comb.MulOp(coeffVal, currPow))
 
         taps.append(newPartialSum)
 
@@ -92,7 +91,7 @@ class PolynomialSystem:
   @generator
   def construct(ports):
     i32 = types.i32
-    x = hw.ConstantOp.create(i32, 23)
+    x = hw.ConstantOp(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
     connect(poly.x, x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",

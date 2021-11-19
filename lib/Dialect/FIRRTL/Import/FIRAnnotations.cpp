@@ -1592,46 +1592,99 @@ bool firrtl::scatterCustomAnnotation(DictionaryAttr anno) {
           if (!localAttr || !remoteAttr)
             return false;
 
-          // Build the two annotations.
-          for (auto pair : std::array{std::make_pair(localAttr, true),
-                                      std::make_pair(remoteAttr, false)}) {
-            auto canonTarget = canonicalizeTarget(pair.first.getValue());
+    if (clazz == "sifive.enterprise.grandcentral.ModuleReplacementAnnotation") {
+      auto id = newID();
+      NamedAttrList fields;
+      auto annotationsAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
+      auto circuitAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
+      auto circuitPackageAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
+      auto dontTouchesAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "dontTouches", loc, clazz);
+      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr ||
+          !dontTouchesAttr)
+        return false;
+      fields.append("class", classAttr);
+      fields.append("id", id);
+      fields.append("annotations", annotationsAttr);
+      fields.append("circuit", circuitAttr);
+      fields.append("circuitPackage", circuitPackageAttr);
+      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
 
-            // HACK: Ignore the side of the connection that targets the *other*
-            // circuit. We do this by checking whether the canonicalized target
-            // begins with `~CircuitName|`. If it doesn't, we skip.
-            // TODO: Once we properly support multiple circuits, this can go and
-            // the annotation can scatter properly.
-            StringRef prefix(canonTarget);
-            if (!(prefix.consume_front("~") &&
-                  prefix.consume_front(circuit.name()) &&
-                  prefix.consume_front("|"))) {
-              continue;
-            }
+      // Add a don't touches for each target in "dontTouches" list
+      for (auto dontTouch : dontTouchesAttr) {
+        StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
+        if (!targetString) {
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation dontTouches entries must be strings")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        if (!canonTarget)
+          return false;
+        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto leafTarget = splitAndAppendTarget(
+            fields, std::get<0>(nlaTargets.back()), context);
 
-            // Assemble the annotation on this side of the connection.
-            NamedAttrList fields;
-            fields.append("class", classAttr);
-            fields.append("id", id);
-            fields.append("targetId", targetId);
-            fields.append("peer", pair.second ? remoteAttr : localAttr);
-            fields.append(
-                "side",
-                StringAttr::get(context, pair.second ? "local" : "remote"));
-            fields.append(
-                "dir", StringAttr::get(context, isSource ? "source" : "sink"));
+        // Add a don't touch annotation to whatever this annotation targets.
+        addDontTouch(leafTarget.first, leafTarget.second);
+      }
 
-            // Handle subfield and non-local targets.
-            auto NLATargets = expandNonLocal(canonTarget);
-            auto leafTarget = splitAndAppendTarget(
-                fields, std::get<0>(NLATargets.back()), context);
-            if (NLATargets.size() > 1) {
-              buildNLA(circuit, ++nlaNumber, NLATargets);
-              fields.append("circt.nonlocal",
-                            FlatSymbolRefAttr::get(context, canonTarget));
-            }
-            newAnnotations[leafTarget.first].push_back(
-                DictionaryAttr::get(context, fields));
+      auto targets = tryGetAs<ArrayAttr>(dict, dict, "targets", loc, clazz);
+      if (!targets)
+        return false;
+      for (auto targetAttr : targets) {
+        NamedAttrList fields;
+        fields.append("id", id);
+        StringAttr targetString = targetAttr.dyn_cast<StringAttr>();
+        if (!targetString) {
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation targets entries must be strings")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        if (!canonTarget)
+          return false;
+        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto leafTarget = splitAndAppendTarget(
+            fields, std::get<0>(nlaTargets.back()), context);
+        if (nlaTargets.size() > 1) {
+          buildNLA(circuit, ++nlaNumber, nlaTargets);
+          fields.append("circt.nonlocal",
+                        FlatSymbolRefAttr::get(context, *canonTarget));
+        }
+        newAnnotations[leafTarget.first].push_back(
+            DictionaryAttr::get(context, fields));
+
+        // Annotate instances along the NLA path.
+        for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+          NamedAttrList fields;
+          fields.append("circt.nonlocal",
+                        FlatSymbolRefAttr::get(context, *canonTarget));
+          fields.append("class", StringAttr::get(context, "circt.nonlocal"));
+          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
+              DictionaryAttr::get(context, fields));
+        }
+      }
+    }
+
+    // Scatter trackers out from OMIR JSON.
+    if (clazz == omirAnnoClass) {
+      auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
+                                           circuit, nlaNumber, loc);
+      if (!newAnno)
+        return false;
+      newAnnotations["~"].push_back(newAnno.getValue());
+      continue;
+    }
 
             // Add a don't touch annotation to whatever this annotation targets.
             addDontTouch(leafTarget.first, leafTarget.second);

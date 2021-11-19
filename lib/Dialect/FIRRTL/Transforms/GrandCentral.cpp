@@ -12,9 +12,9 @@
 
 #include "../AnnotationDetails.h"
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -364,6 +364,89 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+/// A helper to build verbatim strings with symbol placeholders. Provides a
+/// mechanism to snapshot the current string and symbols and restore back to
+/// this state after modifications. These snapshots are particularly useful when
+/// the string is assembled through hierarchical traversal of some sort, which
+/// populates the string with a prefix common to all children of a hierarchy
+/// (like the interface field traversal in the `GrandCentralPass`).
+///
+/// The intended use is as follows:
+///
+///     void baz(VerbatimBuilder &v) {
+///       foo(v.snapshot().append("bar"));
+///     }
+///
+/// The function `baz` takes a snapshot of the current verbatim text `v`, adds
+/// "bar" to it and calls `foo` with that appended verbatim text. After the call
+/// to `foo` returns, any changes made by `foo` as well as the "bar" are dropped
+/// from the verbatim text `v`, as the temporary snapshot goes out of scope.
+struct VerbatimBuilder {
+  struct Base {
+    SmallString<128> string;
+    SmallVector<Attribute> symbols;
+    VerbatimBuilder builder() { return VerbatimBuilder(*this); }
+    operator VerbatimBuilder() { return builder(); }
+  };
+
+  /// Constructing a builder will snapshot the `Base` which holds the actual
+  /// string and symbols.
+  VerbatimBuilder(Base &base)
+      : base(base), stringBaseSize(base.string.size()),
+        symbolsBaseSize(base.symbols.size()) {}
+
+  /// Destroying a builder will reset the `Base` to the original string and
+  /// symbols.
+  ~VerbatimBuilder() {
+    base.string.resize(stringBaseSize);
+    base.symbols.resize(symbolsBaseSize);
+  }
+
+  // Disallow copying.
+  VerbatimBuilder(const VerbatimBuilder &) = delete;
+  VerbatimBuilder &operator=(const VerbatimBuilder &) = delete;
+
+  /// Take a snapshot of the current string and symbols. This returns a new
+  /// `VerbatimBuilder` that will reset to the current state of the string once
+  /// destroyed.
+  VerbatimBuilder snapshot() { return VerbatimBuilder(base); }
+
+  /// Get the current string.
+  StringRef getString() const { return base.string; }
+  /// Get the current symbols;
+  ArrayRef<Attribute> getSymbols() const { return base.symbols; }
+
+  /// Append to the string.
+  VerbatimBuilder &append(char c) {
+    base.string.push_back(c);
+    return *this;
+  }
+
+  /// Append to the string.
+  VerbatimBuilder &append(const Twine &twine) {
+    twine.toVector(base.string);
+    return *this;
+  }
+
+  /// Append a placeholder and symbol to the string.
+  VerbatimBuilder &append(Attribute symbol) {
+    unsigned id = base.symbols.size();
+    base.symbols.push_back(symbol);
+    append("{{" + Twine(id) + "}}");
+    return *this;
+  }
+
+  VerbatimBuilder &operator+=(char c) { return append(c); }
+  VerbatimBuilder &operator+=(const Twine &twine) { return append(twine); }
+  VerbatimBuilder &operator+=(Attribute symbol) { return append(symbol); }
+
+private:
+  Base &base;
+  size_t stringBaseSize;
+  size_t symbolsBaseSize;
+};
+
 /// A wrapper around a string that is used to encode a type which cannot be
 /// represented by an mlir::Type for some reason.  This is currently used to
 /// represent either an interface, a n-dimensional vector of interfaces, or a
@@ -445,8 +528,9 @@ private:
   /// Mapping of ID to leaf ground type associated with that ID.
   DenseMap<Attribute, Value> leafMap;
 
-  /// Mapping of ID to parent instance and module.
-  DenseMap<Attribute, std::pair<InstanceOp, FModuleOp>> parentIDMap;
+  /// Mapping of ID to parent instance and module.  If this module is the top
+  /// module, then the first tuple member will be None.
+  DenseMap<Attribute, std::pair<Optional<InstanceOp>, FModuleOp>> parentIDMap;
 
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
@@ -469,20 +553,20 @@ private:
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
-  bool traverseField(Attribute field, IntegerAttr id, Twine path);
+  bool traverseField(Attribute field, IntegerAttr id, VerbatimBuilder &path);
 
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
   Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
-                                 StringAttr prefix, Twine path);
+                                 StringAttr prefix, VerbatimBuilder &path);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
   Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
                                            IntegerAttr id, StringAttr prefix,
-                                           Twine path);
+                                           VerbatimBuilder &path);
 
   /// Return the module associated with this value.
   FModuleLike getEnclosingModule(Value value);
@@ -513,12 +597,25 @@ private:
   /// using `getNamesapce`.
   Optional<CircuitNamespace> circuitNamespace = None;
 
+  /// The module namespaces. These are lazily constructed by
+  /// `getModuleNamespace`.
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+
   /// Return a reference to the circuit namespace.  This will lazily construct a
   /// namespace if one does not exist.
   CircuitNamespace &getNamespace() {
     if (!circuitNamespace)
       circuitNamespace = CircuitNamespace(getOperation());
     return circuitNamespace.getValue();
+  }
+
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
   }
 
   /// A symbol table associated with the circuit.  This is lazily constructed by
@@ -560,6 +657,20 @@ private:
 
   /// A store of the YAML representation of interfaces.
   DenseMap<Attribute, sv::InterfaceOp> interfaceMap;
+
+  /// Returns an operation's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(Operation *op);
+
+  /// Returns a port's `inner_sym`, adding one if necessary.
+  StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
+
+  /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
+  /// to that operation.
+  hw::InnerRefAttr getInnerRefTo(Operation *op);
+
+  /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
+  /// to that port.
+  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
 };
 
 } // namespace
@@ -632,7 +743,7 @@ Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
 }
 
 bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
-                                     Twine path) {
+                                     VerbatimBuilder &path) {
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](auto ground) {
         Value leafValue = leafMap.lookup(ground.getID());
@@ -641,31 +752,39 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
-        auto srcPaths =
-            instancePaths->getAbsolutePaths(getEnclosingModule(leafValue));
+        auto enclosing = getEnclosingModule(leafValue);
+        auto srcPaths = instancePaths->getAbsolutePaths(enclosing);
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
-        llvm::SmallString<128> srcRef;
-        for (auto path : srcPaths[0]) {
-          srcRef.append(path.name());
-          srcRef.append(".");
+
+        // Add the root module.
+        path += " = ";
+        path += FlatSymbolRefAttr::get(SymbolTable::getSymbolName(
+            srcPaths[0].empty()
+                ? enclosing
+                : srcPaths[0][0]->getParentOfType<FModuleLike>()));
+
+        // Add the source path.
+        for (auto inst : srcPaths[0]) {
+          path += '.';
+          path += getInnerRefTo(inst);
         }
 
+        // Add the leaf value to the path.
         auto uloc = builder.getUnknownLoc();
+        path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
-          FModuleOp module =
-              cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-          builder.create<sv::VerbatimOp>(
-              uloc, "assign " + path + " = " + srcRef +
-                        module.getPortName(blockArg.getArgNumber()) + ";");
+          auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
+          path += getInnerRefTo(module, blockArg.getArgNumber());
         } else {
-          auto leafModuleName = leafValue.getDefiningOp()
-                                    ->getAttr("name")
-                                    .cast<StringAttr>()
-                                    .getValue();
-          builder.create<sv::VerbatimOp>(
-              uloc, "assign " + path + " = " + srcRef + leafModuleName + ";");
+          path += getInnerRefTo(leafValue.getDefiningOp());
         }
+
+        // Assemble the verbatim op.
+        builder.create<sv::VerbatimOp>(
+            uloc,
+            StringAttr::get(&getContext(), "assign " + path.getString() + ";"),
+            ValueRange{}, ArrayAttr::get(&getContext(), path.getSymbols()));
         return true;
       })
       .Case<AugmentedVectorTypeAttr>([&](auto vector) {
@@ -676,7 +795,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           if (!field)
             return false;
           notFailed &=
-              traverseField(field.getValue(), id, path + "[" + Twine(i) + "]");
+              traverseField(field.getValue(), id,
+                            path.snapshot().append("[" + Twine(i) + "]"));
         }
         return notFailed;
       })
@@ -690,7 +810,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           if (!name)
             name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
           anyFailed &=
-              traverseField(field.getValue(), id, path + "." + name.getValue());
+              traverseField(field.getValue(), id,
+                            path.snapshot().append("." + name.getValue()));
         }
 
         return anyFailed;
@@ -707,7 +828,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
                                                  IntegerAttr id,
                                                  StringAttr prefix,
-                                                 Twine path) {
+                                                 VerbatimBuilder &path) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -735,8 +856,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             bool notFailed = true;
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
-            auto elementType = computeField(firstElement.getValue(), id, prefix,
-                                            path + "[" + Twine(0) + "]");
+            auto elementType =
+                computeField(firstElement.getValue(), id, prefix,
+                             path.snapshot().append("[" + Twine(0) + "]"));
             if (!elementType)
               return None;
 
@@ -744,8 +866,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
               auto subField = fromAttr(elements[i]);
               if (!subField)
                 return None;
-              notFailed &= traverseField(subField.getValue(), id,
-                                         path + "[" + Twine(i) + "]");
+              notFailed &=
+                  traverseField(subField.getValue(), id,
+                                path.snapshot().append("[" + Twine(i) + "]"));
             }
 
             if (auto *tpe = std::get_if<Type>(&elementType.getValue()))
@@ -789,7 +912,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 /// drive the interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                                 StringAttr prefix, Twine path) {
+                                 StringAttr prefix, VerbatimBuilder &path) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBody());
@@ -811,8 +934,18 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       return None;
 
     auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
-    auto elementType = computeField(field.getValue(), id, prefix,
-                                    path + "." + name.getValue());
+    // auto signalSym = hw::InnerRefAttr::get(iface.sym_nameAttr(), name);
+    // TODO: The `append(name.getValue())` in the following should actually be
+    // `append(signalSym)`, but this requires that `computeField` and the
+    // functions it calls always return a type for which we can construct an
+    // `InterfaceSignalOp`. Since nested interface instances are currently
+    // busted (due to the interface being a symbol table), this doesn't work at
+    // the moment. Passing a `name` works most of the time, but can be brittle
+    // if the interface field requires renaming in the output (e.g. due to
+    // naming conflicts).
+    auto elementType =
+        computeField(field.getValue(), id, prefix,
+                     path.snapshot().append(".").append(name.getValue()));
     if (!elementType)
       return None;
 
@@ -1211,11 +1344,15 @@ void GrandCentralPass::runOnOperation() {
             // is instantiated exatly once.
             if (tpe.getValue() == "parent") {
               // Assert that the parent is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "parent");
-              if (!instance)
-                return false;
+              // Allow for this to be the main module in the circuit.
+              Optional<InstanceOp> instance;
+              if (op != circuitOp.getMainModule()) {
+                instance = exactlyOneInstance(op, "parent");
+                if (!instance && circuitOp.getMainModule() != op)
+                  return false;
+              }
 
-              parentIDMap[id] = {instance.getValue(), cast<FModuleOp>(op)};
+              parentIDMap[id] = {instance, cast<FModuleOp>(op)};
               return true;
             }
 
@@ -1279,8 +1416,13 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "parentIDMap:\n";
     for (auto id : ids) {
       auto value = parentIDMap.lookup(id);
-      llvm::dbgs() << "  - " << id.getValue() << ": " << value.first.name()
-                   << ":" << value.second.getName() << "\n";
+      StringRef name;
+      if (value.first)
+        name = value.first.getValue().name();
+      else
+        name = value.second.getName();
+      llvm::dbgs() << "  - " << id.getValue() << ": " << name << ":"
+                   << value.second.getName() << "\n";
     }
     ids.clear();
     for (auto tuple : leafMap)
@@ -1342,12 +1484,24 @@ void GrandCentralPass::runOnOperation() {
       continue;
     }
 
+    // Decide on a symbol name to use for the interface instance. This is needed
+    // in `traverseBundle` as a placeholder for the connect operations.
+    auto parentModule = parentIDMap.lookup(bundle.getID()).second;
+    auto symbolName = getNamespace().newName(
+        "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
+        getInterfaceName(bundle.getPrefix(), bundle) + "__");
+
     // Recursively walk the AugmentedBundleType to generate interfaces and XMRs.
     // Error out if this returns None (indicating that the annotation annotation
     // is malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
-    auto iface = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
-                                companionIDMap.lookup(bundle.getID()).name);
+    VerbatimBuilder::Base verbatimData;
+    VerbatimBuilder verbatim(verbatimData);
+    verbatim +=
+        hw::InnerRefAttr::get(SymbolTable::getSymbolName(parentModule),
+                              StringAttr::get(&getContext(), symbolName));
+    auto iface =
+        traverseBundle(bundle, bundle.getID(), bundle.getPrefix(), verbatim);
     if (!iface) {
       removalError = true;
       continue;
@@ -1356,11 +1510,7 @@ void GrandCentralPass::runOnOperation() {
     interfaceVec.push_back(iface.getValue());
 
     // Instantiate the interface inside the parent.
-    builder.setInsertionPointToEnd(
-        parentIDMap.lookup(bundle.getID()).second.getBody());
-    auto symbolName = getNamespace().newName(
-        "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-        getInterfaceName(bundle.getPrefix(), bundle) + "__");
+    builder.setInsertionPointToEnd(parentModule.getBody());
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
@@ -1408,6 +1558,46 @@ void GrandCentralPass::runOnOperation() {
   // annotations.
   if (removalError)
     return signalPassFailure();
+}
+
+StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
+  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+  if (attr)
+    return attr;
+  auto module = op->getParentOfType<FModuleOp>();
+  StringRef nameHint = "gct_sym";
+  if (auto attr = op->getAttrOfType<StringAttr>("name"))
+    nameHint = attr.getValue();
+  auto name = getModuleNamespace(module).newName(nameHint);
+  attr = StringAttr::get(op->getContext(), name);
+  op->setAttr("inner_sym", attr);
+  return attr;
+}
+
+StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
+                                              size_t portIdx) {
+  auto attr = module.getPortSymbolAttr(portIdx);
+  if (attr && !attr.getValue().empty())
+    return attr;
+  StringRef nameHint = "gct_sym";
+  if (auto attr = module.getPortNameAttr(portIdx))
+    nameHint = attr.getValue();
+  auto name = getModuleNamespace(module).newName(nameHint);
+  attr = StringAttr::get(module.getContext(), name);
+  module.setPortSymbolAttr(portIdx, attr);
+  return attr;
+}
+
+hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
+  return hw::InnerRefAttr::get(
+      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
+      getOrAddInnerSym(op));
+}
+
+hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,
+                                                 size_t portIdx) {
+  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
+                               getOrAddInnerSym(module, portIdx));
 }
 
 //===----------------------------------------------------------------------===//

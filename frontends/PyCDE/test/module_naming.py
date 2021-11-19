@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
 
 import pycde
-import circt.dialects.hw
+import pycde.dialects.hw
 
 
 @pycde.module
@@ -35,7 +35,7 @@ class Test:
 
   @pycde.generator
   def build(_):
-    c1 = circt.dialects.hw.ConstantOp.create(pycde.types.i1, 1)
+    c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
     Parameterized(1)(x=c1)
     Parameterized(1)(x=c1)
     Parameterized(2)(x=c1)

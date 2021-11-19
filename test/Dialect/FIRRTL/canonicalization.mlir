@@ -2010,4 +2010,16 @@ firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in
     // CHECK: firrtl.connect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
   }
 
+// Issue #2197
+// CHECK-LABEL: @Issue2197
+firrtl.module @Issue2197(in %clock: !firrtl.clock, out %x: !firrtl.uint<2>) {
+  // CHECK: [[TMP:%.+]] = firrtl.invalidvalue : !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.connect %x, [[TMP]] : !firrtl.uint<2>, !firrtl.uint<2>
+  %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+  %reg = firrtl.reg %clock : !firrtl.uint<2>
+  %0 = firrtl.pad %invalid_ui1, 2 : (!firrtl.uint<1>) -> !firrtl.uint<2>
+  firrtl.connect %reg, %0 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.connect %x, %reg : !firrtl.uint<2>, !firrtl.uint<2>
+}
+
 }

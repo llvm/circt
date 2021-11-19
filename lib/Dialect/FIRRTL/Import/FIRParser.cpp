@@ -597,7 +597,13 @@ ParseResult FIRParser::parseOptionalAnnotations(SMLoc &loc, StringRef &result) {
 ///
 ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   auto spelling = getTokenSpelling();
+  bool isNegative = false;
   switch (getToken().getKind()) {
+  case FIRToken::signed_integer:
+    isNegative = spelling[0] == '-';
+    assert(spelling[0] == '+' || spelling[0] == '-');
+    spelling = spelling.drop_front();
+    LLVM_FALLTHROUGH;
   case FIRToken::integer:
     if (spelling.getAsInteger(10, result))
       return emitError(message), failure();
@@ -607,22 +613,17 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     if (result.isNegative())
       result = result.zext(result.getBitWidth() + 1);
 
-    consumeToken(FIRToken::integer);
-    return success();
-
-  case FIRToken::signed_integer:
-    assert(spelling[0] == '+' || spelling[0] == '-');
-    if (spelling.drop_front().getAsInteger(10, result))
-      return emitError(message), failure();
-
-    // Make sure that the returned APInt has a zero at the top so clients don't
-    // confuse it with a negative number.
-    if (result.isNegative())
-      result = result.zext(result.getBitWidth() + 1);
-
-    if (spelling[0] == '-')
+    if (isNegative)
       result = -result;
-    consumeToken(FIRToken::signed_integer);
+
+    // If this was parsed as >32 bits, but can be represented in 32 bits,
+    // truncate off the extra width.  This is important for extmodules which
+    // like parameters to be 32-bits, and insulates us from some arbitraryness
+    // in StringRef::getAsInteger.
+    if (result.getBitWidth() > 32 && result.getMinSignedBits() <= 32)
+      result = result.trunc(32);
+
+    consumeToken();
     return success();
   case FIRToken::string: {
     // Drop the quotes.

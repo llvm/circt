@@ -308,7 +308,7 @@ hw.module @ExternMods(%a_in: i8) {
   hw.instance "xyz3" @AParameterizedExtModule<CFG: none = #hw.param.verbatim<"\"STRING\"">>(in: %a_in: i8) -> (out: i1)
 }
 
-hw.module.extern @MyParameterizedExtModule<DEFAULT: i64, DEPTH: f64, FORMAT: none,
+hw.module.extern @MyParameterizedExtModule<DEFAULT: i32, DEPTH: f64, FORMAT: none,
      WIDTH: i8>(%in: i8) -> (out: i1)
 
 // CHECK-LABEL: module UseInstances
@@ -328,7 +328,7 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK: );
   %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
   %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule<
-     DEFAULT: i64 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
+     DEFAULT: i32 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
      WIDTH: i8 = 32
   >(in: %a_in: i8) -> (out: i1)
   hw.output %xyz.out, %xyz2.out : i1, i1
@@ -397,6 +397,17 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   hw.output
 }
 
+// https://github.com/llvm/circt/issues/2168
+// CHECK-LABEL: module shrs_parens(
+hw.module @shrs_parens(%a: i18, %b: i18, %c: i1) -> (o: i18) {
+  // CHECK: assign o = a + $signed($signed(b) >>> c);
+  %c0_i17 = hw.constant 0 : i17
+  %0 = comb.concat %c0_i17, %c : i17, i1
+  %1 = comb.shrs %b, %0 : i18
+  %2 = comb.add %a, %1 : i18
+  hw.output %2 : i18
+}
+
 // https://github.com/llvm/circt/issues/755
 // CHECK-LABEL: module UnaryParensIssue755(
 // CHECK: assign b = |(~a);
@@ -408,7 +419,6 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   hw.output %1 : i1
 }
 
-
 // Inner name references to ports which are renamed to avoid collisions with
 // reserved Verilog keywords.
 hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar: i1 {hw.exportPort = @symB})
@@ -418,20 +428,24 @@ hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar
 hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
   %parameter = sv.wire sym @symC : !hw.inout<i4>
   %localparam = sv.reg sym @symD : !hw.inout<i4>
+  %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
   // CHECK: wire [3:0] parameter_2;
   // CHECK: reg  [3:0] localparam_3;
+  // CHECK: Interface shortint();
   hw.output %signed : i1
 }
 sv.verbatim "VERB: module symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symA>]}
 sv.verbatim "VERB: module symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symB>]}
 sv.verbatim "VERB: module symC `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symC>]}
 sv.verbatim "VERB: module symD `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symD>]}
+sv.verbatim "VERB: module symE `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symE>]}
 sv.verbatim "VERB: module.extern symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symA>]}
 sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symB>]}
 // CHECK: VERB: module symA `signed_0`
 // CHECK: VERB: module symB `unsigned_1`
 // CHECK: VERB: module symC `parameter_2`
 // CHECK: VERB: module symD `localparam_3`
+// CHECK: VERB: module symE `shortint_4`
 // CHECK: VERB: module.extern symA `foo`
 // CHECK: VERB: module.extern symB `bar`
 

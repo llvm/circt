@@ -41,6 +41,39 @@ static inline ConstantIntMatcher m_RConstant(APInt &value) {
   return ConstantIntMatcher(value);
 }
 
+namespace {
+template <typename SubType>
+struct ComplementMatcher {
+  SubType lhs;
+  ComplementMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  bool match(Operation *op) {
+    auto xorOp = dyn_cast<XorOp>(op);
+    return xorOp && xorOp.isBinaryNot() && lhs.match(op->getOperand(0));
+  }
+};
+} // end anonymous namespace
+
+template <typename SubType>
+static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
+  return ComplementMatcher(subExpr);
+}
+
+namespace {
+/// Terminal matcher, always returns true.
+struct AnyCapturedValueMatcher {
+  Value *what;
+  AnyCapturedValueMatcher(Value *what) : what(what) {}
+  bool match(Value op) const {
+    *what = op;
+    return true;
+  }
+};
+} // end anonymous namespace
+
+// TODO(llvm merge): Remove this when https://reviews.llvm.org/D113905 is
+// merged in.
+inline auto m_Any(Value *val) { return AnyCapturedValueMatcher(val); }
+
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
 ///
@@ -743,16 +776,14 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
     return inputs()[0];
 
   // and(..., x, ..., ~x, ...) -> 0
-  for (Value arg : inputs())
-    if (auto xorOp = dyn_cast_or_null<XorOp>(arg.getDefiningOp()))
-      if (xorOp.isBinaryNot()) {
-        // isBinaryOp checks for the constant on operand 0.
-        auto srcVal = xorOp.getOperand(0);
-        for (Value arg2 : inputs())
-          if (arg2 == srcVal)
-            return getIntAttr(APInt::getZero(getType().getWidth()),
-                              getContext());
-      }
+  for (Value arg : inputs()) {
+    Value subExpr;
+    if (matchPattern(arg, m_Complement(m_Any(&subExpr)))) {
+      for (Value arg2 : inputs())
+        if (arg2 == subExpr)
+          return getIntAttr(APInt::getZero(getType().getWidth()), getContext());
+    }
+  }
 
   // Constant fold
   return constFoldAssociativeOp(constants, hw::PEO::And);
@@ -874,16 +905,15 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
     return inputs()[0];
 
   // or(..., x, ..., ~x, ...) -> -1
-  for (Value arg : inputs())
-    if (auto xorOp = dyn_cast_or_null<XorOp>(arg.getDefiningOp()))
-      if (xorOp.isBinaryNot()) {
-        // isBinaryOp checks for the constant on operand 0.
-        auto srcVal = xorOp.getOperand(0);
-        for (Value arg2 : inputs())
-          if (arg2 == srcVal)
-            return getIntAttr(APInt::getAllOnes(getType().getWidth()),
-                              getContext());
-      }
+  for (Value arg : inputs()) {
+    Value subExpr;
+    if (matchPattern(arg, m_Complement(m_Any(&subExpr)))) {
+      for (Value arg2 : inputs())
+        if (arg2 == subExpr)
+          return getIntAttr(APInt::getAllOnes(getType().getWidth()),
+                            getContext());
+    }
+  }
 
   // Constant fold
   return constFoldAssociativeOp(constants, hw::PEO::Or);
@@ -1065,9 +1095,9 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
 
   // xor(xor(x,1),1) -> x
   if (isBinaryNot()) {
-    XorOp arg = dyn_cast_or_null<XorOp>(inputs()[0].getDefiningOp());
-    if (arg && arg.isBinaryNot())
-      return arg.inputs()[0];
+    Value subExpr;
+    if (matchPattern(getOperand(0), m_Complement(m_Any(&subExpr))))
+      return subExpr;
   }
 
   // Constant fold
@@ -1699,12 +1729,13 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       return success();
     }
 
-    // When both inputs are constants and differ by only one bit, we can
-    // simplify by splitting the mux into up to three contiguous chunks: one
-    // for the differing bit and up to two for the bits that are the same.
-    // E.g. mux(a, 3'h2, 0) -> concat(0, mux(a, 1, 0), 0) -> concat(0, a, 0)
+    // Check for mux of two constants.  There are many ways to simplify them.
     APInt value2;
     if (matchPattern(op.falseValue(), m_RConstant(value2))) {
+      // When both inputs are constants and differ by only one bit, we can
+      // simplify by splitting the mux into up to three contiguous chunks: one
+      // for the differing bit and up to two for the bits that are the same.
+      // E.g. mux(a, 3'h2, 0) -> concat(0, mux(a, 1, 0), 0) -> concat(0, a, 0)
       APInt xorValue = value ^ value2;
       if (xorValue.isPowerOf2()) {
         unsigned leadingZeros = xorValue.countLeadingZeros();
@@ -1737,6 +1768,13 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
         rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), operands);
         return success();
       }
+
+      // If the true value is all ones and the false is all zeros then we have a
+      // sext pattern.
+      if (value.isAllOnes() && value2.isZero()) {
+        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), op.cond());
+        return success();
+      }
     }
   }
 
@@ -1758,12 +1796,11 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   }
 
   // mux(!a, b, c) -> mux(a, c, b)
-  if (auto xorOp = dyn_cast_or_null<XorOp>(op.cond().getDefiningOp())) {
-    if (xorOp.isBinaryNot()) {
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), xorOp.inputs()[0],
-                                         op.falseValue(), op.trueValue());
-      return success();
-    }
+  Value subExpr;
+  if (matchPattern(op.cond(), m_Complement(m_Any(&subExpr)))) {
+    rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), subExpr,
+                                       op.falseValue(), op.trueValue());
+    return success();
   }
 
   if (auto falseMux =

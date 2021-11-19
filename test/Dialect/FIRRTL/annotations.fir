@@ -1108,3 +1108,53 @@ circuit Sub : %[[{
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 1, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.a.b.c\22, side = \22local\22, targetId = 6 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 2, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.d\22, side = \22local\22, targetId = 7 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 3, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.e\22, side = \22local\22, targetId = 8 : i64}>">
+
+; // -----
+
+; Grand Central's ModuleReplacementAnnotation is properly scattered to the circuit
+; and the targeted operations.
+
+circuit Top : %[[{
+  "class": "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
+  "targets": [
+    "~Top|Top/child:Child",
+    "~Top|Top/childWrapper:ChildWrapper/child:Child"
+  ],
+  "circuit": "",
+  "annotations": ["foo", "bar"],
+  "circuitPackage": "other",
+  "dontTouches":[
+    "~Top|Child>in",
+    "~Top|Child>out"
+  ]
+}]]
+  module ChildWrapper :
+    input in : UInt<123>
+    output out : UInt<456>
+
+    inst child of Child
+    child.in <= in
+    out <= child.out
+
+  extmodule Child :
+    input in : UInt<123>
+    output out : UInt<456>
+
+  module Top :
+    inst child of Child
+    inst childWrapper of ChildWrapper
+
+; CHECK-LABEL: firrtl.circuit "Top"
+; CHECK-SAME: {annotations = ["foo", "bar"], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
+
+; CHECK: %child_in, %child_out = firrtl.instance child
+; CHECK-SAME: {annotations = [{circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", class = "circt.nonlocal"}]}
+
+; CHECK: firrtl.extmodule @Child(
+; CHECK-SAME:   in in: !firrtl.uint<123> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+; CHECK-SAME:   out out: !firrtl.uint<456> [{class = "firrtl.transforms.DontTouchAnnotation"}]
+; CHECK-SAME: )
+; CHECK-SAME: attributes {annotations = [
+; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/child:Child", id = [[ID]] : i64},
+; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", id = [[ID]] : i64}
+; CHECK-SAME: ]}

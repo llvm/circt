@@ -262,7 +262,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       if val.type != port_type:
         if isinstance(port_type, hw.TypeAliasType) and \
            port_type.inner_type == val.type:
-          val = hw.BitcastOp(port_type, val).result
+          val = hw.BitcastOp.create(port_type, val).result
         else:
           raise TypeError(
               f"In {cls_name}, output port '{name}' type ({val.type}) doesn't "
@@ -329,6 +329,14 @@ class ConstantOp:
   @staticmethod
   def create(data_type, value):
     return hw.ConstantOp(IntegerAttr.get(data_type, value))
+
+
+class BitcastOp:
+
+  @staticmethod
+  def create(data_type, value):
+    value = support.get_value(value)
+    return hw.BitcastOp(data_type, value)
 
 
 class ArrayGetOp:
