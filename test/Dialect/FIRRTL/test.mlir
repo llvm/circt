@@ -4,6 +4,10 @@ firrtl.circuit "MyModule" {
 
 // Constant op supports different return types.
 firrtl.module @Constants() {
+  // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+  firrtl.constant 0 : !firrtl.uint<0>
+  // CHECK: %c0_si0 = firrtl.constant 0 : !firrtl.sint<0>
+  firrtl.constant 0 : !firrtl.sint<0>
   // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.uint<8>
   firrtl.constant 4 : !firrtl.uint<8>
   // CHECK: %c-4_si16 = firrtl.constant -4 : !firrtl.sint<16>
