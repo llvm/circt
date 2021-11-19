@@ -31,10 +31,10 @@
 // CHECK:   %[[VAL_117:.*]], %[[VAL_118:.*]] = firrtl.instance handshake_constant2  @handshake_constant_c42_out_ui32(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>)
 // CHECK:   %[[VAL_119:.*]], %[[VAL_120:.*]] = firrtl.instance handshake_constant3  @"handshake_constant_c-11_out_si32"(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>)
 handshake.func @test_constant(%arg0: none, ...) -> (index, i64, ui32, si32, none) {
-  %0:5 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none, none, none, none)
-  %1 = "handshake.constant"(%0#0) {value = 42 : index}: (none) -> index
-  %2 = "handshake.constant"(%0#1) {value = 42 : i64}: (none) -> i64
-  %3 = "handshake.constant"(%0#2) {value = 42 : ui32}: (none) -> ui32
-  %4 = "handshake.constant"(%0#3) {value = -11 : si32}: (none) -> si32
-  handshake.return %1, %2, %3, %4, %0#4 : index, i64, ui32, si32, none
+  %0:5 = fork [5] %arg0 : none
+  %1 = constant %0#0 {value = 42 : index} : index
+  %2 = constant %0#1 {value = 42 : i64} : i64
+  %3 = constant %0#2 {value = 42 : ui32} : ui32
+  %4 = constant %0#3 {value = -11 : si32} : si32
+  return %1, %2, %3, %4, %0#4 : index, i64, ui32, si32, none
 }

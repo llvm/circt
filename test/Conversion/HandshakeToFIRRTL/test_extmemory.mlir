@@ -62,10 +62,10 @@
 
 handshake.func @main(%arg0: index, %arg1: index, %v: i32, %mem : memref<10xi32>, %argCtrl: none) -> none {
   %ldData, %stCtrl, %ldCtrl = handshake.extmemory[ld=1, st=1](%mem : memref<10xi32>)(%storeData, %storeAddr, %loadAddr) {id = 0 : i32} : (i32, index, index) -> (i32, none, none)
-  %fCtrl:2 = "handshake.fork"(%argCtrl) {control = true} : (none) -> (none, none)
-  %loadData, %loadAddr = "handshake.load"(%arg0, %ldData, %fCtrl#0) : (index, i32, none) -> (i32, index)
-  %storeData, %storeAddr = "handshake.store"(%v, %arg1, %fCtrl#1) : (i32, index, none) -> (i32, index)
-  "handshake.sink"(%loadData) : (i32) -> ()
-  %finCtrl = "handshake.join"(%stCtrl, %ldCtrl) {control = true} : (none, none) -> none
-  handshake.return %finCtrl : none
+  %fCtrl:2 = fork [2] %argCtrl : none
+  %loadData, %loadAddr = load [%arg0] %ldData, %fCtrl#0 : index, i32
+  %storeData, %storeAddr = store [%arg1] %v, %fCtrl#1 : index, i32
+  sink %loadData : i32
+  %finCtrl = join %stCtrl, %ldCtrl : none
+  return %finCtrl : none
 }

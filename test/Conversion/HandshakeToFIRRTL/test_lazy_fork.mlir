@@ -28,6 +28,6 @@
 // CHECK:           }
 // CHECK:         }
 handshake.func @test_lazy_fork(%arg0: index, %arg1: none, ...) -> (index, index, none) {
-  %0:2 = "handshake.lazy_fork"(%arg0) {control = false} : (index) -> (index, index)
-  handshake.return %0#0, %0#1, %arg1 : index, index, none
+  %0:2 = lazy_fork [2] %arg0 : index
+  return %0#0, %0#1, %arg1 : index, index, none
 }

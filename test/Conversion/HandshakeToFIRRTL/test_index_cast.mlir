@@ -22,7 +22,7 @@
 // CHECK: }
 handshake.func @test_index_cast(%arg0: index, %arg1: none, ...) -> (i8, none) {
   %0 = arith.index_cast %arg0 : index to i8
-  handshake.return %0, %arg1 : i8, none
+  return %0, %arg1 : i8, none
 }
 
 // -----
@@ -66,5 +66,5 @@ handshake.func @test_index_cast(%arg0: index, %arg1: none, ...) -> (i8, none) {
 handshake.func @test_index_cast2(%arg0: i8, %arg1 : i9, %arg2: none, ...) -> (index, index, none) {
   %0 = arith.index_cast %arg0 : i8 to index
   %1 = arith.index_cast %arg1 : i9 to index
-  handshake.return %0, %1, %arg2 : index, index, none
+  return %0, %1, %arg2 : index, index, none
 }

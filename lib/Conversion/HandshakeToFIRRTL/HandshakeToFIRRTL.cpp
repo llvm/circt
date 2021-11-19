@@ -288,8 +288,7 @@ using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
-        return DiscriminatingTypes{{},
-                                   {memOp.getMemRefType().getElementType()}};
+        return DiscriminatingTypes{{}, {memOp.memRefType().getElementType()}};
       })
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
@@ -387,7 +386,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
-    subModuleName += "_" + std::to_string(bufferOp.slots()) + "slots";
+    subModuleName += "_" + std::to_string(bufferOp.getNumSlots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
   }
@@ -1650,7 +1649,7 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
   auto clock = portList[portNum - 2][0];
   auto reset = portList[portNum - 1][0];
 
-  return buildForkLogic(input, outputs, clock, reset, op.control());
+  return buildForkLogic(input, outputs, clock, reset, op.isControl());
 }
 
 /// Please refer to test_constant.mlir test case.
@@ -1883,8 +1882,8 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
 
   // For now, we only support sequential buffers.
   if (op.sequential())
-    return buildSeqBufferLogic(op.slots(), &input, &output, clock, reset,
-                               op.control());
+    return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
+                               op.isControl());
   else
     return false;
 }
@@ -1941,7 +1940,7 @@ bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Get the memory type and element type.
-  MemRefType type = op.type();
+  MemRefType type = op.memRefType();
   Type elementType = type.getElementType();
   if (!elementType.isSignlessInteger()) {
     op.emitError("only memrefs of signless ints are supported");
@@ -1967,8 +1966,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   };
 
   // Collect the port info for each port.
-  uint64_t numLoads = op.getLdCount().getLimitedValue();
-  uint64_t numStores = op.getStCount().getLimitedValue();
+  uint64_t numLoads = op.ldCount();
+  uint64_t numStores = op.stCount();
   SmallVector<std::pair<Identifier, MemOp::PortKind>, 8> ports;
   for (size_t i = 0; i < numLoads; ++i) {
     auto portName = loadIdentifier(i);
@@ -2187,13 +2186,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 }
 
 bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
-  // Input data accepted from the predecessor.
-  ValueVector inputData = portList[0];
-  Value inputDataData = inputData[2];
-
   // Input address accepted from the predecessor.
-  ValueVector inputAddr = portList[1];
+  ValueVector inputAddr = portList[0];
   Value inputAddrData = inputAddr[2];
+
+  // Input data accepted from the predecessor.
+  ValueVector inputData = portList[1];
+  Value inputDataData = inputData[2];
 
   // Control channel.
   ValueVector control = portList[2];

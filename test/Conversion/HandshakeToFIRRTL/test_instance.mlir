@@ -39,18 +39,18 @@
 module {
   handshake.func @baz(%a: i32, %ctrl : none) -> (i32, none) {
     %0 = arith.addi %a, %a : i32
-    handshake.return %0, %ctrl : i32, none
+    return %0, %ctrl : i32, none
   }
 
   handshake.func @bar(%a: i32, %ctrl : none) -> (i32, none) {
-    %c:2 = handshake.instance @baz(%a, %ctrl) : (i32, none) -> (i32, none)
-    "handshake.sink"(%c#1) {control = true} : (none) -> ()
-    handshake.return %c#0, %ctrl : i32, none
+    %c, %ctrlOut = handshake.instance @baz(%a, %ctrl) : (i32, none) -> (i32, none)
+    sink %ctrlOut : none
+    return %c, %ctrl : i32, none
   }
 
   handshake.func @foo(%a: i32, %ctrl : none) -> (i32, none) {
     %b:2 = handshake.instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
-    "handshake.sink"(%b#1) {control = true} : (none) -> ()
-    handshake.return %b#0, %ctrl : i32, none
+    sink %b#1 : none
+    return %b#0, %ctrl : i32, none
   }
 }
