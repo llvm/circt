@@ -33,6 +33,8 @@ public:
             ConstantZOp,
             // Declarations.
             RegOp, WireOp, LocalParamOp, XMROp,
+            // Macros
+            DefineOp,
             // Control flow.
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
             AlwaysFFOp, InitialOp, CaseZOp,
@@ -91,6 +93,9 @@ public:
   HANDLE(IndexedPartSelectOp, Unhandled);
   HANDLE(ConstantXOp, Unhandled);
   HANDLE(ConstantZOp, Unhandled);
+
+  // Macros
+  HANDLE(DefineOp, Unhandled);
 
   // Control flow.
   HANDLE(IfDefOp, Unhandled);

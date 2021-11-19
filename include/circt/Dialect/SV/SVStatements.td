@@ -18,6 +18,17 @@ def isModuleSymbol : AttrConstraint<
   >, "is module like">;
 
 //===----------------------------------------------------------------------===//
+// Macro operations
+//===----------------------------------------------------------------------===//
+
+def DefineOp : SVOp<"define", [NonProceduralOp]> {
+  let summary = "'define MACRO' statement";
+
+  let arguments = (ins StrAttr:$macroName, OptionalAttr<StrAttr>:$value);
+  let assemblyFormat = "$macroName (`=` $value^)? attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 

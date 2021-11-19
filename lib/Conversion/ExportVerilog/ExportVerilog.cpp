@@ -2260,6 +2260,7 @@ private:
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
 
+  LogicalResult visitSV(DefineOp op);
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
   LogicalResult visitSV(IfDefProceduralOp op) {
@@ -2828,6 +2829,14 @@ LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
   return emitConcurrentAssertion(op, "cover");
+}
+
+LogicalResult StmtEmitter::visitSV(DefineOp op) {
+  indent() << "`define " << op.macroName();
+  if (op.valueAttr())
+    os << " " << op.value();
+  os << "\n";
+  return success();
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {

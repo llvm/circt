@@ -330,6 +330,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
      } // CHECK-NEXT: endcase
   }// CHECK-NEXT:   {{end // initial$}}
 
+  sv.define "VERILATOR"            // CHECK-NEXT: `define VERILATOR
+  sv.define "VERSION" = "2"        // CHECK-NEXT: `define VERSION 2
   sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
   } else  {                        // CHECK-NEXT: `else
@@ -1126,4 +1128,3 @@ sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 // CHECK-NEXT:   ._k (a2__k)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
-
