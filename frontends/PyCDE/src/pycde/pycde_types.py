@@ -5,7 +5,7 @@
 from collections import OrderedDict
 
 import mlir.ir
-from circt.dialects import hw
+from circt.dialects import hw, sv
 import circt.support
 
 
@@ -60,15 +60,30 @@ class _Types:
     if not self.registered_aliases:
       return
 
-    type_scopes = [
-        op for op in mod.body.operations if isinstance(op, hw.TypeScopeOp)
-    ]
-    if len(type_scopes) == 0:
-      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
-        type_scopes.append(hw.TypeScopeOp.create(self.TYPE_SCOPE))
+    type_scopes = list()
+    for op in mod.body.operations:
+      if isinstance(op, hw.TypeScopeOp):
+        type_scopes.append(op)
+        continue
+      if isinstance(op, sv.IfDefOp):
+        if len(op.elseRegion.blocks) == 0:
+          continue
+        for ifdef_op in op.elseRegion.blocks[0]:
+          if isinstance(ifdef_op, hw.TypeScopeOp):
+            type_scopes.append(ifdef_op)
 
-    assert len(type_scopes) == 1
-    type_scope = type_scopes[0]
+    assert len(type_scopes) <= 1
+    if len(type_scopes) == 1:
+      type_scope = type_scopes[0]
+    else:
+      guard_name = "__PYCDE_TYPES__"
+      ifdef = sv.IfDefOp(mlir.ir.StringAttr.get(guard_name),
+                         ip=mlir.ir.InsertionPoint.at_block_begin(mod.body))
+      with mlir.ir.InsertionPoint.at_block_begin(ifdef.elseRegion.blocks[0]):
+        sv.VerbatimOp(mlir.ir.StringAttr.get("`define " + guard_name), [],
+                      mlir.ir.ArrayAttr.get([]))
+        type_scope = hw.TypeScopeOp.create(self.TYPE_SCOPE)
+
     with mlir.ir.InsertionPoint(type_scope.body):
       for (name, type) in self.registered_aliases.items():
         declared_aliases = [

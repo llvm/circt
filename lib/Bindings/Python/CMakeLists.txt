@@ -108,7 +108,9 @@ declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE circt/dialects/SVOps.td
-  SOURCES circt/dialects/sv.py
+  SOURCES
+    circt/dialects/sv.py
+    circt/dialects/_sv_ops_ext.py
   DIALECT_NAME sv)
 
 ################################################################################
