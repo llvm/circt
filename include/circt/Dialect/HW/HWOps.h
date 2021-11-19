@@ -101,14 +101,25 @@ PortInfo getModuleOutputPort(Operation *op, size_t idx);
 /// Return true if this is an hw.module, external module, generated module etc.
 bool isAnyModule(Operation *module);
 
+/// Return true if isAnyModule or instance.
+bool isAnyModuleOrInstance(Operation *module);
+
 /// Return the signature for the specified module as a function type.
 FunctionType getModuleType(Operation *module);
 
-/// Return the number of inputs for the specified module.
-unsigned getModuleNumInputs(Operation *module);
+/// Return the number of inputs for the specified module/instance.
+inline unsigned getModuleNumInputs(Operation *moduleOrInstance) {
+  assert(isAnyModuleOrInstance(moduleOrInstance) &&
+         "must be called on instance or module");
+  return moduleOrInstance->getAttrOfType<ArrayAttr>("argNames").size();
+}
 
-/// Return the number of outputs for the specified module.
-unsigned getModuleNumOutputs(Operation *module);
+/// Return the number of outputs for the specified module/instance.
+inline unsigned getModuleNumOutputs(Operation *moduleOrInstance) {
+  assert(isAnyModuleOrInstance(moduleOrInstance) &&
+         "must be called on instance or module");
+  return moduleOrInstance->getAttrOfType<ArrayAttr>("resultNames").size();
+}
 
 /// Returns the verilog module name attribute or symbol name of any module-like
 /// operations.

@@ -232,6 +232,11 @@ bool hw::isAnyModule(Operation *module) {
          isa<HWModuleGeneratedOp>(module);
 }
 
+/// Return true if isAnyModule or instance.
+bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
+  return isAnyModule(moduleOrInstance) || isa<InstanceOp>(moduleOrInstance);
+}
+
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
 FunctionType hw::getModuleType(Operation *moduleOrInstance) {
@@ -246,32 +251,6 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
   auto typeAttr =
       moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
-}
-
-/// Return the number of inputs for a module as a function type from the module
-/// itself or from an hw::InstanceOp.
-unsigned hw::getModuleNumInputs(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    return instance->getNumOperands();
-  }
-  assert(isAnyModule(moduleOrInstance) &&
-         "must be called on instance or module");
-  auto typeAttr =
-      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>().getNumInputs();
-}
-
-/// Return the number of results for a module as a function type from the module
-/// itselfA or from an hw::InstanceOp.
-unsigned hw::getModuleNumOutputs(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    return instance->getNumResults();
-  }
-  assert(isAnyModule(moduleOrInstance) &&
-         "must be called on instance or module");
-  auto typeAttr =
-      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>().getNumResults();
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -462,7 +441,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 ModulePortInfo hw::getModulePortInfo(Operation *op) {
-  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+  assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> inputs, outputs;
@@ -495,7 +474,7 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
-  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+  assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> results;
