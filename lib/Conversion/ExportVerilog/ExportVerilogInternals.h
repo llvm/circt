@@ -45,20 +45,22 @@ struct GlobalNameTable {
     auto numInputs = hw::getModuleNumInputs(module);
     // portArgNum is the index into the result of getAllModulePortInfos.
     // We need to translate it into the PortInfo::getId(), which is a unique
-    // port identifier. if input port, then (-1 - portArgNum) else numInputs -
-    // portArgNum Also ensure the correct index into the input/output list is
-    // computed.
+    // port identifier.
+    // if input port, then (-1 - portArgNum)
+    // else numInputs - portArgNum
+    // Also ensure the correct index into the input/output list is computed.
     StringAttr nameAttr;
+    ssize_t portId = portArgNum;
     if (portArgNum < numInputs) {
       nameAttr = module->getAttrOfType<ArrayAttr>("argNames")[portArgNum]
                      .cast<StringAttr>();
-      portArgNum = -1 - portArgNum;
+      portId = -1 - portArgNum;
     } else {
-      portArgNum = numInputs - portArgNum;
-      nameAttr = module->getAttrOfType<ArrayAttr>("resultNames")[portArgNum]
+      portId = portArgNum - numInputs;
+      nameAttr = module->getAttrOfType<ArrayAttr>("resultNames")[portId]
                      .cast<StringAttr>();
     }
-    auto it = renamedPorts.find(std::make_pair(module, portArgNum));
+    auto it = renamedPorts.find(std::make_pair(module, portId));
     return (it != renamedPorts.end() ? it->second : nameAttr).getValue();
   }
 
