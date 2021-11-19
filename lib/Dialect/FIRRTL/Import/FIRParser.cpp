@@ -3054,12 +3054,15 @@ private:
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
-                                StringRef circuitTarget,
-                                StringRef annotationsStr, size_t &nlaNumber);
+  ParseResult importAnnotations(
+      CircuitOp circuit,
+      LocWithInfo info,
+          SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
+      SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs,
+      SMLoc inlineAnnotationsLoc, StringRef inlineAnnotations);
   ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                    StringRef annotationsStr,
-                                   SmallVector<Attribute> &attrs);
+                                   SmallVector<DictionaryAttr> &attrs);
   /// Generate OMIR-derived annotations.  Report errors if the OMIR is malformed
   /// in any way.  This also performs scattering of the OMIR to introduce
   /// tracking annotations in the circuit.
@@ -3097,7 +3100,7 @@ private:
 ParseResult
 FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                        StringRef annotationsStr,
-                                       SmallVector<Attribute> &attrs) {
+                                       SmallVector<DictionaryAttr> &attrs) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
@@ -3109,8 +3112,7 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
   }
 
   json::Path::Root root;
-  llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSONRaw(annotations.get(), circuitTarget, attrs, root,
+  if (!fromJSON(annotations.get(), attrs, root,
                    getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
@@ -3124,51 +3126,76 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
   return success();
 }
 
-ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
-                                                StringRef circuitTarget,
-                                                StringRef annotationsStr,
-                                                size_t &nlaNumber) {
+ParseResult FIRCircuitParser::importAnnotations(
+    CircuitOp circuit,
+    LocWithInfo info, SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
+    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs,
+    SMLoc inlineAnnotationsLoc, StringRef inlineAnnotations) {
 
-  auto annotations = json::parse(annotationsStr);
-  if (auto err = annotations.takeError()) {
-    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
-      auto diag = emitError(loc, "Failed to parse JSON Annotations");
-      diag.attachNote() << a.message();
-    });
-    return failure();
+      auto context = circuit.getContext();
+  auto circuitTarget = ("~" + circuit.name()).str();
+  auto circuitTargetAttr = StringAttr::get(context, circuitTarget);
+   size_t nlaNumber = 0;
+
+  SmallVector<DictionaryAttr> rawAnno;
+  // Deal with any inline annotations, if they exist.  These are processed
+  // first to place any annotations from an annotation file *after* the inline
+  // annotations.  While arbitrary, this makes the annotation file have
+  // "append" semantics.
+  if (!inlineAnnotations.empty())
+    if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                             inlineAnnotations, rawAnno))
+      return failure();
+
+  // Deal with the annotation file if one was specified.
+  for (auto annotationsBuf : annotationsBufs)
+    if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
+                             annotationsBuf->getBuffer(), rawAnno))
+      return failure();
+
+  SmallVector<Attribute> passedAnno;
+  for (auto anno : rawAnno) {
+    anno = normalizeTarget(anno);
+    if (circuitTargetAttr != anno.getNamed("target")->second.cast<StringAttr>()
+      || !scatterCustomAnnotation(anno))
+      passedAnno.push_back(anno);
   }
 
-  json::Path::Root root;
-  llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                circuit, nlaNumber)) {
-    auto diag = emitError(loc, "Invalid/unsupported annotation format");
-    std::string jsonErrorMessage =
-        "See inline comments for problem area in JSON:\n";
-    llvm::raw_string_ostream s(jsonErrorMessage);
-    root.printErrorContext(annotations.get(), s);
-    diag.attachNote() << jsonErrorMessage;
-    return failure();
-  }
+  // Process OMIR files as annotations with a class of
+  // "freechips.rocketchip.objectmodel.OMNode"
+  for (auto *omirBuf : omirBufs)
+    if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
+                   omirBuf->getBuffer(), nlaNumber))
+      return failure();
 
-  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
-                                translateLocation(loc), nlaNumber))
-    return failure();
+  // Get annotations associated with this circuit. These are either:
+  //   1. Annotations with no target (which we use "~" to identify)
+  //   2. Annotations targeting the circuit, e.g., "~Foo"
+  ArrayAttr annotations = ArrayAttr::get(context, passedAnno);
+  // getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
+    //                                     getConstants().targetSet);
+  circuit->setAttr("raw_annotations", annotations);
 
-  // Merge the attributes we just parsed into the global set we're accumulating.
-  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
-  for (auto &thisEntry : thisAnnotationMap) {
-    auto &existing = resultAnnoMap[thisEntry.getKey()];
-    if (!existing) {
-      existing = thisEntry.getValue();
-      continue;
-    }
+  //deRaw();
 
-    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
-    annotationVec.append(thisEntry.getValue().begin(),
-                         thisEntry.getValue().end());
-    existing = ArrayAttr::get(getContext(), annotationVec);
-  }
+  // if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
+  //                               translateLocation(loc), nlaNumber))
+  //   return failure();
+
+  // // Merge the attributes we just parsed into the global set we're accumulating.
+  // llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
+  // for (auto &thisEntry : thisAnnotationMap) {
+  //   auto &existing = resultAnnoMap[thisEntry.getKey()];
+  //   if (!existing) {
+  //     existing = thisEntry.getValue();
+  //     continue;
+  //   }
+
+  //   SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
+  //   annotationVec.append(thisEntry.getValue().begin(),
+  //                        thisEntry.getValue().end());
+  //   existing = ArrayAttr::get(getContext(), annotationVec);
+  // }
 
   return success();
 }
@@ -3516,66 +3543,9 @@ ParseResult FIRCircuitParser::parseCircuit(
   OpBuilder b(mlirModule.getBodyRegion());
   auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
-  std::string circuitTarget = "~" + name.getValue().str();
-  size_t nlaNumber = 0;
+  importAnnotations(circuit, info, annotationsBufs, omirBufs, inlineAnnotationsLoc,
+                    inlineAnnotations);
 
-  if (getConstants().options.rawAnnotations) {
-    SmallVector<Attribute> rawAnno;
-    // Deal with any inline annotations, if they exist.  These are processed
-    // first to place any annotations from an annotation file *after* the inline
-    // annotations.  While arbitrary, this makes the annotation file have
-    // "append" semantics.
-    if (!inlineAnnotations.empty())
-      if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
-                               inlineAnnotations, rawAnno))
-        return failure();
-
-    // Deal with the annotation file if one was specified
-    for (auto annotationsBuf : annotationsBufs)
-      if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
-                               annotationsBuf->getBuffer(), rawAnno))
-        return failure();
-
-    if (!omirBufs.empty())
-      mlir::emitWarning(translateLocation(info.getFIRLoc()))
-          << "OMIR is not supported with the 'raw' annotation processing right "
-             "now and will just be ignored";
-
-    // Get annotations associated with this circuit. These are either:
-    //   1. Annotations with no target (which we use "~" to identify)
-    //   2. Annotations targeting the circuit, e.g., "~Foo"
-    ArrayAttr annotations = b.getArrayAttr(rawAnno);
-    circuit->setAttr("raw_annotations", annotations);
-  } else {
-    // Deal with any inline annotations, if they exist.  These are processed
-    // first to place any annotations from an annotation file *after* the inline
-    // annotations.  While arbitrary, this makes the annotation file have
-    // "append" semantics.
-    if (!inlineAnnotations.empty())
-      if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                            inlineAnnotations, nlaNumber))
-        return failure();
-
-    // Deal with the annotation file if one was specified
-    for (auto annotationsBuf : annotationsBufs)
-      if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                            annotationsBuf->getBuffer(), nlaNumber))
-        return failure();
-
-    // Process OMIR files as annotations with a class of
-    // "freechips.rocketchip.objectmodel.OMNode"
-    for (auto *omirBuf : omirBufs)
-      if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
-                     omirBuf->getBuffer(), nlaNumber))
-        return failure();
-
-    // Get annotations associated with this circuit. These are either:
-    //   1. Annotations with no target (which we use "~" to identify)
-    //   2. Annotations targeting the circuit, e.g., "~Foo"
-    ArrayAttr annotations = getAnnotations(
-        {"~", circuitTarget}, info.getFIRLoc(), getConstants().targetSet);
-    circuit->setAttr("annotations", annotations);
-  }
   deferredModules.reserve(16);
 
   // Parse any contained modules.
@@ -3605,7 +3575,7 @@ ParseResult FIRCircuitParser::parseCircuit(
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      if (parseModule(circuit, circuitTarget, moduleIndent))
+      if (parseModule(circuit, ("~"  + name.getValue()).str(), moduleIndent))
         return failure();
       break;
     }

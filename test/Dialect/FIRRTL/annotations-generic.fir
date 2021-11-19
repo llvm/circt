@@ -1,7 +1,7 @@
-; RUN: circt-translate --import-firrtl --mlir-print-op-generic --split-input-file %s | FileCheck %s
+; RUN: circt-translate --import-firrtl --split-input-file %s |circt-opt -firrtl-lower-annotations --mlir-print-op-generic | FileCheck %s
 
 ; A ReferenceTarget/ComponentName pointing at a module/extmodule port should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Bar>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.foo"}]]
   extmodule Bar:
     input bar: UInt<1>
   module Foo:
@@ -11,10 +11,10 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo
 
 ; CHECK-LABEL: "firrtl.extmodule"() ( {
 ; CHECK: }) {
-; CHECK-SAME: portAnnotations = {{['[']['[']}}{a = "a"}]]
+; CHECK-SAME: portAnnotations = {{['[']['[']}}{a = "a", class = "circt.test"}]]
 ; CHECK-SAME: sym_name = "Bar"
 
 ; CHECK-LABEL: "firrtl.module"() ( {
 ; CHECK: }) {
-; CHECK-SAME: portAnnotations = {{['[']['[']}}{b = "b"}]]
+; CHECK-SAME: portAnnotations = {{['[']['[']}}{b = "b", class = "circt.test"}]]
 ; CHECK-SAME: sym_name = "Foo"

@@ -30,6 +30,18 @@ using namespace circt;
 using namespace firrtl;
 using mlir::UnitAttr;
 
+DictionaryAttr cloneWithNewField(DictionaryAttr anno, StringRef field, Attribute newValue) {
+auto context = anno.getContext();
+  SmallVector<NamedAttribute, 4> newAttr;
+  for (auto f:anno) {
+    if (f.first == field)
+      newAttr.push_back(std::make_pair(f.first, newValue));
+      else
+        newAttr.push_back(f);    
+  }
+  return DictionaryAttr::get(context, newAttr);
+}
+
 /// Split a target into a base target (including a reference if one exists) and
 /// an optional array of subfield/subindex tokens.
 static std::pair<StringRef, llvm::Optional<ArrayAttr>>
@@ -175,15 +187,12 @@ splitAndAppendTarget(NamedAttrList &annotation, StringRef target,
 /// Return an input \p target string in canonical form.  This converts a Legacy
 /// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
 /// subfield/subindex references are preserved.
-static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
-
-  if (target.empty())
-    return {};
+static SmallString<32> canonicalizeTarget(StringRef target) {
 
   // If this is a normal Target (not a Named), erase that field in the JSON
   // object and return that Target.
   if (target[0] == '~')
-    return target.str();
+    return target;
 
   // This is a legacy target using the firrtl.annotations.Named type.  This
   // can be trivially canonicalized to a non-legacy target, so we do it with
@@ -191,27 +200,35 @@ static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
   //   1. CircuitName => CircuitTarget, e.g., A -> ~A
   //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
   //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
-  std::string newTarget = "~";
-  llvm::raw_string_ostream s(newTarget);
+  SmallString<32> newTarget("~");
   unsigned tokenIdx = 0;
   for (auto a : target) {
     if (a == '.') {
       switch (tokenIdx) {
       case 0:
-        s << "|";
+        newTarget += '|';
         break;
       case 1:
-        s << ">";
+        newTarget += '>';
         break;
       default:
-        s << ".";
+        newTarget += '\'';
         break;
       }
       ++tokenIdx;
     } else
-      s << a;
+      newTarget += a;
   }
-  return llvm::Optional<std::string>(newTarget);
+  return newTarget;
+}
+static StringAttr canonicalizeTarget(StringAttr target) {
+
+  // If this is a normal Target (not a Named), erase that field in the JSON
+  // object and return that Target.
+  if (target.getValue()[0] == '~')
+    return target;
+
+  return StringAttr::get(target.getContext(), canonicalizeTarget(target.getValue()));
 }
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
@@ -340,114 +357,90 @@ static std::string addNLATargets(
   return leafTarget.str();
 }
 
-/// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
-/// represented as a Target-keyed arrays of attributes.  The input JSON value is
-/// checked, at runtime, to be an array of objects.  Returns true if successful,
-/// false if unsuccessful.
-bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
-                             llvm::StringMap<ArrayAttr> &annotationMap,
-                             json::Path path, CircuitOp circuit,
-                             size_t &nlaNumber) {
-  auto context = circuit.getContext();
+/// Examine an Annotation JSON object and return an optional string indicating
+/// the target associated with this annotation.  Automatically convert any
+/// legacy Named targets to actual Targets.  Note: it is expected that a target
+/// may not exist, e.g., any subclass of firrtl.annotations.NoTargetAnnotation
+/// will not have a target.
+DictionaryAttr firrtl::normalizeTarget(DictionaryAttr anno) {
 
-  /// Examine an Annotation JSON object and return an optional string indicating
-  /// the target associated with this annotation.  Erase the target from the
-  /// JSON object if a target was found.  Automatically convert any legacy Named
-  /// targets to actual Targets.  Note: it is expected that a target may not
-  /// exist, e.g., any subclass of firrtl.annotations.NoTargetAnnotation will
-  /// not have a target.
-  auto findAndEraseTarget = [](json::Object *object,
-                               json::Path p) -> llvm::Optional<std::string> {
-    // If no "target" field exists, then promote the annotation to a
-    // CircuitTarget annotation by returning a target of "~".
-    auto maybeTarget = object->get("target");
-    if (!maybeTarget)
-      return llvm::Optional<std::string>("~");
-
-    // Find the target.
-    auto maybeTargetStr = maybeTarget->getAsString();
-    if (!maybeTargetStr) {
-      p.field("target").report("target must be a string type");
+  auto maybeTarget = anno.getNamed("target");
+  if (maybeTarget) {
+    auto targetStr = maybeTarget->second.dyn_cast<StringAttr>();
+    if (targetStr) {
+      auto newTarget = canonicalizeTarget(targetStr);
+      if (newTarget == targetStr)
+        return anno;
+      return cloneWithNewField(anno, "target", newTarget);
+    } else {
+      // p.field("target").report("target must be a string type");
       return {};
     }
-    auto canonTargetStr = canonicalizeTarget(maybeTargetStr.getValue());
-    if (!canonTargetStr) {
-      p.field("target").report("invalid target string");
-      return {};
-    }
-
-    auto target = canonTargetStr.getValue();
-
-    // Remove the target field from the annotation and return the target.
-    object->erase("target");
-    return llvm::Optional<std::string>(target);
-  };
-
-  // The JSON value must be an array of objects.  Anything else is reported as
-  // invalid.
-  auto array = value.getAsArray();
-  if (!array) {
-    path.report(
-        "Expected annotations to be an array, but found something else.");
-    return false;
+  } else {
+    return cloneWithNewField(anno, "target",
+                             StringAttr::get(anno.getContext(), "~"));
   }
+};
 
-  // Build a mutable map of Target to Annotation.
-  llvm::StringMap<llvm::SmallVector<Attribute>> mutableAnnotationMap;
-  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
-    auto object = (*array)[i].getAsObject();
-    auto p = path.index(i);
-    if (!object) {
-      p.report("Expected annotations to be an array of objects, but found an "
-               "array of something else.");
-      return false;
-    }
-    // Find and remove the "target" field from the Annotation object if it
-    // exists.  In the FIRRTL Dialect, the target will be implicitly specified
-    // based on where the attribute is applied.
-    auto optTarget = findAndEraseTarget(object, p);
-    if (!optTarget)
-      return false;
-    StringRef targetStrRef = optTarget.getValue();
+//     // Build a mutable map of Target to Annotation.
+//   llvm::StringMap<llvm::SmallVector<Attribute>> mutableAnnotationMap;
+  
 
-    if (targetStrRef != "~") {
-      auto circuitFieldEnd = targetStrRef.find_first_of('|');
-      if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
-        p.report("annotation has invalid circuit name");
-        return false;
-      }
-    }
 
-    // Build up the Attribute to represent the Annotation and store it in the
-    // global Target -> Attribute mapping.
-    NamedAttrList metadata;
-    for (auto field : *object) {
-      if (auto value = convertJSONToAttribute(context, field.second, p)) {
-        metadata.append(field.first, value);
-        continue;
-      }
-      return false;
-    }
+//   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+//     auto object = (*array)[i].getAsObject();
+//     auto p = path.index(i);
+//     if (!object) {
+//       p.report("Expected annotations to be an array of objects, but found an "
+//                "array of something else.");
+//       return false;
+//     }
+//     // Find and remove the "target" field from the Annotation object if it
+//     // exists.  In the FIRRTL Dialect, the target will be implicitly specified
+//     // based on where the attribute is applied.
+//     auto optTarget = findAndEraseTarget(object, p);
+//     if (!optTarget)
+//       return false;
+//     StringRef targetStrRef = optTarget.getValue();
 
-    auto leafTarget = addNLATargets(context, targetStrRef, circuit, nlaNumber,
-                                    metadata, mutableAnnotationMap);
+//     if (targetStrRef != "~") {
+//       auto circuitFieldEnd = targetStrRef.find_first_of('|');
+//       if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
+//         p.report("annotation has invalid circuit name");
+//         return false;
+//       }
+//     }
 
-    mutableAnnotationMap[leafTarget].push_back(
-        DictionaryAttr::get(context, metadata));
-  }
+//     // Build up the Attribute to represent the Annotation and store it in the
+//     // global Target -> Attribute mapping.
+//     NamedAttrList metadata;
+//     for (auto field : *object) {
+//       if (auto value = convertJSONToAttribute(context, field.second, p)) {
+//         metadata.append(field.first, value);
+//         continue;
+//       }
+//       return false;
+//     }
 
-  // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
-  for (auto a : mutableAnnotationMap.keys()) {
-    // If multiple annotations on a single object, then append it.
-    if (annotationMap.count(a))
-      for (auto attr : annotationMap[a])
-        mutableAnnotationMap[a].push_back(attr);
+//     auto leafTarget = addNLATargets(context, targetStrRef, circuit, nlaNumber,
+//                                     metadata, mutableAnnotationMap);
 
-    annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
-  }
+//     mutableAnnotationMap[leafTarget].push_back(
+//         DictionaryAttr::get(context, metadata));
+//   }
 
-  return true;
-}
+//   // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
+//   for (auto a : mutableAnnotationMap.keys()) {
+//     // If multiple annotations on a single object, then append it.
+//     if (annotationMap.count(a))
+//       for (auto attr : annotationMap[a])
+//         mutableAnnotationMap[a].push_back(attr);
+
+//     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
+//   }
+
+//   return true;
+// }
 
 /// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
 /// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
@@ -948,10 +941,8 @@ scatterOMIR(Attribute original, unsigned &annotationID,
               "id", IntegerAttr::get(IntegerType::get(ctx, 64), annotationID));
 
           auto canonTarget = canonicalizeTarget(value);
-          if (!canonTarget)
-            return None;
 
-          auto leafTarget = addNLATargets(ctx, *canonTarget, circuit, nlaNumber,
+          auto leafTarget = addNLATargets(ctx, canonTarget, circuit, nlaNumber,
                                           tracker, newAnnotations);
 
           newAnnotations[leafTarget].push_back(
@@ -1222,548 +1213,548 @@ static Optional<Attribute> scatterOMIRAnnotation(
   return DictionaryAttr::get(ctx, newAnnotation);
 }
 
-/// Convert known custom FIRRTL Annotations with compound targets to multiple
-/// attributes that are attached to IR operations where they have semantic
-/// meaning.  This rewrites the input \p annotationMap to convert non-specific
-/// Annotations targeting "~" to those targeting something more specific if
-/// possible.
-bool circt::firrtl::scatterCustomAnnotations(
-    llvm::StringMap<ArrayAttr> &annotationMap, CircuitOp circuit,
-    unsigned &annotationID, Location loc, size_t &nlaNumber) {
-  MLIRContext *context = circuit.getContext();
+bool firrtl::scatterCustomAnnotation(DictionaryAttr anno) {
+  MLIRContext *context = anno.getContext();
 
-  // Exit if no anotations exist that target "~". Also ensure a spurious entry
-  // is not created in the map.
-  if (!annotationMap.count("~"))
-    return true;
-  // This adds an entry "~" to the map.
-  auto nonSpecificAnnotations = annotationMap["~"];
+  return false;
+}
 
-  // Mutable store of new annotations produced.
-  llvm::StringMap<llvm::SmallVector<Attribute>> newAnnotations;
+  /// Convert known custom FIRRTL Annotations with compound targets to multiple
+  /// attributes that are attached to IR operations where they have semantic
+  /// meaning.  This rewrites the input \p annotationMap to convert non-specific
+  /// Annotations targeting "~" to those targeting something more specific if
+  /// possible.
+  bool circt::firrtl::scatterCustomAnnotations(
+      llvm::StringMap<ArrayAttr> & annotationMap, CircuitOp circuit,
+      unsigned &annotationID, Location loc, size_t &nlaNumber) {
+    MLIRContext *context = circuit.getContext();
 
-  /// Return a new identifier that can be used to link scattered annotations
-  /// together.  This mutates the by-reference parameter annotationID.
-  auto newID = [&]() {
-    return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
-  };
+    // Exit if no anotations exist that target "~". Also ensure a spurious entry
+    // is not created in the map.
+    if (!annotationMap.count("~"))
+      return true;
+    // This adds an entry "~" to the map.
+    auto nonSpecificAnnotations = annotationMap["~"];
 
-  /// Add a don't touch annotation for a target.
-  auto addDontTouch = [&](StringRef target,
-                          Optional<ArrayAttr> subfields = {}) {
-    NamedAttrList fields;
-    fields.append(
-        "class",
-        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
-    if (subfields)
-      fields.append("target", *subfields);
-    newAnnotations[target].push_back(
-        DictionaryAttr::getWithSorted(context, fields));
-  };
+    // Mutable store of new annotations produced.
+    llvm::StringMap<llvm::SmallVector<Attribute>> newAnnotations;
 
-  // Loop over all non-specific annotations that target "~".
-  //
-  //
-  for (auto a : nonSpecificAnnotations) {
-    auto dict = a.cast<DictionaryAttr>();
-    StringAttr classAttr = dict.getAs<StringAttr>("class");
-    // If the annotation doesn't have a "class" field, then we can't handle it.
-    // Just copy it over.
-    if (!classAttr) {
-      newAnnotations["~"].push_back(a);
-      continue;
-    }
+    /// Return a new identifier that can be used to link scattered annotations
+    /// together.  This mutates the by-reference parameter annotationID.
+    auto newID = [&]() {
+      return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
+    };
 
-    // Get the "class" value and branch based on this.
+    /// Add a don't touch annotation for a target.
+    auto addDontTouch = [&](StringRef target,
+                            Optional<ArrayAttr> subfields = {}) {
+      NamedAttrList fields;
+      fields.append(
+          "class",
+          StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+      if (subfields)
+        fields.append("target", *subfields);
+      newAnnotations[target].push_back(
+          DictionaryAttr::getWithSorted(context, fields));
+    };
+
+    // Loop over all non-specific annotations that target "~".
     //
-    // TODO: Determine a way to do this in an extensible way.  I.e., a user
-    // should be able to register a handler for an annotation of a specific
-    // class.
-    StringRef clazz = classAttr.getValue();
+    //
+    for (auto a : nonSpecificAnnotations) {
+      auto dict = a.cast<DictionaryAttr>();
+      StringAttr classAttr = dict.getAs<StringAttr>("class");
+      // If the annotation doesn't have a "class" field, then we can't handle
+      // it. Just copy it over.
+      if (!classAttr) {
+        newAnnotations["~"].push_back(a);
+        continue;
+      }
 
-    // Describes tap points into the design.  This has the following structure:
-    //   blackBox: ModuleTarget
-    //   keys: Seq[DataTapKey]
-    // DataTapKey has multiple implementations:
-    //   - ReferenceDataTapKey: (tapping a point which exists in the FIRRTL)
-    //       portName: ReferenceTarget
-    //       source: ReferenceTarget
-    //   - DataTapModuleSignalKey: (tapping a point, by name, in a blackbox)
-    //       portName: ReferenceTarget
-    //       module: IsModule
-    //       internalPath: String
-    //   - DeletedDataTapKey: (not implemented here)
-    //       portName: ReferenceTarget
-    //   - LiteralDataTapKey: (not implemented here)
-    //       portName: ReferenceTarget
-    //       literal: Literal
-    // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
-    // store the string.
-    // TODO: Parse the literal string into a UInt or SInt literal.
-    if (clazz == "sifive.enterprise.grandcentral.DataTapsAnnotation") {
-      auto id = newID();
-      NamedAttrList attrs;
-      attrs.append("class", classAttr);
-      auto blackBoxAttr =
-          tryGetAs<StringAttr>(dict, dict, "blackBox", loc, clazz);
-      if (!blackBoxAttr)
-        return false;
-      auto target = canonicalizeTarget(blackBoxAttr.getValue());
-      if (!target)
-        return false;
-      newAnnotations[target.getValue()].push_back(
-          DictionaryAttr::getWithSorted(context, attrs));
-      addDontTouch(target.getValue());
+      // Get the "class" value and branch based on this.
+      //
+      // TODO: Determine a way to do this in an extensible way.  I.e., a user
+      // should be able to register a handler for an annotation of a specific
+      // class.
+      StringRef clazz = classAttr.getValue();
 
-      // Process all the taps.
-      auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
-      if (!keyAttr)
-        return false;
-      for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
-        auto b = keyAttr[i];
-        auto path = ("keys[" + Twine(i) + "]").str();
-        auto bDict = b.cast<DictionaryAttr>();
-        auto classAttr =
-            tryGetAs<StringAttr>(bDict, dict, "class", loc, clazz, path);
-        if (!classAttr)
+      // Describes tap points into the design.  This has the following
+      // structure:
+      //   blackBox: ModuleTarget
+      //   keys: Seq[DataTapKey]
+      // DataTapKey has multiple implementations:
+      //   - ReferenceDataTapKey: (tapping a point which exists in the FIRRTL)
+      //       portName: ReferenceTarget
+      //       source: ReferenceTarget
+      //   - DataTapModuleSignalKey: (tapping a point, by name, in a blackbox)
+      //       portName: ReferenceTarget
+      //       module: IsModule
+      //       internalPath: String
+      //   - DeletedDataTapKey: (not implemented here)
+      //       portName: ReferenceTarget
+      //   - LiteralDataTapKey: (not implemented here)
+      //       portName: ReferenceTarget
+      //       literal: Literal
+      // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
+      // store the string.
+      // TODO: Parse the literal string into a UInt or SInt literal.
+      if (clazz == "sifive.enterprise.grandcentral.DataTapsAnnotation") {
+        auto id = newID();
+        NamedAttrList attrs;
+        attrs.append("class", classAttr);
+        auto blackBoxAttr =
+            tryGetAs<StringAttr>(dict, dict, "blackBox", loc, clazz);
+        if (!blackBoxAttr)
           return false;
+        auto target = canonicalizeTarget(blackBoxAttr.getValue());
+        newAnnotations[target].push_back(
+            DictionaryAttr::getWithSorted(context, attrs));
+        addDontTouch(target);
 
-        // The "portName" field is common across all sub-types of DataTapKey.
-        NamedAttrList port;
-        auto portNameAttr =
-            tryGetAs<StringAttr>(bDict, dict, "portName", loc, clazz, path);
-        if (!portNameAttr)
+        // Process all the taps.
+        auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
+        if (!keyAttr)
           return false;
-        auto maybePortTarget = canonicalizeTarget(portNameAttr.getValue());
-        if (!maybePortTarget)
-          return false;
-        auto portPair =
-            splitAndAppendTarget(port, maybePortTarget.getValue(), context);
-        port.append("class", classAttr);
-        port.append("id", id);
-        addDontTouch(portPair.first, portPair.second);
-
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
-          NamedAttrList source;
-          auto portID = newID();
-          source.append("class", bDict.get("class"));
-          source.append("id", id);
-          source.append("portID", portID);
-          auto sourceAttr =
-              tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
-          if (!sourceAttr)
+        for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
+          auto b = keyAttr[i];
+          auto path = ("keys[" + Twine(i) + "]").str();
+          auto bDict = b.cast<DictionaryAttr>();
+          auto classAttr =
+              tryGetAs<StringAttr>(bDict, dict, "class", loc, clazz, path);
+          if (!classAttr)
             return false;
-          auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
-          if (!maybeSourceTarget)
+
+          // The "portName" field is common across all sub-types of DataTapKey.
+          NamedAttrList port;
+          auto portNameAttr =
+              tryGetAs<StringAttr>(bDict, dict, "portName", loc, clazz, path);
+          if (!portNameAttr)
             return false;
-          auto NLATargets = expandNonLocal(*maybeSourceTarget);
-          auto leafTarget = splitAndAppendTarget(
-              source, std::get<0>(NLATargets.back()), context);
-          FlatSymbolRefAttr nlaSym;
-          if (NLATargets.size() > 1) {
-            nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
-            source.append("circt.nonlocal", nlaSym);
+          auto maybePortTarget = canonicalizeTarget(portNameAttr.getValue());
+          auto portPair = splitAndAppendTarget(port, maybePortTarget, context);
+          port.append("class", classAttr);
+          port.append("id", id);
+          addDontTouch(portPair.first, portPair.second);
+
+          if (classAttr.getValue() ==
+              "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
+            NamedAttrList source;
+            auto portID = newID();
+            source.append("class", bDict.get("class"));
+            source.append("id", id);
+            source.append("portID", portID);
+            auto sourceAttr =
+                tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
+            if (!sourceAttr)
+              return false;
+            auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
+            auto NLATargets = expandNonLocal(maybeSourceTarget);
+            auto leafTarget = splitAndAppendTarget(
+                source, std::get<0>(NLATargets.back()), context);
+            FlatSymbolRefAttr nlaSym;
+            if (NLATargets.size() > 1) {
+              nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
+              source.append("circt.nonlocal", nlaSym);
+            }
+            source.append("type", StringAttr::get(context, "source"));
+            newAnnotations[leafTarget.first].push_back(
+                DictionaryAttr::get(context, source));
+            addDontTouch(leafTarget.first, leafTarget.second);
+
+            for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+              NamedAttrList pathmetadata;
+              pathmetadata.append("circt.nonlocal", nlaSym);
+              pathmetadata.append("class",
+                                  StringAttr::get(context, "circt.nonlocal"));
+              newAnnotations[std::get<0>(NLATargets[i])].push_back(
+                  DictionaryAttr::get(context, pathmetadata));
+            }
+
+            // Port Annotations generation.
+            port.append("portID", portID);
+            port.append("type", StringAttr::get(context, "portName"));
+            newAnnotations[portPair.first].push_back(
+                DictionaryAttr::get(context, port));
+            continue;
           }
-          source.append("type", StringAttr::get(context, "source"));
-          newAnnotations[leafTarget.first].push_back(
-              DictionaryAttr::get(context, source));
-          addDontTouch(leafTarget.first, leafTarget.second);
+
+          if (classAttr.getValue() ==
+              "sifive.enterprise.grandcentral.DataTapModuleSignalKey") {
+            NamedAttrList module;
+            auto portID = newID();
+            module.append("class", classAttr);
+            module.append("id", id);
+            auto internalPathAttr = tryGetAs<StringAttr>(
+                bDict, dict, "internalPath", loc, clazz, path);
+            auto moduleAttr =
+                tryGetAs<StringAttr>(bDict, dict, "module", loc, clazz, path);
+            if (!internalPathAttr || !moduleAttr)
+              return false;
+            module.append("internalPath", internalPathAttr);
+            module.append("portID", portID);
+            auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+            newAnnotations[moduleTarget].push_back(
+                DictionaryAttr::getWithSorted(context, module));
+            addDontTouch(moduleTarget);
+
+            // Port Annotations generation.
+            port.append("portID", portID);
+            newAnnotations[portPair.first].push_back(
+                DictionaryAttr::get(context, port));
+            continue;
+          }
+
+          if (classAttr.getValue() ==
+              "sifive.enterprise.grandcentral.DeletedDataTapKey") {
+            // Port Annotations generation.
+            newAnnotations[portPair.first].push_back(
+                DictionaryAttr::get(context, port));
+            continue;
+          }
+
+          if (classAttr.getValue() ==
+              "sifive.enterprise.grandcentral.LiteralDataTapKey") {
+            NamedAttrList literal;
+            literal.append("class", classAttr);
+            auto literalAttr =
+                tryGetAs<StringAttr>(bDict, dict, "literal", loc, clazz, path);
+            if (!literalAttr)
+              return false;
+            literal.append("literal", literalAttr);
+
+            // Port Annotaiton generation.
+            newAnnotations[portPair.first].push_back(
+                DictionaryAttr::get(context, literal));
+            continue;
+          }
+
+          mlir::emitError(
+              loc,
+              "Annotation '" + Twine(clazz) + "' with path '" + path +
+                  ".class" +
+                  +"' contained an unknown/unimplemented DataTapKey class '" +
+                  classAttr.getValue() + "'.")
+                  .attachNote()
+              << "The full Annotation is reprodcued here: " << dict << "\n";
+          return false;
+        }
+        continue;
+      }
+
+      if (clazz == "sifive.enterprise.grandcentral.MemTapAnnotation") {
+        auto id = newID();
+        NamedAttrList attrs;
+        auto sourceAttr =
+            tryGetAs<StringAttr>(dict, dict, "source", loc, clazz);
+        if (!sourceAttr)
+          return false;
+        auto target = canonicalizeTarget(sourceAttr.getValue());
+        attrs.append(dict.getNamed("class").getValue());
+        attrs.append("id", id);
+        newAnnotations[target].push_back(DictionaryAttr::get(context, attrs));
+        auto tapsAttr = tryGetAs<ArrayAttr>(dict, dict, "taps", loc, clazz);
+        if (!tapsAttr)
+          return false;
+        for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
+          auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
+          if (!tap) {
+            mlir::emitError(
+                loc, "Annotation '" + Twine(clazz) + "' with path '.taps[" +
+                         Twine(i) +
+                         "]' contained an unexpected type (expected a string).")
+                    .attachNote()
+                << "The full Annotation is reprodcued here: " << dict << "\n";
+            return false;
+          }
+          NamedAttrList foo;
+          foo.append("class", dict.get("class"));
+          foo.append("id", id);
+          foo.append("word",
+                     IntegerAttr::get(IntegerType::get(context, 64), i));
+          auto canonTarget = canonicalizeTarget(tap.getValue());
+          auto NLATargets = expandNonLocal(canonTarget);
+          auto leafTarget =
+              splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
+                  .first;
+          if (NLATargets.size() > 1) {
+            buildNLA(circuit, ++nlaNumber, NLATargets);
+            foo.append("circt.nonlocal",
+                       FlatSymbolRefAttr::get(context, canonTarget));
+          }
+          newAnnotations[leafTarget].push_back(
+              DictionaryAttr::get(context, foo));
 
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
-            pathmetadata.append("circt.nonlocal", nlaSym);
+            pathmetadata.append("circt.nonlocal",
+                                FlatSymbolRefAttr::get(context, canonTarget));
             pathmetadata.append("class",
                                 StringAttr::get(context, "circt.nonlocal"));
             newAnnotations[std::get<0>(NLATargets[i])].push_back(
                 DictionaryAttr::get(context, pathmetadata));
           }
-
-          // Port Annotations generation.
-          port.append("portID", portID);
-          port.append("type", StringAttr::get(context, "portName"));
-          newAnnotations[portPair.first].push_back(
-              DictionaryAttr::get(context, port));
-          continue;
         }
-
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.DataTapModuleSignalKey") {
-          NamedAttrList module;
-          auto portID = newID();
-          module.append("class", classAttr);
-          module.append("id", id);
-          auto internalPathAttr = tryGetAs<StringAttr>(
-              bDict, dict, "internalPath", loc, clazz, path);
-          auto moduleAttr =
-              tryGetAs<StringAttr>(bDict, dict, "module", loc, clazz, path);
-          if (!internalPathAttr || !moduleAttr)
-            return false;
-          module.append("internalPath", internalPathAttr);
-          module.append("portID", portID);
-          auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
-          if (!moduleTarget)
-            return false;
-          newAnnotations[moduleTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, module));
-          addDontTouch(moduleTarget.getValue());
-
-          // Port Annotations generation.
-          port.append("portID", portID);
-          newAnnotations[portPair.first].push_back(
-              DictionaryAttr::get(context, port));
-          continue;
-        }
-
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.DeletedDataTapKey") {
-          // Port Annotations generation.
-          newAnnotations[portPair.first].push_back(
-              DictionaryAttr::get(context, port));
-          continue;
-        }
-
-        if (classAttr.getValue() ==
-            "sifive.enterprise.grandcentral.LiteralDataTapKey") {
-          NamedAttrList literal;
-          literal.append("class", classAttr);
-          auto literalAttr =
-              tryGetAs<StringAttr>(bDict, dict, "literal", loc, clazz, path);
-          if (!literalAttr)
-            return false;
-          literal.append("literal", literalAttr);
-
-          // Port Annotaiton generation.
-          newAnnotations[portPair.first].push_back(
-              DictionaryAttr::get(context, literal));
-          continue;
-        }
-
-        mlir::emitError(
-            loc,
-            "Annotation '" + Twine(clazz) + "' with path '" + path + ".class" +
-                +"' contained an unknown/unimplemented DataTapKey class '" +
-                classAttr.getValue() + "'.")
-                .attachNote()
-            << "The full Annotation is reprodcued here: " << dict << "\n";
-        return false;
+        continue;
       }
-      continue;
-    }
 
-    if (clazz == "sifive.enterprise.grandcentral.MemTapAnnotation") {
-      auto id = newID();
-      NamedAttrList attrs;
-      auto sourceAttr = tryGetAs<StringAttr>(dict, dict, "source", loc, clazz);
-      if (!sourceAttr)
-        return false;
-      auto target = canonicalizeTarget(sourceAttr.getValue());
-      if (!target)
-        return false;
-      attrs.append(dict.getNamed("class").getValue());
-      attrs.append("id", id);
-      newAnnotations[target.getValue()].push_back(
-          DictionaryAttr::get(context, attrs));
-      auto tapsAttr = tryGetAs<ArrayAttr>(dict, dict, "taps", loc, clazz);
-      if (!tapsAttr)
-        return false;
-      for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
-        auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
-        if (!tap) {
-          mlir::emitError(
-              loc, "Annotation '" + Twine(clazz) + "' with path '.taps[" +
-                       Twine(i) +
-                       "]' contained an unexpected type (expected a string).")
-                  .attachNote()
-              << "The full Annotation is reprodcued here: " << dict << "\n";
+      if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
+                   "SerializedViewAnnotation" ||
+          clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
+        auto viewAnnotationClass = StringAttr::get(
+            context, "sifive.enterprise.grandcentral.ViewAnnotation");
+        auto id = newID();
+        NamedAttrList companionAttrs, parentAttrs;
+        companionAttrs.append("class", viewAnnotationClass);
+        companionAttrs.append("id", id);
+        companionAttrs.append("type", StringAttr::get(context, "companion"));
+        auto viewAttr =
+            tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
+        if (!viewAttr)
           return false;
-        }
-        NamedAttrList foo;
-        foo.append("class", dict.get("class"));
-        foo.append("id", id);
-        foo.append("word", IntegerAttr::get(IntegerType::get(context, 64), i));
-        auto canonTarget = canonicalizeTarget(tap.getValue());
-        if (!canonTarget)
+        auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
+        if (!name)
           return false;
-        auto NLATargets = expandNonLocal(*canonTarget);
-        auto leafTarget =
-            splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
-                .first;
-        if (NLATargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, NLATargets);
-          foo.append("circt.nonlocal",
-                     FlatSymbolRefAttr::get(context, *canonTarget));
-        }
-        newAnnotations[leafTarget].push_back(DictionaryAttr::get(context, foo));
+        companionAttrs.append("name", name);
+        auto companionAttr =
+            tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
+        if (!companionAttr)
+          return false;
+        auto companion = companionAttr.getValue();
+        newAnnotations[companion].push_back(
+            DictionaryAttr::get(context, companionAttrs));
+        auto parentAttr =
+            tryGetAs<StringAttr>(dict, dict, "parent", loc, clazz);
+        if (!parentAttr)
+          return false;
+        parentAttrs.append("class", viewAnnotationClass);
+        parentAttrs.append("id", id);
+        parentAttrs.append("name", name);
+        parentAttrs.append("type", StringAttr::get(context, "parent"));
 
-        for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-          NamedAttrList pathmetadata;
-          pathmetadata.append("circt.nonlocal",
-                              FlatSymbolRefAttr::get(context, *canonTarget));
-          pathmetadata.append("class",
-                              StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(NLATargets[i])].push_back(
-              DictionaryAttr::get(context, pathmetadata));
-        }
+        newAnnotations[parentAttr.getValue()].push_back(
+            DictionaryAttr::get(context, parentAttrs));
+        auto prunedAttr = parseAugmentedType(
+            context, viewAttr, dict, newAnnotations, companion, name, {}, id,
+            {}, loc, annotationID, clazz, "view");
+        if (!prunedAttr)
+          return false;
+
+        newAnnotations["~"].push_back(prunedAttr.getValue());
+        continue;
       }
-      continue;
-    }
 
-    if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
-                 "SerializedViewAnnotation" ||
-        clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
-      auto viewAnnotationClass = StringAttr::get(
-          context, "sifive.enterprise.grandcentral.ViewAnnotation");
-      auto id = newID();
-      NamedAttrList companionAttrs, parentAttrs;
-      companionAttrs.append("class", viewAnnotationClass);
-      companionAttrs.append("id", id);
-      companionAttrs.append("type", StringAttr::get(context, "companion"));
-      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
-      if (!viewAttr)
-        return false;
-      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
-      if (!name)
-        return false;
-      companionAttrs.append("name", name);
-      auto companionAttr =
-          tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
-      if (!companionAttr)
-        return false;
-      auto companion = companionAttr.getValue();
-      newAnnotations[companion].push_back(
-          DictionaryAttr::get(context, companionAttrs));
-      auto parentAttr = tryGetAs<StringAttr>(dict, dict, "parent", loc, clazz);
-      if (!parentAttr)
-        return false;
-      parentAttrs.append("class", viewAnnotationClass);
-      parentAttrs.append("id", id);
-      parentAttrs.append("name", name);
-      parentAttrs.append("type", StringAttr::get(context, "parent"));
+      // Scatter signal driver annotations to the sources *and* the targets of
+      // the drives.
+      if (clazz == "sifive.enterprise.grandcentral.SignalDriverAnnotation") {
+        auto id = newID();
 
-      newAnnotations[parentAttr.getValue()].push_back(
-          DictionaryAttr::get(context, parentAttrs));
-      auto prunedAttr = parseAugmentedType(
-          context, viewAttr, dict, newAnnotations, companion, name, {}, id, {},
-          loc, annotationID, clazz, "view");
-      if (!prunedAttr)
-        return false;
-
-      newAnnotations["~"].push_back(prunedAttr.getValue());
-      continue;
-    }
-
-    // Scatter signal driver annotations to the sources *and* the targets of the
-    // drives.
-    if (clazz == "sifive.enterprise.grandcentral.SignalDriverAnnotation") {
-      auto id = newID();
-
-      // Rework the circuit-level annotation to no longer include the
-      // information we are scattering away anyway.
-      NamedAttrList fields;
-      auto annotationsAttr =
-          tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
-      auto circuitAttr =
-          tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
-      auto circuitPackageAttr =
-          tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
-      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
-        return false;
-      fields.append("class", classAttr);
-      fields.append("id", id);
-      fields.append("annotations", annotationsAttr);
-      fields.append("circuit", circuitAttr);
-      fields.append("circuitPackage", circuitPackageAttr);
-      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
-
-      // A callback that will scatter every source and sink target pair to the
-      // corresponding two ends of the connection.
-      llvm::StringSet annotatedModules;
-      auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
-        auto targetId = newID();
-        DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
-        if (!targetDict) {
-          mlir::emitError(loc, "SignalDriverAnnotation source and sink target "
-                               "entries must be dictionaries")
-                  .attachNote()
-              << "annotation:" << dict << "\n";
+        // Rework the circuit-level annotation to no longer include the
+        // information we are scattering away anyway.
+        NamedAttrList fields;
+        auto annotationsAttr =
+            tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
+        auto circuitAttr =
+            tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
+        auto circuitPackageAttr =
+            tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
+        if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
           return false;
-        }
+        fields.append("class", classAttr);
+        fields.append("id", id);
+        fields.append("annotations", annotationsAttr);
+        fields.append("circuit", circuitAttr);
+        fields.append("circuitPackage", circuitPackageAttr);
+        newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
 
-        // Dig up the two sides of the link.
-        auto path = (Twine(clazz) + "." + (isSource ? "source" : "sink") +
-                     "Targets[" + Twine(i) + "]")
-                        .str();
-        auto remoteAttr =
-            tryGetAs<StringAttr>(targetDict, dict, "_1", loc, path);
-        auto localAttr =
-            tryGetAs<StringAttr>(targetDict, dict, "_2", loc, path);
-        if (!localAttr || !remoteAttr)
-          return false;
-
-        // Build the two annotations.
-        for (auto pair : std::array{std::make_pair(localAttr, true),
-                                    std::make_pair(remoteAttr, false)}) {
-          auto canonTarget = canonicalizeTarget(pair.first.getValue());
-          if (!canonTarget)
+        // A callback that will scatter every source and sink target pair to the
+        // corresponding two ends of the connection.
+        llvm::StringSet annotatedModules;
+        auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
+          auto targetId = newID();
+          DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
+          if (!targetDict) {
+            mlir::emitError(loc,
+                            "SignalDriverAnnotation source and sink target "
+                            "entries must be dictionaries")
+                    .attachNote()
+                << "annotation:" << dict << "\n";
             return false;
-
-          // HACK: Ignore the side of the connection that targets the *other*
-          // circuit. We do this by checking whether the canonicalized target
-          // begins with `~CircuitName|`. If it doesn't, we skip.
-          // TODO: Once we properly support multiple circuits, this can go and
-          // the annotation can scatter properly.
-          StringRef prefix(*canonTarget);
-          if (!(prefix.consume_front("~") &&
-                prefix.consume_front(circuit.name()) &&
-                prefix.consume_front("|"))) {
-            continue;
           }
 
-          // Assemble the annotation on this side of the connection.
+          // Dig up the two sides of the link.
+          auto path = (Twine(clazz) + "." + (isSource ? "source" : "sink") +
+                       "Targets[" + Twine(i) + "]")
+                          .str();
+          auto remoteAttr =
+              tryGetAs<StringAttr>(targetDict, dict, "_1", loc, path);
+          auto localAttr =
+              tryGetAs<StringAttr>(targetDict, dict, "_2", loc, path);
+          if (!localAttr || !remoteAttr)
+            return false;
+
+          // Build the two annotations.
+          for (auto pair : std::array{std::make_pair(localAttr, true),
+                                      std::make_pair(remoteAttr, false)}) {
+            auto canonTarget = canonicalizeTarget(pair.first.getValue());
+
+            // HACK: Ignore the side of the connection that targets the *other*
+            // circuit. We do this by checking whether the canonicalized target
+            // begins with `~CircuitName|`. If it doesn't, we skip.
+            // TODO: Once we properly support multiple circuits, this can go and
+            // the annotation can scatter properly.
+            StringRef prefix(canonTarget);
+            if (!(prefix.consume_front("~") &&
+                  prefix.consume_front(circuit.name()) &&
+                  prefix.consume_front("|"))) {
+              continue;
+            }
+
+            // Assemble the annotation on this side of the connection.
+            NamedAttrList fields;
+            fields.append("class", classAttr);
+            fields.append("id", id);
+            fields.append("targetId", targetId);
+            fields.append("peer", pair.second ? remoteAttr : localAttr);
+            fields.append(
+                "side",
+                StringAttr::get(context, pair.second ? "local" : "remote"));
+            fields.append(
+                "dir", StringAttr::get(context, isSource ? "source" : "sink"));
+
+            // Handle subfield and non-local targets.
+            auto NLATargets = expandNonLocal(canonTarget);
+            auto leafTarget = splitAndAppendTarget(
+                fields, std::get<0>(NLATargets.back()), context);
+            if (NLATargets.size() > 1) {
+              buildNLA(circuit, ++nlaNumber, NLATargets);
+              fields.append("circt.nonlocal",
+                            FlatSymbolRefAttr::get(context, canonTarget));
+            }
+            newAnnotations[leafTarget.first].push_back(
+                DictionaryAttr::get(context, fields));
+
+            // Add a don't touch annotation to whatever this annotation targets.
+            addDontTouch(leafTarget.first, leafTarget.second);
+
+            // Keep track of the enclosing module.
+            annotatedModules.insert(
+                (StringRef(std::get<0>(NLATargets.back())).split("|").first +
+                 "|" + std::get<1>(NLATargets.back()))
+                    .str());
+
+            // Annotate instances along the NLA path.
+            for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+              NamedAttrList fields;
+              fields.append("circt.nonlocal",
+                            FlatSymbolRefAttr::get(context, canonTarget));
+              fields.append("class",
+                            StringAttr::get(context, "circt.nonlocal"));
+              newAnnotations[std::get<0>(NLATargets[i])].push_back(
+                  DictionaryAttr::get(context, fields));
+            }
+          }
+
+          return true;
+        };
+
+        // Handle the source and sink targets.
+        auto sourcesAttr =
+            tryGetAs<ArrayAttr>(dict, dict, "sourceTargets", loc, clazz);
+        auto sinksAttr =
+            tryGetAs<ArrayAttr>(dict, dict, "sinkTargets", loc, clazz);
+        if (!sourcesAttr || !sinksAttr)
+          return false;
+        unsigned i = 0;
+        for (auto attr : sourcesAttr)
+          if (!handleTarget(attr, i++, true))
+            return false;
+        i = 0;
+        for (auto attr : sinksAttr)
+          if (!handleTarget(attr, i++, false))
+            return false;
+
+        // Indicate which modules have embedded `SignalDriverAnnotation`s.
+        for (auto &module : annotatedModules) {
           NamedAttrList fields;
           fields.append("class", classAttr);
           fields.append("id", id);
-          fields.append("targetId", targetId);
-          fields.append("peer", pair.second ? remoteAttr : localAttr);
-          fields.append("side", StringAttr::get(
-                                    context, pair.second ? "local" : "remote"));
-          fields.append("dir",
-                        StringAttr::get(context, isSource ? "source" : "sink"));
-
-          // Handle subfield and non-local targets.
-          auto NLATargets = expandNonLocal(*canonTarget);
-          auto leafTarget = splitAndAppendTarget(
-              fields, std::get<0>(NLATargets.back()), context);
-          if (NLATargets.size() > 1) {
-            buildNLA(circuit, ++nlaNumber, NLATargets);
-            fields.append("circt.nonlocal",
-                          FlatSymbolRefAttr::get(context, *canonTarget));
-          }
-          newAnnotations[leafTarget.first].push_back(
+          newAnnotations[module.getKey()].push_back(
               DictionaryAttr::get(context, fields));
-
-          // Add a don't touch annotation to whatever this annotation targets.
-          addDontTouch(leafTarget.first, leafTarget.second);
-
-          // Keep track of the enclosing module.
-          annotatedModules.insert(
-              (StringRef(std::get<0>(NLATargets.back())).split("|").first +
-               "|" + std::get<1>(NLATargets.back()))
-                  .str());
-
-          // Annotate instances along the NLA path.
-          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-            NamedAttrList fields;
-            fields.append("circt.nonlocal",
-                          FlatSymbolRefAttr::get(context, *canonTarget));
-            fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
-                DictionaryAttr::get(context, fields));
-          }
         }
 
-        return true;
-      };
-
-      // Handle the source and sink targets.
-      auto sourcesAttr =
-          tryGetAs<ArrayAttr>(dict, dict, "sourceTargets", loc, clazz);
-      auto sinksAttr =
-          tryGetAs<ArrayAttr>(dict, dict, "sinkTargets", loc, clazz);
-      if (!sourcesAttr || !sinksAttr)
-        return false;
-      unsigned i = 0;
-      for (auto attr : sourcesAttr)
-        if (!handleTarget(attr, i++, true))
-          return false;
-      i = 0;
-      for (auto attr : sinksAttr)
-        if (!handleTarget(attr, i++, false))
-          return false;
-
-      // Indicate which modules have embedded `SignalDriverAnnotation`s.
-      for (auto &module : annotatedModules) {
-        NamedAttrList fields;
-        fields.append("class", classAttr);
-        fields.append("id", id);
-        newAnnotations[module.getKey()].push_back(
-            DictionaryAttr::get(context, fields));
-      }
-
-      continue;
-    }
-
-    // Scatter trackers out from OMIR JSON.
-    if (clazz == omirAnnoClass) {
-      auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
-                                           circuit, nlaNumber, loc);
-      if (!newAnno)
-        return false;
-      newAnnotations["~"].push_back(newAnno.getValue());
-      continue;
-    }
-
-    // Just copy over any annotation we don't understand.
-    newAnnotations["~"].push_back(a);
-  }
-
-  // Delete all the old CircuitTarget annotations.
-  annotationMap.erase("~");
-
-  // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
-  for (auto a : newAnnotations.keys()) {
-    // If multiple annotations on a single object, then append it.
-    if (annotationMap.count(a))
-      for (auto attr : annotationMap[a])
-        newAnnotations[a].push_back(attr);
-
-    annotationMap[a] = ArrayAttr::get(context, newAnnotations[a]);
-  }
-
-  return true;
-}
-
-/// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
-/// represented as a Target-keyed arrays of attributes.  The input JSON value is
-/// checked, at runtime, to be an array of objects.  Returns true if successful,
-/// false if unsuccessful.
-bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
-                                SmallVectorImpl<Attribute> &attrs,
-                                json::Path path, MLIRContext *context) {
-
-  // The JSON value must be an array of objects.  Anything else is reported as
-  // invalid.
-  auto array = value.getAsArray();
-  if (!array) {
-    path.report(
-        "Expected annotations to be an array, but found something else.");
-    return false;
-  }
-
-  // Build an array of annotations.
-  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
-    auto object = (*array)[i].getAsObject();
-    auto p = path.index(i);
-    if (!object) {
-      p.report("Expected annotations to be an array of objects, but found an "
-               "array of something else.");
-      return false;
-    }
-
-    // Build up the Attribute to represent the Annotation
-    NamedAttrList metadata;
-
-    for (auto field : *object) {
-      if (auto value = convertJSONToAttribute(context, field.second, p)) {
-        metadata.append(field.first, value);
         continue;
       }
+
+      // Scatter trackers out from OMIR JSON.
+      if (clazz == omirAnnoClass) {
+        auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
+                                             circuit, nlaNumber, loc);
+        if (!newAnno)
+          return false;
+        newAnnotations["~"].push_back(newAnno.getValue());
+        continue;
+      }
+
+      // Just copy over any annotation we don't understand.
+      newAnnotations["~"].push_back(a);
+    }
+
+    // Delete all the old CircuitTarget annotations.
+    annotationMap.erase("~");
+
+    // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
+    for (auto a : newAnnotations.keys()) {
+      // If multiple annotations on a single object, then append it.
+      if (annotationMap.count(a))
+        for (auto attr : annotationMap[a])
+          newAnnotations[a].push_back(attr);
+
+      annotationMap[a] = ArrayAttr::get(context, newAnnotations[a]);
+    }
+
+    return true;
+  }
+
+  /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
+  /// represented as a Target-keyed arrays of attributes.  The input JSON value
+  /// is checked, at runtime, to be an array of objects.  Returns true if
+  /// successful, false if unsuccessful.
+  bool circt::firrtl::fromJSON(json::Value & value,
+                               SmallVectorImpl<DictionaryAttr> & attrs,
+                               json::Path path, MLIRContext * context) {
+
+    // The JSON value must be an array of objects.  Anything else is reported as
+    // invalid.
+    auto array = value.getAsArray();
+    if (!array) {
+      path.report(
+          "Expected annotations to be an array, but found something else.");
       return false;
     }
 
-    attrs.push_back(DictionaryAttr::get(context, metadata));
-  }
+    // Build an array of annotations.
+    for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+      auto object = (*array)[i].getAsObject();
+      auto p = path.index(i);
+      if (!object) {
+        p.report("Expected annotations to be an array of objects, but found an "
+                 "array of something else.");
+        return false;
+      }
 
-  return true;
-}
+      // Build up the Attribute to represent the Annotation
+      NamedAttrList metadata;
+
+      for (auto field : *object) {
+        if (auto value = convertJSONToAttribute(context, field.second, p)) {
+          metadata.append(field.first, value);
+          continue;
+        }
+        return false;
+      }
+
+      attrs.push_back(DictionaryAttr::get(context, metadata));
+    }
+
+    return true;
+  }

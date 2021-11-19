@@ -306,7 +306,7 @@ Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
     instances.push_back(cast<InstanceOp>(resolved.op));
   }
   // The final module is where the named target is (or is the named target).
-  auto mod = state.symTbl.lookup<FModuleOp>(path.module);
+  auto mod = state.symTbl.lookup<FModuleLike>(path.module);
   if (!mod) {
     state.circuit->emitError("module doesn't exist '") << path.module << '\'';
     return {};
@@ -319,7 +319,7 @@ Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
     ref = findNamedThing(path.name, mod);
     if (!ref) {
       state.circuit->emitError("cannot find name '")
-          << path.name << "' in " << mod.getName();
+          << path.name << "' in " << mod.moduleName();
       return {};
     }
   }
@@ -557,6 +557,8 @@ struct AnnoRecord {
 } // end anonymous namespace
 
 static const llvm::StringMap<AnnoRecord> annotationRecords{{
+
+//    {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
 
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
