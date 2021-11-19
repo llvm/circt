@@ -150,6 +150,10 @@ if config.esi_cosim_path != "":
 if config.esi_capnp != "":
   config.available_features.add('capnp')
 
+# Enable HSDbg tests if they're enabled.
+if config.hsdbg:
+  config.available_features.add('hsdbg')
+
 # Enable Python bindings tests if they're supported.
 if config.bindings_python_enabled:
   config.available_features.add('bindings_python')

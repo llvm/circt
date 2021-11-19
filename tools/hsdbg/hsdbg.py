@@ -111,7 +111,7 @@ class DotFile:
 
 class HSDbg():
 
-  def __init__(self, target, dotFile, vcdFile):
+  def __init__(self, target, dotFile, vcdFile, printBundles):
     # Factory for building signal bundles and modules.
     self.target = target
 
@@ -128,8 +128,17 @@ class HSDbg():
     self.cycle = self.beginTime()
     self.resolveDotToVCD()
 
+    if printBundles:
+      # Print bundles and exit.
+      self.printBundles()
+      return
+
     # Create the graph.
     self.updateCurrentCycle(self.cycle)
+
+  def printBundles(self):
+    for b in self.bundles:
+      b.printResolvedEdge()
 
   def resolveDotToVCD(self):
     """ This function uses the edges gathered from the .dot file to try and
@@ -308,6 +317,10 @@ Legend:
       help="The port to run the image server on. default='8080'",
       type=int,
       default=8080)
+  parser.add_argument(
+      "--print-bundles-only",
+      help="Print the bundles that were successfully resolved, and exit.",
+      action="store_true")
   args = parser.parse_args()
 
   VALUE_FORMAT = args.format
@@ -315,7 +328,8 @@ Legend:
   # For now, only support handshake targets
   target = HandshakeTarget()
 
-  hsdbg = HSDbg(target, args.dotfile, args.vcdfile)
-  viewer = HSDbgImageServer(hsdbg, args.port)
-  viewer.start()
-  start_interactive_mode(args.port, hsdbg)
+  hsdbg = HSDbg(target, args.dotfile, args.vcdfile, args.print_bundles_only)
+  if not args.print_bundles_only:
+    viewer = HSDbgImageServer(hsdbg, args.port)
+    viewer.start()
+    start_interactive_mode(args.port, hsdbg)

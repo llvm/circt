@@ -17,6 +17,10 @@ if(CIRCT_BINDINGS_PYTHON_ENABLED)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS CIRCTPythonModules)
 endif()
 
+if(CIRCT_HSDBG_ENABLED)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS hsdbg-driver)
+endif()
+
 # If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS EsiCosimDpiServer)

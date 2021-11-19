@@ -46,6 +46,7 @@ config.quartus_path = "@QUARTUS_PATH@"
 config.vivado_path = "@VIVADO_PATH@"
 config.questa_path = "@QUESTA_PATH@"
 config.esi_capnp = "@ESI_CAPNP@"
+config.hsdbg = @CIRCT_HSDBG_ENABLED@
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
 

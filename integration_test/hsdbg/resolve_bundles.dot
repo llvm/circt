@@ -1,0 +1,127 @@
+Digraph G {
+  splines=spline;
+  // Subgraph for instance of exponent
+  subgraph "cluster_TOP.exponent" {
+    label = "exponent"
+    labeljust="l"
+    node [shape=box style=filled fillcolor="white"]
+    color = "darkgreen"
+    // Function argument nodes
+    subgraph "cluster_TOP.exponent_args" {
+      label=""
+      peripheries=0
+      "TOP.exponent.in0" [shape=diamond label="in0"]
+      "TOP.exponent.in1" [shape=diamond label="in1"]
+      "TOP.exponent.inCtrl" [shape=diamond, style=dashed label="inCtrl"]
+    }
+    // Function return nodes
+    subgraph "cluster_TOP.exponent_res" {
+      label=""
+      peripheries=0
+      "TOP.exponent.out0" [shape=diamond label="out0"]
+      "TOP.exponent.outCtrl" [shape=diamond label="outCtrl"]
+    }
+    // Function operation nodes
+    "TOP.exponent.handshake_fork0" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.handshake_fork1" [fillcolor = lavender, shape=box, label="fork", style="filled, dashed"]
+    "TOP.exponent.handshake_constant0" [fillcolor = gainsboro, shape=box, label="-1", style="filled"]
+    "TOP.exponent.handshake_constant1" [fillcolor = gainsboro, shape=box, label="1", style="filled"]
+    "TOP.exponent.handshake_mux0" [fillcolor = lavender, shape=box, label="mux", style="filled"]
+    "TOP.exponent.handshake_fork2" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.handshake_buffer0" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    "TOP.exponent.handshake_mux1" [fillcolor = lavender, shape=box, label="mux", style="filled"]
+    "TOP.exponent.handshake_mux2" [fillcolor = lavender, shape=box, label="mux", style="filled"]
+    "TOP.exponent.handshake_control_merge0" [fillcolor = lightblue, shape=box, label="cmerge", style="filled, dashed"]
+    "TOP.exponent.handshake_buffer1" [fillcolor = lightgreen, shape=box, label="buffer", style="filled, dashed"]
+    "TOP.exponent.handshake_fork3" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.handshake_buffer2" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    "TOP.exponent.handshake_mux3" [fillcolor = lavender, shape=box, label="mux", style="filled"]
+    "TOP.exponent.handshake_mux4" [fillcolor = lavender, shape=box, label="mux", style="filled"]
+    "TOP.exponent.handshake_fork4" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.arith_cmpi0" [fillcolor = moccasin, shape=oval, label=">", style="filled"]
+    "TOP.exponent.handshake_fork5" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.handshake_cond_br0" [fillcolor = lightblue, shape=box, label="cbranch", style="filled"]
+    "TOP.exponent.handshake_buffer3" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    "TOP.exponent.handshake_sink0" [fillcolor = gainsboro, shape=box, label="sink", style="filled"]
+    "TOP.exponent.handshake_cond_br1" [fillcolor = lightblue, shape=box, label="cbranch", style="filled"]
+    "TOP.exponent.handshake_sink1" [fillcolor = gainsboro, shape=box, label="sink", style="filled"]
+    "TOP.exponent.handshake_cond_br2" [fillcolor = lightblue, shape=box, label="cbranch", style="filled"]
+    "TOP.exponent.handshake_sink2" [fillcolor = gainsboro, shape=box, label="sink", style="filled"]
+    "TOP.exponent.handshake_cond_br3" [fillcolor = lightblue, shape=box, label="cbranch", style="filled, dashed"]
+    "TOP.exponent.handshake_cond_br4" [fillcolor = lightblue, shape=box, label="cbranch", style="filled"]
+    "TOP.exponent.handshake_buffer4" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    "TOP.exponent.handshake_cond_br5" [fillcolor = lightblue, shape=box, label="cbranch", style="filled"]
+    "TOP.exponent.handshake_sink3" [fillcolor = gainsboro, shape=box, label="sink", style="filled"]
+    "TOP.exponent.handshake_fork6" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.handshake_buffer5" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    "TOP.exponent.handshake_fork7" [fillcolor = lavender, shape=box, label="fork", style="filled"]
+    "TOP.exponent.handshake_buffer6" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    "TOP.exponent.arith_muli0" [fillcolor = moccasin, shape=oval, label="*", style="filled"]
+    "TOP.exponent.arith_addi0" [fillcolor = moccasin, shape=oval, label="+", style="filled"]
+    "TOP.exponent.handshake_buffer7" [fillcolor = lightgreen, shape=box, label="buffer", style="filled"]
+    // Operation result edges
+    "TOP.exponent.handshake_fork0" -> "TOP.exponent.handshake_mux1" //  output="out0" input="in1"
+    "TOP.exponent.handshake_fork0" -> "TOP.exponent.handshake_mux3" //  output="out1" input="in1"
+    "TOP.exponent.handshake_fork1" -> "TOP.exponent.handshake_constant1" [style="dashed"] //  output="out0" input="ctrl"
+    "TOP.exponent.handshake_fork1" -> "TOP.exponent.handshake_constant0" [style="dashed"] //  output="out1" input="ctrl"
+    "TOP.exponent.handshake_fork1" -> "TOP.exponent.handshake_control_merge0" [style="dashed"] //  output="out2" input="in1"
+    "TOP.exponent.handshake_constant0" -> "TOP.exponent.handshake_mux2" //  output="out0" input="in1"
+    "TOP.exponent.handshake_constant1" -> "TOP.exponent.handshake_mux0" //  output="out0" input="in1"
+    "TOP.exponent.handshake_mux0" -> "TOP.exponent.handshake_fork2" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork2" -> "TOP.exponent.handshake_cond_br0" //  output="out0" input="data"
+    "TOP.exponent.handshake_fork2" -> "TOP.exponent.handshake_buffer0" //  output="out1" input="in0"
+    "TOP.exponent.handshake_buffer0" -> "TOP.exponent.arith_cmpi0" //  output="out0" input="in1"
+    "TOP.exponent.handshake_mux1" -> "TOP.exponent.handshake_cond_br1" //  output="out0" input="data"
+    "TOP.exponent.handshake_mux2" -> "TOP.exponent.handshake_cond_br2" //  output="out0" input="data"
+    "TOP.exponent.handshake_control_merge0" -> "TOP.exponent.handshake_buffer1" [style="dashed"] //  output="dataOut" input="in0"
+    "TOP.exponent.handshake_control_merge0" -> "TOP.exponent.handshake_fork3" [style="dashed"] //  output="index" input="in0"
+    "TOP.exponent.handshake_buffer1" -> "TOP.exponent.handshake_cond_br3" [style="dashed"] //  output="out0" input="data"
+    "TOP.exponent.handshake_fork3" -> "TOP.exponent.handshake_buffer2" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork3" -> "TOP.exponent.handshake_mux3" [style="dashed"] //  output="out1" input="select"
+    "TOP.exponent.handshake_fork3" -> "TOP.exponent.handshake_mux2" [style="dashed"] //  output="out2" input="select"
+    "TOP.exponent.handshake_fork3" -> "TOP.exponent.handshake_mux1" [style="dashed"] //  output="out3" input="select"
+    "TOP.exponent.handshake_fork3" -> "TOP.exponent.handshake_mux0" [style="dashed"] //  output="out4" input="select"
+    "TOP.exponent.handshake_buffer2" -> "TOP.exponent.handshake_mux4" [style="dashed"] //  output="out0" input="select"
+    "TOP.exponent.handshake_mux3" -> "TOP.exponent.handshake_cond_br4" //  output="out0" input="data"
+    "TOP.exponent.handshake_mux4" -> "TOP.exponent.handshake_fork4" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork4" -> "TOP.exponent.handshake_cond_br5" //  output="out0" input="data"
+    "TOP.exponent.handshake_fork4" -> "TOP.exponent.arith_cmpi0" //  output="out1" input="in0"
+    "TOP.exponent.arith_cmpi0" -> "TOP.exponent.handshake_fork5" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork5" -> "TOP.exponent.handshake_cond_br5" [style="dashed"] //  output="out0" input="cond"
+    "TOP.exponent.handshake_fork5" -> "TOP.exponent.handshake_cond_br4" [style="dashed"] //  output="out1" input="cond"
+    "TOP.exponent.handshake_fork5" -> "TOP.exponent.handshake_cond_br3" [style="dashed"] //  output="out2" input="cond"
+    "TOP.exponent.handshake_fork5" -> "TOP.exponent.handshake_cond_br2" [style="dashed"] //  output="out3" input="cond"
+    "TOP.exponent.handshake_fork5" -> "TOP.exponent.handshake_cond_br1" [style="dashed"] //  output="out4" input="cond"
+    "TOP.exponent.handshake_fork5" -> "TOP.exponent.handshake_cond_br0" [style="dashed"] //  output="out5" input="cond"
+    "TOP.exponent.handshake_cond_br0" -> "TOP.exponent.handshake_buffer3" //  output="outTrue" input="in0"
+    "TOP.exponent.handshake_cond_br0" -> "TOP.exponent.handshake_sink0" //  output="outFalse" input="in0"
+    "TOP.exponent.handshake_buffer3" -> "TOP.exponent.handshake_mux0" //  output="out0" input="in0"
+    "TOP.exponent.handshake_cond_br1" -> "TOP.exponent.handshake_fork6" //  output="outTrue" input="in0"
+    "TOP.exponent.handshake_cond_br1" -> "TOP.exponent.handshake_sink1" //  output="outFalse" input="in0"
+    "TOP.exponent.handshake_cond_br2" -> "TOP.exponent.handshake_fork7" //  output="outTrue" input="in0"
+    "TOP.exponent.handshake_cond_br2" -> "TOP.exponent.handshake_sink2" //  output="outFalse" input="in0"
+    "TOP.exponent.handshake_cond_br3" -> "TOP.exponent.handshake_control_merge0" [style="dashed"] //  output="outTrue" input="in0"
+    "TOP.exponent.handshake_cond_br3" -> "TOP.exponent.outCtrl" [style="dashed"] //  output="outFalse" input="in1"
+    "TOP.exponent.handshake_cond_br4" -> "TOP.exponent.handshake_buffer4" //  output="outTrue" input="in0"
+    "TOP.exponent.handshake_cond_br4" -> "TOP.exponent.out0" //  output="outFalse" input="in0"
+    "TOP.exponent.handshake_buffer4" -> "TOP.exponent.arith_muli0" //  output="out0" input="in0"
+    "TOP.exponent.handshake_cond_br5" -> "TOP.exponent.arith_addi0" //  output="outTrue" input="in0"
+    "TOP.exponent.handshake_cond_br5" -> "TOP.exponent.handshake_sink3" //  output="outFalse" input="in0"
+    "TOP.exponent.handshake_fork6" -> "TOP.exponent.handshake_buffer5" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork6" -> "TOP.exponent.arith_muli0" //  output="out1" input="in1"
+    "TOP.exponent.handshake_buffer5" -> "TOP.exponent.handshake_mux1" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork7" -> "TOP.exponent.handshake_buffer6" //  output="out0" input="in0"
+    "TOP.exponent.handshake_fork7" -> "TOP.exponent.arith_addi0" //  output="out1" input="in1"
+    "TOP.exponent.handshake_buffer6" -> "TOP.exponent.handshake_mux2" //  output="out0" input="in0"
+    "TOP.exponent.arith_muli0" -> "TOP.exponent.handshake_mux3" //  output="out0" input="in0"
+    "TOP.exponent.arith_addi0" -> "TOP.exponent.handshake_buffer7" //  output="out0" input="in0"
+    "TOP.exponent.handshake_buffer7" -> "TOP.exponent.handshake_mux4" //  output="out0" input="in0"
+    }
+    // Function argument edges
+    "TOP.exponent.in0" [shape=diamond]
+    "TOP.exponent.in0" -> "TOP.exponent.handshake_fork0" //  input="in0"
+    "TOP.exponent.in1" [shape=diamond]
+    "TOP.exponent.in1" -> "TOP.exponent.handshake_mux4" //  input="in1"
+    "TOP.exponent.inCtrl" [shape=diamond, style=dashed]
+    "TOP.exponent.inCtrl" -> "TOP.exponent.handshake_fork1" [style="dashed"] //  input="in0"
+}

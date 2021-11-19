@@ -313,6 +313,20 @@ endif()
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 
 #-------------------------------------------------------------------------------
+# hsdbg Configuration
+#-------------------------------------------------------------------------------
+
+option(CIRCT_HSDBG_ENABLED "Enables hsdbg." OFF)
+
+if(CIRCT_HSDBG_ENABLED)
+  message(STATUS "hsdbg is enabled.")
+else()
+  message(STATUS "hsdbg is disabled.")
+endif()
+
+llvm_canonicalize_cmake_booleans(CIRCT_HSDBG_ENABLED)
+
+#-------------------------------------------------------------------------------
 # Python Configuration
 #-------------------------------------------------------------------------------
 

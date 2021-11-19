@@ -94,6 +94,9 @@ class SignalBundle:
   def isResolved(self):
     return self.edge != None
 
+  def printResolvedEdge(self):
+    print(str(self.edge).strip())
+
   def resolveToDot(self, edges):
     """ Resolves this handshake bundle to a dot edge.
         This is done by finding the dot edge that has the same bundle basename
