@@ -479,7 +479,7 @@ struct PortPruner : public Reduction {
       LLVM_DEBUG(llvm::dbgs() << "  - Removing port `"
                               << moduleOp.getPortName(argIdx) << "`\n");
       SmallVector<Value> maybeUnused;
-      for (auto userOp : llvm::make_early_inc_range(
+      for (auto *userOp : llvm::make_early_inc_range(
                moduleOp.getArgument(argIdx).getUsers())) {
         maybeUnused.append(userOp->operand_begin(), userOp->operand_end());
         userOp->erase();
@@ -492,7 +492,7 @@ struct PortPruner : public Reduction {
     moduleOp.erasePorts(removable);
 
     // Update all instances of this module to reflect the change.
-    for (auto userOp :
+    for (auto *userOp :
          symbols.getNearestSymbolUserMap(moduleOp).getUsers(moduleOp)) {
       auto instOp = dyn_cast<firrtl::InstanceOp>(userOp);
       if (!instOp || instOp.moduleName() != moduleOp.getName())
