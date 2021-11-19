@@ -151,8 +151,6 @@ static LogicalResult execute(MLIRContext &context) {
   // that retains the interesting behavior.
   // ModuleExternalizer pattern;
   BitVector appliedOneShotPatterns(patterns.size(), false);
-  auto lastReportTime = std::chrono::high_resolution_clock::now();
-  constexpr double reportPeriod = 0.1 /*seconds*/;
   for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
     Reduction &pattern = *patterns[patternIdx];
     if (pattern.isOneShot() && appliedOneShotPatterns[patternIdx]) {
@@ -188,16 +186,11 @@ static LogicalResult execute(MLIRContext &context) {
 
       // Show some progress indication.
       VERBOSE({
-        auto thisReportTime = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = thisReportTime - lastReportTime;
-        if (elapsed.count() >= reportPeriod) {
-          lastReportTime = thisReportTime;
-          size_t boundLength = std::min(rangeLength, opIdx);
-          size_t numDone = rangeBase / boundLength + 1;
-          size_t numTotal = (opIdx + boundLength + 1) / boundLength;
-          llvm::errs() << "  [" << numDone << "/" << numTotal << "; "
-                       << (numDone * 100 / numTotal) << "%]\r";
-        }
+        size_t boundLength = std::min(rangeLength, opIdx);
+        size_t numDone = rangeBase / boundLength + 1;
+        size_t numTotal = opIdx / boundLength;
+        llvm::errs() << "  [" << numDone << "/" << numTotal << "; "
+                     << (numDone * 100 / numTotal) << "%]\r";
       });
 
       // Check if this reduced module is still interesting, and its overall size
@@ -279,6 +272,9 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Write the reduced test case to the output.
   VERBOSE(llvm::errs() << "All reduction strategies exhausted\n");
+  VERBOSE(llvm::errs() << "Final size: " << bestSize << " ("
+                       << (100 - bestSize * 100 / initialTest.getSize())
+                       << "% reduction)\n");
   return writeOutput(module.get());
 }
 
