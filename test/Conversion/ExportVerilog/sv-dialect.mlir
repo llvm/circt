@@ -332,6 +332,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 
   sv.define "VERILATOR"            // CHECK-NEXT: `define VERILATOR
   sv.define "VERSION" = "2"        // CHECK-NEXT: `define VERSION 2
+  sv.define "SIMTYPE" = "\"ODD\""  // CHECK-NEXT: `define SIMTYPE "ODD"
   sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
   } else  {                        // CHECK-NEXT: `else
