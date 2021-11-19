@@ -616,9 +616,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
-        auto portInfos = getAllModulePortInfos(itemOp);
-        return state.globalNames.getPortVerilogName(itemOp,
-                                                    portInfos[item.getPort()]);
+        return state.globalNames.getPortVerilogName(itemOp, item.getPort());
       }
       if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
               itemOp))

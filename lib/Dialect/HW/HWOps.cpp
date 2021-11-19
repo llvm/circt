@@ -248,6 +248,32 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
+/// Return the number of inputs for a module as a function type from the module
+/// itself or from an hw::InstanceOp.
+unsigned hw::getModuleNumInputs(Operation *moduleOrInstance) {
+  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
+    return instance->getNumOperands();
+  }
+  assert(isAnyModule(moduleOrInstance) &&
+         "must be called on instance or module");
+  auto typeAttr =
+      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>().getNumInputs();
+}
+
+/// Return the number of results for a module as a function type from the module
+/// itselfA or from an hw::InstanceOp.
+unsigned hw::getModuleNumOutputs(Operation *moduleOrInstance) {
+  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
+    return instance->getNumResults();
+  }
+  assert(isAnyModule(moduleOrInstance) &&
+         "must be called on instance or module");
+  auto typeAttr =
+      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>().getNumResults();
+}
+
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
