@@ -3,6 +3,8 @@
 
 #include "circt/Tools/hlt/Simulator/VerilatorSimInterface.h"
 
+#include <optional>
+
 namespace circt {
 namespace hlt {
 
@@ -20,7 +22,8 @@ struct HandshakePort : public TSimPort {
         << "\tv: " << static_cast<int>(*validSig);
   }
 
-  virtual void transact() = 0;
+  // Transacts a port; returns true if the transaction was successful.
+  virtual bool transact() = 0;
 
   CData *readySig = nullptr;
   CData *validSig = nullptr;
@@ -41,9 +44,12 @@ struct HandshakeInPort : public HandshakePort<SimulatorInPort> {
 
   /// An input port transaction is fulfilled by de-asserting the valid (output)
   // signal of his handshake bundle.
-  void transact() override {
-    if (*(this->validSig) && *(this->readySig))
+  bool transact() override {
+    if (*(this->validSig) && *(this->readySig)) {
       *this->validSig = !1;
+      return true;
+    }
+    return false;
   }
 };
 
@@ -57,11 +63,12 @@ struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
 
   /// An input port transaction is fulfilled by de-asserting the valid (output)
   // signal of his handshake bundle.
-  void transact() override {
+  bool transact() override {
     // Edit: by making the ready signal always enabled, we avoid stalling the
     // handshake model.
     // if (*(this->validSig) && *(this->readySig))
     //   *this->readySig = !1;
+    return false;
   }
 };
 
@@ -134,8 +141,6 @@ public:
     memory_ptr = memory;
   }
 
-  void transact() {}
-
   virtual ~HandshakeMemoryInterface() = default;
 
   void addStorePort(std::shared_ptr<HandshakeInPort> &dataPort,
@@ -178,25 +183,95 @@ class HandshakeSimInterface
 public:
   using VerilatorSimImpl = VerilatorSimInterface<TInput, TOutput, TModel>;
 
+  template <typename T>
+  struct TransactionBuffer {
+    TransactionBuffer(const T &data = T()) : data(data) {
+      for (int i = 0; i < std::tuple_size<T>(); ++i)
+        transacted[i] = false;
+    }
+    T data;
+    // Maintain a mapping between the index of each subtype in data and whether
+    // that subtype has been transacted.
+    std::map<unsigned, bool> transacted;
+    // Flag to indicate if the input control has been transacted for this
+    // buffer.
+    bool transactedControl = false;
+  };
+
+  struct InputBuffer : public TransactionBuffer<TInput> {
+    InputBuffer(const TInput &data) : TransactionBuffer<TInput>(data) {}
+
+    bool done() {
+      return this->transactedControl &&
+             std::all_of(this->transacted.begin(), this->transacted.end(),
+                         [](const auto &pair) { return pair.second; });
+    }
+  };
+
+  struct OutputBuffer : public TransactionBuffer<TOutput> {
+    OutputBuffer() : TransactionBuffer<TOutput>() {}
+
+    bool valid() {
+      return std::all_of(this->transacted.begin(), this->transacted.end(),
+                         [](const auto &pair) { return pair.second; });
+    }
+  };
+
   HandshakeSimInterface() : VerilatorSimImpl() {
     // Allocate in- and output control ports.
     inCtrl = std::make_unique<HandshakeInPort>();
     outCtrl = std::make_unique<HandshakeOutPort>();
   }
 
-  void step() override {
-    for (auto &port : this->outPorts)
-      static_cast<HandshakeOutPort *>(port.get())->transact();
-    VerilatorSimImpl::step();
+  // The handshake simulator is ready to accept inputs whenever it is not
+  // currently transacting an input buffer.
+  bool inReady() override { return !this->inBuffer.has_value(); }
 
-    // Always reset the input control valid signal after clocking, to ensure
-    // that only as many rounds are initialized as the number of times that
-    // we've pushed inputs.
-    *inCtrl->validSig = 0;
+  // The handshake simulator is ready to provide an output whenever it has
+  // a valid output buffer.
+  bool outValid() override { return this->outBuffer.valid(); }
+
+  // @todo: The # of advanceTime calls in the following can be reduced; the
+  // current implementation is a hack to ensure that the simulator
+  // re-evaluates its state on _any_ input change. This is useful during
+  // debugging of the simulator infrastructure given that the dataflow
+  // components are quite (combinationally) sensitive to changes in top-level
+  // i/o.s
+
+  void step() override {
+    // Try writing any inputs currently in our buffer (Acting like combinational
+    // logic propagating in the previous cycle).
+    writeFromInputBuffer();
+    this->advanceTime();
+
+    // Rising edge
+    VerilatorSimImpl::clock_rising();
+    this->advanceTime();
+    readToOutputBuffer();
+    this->advanceTime();
 
     // Transact all I/O ports
-    for (auto &port : this->inPorts)
-      static_cast<HandshakeInPort *>(port.get())->transact();
+    for (auto &port : this->outPorts)
+      static_cast<HandshakeOutPort *>(port.get())->transact();
+    int i = 0;
+    for (auto &port : this->inPorts) {
+      bool transacted = static_cast<HandshakeInPort *>(port.get())->transact();
+      if (transacted)
+        inBuffer.value().transacted[i] = true;
+      i++;
+    }
+    this->advanceTime();
+
+    // Transact control ports
+    if (inCtrl->transact())
+      inBuffer.value().transactedControl = true;
+
+    outCtrl->transact();
+    this->advanceTime();
+
+    // Falling edge
+    VerilatorSimImpl::clock_falling();
+    this->advanceTime();
   }
 
   void setup() override {
@@ -235,50 +310,87 @@ public:
 
   template <std::size_t I = 0, typename... Tp>
   inline typename std::enable_if<I == sizeof...(Tp), void>::type
-  pushInputRec(const std::tuple<Tp...> &) {
+  writeInputRec(const std::tuple<Tp...> &) {
     // End-case, do nothing
   }
 
   template <std::size_t I = 0, typename... Tp>
       inline
       typename std::enable_if < I<sizeof...(Tp), void>::type
-                                pushInputRec(const std::tuple<Tp...> &tInput) {
+                                writeInputRec(const std::tuple<Tp...> &tInput) {
     auto value = std::get<I>(tInput);
     auto inPort = dynamic_cast<HandshakeDataInPort<decltype(value)> *>(
         this->inPorts.at(I).get());
     assert(inPort);
-    inPort->writeData(value);
-    pushInputRec<I + 1, Tp...>(tInput);
+
+    auto &inBufferV = inBuffer.value();
+
+    // Write value from input buffer to port if the port is ready and the
+    if (inPort->ready() && !inBufferV.transacted[I]) {
+      inPort->writeData(value);
+    }
+    writeInputRec<I + 1, Tp...>(tInput);
+  }
+
+  void writeFromInputBuffer() {
+    if (!inBuffer.has_value())
+      return; // Nothing to transact.
+
+    auto &inBufferV = inBuffer.value();
+
+    // Try writing input data.
+    writeInputRec(inBufferV.data);
+
+    // Try writing input control.
+    if (!inBufferV.transactedControl)
+      inCtrl->write();
+
+    // Finish writing input buffer?
+    if (inBufferV.done())
+      inBuffer = std::nullopt;
   }
 
   void pushInput(const TInput &v) override {
-    pushInputRec(v);
-
-    // Pushing inputs implies starting a new round of the kernel.
-    *inCtrl->validSig = 1;
+    assert(!inBuffer.has_value() &&
+           "pushing input while already having an input buffer?");
+    inBuffer = {v};
   }
 
   template <std::size_t I = 0, typename... Tp>
   inline typename std::enable_if<I == sizeof...(Tp), void>::type
-  popOutputRec(std::tuple<Tp...> &) {
+  readOutputRec(std::tuple<Tp...> &) {
     // End-case, do nothing
   }
 
   template <std::size_t I = 0, typename... Tp>
       inline typename std::enable_if <
-      I<sizeof...(Tp), void>::type popOutputRec(std::tuple<Tp...> &tOutput) {
+      I<sizeof...(Tp), void>::type readOutputRec(std::tuple<Tp...> &tOutput) {
     using ValueType = std::remove_reference_t<decltype(std::get<I>(tOutput))>;
     auto outPort = dynamic_cast<HandshakeDataOutPort<ValueType> *>(
         this->outPorts.at(I).get());
     assert(outPort);
-    std::get<I>(tOutput) = outPort->readData();
-    popOutputRec<I + 1, Tp...>(tOutput);
+    if (outPort->valid() && !outBuffer.transacted[I]) {
+      std::get<I>(tOutput) = outPort->readData();
+      outBuffer.transacted[I] = true;
+    }
+    readOutputRec<I + 1, Tp...>(tOutput);
+  }
+
+  void readToOutputBuffer() {
+    if (outBuffer.valid())
+      return; // Nothing to transact.
+
+    // Try reading output data.
+    readOutputRec(outBuffer.data);
+
+    // OutBuffer will be cleared by popOutput if all data has been read.
   }
 
   TOutput popOutput() override {
-    TOutput out;
-    popOutputRec(out);
-    return out;
+    assert(outBuffer.valid() && "popping output buffer that is not valid?");
+    auto vOutput = outBuffer.data;
+    outBuffer = OutputBuffer(); // reset
+    return vOutput;
   }
 
 protected:
@@ -286,6 +398,13 @@ protected:
   // by VerilatorSimInterface.
   std::unique_ptr<HandshakeInPort> inCtrl;
   std::unique_ptr<HandshakeOutPort> outCtrl;
+
+  // In- and output buffers.
+  // @todo: this could be made into separate buffers for each subtype within
+  // TInput and TOutput, allowing for decoupling of starting the writing of a
+  // new input buffer until all values within an input have been transacted.
+  std::optional<InputBuffer> inBuffer;
+  OutputBuffer outBuffer;
 };
 
 } // namespace hlt

@@ -6,7 +6,7 @@
 // RUN:               -reconcile-unrealized-casts > ${TESTNAME}_tb.mlir
 
 // === Build handshake simulator
-// RUN: circt-opt %s.kernel -lower-std-to-handshake -canonicalize='top-down=true region-simplify=true' -handshake-insert-buffer='strategies=cycles' > ${TESTNAME}_handshake.mlir
+// RUN: circt-opt %s.kernel -lower-std-to-handshake -canonicalize='top-down=true region-simplify=true' -handshake-insert-buffer='strategies=all' > ${TESTNAME}_handshake.mlir
 // RUN: circt-opt -lower-handshake-to-firrtl ${TESTNAME}_handshake.mlir > ${TESTNAME}_handshake_firrtl.mlir
 // RUN: firtool --format=mlir --lower-to-hw --verilog ${TESTNAME}_handshake_firrtl.mlir > ${TESTNAME}.sv
 // RUN: hlt-wrapgen --ref %s.kernel --kernel ${TESTNAME}_handshake_firrtl.mlir --name ${TESTNAME} --type=handshakeFIRRTL -o .

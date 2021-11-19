@@ -47,17 +47,12 @@ public:
 
   uint64_t time() override { return ctx->time(); }
 
-  bool inReady() override {
-    return std::all_of(this->inPorts.begin(), this->inPorts.end(),
-                       [](auto &port) { return port->ready(); });
-  }
-
   bool outValid() override {
     return std::all_of(this->outPorts.begin(), this->outPorts.end(),
                        [](auto &port) { return port->valid(); });
   }
 
-  void step() override { clock(); }
+  void step() override { clock_flip(); }
 
   void dump(std::ostream &out) const override {
     out << "Port states:\n";
@@ -109,21 +104,7 @@ public:
   }
 
 protected:
-  // Clocks the model.
-  void clock() {
-    // Ensure combinational logic is settled, if input pins changed.
-    *interface.clock = 0;
-    dut->eval();
-
-    // Rising edge
-    *interface.clock = 1;
-    dut->eval();
-    ctx->timeInc(1);
-#if VM_TRACE
-    trace->dump(ctx->time());
-#endif
-    // Falling edge
-    *interface.clock = 0;
+  void advanceTime() {
     dut->eval();
     ctx->timeInc(1);
 #if VM_TRACE
@@ -131,6 +112,22 @@ protected:
     // If tracing, flush after each cycle so we can immediately see the output.
     trace->flush();
 #endif
+  }
+
+  // Clocks the model a half phase (rising or falling edge)
+  void clock_half(bool rising) {
+    // Ensure combinational logic is settled, if input pins changed.
+    advanceTime();
+    *interface.clock = rising;
+    advanceTime();
+  }
+
+  void clock_rising() { clock_half(true); }
+  void clock_falling() { clock_half(false); }
+  void clock_flip() { clock_half(!*interface.clock); }
+  void clock() {
+    clock_rising();
+    clock_falling();
   }
 
   // Pointer to the verilated model.
