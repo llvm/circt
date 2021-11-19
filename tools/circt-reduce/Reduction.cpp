@@ -415,10 +415,12 @@ struct ConnectInvalidator : public Reduction {
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
   bool match(Operation *op) override {
     return !isa<ModuleOp>(op) &&
-           !op->hasAttr(SymbolTable::getSymbolAttrName()) &&
-           (op->getNumResults() == 0 || op->use_empty());
+           (op->getNumResults() == 0 || op->use_empty()) &&
+           (!op->hasAttr(SymbolTable::getSymbolAttrName()) ||
+            symbols.getNearestSymbolUserMap(op).use_empty(op));
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
@@ -426,6 +428,8 @@ struct OperationPruner : public Reduction {
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
+
+  SymbolCache symbols;
 };
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
