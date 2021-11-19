@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# ===- hsdbg - HSDbg driver --------------------------------------*- sh -*-===//
+#
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+# ===---------------------------------------------------------------------===//
+#
+# Script to drive HSDbg visualization.
+#
+# ===---------------------------------------------------------------------===//
+
+set -e
+cd @CIRCT_SOURCE_DIR@/tools/hsdbg
+python3 hsdbg.py ${@:1}

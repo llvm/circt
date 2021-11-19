@@ -137,17 +137,12 @@ class HSDbg():
             that quite a few assumptions are placed on the format of both the vcd
             file and the dot file.
         """
-    # Step 1: infer top module name
-    top = "TOP"
-
+    # Infer top module name
     hier = resolveVCDHierarchy(self.vcd)
-    if len(hier) != 1 or "TOP" not in hier:
-      raise Exception("Expected \"TOP\" as top-level in vcd hierarchy")
-    topHier = hier["TOP"]
-    if len(topHier) != 1:
-      raise Exception("Expected a single module under the \"TOP\" module.")
-    dutHier = topHier[list(topHier.keys())[0]]
-    dutName = list(topHier.keys())[0]
+    if len(hier) != 1:
+      raise Exception("Expected one top-level in vcd hierarchy")
+    top = list(hier.keys())[0]
+    topHier = hier[top]
     modules = {}
 
     def buildModule(self, *argv):
@@ -208,7 +203,12 @@ class HSDbg():
     self.vcd = VCDVCD(vcdFile)
 
   def updateCurrentCycle(self, cycle):
-    cycle = int(cycle)
+    try:
+      cycle = int(cycle)
+    except ValueError:
+      print("Invalid cycle value: " + str(cycle))
+      return
+
     if cycle < self.beginTime():
       print(f"Capping at minimum time ({self.beginTime()})")
       cycle = self.beginTime()
@@ -254,11 +254,11 @@ def start_interactive_mode(port, hsdbg):
   msg = f"""=== Handshake interactive simulation viewer ===
 
 Usage:
-    Open "localhost:{port}" in a browser to view the simulation.
+    Open "http://localhost:{port}" in a browser to view the simulation.
 
-    left arrow: step forward 1 step in vcd time
-    right arrow: step backward 1 step in vcd time
-    goto <cycle>: step to a specific cycle in vcd time
+    right arrow: step forward 1 timestep in vcd time
+    left arrow: step backwards 1 timestep in vcd time
+    g <cycle>: step to a specific cycle in vcd time
 
 "Entering interactive mode. Type 'q' to quit."
 """
@@ -275,10 +275,8 @@ Usage:
     elif command == '\x1b[C':
       hsdbg.right()
     elif command == "g":
-      address = input("Cycle: ")
+      address = input("Goto cycle: ")
       hsdbg.goto(address)
-    else:
-      print(f"Unknown command '{command}'")
 
 
 if __name__ == "__main__":
