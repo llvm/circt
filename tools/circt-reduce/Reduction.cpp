@@ -33,6 +33,40 @@ using namespace mlir;
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
+/// A utility doing lazy construction of `SymbolTable`s and `SymbolUserMap`s,
+/// which is handy for reductions that need to look up a lot of symbols.
+struct SymbolCache {
+  SymbolTable &getSymbolTable(Operation *op) {
+    return tables.getSymbolTable(op);
+  }
+  SymbolTable &getNearestSymbolTable(Operation *op) {
+    return getSymbolTable(SymbolTable::getNearestSymbolTable(op));
+  }
+
+  SymbolUserMap &getSymbolUserMap(Operation *op) {
+    auto it = userMaps.find(op);
+    if (it != userMaps.end())
+      return it->second;
+    return userMaps.insert({op, SymbolUserMap(tables, op)}).first->second;
+  }
+  SymbolUserMap &getNearestSymbolUserMap(Operation *op) {
+    return getSymbolUserMap(SymbolTable::getNearestSymbolTable(op));
+  }
+
+  void clear() {
+    tables = SymbolTableCollection();
+    userMaps.clear();
+  }
+
+private:
+  SymbolTableCollection tables;
+  SmallDenseMap<Operation *, SymbolUserMap, 2> userMaps;
+};
+
+//===----------------------------------------------------------------------===//
 // Reduction
 //===----------------------------------------------------------------------===//
 
@@ -156,7 +190,10 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+
   bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
+
   LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
     LLVM_DEBUG(llvm::dbgs() << "Stubbing instance `" << instOp.name() << "`\n");
@@ -172,18 +209,21 @@ struct InstanceStubber : public Reduction {
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
     }
-    auto moduleOp = instOp.getReferencedModule();
+    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     instOp->erase();
-    if (SymbolTable::symbolKnownUseEmpty(
-            moduleOp, moduleOp->getParentOfType<ModuleOp>())) {
+    if (symbols.getSymbolUserMap(tableOp).use_empty(moduleOp)) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
                               << moduleOp.moduleName() << "`\n");
       moduleOp->erase();
     }
     return success();
   }
+
   std::string getName() const override { return "instance-stubber"; }
   bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
@@ -431,14 +471,19 @@ struct RootPortPruner : public Reduction {
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+
   bool match(Operation *op) override {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
-      return isa<firrtl::FExtModuleOp>(instOp.getReferencedModule());
+      return isa<firrtl::FExtModuleOp>(
+          instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp)));
     return false;
   }
   LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
-    auto portInfo = instOp.getReferencedModule().getPorts();
+    auto portInfo =
+        instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp))
+            .getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
@@ -456,6 +501,8 @@ struct ExtmoduleInstanceRemover : public Reduction {
   }
   std::string getName() const override { return "extmodule-instance-remover"; }
   bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
 };
 
 //===----------------------------------------------------------------------===//
