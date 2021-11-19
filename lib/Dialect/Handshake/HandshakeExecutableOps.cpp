@@ -94,8 +94,8 @@ static bool tryToExecute(Operation *op,
     updateTime(ins, outs, timeMap, latency);
     scheduleList = outs;
     return true;
-  } else
-    return false;
+  }
+  return false;
 }
 
 namespace circt {
@@ -114,7 +114,7 @@ bool MergeOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                          llvm::DenseMap<mlir::Value, double> &timeMap,
                          std::vector<std::vector<llvm::Any>> & /*store*/,
                          std::vector<mlir::Value> &scheduleList) {
-  auto op = getOperation();
+  Operation *op = getOperation();
   bool found = false;
   int i = 0;
   for (mlir::Value in : op->getOperands()) {
@@ -140,7 +140,7 @@ bool MuxOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                        llvm::DenseMap<mlir::Value, double> &timeMap,
                        std::vector<std::vector<llvm::Any>> & /*store*/,
                        std::vector<mlir::Value> &scheduleList) {
-  auto op = getOperation();
+  Operation *op = getOperation();
   mlir::Value control = op->getOperand(0);
   if (valueMap.count(control) == 0)
     return false;
@@ -168,7 +168,7 @@ bool ControlMergeOp::tryExecute(
     llvm::DenseMap<mlir::Value, double> &timeMap,
     std::vector<std::vector<llvm::Any>> & /*store*/,
     std::vector<mlir::Value> &scheduleList) {
-  auto op = getOperation();
+  Operation *op = getOperation();
   bool found = false;
   int i = 0;
   for (mlir::Value in : op->getOperands()) {
@@ -214,7 +214,7 @@ bool ConditionalBranchOp::tryExecute(
     llvm::DenseMap<mlir::Value, double> &timeMap,
     std::vector<std::vector<llvm::Any>> & /*store*/,
     std::vector<mlir::Value> &scheduleList) {
-  auto op = getOperation();
+  Operation *op = getOperation();
   mlir::Value control = op->getOperand(0);
   if (valueMap.count(control) == 0)
     return false;
@@ -295,7 +295,7 @@ bool MemoryOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                           llvm::DenseMap<mlir::Value, double> &timeMap,
                           std::vector<std::vector<llvm::Any>> &store,
                           std::vector<mlir::Value> &scheduleList) {
-  auto op = getOperation();
+  Operation *op = getOperation();
   int opIndex = 0;
   bool notReady = false;
   unsigned buffer = memoryMap[id()];
@@ -364,7 +364,7 @@ bool LoadOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                         llvm::DenseMap<mlir::Value, double> &timeMap,
                         std::vector<std::vector<llvm::Any>> & /*store*/,
                         std::vector<mlir::Value> &scheduleList) {
-  auto op = getOperation();
+  Operation *op = getOperation();
   mlir::Value address = op->getOperand(0);
   mlir::Value data = op->getOperand(1);
   mlir::Value nonce = op->getOperand(2);
