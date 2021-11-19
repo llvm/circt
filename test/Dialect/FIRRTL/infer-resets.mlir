@@ -707,3 +707,15 @@ firrtl.circuit "SubAccess" {
 
   }
 }
+
+// This is a regression check to ensure that a zero-width register gets a proper
+// reset value.
+// CHECK-LABEL: firrtl.module @ZeroWidthRegister
+firrtl.circuit "ZeroWidthRegister" {
+  firrtl.module @ZeroWidthRegister(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
+    portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
+    %reg = firrtl.reg %clock : !firrtl.uint<0>
+    // CHECK-NEXT: [[TMP:%.+]] = firrtl.constant 0 : !firrtl.uint<0>
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]]
+  }
+}
