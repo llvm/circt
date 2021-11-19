@@ -23,11 +23,13 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 
+using llvm::SmallDenseSet;
 using mlir::RegionRange;
 using namespace circt;
 using namespace firrtl;
@@ -956,6 +958,41 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
+/// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
+/// updates any users of the remaining ports to point at the new instance.
+InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
+                                  ArrayRef<unsigned> portIndices) {
+  if (portIndices.empty())
+    return *this;
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(portDirectionsAttr()), portIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(portNames().getValue(), portIndices);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(portAnnotations().getValue(), portIndices);
+
+  auto newOp = builder.create<InstanceOp>(
+      getLoc(), newResultTypes, moduleName(), name(), newPortDirections,
+      newPortNames, annotations().getValue(), newPortAnnotations, lowerToBind(),
+      inner_symAttr());
+
+  SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
+  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
+       oldIdx != numOldPorts; ++oldIdx) {
+    if (portSet.contains(oldIdx)) {
+      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+      continue;
+    }
+    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
+    ++newIdx;
+  }
+
+  return newOp;
+}
+
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");
@@ -1850,9 +1887,6 @@ static ParseResult parseConstantOp(OpAsmParser &parser,
   // APInt as appropriate.
   if (resultType.hasWidth()) {
     auto width = (unsigned)resultType.getWidthOrSentinel();
-    if (width == 0)
-      return parser.emitError(loc, "zero bit constants aren't allowed");
-
     if (width > value.getBitWidth()) {
       // sext is always safe here, even for unsigned values, because the
       // parseOptionalInteger method will return something with a zero in the

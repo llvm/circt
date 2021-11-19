@@ -242,10 +242,14 @@ Operation *insertMerge(Block *block, Value val,
     }
   }
 
-  // If there are no block predecessors (i.e., entry block), function argument
-  // is set as single operand
-  if (numPredecessors <= 1)
-    return rewriter.create<handshake::MergeOp>(block->front().getLoc(), val, 1);
+  // If there are no block predecessors (i.e., entry block)
+  if (numPredecessors <= 1) {
+    SmallVector<Value> mergeOperands;
+    mergeOperands.append(2, val); // 2 dummy values used here due to hard-coded
+                                  // logic of reconnectMergeOps.
+    return rewriter.create<handshake::MergeOp>(block->front().getLoc(),
+                                               mergeOperands);
+  }
 
   return rewriter.create<handshake::MuxOp>(block->front().getLoc(), val,
                                            numPredecessors);
@@ -770,9 +774,10 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
                  "Address operands of affine memref access cannot be reduced.");
 
           if (isa<mlir::AffineReadOpInterface>(op)) {
-            newOp = rewriter.create<handshake::LoadOp>(
+            auto loadOp = rewriter.create<handshake::LoadOp>(
                 op.getLoc(), access.memref, *operands);
-            op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+            newOp = loadOp;
+            op.getResult(0).replaceAllUsesWith(loadOp.dataResult());
           } else {
             newOp = rewriter.create<handshake::StoreOp>(
                 op.getLoc(), op.getOperand(0), *operands);
@@ -1556,10 +1561,10 @@ struct HandshakeInsertBufferPass
         auto value = operand.get();
 
         builder.setInsertionPointAfter(op);
-        auto bufferOp = builder.create<handshake::BufferOp>(
-            op->getLoc(), value.getType(), value, /*sequential=*/true,
-            /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/numSlots);
+        auto bufferOp =
+            builder.create<handshake::BufferOp>(op->getLoc(), value.getType(),
+                                                /*slots=*/numSlots, value,
+                                                /*sequential=*/true);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1583,10 +1588,9 @@ struct HandshakeInsertBufferPass
     if (callback(definingOp, usingOp)) {
       builder.setInsertionPoint(usingOp);
       auto buffer = builder.create<handshake::BufferOp>(
-          oldValue.getLoc(), oldValue.getType(), oldValue,
-          /*sequential=*/true,
-          /*control=*/oldValue.getType().isa<NoneType>(),
-          /*slots=*/numSlots);
+          oldValue.getLoc(), oldValue.getType(),
+          /*slots=*/numSlots, oldValue,
+          /*sequential=*/true);
       use.getOwner()->setOperand(use.getOperandNumber(), buffer);
     }
 

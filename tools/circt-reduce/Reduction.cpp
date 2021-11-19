@@ -33,6 +33,54 @@ using namespace mlir;
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
+/// A utility doing lazy construction of `SymbolTable`s and `SymbolUserMap`s,
+/// which is handy for reductions that need to look up a lot of symbols.
+struct SymbolCache {
+  SymbolTable &getSymbolTable(Operation *op) {
+    return tables.getSymbolTable(op);
+  }
+  SymbolTable &getNearestSymbolTable(Operation *op) {
+    return getSymbolTable(SymbolTable::getNearestSymbolTable(op));
+  }
+
+  SymbolUserMap &getSymbolUserMap(Operation *op) {
+    auto it = userMaps.find(op);
+    if (it != userMaps.end())
+      return it->second;
+    return userMaps.insert({op, SymbolUserMap(tables, op)}).first->second;
+  }
+  SymbolUserMap &getNearestSymbolUserMap(Operation *op) {
+    return getSymbolUserMap(SymbolTable::getNearestSymbolTable(op));
+  }
+
+  void clear() {
+    tables = SymbolTableCollection();
+    userMaps.clear();
+  }
+
+private:
+  SymbolTableCollection tables;
+  SmallDenseMap<Operation *, SymbolUserMap, 2> userMaps;
+};
+
+/// Check that all connections to a value are invalids.
+static bool onlyInvalidated(Value arg) {
+  return llvm::all_of(arg.getUses(), [](OpOperand &use) {
+    auto *op = use.getOwner();
+    if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
+      return false;
+    if (use.getOperandNumber() != 0)
+      return false;
+    if (!op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>())
+      return false;
+    return true;
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Reduction
 //===----------------------------------------------------------------------===//
 
@@ -56,13 +104,11 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
   pm->addPass(std::move(pass));
 }
 
-bool PassReduction::match(Operation *op) const {
+bool PassReduction::match(Operation *op) {
   return op->getName().getIdentifier() == pm->getOpName(*context);
 }
 
-LogicalResult PassReduction::rewrite(Operation *op) const {
-  return pm->run(op);
-}
+LogicalResult PassReduction::rewrite(Operation *op) { return pm->run(op); }
 
 std::string PassReduction::getName() const { return passName.str(); }
 
@@ -72,10 +118,8 @@ std::string PassReduction::getName() const { return passName.str(); }
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
 struct ModuleExternalizer : public Reduction {
-  bool match(Operation *op) const override {
-    return isa<firrtl::FModuleOp>(op);
-  }
-  LogicalResult rewrite(Operation *op) const override {
+  bool match(Operation *op) override { return isa<firrtl::FModuleOp>(op); }
+  LogicalResult rewrite(Operation *op) override {
     auto module = cast<firrtl::FModuleOp>(op);
     OpBuilder builder(module);
     builder.create<firrtl::FExtModuleOp>(
@@ -160,10 +204,11 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
-  bool match(Operation *op) const override {
-    return isa<firrtl::InstanceOp>(op);
-  }
-  LogicalResult rewrite(Operation *op) const override {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+
+  bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
+
+  LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
     LLVM_DEBUG(llvm::dbgs() << "Stubbing instance `" << instOp.name() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
@@ -178,25 +223,28 @@ struct InstanceStubber : public Reduction {
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
     }
-    auto moduleOp = instOp.getReferencedModule();
+    auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
+    auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     instOp->erase();
-    if (SymbolTable::symbolKnownUseEmpty(
-            moduleOp, moduleOp->getParentOfType<ModuleOp>())) {
+    if (symbols.getSymbolUserMap(tableOp).use_empty(moduleOp)) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
                               << moduleOp.moduleName() << "`\n");
       moduleOp->erase();
     }
     return success();
   }
+
   std::string getName() const override { return "instance-stubber"; }
   bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
 /// wires.
 struct MemoryStubber : public Reduction {
-  bool match(Operation *op) const override { return isa<firrtl::MemOp>(op); }
-  LogicalResult rewrite(Operation *op) const override {
+  bool match(Operation *op) override { return isa<firrtl::MemOp>(op); }
+  LogicalResult rewrite(Operation *op) override {
     auto memOp = cast<firrtl::MemOp>(op);
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.name() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
@@ -272,6 +320,11 @@ static void pruneUnusedOps(Operation *initialOp) {
   }
 }
 
+static void pruneUnusedOps(Value value) {
+  if (auto *op = value.getDefiningOp())
+    pruneUnusedOps(op);
+}
+
 /// Check whether an operation interacts with flows in any way, which can make
 /// replacement and operand forwarding harder in some cases.
 static bool isFlowSensitiveOp(Operation *op) {
@@ -285,7 +338,7 @@ static bool isFlowSensitiveOp(Operation *op) {
 /// rapidly.
 template <unsigned OpNum>
 struct OperandForwarder : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
         OpNum >= op->getNumOperands())
       return false;
@@ -299,7 +352,7 @@ struct OperandForwarder : public Reduction {
                (opTy.getBitWidthOrSentinel() == -1) &&
            resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     ImplicitLocOpBuilder builder(op->getLoc(), op);
     auto result = op->getResult(0);
@@ -329,7 +382,7 @@ struct OperandForwarder : public Reduction {
 /// A sample reduction pattern that replaces operations with a constant zero of
 /// their type.
 struct Constantifier : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     if (op->getNumResults() != 1 || op->getNumOperands() == 0)
       return false;
     if (isFlowSensitiveOp(op))
@@ -337,7 +390,7 @@ struct Constantifier : public Reduction {
     auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLType>();
     return type && type.isa<firrtl::UIntType, firrtl::SIntType>();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     OpBuilder builder(op);
     auto type = op->getResult(0).getType().cast<firrtl::FIRRTLType>();
@@ -358,11 +411,11 @@ struct Constantifier : public Reduction {
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     return isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op) &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     auto rhs = op->getOperand(1);
     OpBuilder builder(op);
@@ -381,23 +434,131 @@ struct ConnectInvalidator : public Reduction {
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
-  bool match(Operation *op) const override {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+  bool match(Operation *op) override {
     return !isa<ModuleOp>(op) &&
-           !op->hasAttr(SymbolTable::getSymbolAttrName()) &&
-           (op->getNumResults() == 0 || op->use_empty());
+           (op->getNumResults() == 0 || op->use_empty()) &&
+           (!op->hasAttr(SymbolTable::getSymbolAttrName()) ||
+            symbols.getNearestSymbolUserMap(op).use_empty(op));
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     pruneUnusedOps(op);
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
+
+  SymbolCache symbols;
+};
+
+/// A sample reduction pattern that removes ports from FIRRTL modules if they
+/// are either unused inputs or outputs that are only invalidated.
+struct PortPruner : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+
+  bool match(Operation *op) override {
+    auto moduleOp = dyn_cast<firrtl::FModuleOp>(op);
+    return moduleOp && llvm::any_of(moduleOp.getArguments(), onlyInvalidated);
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto moduleOp = cast<firrtl::FModuleOp>(op);
+    LLVM_DEBUG(llvm::dbgs()
+               << "Pruning ports of `" << moduleOp.getName() << "`\n");
+
+    // Make a list of ports we can likely remove.
+    SmallVector<unsigned> removable;
+    for (unsigned i = 0, e = moduleOp.getNumPorts(); i != e; ++i)
+      if (onlyInvalidated(moduleOp.getArgument(i)))
+        removable.push_back(i);
+    assert(!removable.empty() &&
+           "shouldn't work on module with no prunable ports");
+
+    // Erase any users of the ports we are going to remove.
+    for (auto argIdx : removable) {
+      LLVM_DEBUG(llvm::dbgs() << "  - Removing port `"
+                              << moduleOp.getPortName(argIdx) << "`\n");
+      SmallVector<Value> maybeUnused;
+      for (auto *userOp : llvm::make_early_inc_range(
+               moduleOp.getArgument(argIdx).getUsers())) {
+        maybeUnused.append(userOp->operand_begin(), userOp->operand_end());
+        userOp->erase();
+      }
+      for (auto v : maybeUnused)
+        pruneUnusedOps(v);
+    }
+
+    // Actually remove the ports.
+    moduleOp.erasePorts(removable);
+
+    // Update all instances of this module to reflect the change.
+    for (auto *userOp :
+         symbols.getNearestSymbolUserMap(moduleOp).getUsers(moduleOp)) {
+      auto instOp = dyn_cast<firrtl::InstanceOp>(userOp);
+      if (!instOp || instOp.moduleName() != moduleOp.getName())
+        continue;
+      LLVM_DEBUG(llvm::dbgs()
+                 << "  - Updating instance `" << instOp.name()
+                 << "` in module `"
+                 << instOp->getParentOfType<firrtl::FModuleOp>().getName()
+                 << "`\n");
+
+      // Replace the removed instance port uses with corresponding wire
+      // declarations, and invalidate the output fields.
+      ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+      SmallDenseMap<Type, Value, 8> invalidCache;
+      for (auto i : removable) {
+        auto result = instOp.getResult(i);
+        auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+                                          instOp.getPortNameStr(i));
+        auto wire = builder.create<firrtl::WireOp>(
+            result.getType(), name, instOp.getPortAnnotation(i), StringAttr{});
+        invalidateOutputs(builder, wire, invalidCache,
+                          instOp.getPortDirection(i) == firrtl::Direction::In);
+        result.replaceAllUsesWith(wire);
+      }
+
+      // Remove the ports from the instance, which creates a new instance op and
+      // we can remove the old one.
+      instOp.erasePorts(builder, removable);
+      instOp->erase();
+    }
+    return success();
+  }
+
+  std::string getName() const override { return "port-pruner"; }
+  bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
+};
+
+/// A sample reduction pattern that removes FIRRTL annotations from ports and
+/// operations.
+struct AnnotationRemover : public Reduction {
+  bool match(Operation *op) override {
+    return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
+  }
+  LogicalResult rewrite(Operation *op) override {
+    auto emptyArray = ArrayAttr::get(op->getContext(), {});
+    if (op->hasAttr("annotations"))
+      op->setAttr("annotations", emptyArray);
+    if (op->hasAttr("portAnnotations")) {
+      auto attr = emptyArray;
+      if (isa<firrtl::InstanceOp>(op))
+        attr = ArrayAttr::get(
+            op->getContext(),
+            SmallVector<Attribute>(op->getNumResults(), emptyArray));
+      op->setAttr("portAnnotations", attr);
+    }
+    return success();
+  }
+  std::string getName() const override { return "annotation-remover"; }
 };
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
 /// if the port is not used or just invalidated.
 struct RootPortPruner : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     auto module = dyn_cast<firrtl::FModuleOp>(op);
     if (!module)
       return false;
@@ -406,23 +567,12 @@ struct RootPortPruner : public Reduction {
       return false;
     return circuit.nameAttr() == module.getNameAttr();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     auto module = cast<firrtl::FModuleOp>(op);
     SmallVector<unsigned> dropPorts;
     for (unsigned i = 0, e = module.getNumPorts(); i != e; ++i) {
-      bool onlyInvalidated =
-          llvm::all_of(module.getArgument(i).getUses(), [](OpOperand &use) {
-            auto *op = use.getOwner();
-            if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
-              return false;
-            if (use.getOperandNumber() != 0)
-              return false;
-            if (!op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>())
-              return false;
-            return true;
-          });
-      if (onlyInvalidated) {
+      if (onlyInvalidated(module.getArgument(i))) {
         dropPorts.push_back(i);
         for (auto user : module.getArgument(i).getUsers())
           user->erase();
@@ -437,14 +587,19 @@ struct RootPortPruner : public Reduction {
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public Reduction {
-  bool match(Operation *op) const override {
+  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+
+  bool match(Operation *op) override {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
-      return isa<firrtl::FExtModuleOp>(instOp.getReferencedModule());
+      return isa<firrtl::FExtModuleOp>(
+          instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp)));
     return false;
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
-    auto portInfo = instOp.getReferencedModule().getPorts();
+    auto portInfo =
+        instOp.getReferencedModule(symbols.getNearestSymbolTable(instOp))
+            .getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
@@ -462,6 +617,8 @@ struct ExtmoduleInstanceRemover : public Reduction {
   }
   std::string getName() const override { return "extmodule-instance-remover"; }
   bool acceptSizeIncrease() const override { return true; }
+
+  SymbolCache symbols;
 };
 
 //===----------------------------------------------------------------------===//
@@ -505,6 +662,8 @@ void circt::createAllReductions(
   add(std::make_unique<OperandForwarder<1>>());
   add(std::make_unique<OperandForwarder<2>>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<PortPruner>());
+  add(std::make_unique<AnnotationRemover>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
 }

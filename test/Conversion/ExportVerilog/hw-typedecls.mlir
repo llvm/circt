@@ -24,6 +24,16 @@ hw.type_scope @_other_scope {
   hw.typedecl @foo, "_other_scope_foo" : i2
 }
 
+// CHECK: `ifndef __PYCDE_TYPES__
+// CHECK:   typedef struct packed {logic a; } exTypedef;
+// CHECK: `endif
+sv.ifdef "__PYCDE_TYPES__"  {
+} else  {
+  hw.type_scope @pycde  {
+    hw.typedecl @exTypedef : !hw.struct<a: i1>
+  }
+}
+
 // CHECK-LABEL: module testTypeAlias
 hw.module @testTypeAlias(
   // CHECK: input  foo      arg0, arg1

@@ -616,9 +616,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
-        auto portInfos = getAllModulePortInfos(itemOp);
-        return state.globalNames.getPortVerilogName(itemOp,
-                                                    portInfos[item.getPort()]);
+        return state.globalNames.getPortVerilogName(itemOp, item.getPort());
       }
       if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
               itemOp))
@@ -2153,51 +2151,6 @@ void NameCollector::collectNames(Block &block) {
 }
 
 //===----------------------------------------------------------------------===//
-// TypeScopeEmitter
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// This emits typescope-related operations.
-class TypeScopeEmitter
-    : public EmitterBase,
-      public hw::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
-public:
-  /// Create a TypeScopeEmitter for the specified module emitter.
-  TypeScopeEmitter(ModuleEmitter &emitter)
-      : EmitterBase(emitter.state), emitter(emitter) {}
-
-  void emitTypeScopeBlock(Block &body);
-
-private:
-  friend class TypeScopeVisitor<TypeScopeEmitter, LogicalResult>;
-
-  LogicalResult visitTypeScope(TypedeclOp op);
-
-  ModuleEmitter &emitter;
-};
-
-} // end anonymous namespace
-
-void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
-  for (auto &op : body) {
-    if (failed(dispatchTypeScopeVisitor(&op))) {
-      op.emitOpError("cannot emit this type scope op to Verilog");
-      os << "<<unsupported op: " << op.getName().getStringRef() << ">>\n";
-    }
-  }
-}
-
-LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
-  indent() << "typedef ";
-  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
-                          false);
-  os << ' ' << op.getPreferredName();
-  emitter.printUnpackedTypePostfix(op.type(), os);
-  os << ";\n";
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // StmtEmitter
 //===----------------------------------------------------------------------===//
 
@@ -2259,6 +2212,8 @@ private:
   LogicalResult visitSV(InterfaceInstanceOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitStmt(TypeScopeOp op);
+  LogicalResult visitStmt(TypedeclOp op);
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
@@ -2584,6 +2539,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ++operandIndex;
     ++numStatementsEmitted;
   }
+  return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
+  emitStatementBlock(*op.getBodyBlock());
+  return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
+  os << "typedef ";
+  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
+                          false);
+  os << ' ' << op.getPreferredName();
+  emitter.printUnpackedTypePostfix(op.type(), os);
+  os << ";\n";
   return success();
 }
 
@@ -4219,8 +4189,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<InterfaceOp, VerbatimOp, IfDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
-        ModuleEmitter emitter(state);
-        TypeScopeEmitter(emitter).emitTypeScopeBlock(*typedecls.getBodyBlock());
+        ModuleEmitter(state).emitStatement(typedecls);
       })
       .Default([&](auto *op) {
         state.encounteredError = true;
