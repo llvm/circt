@@ -118,10 +118,6 @@ def OneBitType : DialectType<FIRRTLDialect,
    "($_self.isa<AnalogType>() && $_self.cast<AnalogType>().getWidth() == 1)">,
  "UInt<1>, SInt<1>, or Analog<1>", "::circt::firrtl::FIRRTLType">;
 
-def NonZeroIntType : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<IntType>() && $_self.cast<IntType>().getWidth() != 0">,
-  "Int", "::circt::firrtl::IntType">;
-
 def AnyResetType : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
     "Reset", "::circt::firrtl::FIRRTLType">;

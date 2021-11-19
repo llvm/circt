@@ -1850,9 +1850,6 @@ static ParseResult parseConstantOp(OpAsmParser &parser,
   // APInt as appropriate.
   if (resultType.hasWidth()) {
     auto width = (unsigned)resultType.getWidthOrSentinel();
-    if (width == 0)
-      return parser.emitError(loc, "zero bit constants aren't allowed");
-
     if (width > value.getBitWidth()) {
       // sext is always safe here, even for unsigned values, because the
       // parseOptionalInteger method will return something with a zero in the
