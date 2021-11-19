@@ -104,6 +104,12 @@ bool isAnyModule(Operation *module);
 /// Return the signature for the specified module as a function type.
 FunctionType getModuleType(Operation *module);
 
+/// Return the number of inputs for the specified module as a function type.
+unsigned getModuleNumInputs(Operation *module);
+
+/// Return the number of outputs for the specified module as a function type.
+unsigned getModuleNumOutputs(Operation *module);
+
 /// Returns the verilog module name attribute or symbol name of any module-like
 /// operations.
 StringAttr getVerilogModuleNameAttr(Operation *module);

@@ -616,9 +616,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
-        auto portInfos = state.globalNames.getPortsInfo(itemOp);
-        return state.globalNames.getPortVerilogName(itemOp,
-                                                    portInfos[item.getPort()]);
+        return state.globalNames.getPortVerilogName(itemOp, item.getPort());
       }
       if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
               itemOp))
@@ -3141,7 +3139,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   os << ' ' << names.getName(op) << " (";
 
-  SmallVector<PortInfo> portInfo = state.globalNames.getPortsInfo(op);
+  SmallVector<PortInfo> portInfo = getAllModulePortInfos(op);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -3561,7 +3559,7 @@ void ModuleEmitter::emitBind(BindOp op) {
            << state.globalNames.getDeclarationVerilogName(inst) << " (";
 
   ModulePortInfo parentPortInfo = parentMod.getPorts();
-  SmallVector<PortInfo> childPortInfo = state.globalNames.getPortsInfo(inst);
+  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -3652,7 +3650,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   ModuleNameManager names;
 
   // Add all the ports to the name table so wires etc don't reuse the name.
-  SmallVector<PortInfo> portInfo = state.globalNames.getPortsInfo(module);
+  SmallVector<PortInfo> portInfo = module.getAllPorts();
   for (auto &port : portInfo) {
     StringRef name = state.globalNames.getPortVerilogName(module, port);
     Value value;

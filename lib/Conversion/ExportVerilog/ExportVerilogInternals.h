@@ -38,6 +38,30 @@ struct GlobalNameTable {
     return (it != renamedPorts.end() ? it->second : port.name).getValue();
   }
 
+  /// Return the string to use for the specified port in the specified module.
+  /// Ports may be renamed for a variety of reasons (e.g. conflicting with
+  /// Verilog keywords), and this returns the legalized name to use.
+  StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) const {
+    auto numInputs = hw::getModuleNumInputs(module);
+    // portArgNum is the index into the result of getAllModulePortInfos.
+    // We need to translate it into the PortInfo::getId(), which is a unique
+    // port identifier. if input port, then (-1 - portArgNum) else numInputs -
+    // portArgNum Also ensure the correct index into the input/output list is
+    // computed.
+    StringAttr nameAttr;
+    if (portArgNum < numInputs) {
+      nameAttr = module->getAttrOfType<ArrayAttr>("argNames")[portArgNum]
+                     .cast<StringAttr>();
+      portArgNum = -1 - portArgNum;
+    } else {
+      portArgNum = numInputs - portArgNum;
+      nameAttr = module->getAttrOfType<ArrayAttr>("resultNames")[portArgNum]
+                     .cast<StringAttr>();
+    }
+    auto it = renamedPorts.find(std::make_pair(module, portArgNum));
+    return (it != renamedPorts.end() ? it->second : nameAttr).getValue();
+  }
+
   /// Return the string to use for the specified parameter name in the specified
   /// module.  Parameters may be renamed for a variety of reasons (e.g.
   /// conflicting with ports or Verilog keywords), and this returns the
@@ -67,27 +91,6 @@ struct GlobalNameTable {
     auto attr = it != renamedInterfaceOp.end() ? it->second
                                                : SymbolTable::getSymbolName(op);
     return attr.getValue();
-  }
-
-  /// Return the getAllModulePortInfos for mod, return cached if it exists else
-  /// cache it.
-  SmallVector<hw::PortInfo> getPortsInfo(Operation *mod) {
-    auto it = modPortInfos.find(mod);
-    SmallVector<hw::PortInfo> result;
-    if (it == modPortInfos.end()) {
-      result = hw::getAllModulePortInfos(mod);
-      modPortInfos[mod] = result;
-    } else
-      result = it->getSecond();
-    return result;
-  }
-
-  /// Return the cached result for getAllModulePortInfos for mod.
-  SmallVector<hw::PortInfo> getPortsInfo(Operation *mod) const {
-    auto it = modPortInfos.find(mod);
-    if (it == modPortInfos.end())
-      return hw::getAllModulePortInfos(mod);
-    return it->getSecond();
   }
 
 private:
@@ -120,7 +123,8 @@ private:
   /// This contains entries for any ports that got renamed.  The key is a
   /// moduleop/portIdx tuple, the value is the name to use.  The portIdx is the
   /// index of the port in the list returned by getAllModulePortInfos.
-  DenseMap<std::pair<Operation *, size_t>, StringAttr> renamedPorts;
+  /// Note, PortInfo::getId() returns ssize_t.
+  DenseMap<std::pair<Operation *, ssize_t>, StringAttr> renamedPorts;
 
   /// This contains entries for any parameters that got renamed.  The key is a
   /// moduleop/paramName tuple, the value is the name to use.
@@ -133,9 +137,6 @@ private:
   /// sv.interface.signal, and sv.interface.modport) that need to be renamed
   /// due to conflicts.
   DenseMap<Operation *, StringAttr> renamedInterfaceOp;
-
-  /// This caches the result of getAllModulePortInfos.
-  DenseMap<Operation *, SmallVector<hw::PortInfo>> modPortInfos;
 };
 
 //===----------------------------------------------------------------------===//
