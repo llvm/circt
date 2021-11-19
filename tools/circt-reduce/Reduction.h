@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 
+#include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
@@ -37,13 +38,23 @@ namespace circt {
 struct Reduction {
   virtual ~Reduction();
 
+  /// Called before the reduction is applied to a new subset of operations.
+  /// Reductions may use this callback to collect information such as symbol
+  /// tables about the module upfront.
+  virtual void beforeReduction(mlir::ModuleOp) {}
+
+  /// Called after the reduction has been applied to a subset of operations.
+  /// Reductions may use this callback to perform post-processing of the
+  /// reductions before the resulting module is tried for interestingness.
+  virtual void afterReduction(mlir::ModuleOp) {}
+
   /// Check if the reduction can apply to a specific operation.
-  virtual bool match(mlir::Operation *op) const = 0;
+  virtual bool match(mlir::Operation *op) = 0;
 
   /// Apply the reduction to a specific operation. If the returned result
   /// indicates that the application failed, the resulting module is treated the
   /// same as if the tester marked it as uninteresting.
-  virtual mlir::LogicalResult rewrite(mlir::Operation *op) const = 0;
+  virtual mlir::LogicalResult rewrite(mlir::Operation *op) = 0;
 
   /// Return a human-readable name for this reduction pattern.
   virtual std::string getName() const = 0;
@@ -76,8 +87,8 @@ struct Reduction {
 struct PassReduction : public Reduction {
   PassReduction(mlir::MLIRContext *context, std::unique_ptr<mlir::Pass> pass,
                 bool canIncreaseSize = false, bool oneShot = false);
-  bool match(mlir::Operation *op) const override;
-  mlir::LogicalResult rewrite(mlir::Operation *op) const override;
+  bool match(mlir::Operation *op) override;
+  mlir::LogicalResult rewrite(mlir::Operation *op) override;
   std::string getName() const override;
   bool acceptSizeIncrease() const override { return canIncreaseSize; }
   bool isOneShot() const override { return oneShot; }

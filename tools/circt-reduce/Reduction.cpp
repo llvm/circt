@@ -56,13 +56,11 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
   pm->addPass(std::move(pass));
 }
 
-bool PassReduction::match(Operation *op) const {
+bool PassReduction::match(Operation *op) {
   return op->getName().getIdentifier() == pm->getOpName(*context);
 }
 
-LogicalResult PassReduction::rewrite(Operation *op) const {
-  return pm->run(op);
-}
+LogicalResult PassReduction::rewrite(Operation *op) { return pm->run(op); }
 
 std::string PassReduction::getName() const { return passName.str(); }
 
@@ -72,10 +70,8 @@ std::string PassReduction::getName() const { return passName.str(); }
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
 struct ModuleExternalizer : public Reduction {
-  bool match(Operation *op) const override {
-    return isa<firrtl::FModuleOp>(op);
-  }
-  LogicalResult rewrite(Operation *op) const override {
+  bool match(Operation *op) override { return isa<firrtl::FModuleOp>(op); }
+  LogicalResult rewrite(Operation *op) override {
     auto module = cast<firrtl::FModuleOp>(op);
     OpBuilder builder(module);
     builder.create<firrtl::FExtModuleOp>(
@@ -160,10 +156,8 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
-  bool match(Operation *op) const override {
-    return isa<firrtl::InstanceOp>(op);
-  }
-  LogicalResult rewrite(Operation *op) const override {
+  bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
+  LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
     LLVM_DEBUG(llvm::dbgs() << "Stubbing instance `" << instOp.name() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
@@ -195,8 +189,8 @@ struct InstanceStubber : public Reduction {
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
 /// wires.
 struct MemoryStubber : public Reduction {
-  bool match(Operation *op) const override { return isa<firrtl::MemOp>(op); }
-  LogicalResult rewrite(Operation *op) const override {
+  bool match(Operation *op) override { return isa<firrtl::MemOp>(op); }
+  LogicalResult rewrite(Operation *op) override {
     auto memOp = cast<firrtl::MemOp>(op);
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.name() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
@@ -285,7 +279,7 @@ static bool isFlowSensitiveOp(Operation *op) {
 /// rapidly.
 template <unsigned OpNum>
 struct OperandForwarder : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
         OpNum >= op->getNumOperands())
       return false;
@@ -299,7 +293,7 @@ struct OperandForwarder : public Reduction {
                (opTy.getBitWidthOrSentinel() == -1) &&
            resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     ImplicitLocOpBuilder builder(op->getLoc(), op);
     auto result = op->getResult(0);
@@ -329,7 +323,7 @@ struct OperandForwarder : public Reduction {
 /// A sample reduction pattern that replaces operations with a constant zero of
 /// their type.
 struct Constantifier : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     if (op->getNumResults() != 1 || op->getNumOperands() == 0)
       return false;
     if (isFlowSensitiveOp(op))
@@ -337,7 +331,7 @@ struct Constantifier : public Reduction {
     auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLType>();
     return type && type.isa<firrtl::UIntType, firrtl::SIntType>();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     OpBuilder builder(op);
     auto type = op->getResult(0).getType().cast<firrtl::FIRRTLType>();
@@ -358,11 +352,11 @@ struct Constantifier : public Reduction {
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     return isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op) &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     auto rhs = op->getOperand(1);
     OpBuilder builder(op);
@@ -381,12 +375,12 @@ struct ConnectInvalidator : public Reduction {
 /// A sample reduction pattern that removes operations which either produce no
 /// results or their results have no users.
 struct OperationPruner : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     return !isa<ModuleOp>(op) &&
            !op->hasAttr(SymbolTable::getSymbolAttrName()) &&
            (op->getNumResults() == 0 || op->use_empty());
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     pruneUnusedOps(op);
     return success();
@@ -397,7 +391,7 @@ struct OperationPruner : public Reduction {
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
 /// if the port is not used or just invalidated.
 struct RootPortPruner : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     auto module = dyn_cast<firrtl::FModuleOp>(op);
     if (!module)
       return false;
@@ -406,7 +400,7 @@ struct RootPortPruner : public Reduction {
       return false;
     return circuit.nameAttr() == module.getNameAttr();
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     auto module = cast<firrtl::FModuleOp>(op);
     SmallVector<unsigned> dropPorts;
@@ -437,12 +431,12 @@ struct RootPortPruner : public Reduction {
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public Reduction {
-  bool match(Operation *op) const override {
+  bool match(Operation *op) override {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
       return isa<firrtl::FExtModuleOp>(instOp.getReferencedModule());
     return false;
   }
-  LogicalResult rewrite(Operation *op) const override {
+  LogicalResult rewrite(Operation *op) override {
     auto instOp = cast<firrtl::InstanceOp>(op);
     auto portInfo = instOp.getReferencedModule().getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);

@@ -171,6 +171,7 @@ static LogicalResult execute(MLIRContext &context) {
       // and `rangeLength`.
       size_t opIdx = 0;
       OwningModuleRef newModule = module->clone();
+      pattern.beforeReduction(*newModule);
       newModule->walk([&](Operation *op) {
         if (!pattern.match(op))
           return;
@@ -179,6 +180,7 @@ static LogicalResult execute(MLIRContext &context) {
           return;
         (void)pattern.rewrite(op);
       });
+      pattern.afterReduction(*newModule);
       if (opIdx == 0) {
         VERBOSE(llvm::errs() << "- No more ops where the pattern applies\n");
         break;
