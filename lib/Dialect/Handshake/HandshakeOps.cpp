@@ -873,6 +873,10 @@ static ParseResult parseConditionalBranchOp(OpAsmParser &parser,
   if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
                              result.operands))
     return failure();
+
+  if (dataType.isa<NoneType>())
+    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+
   return success();
 }
 
@@ -909,7 +913,7 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
                     dataOperand == op->getResult(0))
                        ? true
                        : false;
-  if (isControl)
+  if (isControl || type.isa<NoneType>())
     result.addAttribute("control", builder.getBoolAttr(true));
 }
 
