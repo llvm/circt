@@ -3155,10 +3155,12 @@ ParseResult FIRCircuitParser::importAnnotations(
       return failure();
 
   SmallVector<Attribute> passedAnno;
+  unsigned annotationID = 0;
+  SmallVector<Attribute> newAnnos;
   for (auto anno : rawAnno) {
     anno = normalizeTarget(anno);
     if (circuitTargetAttr != anno.getNamed("target")->second.cast<StringAttr>()
-      || !scatterCustomAnnotation(anno))
+      || !scatterCustomAnnotation(anno, circuit, info.getLoc(), newAnnos, annotationID, nlaNumber))
       passedAnno.push_back(anno);
   }
 
@@ -3172,11 +3174,12 @@ ParseResult FIRCircuitParser::importAnnotations(
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
   //   2. Annotations targeting the circuit, e.g., "~Foo"
+  if (!passedAnno.empty()) {
   ArrayAttr annotations = ArrayAttr::get(context, passedAnno);
   // getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
     //                                     getConstants().targetSet);
   circuit->setAttr("raw_annotations", annotations);
-
+  }
   //deRaw();
 
   // if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,

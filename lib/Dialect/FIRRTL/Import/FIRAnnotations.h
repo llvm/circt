@@ -42,7 +42,10 @@ bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
                               CircuitOp circuit, unsigned &annotationID,
                               Location loc, size_t &nlaNumber);
 
-bool scatterCustomAnnotation(DictionaryAttr anno);
+bool scatterCustomAnnotation(DictionaryAttr anno, CircuitOp circuit,
+                             Location loc,
+                             SmallVectorImpl<Attribute> &newAnnotations,
+                             unsigned &annotationID, size_t &nlaNumber);
 
 bool fromJSON(llvm::json::Value &value,
                  SmallVectorImpl<DictionaryAttr> &attrs, llvm::json::Path path,
