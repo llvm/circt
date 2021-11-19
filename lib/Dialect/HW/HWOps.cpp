@@ -232,6 +232,11 @@ bool hw::isAnyModule(Operation *module) {
          isa<HWModuleGeneratedOp>(module);
 }
 
+/// Return true if isAnyModule or instance.
+bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
+  return isAnyModule(moduleOrInstance) || isa<InstanceOp>(moduleOrInstance);
+}
+
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
 FunctionType hw::getModuleType(Operation *moduleOrInstance) {
