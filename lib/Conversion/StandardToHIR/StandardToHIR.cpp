@@ -296,9 +296,9 @@ LogicalResult StandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   // We do not support iter_args so scf.for should not have any results.
   assert(op.getNumResults() == 0);
 
-  auto forOp = builder.create<hir::ForOp>(op.getLoc(),
-                                          hir::TimeType::get(op.getContext()),
-                                          lb, ub, step, Value(), IntegerAttr());
+  auto forOp = builder.create<hir::ForOp>(
+      op.getLoc(), hir::TimeType::get(op.getContext()), lb, ub, step,
+      SmallVector<Value>({}), Value(), IntegerAttr());
   BlockAndValueMapping mapper;
   op.getLoopBody().cloneInto(&forOp.getLoopBody(), mapper);
   if (Attribute unrollAttr = op->getAttr("hir.unroll"))

@@ -48,11 +48,10 @@ void SimplifyCtrlPass::runOnOperation() {
 /// Convert ForOp into a WhileOp.
 LogicalResult SimplifyCtrlPass::visitOp(ForOp forOp) {
   // The condition var = cmpi "ult",lb,ub: i4.
-  if (forOp->hasAttr("unroll"))
-    return success();
-  Type ivTy = forOp.getInductionVar().getType();
-  if (ivTy.isIndex())
-    return success();
+  assert(!forOp->hasAttr("unroll"));
+  assert(!forOp.getInductionVar().getType().isa<mlir::IndexType>());
+  // FIXME: We dont yet handle iter_args for non-unrolled loops.
+  assert(forOp.iter_args().empty());
 
   OpBuilder builder(forOp);
   builder.setInsertionPoint(forOp);
@@ -86,9 +85,9 @@ LogicalResult SimplifyCtrlPass::visitOp(ForOp forOp) {
   // Copy the loop body.
   for (auto &operation : forOp.getLoopBody().front()) {
     if (auto nextIterOp = dyn_cast<hir::NextIterOp>(operation)) {
-      builder.create<hir::NextIterOp>(builder.getUnknownLoc(), condition,
-                                      operandMap.lookup(nextIterOp.tstart()),
-                                      nextIterOp.offsetAttr());
+      builder.create<hir::NextIterOp>(
+          builder.getUnknownLoc(), condition, SmallVector<Value>({}),
+          operandMap.lookup(nextIterOp.tstart()), nextIterOp.offsetAttr());
     } else {
       builder.clone(operation, operandMap);
     }

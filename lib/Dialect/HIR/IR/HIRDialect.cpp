@@ -97,7 +97,7 @@ struct HIROpAsmDialectInterface : public mlir::OpAsmDialectInterface {
     if (argNames)
       for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
         auto name = argNames[i].dyn_cast<StringAttr>();
-        if (name)
+        if (name && !name.getValue().empty())
           setNameFn(block->getArgument(i), name.getValue());
       }
   }

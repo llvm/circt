@@ -128,7 +128,8 @@ void ForOp::beginRegion(OpBuilder &builder) {
 }
 
 void ForOp::endRegion(OpBuilder &builder) {
-  builder.create<hir::NextIterOp>(builder.getUnknownLoc(), Value(), Value(),
+  builder.create<hir::NextIterOp>(builder.getUnknownLoc(), Value(),
+                                  SmallVector<Value>({}), Value(),
                                   IntegerAttr());
   builder.setInsertionPointAfter(*this);
 }

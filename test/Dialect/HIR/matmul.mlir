@@ -96,19 +96,17 @@ hir.func @kernel at %t(
 
    hir.for %i : i5 = %c0_i5  to %c16_i5  step %c1_i5  iter_time(%ti = %t + 1){
      %A_reg = hir.alloca "reg"  : !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_r,#reg_w]
-     %i_reg = hir.alloca "reg"  : !hir.memref<(bank 16)xi4> ports[#reg_r,#reg_w]
      %i_i4 = comb.extract %i from 0 : (i5)->(i4)
-     hir.store %i_i4 to %i_reg[port 1][%0] at %ti :!hir.memref<(bank 16)xi4>
-     hir.for %k:index = %0 to %16 step %1 iter_time(%tk = %ti+1){
-       %i_k = hir.load %i_reg[port 0][%k] at %tk:!hir.memref<(bank 16)xi4>
+     hir.for %k:index = %0 to %16 step %1 iter_args(%i_k = %i_i4:i4) iter_time(%tk = %ti){
        %a = hir.load %A[port 0][%i_k,%k] at %tk : !hir.memref<16x(bank 16)xi32>
        hir.store %a to %A_reg[port 1][%0,%k] at %tk+1 :!hir.memref<(bank 16)x(bank 16)xi32>
-       hir.next_iter at %tk + 1 
+       %i_k_next = hir.delay %i_k by 1 at %tk :i4
+       hir.probe %i_k_next name "i_k_next" :i4
+       hir.next_iter iter_args(%i_k_next) at %tk + 1 :(i4)
      }
+
      hir.for %j :index = %1 to %16 step %1 iter_time(%tj = %ti+1){
       %j-1 = arith.subi %j,%1 :index
-      %i_prev = hir.load %i_reg[port 0][%j-1] at %tj:!hir.memref<(bank 16)xi4>
-      hir.store %i_prev to %i_reg[port 1][%j] at %tj :!hir.memref<(bank 16)xi4>
       %tk_end=hir.for %k:index = %0 to %16 step %1 iter_time(%tk = %tj){
         %a = hir.load %A_reg[port 0][%j-1,%k] at %tk+1 : !hir.memref<(bank 16)x(bank 16)xi32>
         hir.store %a to %A_reg[port 1][%j,%k] at %tk+1 :!hir.memref<(bank 16)x(bank 16)xi32>
@@ -117,10 +115,10 @@ hir.func @kernel at %t(
       hir.next_iter at %tj + 1 
      }
 
-     hir.for %j :index = %0 to %16 step %1 iter_time(%tj = %ti){
+     hir.for %j :index = %0 to %16 step %1 iter_args(%i_j = %i_i4:i4) iter_time(%tj = %ti){
       %C_reg = hir.alloca "reg"  : !hir.memref<(bank 17)xi32> ports[#reg_r,#reg_w]
       hir.store %c0_i32 to %C_reg[port 1][%0] at %tj + 3 : !hir.memref<(bank 17)xi32>
-      %tk_end=hir.for %k:index = %0 to %16 step %1 iter_time(%tk = %tj){
+      %i_k_end, %tk_end=hir.for %k:index = %0 to %16 step %1 iter_args(%i_k=%i_j:i4) iter_time(%tk = %tj){
         %a = hir.load %A_reg[port 0][%j, %k] at %tk + 2  : !hir.memref<(bank 16)x(bank 16)xi32>
         %b = hir.load %B[port 0][%k, %j] at %tk+2 : !hir.memref<(bank 16)x(bank 16)xi32>
         %ab = hir.call @mult(%a, %b) at %tk + 2 : !hir.func<(i32, i32) -> (i32 delay 2)>
@@ -133,13 +131,14 @@ hir.func @kernel at %t(
         hir.probe %c name "c" :i32
         %kPlus1 = arith.addi  %k, %1  : index
         hir.store %c to %C_reg[port 1][%kPlus1] at %tk + 4  : !hir.memref<(bank 17)xi32>
-        hir.next_iter at %tk + 1 
+        %i_k_next = hir.delay %i_k by 1 at %tk :i4
+        hir.next_iter iter_args(%i_k_next) at %tk + 1 : (i4)
       }
-      %acc = hir.load %C_reg[port 0][%16] at %tj + 20 : !hir.memref<(bank 17)xi32>
-      %i1 = hir.load %i_reg[port 0][%j] at %tj+1 :  !hir.memref<(bank 16)xi4>
-      %i2 = hir.delay %i1 by 19 at %tj+1 : i4 
-      hir.store %acc to %C[port 0][%i2, %j] at %tj + 20 : !hir.memref<16x(bank 16)xi32>
-      hir.next_iter at %tj + 1 
+      %acc = hir.load %C_reg[port 0][%16] at %tk_end + 4 : !hir.memref<(bank 17)xi32>
+      %i_delayed = hir.delay %i_k_end by 4 at %tk_end : i4 
+      hir.store %acc to %C[port 0][%i_delayed, %j] at %tk_end+4 : !hir.memref<16x(bank 16)xi32>
+      %i_j_next = hir.delay %i_j by 1 at %tj :i4
+      hir.next_iter iter_args (%i_j_next) at %tj + 1 :(i4)
     }
     hir.next_iter at %ti + 1 
   } 

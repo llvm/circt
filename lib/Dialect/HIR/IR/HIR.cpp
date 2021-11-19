@@ -60,7 +60,10 @@ LogicalResult addNamesAttribute(MLIRContext *context, StringRef attrName,
   if (!hasAttribute(attrName, result.attributes)) {
     SmallVector<Attribute> argNames;
     for (const auto &arg : args)
-      argNames.push_back(getNameAttr(context, arg.name));
+      if (arg.name.empty())
+        argNames.push_back(StringAttr::get(context));
+      else
+        argNames.push_back(getNameAttr(context, arg.name));
 
     result.addAttribute(attrName, ArrayAttr::get(context, argNames));
   }
@@ -257,6 +260,36 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+static ParseResult
+parseIterArgs(OpAsmParser &parser,
+              SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+              SmallVectorImpl<OpAsmParser::OperandType> &operands,
+              SmallVectorImpl<Type> &operandTypes, ArrayAttr &delays) {
+
+  SmallVector<Attribute> delayAttrs;
+  if (parser.parseLParen())
+    return failure();
+  do {
+    OpAsmParser::OperandType arg, operand;
+    Type operandTy;
+    int64_t delay = 0;
+    if (parser.parseRegionArgument(arg) || parser.parseEqual() ||
+        parser.parseOperand(operand) || parser.parseColonType(operandTy))
+      return failure();
+    if (succeeded(parser.parseOptionalKeyword("delay")))
+      if (parser.parseInteger(delay))
+        return failure();
+    entryArgs.push_back(arg);
+    operands.push_back(operand);
+    operandTypes.push_back(operandTy);
+    delayAttrs.push_back(parser.getBuilder().getI64IntegerAttr(delay));
+  } while (succeeded(parser.parseOptionalComma()));
+  if (parser.parseRParen())
+    return failure();
+
+  delays = ArrayAttr::get(parser.getContext(), delayAttrs);
+  return success();
+}
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -576,6 +609,11 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType lb;
   OpAsmParser::OperandType ub;
   OpAsmParser::OperandType step;
+  SmallVector<OpAsmParser::OperandType> iterArgs;
+  SmallVector<OpAsmParser::OperandType> regionIterArgs;
+  SmallVector<Type> iterArgTypes;
+  ArrayAttr iterArgDelays;
+
   llvm::Optional<OpAsmParser::OperandType> tstart;
   IntegerAttr offset;
 
@@ -584,8 +622,6 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseRegionArgument(inductionVar) ||
       parser.parseColonType(inductionVarTy) || parser.parseEqual())
     return failure();
-  if (inductionVar.name.empty())
-    return parser.emitError(inductionVarLoc) << "Expected valid name.";
 
   // Parse loop bounds.
   if (parser.parseOperand(lb) || parser.parseKeyword("to") ||
@@ -593,15 +629,18 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOperand(step))
     return failure();
 
+  // Parse iter_args.
+  if (succeeded(parser.parseOptionalKeyword("iter_args")))
+    if (parseIterArgs(parser, regionIterArgs, iterArgs, iterArgTypes,
+                      iterArgDelays))
+      return failure();
+
   // Parse iter-time.
   if (parser.parseKeyword("iter_time") || parser.parseLParen())
     return failure();
-  auto iterTimeVarLoc = parser.getCurrentLocation();
+
   if (parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
     return failure();
-
-  if (iterTimeVar.name.empty())
-    return parser.emitError(iterTimeVarLoc) << "Expected valid name.";
 
   if (parseTimeAndOffset(parser, tstart, offset) || parser.parseRParen())
     return failure();
@@ -612,6 +651,11 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperand(step, inductionVarTy, result.operands))
     return failure();
 
+  if (!iterArgs.empty() && failed(parser.resolveOperands(
+                               iterArgs, iterArgTypes,
+                               parser.getCurrentLocation(), result.operands)))
+    return failure();
+
   // resolve optional tstart and offset.
   if (tstart.hasValue())
     if (parser.resolveOperand(tstart.getValue(), TimeType::get(context),
@@ -619,16 +663,27 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       return failure();
   if (offset)
     result.addAttribute("offset", offset);
+  if (iterArgs.size() > 0)
+    result.addAttribute("iter_arg_delays", iterArgDelays);
 
-  if (failed(addNamesAttribute(context, "argNames", {inductionVar, iterTimeVar},
-                               result)))
+  result.addAttribute("operand_segment_sizes",
+                      parser.getBuilder().getI32VectorAttr(
+                          {1 /*lb*/, 1 /*ub*/, 1 /*step*/,
+                           static_cast<int32_t>(iterArgs.size()),
+                           static_cast<int32_t>(tstart.hasValue() ? 1 : 0)}));
+  SmallVector<Type> resultTypes(iterArgTypes);
+  regionIterArgs.push_back(inductionVar);
+  regionIterArgs.push_back(iterTimeVar);
+  iterArgTypes.push_back(inductionVarTy);
+  iterArgTypes.push_back(TimeType::get(context));
+  resultTypes.push_back(TimeType::get(context));
+
+  if (failed(addNamesAttribute(context, "argNames", regionIterArgs, result)))
     return parser.emitError(inductionVarLoc)
            << "Failed to add names for induction var and time var";
-
   // Parse the body region.
   Region *body = result.addRegion();
-  if (parser.parseRegion(*body, {inductionVar, iterTimeVar},
-                         {inductionVarTy, TimeType::get(context)}))
+  if (parser.parseRegion(*body, regionIterArgs, iterArgTypes))
     return failure();
 
   // Parse the attr-dict
@@ -636,7 +691,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // ForOp result is the time at which last iteration calls next_iter.
-  result.addTypes(TimeType::get(context));
+  result.addTypes(resultTypes);
 
   // ForOp::ensureTerminator(*body, builder, result.location);
   return success();
@@ -647,6 +702,21 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
           << op.getInductionVar().getType() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step();
 
+  if (op.iter_args().size() > 0) {
+    printer << " iter_args(";
+    for (size_t i = 0; i < op.iter_args().size(); i++) {
+      if (i > 0)
+        printer << ",";
+      printer << op.body().front().getArgument(i) << "=" << op.iter_args()[i]
+              << ": " << op.iter_args()[i].getType();
+      auto delay = op->getAttrOfType<ArrayAttr>("iter_arg_delays")[i]
+                       .dyn_cast<IntegerAttr>()
+                       .getInt();
+      if (delay > 0)
+        printer << "delay " << delay;
+    }
+    printer << ")";
+  }
   printer << " iter_time( " << op.getIterTimeVar() << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << ")";

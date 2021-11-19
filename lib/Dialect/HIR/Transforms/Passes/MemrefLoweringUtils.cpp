@@ -147,10 +147,8 @@ Value getBusFromTensor(OpBuilder &builder, Value busT, int64_t idx) {
   auto busTy = hir::BusType::get(
       builder.getContext(),
       busT.getType().dyn_cast<hir::BusTensorType>().getElementType());
-  builder.create<hir::CommentOp>(uLoc, "debug start");
   auto out =
       builder.create<hir::BusTensorGetElementOp>(uLoc, busTy, busT, cIdx);
-  builder.create<hir::CommentOp>(uLoc, "debug end");
   return out;
 }
 

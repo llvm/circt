@@ -140,9 +140,9 @@ LogicalResult ScheduleInfoImpl::visitOp(ForOp op) {
   if (!op.tstart())
     return op.emitError("Failed to create ScheduleInfo. Operation is not "
                         "scheduled yet.");
-  scheduleInfo.setOfRootTimeVars.insert(op.getResult());
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] = op.getResult();
-  scheduleInfo.mapValueToOffset[op.getResult()] = 0;
+  scheduleInfo.setOfRootTimeVars.insert(op.t_end());
+  scheduleInfo.mapValueToRootTimeVar[op.t_end()] = op.t_end();
+  scheduleInfo.mapValueToOffset[op.t_end()] = 0;
 
   // Register all the region operands with the root time var.
   scheduleInfo.mapValueToOffset[op.getInductionVar()] = 0;

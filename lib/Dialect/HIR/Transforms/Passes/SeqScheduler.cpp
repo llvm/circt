@@ -99,7 +99,7 @@ LogicalResult SeqSchedulerPass::updateOp(ForOp op) {
     return failure();
 
   // Update the time var and offset for instructions after the ForOp.
-  this->currentTimeVar = op.getResult();
+  this->currentTimeVar = op.t_end();
   this->nextFreeOffset = 0;
 
   return success();

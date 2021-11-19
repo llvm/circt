@@ -73,12 +73,12 @@ def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments, ParentOneOf<["Fo
       ```mlir hir.next_iter at %t```
   }];
 
-  let arguments = (ins Optional<I1> :$condition, Optional<HIR_TimeType> : $tstart, 
+  let arguments = (ins Optional<I1> :$condition, Variadic<AnyType>:$iter_args, Optional<HIR_TimeType> : $tstart, 
     OptionalAttr<I64Attr>: $offset);
 
   let results = (outs );
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = [{ (`condition` $condition^)? `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
+  let assemblyFormat = [{ (`condition` $condition^)? (`iter_args` `(`$iter_args^ `)`)? `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict (`:` `(` type($iter_args)^ `)`)? }];
   let verifier =[{return verify$cppClass(*this);}];
 }
 
@@ -264,14 +264,14 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   let hasCanonicalizeMethod =true;
 }
 
-def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
       ```mlir
       hir.for %i = 0 to %N step 1 at iter_time(%ti = %t offset %1) {
-        hir.for %j = %lb to %ub step %s at iter_time(%tj = %ti offset %1) 
-          iter_args(%xx = %x at %tj){   
+        hir.for %j = %lb to %ub step %s iter_args(%xx = %x at %tj) at iter_time(%tj = %ti offset %1) 
+          {   
             %yy = hir.delay %xx by 1 at %tj
               hir.yield %yy at %tj offset 1;
           }
@@ -280,10 +280,10 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
     ```
   }];
 
-  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step,
+  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step,Variadic<AnyType>:$iter_args,
       Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let regions = (region SizedRegion<1>:$body);
-  let results = (outs HIR_TimeType:$res);
+  let results = (outs Variadic<AnyType>:$iterResults, HIR_TimeType:$t_end);
 
   let builders = [OpBuilder<(ins "Value":$lb, "Value":$ub, "Value":$step,
   "Value":$tstart, "IntegerAttr":$offset,
@@ -293,7 +293,7 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
   let printer = [{return print$cppClass(p,*this);}];
   
   let extraClassDeclaration = [{
-    Value getInductionVar() { return getBody()->getArgument(0); }
+    Value getInductionVar() { return getBody()->getArgument(getBody()->getNumArguments()-2); }
     Value setInductionVar(Type ty) { 
       Value newInductionVar = getBody()->insertArgument(
         (unsigned)0, ty);

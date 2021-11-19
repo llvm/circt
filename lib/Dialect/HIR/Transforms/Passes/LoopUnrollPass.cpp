@@ -37,35 +37,38 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   int64_t ub = helper::getConstantIntValue(forOp.ub()).getValue();
   int64_t step = helper::getConstantIntValue(forOp.step()).getValue();
 
-  Value iterTimeVar = forOp.getIterTimeVar();
-  assert(forOp.offset().getValue() == 0);
-  Value iterTStart = forOp.tstart();
   auto *context = builder.getContext();
-  // insert the unrolled body.
+  assert(forOp.offset().getValue() == 0);
 
+  Value mappedIterTimeVar = forOp.tstart();
+  SmallVector<Value> mappedIterArgs;
+  for (auto iterArg : forOp.iter_args())
+    mappedIterArgs.push_back(iterArg);
+
+  // insert the unrolled body.
   for (int i = lb; i < ub; i += step) {
     auto loopIVOp = builder.create<mlir::arith::ConstantOp>(
         builder.getUnknownLoc(), IndexType::get(context),
         builder.getIndexAttr(i));
     helper::setNames(loopIVOp, forOp.getInductionVarName());
+
+    // Populate the operandMap.
     BlockAndValueMapping operandMap;
-    // Latch the captures and update them as the new captures for the next
-    // iteration.
-    for (auto capture : forOp.getCapturedValues()) {
-      operandMap.map(capture,
-                     builder.create<hir::LatchOp>(
-                         builder.getUnknownLoc(), capture.getType(), capture,
-                         iterTStart, builder.getI64IntegerAttr(0)));
+    for (size_t i = 0; i < forOp.iter_args().size(); i++) {
+      Value regionIterArg = loopBodyBlock.getArgument(i);
+      operandMap.map(regionIterArg, mappedIterArgs[i]);
     }
-    operandMap.map(iterTimeVar, iterTStart);
+    operandMap.map(forOp.getIterTimeVar(), mappedIterTimeVar);
     operandMap.map(forOp.getInductionVar(), loopIVOp.getResult());
 
     // Copy the loop body.
     for (auto &operation : loopBodyBlock) {
       if (auto nextIterOp = dyn_cast<hir::NextIterOp>(operation)) {
         assert(nextIterOp.offset().getValue() == 0);
-        iterTStart = {
-            helper::lookupOrOriginal(operandMap, nextIterOp.tstart())};
+        mappedIterArgs.clear();
+        for (auto iterArg : nextIterOp.iter_args())
+          mappedIterArgs.push_back(operandMap.lookup(iterArg));
+        mappedIterTimeVar = operandMap.lookup(nextIterOp.tstart());
       } else if (auto probeOp = dyn_cast<hir::ProbeOp>(operation)) {
         auto unrolledName = builder.getStringAttr(probeOp.verilog_name() + "_" +
                                                   forOp.getInductionVarName() +
@@ -77,11 +80,11 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
       }
     }
   }
-
+  assert(forOp.iter_args().size() == forOp.iterResults().size());
   // replace the ForOp results.
-  auto results = forOp->getResults();
-  assert(results.size() <= 1);
-  results[0].replaceAllUsesWith(iterTStart);
+  forOp.t_end().replaceAllUsesWith(mappedIterTimeVar);
+  for (size_t i = 0; i < forOp.iterResults().size(); i++)
+    forOp.iterResults()[i].replaceAllUsesWith(mappedIterArgs[i]);
 
   forOp.erase();
   return success();

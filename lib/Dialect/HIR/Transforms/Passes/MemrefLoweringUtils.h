@@ -183,9 +183,6 @@ public:
   }
 
   void attachAddrEnBus(OpBuilder &builder, Value addrEnBus) {
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("attachAddrEnBus start"));
     Value prevAddrEnBus = getAddrEnBus();
     Value nextAddrEnBus = declTopLevelBus(
         builder,
@@ -200,8 +197,6 @@ public:
                                      nextAddrEnBus));
     assert(hasAddrBus());
     setAddrEnableBus(nextAddrEnBus);
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(), builder.getStringAttr("attachAddrEnBus end."));
   }
 
   void attachAddrDataBus(OpBuilder &builder, Value enBus, Value dataBus) {

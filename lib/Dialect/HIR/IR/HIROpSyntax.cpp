@@ -321,11 +321,12 @@ void printWithSSANames(mlir::OpAsmPrinter &printer, Operation *op,
     }
   }
   SmallVector<StringRef, 10> elidedAttrs = {
-      "offset",        "delay",        "ports",
-      "port",          "result_attrs", "callee",
-      "funcTy",        "portNums",     "operand_segment_sizes",
-      "index",         "mem_type",     "argNames",
-      "instance_name", "value"};
+      "offset",         "delay",        "ports",
+      "port",           "result_attrs", "callee",
+      "funcTy",         "portNums",     "operand_segment_sizes",
+      "index",          "mem_type",     "argNames",
+      "instance_name",  "value",        "mem_kind",
+      "iter_arg_delays"};
   if (!namesDisagree)
     elidedAttrs.push_back("names");
   printer.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
