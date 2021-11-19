@@ -284,13 +284,14 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   Operation *parentOp = findParentInNonProceduralRegion(op);
   OpBuilder builder(parentOp);
   auto reg = builder.create<RegOp>(op->getLoc(), opValue.getType());
-  builder.setInsertionPointAfter(op);
 
-  // Everything using the expr now uses the reg.
+  // Everything using the expr now uses a read_inout of the reg.
   auto value = builder.create<ReadInOutOp>(op->getLoc(), reg);
   opValue.replaceAllUsesWith(value);
 
-  // We assign the side effect expr to the reg.
+  // We assign the side effect expr to the reg immediately after that expression
+  // is computed.
+  builder.setInsertionPointAfter(op);
   builder.create<BPAssignOp>(op->getLoc(), reg, opValue);
   return true;
 }

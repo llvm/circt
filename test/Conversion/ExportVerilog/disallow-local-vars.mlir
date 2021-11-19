@@ -11,6 +11,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
   // DISALLOW: reg [[SE_REG:[_A-Za-z0-9]+]];
 
   // DISALLOW: wire [[COND:[_A-Za-z0-9]+]] = INLINE_OK;
+  // DISALLOW: wire [[SE_REG2:[_A-Za-z0-9]+]] = [[SE_REG]];
 
   // CHECK:    always @(posedge clock)
   // DISALLOW: always @(posedge clock)
@@ -27,7 +28,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
     // This should go through a reg when in "disallow" mode.
     // CHECK: if (SIDE_EFFECT)
     // DISALLOW: [[SE_REG]] = SIDE_EFFECT;
-    // DISALLOW: if ([[SE_REG]])
+    // DISALLOW: if ([[SE_REG2]])
     %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
     sv.if %1  {
       sv.fatal 1
@@ -116,3 +117,37 @@ hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo
   }
   hw.output %2 : i5
 }
+
+// CHECK-LABEL: module EmittedDespiteDisallowed
+// DISALLOW-LABEL: module EmittedDespiteDisallowed
+// https://github.com/llvm/circt/issues/2216
+hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
+  %tick_value_2 = sv.reg  : !hw.inout<i1>
+  %counter_value = sv.reg  : !hw.inout<i1>
+
+  // Temporary reg gets introduced.
+  // DISALLOW: reg [1:0] _T;
+
+  // DISALLOW: wire [1:0] _T_0 = _T;
+  // DISALLOW: wire _T_1 = _T_0[0];
+  // DISALLOW: wire _T_2 = _T_0[1];
+  // DISALLOW: initial begin
+  sv.initial {
+    // CHECK: automatic logic [1:0] _T = magic;
+    // DISALLOW: _T = magic;
+    %RANDOM = sv.verbatim.expr.se "magic" : () -> i2 {symbols = []}
+
+    // CHECK: tick_value_2 = _T[0];
+    // DISALLOW-NEXT: tick_value_2 = _T_1;
+    %1 = comb.extract %RANDOM from 0 : (i2) -> i1
+    sv.bpassign %tick_value_2, %1 : i1
+
+    // CHECK: counter_value = _T[1];
+    // DISALLOW-NEXT: counter_value = _T_2;
+    %2 = comb.extract %RANDOM from 1 : (i2) -> i1
+    sv.bpassign %counter_value, %2 : i1
+  }
+  hw.output
+}
+
+
