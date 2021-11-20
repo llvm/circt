@@ -17,6 +17,7 @@
 using namespace mlir;
 using namespace circt;
 using namespace comb;
+using namespace matchers;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
@@ -69,10 +70,6 @@ struct AnyCapturedValueMatcher {
   }
 };
 } // end anonymous namespace
-
-// TODO(llvm merge): Remove this when https://reviews.llvm.org/D113905 is
-// merged in.
-inline auto m_Any(Value *val) { return AnyCapturedValueMatcher(val); }
 
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
