@@ -1,35 +1,29 @@
-#bram_r = {"rd"= 1}
-#bram_w = {"wr"= 1}
-#reg_r  = {"rd" = 0}
-#reg_w  = {"wr"= 1}
+#bram_r = {"rd_latency"= 1}
+#bram_w = {"wr_latency"= 1}
+#reg_r  = {"rd_latency" = 0}
+#reg_w  = {"wr_latency"= 1}
 
 hir.func @gesummv at %t(
 %alpha:i32, 
 %beta:i32, 
-%tmp:!hir.memref<8xi32, #bram_w> , 
-%A:!hir.memref<8x8xi32,#bram_r>,
-%B:!hir.memref<8x8xi32,#bram_r>,
-%X:!hir.memref<8xi32,#bram_r>,
-%Y:!hir.memref<8xi32,#bram_w>
+%tmp:!hir.memref<8xi32> ports [#bram_w]> , 
+%A:!hir.memref<8x8xi32>ports [#bram_r]>,
+%B:!hir.memref<8x8xi32>ports [#bram_r]>,
+%X:!hir.memref<8xi32>ports [#bram_r]>,
+%Y:!hir.memref<8xi32>ports [#bram_w]>
 ){
 
-  %buff_r,%buff_w = hir.alloca("bram") :!hir.memref<2x16xf32,[1], #bram_r>,
-                    !hir.memref<2x16xf32,[1], #bram_w>
 
-  %wndw_r,%wndw_w = hir.alloca("bram") :!hir.memref<2x2xf32,[0,1], #reg_r>,
-  !hir.memref<2x2xf32,[0,1], #reg_w>
-
-  %0 = hir.constant (0):!hir.const
-  %1 = hir.constant (1):!hir.const
-  %4 = hir.constant (4):!hir.const
-  %5 = hir.constant (5):!hir.const
-  %6 = hir.constant (6):!hir.const
-  %8 = hir.constant (8):!hir.const
-  %9 = hir.constant (9):!hir.const
+  %0 = hw.constant 0:i4
+  %1 = hw.constant 1:i4
+  %4 = hw.constant 4:i4
+  %5 = hw.constant 5:i4
+  %6 = hw.constant 6:i4
+  %8 = hw.constant 8:i4
+  %9 = hw.constant 9:i4
 
 
-  hir.for %i :i32 = %0 :!hir.const to %8 :!hir.const step %1 :!hir.const 
-    iter_time(%ti = %t  +  %1 ){
+  hir.for %i :i4 = %0  to %8 step %1  iter_time(%ti = %t  +  %1 ){
     %tmpreg_r,%tmpreg_w = hir.alloca("reg") :!hir.memref<1xi32,[0], #reg_r>,
                     !hir.memref<1xi32,[0], #reg_w>
     %yreg_r,%yreg_w = hir.alloca("reg") :!hir.memref<1xi32,[0], #reg_r>,
