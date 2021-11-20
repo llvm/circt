@@ -134,7 +134,8 @@ protected:
   static constexpr unsigned firstNonBasicVariableColumn = 3;
 
   virtual Problem &getProblem() = 0;
-  virtual void fillConstraintRow(SmallVector<int> &row, detail::Dependence dep);
+  virtual void fillConstraintRow(SmallVector<int> &row,
+                                 Problem::Dependence dep);
   void buildTableau();
   Optional<unsigned> findPivotRow();
   Optional<unsigned> findPivotColumn(unsigned pivotRow,
@@ -184,7 +185,7 @@ private:
 protected:
   Problem &getProblem() override { return prob; }
   void fillConstraintRow(SmallVector<int> &row,
-                         detail::Dependence dep) override;
+                         Problem::Dependence dep) override;
 
 public:
   CyclicSimplexScheduler(CyclicProblem &prob, Operation *lastOp)
@@ -213,7 +214,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 void SimplexSchedulerBase::fillConstraintRow(SmallVector<int> &row,
-                                             detail::Dependence dep) {
+                                             Problem::Dependence dep) {
   auto &prob = getProblem();
   Operation *src = dep.getSource();
   Operation *dst = dep.getDestination();
@@ -597,7 +598,7 @@ LogicalResult SimplexScheduler::schedule() {
 //===----------------------------------------------------------------------===//
 
 void CyclicSimplexScheduler::fillConstraintRow(SmallVector<int> &row,
-                                               detail::Dependence dep) {
+                                               Problem::Dependence dep) {
   SimplexSchedulerBase::fillConstraintRow(row, dep);
   if (auto dist = prob.getDistance(dep))
     row[parameterTColumn] = *dist;
