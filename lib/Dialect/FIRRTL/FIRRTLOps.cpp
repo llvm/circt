@@ -868,8 +868,8 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
         value.isa<FloatAttr>())
       return true;
-    op.emitError() << "has unknown extmodule parameter value '" << elt.getName()
-                   << "' = " << value;
+    op.emitError() << "has unknown extmodule parameter value '"
+                   << elt.getName().getValue() << "' = " << value;
     return false;
   };
 

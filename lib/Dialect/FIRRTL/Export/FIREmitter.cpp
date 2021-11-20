@@ -259,7 +259,7 @@ void Emitter::emitModule(FExtModuleOp op) {
   // Emit the parameters.
   if (auto params = op.parameters()) {
     for (auto param : *params) {
-      indent() << "parameter " << param.getName() << " = ";
+      indent() << "parameter " << param.getName().getValue() << " = ";
       TypeSwitch<Attribute>(param.getValue())
           .Case<IntegerAttr>([&](auto attr) { os << attr.getValue(); })
           .Case<FloatAttr>([&](auto attr) {
@@ -773,7 +773,7 @@ void Emitter::emitType(Type type) {
 void Emitter::emitLocation(Location loc) {
   // TODO: Handle FusedLoc and uniquify locations, avoid repeated file names.
   if (auto fileLoc = loc->dyn_cast_or_null<FileLineColLoc>()) {
-    os << " @[" << fileLoc.getFilename();
+    os << " @[" << fileLoc.getFilename().getValue();
     if (auto line = fileLoc.getLine()) {
       os << " " << line;
       if (auto col = fileLoc.getColumn())

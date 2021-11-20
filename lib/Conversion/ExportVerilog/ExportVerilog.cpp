@@ -334,7 +334,7 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
     collectFileLineColLocs(op->getLoc(), locationSet);
 
   auto printLoc = [&](FileLineColLoc loc) {
-    sstr << loc.getFilename();
+    sstr << loc.getFilename().getValue();
     if (auto line = loc.getLine()) {
       sstr << ':' << line;
       if (auto col = loc.getColumn())
