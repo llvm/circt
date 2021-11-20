@@ -59,7 +59,7 @@ mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,
 // caching.
 std::pair<bool, llvm::Optional<mlir::LocationAttr>>
 maybeStringToLocation(llvm::StringRef spelling, bool skipParsing,
-                      mlir::Identifier &locatorFilenameCache,
+                      mlir::StringAttr &locatorFilenameCache,
                       FileLineColLoc &fileLineColLocCache,
                       MLIRContext *context);
 

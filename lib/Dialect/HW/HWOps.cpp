@@ -310,7 +310,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argNames, resultNames;
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
-  auto exportPortIdent = Identifier::get("hw.exportPort", builder.getContext());
+  auto exportPortIdent = StringAttr::get("hw.exportPort", builder.getContext());
 
   for (auto elt : ports.inputs) {
     if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
@@ -530,7 +530,7 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
-    if (argAttr.first == name)
+    if (argAttr.getName() == name)
       return true;
   return false;
 }

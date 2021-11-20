@@ -3930,10 +3930,10 @@ struct SharedEmitterState {
 
   /// The additional files to emit, with the output file name as the key into
   /// the map.
-  llvm::MapVector<Identifier, FileInfo> files;
+  llvm::MapVector<StringAttr, FileInfo> files;
 
   /// The various file lists and their contents to emit
-  llvm::StringMap<SmallVector<Identifier>> fileLists;
+  llvm::StringMap<SmallVector<StringAttr>> fileLists;
 
   /// A list of operations replicated in each output file (e.g., `sv.verbatim`
   /// or `sv.ifdef` without dedicated output file).
@@ -4002,12 +4002,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+        if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
-        if (auto sym = resultAttr.second.dyn_cast<FlatSymbolRefAttr>())
+        if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p + numArgs);
   };
@@ -4057,7 +4057,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         }
       }
 
-      auto destFile = Identifier::get(outputPath, op->getContext());
+      auto destFile = StringAttr::get(outputPath, op->getContext());
       auto &file = files[destFile];
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
@@ -4357,7 +4357,7 @@ createOutputFile(StringRef fileName, StringRef dirname,
   return output;
 }
 
-static void createSplitOutputFile(Identifier fileName, FileInfo &file,
+static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
                                   StringRef dirname,
                                   SharedEmitterState &emitter) {
   auto output = createOutputFile(fileName, dirname, emitter);

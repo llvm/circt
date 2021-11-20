@@ -110,7 +110,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
-    if (argAttr.first == name)
+    if (argAttr.getName() == name)
       return true;
   return false;
 }

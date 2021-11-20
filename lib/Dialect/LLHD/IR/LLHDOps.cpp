@@ -368,7 +368,7 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
           .getUnderlyingType()
           .cast<hw::StructType>()
           .getFieldType(
-              attrs.getNamed("field")->second.cast<StringAttr>().getValue());
+              attrs.getNamed("field")->getValue().cast<StringAttr>().getValue());
   if (!type) {
     context->getDiagEngine().emit(loc.getValueOr(UnknownLoc()),
                                   DiagnosticSeverity::Error)

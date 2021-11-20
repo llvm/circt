@@ -1968,7 +1968,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Collect the port info for each port.
   uint64_t numLoads = op.ldCount();
   uint64_t numStores = op.stCount();
-  SmallVector<std::pair<Identifier, MemOp::PortKind>, 8> ports;
+  SmallVector<std::pair<StringAttr, MemOp::PortKind>, 8> ports;
   for (size_t i = 0; i < numLoads; ++i) {
     auto portName = loadIdentifier(i);
     auto portKind = MemOp::PortKind::Read;

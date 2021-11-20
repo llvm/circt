@@ -259,8 +259,8 @@ void Emitter::emitModule(FExtModuleOp op) {
   // Emit the parameters.
   if (auto params = op.parameters()) {
     for (auto param : *params) {
-      indent() << "parameter " << param.first << " = ";
-      TypeSwitch<Attribute>(param.second)
+      indent() << "parameter " << param.getName() << " = ";
+      TypeSwitch<Attribute>(param.getValue())
           .Case<IntegerAttr>([&](auto attr) { os << attr.getValue(); })
           .Case<FloatAttr>([&](auto attr) {
             SmallString<16> str;

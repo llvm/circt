@@ -89,7 +89,7 @@ public:
   using Dependence = detail::Dependence;
 
   /// Operator types are distinguished by name (chosen by the client).
-  using OperatorType = mlir::Identifier;
+  using OperatorType = mlir::StringAttr;
 
   //===--------------------------------------------------------------------===//
   // Aliases for containers storing the problem components and properties

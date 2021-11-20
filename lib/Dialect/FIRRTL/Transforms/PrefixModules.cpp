@@ -247,15 +247,15 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
     }
 
     NamedAttrList newAnno;
-    for (auto pair : anno.getDict()) {
-      if (pair.first == "name") {
-        newAnno.append(
-            pair.first,
-            builder.getStringAttr(Twine(prefixFull) +
-                                  pair.second.cast<StringAttr>().getValue()));
+    for (auto attr : anno.getDict()) {
+      if (attr.getName() == "name") {
+        newAnno.append(attr.getName(),
+                       (Attribute)builder.getStringAttr(
+                           Twine(prefixFull) +
+                           attr.getValue().cast<StringAttr>().getValue()));
         continue;
       }
-      newAnno.append(pair.first, pair.second);
+      newAnno.append(attr.getName(), attr.getValue());
     }
     newAnnotations.push_back(
         DictionaryAttr::getWithSorted(builder.getContext(), newAnno));

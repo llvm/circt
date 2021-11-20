@@ -260,8 +260,8 @@ private:
       attributes = op->getAttrDictionary();
 
     SmallString<16> calyxAttributes;
-    for (auto &&[id, attr] : attributes)
-      calyxAttributes.append(getAttribute(op, id, attr, isPort));
+    for (auto &attr : attributes)
+      calyxAttributes.append(getAttribute(op, attr.getName(), attr.getValue(), isPort));
     return calyxAttributes.c_str();
   }
 

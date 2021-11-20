@@ -73,7 +73,7 @@ static Type lowerType(Type type) {
       if (!etype)
         return {};
       // TODO: make hw::StructType contain StringAttrs.
-      auto name = Identifier::get(element.name.getValue(), type.getContext());
+      auto name = StringAttr::get(element.name.getValue(), type.getContext());
       hwfields.push_back(hw::StructType::FieldInfo{name, etype});
     }
     return hw::StructType::get(type.getContext(), hwfields);
@@ -190,7 +190,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(Identifier::get(attrBase, ctx),
+    old.emplace_back(StringAttr::get(attrBase, ctx),
                      hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
     top->setAttrs(old);
   }
@@ -198,7 +198,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);
@@ -768,9 +768,9 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   // in sorted order which is nicely stable.
   SmallVector<Attribute> newParams;
   for (const NamedAttribute &entry : paramsOptional.getValue()) {
-    auto name = builder.getStringAttr(entry.first.strref());
-    auto type = TypeAttr::get(entry.second.getType());
-    auto value = ignoreValues ? Attribute() : entry.second;
+    auto name = entry.getName();
+    auto type = TypeAttr::get(entry.getValue().getType());
+    auto value = ignoreValues ? Attribute() : entry.getValue();
     auto paramAttr =
         hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
     newParams.push_back(paramAttr);

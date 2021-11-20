@@ -106,7 +106,6 @@ class FlatSymbolRefAttr;
 class FloatAttr;
 class FunctionType;
 class FusedLoc;
-class Identifier;
 class ImplicitLocOpBuilder;
 class IndexType;
 class InFlightDiagnostic;
@@ -117,6 +116,7 @@ class MemRefType;
 class MLIRContext;
 class ModuleOp;
 class MutableOperandRange;
+class NamedAttribute;
 class NamedAttrList;
 class NoneType;
 class OpAsmDialectInterface;
@@ -167,7 +167,6 @@ struct OpRewritePattern;
 
 using DefaultTypeStorage = TypeStorage;
 using OpAsmSetValueNameFn = function_ref<void(Value, StringRef)>;
-using NamedAttribute = std::pair<Identifier, Attribute>;
 
 namespace OpTrait {}
 
@@ -201,7 +200,6 @@ using mlir::FlatSymbolRefAttr;
 using mlir::FloatAttr;
 using mlir::FunctionType;
 using mlir::FusedLoc;
-using mlir::Identifier;
 using mlir::ImplicitLocOpBuilder;
 using mlir::IndexType;
 using mlir::InFlightDiagnostic;

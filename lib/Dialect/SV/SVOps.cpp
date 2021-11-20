@@ -55,7 +55,7 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
     return nullptr;
 
   // Look for a symbol with the given name.
-  Identifier symbolNameId = Identifier::get(SymbolTable::getSymbolAttrName(),
+  StringAttr symbolNameId = StringAttr::get(SymbolTable::getSymbolAttrName(),
                                             symbolTableOp->getContext());
   for (Block &block : region)
     for (Operation &nestedOp : block) {
@@ -84,7 +84,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
   // If the attribute dictionary contains no 'name' attribute, infer it from
   // the SSA name (if specified).
   bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
+      resultAttrs, [](NamedAttribute attr) { return attr.getName() == "name"; });
 
   // If there was no name specified, check to see if there was a useful name
   // specified in the asm file.
@@ -98,7 +98,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
   return success();
 }
 

@@ -83,7 +83,7 @@ struct PortInfo {
   bool hasAttribute(StringRef identifier) const {
     assert(attributes && "PortInfo::attributes should be instantiated.");
     return llvm::any_of(attributes, [&](auto idToAttribute) {
-      return identifier == std::get<0>(idToAttribute);
+      return identifier == idToAttribute.getName();
     });
   }
 
@@ -92,20 +92,19 @@ struct PortInfo {
   llvm::Optional<Attribute> getAttribute(StringRef identifier) const {
     assert(attributes && "PortInfo::attributes should be instantiated.");
     auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
-      return identifier == std::get<0>(idToAttribute);
+      return identifier == idToAttribute.getName();
     });
     if (it == attributes.end())
       return None;
-    return std::get<1>(*it);
+    return it->getValue();
   }
 
   /// Returns all identifiers for this dictionary attribute.
   SmallVector<StringRef> getAllIdentifiers() const {
     assert(attributes && "PortInfo::attributes should be instantiated.");
     SmallVector<StringRef> identifiers;
-    llvm::transform(
-        attributes, std::back_inserter(identifiers),
-        [](auto idToAttribute) { return std::get<0>(idToAttribute); });
+    llvm::transform(attributes, std::back_inserter(identifiers),
+                    [](auto idToAttribute) { return idToAttribute.getName(); });
     return identifiers;
   }
 };
