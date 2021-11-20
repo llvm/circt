@@ -62,7 +62,8 @@ LogicalResult SimplifyCtrlPass::visitOp(ForOp forOp) {
       forOp.lb(), forOp.ub());
 
   auto whileOp = builder.create<hir::WhileOp>(
-      forOp.getLoc(), initialCondition, forOp.tstart(), forOp.offsetAttr());
+      forOp.getLoc(), initialCondition, ArrayRef<Value>({}), forOp.tstart(),
+      forOp.offsetAttr());
   auto forNextIterOp = dyn_cast<NextIterOp>(&forOp.body().begin()->back());
   assert(forNextIterOp);
 

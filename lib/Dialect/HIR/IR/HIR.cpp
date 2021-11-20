@@ -145,6 +145,57 @@ ParseResult parseBusPortsAttr(OpAsmParser &parser,
   return success();
 }
 
+static ParseResult
+parseOptionalIterArgs(OpAsmParser &parser,
+                      SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+                      SmallVectorImpl<OpAsmParser::OperandType> &operands,
+                      SmallVectorImpl<Type> &operandTypes, ArrayAttr &delays) {
+
+  if (parser.parseOptionalKeyword("iter_args"))
+    return success();
+
+  SmallVector<Attribute> delayAttrs;
+  if (parser.parseLParen())
+    return failure();
+  do {
+    OpAsmParser::OperandType arg, operand;
+    Type operandTy;
+    int64_t delay = 0;
+    if (parser.parseRegionArgument(arg) || parser.parseEqual() ||
+        parser.parseOperand(operand) || parser.parseColonType(operandTy))
+      return failure();
+    if (succeeded(parser.parseOptionalKeyword("delay")))
+      if (parser.parseInteger(delay))
+        return failure();
+    entryArgs.push_back(arg);
+    operands.push_back(operand);
+    operandTypes.push_back(operandTy);
+    delayAttrs.push_back(parser.getBuilder().getI64IntegerAttr(delay));
+  } while (succeeded(parser.parseOptionalComma()));
+  if (parser.parseRParen())
+    return failure();
+
+  delays = ArrayAttr::get(parser.getContext(), delayAttrs);
+  return success();
+}
+static void printOptionalIterArgs(OpAsmPrinter &printer, OperandRange iterArgs,
+                                  ArrayRef<BlockArgument> regionArgs,
+                                  ArrayAttr iterArgDelays) {
+  if (iterArgs.size() > 0) {
+    printer << " iter_args(";
+    for (size_t i = 0; i < iterArgs.size(); i++) {
+      if (i > 0)
+        printer << ",";
+      printer << regionArgs[i] << "=" << iterArgs[i] << ": "
+              << iterArgs[i].getType();
+      auto delay = iterArgDelays[i].dyn_cast<IntegerAttr>().getInt();
+      if (delay > 0)
+        printer << "delay " << delay;
+    }
+    printer << ")";
+  }
+}
+
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -260,36 +311,6 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-static ParseResult
-parseIterArgs(OpAsmParser &parser,
-              SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
-              SmallVectorImpl<OpAsmParser::OperandType> &operands,
-              SmallVectorImpl<Type> &operandTypes, ArrayAttr &delays) {
-
-  SmallVector<Attribute> delayAttrs;
-  if (parser.parseLParen())
-    return failure();
-  do {
-    OpAsmParser::OperandType arg, operand;
-    Type operandTy;
-    int64_t delay = 0;
-    if (parser.parseRegionArgument(arg) || parser.parseEqual() ||
-        parser.parseOperand(operand) || parser.parseColonType(operandTy))
-      return failure();
-    if (succeeded(parser.parseOptionalKeyword("delay")))
-      if (parser.parseInteger(delay))
-        return failure();
-    entryArgs.push_back(arg);
-    operands.push_back(operand);
-    operandTypes.push_back(operandTy);
-    delayAttrs.push_back(parser.getBuilder().getI64IntegerAttr(delay));
-  } while (succeeded(parser.parseOptionalComma()));
-  if (parser.parseRParen())
-    return failure();
-
-  delays = ArrayAttr::get(parser.getContext(), delayAttrs);
-  return success();
-}
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -547,11 +568,19 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
 static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType iterTimeVar;
   OpAsmParser::OperandType conditionVar;
+  SmallVector<OpAsmParser::OperandType> iterArgs;
+  SmallVector<OpAsmParser::OperandType> regionIterArgs;
+  SmallVector<Type> iterArgTypes;
+  ArrayAttr iterArgDelays;
   llvm::Optional<OpAsmParser::OperandType> tstart;
   IntegerAttr offset;
+
   if (parser.parseOperand(conditionVar))
     return failure();
 
+  if (parseOptionalIterArgs(parser, regionIterArgs, iterArgs, iterArgTypes,
+                            iterArgDelays))
+    return failure();
   if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
       parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
     return failure();
@@ -570,23 +599,36 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
             result.operands))
       return failure();
 
+  if (!iterArgs.empty())
+    if (parser.resolveOperands(iterArgs, iterArgTypes, parser.getNameLoc(),
+                               result.operands))
+      return failure();
+
   if (offset)
     result.addAttribute("offset", offset);
 
+  if (!iterArgs.empty())
+    result.addAttribute("iter_arg_delays", iterArgDelays);
+
+  regionIterArgs.push_back(iterTimeVar);
+  iterArgTypes.push_back(hir::TimeType::get(parser.getContext()));
+
   Region *body = result.addRegion();
-  if (parser.parseRegion(
-          *body, {iterTimeVar},
-          {hir::TimeType::get(parser.getBuilder().getContext())}))
+  if (parser.parseRegion(*body, iterArgs, iterArgTypes))
     return failure();
+
   // Parse the attr-dict
   if (parseWithSSANames(parser, result.attributes))
     return failure();
-  result.addTypes(TimeType::get(parser.getBuilder().getContext()));
+  result.addTypes(iterArgTypes);
   return success();
 }
 
 static void printWhileOp(OpAsmPrinter &printer, WhileOp op) {
   printer << " " << op.condition();
+  printOptionalIterArgs(printer, op.iter_args(),
+                        op.body().front().getArguments(),
+                        op->getAttrOfType<ArrayAttr>("iter_arg_delays"));
   printer << " iter_time(" << op.getIterTimeVar() << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << ")";
@@ -631,8 +673,8 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
 
   // Parse iter_args.
   if (succeeded(parser.parseOptionalKeyword("iter_args")))
-    if (parseIterArgs(parser, regionIterArgs, iterArgs, iterArgTypes,
-                      iterArgDelays))
+    if (parseOptionalIterArgs(parser, regionIterArgs, iterArgs, iterArgTypes,
+                              iterArgDelays))
       return failure();
 
   // Parse iter-time.
@@ -696,27 +738,14 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   // ForOp::ensureTerminator(*body, builder, result.location);
   return success();
 }
-
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer << " " << op.getInductionVar() << " : "
           << op.getInductionVar().getType() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step();
+  printOptionalIterArgs(printer, op.iter_args(),
+                        op.body().front().getArguments(),
+                        op->getAttrOfType<ArrayAttr>("iter_arg_delays"));
 
-  if (op.iter_args().size() > 0) {
-    printer << " iter_args(";
-    for (size_t i = 0; i < op.iter_args().size(); i++) {
-      if (i > 0)
-        printer << ",";
-      printer << op.body().front().getArgument(i) << "=" << op.iter_args()[i]
-              << ": " << op.iter_args()[i].getType();
-      auto delay = op->getAttrOfType<ArrayAttr>("iter_arg_delays")[i]
-                       .dyn_cast<IntegerAttr>()
-                       .getInt();
-      if (delay > 0)
-        printer << "delay " << delay;
-    }
-    printer << ")";
-  }
   printer << " iter_time( " << op.getIterTimeVar() << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << ")";

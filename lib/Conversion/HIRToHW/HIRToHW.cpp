@@ -261,6 +261,7 @@ LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
+  auto uLoc = builder->getUnknownLoc();
   assert(op.offset().getValue() == 0);
   auto &bb = op.body().front();
   assert(!op.offset() || op.offset().getValue() == 0);
@@ -298,14 +299,35 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
   auto tLastName = helper::getOptionalName(op, 0);
   if (tLastName)
     tLast->setAttr("name", builder->getStringAttr(tLastName.getValue()));
+
+  SmallVector<Value> placeholderIterArgs;
+  for (size_t i = 0; i < op.iter_args().size(); i++) {
+    auto iterArg = op.iter_args()[i];
+    auto backwardIterArg =
+        getConstantX(builder, iterArg.getType())->getResult(0);
+    placeholderIterArgs.push_back(backwardIterArg);
+    auto forwardIterArg = mapHIRToHWValue.lookup(iterArg);
+    builder->create<comb::MuxOp>(uLoc, tNextBegin, forwardIterArg,
+                                 backwardIterArg);
+  }
+
   mapHIRToHWValue.map(op.getIterTimeVar(), iterTimeVar);
-  mapHIRToHWValue.map(op.res(), tLast);
+
   auto visitResult = visitRegion(op.body());
 
   auto nextIterOp = dyn_cast<hir::NextIterOp>(bb.back());
   assert(nextIterOp);
 
   // Replace placeholder values.
+  for (size_t i = 0; i < op.iter_args().size(); i++) {
+    auto forwardIterArg = mapHIRToHWValue.lookup(op.iter_args()[i]);
+    auto backwardIterArg = mapHIRToHWValue.lookup(nextIterOp.iter_args()[i]);
+    placeholderIterArgs[i].replaceAllUsesWith(backwardIterArg);
+    auto iterResult = builder->create<comb::MuxOp>(
+        uLoc, tLastBegin, forwardIterArg, backwardIterArg);
+    mapHIRToHWValue.map(op.iterResults()[i], iterResult);
+  }
+  mapHIRToHWValue.map(op.t_end(), tLast);
   tstartNextIterOp.replaceAllUsesWith(
       mapHIRToHWValue.lookup(nextIterOp.tstart()));
   conditionNextIterOp.replaceAllUsesWith(
