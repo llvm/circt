@@ -41,8 +41,7 @@ static Attribute parseRootedInstancePath(AsmParser &p) {
   return RootedInstancePathAttr::get(p.getContext(), root, path);
 }
 
-static void printRootedInstancePath(RootedInstancePathAttr me,
-                                    AsmPrinter &p) {
+static void printRootedInstancePath(RootedInstancePathAttr me, AsmPrinter &p) {
   p << me.getRootModule() << '[';
   llvm::interleave(me.getPath(), p, ",");
   p << ']';
@@ -112,8 +111,8 @@ Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
 }
 
 void PhysLocationAttr::print(AsmPrinter &p) const {
-  p << "<" << stringifyPrimitiveType(getPrimitiveType().getValue())
-    << ", " << getX() << ", " << getY() << ", " << getNum() << '>';
+  p << "<" << stringifyPrimitiveType(getPrimitiveType().getValue()) << ", "
+    << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 
 Attribute PhysicalRegionRefAttr::parse(AsmParser &p, Type type) {

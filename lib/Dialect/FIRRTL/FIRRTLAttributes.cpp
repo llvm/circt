@@ -70,8 +70,7 @@ Attribute SubAnnotationAttr::parse(AsmParser &p, Type type) {
 }
 
 void SubAnnotationAttr::print(AsmPrinter &p) const {
-  p << "<fieldID = " << getFieldID() << ", "
-    << getAnnotations() << ">";
+  p << "<fieldID = " << getFieldID() << ", " << getAnnotations() << ">";
 }
 
 //===----------------------------------------------------------------------===//

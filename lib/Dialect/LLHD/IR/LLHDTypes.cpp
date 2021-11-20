@@ -111,8 +111,8 @@ Attribute TimeAttr::parse(AsmParser &p, Type type) {
 }
 
 void TimeAttr::print(AsmPrinter &p) const {
-  p << "<" << getTime() << getTimeUnit() << ", " << getDelta()
-    << "d, " << getEpsilon() << "e>";
+  p << "<" << getTime() << getTimeUnit() << ", " << getDelta() << "d, "
+    << getEpsilon() << "e>";
 }
 
 LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,
