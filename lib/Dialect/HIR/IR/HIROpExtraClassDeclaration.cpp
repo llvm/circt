@@ -109,6 +109,8 @@ SmallVector<Value> ForOp::getCapturedValues() {
 
 Block *ForOp::addEntryBlock(MLIRContext *context, Type inductionVarTy) {
   Block *entry = new Block;
+  for (Value iterArg : this->iter_args())
+    entry->addArgument(iterArg.getType());
   entry->addArgument(inductionVarTy);              // induction var
   entry->addArgument(hir::TimeType::get(context)); // iter time
   getLoopBody().push_back(entry);
@@ -118,6 +120,8 @@ Block *ForOp::addEntryBlock(MLIRContext *context, Type inductionVarTy) {
 Block *WhileOp::addEntryBlock() {
   auto *context = this->getContext();
   Block *entry = new Block;
+  for (Value iterArg : this->iter_args())
+    entry->addArgument(iterArg.getType());
   entry->addArgument(hir::TimeType::get(context)); // iter time
   body().push_back(entry);
   return entry;

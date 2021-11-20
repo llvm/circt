@@ -114,6 +114,11 @@ LogicalResult verifyAllocaOp(hir::AllocaOp op) {
       auto port = storeOp.port();
       if (!port)
         continue;
+      if (ports.getValue().size() <= port.getValue())
+        return use.getOwner()
+                   ->emitError("Invalid port number.")
+                   .attachNote(op.getLoc())
+               << "Memref defined here.";
       auto storeOpPort = ports.getValue()[port.getValue()];
       if (!helper::isWrite(storeOpPort))
         return use.getOwner()->emitError()

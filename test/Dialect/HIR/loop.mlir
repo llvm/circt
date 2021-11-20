@@ -20,15 +20,16 @@ hir.func @test at %t() -> (%res:i4){
     hir.next_iter at %ti+1 
   }
   %b = hw.constant 1:i1
-  %t_end = hir.while %b  iter_time(%tw = %tt2 + 2){
+  %zz, %t_blah = hir.while %b  iter_args (%x = %c15:i4) iter_time(%tw = %tt2 + 2){
     %bb = hw.constant 1:i1
-    hir.next_iter condition %bb at %tw+1
+    %xx = hir.delay %x by 1 at %tw : i4
+    hir.next_iter condition %bb iter_args(%xx) at %tw+1:(i4)
   }
 
   hir.comment "IfOp"
   %c = hw.constant 1 :i1
-  %res2= hir.if %c  at time(%tf=%t_end) -> (i4){
-    hir.yield (%c15) :(i4)
+  %res2= hir.if %c  at time(%tf=%t_blah) -> (i4){
+    hir.yield (%zz) :(i4)
   }else{ 
     hir.yield (%c0) :(i4)
   } 

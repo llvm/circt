@@ -592,16 +592,15 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
                             result.operands))
     return failure();
 
+  if (!iterArgs.empty())
+    if (parser.resolveOperands(iterArgs, iterArgTypes, parser.getNameLoc(),
+                               result.operands))
+      return failure();
   if (tstart.hasValue())
     if (parser.resolveOperand(
             tstart.getValue(),
             hir::TimeType::get(parser.getBuilder().getContext()),
             result.operands))
-      return failure();
-
-  if (!iterArgs.empty())
-    if (parser.resolveOperands(iterArgs, iterArgTypes, parser.getNameLoc(),
-                               result.operands))
       return failure();
 
   if (offset)
@@ -610,11 +609,17 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
   if (!iterArgs.empty())
     result.addAttribute("iter_arg_delays", iterArgDelays);
 
+  result.addAttribute(
+      "operand_segment_sizes",
+      parser.getBuilder().getI32VectorAttr(
+          {1 /*condition*/, static_cast<int32_t>(iterArgs.size()),
+           static_cast<int32_t>(tstart.hasValue() ? 1 : 0)}));
+
   regionIterArgs.push_back(iterTimeVar);
   iterArgTypes.push_back(hir::TimeType::get(parser.getContext()));
 
   Region *body = result.addRegion();
-  if (parser.parseRegion(*body, iterArgs, iterArgTypes))
+  if (parser.parseRegion(*body, regionIterArgs, iterArgTypes))
     return failure();
 
   // Parse the attr-dict

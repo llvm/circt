@@ -61,9 +61,12 @@ LogicalResult SimplifyCtrlPass::visitOp(ForOp forOp) {
                                              : comb::ICmpPredicate::ult,
       forOp.lb(), forOp.ub());
 
-  auto whileOp = builder.create<hir::WhileOp>(
-      forOp.getLoc(), initialCondition, ArrayRef<Value>({}), forOp.tstart(),
-      forOp.offsetAttr());
+  SmallVector<Value> iterArgs;
+  for (auto arg : forOp.iter_args())
+    iterArgs.push_back(arg);
+  auto whileOp =
+      builder.create<hir::WhileOp>(forOp.getLoc(), initialCondition, iterArgs,
+                                   forOp.tstart(), forOp.offsetAttr());
   auto forNextIterOp = dyn_cast<NextIterOp>(&forOp.body().begin()->back());
   assert(forNextIterOp);
 
@@ -78,16 +81,28 @@ LogicalResult SimplifyCtrlPass::visitOp(ForOp forOp) {
                             forOp.step(), whileOp.getIterTimeVar());
   auto condition = conditionAndIV.first;
   auto iv = conditionAndIV.second;
-  BlockAndValueMapping operandMap;
 
+  // Create the operandMap.
+  BlockAndValueMapping operandMap;
   operandMap.map(forOp.getInductionVar(), iv);
+  for (size_t i = 0; i < forOp.iter_args().size(); i++)
+    operandMap.map(forOp.body().front().getArgument(i),
+                   whileOp.body().front().getArgument(i));
+
   operandMap.map(forOp.getIterTimeVar(), whileOp.getIterTimeVar());
 
   // Copy the loop body.
   for (auto &operation : forOp.getLoopBody().front()) {
     if (auto nextIterOp = dyn_cast<hir::NextIterOp>(operation)) {
+      SmallVector<Value> mappedIterArgs;
+      for (auto iterArg : nextIterOp.iter_args()) {
+        auto mappedIterArg = operandMap.lookupOrNull(iterArg);
+        mappedIterArg = mappedIterArg ? mappedIterArg : iterArg;
+        mappedIterArgs.push_back(mappedIterArg);
+      }
+
       builder.create<hir::NextIterOp>(
-          builder.getUnknownLoc(), condition, SmallVector<Value>({}),
+          builder.getUnknownLoc(), condition, mappedIterArgs,
           operandMap.lookup(nextIterOp.tstart()), nextIterOp.offsetAttr());
     } else {
       builder.clone(operation, operandMap);
@@ -107,8 +122,11 @@ SmallVector<Value> inlineRegion(OpBuilder &builder,
   SmallVector<Value> regionOutput;
   for (auto &operation : r.front()) {
     if (auto yieldOp = dyn_cast<hir::YieldOp>(operation)) {
-      for (auto operand : yieldOp.operands())
-        regionOutput.push_back(operandMap.lookup(operand));
+      for (auto operand : yieldOp.operands()) {
+        auto mappedOperand = operandMap.lookupOrNull(operand);
+        mappedOperand = mappedOperand ? mappedOperand : operand;
+        regionOutput.push_back(mappedOperand);
+      }
     } else {
       builder.clone(operation, operandMap);
     }
