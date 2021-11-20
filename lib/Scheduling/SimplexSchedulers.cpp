@@ -192,16 +192,16 @@ public:
   LogicalResult schedule() override;
 };
 
-class SharedPipelinedOperatorsSimplexScheduler : public SimplexSchedulerBase {
+class SharedOperatorsSimplexScheduler : public SimplexSchedulerBase {
 private:
-  SharedPipelinedOperatorsProblem &prob;
+  SharedOperatorsProblem &prob;
 
 protected:
   Problem &getProblem() override { return prob; }
 
 public:
-  SharedPipelinedOperatorsSimplexScheduler(
-      SharedPipelinedOperatorsProblem &prob, Operation *lastOp)
+  SharedOperatorsSimplexScheduler(SharedOperatorsProblem &prob,
+                                  Operation *lastOp)
       : SimplexSchedulerBase(lastOp), prob(prob) {}
   LogicalResult schedule() override;
 };
@@ -624,10 +624,10 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedPipelinedOperatorsSimplexScheduler
+// SharedOperatorsSimplexScheduler
 //===----------------------------------------------------------------------===//
 
-LogicalResult SharedPipelinedOperatorsSimplexScheduler::schedule() {
+LogicalResult SharedOperatorsSimplexScheduler::schedule() {
   parameterS = 0;
   parameterT = 0;
   buildTableau();
@@ -726,8 +726,8 @@ LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
   return simplex.schedule();
 }
 
-LogicalResult scheduling::scheduleSimplex(SharedPipelinedOperatorsProblem &prob,
+LogicalResult scheduling::scheduleSimplex(SharedOperatorsProblem &prob,
                                           Operation *lastOp) {
-  SharedPipelinedOperatorsSimplexScheduler simplex(prob, lastOp);
+  SharedOperatorsSimplexScheduler simplex(prob, lastOp);
   return simplex.schedule();
 }
