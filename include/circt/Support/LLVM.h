@@ -84,6 +84,8 @@ using llvm::SmallDenseMap;
 // Forward declarations of classes to be imported in to the circt namespace.
 namespace mlir {
 class ArrayAttr;
+class AsmParser;
+class AsmPrinter;
 class Attribute;
 class Block;
 class BlockAndValueMapping;
@@ -175,6 +177,8 @@ namespace OpTrait {}
 // Import things we want into our namespace.
 namespace circt {
 using mlir::ArrayAttr;
+using mlir::AsmParser;
+using mlir::AsmPrinter;
 using mlir::Attribute;
 using mlir::Block;
 using mlir::BlockAndValueMapping;
