@@ -59,18 +59,6 @@ static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
   return ComplementMatcher(subExpr);
 }
 
-namespace {
-/// Terminal matcher, always returns true.
-struct AnyCapturedValueMatcher {
-  Value *what;
-  AnyCapturedValueMatcher(Value *what) : what(what) {}
-  bool match(Value op) const {
-    *what = op;
-    return true;
-  }
-};
-} // end anonymous namespace
-
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
 ///
