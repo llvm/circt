@@ -83,8 +83,9 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
 
   // If the attribute dictionary contains no 'name' attribute, infer it from
   // the SSA name (if specified).
-  bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.getName() == "name"; });
+  bool hadName = llvm::any_of(resultAttrs, [](NamedAttribute attr) {
+    return attr.getName() == "name";
+  });
 
   // If there was no name specified, check to see if there was a useful name
   // specified in the asm file.

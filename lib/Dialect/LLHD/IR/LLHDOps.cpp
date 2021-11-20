@@ -361,14 +361,15 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, Optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
     SmallVectorImpl<Type> &results) {
-  Type type =
-      operands[0]
-          .getType()
-          .cast<llhd::SigType>()
-          .getUnderlyingType()
-          .cast<hw::StructType>()
-          .getFieldType(
-              attrs.getNamed("field")->getValue().cast<StringAttr>().getValue());
+  Type type = operands[0]
+                  .getType()
+                  .cast<llhd::SigType>()
+                  .getUnderlyingType()
+                  .cast<hw::StructType>()
+                  .getFieldType(attrs.getNamed("field")
+                                    ->getValue()
+                                    .cast<StringAttr>()
+                                    .getValue());
   if (!type) {
     context->getDiagEngine().emit(loc.getValueOr(UnknownLoc()),
                                   DiagnosticSeverity::Error)

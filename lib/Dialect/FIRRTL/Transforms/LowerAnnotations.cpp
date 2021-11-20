@@ -486,7 +486,8 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
         << anno;
     return {};
   }
-  return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(), state);
+  return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
+                        state);
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
@@ -494,7 +495,8 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
                                           ApplyState state) {
   auto target = anno.getNamed("target");
   if (target)
-    return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(), state);
+    return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
+                          state);
   return AnnoPathValue(state.circuit);
 }
 

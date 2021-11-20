@@ -261,7 +261,8 @@ private:
 
     SmallString<16> calyxAttributes;
     for (auto &attr : attributes)
-      calyxAttributes.append(getAttribute(op, attr.getName(), attr.getValue(), isPort));
+      calyxAttributes.append(
+          getAttribute(op, attr.getName(), attr.getValue(), isPort));
     return calyxAttributes.c_str();
   }
 
