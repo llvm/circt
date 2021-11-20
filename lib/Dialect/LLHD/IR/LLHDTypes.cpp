@@ -29,7 +29,7 @@ using namespace circt::llhd;
 //===----------------------------------------------------------------------===//
 
 /// Parse a nested type, enclosed in angle brackts (`<...>`).
-static Type parseNestedType(DialectAsmParser &parser) {
+static Type parseNestedType(AsmParser &parser) {
   Type underlyingType;
   if (parser.parseLess())
     return Type();
@@ -53,14 +53,14 @@ static Type parseNestedType(DialectAsmParser &parser) {
 
 /// Parse a signal type.
 /// Syntax: sig ::= !llhd.sig<type>
-Type SigType::parse(DialectAsmParser &p) {
+Type SigType::parse(AsmParser &p) {
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
   return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
                     p.getContext(), parseNestedType(p));
 }
 
-void SigType::print(DialectAsmPrinter &p) const {
-  p << "sig<" << getUnderlyingType() << '>';
+void SigType::print(AsmPrinter &p) const {
+  p << "<" << getUnderlyingType() << '>';
 }
 
 //===----------------------------------------------------------------------===//
@@ -69,14 +69,14 @@ void SigType::print(DialectAsmPrinter &p) const {
 
 /// Parse a pointer type.
 /// Syntax: ptr ::= !llhd.ptr<type>
-Type PtrType::parse(DialectAsmParser &p) {
+Type PtrType::parse(AsmParser &p) {
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
   return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
                     p.getContext(), parseNestedType(p));
 }
 
-void PtrType::print(DialectAsmPrinter &p) const {
-  p << "ptr<" << getUnderlyingType() << '>';
+void PtrType::print(AsmPrinter &p) const {
+  p << "<" << getUnderlyingType() << '>';
 }
 
 //===----------------------------------------------------------------------===//
@@ -85,7 +85,7 @@ void PtrType::print(DialectAsmPrinter &p) const {
 
 /// Parse a time attribute.
 /// Syntax: timeattr ::= #llhd.time<[time][timeUnit], [delta]d, [epsilon]e>
-Attribute TimeAttr::parse(DialectAsmParser &p, Type type) {
+Attribute TimeAttr::parse(AsmParser &p, Type type) {
   llvm::StringRef timeUnit;
   unsigned time = 0;
   unsigned delta = 0;
@@ -110,8 +110,8 @@ Attribute TimeAttr::parse(DialectAsmParser &p, Type type) {
                     p.getContext(), time, timeUnit, delta, eps);
 }
 
-void TimeAttr::print(DialectAsmPrinter &p) const {
-  p << getMnemonic() << "<" << getTime() << getTimeUnit() << ", " << getDelta()
+void TimeAttr::print(AsmPrinter &p) const {
+  p << "<" << getTime() << getTimeUnit() << ", " << getDelta()
     << "d, " << getEpsilon() << "e>";
 }
 

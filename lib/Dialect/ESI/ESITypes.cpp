@@ -21,15 +21,15 @@
 using namespace circt;
 using namespace circt::esi;
 
-Type ChannelPort::parse(DialectAsmParser &p) {
+Type ChannelPort::parse(AsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
     return Type();
   return get(p.getContext(), inner);
 }
 
-void ChannelPort::print(DialectAsmPrinter &p) const {
-  p << "channel<";
+void ChannelPort::print(AsmPrinter &p) const {
+  p << "<";
   p.printType(getInner());
   p << ">";
 }

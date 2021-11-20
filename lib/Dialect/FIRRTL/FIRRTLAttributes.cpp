@@ -20,15 +20,15 @@ using namespace firrtl;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.cpp.inc"
 
-Attribute InvalidValueAttr::parse(DialectAsmParser &p, Type typeX) {
+Attribute InvalidValueAttr::parse(AsmParser &p, Type typeX) {
   FIRRTLType type;
   if (p.parseLess() || p.parseType(type) || p.parseGreater())
     return Attribute();
   return InvalidValueAttr::get(p.getContext(), type);
 }
 
-void InvalidValueAttr::print(DialectAsmPrinter &p) const {
-  p << "invalidvalue<" << getType() << '>';
+void InvalidValueAttr::print(AsmPrinter &p) const {
+  p << '<' << getType() << '>';
 }
 
 Attribute FIRRTLDialect::parseAttribute(DialectAsmParser &p, Type type) const {
@@ -53,7 +53,7 @@ void FIRRTLDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 // SubAnnotationAttr
 //===----------------------------------------------------------------------===//
 
-Attribute SubAnnotationAttr::parse(DialectAsmParser &p, Type type) {
+Attribute SubAnnotationAttr::parse(AsmParser &p, Type type) {
   int64_t fieldID;
   DictionaryAttr annotations;
   StringRef fieldIDKeyword;
@@ -69,8 +69,8 @@ Attribute SubAnnotationAttr::parse(DialectAsmParser &p, Type type) {
   return SubAnnotationAttr::get(p.getContext(), fieldID, annotations);
 }
 
-void SubAnnotationAttr::print(DialectAsmPrinter &p) const {
-  p << getMnemonic() << "<fieldID = " << getFieldID() << ", "
+void SubAnnotationAttr::print(AsmPrinter &p) const {
+  p << "<fieldID = " << getFieldID() << ", "
     << getAnnotations() << ">";
 }
 
