@@ -137,7 +137,7 @@ struct TestProblemPass : public PassWrapper<TestProblemPass, FunctionPass> {
 void TestProblemPass::runOnFunction() {
   auto func = getFunction();
 
-  Problem prob(func);
+  auto prob = Problem::get(func);
   constructProblem(prob, func);
 
   if (failed(prob.check())) {
@@ -174,7 +174,7 @@ struct TestCyclicProblemPass
 void TestCyclicProblemPass::runOnFunction() {
   auto func = getFunction();
 
-  CyclicProblem prob(func);
+  auto prob = CyclicProblem::get(func);
   constructProblem(prob, func);
   constructCyclicProblem(prob, func);
 
@@ -219,7 +219,7 @@ struct TestSharedOperatorsProblemPass
 void TestSharedOperatorsProblemPass::runOnFunction() {
   auto func = getFunction();
 
-  SharedOperatorsProblem prob(func);
+  auto prob = SharedOperatorsProblem::get(func);
   constructProblem(prob, func);
   constructSharedOperatorsProblem(prob, func);
 
@@ -257,7 +257,7 @@ struct TestModuloProblemPass
 void TestModuloProblemPass::runOnFunction() {
   auto func = getFunction();
 
-  ModuloProblem prob(func);
+  auto prob = ModuloProblem::get(func);
   constructProblem(prob, func);
   constructCyclicProblem(prob, func);
   constructSharedOperatorsProblem(prob, func);
@@ -300,7 +300,7 @@ struct TestASAPSchedulerPass
 void TestASAPSchedulerPass::runOnFunction() {
   auto func = getFunction();
 
-  Problem prob(func);
+  auto prob = Problem::get(func);
   constructProblem(prob, func);
   assert(succeeded(prob.check()));
 
@@ -342,7 +342,7 @@ void TestSimplexSchedulerPass::runOnFunction() {
   OpBuilder builder(func.getContext());
 
   if (problemToTest == "Problem") {
-    Problem prob(func);
+    auto prob = Problem::get(func);
     constructProblem(prob, func);
     assert(succeeded(prob.check()));
 
@@ -361,7 +361,7 @@ void TestSimplexSchedulerPass::runOnFunction() {
   }
 
   if (problemToTest == "CyclicProblem") {
-    CyclicProblem prob(func);
+    auto prob = CyclicProblem::get(func);
     constructProblem(prob, func);
     constructCyclicProblem(prob, func);
     assert(succeeded(prob.check()));
@@ -383,7 +383,7 @@ void TestSimplexSchedulerPass::runOnFunction() {
   }
 
   if (problemToTest == "SharedOperatorsProblem") {
-    SharedOperatorsProblem prob(func);
+    auto prob = SharedOperatorsProblem::get(func);
     constructProblem(prob, func);
     constructSharedOperatorsProblem(prob, func);
     assert(succeeded(prob.check()));
