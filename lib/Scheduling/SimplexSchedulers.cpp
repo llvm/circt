@@ -134,7 +134,8 @@ protected:
   static constexpr unsigned firstNonBasicVariableColumn = 3;
 
   virtual Problem &getProblem() = 0;
-  virtual void fillConstraintRow(SmallVector<int> &row, detail::Dependence dep);
+  virtual void fillConstraintRow(SmallVector<int> &row,
+                                 Problem::Dependence dep);
   void buildTableau();
   Optional<unsigned> findPivotRow();
   Optional<unsigned> findPivotColumn(unsigned pivotRow,
@@ -184,7 +185,7 @@ private:
 protected:
   Problem &getProblem() override { return prob; }
   void fillConstraintRow(SmallVector<int> &row,
-                         detail::Dependence dep) override;
+                         Problem::Dependence dep) override;
 
 public:
   CyclicSimplexScheduler(CyclicProblem &prob, Operation *lastOp)
@@ -192,16 +193,16 @@ public:
   LogicalResult schedule() override;
 };
 
-class SharedPipelinedOperatorsSimplexScheduler : public SimplexSchedulerBase {
+class SharedOperatorsSimplexScheduler : public SimplexSchedulerBase {
 private:
-  SharedPipelinedOperatorsProblem &prob;
+  SharedOperatorsProblem &prob;
 
 protected:
   Problem &getProblem() override { return prob; }
 
 public:
-  SharedPipelinedOperatorsSimplexScheduler(
-      SharedPipelinedOperatorsProblem &prob, Operation *lastOp)
+  SharedOperatorsSimplexScheduler(SharedOperatorsProblem &prob,
+                                  Operation *lastOp)
       : SimplexSchedulerBase(lastOp), prob(prob) {}
   LogicalResult schedule() override;
 };
@@ -213,7 +214,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 void SimplexSchedulerBase::fillConstraintRow(SmallVector<int> &row,
-                                             detail::Dependence dep) {
+                                             Problem::Dependence dep) {
   auto &prob = getProblem();
   Operation *src = dep.getSource();
   Operation *dst = dep.getDestination();
@@ -597,7 +598,7 @@ LogicalResult SimplexScheduler::schedule() {
 //===----------------------------------------------------------------------===//
 
 void CyclicSimplexScheduler::fillConstraintRow(SmallVector<int> &row,
-                                               detail::Dependence dep) {
+                                               Problem::Dependence dep) {
   SimplexSchedulerBase::fillConstraintRow(row, dep);
   if (auto dist = prob.getDistance(dep))
     row[parameterTColumn] = *dist;
@@ -624,10 +625,10 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedPipelinedOperatorsSimplexScheduler
+// SharedOperatorsSimplexScheduler
 //===----------------------------------------------------------------------===//
 
-LogicalResult SharedPipelinedOperatorsSimplexScheduler::schedule() {
+LogicalResult SharedOperatorsSimplexScheduler::schedule() {
   parameterS = 0;
   parameterT = 0;
   buildTableau();
@@ -726,8 +727,8 @@ LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
   return simplex.schedule();
 }
 
-LogicalResult scheduling::scheduleSimplex(SharedPipelinedOperatorsProblem &prob,
+LogicalResult scheduling::scheduleSimplex(SharedOperatorsProblem &prob,
                                           Operation *lastOp) {
-  SharedPipelinedOperatorsSimplexScheduler simplex(prob, lastOp);
+  SharedOperatorsSimplexScheduler simplex(prob, lastOp);
   return simplex.schedule();
 }

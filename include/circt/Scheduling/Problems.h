@@ -279,12 +279,12 @@ public:
 /// a certain limited operator type, and start in the same time step, does not
 /// exceed the operator type's limit. These constraints do not apply to operator
 /// types without a limit (not set, or 0).
-class SharedPipelinedOperatorsProblem : public virtual Problem {
+class SharedOperatorsProblem : public virtual Problem {
 private:
   OperatorTypeProperty<unsigned> limit;
 
 public:
-  explicit SharedPipelinedOperatorsProblem(Operation *containingOp)
+  explicit SharedOperatorsProblem(Operation *containingOp)
       : Problem(containingOp) {}
 
   /// The limit is the maximum number of operations using \p opr that are
@@ -314,11 +314,11 @@ public:
 ///      and start in the same congruence class (= start time *mod* II), does
 ///      not exceed the operator type's limit.
 class ModuloProblem : public virtual CyclicProblem,
-                      public virtual SharedPipelinedOperatorsProblem {
+                      public virtual SharedOperatorsProblem {
 public:
   explicit ModuloProblem(Operation *containingOp)
       : Problem(containingOp), CyclicProblem(containingOp),
-        SharedPipelinedOperatorsProblem(containingOp) {}
+        SharedOperatorsProblem(containingOp) {}
 
 protected:
   /// \p opr is not oversubscribed in any congruence class modulo II.

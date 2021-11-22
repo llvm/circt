@@ -101,8 +101,8 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
   }
 }
 
-static void constructSPOProblem(SharedPipelinedOperatorsProblem &prob,
-                                FuncOp func) {
+static void constructSharedOperatorsProblem(SharedOperatorsProblem &prob,
+                                            FuncOp func) {
   // parse operator type info (again) to extract optional operator limit
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
     for (auto &elem : parseArrayOfDicts(attr, "limit")) {
@@ -199,27 +199,29 @@ void TestCyclicProblemPass::runOnFunction() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedPipelinedOperatorsProblem
+// SharedOperatorsProblem
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct TestSPOProblemPass
-    : public PassWrapper<TestSPOProblemPass, FunctionPass> {
+struct TestSharedOperatorsProblemPass
+    : public PassWrapper<TestSharedOperatorsProblemPass, FunctionPass> {
   void runOnFunction() override;
-  StringRef getArgument() const override { return "test-spo-problem"; }
+  StringRef getArgument() const override {
+    return "test-shared-operators-problem";
+  }
   StringRef getDescription() const override {
-    return "Import a solution for the shared, pipelined operators problem "
-           "encoded as attributes";
+    return "Import a solution for the shared operators problem encoded as "
+           "attributes";
   }
 };
 } // namespace
 
-void TestSPOProblemPass::runOnFunction() {
+void TestSharedOperatorsProblemPass::runOnFunction() {
   auto func = getFunction();
 
-  SharedPipelinedOperatorsProblem prob(func);
+  SharedOperatorsProblem prob(func);
   constructProblem(prob, func);
-  constructSPOProblem(prob, func);
+  constructSharedOperatorsProblem(prob, func);
 
   if (failed(prob.check())) {
     func->emitError("problem check failed");
@@ -258,7 +260,7 @@ void TestModuloProblemPass::runOnFunction() {
   ModuloProblem prob(func);
   constructProblem(prob, func);
   constructCyclicProblem(prob, func);
-  constructSPOProblem(prob, func);
+  constructSharedOperatorsProblem(prob, func);
 
   if (failed(prob.check())) {
     func->emitError("problem check failed");
@@ -380,10 +382,10 @@ void TestSimplexSchedulerPass::runOnFunction() {
     return;
   }
 
-  if (problemToTest == "SharedPipelinedOperatorsProblem") {
-    SharedPipelinedOperatorsProblem prob(func);
+  if (problemToTest == "SharedOperatorsProblem") {
+    SharedOperatorsProblem prob(func);
     constructProblem(prob, func);
-    constructSPOProblem(prob, func);
+    constructSharedOperatorsProblem(prob, func);
     assert(succeeded(prob.check()));
 
     if (failed(scheduleSimplex(prob, lastOp))) {
@@ -417,7 +419,7 @@ void registerSchedulingTestPasses() {
     return std::make_unique<TestCyclicProblemPass>();
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-    return std::make_unique<TestSPOProblemPass>();
+    return std::make_unique<TestSharedOperatorsProblemPass>();
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestModuloProblemPass>();

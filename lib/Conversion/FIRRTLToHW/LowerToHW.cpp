@@ -1310,6 +1310,10 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
+
+  /// This is a map from block to a pair of a random value and its unused bits.
+  /// It is used to reduce the number of random value.
+  DenseMap<Block *, std::pair<Value, unsigned>> blockRandomValueAndRemain;
 };
 } // end anonymous namespace
 
@@ -1972,9 +1976,10 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
   // VerbatimExprSEOp.
+  constexpr unsigned randomWidth = 32;
   auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprSEOp>(builder.getIntegerType(32),
-                                                "`RANDOM");
+    return builder.create<sv::VerbatimExprSEOp>(
+        builder.getIntegerType(randomWidth), "`RANDOM");
   };
 
   // Return an expression containing random bits of the specified width.
@@ -1982,13 +1987,32 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   std::function<Value(IntegerType)> getRandomValue =
       [&](IntegerType type) -> Value {
     assert(type.getWidth() != 0 && "zero bit width's not supported");
-    auto rand32 = getRandom32Val();
-    if (type.getWidth() <= 32)
-      return builder.createOrFold<comb::ExtractOp>(type, rand32, 0);
+    auto &randomValueAndRemain = blockRandomValueAndRemain[builder.getBlock()];
+    if (randomValueAndRemain.second >= type.getWidth()) {
+      auto value = builder.createOrFold<comb::ExtractOp>(
+          type, randomValueAndRemain.first,
+          randomWidth - randomValueAndRemain.second);
 
-    // Get the top part.
-    auto rest = getRandomValue(builder.getIntegerType(type.getWidth() - 32));
-    return builder.createOrFold<comb::ConcatOp>(rand32, rest);
+      randomValueAndRemain.second -= type.getWidth();
+      return value;
+    }
+
+    // If nothing remains, produce new 32 bit random value and call it
+    // recursively.
+    if (randomValueAndRemain.second == 0) {
+      randomValueAndRemain = {getRandom32Val(), randomWidth};
+      return getRandomValue(type);
+    }
+
+    // Consume all the bits we have now, and then concat the rest.
+    auto currentWidth = builder.getIntegerType(randomValueAndRemain.second);
+    auto value = builder.createOrFold<comb::ExtractOp>(
+        currentWidth, randomValueAndRemain.first,
+        randomWidth - randomValueAndRemain.second);
+    randomValueAndRemain = {getRandom32Val(), randomWidth};
+    auto rest = getRandomValue(
+        builder.getIntegerType(type.getWidth() - currentWidth.getWidth()));
+    return builder.createOrFold<comb::ConcatOp>(value, rest);
   };
 
   // Get a random value with the specified width, combining or truncating

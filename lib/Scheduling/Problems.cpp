@@ -158,10 +158,10 @@ LogicalResult CyclicProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedPipelinedOperatorsProblem
+// SharedOperatorsProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult SharedPipelinedOperatorsProblem::checkLatency(OperatorType opr) {
+LogicalResult SharedOperatorsProblem::checkLatency(OperatorType opr) {
   if (failed(Problem::checkLatency(opr)))
     return failure();
 
@@ -173,8 +173,7 @@ LogicalResult SharedPipelinedOperatorsProblem::checkLatency(OperatorType opr) {
   return success();
 }
 
-LogicalResult
-SharedPipelinedOperatorsProblem::verifyUtilization(OperatorType opr) {
+LogicalResult SharedOperatorsProblem::verifyUtilization(OperatorType opr) {
   auto limit = getLimit(opr);
   if (!limit)
     return success();
@@ -194,7 +193,7 @@ SharedPipelinedOperatorsProblem::verifyUtilization(OperatorType opr) {
   return success();
 }
 
-LogicalResult SharedPipelinedOperatorsProblem::verify() {
+LogicalResult SharedOperatorsProblem::verify() {
   if (failed(Problem::verify()))
     return failure();
 
@@ -234,8 +233,8 @@ LogicalResult ModuloProblem::verify() {
   if (failed(CyclicProblem::verify()))
     return failure();
 
-  // Don't call SharedPipelinedOperatorsProblem::verify() here to prevent
-  // redundant verification of the base problem.
+  // Don't call SharedOperatorsProblem::verify() here to prevent redundant
+  // verification of the base problem.
   for (auto opr : getOperatorTypes())
     if (failed(verifyUtilization(opr)))
       return failure();
