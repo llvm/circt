@@ -30,6 +30,7 @@ namespace hlt {
 class StdWrapper : public BaseWrapper {
 public:
   using BaseWrapper::BaseWrapper;
+  LogicalResult init(Operation *refOp, Operation *kernelOp);
   LogicalResult emitPreamble(Operation *kernelOp) override;
 
 protected:

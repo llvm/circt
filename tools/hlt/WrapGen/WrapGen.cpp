@@ -41,12 +41,20 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 
+// Used for the software interface.
 static cl::opt<std::string>
-    inputReferenceFilename("ref", cl::Required,
+    inputFunctionFilename("func", cl::Required,
+                          cl::desc("<builtin function filename>"),
+                          cl::init("-"));
+
+// Used for the transactional interface.
+static cl::opt<std::string>
+    inputReferenceFilename("ref", cl::Optional,
                            cl::desc("<Reference function filename>"),
                            cl::init("-"));
 
-static cl::opt<std::string> inputKernelFilename("kernel", cl::Required,
+// Used for the hardware interface.
+static cl::opt<std::string> inputKernelFilename("kernel", cl::Optional,
                                                 cl::desc("<Kernel filename>"),
                                                 cl::init("-"));
 
@@ -166,13 +174,35 @@ int main(int argc, char **argv) {
   circt::hlt::registerDialects(registry);
   mlir::MLIRContext context(registry);
 
-  mlir::Operation *refOp =
-      circt::hlt::getOpToWrap(&context, inputReferenceFilename, functionName);
-  mlir::Operation *kernelOp =
-      circt::hlt::getOpToWrap(&context, inputKernelFilename, functionName);
-
-  if (!refOp || !kernelOp)
+  mlir::Operation *funcOpPtr =
+      circt::hlt::getOpToWrap(&context, inputFunctionFilename, functionName);
+  auto funcOp = dyn_cast<mlir::FuncOp>(funcOpPtr);
+  if (!funcOp) {
+    errs() << "Expected --func to be a builtin.func\n";
     return 1;
+  }
+
+  Operation *refOp = nullptr;
+  Operation *kernelOp = nullptr;
+
+  if (!inputReferenceFilename.empty()) {
+    refOp =
+        circt::hlt::getOpToWrap(&context, inputReferenceFilename, functionName);
+    if (!refOp) {
+      errs() << "No symbol named '" << functionName << "' found in '"
+             << inputReferenceFilename << "\n";
+      return 1;
+    }
+  }
+  if (!inputKernelFilename.empty()) {
+    kernelOp =
+        circt::hlt::getOpToWrap(&context, inputKernelFilename, functionName);
+    if (!kernelOp) {
+      errs() << "No symbol named '" << functionName << "' found in '"
+             << inputReferenceFilename << "\n";
+      return 1;
+    }
+  }
 
   /// Locate wrapping handler for the operation.
   auto wrapper = circt::hlt::getWrapper();
@@ -180,6 +210,6 @@ int main(int argc, char **argv) {
     return 1;
 
   /// Go wrap!
-  if (wrapper->wrap(refOp, kernelOp).failed())
+  if (wrapper->wrap(funcOp, refOp, kernelOp).failed())
     return 1;
 }

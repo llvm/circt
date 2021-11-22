@@ -1,4 +1,4 @@
-//===- VerilatorEmitterUtils.cpp - Verilator emission utilities -----------===//
+﻿//===- VerilatorEmitterUtils.cpp - Verilator emission utilities -----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -37,9 +37,20 @@ LogicalResult emitVerilatorType(llvm::raw_ostream &os, Location loc,
                  << "Integers wider than 64 bits are unhandled for now";
         return success();
       })
+      .Case<IndexType>([&](IndexType type) {
+        return emitVerilatorType(
+            os, loc,
+            IntegerType::get(type.getContext(), type.kInternalStorageBitWidth));
+      })
+      .Case<MemRefType>([&](MemRefType type) {
+        if (emitVerilatorType(os, loc, type.getElementType()).failed())
+          return failure();
+        os << "*";
+        return success();
+      })
       .Default([&](auto type) {
-        return emitError(loc) << "No known conversion from '" << type
-                              << "' to a verilator type:";
+        return emitError(loc) << "no known conversion from '" << type
+                              << "' to a verilator type.";
       });
 }
 

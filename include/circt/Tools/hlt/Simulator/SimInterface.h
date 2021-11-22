@@ -71,8 +71,12 @@ std::ostream &operator<<(std::ostream &out, const SimBase &b) {
 // A SimulatorPort represents a mapping between a software-like in/output
 // variable and its underlying representation in the simulator.
 struct SimulatorPort : SimBase {
-  virtual void reset() = 0;
   virtual ~SimulatorPort() = default;
+
+  // Resets a port to its initial state.
+  virtual void reset() = 0;
+  // Transacts a port; returns true if the transaction was successful.
+  virtual bool transact() = 0;
 };
 
 // A SimulatorInPort represents a mapping from a software-like input variable

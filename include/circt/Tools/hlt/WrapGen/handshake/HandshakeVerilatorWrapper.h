@@ -34,6 +34,7 @@ namespace hlt {
 class HandshakeVerilatorWrapper : public BaseWrapper {
 public:
   using BaseWrapper::BaseWrapper;
+  LogicalResult init(Operation *refOp, Operation *kernelOp);
   LogicalResult emitPreamble(Operation *kernelOp) override;
 
 protected:
@@ -41,7 +42,22 @@ protected:
   SmallVector<std::string> getNamespaces() override { return {"circt", "hlt"}; }
 
 private:
-  void emitSimulator(firrtl::FModuleLike handshakeFirMod);
+  // Returns the index in the firrtl port argument list of the input control
+  // port.
+  unsigned inCtrlIdx();
+
+  LogicalResult emitSimulator();
+  LogicalResult emitInputPort(Type t, unsigned idx);
+  LogicalResult emitOutputPort(Type t, unsigned idx);
+  LogicalResult emitExtMemPort(MemRefType t, unsigned idx);
+
+  // Returns the port names for the respective in- or output index.
+  std::string getResName(unsigned idx);
+  std::string getInputName(unsigned idx);
+
+  // Operations representing the reference and firrtl modules of the kernel.
+  handshake::FuncOp hsOp;
+  firrtl::FModuleLike firrtlOp;
 };
 
 } // namespace hlt

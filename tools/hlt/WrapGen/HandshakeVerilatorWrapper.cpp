@@ -22,6 +22,26 @@ using namespace circt;
 namespace circt {
 namespace hlt {
 
+LogicalResult HandshakeVerilatorWrapper::init(Operation *refOp,
+                                              Operation *kernelOp) {
+  if (!(refOp && kernelOp))
+    return refOp->emitError()
+           << "Expected both a reference and a kernel operation for wrapping a "
+              "handshake simulator.";
+
+  auto hsRefOp = dyn_cast<handshake::FuncOp>(refOp);
+  if (!hsRefOp)
+    return refOp->emitOpError()
+           << "expected reference operation to be a handshake.func operation.";
+  auto firrtlLikeOp = dyn_cast<firrtl::FModuleLike>(kernelOp);
+  if (!firrtlLikeOp)
+    return firrtlLikeOp->emitOpError() << "expected reference operation to be "
+                                          "a firrtl FModuleLike operation.";
+  hsOp = hsRefOp;
+  firrtlOp = firrtlLikeOp;
+  return success();
+}
+
 SmallVector<std::string> HandshakeVerilatorWrapper::getIncludes() {
   SmallVector<std::string> includes;
   includes.push_back(("V" + funcName() + ".h").str());
@@ -47,15 +67,27 @@ LogicalResult HandshakeVerilatorWrapper::emitPreamble(Operation *kernelOp) {
            "TModel>;\n\n";
 
   // Emit simulator.
-  emitSimulator(handshakeFirMod);
+  firrtlOp = handshakeFirMod;
+  if (emitSimulator().failed())
+    return failure();
 
   // Emit simulator driver type.
   osi() << "using TSim = " << funcName() << "Sim;\n";
   return success();
 }
 
-void HandshakeVerilatorWrapper::emitSimulator(
-    firrtl::FModuleLike handshakeFirMod) {
+std::string HandshakeVerilatorWrapper::getResName(unsigned idx) {
+  return firrtlOp.getPortName(idx + inCtrlIdx() + 1).str();
+}
+std::string HandshakeVerilatorWrapper::getInputName(unsigned idx) {
+  return firrtlOp.getPortName(idx).str();
+}
+
+unsigned HandshakeVerilatorWrapper::inCtrlIdx() {
+  return funcOp.getNumArguments();
+}
+
+LogicalResult HandshakeVerilatorWrapper::emitSimulator() {
   osi() << "class " << funcName() << "Sim : public " << funcName()
         << "SimInterface {\n";
   osi() << "public:\n";
@@ -68,16 +100,7 @@ void HandshakeVerilatorWrapper::emitSimulator(
   osi() << "interface.clock = &dut->clock;\n";
   osi() << "interface.reset = &dut->reset;\n\n";
 
-  auto getInputName = [&](unsigned idx) -> StringRef {
-    return handshakeFirMod.getPortName(idx);
-  };
-  unsigned inCtrlIndex = funcOp.getNumArguments();
-  auto getResName = [&](unsigned idx) -> StringRef {
-    idx += inCtrlIndex + 1;
-    return handshakeFirMod.getPortName(idx);
-  };
-
-  auto inCtrlName = getInputName(inCtrlIndex);
+  auto inCtrlName = getInputName(inCtrlIdx());
   auto outCtrlName = getResName(funcOp.getNumResults());
   osi() << "// --- Handshake interface\n";
   osi() << "inCtrl->readySig = &dut->" << inCtrlName << "_ready;\n";
@@ -89,31 +112,137 @@ void HandshakeVerilatorWrapper::emitSimulator(
   // of the FIRRTL module. Additionally, the handshake layer has then added
   // one more argument and return port for the control signals.
 
-  osi() << "// --- Model interface\n";
+  osi() << "// --- Software interface\n";
   auto funcType = funcOp.getType();
   osi() << "// - Input ports\n";
   for (auto &input : enumerate(funcType.getInputs())) {
-    auto arg = getInputName(input.index());
-    osi() << "addInputPort<HandshakeDataInPort<TArg" << input.index() << ">>(\""
-          << arg << "\", ";
-    osi() << "&dut->" << arg << "_ready, ";
-    osi() << "&dut->" << arg << "_valid, ";
-    osi() << "&dut->" << arg << "_data);\n";
+    if (emitInputPort(input.value(), input.index()).failed())
+      return failure();
   }
   osi() << "\n// - Output ports\n";
   for (auto &res : enumerate(funcType.getResults())) {
-    auto arg = getResName(res.index());
-    osi() << "addOutputPort<HandshakeDataOutPort<TRes" << res.index() << ">>(\""
-          << arg << "\", ";
-    osi() << "&dut->" << arg << "_ready, ";
-    osi() << "&dut->" << arg << "_valid, ";
-    osi() << "&dut->" << arg << "_data);\n";
+    if (emitOutputPort(res.value(), res.index()).failed())
+      return failure();
   }
   osi().unindent();
   osi() << "};\n";
 
   osi().unindent();
   osi() << "};\n\n";
+  return success();
+}
+
+static raw_indented_ostream &emitHSPortCtor(raw_indented_ostream &os,
+                                            StringRef prefix,
+                                            bool hasData = true) {
+  os << "(\"" << prefix << "\", ";
+  os << "&dut->" << prefix << "_ready, ";
+  os << "&dut->" << prefix << "_valid";
+  if (hasData)
+    os << ", &dut->" << prefix << "_data";
+  os << ")";
+  return os;
+}
+
+LogicalResult HandshakeVerilatorWrapper::emitExtMemPort(MemRefType memref,
+                                                        unsigned idx) {
+  auto shape = memref.getShape();
+  assert(shape.size() == 1 && "Only support unidimensional memories");
+  std::string name = getInputName(idx);
+  Type addrType = IndexType::get(hsOp.getContext());
+  osi() << "auto " << name << " = addInputPort<HandshakeMemoryInterface<";
+  if (emitVerilatorType(osi(), hsOp.getLoc(), memref.getElementType()).failed())
+    return failure();
+  osi() << ", ";
+  if (emitVerilatorType(osi(), hsOp.getLoc(), addrType).failed())
+    return failure();
+  osi() << ">>(/*size=*/" << shape.front() << ");\n";
+
+  // Locate the external memory operation referencing the input
+  auto extMemUsers = hsOp.getArgument(idx).getUsers();
+  assert(std::distance(extMemUsers.begin(), extMemUsers.end()) == 1 &&
+         "expected exactly 1 user of a memref input argument");
+  handshake::ExternalMemoryOp extMemOp =
+      cast<handshake::ExternalMemoryOp>(*extMemUsers.begin());
+
+  // Load ports
+  for (unsigned i = 0; i < extMemOp.ldCount(); ++i) {
+    osi() << name << "->addLoadPort(\n";
+    osi().indent();
+
+    // Data port
+    osi() << "std::make_shared<HandshakeDataInPort<";
+    if (emitVerilatorType(os(), hsOp.getLoc(), memref.getElementType())
+            .failed())
+      return failure();
+    osi() << ">>";
+    emitHSPortCtor(osi(), name + "_ldData" + std::to_string(i));
+    osi() << ",\n";
+
+    // Address port
+    osi() << "std::make_shared<HandshakeDataOutPort<";
+    if (emitVerilatorType(os(), hsOp.getLoc(), addrType).failed())
+      return failure();
+    osi() << ">>";
+    emitHSPortCtor(osi(), name + "_ldAddr" + std::to_string(i));
+    osi() << ",\n";
+
+    // done port
+    osi() << "std::make_shared<HandshakeInPort>";
+    emitHSPortCtor(osi(), name + "_ldDone" + std::to_string(i),
+                   /*hasData=*/false);
+    osi() << ");\n";
+    osi().unindent();
+  }
+
+  // Store ports
+  for (unsigned i = 0; i < extMemOp.stCount(); ++i) {
+    osi() << name << "->addStorePort(\n";
+    osi().indent();
+
+    // Data port
+    osi() << "std::make_shared<HandshakeDataOutPort<";
+    if (emitVerilatorType(os(), hsOp.getLoc(), memref.getElementType())
+            .failed())
+      return failure();
+    osi() << ">>";
+    emitHSPortCtor(osi(), name + "_stData" + std::to_string(i));
+    osi() << ",\n";
+
+    // Address port
+    osi() << "std::make_shared<HandshakeDataOutPort<";
+    if (emitVerilatorType(os(), hsOp.getLoc(), addrType).failed())
+      return failure();
+    osi() << ">>";
+    emitHSPortCtor(osi(), name + "_stAddr" + std::to_string(i));
+    osi() << ",\n";
+
+    // done port
+    osi() << "std::make_shared<HandshakeInPort>";
+    emitHSPortCtor(osi(), name + "_stDone" + std::to_string(i),
+                   /*hasData=*/false);
+    osi() << ");\n";
+    osi().unindent();
+  }
+  return success();
+}
+
+LogicalResult HandshakeVerilatorWrapper::emitInputPort(Type t, unsigned idx) {
+  if (auto memref = t.dyn_cast<MemRefType>(); memref) {
+    return emitExtMemPort(memref, idx);
+  } else {
+    auto arg = getInputName(idx);
+    osi() << "addInputPort<HandshakeDataInPort<TArg" << idx << ">>";
+    emitHSPortCtor(osi(), arg) << ";\n";
+  }
+  return success();
+}
+LogicalResult HandshakeVerilatorWrapper::emitOutputPort(Type t, unsigned idx) {
+  auto arg = getResName(idx);
+  osi() << "addOutputPort<HandshakeDataOutPort<TRes" << idx << ">>" << arg
+        << "\", ";
+  emitHSPortCtor(osi(), arg) << ";\n";
+  return success();
 }
 
 } // namespace hlt

@@ -19,11 +19,11 @@ using namespace mlir;
 namespace circt {
 namespace hlt {
 
-LogicalResult BaseWrapper::wrap(Operation *refOp, Operation *kernelOp) {
-  funcOp = dyn_cast<mlir::FuncOp>(refOp);
-  if (!funcOp)
-    return refOp->emitOpError()
-           << "Expected the reference operation to be a builtin.func operation";
+LogicalResult BaseWrapper::wrap(mlir::FuncOp _funcOp, Operation *refOp,
+                                Operation *kernelOp) {
+  funcOp = _funcOp;
+  if (init(refOp, kernelOp).failed())
+    return failure();
 
   if (createFile(refOp->getLoc(), funcOp.getName() + ".cpp").failed())
     return failure();
@@ -135,10 +135,14 @@ void BaseWrapper::emitAsyncCall(Operation * /*kernelOp*/) {
   osi() << "  init_sim();\n";
 
   // Pack arguments
-  osi() << "TInput input{";
-  interleaveComma(llvm::iota_range(0U, funcOp.getNumArguments(), false), osi(),
-                  [&](unsigned i) { osi() << "in" << i; });
-  osi() << "};\n";
+  osi() << "TInput input;\n";
+  for (auto arg : llvm::enumerate(funcOp.getArguments())) {
+    // Reinterpret cast here is just a hack around software interface providing
+    // i.e. int32_t* as pointer type, and verilator using uint32_t*. Should
+    // obviously be fixed so we don't throw away type safety.
+    osi() << "std::get<" << arg.index() << ">(input) = reinterpret_cast<TArg"
+          << arg.index() << ">(in" << arg.index() << ");\n";
+  }
 
   // Push to driver
   osi() << "driver->push(input); // non-blocking\n";
@@ -146,10 +150,20 @@ void BaseWrapper::emitAsyncCall(Operation * /*kernelOp*/) {
 
 void BaseWrapper::emitAsyncAwait(Operation * /*kernelOp*/) {
   osi() << "TOutput output = driver->pop(); // blocking\n";
-  if (funcOp.getNumResults() == 1)
+  switch (funcOp.getNumResults()) {
+  case 0: {
+    osi() << "return;\n";
+    break;
+  }
+  case 1: {
     osi() << "return std::get<0>(output);\n";
-  else
-    osi() << "return output";
+    break;
+  }
+  default: {
+    osi() << "return output;\n";
+    break;
+  }
+  }
 }
 
 } // namespace hlt

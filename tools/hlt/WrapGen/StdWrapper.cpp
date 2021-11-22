@@ -29,6 +29,12 @@ SmallVector<std::string> StdWrapper::getIncludes() {
   return includes;
 }
 
+LogicalResult StdWrapper::init(Operation * /*refOp*/,
+                               Operation * /*kernelOp*/) {
+  // Nothing to do; only function op is used for standard wrapper.
+  return success();
+}
+
 LogicalResult StdWrapper::emitPreamble(Operation * /*kernelOp*/) {
   if (emitIOTypes(emitType).failed())
     return failure();

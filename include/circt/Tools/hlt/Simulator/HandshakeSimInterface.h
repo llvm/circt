@@ -22,9 +22,6 @@ struct HandshakePort : public TSimPort {
         << "\tv: " << static_cast<int>(*validSig);
   }
 
-  // Transacts a port; returns true if the transaction was successful.
-  virtual bool transact() = 0;
-
   CData *readySig = nullptr;
   CData *validSig = nullptr;
   std::string name;
@@ -74,9 +71,6 @@ struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
 
 template <typename TData, typename THandshakeIOPort>
 struct HandshakeDataPort : public THandshakeIOPort {
-  static_assert(!std::is_pointer<TData>::value &&
-                    !std::is_reference<TData>::value,
-                "Must not be a pointer or reference type");
   HandshakeDataPort() {}
   HandshakeDataPort(CData *readySig, CData *validSig, TData *dataSig)
       : THandshakeIOPort(readySig, validSig), dataSig(dataSig){};
@@ -115,53 +109,130 @@ struct HandshakeDataOutPort : HandshakeDataPort<TData, HandshakeOutPort> {
 // transacting, will access the pointer provided to the memory interface during
 // simulation. The memory interface inherits from SimulatorInPort due to
 // handshake circuits receiving a memory interface as a memref input.
-template <typename TData>
-class HandshakeMemoryInterface : SimulatorInPort {
+template <typename TData, typename TAddr>
+class HandshakeMemoryInterface : public SimulatorInPort {
 
   struct StorePort {
-    std::shared_ptr<HandshakeDataInPort<TData>> data;
-    std::shared_ptr<HandshakeInPort> addr;
-    std::shared_ptr<HandshakeOutPort> done;
+    std::shared_ptr<HandshakeDataOutPort<TData>> data;
+    std::shared_ptr<HandshakeDataOutPort<TAddr>> addr;
+    std::shared_ptr<HandshakeInPort> done;
   };
 
   struct LoadPort {
-    std::shared_ptr<HandshakeInPort> addr;
-    std::shared_ptr<HandshakeOutPort> done;
-    std::shared_ptr<HandshakeDataOutPort<TData>> data;
+    std::shared_ptr<HandshakeDataInPort<TData>> data;
+    std::shared_ptr<HandshakeDataOutPort<TAddr>> addr;
+    std::shared_ptr<HandshakeInPort> done;
   };
 
 public:
+  // A memory interface is initialized with a static memory size. This is
+  // generated during wrapper generation.
   HandshakeMemoryInterface(size_t size) : memorySize(size) {}
 
-  void setMemory(TData *memory) {
+  void dump(std::ostream &os) const {}
+
+  void setMemory(void *memory) {
     if (memory_ptr != nullptr)
       assert(memory_ptr == memory &&
              "The memory should always point to the same base address "
              "throughout simulation.");
-    memory_ptr = memory;
+    memory_ptr = reinterpret_cast<TData *>(memory);
   }
 
   virtual ~HandshakeMemoryInterface() = default;
 
-  void addStorePort(std::shared_ptr<HandshakeInPort> &dataPort,
-                    std::shared_ptr<HandshakeInPort> &addrPort,
-                    std::shared_ptr<HandshakeOutPort> &donePort) {
+  void
+  addStorePort(const std::shared_ptr<HandshakeDataOutPort<TData>> &dataPort,
+               const std::shared_ptr<HandshakeDataOutPort<TAddr>> &addrPort,
+               const std::shared_ptr<HandshakeInPort> &donePort) {
     storePorts.push_back(StorePort{dataPort, addrPort, donePort});
   }
 
-  void addLoadPort(std::shared_ptr<HandshakeInPort> &addrPort,
-                   std::shared_ptr<HandshakeOutPort> &donePort,
-                   std::shared_ptr<HandshakeOutPort> &dataPort) {
-    loadPorts.push_back(LoadPort{addrPort, donePort, dataPort});
+  void addLoadPort(const std::shared_ptr<HandshakeDataInPort<TData>> &dataPort,
+                   const std::shared_ptr<HandshakeDataOutPort<TAddr>> &addrPort,
+                   const std::shared_ptr<HandshakeInPort> &donePort) {
+    loadPorts.push_back(LoadPort{dataPort, addrPort, donePort});
+  }
+
+  void reset() override {
+    for (auto &port : storePorts) {
+      *(port.data->validSig) = !1;
+      *(port.addr->validSig) = !1;
+      *(port.done->readySig) = !1;
+    }
+    for (auto &port : loadPorts) {
+      *(port.data->readySig) = !1;
+      *(port.addr->validSig) = !1;
+      *(port.done->readySig) = !1;
+    }
+  }
+  bool ready() override {
+    assert(false && "N/A for memory interfaces.");
+    return false;
+  }
+
+  // Writing to an input port implies setting the valid signal.
+  virtual void write() { assert(false && "N/A for memory interfaces."); }
+
+  /// An input port transaction is fulfilled by de-asserting the valid
+  /// (output)
+  // signal of his handshake bundle.
+  bool transact() override {
+    bool transacted = false;
+
+    // Check if there is a load or store transaction to be fulfilled from the
+    // previous cycle.
+    for (auto &port : storePorts) {
+      port.data->transact();
+      port.addr->transact();
+      port.done->transact();
+    }
+    for (auto &port : loadPorts) {
+      port.data->transact();
+      port.addr->transact();
+      port.done->transact();
+    }
+
+    // Current cycle transactions:
+    // Load ports
+    for (auto &loadPort : loadPorts) {
+      if (*(loadPort.addr->validSig) && *(loadPort.data->readySig) &&
+          *(loadPort.done->readySig)) {
+        assert(memory_ptr != nullptr && "Memory not set.");
+        *(loadPort.addr->readySig) = 1;
+        *(loadPort.data->validSig) = 1;
+        *(loadPort.done->validSig) = 1;
+        size_t addr = *(loadPort.addr->dataSig);
+        assert(addr < memorySize && "Address out of bounds.");
+        *(loadPort.data->dataSig) = memory_ptr[addr];
+        transacted = true;
+      }
+    }
+
+    // Store ports
+    for (auto &storePort : storePorts) {
+      if (*(storePort.addr->validSig) && *(storePort.data->validSig) &&
+          *(storePort.done->readySig)) {
+        assert(memory_ptr != nullptr && "Memory not set.");
+        *(storePort.addr->readySig) = 1;
+        *(storePort.data->readySig) = 1;
+        *(storePort.done->validSig) = 1;
+        size_t addr = *(storePort.addr->dataSig);
+        assert(addr < memorySize && "Address out of bounds.");
+        memory_ptr[addr] = *(storePort.data->dataSig);
+        transacted = true;
+      }
+    }
+    return transacted;
   }
 
 private:
-  TData read(uint32_t addr) {
+  TData readMemory(uint32_t addr) {
     assert(memory_ptr != nullptr && "Memory not set.");
     assert(addr < memorySize && "Address out of bounds.");
     return memory_ptr[addr];
   }
-  void write(uint32_t addr, TData data) {
+  void writeMemory(uint32_t addr, TData data) {
     assert(memory_ptr != nullptr && "Memory not set.");
     assert(addr < memorySize && "Address out of bounds.");
     memory_ptr[addr] = data;
@@ -190,8 +261,8 @@ public:
         transacted[i] = false;
     }
     T data;
-    // Maintain a mapping between the index of each subtype in data and whether
-    // that subtype has been transacted.
+    // Maintain a mapping between the index of each subtype in data and
+    // whether that subtype has been transacted.
     std::map<unsigned, bool> transacted;
     // Flag to indicate if the input control has been transacted for this
     // buffer.
@@ -212,7 +283,8 @@ public:
     OutputBuffer() : TransactionBuffer<TOutput>() {}
 
     bool valid() {
-      return std::all_of(this->transacted.begin(), this->transacted.end(),
+      return this->transactedControl &&
+             std::all_of(this->transacted.begin(), this->transacted.end(),
                          [](const auto &pair) { return pair.second; });
     }
   };
@@ -239,8 +311,8 @@ public:
   // i/o.s
 
   void step() override {
-    // Try writing any inputs currently in our buffer (Acting like combinational
-    // logic propagating in the previous cycle).
+    // Try writing any inputs currently in our buffer (Acting like
+    // combinational logic propagating in the previous cycle).
     writeFromInputBuffer();
     this->advanceTime();
 
@@ -255,7 +327,7 @@ public:
       static_cast<HandshakeOutPort *>(port.get())->transact();
     int i = 0;
     for (auto &port : this->inPorts) {
-      bool transacted = static_cast<HandshakeInPort *>(port.get())->transact();
+      bool transacted = port.get()->transact();
       if (transacted)
         inBuffer.value().transacted[i] = true;
       i++;
@@ -266,7 +338,8 @@ public:
     if (inCtrl->transact())
       inBuffer.value().transactedControl = true;
 
-    outCtrl->transact();
+    if (outCtrl->transact())
+      outBuffer.transactedControl = true;
     this->advanceTime();
 
     // Falling edge
@@ -319,16 +392,24 @@ public:
       typename std::enable_if < I<sizeof...(Tp), void>::type
                                 writeInputRec(const std::tuple<Tp...> &tInput) {
     auto value = std::get<I>(tInput);
-    auto inPort = dynamic_cast<HandshakeDataInPort<decltype(value)> *>(
-        this->inPorts.at(I).get());
-    assert(inPort);
-
     auto &inBufferV = inBuffer.value();
 
-    // Write value from input buffer to port if the port is ready and the
-    if (inPort->ready() && !inBufferV.transacted[I]) {
-      inPort->writeData(value);
+    // Is this a simple input port?
+    auto p = this->inPorts.at(I).get();
+    if (auto inPort = dynamic_cast<HandshakeDataInPort<decltype(value)> *>(p);
+        inPort) {
+      // Write value from input buffer to port if the port is ready.
+      if (inPort->ready() && !inBufferV.transacted[I]) {
+        inPort->writeData(value);
+      }
+    } else if (auto inMemPort = dynamic_cast<HandshakeMemoryInterface<
+                   std::remove_pointer_t<decltype(value)>, QData> *>(p);
+               inMemPort) {
+      inMemPort->setMemory(reinterpret_cast<void *>(value));
+    } else {
+      assert(false && "Unsupported input port type");
     }
+
     writeInputRec<I + 1, Tp...>(tInput);
   }
 

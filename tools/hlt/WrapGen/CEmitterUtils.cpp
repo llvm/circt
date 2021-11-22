@@ -79,6 +79,12 @@ static bool shouldMapToUnsigned(IntegerType::SignednessSemantics val) {
 }
 
 LogicalResult emitType(llvm::raw_ostream &os, Location loc, Type type) {
+  if (auto memRefType = type.dyn_cast<MemRefType>()) {
+    if (emitType(os, loc, memRefType.getElementType()).failed())
+      return failure();
+    os << "*";
+    return success();
+  }
   if (auto iType = type.dyn_cast<IntegerType>()) {
     switch (iType.getWidth()) {
     case 1:

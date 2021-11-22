@@ -30,11 +30,16 @@ public:
   BaseWrapper(StringRef outDir) : outDir(outDir) {}
   virtual ~BaseWrapper(){};
 
+  /// Initializes the subclassing wrapper. In here, we check for whether the
+  /// types of the reference and kernel operations are as expected.
+  virtual LogicalResult init(Operation *refOp, Operation *kernelOp) = 0;
+
   /// The wrap function takes a source operation and a kernel operation. The
   /// kernel operation is wrapper-specific, whereas the source operation
   /// represents the "software" interface that a kernel is expected to adhere
   /// to.
-  LogicalResult wrap(Operation *srcOp, Operation *kernelOp);
+  LogicalResult wrap(mlir::FuncOp funcOp, Operation *refOp,
+                     Operation *kernelOp);
 
   std::string getOutputFileName() { return outputFilename; }
 
