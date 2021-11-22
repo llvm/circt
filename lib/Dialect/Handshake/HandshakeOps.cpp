@@ -838,7 +838,7 @@ static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
                                        unsigned idx) {
   std::string name;
   if (idx < nLoads)
-    name = "lddata" + std::to_string(idx);
+    name = "ldData" + std::to_string(idx);
   else if (idx < nLoads + nStores)
     name = "stDone" + std::to_string(idx - nLoads);
   else
