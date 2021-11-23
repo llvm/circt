@@ -76,13 +76,15 @@ class _Types:
     if len(type_scopes) == 1:
       type_scope = type_scopes[0]
     else:
-      guard_name = "__PYCDE_TYPES__"
-      ifdef = sv.IfDefOp(mlir.ir.StringAttr.get(guard_name),
-                         ip=mlir.ir.InsertionPoint.at_block_begin(mod.body))
-      with mlir.ir.InsertionPoint.at_block_begin(ifdef.elseRegion.blocks[0]):
+      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
+        guard_name = "__PYCDE_TYPES__"
+        sv.VerbatimOp(mlir.ir.StringAttr.get("`ifndef " + guard_name), [],
+                      mlir.ir.ArrayAttr.get([]))
         sv.VerbatimOp(mlir.ir.StringAttr.get("`define " + guard_name), [],
                       mlir.ir.ArrayAttr.get([]))
         type_scope = hw.TypeScopeOp.create(self.TYPE_SCOPE)
+        sv.VerbatimOp(mlir.ir.StringAttr.get("`endif // " + guard_name), [],
+                      mlir.ir.ArrayAttr.get([]))
 
     with mlir.ir.InsertionPoint(type_scope.body):
       for (name, type) in self.registered_aliases.items():
