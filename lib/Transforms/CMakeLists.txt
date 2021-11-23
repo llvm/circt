@@ -6,8 +6,10 @@ add_circt_library(CIRCTTransforms
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRMemRef
   MLIRStandard
   MLIRSupport
+  MLIRTransformUtils
 
   DEPENDS
   CIRCTTransformsPassIncGen

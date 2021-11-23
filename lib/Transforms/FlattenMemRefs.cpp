@@ -13,6 +13,7 @@
 #include "PassDetail.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -77,15 +78,16 @@ struct LoadOpConversion : public OpConversionPattern<memref::LoadOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(memref::LoadOp op, OpAdaptor /*adaptor*/,
+  matchAndRewrite(memref::LoadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     MemRefType type = op.getMemRefType();
     if (isUniDimensional(type) || !type.hasStaticShape() ||
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
     Value finalIdx =
-        flattenIndices(rewriter, op, op.getIndices(), op.getMemRefType());
-    rewriter.replaceOpWithNewOp<memref::LoadOp>(op, op.memref(),
+        flattenIndices(rewriter, op, adaptor.indices(), op.getMemRefType());
+    rewriter.replaceOpWithNewOp<memref::LoadOp>(op, adaptor.memref(),
+
                                                 SmallVector<Value>{finalIdx});
     return success();
   }
@@ -95,16 +97,16 @@ struct StoreOpConversion : public OpConversionPattern<memref::StoreOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(memref::StoreOp op, OpAdaptor /*adaptor*/,
+  matchAndRewrite(memref::StoreOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     MemRefType type = op.getMemRefType();
     if (isUniDimensional(type) || !type.hasStaticShape() ||
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
     Value finalIdx =
-        flattenIndices(rewriter, op, op.getIndices(), op.getMemRefType());
+        flattenIndices(rewriter, op, adaptor.indices(), op.getMemRefType());
     rewriter.replaceOpWithNewOp<memref::StoreOp>(
-        op, op.getValueToStore(), op.memref(), SmallVector<Value>{finalIdx});
+        op, adaptor.value(), adaptor.memref(), SmallVector<Value>{finalIdx});
     return success();
   }
 };
@@ -125,24 +127,27 @@ struct AllocOpConversion : public OpConversionPattern<memref::AllocOp> {
   }
 };
 
-struct MemRefTypeConversion : public OpConversionPattern<mlir::FuncOp> {
-  using OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
+struct ReturnOpConversion : public OpConversionPattern<mlir::ReturnOp> {
+  using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::FuncOp op, OpAdaptor /*adaptor*/,
+  matchAndRewrite(mlir::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, adaptor.operands());
+    return success();
+  }
+};
 
-    if (llvm::none_of(op.getBlocks(), [](auto &block) {
-          return hasMultiDimMemRef(block.getArguments());
-        }))
-      return failure();
+struct CondBranchOpConversion : public OpConversionPattern<mlir::CondBranchOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-    bool err = false;
-    rewriter.updateRootInPlace(op, [&] {
-      if (failed(rewriter.convertRegionTypes(&op.getRegion(), *typeConverter)))
-        err = true;
-    });
-    return err ? failure() : success();
+  LogicalResult
+  matchAndRewrite(mlir::CondBranchOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::CondBranchOp>(
+        op, adaptor.condition(), adaptor.trueDestOperands(),
+        adaptor.falseDestOperands(), op.trueDest(), op.falseDest());
+    return success();
   }
 };
 
@@ -150,9 +155,12 @@ struct FlattenMemRefPass : public FlattenMemRefBase<FlattenMemRefPass> {
 public:
   void runOnOperation() override {
 
-    auto ctx = &getContext();
+    auto *ctx = &getContext();
     TypeConverter typeConverter;
-    typeConverter.addConversion([&](MemRefType memref) {
+    // Add default conversion for all types generically.
+    typeConverter.addConversion([](Type type) { return type; });
+    // Add specific conversion for memref types.
+    typeConverter.addConversion([](MemRefType memref) {
       if (isUniDimensional(memref))
         return memref;
       return MemRefType::get(
@@ -161,9 +169,40 @@ public:
     });
 
     RewritePatternSet patterns(ctx);
-    patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion>(ctx);
-    patterns.add<MemRefTypeConversion>(typeConverter, ctx);
-    if (applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))
+    patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
+                 ReturnOpConversion, CondBranchOpConversion>(ctx);
+    populateFuncOpTypeConversionPattern(patterns, typeConverter);
+
+    ConversionTarget target(*ctx);
+    target.addLegalDialect<arith::ArithmeticDialect>();
+    target.addDynamicallyLegalOp<memref::AllocOp>(
+        [](memref::AllocOp op) { return isUniDimensional(op.getType()); });
+    target.addDynamicallyLegalOp<memref::StoreOp>(
+        [](memref::StoreOp op) { return op.getIndices().size() == 1; });
+    target.addDynamicallyLegalOp<memref::LoadOp>(
+        [](memref::LoadOp op) { return op.getIndices().size() == 1; });
+    target.addDynamicallyLegalOp<mlir::ReturnOp>(
+        [](mlir::ReturnOp op) { return !hasMultiDimMemRef(op.operands()); });
+    target.addDynamicallyLegalOp<mlir::CondBranchOp>([](mlir::CondBranchOp op) {
+      return !hasMultiDimMemRef(op.trueDestOperands()) &&
+             !hasMultiDimMemRef(op.falseDestOperands());
+    });
+    target.addDynamicallyLegalOp<mlir::FuncOp>([](mlir::FuncOp op) {
+      auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
+        return hasMultiDimMemRef(block.getArguments());
+      });
+
+      auto resultsConverted =
+          llvm::all_of(op.getType().getResults(), [](Type type) {
+            if (auto memref = type.dyn_cast<MemRefType>())
+              return isUniDimensional(memref);
+            return true;
+          });
+
+      return argsConverted && resultsConverted;
+    });
+
+    if (applyPartialConversion(getOperation(), target, std::move(patterns))
             .failed()) {
       signalPassFailure();
       return;
