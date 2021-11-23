@@ -31,31 +31,32 @@ static bool isUniDimensional(MemRefType memref) {
 
 // Flatten indices by generating the product of the i'th index and the [0:i-1]
 // shapes, for each index, and then summing these.
-static Value flattenIndices(Operation *op, ValueRange indices,
-                            MemRefType memrefType) {
-  ImplicitLocOpBuilder builder(op->getLoc(), op);
-
+static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
+                            ValueRange indices, MemRefType memrefType) {
+  Location loc = op->getLoc();
   Value finalIdx = indices.front();
   for (auto memIdx : llvm::enumerate(indices.drop_front())) {
     Value partialIdx = memIdx.value();
     for (unsigned i = 0; i <= memIdx.index(); ++i) {
       int64_t dimSize = memrefType.getShape()[i];
       if (llvm::isPowerOf2_64(dimSize)) {
-        auto constant = builder
-                            .create<arith::ConstantOp>(
-                                builder.getIndexAttr(llvm::Log2_64(dimSize)))
-                            .getResult();
-        partialIdx =
-            builder.create<arith::ShLIOp>(partialIdx, constant).getResult();
+        auto constant =
+            rewriter
+                .create<arith::ConstantOp>(
+                    loc, rewriter.getIndexAttr(llvm::Log2_64(dimSize)))
+                .getResult();
+        partialIdx = rewriter.create<arith::ShLIOp>(loc, partialIdx, constant)
+                         .getResult();
       } else {
         auto constant =
-            builder.create<arith::ConstantOp>(builder.getIndexAttr(dimSize))
+            rewriter
+                .create<arith::ConstantOp>(loc, rewriter.getIndexAttr(dimSize))
                 .getResult();
-        partialIdx =
-            builder.create<arith::MulIOp>(partialIdx, constant).getResult();
+        partialIdx = rewriter.create<arith::MulIOp>(loc, partialIdx, constant)
+                         .getResult();
       }
     }
-    auto sumOp = builder.create<arith::AddIOp>(finalIdx, partialIdx);
+    auto sumOp = rewriter.create<arith::AddIOp>(loc, finalIdx, partialIdx);
     finalIdx = sumOp.getResult();
   }
   return finalIdx;
@@ -82,7 +83,8 @@ struct LoadOpConversion : public OpConversionPattern<memref::LoadOp> {
     if (isUniDimensional(type) || !type.hasStaticShape() ||
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
-    Value finalIdx = flattenIndices(op, op.getIndices(), op.getMemRefType());
+    Value finalIdx =
+        flattenIndices(rewriter, op, op.getIndices(), op.getMemRefType());
     rewriter.replaceOpWithNewOp<memref::LoadOp>(op, op.memref(),
                                                 SmallVector<Value>{finalIdx});
     return success();
@@ -99,7 +101,8 @@ struct StoreOpConversion : public OpConversionPattern<memref::StoreOp> {
     if (isUniDimensional(type) || !type.hasStaticShape() ||
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
-    Value finalIdx = flattenIndices(op, op.getIndices(), op.getMemRefType());
+    Value finalIdx =
+        flattenIndices(rewriter, op, op.getIndices(), op.getMemRefType());
     rewriter.replaceOpWithNewOp<memref::StoreOp>(
         op, op.getValueToStore(), op.memref(), SmallVector<Value>{finalIdx});
     return success();
