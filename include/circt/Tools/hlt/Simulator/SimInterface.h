@@ -75,8 +75,8 @@ struct SimulatorPort : SimBase {
 
   // Resets a port to its initial state.
   virtual void reset() = 0;
-  // Transacts a port; returns true if the transaction was successful.
-  virtual bool transact() = 0;
+  // Evaluates a port.
+  virtual void eval() = 0;
 };
 
 // A SimulatorInPort represents a mapping from a software-like input variable

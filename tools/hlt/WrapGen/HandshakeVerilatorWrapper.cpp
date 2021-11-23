@@ -239,8 +239,7 @@ LogicalResult HandshakeVerilatorWrapper::emitInputPort(Type t, unsigned idx) {
 }
 LogicalResult HandshakeVerilatorWrapper::emitOutputPort(Type t, unsigned idx) {
   auto arg = getResName(idx);
-  osi() << "addOutputPort<HandshakeDataOutPort<TRes" << idx << ">>" << arg
-        << "\", ";
+  osi() << "addOutputPort<HandshakeDataOutPort<TRes" << idx << ">>";
   emitHSPortCtor(osi(), arg) << ";\n";
   return success();
 }

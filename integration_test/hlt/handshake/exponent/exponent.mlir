@@ -11,7 +11,12 @@
 // RUN:     region-simplify=true' -handshake-insert-buffer='strategies=all' > ${TESTNAME}_handshake.mlir
 // RUN: circt-opt -lower-handshake-to-firrtl ${TESTNAME}_handshake.mlir > ${TESTNAME}_handshake_firrtl.mlir
 // RUN: firtool --format=mlir --lower-to-hw --verilog ${TESTNAME}_handshake_firrtl.mlir > ${TESTNAME}.sv
-// RUN: hlt-wrapgen --ref %s.kernel --kernel ${TESTNAME}_handshake_firrtl.mlir --name ${TESTNAME} --type=handshakeFIRRTL -o .
+// RUN: hlt-wrapgen                                            \
+// RUN:   --func %s.kernel                                                     \
+// RUN:   --ref ${TESTNAME}_handshake.mlir                                     \
+// RUN:   --kernel ${TESTNAME}_handshake_firrtl.mlir                           \
+// RUN:   --name ${TESTNAME}                                                   \
+// RUN:   --type=handshakeFIRRTL -o .
 // RUN: cp %circt_obj_root/tools/hlt/Simulator/hlt_verilator_CMakeLists.txt CMakeLists.txt
 // RUN: cmake -DHLT_TESTNAME=${TESTNAME} -DCMAKE_BUILD_TYPE=RelWithDebInfo . 
 // RUN: make all -j$(nproc)

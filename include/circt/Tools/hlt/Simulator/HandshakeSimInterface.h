@@ -8,8 +8,15 @@
 namespace circt {
 namespace hlt {
 
+using TxCallback = std::function<void()>;
+
+struct TransactableTrait {
+  // If this is set, the port was transacted in the last cycle.
+  bool transacted = false;
+};
+
 template <typename TSimPort>
-struct HandshakePort : public TSimPort {
+struct HandshakePort : public TSimPort, public TransactableTrait {
   HandshakePort() {}
   HandshakePort(CData *readySig, CData *validSig)
       : readySig(readySig), validSig(validSig){};
@@ -41,13 +48,22 @@ struct HandshakeInPort : public HandshakePort<SimulatorInPort> {
 
   /// An input port transaction is fulfilled by de-asserting the valid (output)
   // signal of his handshake bundle.
-  bool transact() override {
-    if (*(this->validSig) && *(this->readySig)) {
-      *this->validSig = !1;
-      return true;
+  void eval() override {
+    transacted = false;
+    if (transactNext || *(this->validSig) && *(this->readySig)) {
+      if (transactNext) {
+        *this->validSig = 0;
+        transacted = true;
+        transactNext = false;
+      } else
+        transactNext = true;
     }
-    return false;
   }
+
+  // If the valid signal is to be set low the next cycle. This is a tiny state
+  // machine to ensure that ready/valid signals are held high across clock
+  // edges.
+  bool transactNext = false;
 };
 
 struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
@@ -58,14 +74,15 @@ struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
     // todo
   }
 
-  /// An input port transaction is fulfilled by de-asserting the valid (output)
-  // signal of his handshake bundle.
-  bool transact() override {
-    // Edit: by making the ready signal always enabled, we avoid stalling the
-    // handshake model.
-    // if (*(this->validSig) && *(this->readySig))
-    //   *this->readySig = !1;
-    return false;
+  /// An output port transaction is fulfilled whenever the ready signal of the
+  // handshake bundle is asserted and the valid signal is not. A precondition
+  // is that the valid signal was asserter before the ready signal.
+  void eval() override {
+    if (*(this->readySig) && !*(this->validSig)) {
+      *this->readySig = 0;
+      transacted = true;
+    } else
+      transacted = false;
   }
 };
 
@@ -110,18 +127,29 @@ struct HandshakeDataOutPort : HandshakeDataPort<TData, HandshakeOutPort> {
 // simulation. The memory interface inherits from SimulatorInPort due to
 // handshake circuits receiving a memory interface as a memref input.
 template <typename TData, typename TAddr>
-class HandshakeMemoryInterface : public SimulatorInPort {
-
+class HandshakeMemoryInterface : public SimulatorInPort,
+                                 public TransactableTrait {
+  enum TransactState { Idle, WritingMem };
   struct StorePort {
     std::shared_ptr<HandshakeDataOutPort<TData>> data;
     std::shared_ptr<HandshakeDataOutPort<TAddr>> addr;
     std::shared_ptr<HandshakeInPort> done;
+    void eval() {
+      data->eval();
+      addr->eval();
+      done->eval();
+    }
   };
 
   struct LoadPort {
     std::shared_ptr<HandshakeDataInPort<TData>> data;
     std::shared_ptr<HandshakeDataOutPort<TAddr>> addr;
     std::shared_ptr<HandshakeInPort> done;
+    void eval() {
+      data->eval();
+      addr->eval();
+      done->eval();
+    }
   };
 
 public:
@@ -137,6 +165,7 @@ public:
              "The memory should always point to the same base address "
              "throughout simulation.");
     memory_ptr = reinterpret_cast<TData *>(memory);
+    state = TransactState::WritingMem;
   }
 
   virtual ~HandshakeMemoryInterface() = default;
@@ -177,20 +206,15 @@ public:
   /// An input port transaction is fulfilled by de-asserting the valid
   /// (output)
   // signal of his handshake bundle.
-  bool transact() override {
-    bool transacted = false;
-
-    // Check if there is a load or store transaction to be fulfilled from the
-    // previous cycle.
-    for (auto &port : storePorts) {
-      port.data->transact();
-      port.addr->transact();
-      port.done->transact();
-    }
-    for (auto &port : loadPorts) {
-      port.data->transact();
-      port.addr->transact();
-      port.done->transact();
+  void eval() override {
+    switch (state) {
+    case TransactState::Idle:
+      transacted = false;
+      break;
+    case TransactState::WritingMem:
+      state = TransactState::Idle;
+      transacted = true;
+      break;
     }
 
     // Current cycle transactions:
@@ -205,7 +229,6 @@ public:
         size_t addr = *(loadPort.addr->dataSig);
         assert(addr < memorySize && "Address out of bounds.");
         *(loadPort.data->dataSig) = memory_ptr[addr];
-        transacted = true;
       }
     }
 
@@ -220,10 +243,13 @@ public:
         size_t addr = *(storePort.addr->dataSig);
         assert(addr < memorySize && "Address out of bounds.");
         memory_ptr[addr] = *(storePort.data->dataSig);
-        transacted = true;
       }
     }
-    return transacted;
+
+    for (auto &port : storePorts)
+      port.eval();
+    for (auto &port : loadPorts)
+      port.eval();
   }
 
 private:
@@ -246,6 +272,11 @@ private:
 
   // The size of the memory associated with this interface.
   size_t memorySize;
+
+  // A memory interface is transacted whenever a memory is written to the
+  // interface (or in other words, we're passing a pointer to the function
+  // from software).
+  TransactState state = TransactState::Idle;
 };
 
 template <typename TInput, typename TOutput, typename TModel>
@@ -311,36 +342,32 @@ public:
   // i/o.s
 
   void step() override {
-    // Try writing any inputs currently in our buffer (Acting like
-    // combinational logic propagating in the previous cycle).
-    writeFromInputBuffer();
-    this->advanceTime();
-
     // Rising edge
     VerilatorSimImpl::clock_rising();
-    this->advanceTime();
-    readToOutputBuffer();
-    this->advanceTime();
 
+    readToOutputBuffer();
+    writeFromInputBuffer();
+    this->advanceTime();
     // Transact all I/O ports
     for (auto &port : this->outPorts)
-      static_cast<HandshakeOutPort *>(port.get())->transact();
+      static_cast<HandshakeOutPort *>(port.get())->eval();
     int i = 0;
     for (auto &port : this->inPorts) {
-      bool transacted = port.get()->transact();
-      if (transacted)
+      port->eval();
+      auto transactable = dynamic_cast<TransactableTrait *>(port.get());
+      if (transactable->transacted)
         inBuffer.value().transacted[i] = true;
       i++;
     }
-    this->advanceTime();
 
     // Transact control ports
-    if (inCtrl->transact())
+    inCtrl->eval();
+    if (inCtrl->transacted)
       inBuffer.value().transactedControl = true;
 
-    if (outCtrl->transact())
+    outCtrl->eval();
+    if (outCtrl->transacted)
       outBuffer.transactedControl = true;
-    this->advanceTime();
 
     // Falling edge
     VerilatorSimImpl::clock_falling();
@@ -365,8 +392,6 @@ public:
       assert(outPortp);
       *(outPortp->readySig) = !0;
     }
-    *(outCtrl->readySig) = !0;
-    *inCtrl->validSig = !0;
 
     // Run a few cycles to ensure everything works after the model is out of
     // reset and a subset of all ports are ready/valid.
@@ -396,18 +421,23 @@ public:
 
     // Is this a simple input port?
     auto p = this->inPorts.at(I).get();
-    if (auto inPort = dynamic_cast<HandshakeDataInPort<decltype(value)> *>(p);
-        inPort) {
-      // Write value from input buffer to port if the port is ready.
-      if (inPort->ready() && !inBufferV.transacted[I]) {
-        inPort->writeData(value);
+    if (!inBufferV.transacted[I]) {
+      // Normal port?
+      if (auto inPort = dynamic_cast<HandshakeDataInPort<decltype(value)> *>(p);
+          inPort) {
+        // Write value from input buffer to port if the port is ready.
+        if (inPort->ready()) {
+          inPort->writeData(value);
+        }
       }
-    } else if (auto inMemPort = dynamic_cast<HandshakeMemoryInterface<
+      // Memory interface?
+      else if (auto inMemPort = dynamic_cast<HandshakeMemoryInterface<
                    std::remove_pointer_t<decltype(value)>, QData> *>(p);
                inMemPort) {
-      inMemPort->setMemory(reinterpret_cast<void *>(value));
-    } else {
-      assert(false && "Unsupported input port type");
+        inMemPort->setMemory(reinterpret_cast<void *>(value));
+      } else {
+        assert(false && "Unsupported input port type");
+      }
     }
 
     writeInputRec<I + 1, Tp...>(tInput);

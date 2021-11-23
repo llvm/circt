@@ -137,11 +137,14 @@ void BaseWrapper::emitAsyncCall(Operation * /*kernelOp*/) {
   // Pack arguments
   osi() << "TInput input;\n";
   for (auto arg : llvm::enumerate(funcOp.getArguments())) {
-    // Reinterpret cast here is just a hack around software interface providing
-    // i.e. int32_t* as pointer type, and verilator using uint32_t*. Should
-    // obviously be fixed so we don't throw away type safety.
-    osi() << "std::get<" << arg.index() << ">(input) = reinterpret_cast<TArg"
-          << arg.index() << ">(in" << arg.index() << ");\n";
+    // Reinterpret/static cast here is just a hack around software interface
+    // providing i.e. int32_t* as pointer type, and verilator using uint32_t*.
+    // Should obviously be fixed so we don't throw away type safety.
+    bool isPtr = arg.value().getType().isa<MemRefType>();
+
+    osi() << "std::get<" << arg.index() << ">(input) = ";
+    osi() << (isPtr ? "reinterpret_cast" : "static_cast");
+    osi() << "<TArg" << arg.index() << ">(in" << arg.index() << ");\n";
   }
 
   // Push to driver

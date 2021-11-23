@@ -105,13 +105,13 @@ public:
 
 protected:
   void advanceTime() {
-    dut->eval();
-    ctx->timeInc(1);
 #if VM_TRACE
     trace->dump(ctx->time());
     // If tracing, flush after each cycle so we can immediately see the output.
     trace->flush();
 #endif
+    ctx->timeInc(1);
+    dut->eval();
   }
 
   // Clocks the model a half phase (rising or falling edge)
@@ -119,6 +119,7 @@ protected:
     // Ensure combinational logic is settled, if input pins changed.
     advanceTime();
     *interface.clock = rising;
+    dut->eval();
     advanceTime();
   }
 
