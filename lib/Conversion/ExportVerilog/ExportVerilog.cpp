@@ -3947,7 +3947,7 @@ struct SharedEmitterState {
   SymbolCache symbolCache;
 
   // Emitter options extracted from the top-level module.
-  const LoweringOptions options;
+  const LoweringOptions &options;
 
   /// This is a set is populated at "gather" time, containing the hw.module
   /// operations that have a sv.bind in them.
@@ -3956,8 +3956,9 @@ struct SharedEmitterState {
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
 
-  explicit SharedEmitterState(ModuleOp designOp, GlobalNameTable globalNames)
-      : designOp(designOp), options(designOp),
+  explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
+                              GlobalNameTable globalNames)
+      : designOp(designOp), options(options),
         globalNames(std::move(globalNames)) {}
   void gatherFiles(bool separateModules);
 
@@ -4266,9 +4267,10 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   // Rename module names and interfaces to not conflict with each other or with
   // Verilog keywords.
+  LoweringOptions options(module);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
-  SharedEmitterState emitter(module, std::move(globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
   SharedEmitterState::EmissionList list;
@@ -4378,9 +4380,10 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   // Rename module names and interfaces to not conflict with each other or with
   // Verilog keywords.
+  LoweringOptions options(module);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
-  SharedEmitterState emitter(module, std::move(globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
 
   // Emit each file in parallel if context enables it.
