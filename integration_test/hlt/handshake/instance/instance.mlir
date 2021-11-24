@@ -1,4 +1,4 @@
-// RUN: TESTNAME=instancee
+// RUN: TESTNAME=instance
 
 // === Lower testbench to LLVMIR
 // RUN:   mlir-opt %s -convert-scf-to-std                                      \
@@ -10,8 +10,8 @@
 // RUN: | circt-opt -canonicalize='top-down=true region-simplify=true' -handshake-insert-buffer='strategies=all' > ${TESTNAME}_handshake.mlir
 // RUN: circt-opt -lower-handshake-to-firrtl ${TESTNAME}_handshake.mlir > ${TESTNAME}_handshake_firrtl.mlir
 // RUN: firtool --format=mlir --lower-to-hw --verilog ${TESTNAME}_handshake_firrtl.mlir > ${TESTNAME}.sv
-// RUN: hlt-wrapgen                                            \
-// RUN:   --func %s.kernel                                                     \
+// RUN: hlt-wrapgen                                                            \
+// RUN:   --func %s.ref                                                        \
 // RUN:   --ref ${TESTNAME}_handshake.mlir                                     \
 // RUN:   --kernel ${TESTNAME}_handshake_firrtl.mlir                           \
 // RUN:   --name ${TESTNAME}                                                   \
@@ -29,11 +29,11 @@
 // RUN: | FileCheck %s
 
 
-func private @instancee_call(i32, i32) -> ()
-func private @instancee_await() -> (i32)
+func private @instance_call(i32) -> ()
+func private @instance_await() -> (i32)
 func private @printI64(i32)
 func private @printComma()
-func @test_instancee() -> i32 {
+func @test_instance() -> i32 {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   %c10 = arith.constant 10 : index
@@ -43,13 +43,13 @@ func @test_instancee() -> i32 {
   // Call
   scf.for %i = %c0 to %c10 step %c1 {
     %0 = arith.index_cast %i : index to i32
-    call @instancee_call(%0, %c5_i32) : (i32, i32) -> ()
+    call @instance_call(%0) : (i32) -> ()
   }
 
   // Await
   scf.for %i = %c0 to %c10 step %c1 {
     %0 = arith.index_cast %i : index to i32
-    %res = call @instancee_await() : () -> (i32)
+    %res = call @instance_await() : () -> (i32)
     call @printI64(%res) : (i32) -> ()
     call @printComma() : () -> ()
   }

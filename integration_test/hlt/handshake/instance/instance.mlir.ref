@@ -1,1 +1,1 @@
-func private @instancee(i32) -> i32
+func private @instance(i32) -> i32

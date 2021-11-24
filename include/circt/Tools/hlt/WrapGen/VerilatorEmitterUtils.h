@@ -23,7 +23,8 @@ namespace circt {
 namespace hlt {
 
 /// Outputs Verilator types based on MLIR integer types.
-LogicalResult emitVerilatorType(llvm::raw_ostream &os, Location loc, Type type);
+LogicalResult emitVerilatorType(llvm::raw_ostream &os, Location loc, Type type,
+                                Optional<StringRef> varName = {});
 
 } // namespace hlt
 } // namespace circt

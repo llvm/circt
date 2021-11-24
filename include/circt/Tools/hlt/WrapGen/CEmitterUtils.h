@@ -23,7 +23,8 @@ using namespace mlir;
 namespace circt {
 namespace hlt {
 
-LogicalResult emitType(llvm::raw_ostream &os, Location loc, Type type);
+LogicalResult emitType(llvm::raw_ostream &os, Location loc, Type type,
+                       Optional<StringRef> variable = {});
 LogicalResult emitTupleType(llvm::raw_ostream &os, Location loc,
                             TypeRange types);
 LogicalResult emitTypes(llvm::raw_ostream &os, Location loc, TypeRange types);

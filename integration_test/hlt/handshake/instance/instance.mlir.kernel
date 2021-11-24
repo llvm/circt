@@ -11,7 +11,7 @@ module {
     handshake.return %c#0, %ctrl : i32, none
   }
 
-  handshake.func @instancee(%a: i32, %ctrl : none) -> (i32, none) {
+  handshake.func @instance(%a: i32, %ctrl : none) -> (i32, none) {
     %b:2 = instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
     sink %b#1 : none
     handshake.return %b#0, %ctrl : i32, none

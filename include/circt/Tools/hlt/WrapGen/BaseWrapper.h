@@ -54,8 +54,8 @@ protected:
     return success();
   };
   StringRef funcName() { return funcOp.getName(); }
-  using TypeEmitter =
-      std::function<LogicalResult(llvm::raw_ostream &, Location, Type)>;
+  using TypeEmitter = std::function<LogicalResult(llvm::raw_ostream &, Location,
+                                                  Type, Optional<StringRef>)>;
   LogicalResult emitIOTypes(const TypeEmitter &emitter);
 
   raw_fd_ostream &os() { return *outputFile; }

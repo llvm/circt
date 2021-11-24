@@ -19,8 +19,8 @@ using namespace mlir;
 namespace circt {
 namespace hlt {
 
-LogicalResult emitVerilatorType(llvm::raw_ostream &os, Location loc,
-                                Type type) {
+LogicalResult emitVerilatorType(llvm::raw_ostream &os, Location loc, Type type,
+                                Optional<StringRef>) {
   return llvm::TypeSwitch<Type, LogicalResult>(type)
       .Case<IntegerType>([&](IntegerType type) -> LogicalResult {
         unsigned bits = type.getIntOrFloatBitWidth();

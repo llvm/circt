@@ -9,13 +9,18 @@
 namespace circt {
 namespace hlt {
 
-using TxCallback = std::function<void()>;
-
 struct TransactableTrait {
-  enum State { Idle, TransactNext, Transacted };
+  enum State {
+    // No transaction
+    Idle,
+    // Transaction is in progress (expecting Transacted to be set during eval())
+    TransactNext,
+    // Just transacted.
+    Transacted
+  };
   // If this is set, the port was transacted in the last cycle.
-  State state = Idle;
-  bool transacted() { return state == State::Transacted; }
+  State txState = Idle;
+  bool transacted() { return txState == State::Transacted; }
 };
 
 template <typename TSimPort>
@@ -31,6 +36,8 @@ struct HandshakePort : public TSimPort, public TransactableTrait {
     out << "r: " << static_cast<int>(*readySig)
         << "\tv: " << static_cast<int>(*validSig);
   }
+  bool valid() { return *(this->validSig) == 1; }
+  bool ready() { return *(this->readySig) == 1; }
 
   CData *readySig = nullptr;
   CData *validSig = nullptr;
@@ -52,16 +59,16 @@ struct HandshakeInPort : public HandshakePort<SimulatorInPort> {
   /// An input port transaction is fulfilled by de-asserting the valid (output)
   // signal of his handshake bundle.
   void eval() override {
-    if (state == Transacted)
-      state = Idle;
+    if (txState == Transacted)
+      txState = Idle;
 
-    bool transacting = state == TransactNext;
+    bool transacting = txState == TransactNext;
     if (transacting || *(this->validSig) && *(this->readySig)) {
       if (transacting) {
         *this->validSig = 0;
-        state = Transacted;
+        txState = Transacted;
       } else
-        state = TransactNext;
+        txState = TransactNext;
     }
   }
 };
@@ -69,7 +76,6 @@ struct HandshakeInPort : public HandshakePort<SimulatorInPort> {
 struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
   using HandshakePort<SimulatorOutPort>::HandshakePort;
   void reset() override { *(this->readySig) = !1; }
-  bool valid() override { return *(this->validSig) == 1; }
   virtual void read() {
     // todo
   }
@@ -78,16 +84,16 @@ struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
   // handshake bundle is asserted and the valid signal is not. A precondition
   // is that the valid signal was asserter before the ready signal.
   void eval() override {
-    if (state == Transacted)
-      state = Idle;
+    if (txState == Transacted)
+      txState = Idle;
 
-    bool transacting = state == TransactNext;
+    bool transacting = txState == TransactNext;
     if (transacting || *(this->validSig) && *(this->readySig)) {
       if (transacting) {
-        *this->readySig = 0;
-        state = Transacted;
+        // *this->readySig = 0;
+        txState = Transacted;
       } else
-        state = TransactNext;
+        txState = TransactNext;
     }
   }
 };
@@ -171,7 +177,7 @@ public:
              "The memory should always point to the same base address "
              "throughout simulation.");
     memory_ptr = reinterpret_cast<TData *>(memory);
-    state = Transacted;
+    txState = TransactNext;
   }
 
   virtual ~HandshakeMemoryInterface() = default;
@@ -213,7 +219,16 @@ public:
   /// (output)
   // signal of his handshake bundle.
   void eval() override {
-    state = Idle;
+    switch (txState) {
+    case Idle:
+      break;
+    case TransactNext:
+      txState = Transacted;
+      break;
+    case Transacted:
+      txState = Idle;
+      break;
+    }
 
     // Current cycle transactions:
     // Load ports
@@ -327,26 +342,28 @@ public:
   // a valid output buffer.
   bool outValid() override { return this->outBuffer.valid(); }
 
-  // @todo: The # of advanceTime calls in the following can be reduced; the
-  // current implementation is a hack to ensure that the simulator
-  // re-evaluates its state on _any_ input change. This is useful during
-  // debugging of the simulator infrastructure given that the dataflow
-  // components are quite (combinationally) sensitive to changes in top-level
-  // i/o.s
-
   void step() override {
     // Rising edge
     VerilatorSimImpl::clock_rising();
 
     readToOutputBuffer();
     writeFromInputBuffer();
+
+    // Advance time for debugging purposes; separates the clk edge from changes
+    // to the following signals.
     this->advanceTime();
     // Transact all I/O ports
-    for (auto &port : this->outPorts)
-      static_cast<HandshakeOutPort *>(port.get())->eval();
+    for (auto &port : llvm::enumerate(this->outPorts)) {
+      port.value()->eval();
+      auto transactable = dynamic_cast<TransactableTrait *>(port.value().get());
+      assert(transactable);
+      if (transactable->transacted())
+        outBuffer.transacted[port.index()] = true;
+    }
     for (auto &port : llvm::enumerate(this->inPorts)) {
       port.value()->eval();
       auto transactable = dynamic_cast<TransactableTrait *>(port.value().get());
+      assert(transactable);
       if (transactable->transacted())
         inBuffer.value().transacted[port.index()] = true;
     }
@@ -360,10 +377,6 @@ public:
     if (outCtrl->transacted())
       outBuffer.transactedControl = true;
 
-    // Falling edge
-    VerilatorSimImpl::clock_falling();
-    this->advanceTime();
-
     // Set output ports readyness based on which outputs in the current output
     // buffer have been transacted.
     for (auto outPort : llvm::enumerate(this->outPorts)) {
@@ -374,6 +387,10 @@ public:
     }
     if (!outBuffer.transactedControl)
       *(outCtrl->readySig) = 1;
+
+    // Falling edge
+    VerilatorSimImpl::clock_falling();
+    this->advanceTime();
   }
 
   void setup() override {
@@ -419,8 +436,9 @@ public:
       // Normal port?
       if (auto inPort = dynamic_cast<HandshakeDataInPort<decltype(value)> *>(p);
           inPort) {
-        // Write value from input buffer to port if the port is ready.
-        if (inPort->ready()) {
+        // A value can be written to an input port when it is not already trying
+        // to transact a value.
+        if (!inPort->valid()) {
           inPort->writeData(value);
         }
       }
@@ -474,9 +492,8 @@ public:
     auto outPort = dynamic_cast<HandshakeDataOutPort<ValueType> *>(
         this->outPorts.at(I).get());
     assert(outPort);
-    if (outPort->valid() && !outBuffer.transacted[I]) {
+    if (outPort->valid() && outPort->ready()) {
       std::get<I>(tOutput) = outPort->readData();
-      outBuffer.transacted[I] = true;
     }
     readOutputRec<I + 1, Tp...>(tOutput);
   }

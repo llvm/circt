@@ -78,42 +78,78 @@ static bool shouldMapToUnsigned(IntegerType::SignednessSemantics val) {
   llvm_unreachable("Unexpected IntegerType::SignednessSemantics");
 }
 
-LogicalResult emitType(llvm::raw_ostream &os, Location loc, Type type) {
+LogicalResult emitType(llvm::raw_ostream &os, Location loc, Type type,
+                       Optional<StringRef> variable) {
   if (auto memRefType = type.dyn_cast<MemRefType>()) {
+    // We here follow the LLVM memref calling convention:
+    // https://mlir.llvm.org/docs/TargetLLVMIR/#calling-conventions
+    // where a memref is lowered into a set of arguments being:
+    // %arg0 : memref<4xi32> ->
+    // %arg0: !llvm.ptr<f32>   // Allocated pointer.
+    // %arg1: !llvm.ptr<f32>   // Aligned pointer.
+    // %arg2: i64              // Offset.
+    // %arg3: i64              // Size in dim 0.
+    // %arg4: i64              // Stride in dim 0.
+    assert(memRefType.getRank() == 1 &&
+           "Only unidimensional memories supported.. for now");
+
+    // Allocated pointer. If we've been provided with a variable name, this wil
+    // be the named variable.
     if (emitType(os, loc, memRefType.getElementType()).failed())
       return failure();
-    os << "*";
+    os << "* ";
+    if (variable)
+      os << *variable;
+    os << ", ";
+
+    // Aligned pointer
+    if (emitType(os, loc, memRefType.getElementType()).failed())
+      return failure();
+    os << "* ";
+    if (variable)
+      os << *variable << "_aligned_ptr";
+    os << ", ";
+
+    // Offset, size and stride
+    if (variable) {
+      os << "int64_t " << *variable << "_offset, ";
+      os << "int64_t " << *variable << "_size, ";
+      os << "int64_t " << *variable << "_stride";
+    } else
+      os << "int64_t, int64_t, int64_t";
     return success();
-  }
-  if (auto iType = type.dyn_cast<IntegerType>()) {
+  } else if (auto iType = type.dyn_cast<IntegerType>()) {
     switch (iType.getWidth()) {
     case 1:
-      return (os << "bool"), success();
+      (os << "bool");
+      break;
     case 8:
     case 16:
     case 32:
-    case 64:
+    case 64: {
       if (shouldMapToUnsigned(iType.getSignedness()))
-        return (os << "uint" << iType.getWidth() << "_t"), success();
+        (os << "uint" << iType.getWidth() << "_t");
       else
-        return (os << "int" << iType.getWidth() << "_t"), success();
+        (os << "int" << iType.getWidth() << "_t");
+      break;
+    }
     default:
       return emitError(loc, "cannot emit integer type ") << type;
     }
-  }
-  if (auto fType = type.dyn_cast<FloatType>()) {
+  } else if (auto fType = type.dyn_cast<FloatType>()) {
     switch (fType.getWidth()) {
     case 32:
-      return (os << "float"), success();
+      (os << "float");
+      break;
     case 64:
-      return (os << "double"), success();
+      (os << "double");
+      break;
     default:
       return emitError(loc, "cannot emit float type ") << type;
     }
-  }
-  if (auto iType = type.dyn_cast<IndexType>())
-    return (os << "size_t"), success();
-  if (auto tType = type.dyn_cast<TensorType>()) {
+  } else if (auto iType = type.dyn_cast<IndexType>())
+    (os << "size_t");
+  else if (auto tType = type.dyn_cast<TensorType>()) {
     if (!tType.hasRank())
       return emitError(loc, "cannot emit unranked tensor type");
     if (!tType.hasStaticShape())
@@ -128,11 +164,15 @@ LogicalResult emitType(llvm::raw_ostream &os, Location loc, Type type) {
     }
     os << ">";
     return success();
-  }
-  if (auto tType = type.dyn_cast<TupleType>())
+  } else if (auto tType = type.dyn_cast<TupleType>())
     return emitTupleType(os, loc, tType.getTypes());
+  else {
+    return emitError(loc, "cannot emit type ") << type;
+  }
 
-  return emitError(loc, "cannot emit type ") << type;
+  if (variable)
+    os << " " << *variable;
+  return success();
 }
 
 LogicalResult emitTupleType(llvm::raw_ostream &os, Location loc,

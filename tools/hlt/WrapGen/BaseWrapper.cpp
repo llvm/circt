@@ -61,8 +61,8 @@ LogicalResult BaseWrapper::wrap(mlir::FuncOp _funcOp, Operation *refOp,
   int i = 0;
   bool failed = false;
   interleaveComma(funcOp.getType().getInputs(), os(), [&](auto inType) {
-    failed |= emitType(os(), kernelOp->getLoc(), inType).failed();
-    os() << " in" << i++;
+    auto varName = "in" + std::to_string(i++);
+    failed |= emitType(os(), kernelOp->getLoc(), inType, {varName}).failed();
   });
   if (failed)
     return failure();
@@ -94,7 +94,7 @@ LogicalResult BaseWrapper::emitIOTypes(const TypeEmitter &emitter) {
   // Emit in types.
   for (auto &inType : enumerate(funcType.getInputs())) {
     osi() << "using TArg" << inType.index() << " = ";
-    if (emitter(osi(), funcOp.getLoc(), inType.value()).failed())
+    if (emitter(osi(), funcOp.getLoc(), inType.value(), {}).failed())
       return failure();
     osi() << ";\n";
   }
@@ -106,7 +106,7 @@ LogicalResult BaseWrapper::emitIOTypes(const TypeEmitter &emitter) {
   // Emit out types.
   for (auto &outType : enumerate(funcType.getResults())) {
     osi() << "using TRes" << outType.index() << " = ";
-    if (emitter(osi(), funcOp.getLoc(), outType.value()).failed())
+    if (emitter(osi(), funcOp.getLoc(), outType.value(), {}).failed())
       return failure();
     osi() << ";\n";
   }

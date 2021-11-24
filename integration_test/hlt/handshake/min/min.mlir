@@ -9,7 +9,7 @@
 // RUN: circt-opt %s.kernel -lower-std-to-handshake -canonicalize='top-down=true region-simplify=true' -handshake-insert-buffer='strategies=all' > ${TESTNAME}_handshake.mlir
 // RUN: circt-opt -lower-handshake-to-firrtl ${TESTNAME}_handshake.mlir > ${TESTNAME}_handshake_firrtl.mlir
 // RUN: firtool --format=mlir --lower-to-hw --verilog ${TESTNAME}_handshake_firrtl.mlir > ${TESTNAME}.sv
-// RUN: hlt-wrapgen                                            \
+// RUN: hlt-wrapgen                                                            \
 // RUN:   --func %s.kernel                                                     \
 // RUN:   --ref ${TESTNAME}_handshake.mlir                                     \
 // RUN:   --kernel ${TESTNAME}_handshake_firrtl.mlir                           \
