@@ -348,18 +348,24 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
                                     const LoweringOptions &options) {
-  // True if these operations are in a procedural region.
-  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
 
-  for (Block::iterator opIterator = block.begin(), e = block.end();
-       opIterator != e;) {
-    auto &op = *opIterator++;
-
+  // First step, check any nested blocks that exist in this region.  This walk
+  // can pull things out to our level of the hierarchy.
+  for (auto &op : block) {
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
         prepareHWModule(region.front(), options);
     }
+  }
+
+  // Next, walk all of the operations at this level.
+
+  // True if these operations are in a procedural region.
+  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+  for (Block::iterator opIterator = block.begin(), e = block.end();
+       opIterator != e;) {
+    auto &op = *opIterator++;
 
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple
