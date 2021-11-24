@@ -198,6 +198,22 @@ Executing this lit test will  generated a `.vcd` file such as the following, whi
 
 <p align="center"><img src="includes/img/hlt_waveform.png"/></p>
 
+## Debugging HLT simulators
+It might happen that you would want to manually write a `main` function to access the `call/await` functions exposed by the wrapped kernel. To do so, first create a kernel wrapper through `hlt-wrapgen` and copy the `hlt_verilator_CMakeLists.txt` file into the directory where you placed the wrapper and plan to verilate the HDL of the kernel.
+
+First, add a main function. To avoid having new files, navigate to the `${TESTNAME}.cpp` wrapper and add it:
+```c++
+int main() {
+  for (int i = 0; i < 10; i++)
+    ${TESTNAME}_call(...);
+  for (int i = 0; i < 10; i++)
+    ... = ${TESTNAME}_await();
+}
+```
+Then, open the `hlt_verilator_CMakeLists.txt` copied file and modify the `add_library` line to:
+> `add_executable(${HLT_LIBNAME} "${HLT_TESTNAME}.cpp")`
+
+You should now be able to run CMake configure and build, and have an executable which can be debugged as any other C++ project.
 
 ## Why not use the `async` dialect?
 I was initially looking at having the asynchronicity implicit (as opposed to having two separate call/await loops) by using `async.execute` and calling the simulator from within there. However, the main issue with this is that it interferes with how the simulation library currently works;
