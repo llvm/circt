@@ -677,10 +677,9 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Parse iter_args.
-  if (succeeded(parser.parseOptionalKeyword("iter_args")))
-    if (parseOptionalIterArgs(parser, regionIterArgs, iterArgs, iterArgTypes,
-                              iterArgDelays))
-      return failure();
+  if (parseOptionalIterArgs(parser, regionIterArgs, iterArgs, iterArgTypes,
+                            iterArgDelays))
+    return failure();
 
   // Parse iter-time.
   if (parser.parseKeyword("iter_time") || parser.parseLParen())
