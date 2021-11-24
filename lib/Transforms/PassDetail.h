@@ -6,8 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TRANSFORMS_PASSDETAIL_H_
-#define CIRCT_TRANSFORMS_PASSDETAIL_H_
+// NOLINTNEXTLINE(llvm-header-guard)
+#ifndef TRANSFORMS_PASSDETAIL_H
+#define TRANSFORMS_PASSDETAIL_H
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/Passes.h"
@@ -30,4 +31,4 @@ namespace circt {
 } // namespace circt
 } // end namespace mlir
 
-#endif // CIRCT_TRANSFORMS_PASSDETAIL_H_
+#endif // TRANSFORMS_PASSDETAIL_H
