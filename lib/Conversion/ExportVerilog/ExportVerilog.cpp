@@ -3637,10 +3637,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     names.addName(nullptr, verilogName);
   }
 
-  // Rewrite the module body into compliance with our emission expectations, and
-  // collect/rename symbols within the body that conflict.
-  prepareHWModule(*module.getBodyBlock(), state.options);
-
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
 
@@ -4260,14 +4256,25 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   }
 }
 
+/// Prepare the given MLIR module for emission.
+static void prepareForEmission(ModuleOp module,
+                               const LoweringOptions &options) {
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare, [&](auto op) {
+    prepareHWModule(*op.getBodyBlock(), options);
+  });
+}
+
 //===----------------------------------------------------------------------===//
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  // Rename module names and interfaces to not conflict with each other or with
-  // Verilog keywords.
+  // Prepare the ops in the module for emission and legalize the names that will
+  // end up in the output.
   LoweringOptions options(module);
+  prepareForEmission(module, options);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
@@ -4378,9 +4385,10 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 }
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
-  // Rename module names and interfaces to not conflict with each other or with
-  // Verilog keywords.
+  // Prepare the ops in the module for emission and legalize the names that will
+  // end up in the output.
   LoweringOptions options(module);
+  prepareForEmission(module, options);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
