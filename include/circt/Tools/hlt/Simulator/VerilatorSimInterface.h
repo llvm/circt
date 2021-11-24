@@ -84,14 +84,14 @@ public:
 
     // Run for a few cycles with reset.
     for (int i = 0; i < 2; ++i)
-      clock();
+      this->clock();
 
     // Disassert reset
     if (interface.reset)
       *interface.reset = !1;
     else
       *interface.nReset = !0;
-    clock();
+    this->clock();
   }
 
   void finish() override {

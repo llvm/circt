@@ -18,6 +18,11 @@ set(HLT_LIBNAME hlt_${HLT_TESTNAME})
 
 add_library(${HLT_LIBNAME} SHARED "${HLT_TESTNAME}.cpp")
 target_include_directories(${HLT_LIBNAME} PUBLIC "@CIRCT_MAIN_INCLUDE_DIR@")
+target_include_directories(${HLT_LIBNAME} PUBLIC "@LLVM_MAIN_INCLUDE_DIR@")
+target_include_directories(${HLT_LIBNAME} PUBLIC "@LLVM_BINARY_DIR@/include")
+
+# Allow using LLVM in header-only mode.
+add_definitions(-DLLVM_DISABLE_ABI_BREAKING_CHECKS_ENFORCING=1)
 
 # Add the Verilated circuit to the target
 verilate(${HLT_LIBNAME}

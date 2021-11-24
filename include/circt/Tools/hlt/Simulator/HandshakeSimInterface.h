@@ -2,6 +2,7 @@
 #define CIRCT_TOOLS_HLT_HANDSHAKESIMINTERFACE_H
 
 #include "circt/Tools/hlt/Simulator/VerilatorSimInterface.h"
+#include "llvm/ADT/STLExtras.h"
 
 #include <optional>
 
@@ -11,8 +12,10 @@ namespace hlt {
 using TxCallback = std::function<void()>;
 
 struct TransactableTrait {
+  enum State { Idle, TransactNext, Transacted };
   // If this is set, the port was transacted in the last cycle.
-  bool transacted = false;
+  State state = Idle;
+  bool transacted() { return state == State::Transacted; }
 };
 
 template <typename TSimPort>
@@ -49,21 +52,18 @@ struct HandshakeInPort : public HandshakePort<SimulatorInPort> {
   /// An input port transaction is fulfilled by de-asserting the valid (output)
   // signal of his handshake bundle.
   void eval() override {
-    transacted = false;
-    if (transactNext || *(this->validSig) && *(this->readySig)) {
-      if (transactNext) {
+    if (state == Transacted)
+      state = Idle;
+
+    bool transacting = state == TransactNext;
+    if (transacting || *(this->validSig) && *(this->readySig)) {
+      if (transacting) {
         *this->validSig = 0;
-        transacted = true;
-        transactNext = false;
+        state = Transacted;
       } else
-        transactNext = true;
+        state = TransactNext;
     }
   }
-
-  // If the valid signal is to be set low the next cycle. This is a tiny state
-  // machine to ensure that ready/valid signals are held high across clock
-  // edges.
-  bool transactNext = false;
 };
 
 struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
@@ -78,11 +78,17 @@ struct HandshakeOutPort : public HandshakePort<SimulatorOutPort> {
   // handshake bundle is asserted and the valid signal is not. A precondition
   // is that the valid signal was asserter before the ready signal.
   void eval() override {
-    if (*(this->readySig) && !*(this->validSig)) {
-      *this->readySig = 0;
-      transacted = true;
-    } else
-      transacted = false;
+    if (state == Transacted)
+      state = Idle;
+
+    bool transacting = state == TransactNext;
+    if (transacting || *(this->validSig) && *(this->readySig)) {
+      if (transacting) {
+        *this->readySig = 0;
+        state = Transacted;
+      } else
+        state = TransactNext;
+    }
   }
 };
 
@@ -121,15 +127,15 @@ struct HandshakeDataOutPort : HandshakeDataPort<TData, HandshakeOutPort> {
   }
 };
 
-// A HandshakeMemoryInterface represents a wrapper around a handshake.extmemory
-// operation. It is initialized with a set of load- and store ports which, when
-// transacting, will access the pointer provided to the memory interface during
-// simulation. The memory interface inherits from SimulatorInPort due to
-// handshake circuits receiving a memory interface as a memref input.
+// A HandshakeMemoryInterface represents a wrapper around a
+// handshake.extmemory operation. It is initialized with a set of load- and
+// store ports which, when transacting, will access the pointer provided to
+// the memory interface during simulation. The memory interface inherits from
+// SimulatorInPort due to handshake circuits receiving a memory interface as a
+// memref input.
 template <typename TData, typename TAddr>
 class HandshakeMemoryInterface : public SimulatorInPort,
                                  public TransactableTrait {
-  enum TransactState { Idle, WritingMem };
   struct StorePort {
     std::shared_ptr<HandshakeDataOutPort<TData>> data;
     std::shared_ptr<HandshakeDataOutPort<TAddr>> addr;
@@ -165,7 +171,7 @@ public:
              "The memory should always point to the same base address "
              "throughout simulation.");
     memory_ptr = reinterpret_cast<TData *>(memory);
-    state = TransactState::WritingMem;
+    state = Transacted;
   }
 
   virtual ~HandshakeMemoryInterface() = default;
@@ -207,15 +213,7 @@ public:
   /// (output)
   // signal of his handshake bundle.
   void eval() override {
-    switch (state) {
-    case TransactState::Idle:
-      transacted = false;
-      break;
-    case TransactState::WritingMem:
-      state = TransactState::Idle;
-      transacted = true;
-      break;
-    }
+    state = Idle;
 
     // Current cycle transactions:
     // Load ports
@@ -272,11 +270,6 @@ private:
 
   // The size of the memory associated with this interface.
   size_t memorySize;
-
-  // A memory interface is transacted whenever a memory is written to the
-  // interface (or in other words, we're passing a pointer to the function
-  // from software).
-  TransactState state = TransactState::Idle;
 };
 
 template <typename TInput, typename TOutput, typename TModel>
@@ -351,27 +344,36 @@ public:
     // Transact all I/O ports
     for (auto &port : this->outPorts)
       static_cast<HandshakeOutPort *>(port.get())->eval();
-    int i = 0;
-    for (auto &port : this->inPorts) {
-      port->eval();
-      auto transactable = dynamic_cast<TransactableTrait *>(port.get());
-      if (transactable->transacted)
-        inBuffer.value().transacted[i] = true;
-      i++;
+    for (auto &port : llvm::enumerate(this->inPorts)) {
+      port.value()->eval();
+      auto transactable = dynamic_cast<TransactableTrait *>(port.value().get());
+      if (transactable->transacted())
+        inBuffer.value().transacted[port.index()] = true;
     }
 
     // Transact control ports
     inCtrl->eval();
-    if (inCtrl->transacted)
+    if (inCtrl->transacted())
       inBuffer.value().transactedControl = true;
 
     outCtrl->eval();
-    if (outCtrl->transacted)
+    if (outCtrl->transacted())
       outBuffer.transactedControl = true;
 
     // Falling edge
     VerilatorSimImpl::clock_falling();
     this->advanceTime();
+
+    // Set output ports readyness based on which outputs in the current output
+    // buffer have been transacted.
+    for (auto outPort : llvm::enumerate(this->outPorts)) {
+      auto outPortp = dynamic_cast<HandshakeOutPort *>(outPort.value().get());
+      assert(outPortp);
+      if (!outBuffer.transacted[outPort.index()])
+        *(outPortp->readySig) = 1;
+    }
+    if (!outBuffer.transactedControl)
+      *(outCtrl->readySig) = 1;
   }
 
   void setup() override {
@@ -385,18 +387,10 @@ public:
     // Do verilator initialization; this will reset the circuit
     VerilatorSimImpl::setup();
 
-    // Set output ports as ready; this means that when input ports are valid,
-    // the model will start execution.
-    for (auto &outPort : this->outPorts) {
-      auto outPortp = dynamic_cast<HandshakeOutPort *>(outPort.get());
-      assert(outPortp);
-      *(outPortp->readySig) = !0;
-    }
-
     // Run a few cycles to ensure everything works after the model is out of
     // reset and a subset of all ports are ready/valid.
     for (int i = 0; i < 2; ++i)
-      clock();
+      VerilatorSimImpl::clock();
   }
 
   void dump(std::ostream &out) const override {
