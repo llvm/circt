@@ -158,6 +158,131 @@ LogicalResult CyclicProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ChainingProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult ChainingProblem::checkCycleTime() {
+  if (!getCycleTime() || *getCycleTime() <= 0.0f)
+    return getContainingOp()->emitError("Invalid cycle time");
+  return success();
+}
+
+LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
+  auto incDelay = getIncomingDelay(opr);
+  auto outDelay = getOutgoingDelay(opr);
+
+  if (!incDelay || !outDelay)
+    return getContainingOp()->emitError()
+           << "Missing physical delays for operator type '" << opr << "'";
+
+  float zInc = *incDelay;
+  float zOut = *outDelay;
+  float ct = *getCycleTime();
+
+  if (zInc < 0.0f || zOut < 0.0f)
+    return getContainingOp()->emitError()
+           << "Negative physical delays for operator type '" << opr << "'";
+
+  if (zInc > ct)
+    return getContainingOp()->emitError()
+           << "Incoming delay (" << zInc << ") for operator type '" << opr
+           << "' exceeds cycle time (" << ct << ")";
+
+  if (zOut > ct)
+    return getContainingOp()->emitError()
+           << "Outgoing delay (" << zOut << ") for operator type '" << opr
+           << "' exceeds cycle time (" << ct << ")";
+
+  if (*getLatency(opr) == 0 && zInc != zOut)
+    return getContainingOp()->emitError()
+           << "Incoming & outgoing delay must be equal for zero-latency "
+              "operator type '"
+           << opr << "'";
+
+  return success();
+}
+
+LogicalResult ChainingProblem::verifyPhysicalStartTime(Operation *op) {
+  auto physStartTime = getPhysicalStartTime(op);
+  if (!physStartTime)
+    return op->emitError("Operation has no physical start time");
+
+  float pst = *physStartTime;
+  float zInc = *getIncomingDelay(*getLinkedOperatorType(op));
+  float ct = *getCycleTime();
+
+  if (!(pst + zInc <= ct))
+    return op->emitError("Operation violates cycle time constraint");
+
+  return success();
+}
+
+LogicalResult ChainingProblem::verifyPhysicalPrecedence(Dependence dep) {
+  // Auxiliary edges don't transport values.
+  if (dep.isAuxiliary())
+    return success();
+
+  Operation *i = dep.getSource();
+  Operation *j = dep.getDestination();
+
+  unsigned stI = *getStartTime(i);
+  unsigned latI = *getLatency(*getLinkedOperatorType(i));
+  unsigned stJ = *getStartTime(j);
+
+  // If `i` finishes a full time step earlier than `j`, its value is registered
+  // and thereby available at physical time 0.0 in `j`'s start cycle.
+  if (stI + latI < stJ)
+    return success();
+
+  // We have stI + latI == stJ, i.e. `i` ends in the same cycle as `j` starts.
+  // If `i` is combinational, both ops also start in the same cycle, and we must
+  // include `i`'s physical start time in the path delay. Otherwise, `i` started
+  // in an earlier cycle and just contributes its outgoing delay to the path.
+  float pstI = latI == 0 ? *getPhysicalStartTime(i) : 0.0f;
+  float zOutI = *getOutgoingDelay(*getLinkedOperatorType(i));
+  float pstJ = *getPhysicalStartTime(j);
+
+  if (!(pstI + zOutI <= pstJ))
+    return getContainingOp()->emitError()
+           << "Physical delays violated in time step " << stJ
+           << " for dependence:"
+           << "\n  from: " << *i << ", result available in z=" << (pstI + zOutI)
+           << "\n  to:   " << *j << ", starts in z=" << pstJ;
+
+  return success();
+}
+
+LogicalResult ChainingProblem::check() {
+  if (failed(Problem::check()))
+    return failure();
+
+  if (failed(checkCycleTime()))
+    return failure();
+
+  for (auto opr : getOperatorTypes())
+    if (failed(checkDelays(opr)))
+      return failure();
+
+  return success();
+}
+
+LogicalResult ChainingProblem::verify() {
+  if (failed(Problem::verify()))
+    return failure();
+
+  for (auto *op : getOperations())
+    if (failed(verifyPhysicalStartTime(op)))
+      return failure();
+
+  for (auto *op : getOperations())
+    for (auto dep : getDependences(op))
+      if (failed(verifyPhysicalPrecedence(dep)))
+        return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // SharedOperatorsProblem
 //===----------------------------------------------------------------------===//
 
