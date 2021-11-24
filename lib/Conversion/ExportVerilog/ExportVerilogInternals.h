@@ -11,6 +11,9 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include <atomic>
 
 namespace circt {
 struct LoweringOptions;
@@ -170,6 +173,138 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
+// SharedEmitterState
+//===----------------------------------------------------------------------===//
+
+/// Information to control the emission of a single operation into a file.
+struct OpFileInfo {
+  /// The operation to be emitted.
+  Operation *op;
+
+  /// Where among the replicated per-file operations the `op` above should be
+  /// emitted.
+  size_t position = 0;
+};
+
+/// Information to control the emission of a list of operations into a file.
+struct FileInfo {
+  /// The operations to be emitted into a separate file, and where among the
+  /// replicated per-file operations the operation should be emitted.
+  SmallVector<OpFileInfo, 1> ops;
+
+  /// Whether to emit the replicated per-file operations.
+  bool emitReplicatedOps = true;
+
+  /// Whether to include this file as part of the emitted file list.
+  bool addToFilelist = true;
+};
+
+/// This class wraps an operation or a fixed string that should be emitted.
+class StringOrOpToEmit {
+public:
+  explicit StringOrOpToEmit(Operation *op) : pointerData(op), length(~0ULL) {}
+
+  explicit StringOrOpToEmit(StringRef string) {
+    pointerData = (Operation *)nullptr;
+    setString(string);
+  }
+
+  ~StringOrOpToEmit() {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      free(const_cast<void *>(ptr));
+  }
+
+  /// If the value is an Operation*, return it.  Otherwise return null.
+  Operation *getOperation() const {
+    return pointerData.dyn_cast<Operation *>();
+  }
+
+  /// If the value wraps a string, return it.  Otherwise return null.
+  StringRef getStringData() const {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      return StringRef((const char *)ptr, length);
+    return StringRef();
+  }
+
+  /// This method transforms the entry from an operation to a string value.
+  void setString(StringRef value) {
+    assert(pointerData.is<Operation *>() && "shouldn't already be a string");
+    length = value.size();
+    void *data = malloc(length);
+    memcpy(data, value.data(), length);
+    pointerData = (const void *)data;
+  }
+
+  // These move just fine.
+  StringOrOpToEmit(StringOrOpToEmit &&rhs)
+      : pointerData(rhs.pointerData), length(rhs.length) {
+    rhs.pointerData = (Operation *)nullptr;
+  }
+
+private:
+  StringOrOpToEmit(const StringOrOpToEmit &) = delete;
+  void operator=(const StringOrOpToEmit &) = delete;
+  PointerUnion<Operation *, const void *> pointerData;
+  size_t length;
+};
+
+/// This class tracks the top-level state for the emitters, which is built and
+/// then shared across all per-file emissions that happen in parallel.
+struct SharedEmitterState {
+  /// The MLIR module to emit.
+  ModuleOp designOp;
+
+  /// The main file that collects all operations that are neither replicated
+  /// per-file ops nor specifically assigned to a file.
+  FileInfo rootFile;
+
+  /// The additional files to emit, with the output file name as the key into
+  /// the map.
+  llvm::MapVector<Identifier, FileInfo> files;
+
+  /// The various file lists and their contents to emit
+  llvm::StringMap<SmallVector<Identifier>> fileLists;
+
+  /// A list of operations replicated in each output file (e.g., `sv.verbatim`
+  /// or `sv.ifdef` without dedicated output file).
+  SmallVector<Operation *, 0> replicatedOps;
+
+  /// Whether any error has been encountered during emission.
+  std::atomic<bool> encounteredError = {};
+
+  /// A cache of symbol -> defining ops built once and used by each of the
+  /// verilog module emitters.  This is built at "gatherFiles" time.
+  hw::SymbolCache symbolCache;
+
+  // Emitter options extracted from the top-level module.
+  const LoweringOptions &options;
+
+  /// This is a set is populated at "gather" time, containing the hw.module
+  /// operations that have a sv.bind in them.
+  SmallPtrSet<Operation *, 8> modulesContainingBinds;
+
+  /// Information about renamed global symbols, parameters, etc.
+  const GlobalNameTable globalNames;
+
+  /// Flag indicating whether emission is currently in a parallel processing
+  /// mode. This is used for runtime assertions to ensure that certain blocks of
+  /// the code which cross-reference into other modules do so only in sequential
+  /// regions.
+  std::atomic<bool> isInParallelMode = {};
+
+  explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
+                              GlobalNameTable globalNames)
+      : designOp(designOp), options(options),
+        globalNames(std::move(globalNames)) {}
+  void gatherFiles(bool separateModules);
+
+  using EmissionList = std::vector<StringOrOpToEmit>;
+
+  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
+  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
+};
+
+//===----------------------------------------------------------------------===//
 // Other utilities
 //===----------------------------------------------------------------------===//
 
@@ -210,8 +345,8 @@ void prepareHWModule(Block &block, const LoweringOptions &options);
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
 GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
-} // namespace ExportVerilog
 
+} // namespace ExportVerilog
 } // namespace circt
 
 #endif // CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
