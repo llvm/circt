@@ -34,6 +34,7 @@ static bool isUniDimensional(MemRefType memref) {
 // shapes, for each index, and then summing these.
 static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
                             ValueRange indices, MemRefType memrefType) {
+  assert(memrefType.hasStaticShape() && "expected statically shaped memref");
   Location loc = op->getLoc();
   Value finalIdx = indices.front();
   for (auto memIdx : llvm::enumerate(indices.drop_front())) {
