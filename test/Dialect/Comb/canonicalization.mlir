@@ -1074,23 +1074,23 @@ hw.module @extractShift(%arg0: i4) -> (o1 : i1, o2: i1) {
 
 // CHECK-LABEL: hw.module @moduloZeroDividend
 hw.module @moduloZeroDividend(%arg0: i32) -> (o1: i32, o2: i32) {
-  // CHECK: %[[ZERO:.*]] = hw.constant 0 : i32
+  // CHECK: [[ZERO:%.*]] = hw.constant 0 : i32
   %zero = hw.constant 0 : i32
   %0 = comb.mods %zero, %arg0 : i32
   %1 = comb.modu %zero, %arg0 : i32
 
-  // CHECK: hw.output %[[ZERO]], %[[ZERO]]
+  // CHECK: hw.output [[ZERO]], [[ZERO]]
   hw.output %0, %1 : i32, i32
 }
 
 // CHECK-LABEL: hw.module @orWithNegation
 hw.module @orWithNegation(%arg0: i32) -> (o1: i32) {
-  // CHECK: %[[ALLONES:.*]] = hw.constant -1 : i32
+  // CHECK: [[ALLONES:%.*]] = hw.constant -1 : i32
   %allones = hw.constant -1 : i32
   %0 = comb.xor %arg0, %allones : i32
   %1 = comb.or %arg0, %0 : i32
 
-  // CHECK: hw.output %[[ALLONES]]
+  // CHECK: hw.output [[ALLONES]]
   hw.output %1 : i32
 }
 
@@ -1120,3 +1120,23 @@ hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
   // CHECK-NEXT: hw.output %0
   hw.output %0 : i25
 }
+
+// CHECK-LABEL: hw.module @muxNot
+hw.module @muxNot(%cond: i1, %arg0: i32) -> (o1: i32, o1: i32) {
+  %allones = hw.constant -1 : i32
+  %notArg0 = comb.xor %arg0, %allones : i32
+
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[O1:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
+  %o1 = comb.mux %cond, %notArg0, %arg0 : i32
+
+  // CHECK: [[CONDNOT:%.*]] = comb.xor %cond, %true : i1
+  // CHECK: [[CONDEXT:%.*]] = comb.sext [[CONDNOT]] : (i1) -> i32
+  // CHECK: [[O2:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
+  %o2 = comb.mux %cond, %arg0, %notArg0 : i32
+
+  // CHECK: hw.output [[O1]], [[O2]]
+  hw.output %o1, %o2 : i32, i32
+}
+
+

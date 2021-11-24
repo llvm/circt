@@ -37,6 +37,8 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicOps
   CIRCTSV
   CIRCTSVTransforms
+  CIRCTTransforms
+
   
   MLIRIR
   MLIRLLVMIR

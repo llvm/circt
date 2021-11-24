@@ -1788,6 +1788,26 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     return success();
   }
 
+  // mux(cond, ~a, a) -> sext(cond)^a
+  if (matchPattern(op.trueValue(), m_Complement(m_Any(&subExpr))) &&
+      op.falseValue() == subExpr) {
+    auto extended =
+        rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), op.cond());
+    rewriter.replaceOpWithNewOp<XorOp>(op, extended, subExpr);
+    return success();
+  }
+
+  // mux(cond, a, ~a) -> sext(~cond)^a
+  if (matchPattern(op.falseValue(), m_Complement(m_Any(&subExpr))) &&
+      op.trueValue() == subExpr) {
+    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
+    auto notCond = rewriter.createOrFold<XorOp>(op.getLoc(), op.cond(), one);
+    auto extended =
+        rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), notCond);
+    rewriter.replaceOpWithNewOp<XorOp>(op, extended, subExpr);
+    return success();
+  }
+
   if (auto falseMux =
           dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
