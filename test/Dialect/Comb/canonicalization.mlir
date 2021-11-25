@@ -1121,8 +1121,10 @@ hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
   hw.output %0 : i25
 }
 
-// CHECK-LABEL: hw.module @muxNot
-hw.module @muxNot(%cond: i1, %arg0: i32) -> (o1: i32, o1: i32) {
+// CHECK-LABEL: hw.module @muxCommon
+// This handles various cases of mux(cond, x, someop(x, y, z)).
+hw.module @muxCommon(%cond: i1, %arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32)
+  -> (o1: i32, o2: i32, o3: i32, o4: i32, o5: i32, orResult: i32) {
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1135,8 +1137,30 @@ hw.module @muxNot(%cond: i1, %arg0: i32) -> (o1: i32, o1: i32) {
   // CHECK: [[O2:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
   %o2 = comb.mux %cond, %arg0, %notArg0 : i32
 
-  // CHECK: hw.output [[O1]], [[O2]]
-  hw.output %o1, %o2 : i32, i32
+  // CHECK: [[OR_PARTIAL:%.*]] = comb.or %arg1, %arg2 : i32
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[OR_PARTIAL2:%.*]] = comb.and [[CONDEXT]], [[OR_PARTIAL]] : i32
+  // CHECK: [[O3:%.*]] = comb.or [[OR_PARTIAL2]], %arg0 : i32
+  %or = comb.or %arg0, %arg1, %arg2 : i32
+  %o3 = comb.mux %cond, %or, %arg0 : i32
+
+  // CHECK: [[AND_PARTIAL:%.*]] = comb.and %arg1, %arg2 : i32
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[AND_PARTIAL2:%.*]] = comb.or [[CONDEXT]], [[AND_PARTIAL]] : i32
+  // CHECK: [[O4:%.*]] = comb.and [[AND_PARTIAL2]], %arg0 : i32
+  %and = comb.and %arg0, %arg1, %arg2 : i32
+  %o4 = comb.mux %cond, %arg0, %and : i32
+
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[OR1:%.*]] = comb.or %arg1, %arg2, %arg3 : i32
+  // CHECK: [[ORRESULT:%.*]] = comb.or [[OR1]], %arg0 : i32
+  // CHECK: [[MASKED_OR:%.*]] = comb.and [[CONDEXT]], [[OR1]] : i32
+  // CHECK: [[O5:%.*]] = comb.or [[MASKED_OR]], %arg0 : i32
+  %orResult = comb.or %arg0, %arg1, %arg2, %arg3 : i32
+  %o5 = comb.mux %cond, %orResult, %arg0 : i32
+
+  // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult : i32, i32, i32, i32, i32, i32
 }
 
 

@@ -18,6 +18,19 @@ using namespace mlir;
 using namespace circt;
 using namespace comb;
 
+/// Create a new instance of a generic operation that only has value operands,
+/// and has a single result value whose type matches the first operand.
+///
+/// This should not be used to create instances of ops with attributes or with
+/// more complicated type signatures.
+static Value createGenericOp(Location loc, OperationName name,
+                             ArrayRef<Value> operands, OpBuilder &builder) {
+  OperationState state(loc, name);
+  state.addOperands(operands);
+  state.addTypes(operands[0].getType());
+  return builder.createOperation(state)->getResult(0);
+}
+
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
                           value);
@@ -707,10 +720,8 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
   // Create a new instance of the logical operation.  We have to do this the
   // hard way since we're generic across a family of different ops.
   auto createLogicalOp = [&](ArrayRef<Value> operands) -> Value {
-    OperationState state(logicalOp->getLoc(), logicalOp->getName());
-    state.addOperands(operands);
-    state.addTypes(operands[0].getType());
-    return rewriter.createOperation(state)->getResult(0);
+    return createGenericOp(logicalOp->getLoc(), logicalOp->getName(), operands,
+                           rewriter);
   };
 
   // Ok, let's do the transformation.  We do this by slicing up the constant
@@ -1710,6 +1721,113 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
   return true;
 }
 
+/// Given a fully associative variadic operation like (a+b+c+d), break the
+/// expression into two parts, one without the specified operand (e.g.
+/// `tmp = a+b+d`) and one that combines that into the full expression (e.g.
+/// `tmp+c`), and return the inner expression.
+///
+/// NOTE: This mutates the operation in place if it only has a single user,
+/// which assumes that user will be removed.
+///
+static Value extractOperandFromFullyAssociative(Operation *fullyAssoc,
+                                                size_t operandNo,
+                                                PatternRewriter &rewriter) {
+  assert(fullyAssoc->getNumOperands() >= 2 && "cannot split up unary ops");
+  assert(operandNo < fullyAssoc->getNumOperands() && "Invalid operand #");
+
+  // If this expression already has two operands (the common case) no splitting
+  // is necessary.
+  if (fullyAssoc->getNumOperands() == 2)
+    return fullyAssoc->getOperand(operandNo ^ 1);
+
+  // If the operation has a single use, mutate it in place.
+  if (fullyAssoc->hasOneUse()) {
+    fullyAssoc->eraseOperand(operandNo);
+    return fullyAssoc->getResult(0);
+  }
+
+  // Form the new operation with the operands that remain.
+  SmallVector<Value> operands;
+  operands.append(fullyAssoc->getOperands().begin(),
+                  fullyAssoc->getOperands().begin() + operandNo);
+  operands.append(fullyAssoc->getOperands().begin() + operandNo + 1,
+                  fullyAssoc->getOperands().end());
+  Value opWithoutExcluded = createGenericOp(
+      fullyAssoc->getLoc(), fullyAssoc->getName(), operands, rewriter);
+  Value excluded = fullyAssoc->getOperand(operandNo);
+
+  Value fullResult =
+      createGenericOp(fullyAssoc->getLoc(), fullyAssoc->getName(),
+                      ArrayRef<Value>{opWithoutExcluded, excluded}, rewriter);
+  rewriter.replaceOp(fullyAssoc, fullResult);
+  return opWithoutExcluded;
+}
+
+/// Fold things like `mux(cond, x|y|z|a, a)` -> `(x|y|z)&sext(cond) | a` and
+/// `mux(cond, a, x|y|z|a) -> `(x|y|z)&sext(~cond) | a` (when isTrueOperand is
+/// true.  Return true on successful transformation, false if not.
+///
+/// These are various forms of "predicated ops" that can be handled with a
+/// sext/and combination.
+static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
+                               PatternRewriter &rewriter) {
+  // Check to see the operand in question is an operation.  If it is a port,
+  // we can't simplify it.
+  Operation *subExpr =
+      (isTrueOperand ? op.falseValue() : op.trueValue()).getDefiningOp();
+  if (!subExpr || subExpr->getNumOperands() < 2)
+    return false;
+
+  // If this isn't an operation we can handle, don't spend energy on it.
+  if (!isa<AndOp, XorOp, OrOp>(subExpr))
+    return false;
+
+  // Check to see if the common value occurs in the operand list for the
+  // subexpression op.  If so, then we can simplify it.
+  Value commonValue = isTrueOperand ? op.trueValue() : op.falseValue();
+  size_t opNo = 0, e = subExpr->getNumOperands();
+  while (opNo != e && subExpr->getOperand(opNo) != commonValue)
+    ++opNo;
+  if (opNo == e)
+    return false;
+
+  // If we got a hit, then go ahead and simplify it!
+  Value cond = op.cond();
+
+  // Invert the condition if needed.  Or/Xor invert when dealing with
+  // TrueOperand, And inverts for False operand.
+  if (isTrueOperand ^ isa<AndOp>(subExpr)) {
+    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
+    cond = rewriter.createOrFold<XorOp>(op.getLoc(), cond, one);
+  }
+  auto extendedCond =
+      rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), cond);
+
+  // Handle the fully associative ops, start by pulling out the subexpression
+  // from a many operand version of the op.
+  auto restOfAssoc =
+      extractOperandFromFullyAssociative(subExpr, opNo, rewriter);
+
+  // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&sext(cond) | a`
+  // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&sext(cond) ^ a`
+  if (isa<OrOp, XorOp>(subExpr)) {
+    auto masked =
+        rewriter.createOrFold<AndOp>(op.getLoc(), extendedCond, restOfAssoc);
+    if (isa<XorOp>(subExpr))
+      rewriter.replaceOpWithNewOp<XorOp>(op, masked, commonValue);
+    else
+      rewriter.replaceOpWithNewOp<OrOp>(op, masked, commonValue);
+    return true;
+  }
+
+  // `mux(cond, a, x&y&z&a)` -> `((x&y&z)|sext(cond)) & a`
+  assert(isa<AndOp>(subExpr) && "unexpected operation here");
+  auto masked =
+      rewriter.createOrFold<OrOp>(op.getLoc(), extendedCond, restOfAssoc);
+  rewriter.replaceOpWithNewOp<AndOp>(op, masked, commonValue);
+  return true;
+}
+
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
@@ -1803,26 +1921,6 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  // mux(cond, ~a, a) -> sext(cond)^a
-  if (matchPattern(op.trueValue(), m_Complement(m_Any(&subExpr))) &&
-      op.falseValue() == subExpr) {
-    auto extended =
-        rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), op.cond());
-    rewriter.replaceOpWithNewOp<XorOp>(op, extended, subExpr);
-    return success();
-  }
-
-  // mux(cond, a, ~a) -> sext(~cond)^a
-  if (matchPattern(op.falseValue(), m_Complement(m_Any(&subExpr))) &&
-      op.trueValue() == subExpr) {
-    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-    auto notCond = rewriter.createOrFold<XorOp>(op.getLoc(), op.cond(), one);
-    auto extended =
-        rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), notCond);
-    rewriter.replaceOpWithNewOp<XorOp>(op, extended, subExpr);
-    return success();
-  }
-
   if (auto falseMux =
           dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
@@ -1849,6 +1947,13 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     if (foldMuxChain(op, /*isFalseSide*/ false, rewriter))
       return success();
   }
+
+  // mux(cond, x|y|z|a, a) -> (x|y|z)&sext(cond) | a
+  if (foldCommonMuxValue(op, false, rewriter))
+    return success();
+  // mux(cond, a, x|y|z|a) -> (x|y|z)&sext(~cond) | a
+  if (foldCommonMuxValue(op, true, rewriter))
+    return success();
 
   return failure();
 }
