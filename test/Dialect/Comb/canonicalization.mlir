@@ -747,6 +747,30 @@ hw.module @fold_mux_tree4(%sel: i2, %a: i8, %b: i8, %c: i8) -> (y: i8) {
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @fold_mux_tree5
+// This mux tree has an "and" of two selectors.
+hw.module @fold_mux_tree5(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %d, %d, %d, %b, %a, %c, %b, %a : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c-4_i3 = hw.constant -4 : i3
+  %c3_i3 = hw.constant 3 : i3
+  %c0_i3 = hw.constant 0 : i3
+  %c1_i3 = hw.constant 1 : i3
+  %c2_i3 = hw.constant 2 : i3
+  %0 = comb.icmp eq %sel, %c2_i3 : i3
+  %1 = comb.mux %0, %c, %d : i8
+  %2 = comb.icmp eq %sel, %c1_i3 : i3
+  %3 = comb.mux %2, %b, %1 : i8
+  %4 = comb.icmp eq %sel, %c0_i3 : i3
+  %5 = comb.icmp eq %sel, %c3_i3 : i3
+  %6 = comb.or %5, %4 : i1
+  %7 = comb.mux %6, %a, %3 : i8
+  %8 = comb.icmp eq %sel, %c-4_i3 : i3
+  %9 = comb.mux %8, %b, %7 : i8
+  hw.output %9 : i8
+}
+
 // CHECK-LABEL: hw.module @dont_fold_mux_tree1
 // This shouldn't be turned into an array because it is too sparse.
 hw.module @dont_fold_mux_tree1(%sel: i7, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
