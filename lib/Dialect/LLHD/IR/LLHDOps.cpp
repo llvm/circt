@@ -538,11 +538,12 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
   result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
                       TypeAttr::get(type));
 
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, args, argTypes))
+  auto &body = *result.addRegion();
+  if (parser.parseRegion(body, args, argTypes))
     return failure();
+  if (body.empty())
+    body.push_back(std::make_unique<Block>().release());
 
-  llhd::EntityOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
 
@@ -620,11 +621,6 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 }
 
 LogicalResult circt::llhd::EntityOp::verifyBody() {
-  // Body must not be empty.
-  if (isExternal())
-    return emitOpError("defining external entity with the entity instruction "
-                       "is not allowed, use the intended instruction instead.");
-
   // check signal names are unique
   llvm::StringMap<bool> sigMap;
   llvm::StringMap<bool> instMap;
@@ -678,15 +674,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
   return success();
 }
 
-LogicalResult circt::llhd::ProcOp::verifyBody() {
-  // Body must not be empty, this indicates an external process. We use
-  // another instruction to reference external processes.
-  if (isExternal()) {
-    return emitOpError("defining external processes with the proc instruction "
-                       "is not allowed, use the intended instruction instead.");
-  }
-  return success();
-}
+LogicalResult circt::llhd::ProcOp::verifyBody() { return success(); }
 
 static LogicalResult verify(llhd::ProcOp op) {
   // Check that the ins attribute is smaller or equal the number of

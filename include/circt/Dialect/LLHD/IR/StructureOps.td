@@ -14,7 +14,8 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
-    SingleBlockImplicitTerminator<"TerminatorOp">,
+    SingleBlock,
+    NoTerminator,
     DeclareOpInterfaceMethods<CallableOpInterface>
   ]> {
   let summary = "Create an entity.";
@@ -224,22 +225,6 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
 //===----------------------------------------------------------------------===//
 //=== Control Flow Operations
 //===----------------------------------------------------------------------===//
-
-def LLHD_TerminatorOp : LLHD_Op<"terminator", [
-    Terminator,
-    HasParent<"EntityOp">
-  ]> {
-  let summary = "Dummy terminator";
-  let description = [{
-    The `"llhd.terminator"` op is a dummy terminator for an `EntityOp` unit.
-    It provides no further meaning other than ensuring correct termination
-    of an entitiy's region. This operation provides no custom syntax and
-    should never explicitly appear in LLHD's custom syntax.
-  }];
-
-  let parser = ?;
-  let printer = ?;
-}
 
 def LLHD_WaitOp : LLHD_Op<"wait", [
     Terminator,
