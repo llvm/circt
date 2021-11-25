@@ -11,9 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/APInt/APIntOps.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/APSInt.h"
 
 using namespace circt;
 using namespace apint;
@@ -94,6 +93,32 @@ LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
 
   results.push_back(IntegerType::get(context, resultWidth, signedness));
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+APSInt ConstantOp::getValue() {
+  return (*this)->getAttrOfType<IntegerAttr>("value").getAPSInt();
+}
+
+static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
+  p << " ";
+  p.printAttribute(op.valueAttr());
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+static ParseResult parseConstantOp(OpAsmParser &parser,
+                                   OperationState &result) {
+  IntegerAttr valueAttr;
+
+  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes(valueAttr.getType());
   return success();
 }
 

@@ -26,6 +26,7 @@ def APIntDialect : Dialect {
     This dialect defines the `apint` dialect, which is intended to represent
     lossless arbitrary precision integer arithmetics.
   }];
+
   let cppNamespace = "::circt::apint";
   let extraClassDeclaration = [{
     /// Register all APInt types.
