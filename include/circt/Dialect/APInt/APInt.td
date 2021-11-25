@@ -14,9 +14,6 @@
 #define APINT_TD
 
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/IR/OpAsmInterface.td"
-include "mlir/IR/SymbolInterfaces.td"
 
 def APIntDialect : Dialect {
   let name = "apint";

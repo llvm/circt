@@ -16,7 +16,6 @@
 #define CIRCT_DIALECT_APINT_APINTTYPES_H
 
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/Dialect.h"
 
 #include "APIntDialect.h"
 

@@ -13,7 +13,6 @@
 #ifndef CIRCT_DIALECT_APINT_APINTDIALECT_H
 #define CIRCT_DIALECT_APINT_APINTDIALECT_H
 
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the Dialect definition.

@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/APInt/APIntOps.h"
-#include "mlir/IR/Builders.h"
 #include "llvm/ADT/APSInt.h"
 
 using namespace circt;

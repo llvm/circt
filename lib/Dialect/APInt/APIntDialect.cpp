@@ -12,10 +12,6 @@
 
 #include "circt/Dialect/APInt/APIntDialect.h"
 #include "circt/Dialect/APInt/APIntOps.h"
-#include "circt/Dialect/HW/HWOps.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
 using namespace apint;

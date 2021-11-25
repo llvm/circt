@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/APInt/APIntTypes.h"
-#include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
 using namespace circt::apint;
