@@ -573,6 +573,12 @@ public:
                                  std::function<void(Value)> operandEmitter,
                                  ArrayAttr symAttrs, ModuleNameManager &names);
 
+  /// Emit the value of a StringAttr as one or more Verilog "one-line" comments
+  /// ("//").  Break the comment to respect the emittedLineLength and trim
+  /// whitespace after a line break.  Do nothing if the StringAttr is null or
+  /// the value is empty.
+  void emitComment(StringAttr comment);
+
 private:
   void operator=(const EmitterBase &) = delete;
   EmitterBase(const EmitterBase &) = delete;
@@ -681,6 +687,65 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Emit any text after the last substitution.
   os << string;
+}
+
+void EmitterBase::emitComment(StringAttr comment) {
+  if (!comment)
+    return;
+
+  // Set a line length for the comment.  Subtract off the leading comment and
+  // space ("// ") as well as the current indent level to simplify later
+  // arithmetic.  Ensure that this line length doesn't go below zero.
+  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
+  if (lineLength > state.options.emittedLineLength)
+    lineLength = 0;
+
+  // Process the comment in line chunks extracted from manually specified line
+  // breaks.  This is done to preserve user-specified line breaking if used.
+  auto ref = comment.getValue();
+  StringRef line;
+  while (!ref.empty()) {
+    std::tie(line, ref) = ref.split("\n");
+    // Emit each comment line breaking it if it exceeds the emittedLineLength.
+    for (;;) {
+      indent();
+      os << "// ";
+
+      // Base case 1: the entire comment fits on one line.
+      if (line.size() <= lineLength) {
+        os << line << "\n";
+        break;
+      }
+
+      // The comment does NOT fit on one line.  Use a simple algorithm to find
+      // a position to break the line:
+      //   1) Search backwards for whitespace and break there if you find it.
+      //   2) If no whitespace exists in (1), search forward for whitespace
+      //      and break there.
+      // This algorithm violates the emittedLineLength if (2) ever occurrs,
+      // but it's dead simple.
+      auto breakPos = line.rfind(' ', lineLength);
+      // No whitespace exists looking backwards.
+      if (breakPos == StringRef::npos) {
+        breakPos = line.find(' ', lineLength);
+        // No whitespace exists looking forward (you hit the end of the
+        // string).
+        if (breakPos == StringRef::npos)
+          breakPos = line.size();
+      }
+
+      // Emit up to the break position.  Trim any whitespace after the break
+      // position.  Exit if nothing is left to emit.  Otherwise, update the
+      // comment ref and continue;
+      os << line.take_front(breakPos) << "\n";
+      breakPos = line.find_first_not_of(' ', breakPos);
+      // Base Case 2: nothing left except whitespace.
+      if (breakPos == StringRef::npos)
+        break;
+
+      line = line.drop_front(breakPos);
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -3652,6 +3717,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
+
+  emitComment(module.commentAttr());
 
   os << "module " << getVerilogModuleName(module);
 
