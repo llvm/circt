@@ -10,6 +10,7 @@ add_llvm_tool(circt-reduce
 llvm_update_compile_flags(circt-reduce)
 target_link_libraries(circt-reduce
   PRIVATE
+  CIRCTAPInt
   CIRCTCalyx
   CIRCTESI
   CIRCTFIRRTL

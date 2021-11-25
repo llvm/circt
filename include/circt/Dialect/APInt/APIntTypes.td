@@ -21,5 +21,5 @@ def APIntType : DialectType<APIntDialect,
       CPred<"$_self.isa<::mlir::IntegerType>()">,
       CPred<"!$_self.isSignlessInteger()">
     ]>,
-    "arbitrary precision integer with signedness semantics",
+    "an arbitrary precision integer with signedness semantics",
     "::mlir::IntegerType">;
