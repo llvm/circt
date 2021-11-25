@@ -31,12 +31,6 @@ LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
   auto lhs = operands[0].getType().cast<IntegerType>();
   auto rhs = operands[1].getType().cast<IntegerType>();
 
-  // TODO such checks will be required for every operand...
-  //      is there a trait that can be used instead?
-  //      or is a verifier the preferred choice here?
-  assert(!lhs.isSignless() && "lhs operand may not be signless");
-  assert(!rhs.isSignless() && "rhs operand may not be signless");
-
   // Bit width rules are taken from Vivado Design Suite User Guide:
   // High-Level Synthesis (v2020.1) page 241
   // https://www.xilinx.com/content/dam/xilinx/support/documentation/sw_manuals/xilinx2020_1/ug902-vivado-high-level-synthesis.pdf
@@ -81,9 +75,6 @@ LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
 
   auto lhs = operands[0].getType().cast<IntegerType>();
   auto rhs = operands[1].getType().cast<IntegerType>();
-
-  assert(!lhs.isSignless() && "lhs operand may not be signless");
-  assert(!rhs.isSignless() && "rhs operand may not be signless");
 
   // Bit width rules are taken from Vivado Design Suite User Guide:
   // High-Level Synthesis (v2020.1) page 242

@@ -20,8 +20,8 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 // Base class for binary operators.
 class BinOp<string mnemonic, list<OpTrait> traits = []> :
       APIntOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
-  let results = (outs AnyInteger:$result);
+  let arguments = (ins APIntType:$lhs, APIntType:$rhs);
+  let results = (outs APIntType:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
 }

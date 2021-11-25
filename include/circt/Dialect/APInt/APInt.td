@@ -32,6 +32,7 @@ def APIntDialect : Dialect {
 class APIntOp<string mnemonic, list<OpTrait> traits = []> :
     Op<APIntDialect, mnemonic, traits>;
 
+include "circt/Dialect/APInt/APIntTypes.td"
 include "circt/Dialect/APInt/APIntOps.td"
 
 #endif // APINT_TD
