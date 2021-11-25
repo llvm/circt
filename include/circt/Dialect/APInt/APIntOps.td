@@ -26,12 +26,6 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
 }
 
-// Binary operator with uniform input/result types.
-class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
-      BinOp<mnemonic,
-               traits # [SameTypeOperands, SameOperandsAndResultType]> {
-}
-
 // Binary operator with result type inference.
 class TIBinOp<string mnemonic, list<OpTrait> traits = []> :
       BinOp<mnemonic, traits # [InferTypeOpInterface]> {
