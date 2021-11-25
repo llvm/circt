@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 def LLHD_SigOp : LLHD_Op<"sig", [
-    HasParent<"EntityOp">,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
       "init", "result", "SigType::get($_self)">
