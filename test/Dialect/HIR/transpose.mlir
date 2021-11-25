@@ -2,7 +2,7 @@
 #bram_r = {"rd_latency"=1}
 #bram_w = {"wr_latency"=1}
 
-hir.func @transpose at %t(
+hir.func @transpose_hir at %t(
   %Ai :!hir.memref<16x16xi32> ports [#bram_r],
   %Co : !hir.memref<16x16xi32> ports [#bram_w]) {
     
