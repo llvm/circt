@@ -25,6 +25,9 @@ using namespace apint;
 //===----------------------------------------------------------------------===//
 
 void APIntDialect::initialize() {
+  // Register types.
+  registerTypes();
+
   // Register operations.
   addOperations<
 #define GET_OP_LIST

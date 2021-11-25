@@ -27,6 +27,10 @@ def APIntDialect : Dialect {
     lossless arbitrary precision integer arithmetics.
   }];
   let cppNamespace = "::circt::apint";
+  let extraClassDeclaration = [{
+    /// Register all APInt types.
+    void registerTypes();
+  }];
 }
 
 // Base class for the operation in this dialect.
