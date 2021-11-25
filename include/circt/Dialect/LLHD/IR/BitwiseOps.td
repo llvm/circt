@@ -47,17 +47,16 @@ def LLHD_ShlOp : LLHD_Op<"shl", [
     ```
   }];
 
-  // TODO: adjust type T and Th to include pointers
   let arguments = (ins
     AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$base,
+               LLHD_SigOrPtrType<[HWIntegerType, ArrayType]>]>:$base,
     AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$hidden,
+               LLHD_SigOrPtrType<[HWIntegerType, ArrayType]>]>:$hidden,
     HWIntegerType:$amount);
 
   let results = (outs
     AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$result);
+               LLHD_SigOrPtrType<[HWIntegerType, ArrayType]>]>:$result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
@@ -108,17 +107,16 @@ def LLHD_ShrOp : LLHD_Op<"shr", [
     ```
   }];
 
-  // TODO: adjust type T and Th to include pointers
   let arguments = (ins
     AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$base,
+               LLHD_SigOrPtrType<[HWIntegerType, ArrayType]>]>:$base,
     AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$hidden,
+               LLHD_SigOrPtrType<[HWIntegerType, ArrayType]>]>:$hidden,
     HWIntegerType:$amount);
 
   let results = (outs
     AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$result);
+               LLHD_SigOrPtrType<[HWIntegerType, ArrayType]>]>:$result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)

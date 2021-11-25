@@ -135,6 +135,8 @@ struct constant_int_all_ones_matcher {
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
+  else if (auto ptr = type.dyn_cast<llhd::PtrType>())
+    type = ptr.getUnderlyingType();
   if (auto array = type.dyn_cast<hw::ArrayType>())
     return array.getSize();
   if (auto tup = type.dyn_cast<hw::StructType>())
@@ -145,6 +147,8 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 Type circt::llhd::getLLHDElementType(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
+  else if (auto ptr = type.dyn_cast<llhd::PtrType>())
+    type = ptr.getUnderlyingType();
   if (auto array = type.dyn_cast<hw::ArrayType>())
     return array.getElementType();
   return type;
@@ -162,6 +166,10 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
     return sameKindArbitraryWidth(
         sig.getUnderlyingType(),
         rhsType.cast<llhd::SigType>().getUnderlyingType());
+  if (auto ptr = lhsType.dyn_cast<llhd::PtrType>())
+    return sameKindArbitraryWidth(
+        ptr.getUnderlyingType(),
+        rhsType.cast<llhd::PtrType>().getUnderlyingType());
 
   if (auto array = lhsType.dyn_cast<hw::ArrayType>())
     return array.getElementType() ==
