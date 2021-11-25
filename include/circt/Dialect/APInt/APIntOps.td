@@ -26,10 +26,6 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
 }
 
-// TODO the type cannot be inferred if operand types are not the same as the result type
-//      Yet, for lossless arithmetic the bit sizes are typically different.
-//      See i.e. https://github.com/Minres/CoreDSL/wiki/Expressions#addition
-
 // Binary operator with uniform input/result types.
 class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
       BinOp<mnemonic,
@@ -50,9 +46,6 @@ class TIBinOp<string mnemonic, list<OpTrait> traits = []> :
                                           SmallVectorImpl<Type> &results);
   }];
 }
-
-
-// TODO unary ops are probably desired too
 
 // Arithmetic and Logical Operations.
 def AddOp : TIBinOp<"add", [Commutative]>;

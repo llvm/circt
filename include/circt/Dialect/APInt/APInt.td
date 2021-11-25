@@ -23,7 +23,8 @@ def APIntDialect : Dialect {
 
   let summary = "Types and operations for apint dialect";
   let description = [{
-    TODO
+    This dialect defines the `apint` dialect, which is intended to represent
+    lossless arbitrary precision integer arithmetics.
   }];
   let cppNamespace = "::circt::apint";
 }
