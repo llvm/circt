@@ -4079,10 +4079,21 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       });
 }
 
-/// Actually emit the collected list of operations and strings to the
-/// specified file.
-void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
-                                 bool parallelize) {
+/// Emit the collected list of operations and strings to the specified output
+/// stream. This performs an initial best-effort parallel emission. /// If
+/// parallelization is *disabled* directly emits to the output stream. If this
+/// function is called within a parallel block and an operation like `sv.bind`
+/// is encountered which requires sequential processing, the emission stops at
+/// that operation.
+///
+/// If parallelization is *enabled* ops are emitted to a string buffer in
+/// parallel. Operations like `sv.bind` are skipped.
+///
+/// This function leaves the `thingsToEmit` in a partially-emitted state (with
+/// the emitted ones cleared), and relies on a subsequent call to
+/// `emitOpsSequential` to perform the final emission.
+void SharedEmitterState::emitOpsParallel(EmissionList &thingsToEmit,
+                                         raw_ostream &os, bool parallelize) {
   MLIRContext *context = designOp->getContext();
 
   // Disable parallelization overhead if MLIR threading is disabled.
@@ -4095,10 +4106,22 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     VerilogEmitterState state(designOp, *this, options, symbolCache,
                               globalNames, os);
     for (auto &entry : thingsToEmit) {
-      if (auto *op = entry.getOperation())
-        emitOperation(state, op);
-      else
+      auto *op = entry.getOperation();
+      if (!op) {
         os << entry.getStringData();
+        entry.clear();
+        continue;
+      }
+
+      // BindOp emission reaches into the hw.module of the instance, and that
+      // body may be being transformed by its own emission. Postpone emission to
+      // the sequential phase.
+      if (isInParallelMode &&
+          (isa<BindOp>(op) || modulesContainingBinds.count(op)))
+        break;
+
+      emitOperation(state, op);
+      entry.clear();
     }
 
     if (state.encounteredError)
@@ -4126,11 +4149,29 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
                               globalNames, tmpStream);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
+    if (state.encounteredError)
+      encounteredError = true;
   });
   isInParallelMode = false;
+}
 
-  // Finally emit each entry now that we know it is a string.
+/// Emit the collected list of operations and strings to the specified output
+/// stream. This function performs emission sequentially and expects to be
+/// called in a non-parallel region. Parts of the `thingsToEmit` may already
+/// have been emitted to the output stream (indicated by them having been
+/// cleared). These parts are simply skipped.
+///
+/// This function performs all the remaining work necessary to emit the
+/// `thingsToEmit`. It *may* be preceeded by a call to `emitOpsParallel` that
+/// already handles parts of the emission, but it does not have to be.
+void SharedEmitterState::emitOpsSequential(EmissionList &thingsToEmit,
+                                           raw_ostream &os) {
+  assert(!isInParallelMode);
   for (auto &entry : thingsToEmit) {
+    // If this was already emitted to the output stream, just do nothing.
+    if (entry.isCleared())
+      continue;
+
     // Almost everything is lowered to a string, just concat the strings onto
     // the output stream.
     auto *op = entry.getOperation();
@@ -4143,6 +4184,9 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     VerilogEmitterState state(designOp, *this, options, symbolCache,
                               globalNames, os);
     emitOperation(state, op);
+    entry.clear();
+    if (state.encounteredError)
+      encounteredError = true;
   }
 }
 
@@ -4193,7 +4237,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   }
 
   // Finally, emit all the ops we collected.
-  emitter.emitOps(list, os, /*parallelize=*/true);
+  emitter.emitOpsParallel(list, os, /*parallelize=*/true);
+  emitter.emitOpsSequential(list, os);
   return failure(emitter.encounteredError);
 }
 
@@ -4256,21 +4301,47 @@ createOutputFile(StringRef fileName, StringRef dirname,
   return output;
 }
 
-static void createSplitOutputFile(Identifier fileName, FileInfo &file,
-                                  StringRef dirname,
-                                  SharedEmitterState &emitter) {
-  auto output = createOutputFile(fileName, dirname, emitter);
+namespace {
+/// Necessary information to emit one of the output files in split Verilog
+/// emission. This is mainly used to allow for file emission in two phases: an
+/// opportunistic parallel phase and a final sequential phase.
+struct SplitOutputFile {
+  Identifier fileName;
+  FileInfo &file;
+  SharedEmitterState::EmissionList list;
+  std::unique_ptr<llvm::ToolOutputFile> output;
+
+  SplitOutputFile(Identifier fileName, FileInfo &file)
+      : fileName(fileName), file(file) {}
+  void emitParallel(StringRef dirname, SharedEmitterState &emitter);
+  void emitSequential(SharedEmitterState &emitter);
+};
+} // namespace
+
+/// Perform the initial parallel part of emission. This function expects to be
+/// called in a parallel block, and at least creates the output file and gathers
+/// up the ops to be emitted. Must be followed by a call to `emitSequential` to
+/// finalize.
+void SplitOutputFile::emitParallel(StringRef dirname,
+                                   SharedEmitterState &emitter) {
+  output = createOutputFile(fileName, dirname, emitter);
   if (!output)
     return;
 
-  SharedEmitterState::EmissionList list;
   emitter.collectOpsForFile(file, list);
 
   // Emit the file, copying the global options into the individual module
   // state.  Don't parallelize emission of the ops within this file - we
   // already parallelize per-file emission and we pay a string copy overhead
   // for parallelization.
-  emitter.emitOps(list, output->os(), /*parallelize=*/false);
+  emitter.emitOpsParallel(list, output->os(), /*parallelize=*/false);
+}
+
+/// Perform the final sequential part of emission. This function expects to be
+/// called in a purely sequential section, and must have been preceeded by a
+/// call to `emitParallel`.
+void SplitOutputFile::emitSequential(SharedEmitterState &emitter) {
+  emitter.emitOpsSequential(list, output->os());
   output->keep();
 }
 
@@ -4284,14 +4355,23 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
 
-  // Emit each file in parallel if context enables it.
+  // Gather up the necessary data to emit each file. This data structure is used
+  // to carry the necessary information from the parallel phase to the
+  // sequential phase.
+  SmallVector<SplitOutputFile> files;
+  files.reserve(emitter.files.size());
+  for (auto &it : emitter.files)
+    files.push_back(SplitOutputFile(it.first, it.second));
+
+  // Perform a first parallel emission of each file if the context enables it.
   emitter.isInParallelMode = true;
-  parallelForEach(module->getContext(), emitter.files.begin(),
-                  emitter.files.end(), [&](auto &it) {
-                    createSplitOutputFile(it.first, it.second, dirname,
-                                          emitter);
-                  });
+  parallelForEach(module->getContext(), files.begin(), files.end(),
+                  [&](auto &file) { file.emitParallel(dirname, emitter); });
   emitter.isInParallelMode = false;
+
+  // Perform the final sequential emission of each file.
+  for (auto &file : files)
+    file.emitSequential(emitter);
 
   // Write the file list.
   SmallString<128> filelistPath(dirname);

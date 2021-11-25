@@ -209,10 +209,10 @@ public:
     setString(string);
   }
 
-  ~StringOrOpToEmit() {
-    if (const void *ptr = pointerData.dyn_cast<const void *>())
-      free(const_cast<void *>(ptr));
-  }
+  ~StringOrOpToEmit() { clear(); }
+
+  /// Check if the value has been cleared.
+  bool isCleared() const { return pointerData.isNull(); }
 
   /// If the value is an Operation*, return it.  Otherwise return null.
   Operation *getOperation() const {
@@ -233,6 +233,13 @@ public:
     void *data = malloc(length);
     memcpy(data, value.data(), length);
     pointerData = (const void *)data;
+  }
+
+  /// Clear the entry.
+  void clear() {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      free(const_cast<void *>(ptr));
+    pointerData = nullptr;
   }
 
   // These move just fine.
@@ -301,7 +308,9 @@ struct SharedEmitterState {
   using EmissionList = std::vector<StringOrOpToEmit>;
 
   void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
-  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
+  void emitOpsParallel(EmissionList &thingsToEmit, raw_ostream &os,
+                       bool parallelize);
+  void emitOpsSequential(EmissionList &thingsToEmit, raw_ostream &os);
 };
 
 //===----------------------------------------------------------------------===//
