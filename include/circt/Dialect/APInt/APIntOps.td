@@ -23,7 +23,7 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
   let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
   let results = (outs AnyInteger:$result);
 
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)";
 }
 
 // TODO the type cannot be inferred if operand types are not the same as the result type
@@ -36,8 +36,24 @@ class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
 }
 
+// Binary operator with result type inference.
+class TIBinOp<string mnemonic, list<OpTrait> traits = []> :
+      BinOp<mnemonic, traits # [InferTypeOpInterface]> {
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}
+
+
 // TODO unary ops are probably desired too
 
 // Arithmetic and Logical Operations.
-def AddOp : UTBinOp<"add", [Commutative]>;
-def MulOp : UTBinOp<"mul", [Commutative]>;
+def AddOp : TIBinOp<"add", [Commutative]>;
+def MulOp : TIBinOp<"mul", [Commutative]>;
