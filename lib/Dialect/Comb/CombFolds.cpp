@@ -1620,23 +1620,6 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     return false;
   Value indexValue = rootCmp.lhs();
 
-  // Check to see if the condition to the specified mux is an equality
-  // comparison `indexValue` and a constant.  If so, return the constant, if not
-  // return null.
-  auto getCondConstant = [&](MuxOp mux) -> hw::ConstantOp {
-    auto topLevelCmp = mux.cond().getDefiningOp<ICmpOp>();
-
-    // TODO: We could conceivably handle things like "x < 2" as two entries
-    // if there was a reason to.  We could also handle a mix of == / !=
-    // comparisons if they occur.
-    auto requiredPredicate =
-        (isFalseSide ? ICmpPredicate::eq : ICmpPredicate::ne);
-    if (!topLevelCmp || topLevelCmp.lhs() != indexValue ||
-        topLevelCmp.predicate() != requiredPredicate)
-      return {};
-    return topLevelCmp.rhs().getDefiningOp<hw::ConstantOp>();
-  };
-
   // Return the value to use if the equality match succeeds.
   auto getCaseValue = [&](MuxOp mux) -> Value {
     return mux.getOperand(1 + unsigned(!isFalseSide));
@@ -1648,25 +1631,57 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     return mux.getOperand(1 + unsigned(isFalseSide));
   };
 
+  // Check to see if the condition to the specified mux is an equality
+  // comparison `indexValue` and one or more constants.  If so, put the
+  // constants in the constants vector and return true, otherwise return false.
+  auto getCondConstant =
+      [&](MuxOp mux, std::function<void(hw::ConstantOp)> constantFn) -> bool {
+    // Handle `idx == 42` and `idx != 42`.
+    if (auto topLevelCmp = mux.cond().getDefiningOp<ICmpOp>()) {
+      // TODO: We could handle things like "x < 2" as two entries
+      // if there was a reason to.  We could also handle a mix of == / !=
+      // comparisons if they occur.
+      auto requiredPredicate =
+          (isFalseSide ? ICmpPredicate::eq : ICmpPredicate::ne);
+      if (topLevelCmp.lhs() == indexValue &&
+          topLevelCmp.predicate() == requiredPredicate) {
+        if (auto cst = topLevelCmp.rhs().getDefiningOp<hw::ConstantOp>()) {
+          constantFn(cst);
+          return true;
+        }
+      }
+      return false;
+    }
+    return false;
+  };
+
+  // Start scanning the mux tree to see what we've got.  Keep track of the
+  // constant comparison value and the SSA value to use when equal to it.
+  SmallVector<Location> locationsFound;
+  SmallVector<std::pair<hw::ConstantOp, Value>, 4> valuesFound;
+
+  /// Extract constants and values into `valuesFound` and return true if this is
+  /// part of the mux tree, otherwise return false.
+  auto collectConstantValues = [&](MuxOp mux) -> bool {
+    return getCondConstant(mux, [&](hw::ConstantOp cst) {
+      valuesFound.push_back({cst, getCaseValue(mux)});
+      locationsFound.push_back(mux.cond().getLoc());
+      locationsFound.push_back(mux->getLoc());
+    });
+  };
+
   // Make sure the root is a correct comparison with a constant.
-  auto rootCst = getCondConstant(rootMux);
-  if (!rootCst)
+  if (!collectConstantValues(rootMux))
     return false;
 
   // Make sure that we're not looking at the intermediate node in a mux tree.
   if (rootMux->hasOneUse()) {
     if (auto userMux = dyn_cast<MuxOp>(*rootMux->user_begin())) {
-      if (getCondConstant(userMux) &&
-          getTreeValue(userMux) == rootMux.getResult())
+      if (getTreeValue(userMux) == rootMux.getResult() &&
+          getCondConstant(userMux, [&](hw::ConstantOp cst) {}))
         return false;
     }
   }
-
-  // Start scanning the mux tree to see what we've got.  Keep track of the
-  // constant comparison value and the SSA value to use when equal to it.
-  SmallVector<std::pair<hw::ConstantOp, Value>, 4> valuesFound;
-  SmallVector<Location> locationsFound;
-  valuesFound.push_back({rootCst, getCaseValue(rootMux)});
 
   // Scan up the tree linearly.
   auto nextTreeValue = getTreeValue(rootMux);
@@ -1674,12 +1689,8 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     auto nextMux = nextTreeValue.getDefiningOp<MuxOp>();
     if (!nextMux || !nextMux->hasOneUse())
       break;
-    auto nextCst = getCondConstant(nextMux);
-    if (!nextCst)
+    if (!collectConstantValues(nextMux))
       break;
-    valuesFound.push_back({nextCst, getCaseValue(nextMux)});
-    locationsFound.push_back(nextMux.cond().getLoc());
-    locationsFound.push_back(nextMux->getLoc());
     nextTreeValue = getTreeValue(nextMux);
   }
 
