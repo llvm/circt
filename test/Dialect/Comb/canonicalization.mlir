@@ -280,14 +280,15 @@ hw.module @flattenMuxMixed(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i
 }
 
 // CHECK-LABEL: @flattenNotOnDifferentCond
-hw.module @flattenNotOnDifferentCond(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i8, %arg4 : i8) -> (o1 : i8) {
+hw.module @flattenNotOnDifferentCond(%arg0: i1, %arg1: i1, %arg2: i1,
+ %arg3: i8, %arg4 : i8, %arg5: i8, %arg6: i8) -> (o1 : i8) {
 // CHECK-NEXT:    %0 = comb.mux %arg0, %arg3, %arg4 : i8
-// CHECK-NEXT:    %1 = comb.mux %arg1, %0, %arg4 : i8
-// CHECK-NEXT:    %2 = comb.mux %arg2, %1, %arg4 : i8
+// CHECK-NEXT:    %1 = comb.mux %arg1, %0, %arg5 : i8
+// CHECK-NEXT:    %2 = comb.mux %arg2, %1, %arg6 : i8
 // CHECK-NEXT:    hw.output %2 : i8
   %0 = comb.mux %arg0, %arg3, %arg4 : i8
-  %1 = comb.mux %arg1, %0,    %arg4 : i8
-  %2 = comb.mux %arg2, %1,    %arg4 : i8
+  %1 = comb.mux %arg1, %0,    %arg5 : i8
+  %2 = comb.mux %arg2, %1,    %arg6 : i8
   hw.output %2 : i8
 }
 
@@ -1147,8 +1148,10 @@ hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
 
 // CHECK-LABEL: hw.module @muxCommon
 // This handles various cases of mux(cond, x, someop(x, y, z)).
-hw.module @muxCommon(%cond: i1, %arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32)
-  -> (o1: i32, o2: i32, o3: i32, o4: i32, o5: i32, orResult: i32) {
+hw.module @muxCommon(%cond: i1, %cond2: i1,
+                     %arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32)
+  -> (o1: i32, o2: i32, o3: i32, o4: i32, o5: i32, orResult: i32,
+      o6: i32, o7: i32) {
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1183,8 +1186,22 @@ hw.module @muxCommon(%cond: i1, %arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32)
   %orResult = comb.or %arg0, %arg1, %arg2, %arg3 : i32
   %o5 = comb.mux %cond, %orResult, %arg0 : i32
 
-  // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]]
-  hw.output %o1, %o2, %o3, %o4, %o5, %orResult : i32, i32, i32, i32, i32, i32
+  // CHECK: [[CONDS:%.*]] = comb.or %cond2, %cond : i1
+  // CHECK: [[O6:%.*]] = comb.mux [[CONDS]], %arg0, %arg1 : i32
+  %0 = comb.mux %cond, %arg0, %arg1 : i32
+  %o6 = comb.mux %cond2, %arg0, %0 : i32
+  
+  // CHECK: [[NCOND:%.*]] = comb.xor %cond, %true : i1
+  // CHECK: [[NCOND2:%.*]] = comb.xor %cond2, %true : i1
+  // CHECK: [[CONDS:%.*]] = comb.or [[NCOND2]], [[NCOND]] : i1
+  // CHECK: [[O7:%.*]] = comb.mux [[CONDS]], %arg0, %arg1 : i32
+  %1 = comb.mux %cond, %arg1, %arg0 : i32
+  %o7 = comb.mux %cond2, %1, %arg0 : i32
+
+  // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
+  // CHECK: [[O6]], [[O7]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7
+    : i32, i32, i32, i32, i32, i32, i32, i32
 }
 
 

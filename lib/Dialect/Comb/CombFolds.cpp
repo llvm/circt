@@ -1814,7 +1814,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
     return false;
 
   // If this isn't an operation we can handle, don't spend energy on it.
-  if (!isa<AndOp, XorOp, OrOp>(subExpr))
+  if (!isa<AndOp, XorOp, OrOp, MuxOp>(subExpr))
     return false;
 
   // Check to see if the common value occurs in the operand list for the
@@ -1829,12 +1829,43 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   // If we got a hit, then go ahead and simplify it!
   Value cond = op.cond();
 
+  auto invertBoolValue = [&](Value value) -> Value {
+    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
+    return rewriter.createOrFold<XorOp>(op.getLoc(), value, one);
+  };
+
+  // `mux(cond, a, mux(cond2, a, b))` -> `mux(cond|cond2, a, b)`
+  // `mux(cond, a, mux(cond2, b, a))` -> `mux(cond|~cond2, a, b)`
+  // `mux(cond, mux(cond2, a, b), a)` -> `mux(~cond|cond2, a, b)`
+  // `mux(cond, mux(cond2, b, a), a)` -> `mux(~cond|~cond2, a, b)`
+  if (auto subMux = dyn_cast<MuxOp>(subExpr)) {
+    Value otherValue;
+    Value subCond = subMux.cond();
+
+    // Invert th subCond if needed and dig out the 'b' value.
+    if (subMux.trueValue() == commonValue)
+      otherValue = subMux.falseValue();
+    else if (subMux.falseValue() == commonValue) {
+      otherValue = subMux.trueValue();
+      subCond = invertBoolValue(subCond);
+    } else {
+      // We can't fold `mux(cond, a, mux(a, x, y))`.
+      return false;
+    }
+
+    // Invert the outer cond if needed, and combine the mux conditions.
+    if (!isTrueOperand)
+      cond = invertBoolValue(cond);
+    cond = rewriter.createOrFold<OrOp>(op.getLoc(), cond, subCond);
+    rewriter.replaceOpWithNewOp<MuxOp>(op, cond, commonValue, otherValue);
+    return true;
+  }
+
   // Invert the condition if needed.  Or/Xor invert when dealing with
   // TrueOperand, And inverts for False operand.
-  if (isTrueOperand ^ isa<AndOp>(subExpr)) {
-    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-    cond = rewriter.createOrFold<XorOp>(op.getLoc(), cond, one);
-  }
+  if (isTrueOperand ^ isa<AndOp>(subExpr))
+    cond = invertBoolValue(cond);
+
   auto extendedCond =
       rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), cond);
 
