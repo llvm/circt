@@ -100,7 +100,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
     wakeupQueue.push_back(i);
     auto &inst = state->instances[i];
-    auto expectedFPtr = engine->lookup(inst.unit);
+    auto expectedFPtr = engine->lookupPacked(inst.unit);
     if (!expectedFPtr) {
       llvm::errs() << "Could not lookup " << inst.unit << "!\n";
       return -1;
