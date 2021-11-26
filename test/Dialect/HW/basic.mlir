@@ -148,7 +148,3 @@ hw.module @argRenames(%arg1: i32) attributes {argNames = [""]} {
 
 hw.module @fileListTest(%arg1: i32) attributes {output_filelist = #hw.output_filelist<"foo.f">} {
 }
-
-// CHECK-LABEL: hw.module @commentModule
-// CHECK-SAME: attributes {comment = "hello world"}
-hw.module @commentModule() attributes {comment = "hello world"} {}

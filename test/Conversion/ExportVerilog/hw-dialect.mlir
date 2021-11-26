@@ -921,9 +921,3 @@ hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
   %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
 
 }
-
-// CHECK-LABEL: // moduleWithComment has a comment
-// CHECK-NEXT:  // hello
-// CHECK-NEXT:  module moduleWithComment
-hw.module @moduleWithComment()
-  attributes {comment = "moduleWithComment has a comment\nhello"} {}
