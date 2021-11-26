@@ -301,8 +301,7 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const ModulePortInfo &ports,
                         ArrayAttr parameters,
-                        ArrayRef<NamedAttribute> attributes,
-                        StringAttr comment) {
+                        ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -353,9 +352,6 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
                       builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
-  if (!comment)
-    comment = builder.getStringAttr("");
-  result.addAttribute("comment", comment);
   result.addAttributes(attributes);
   result.addRegion();
 }
@@ -363,9 +359,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes,
-                       StringAttr comment) {
-  buildModule(builder, result, name, ports, parameters, attributes, comment);
+                       ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, parameters, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -382,10 +377,8 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes,
-                       StringAttr comment) {
-  build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
-        comment);
+                       ArrayRef<NamedAttribute> attributes) {
+  build(builder, result, name, ModulePortInfo(ports), parameters, attributes);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -410,7 +403,7 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule(builder, result, name, ports, parameters, attributes);
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -429,7 +422,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 const ModulePortInfo &ports,
                                 StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes, {});
+  buildModule(builder, result, name, ports, parameters, attributes);
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -644,8 +637,6 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("parameters", ArrayAttr::get(context, parameters));
-  if (!hasAttribute("comment", result.attributes))
-    result.addAttribute("comment", StringAttr::get(context, ""));
 
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
@@ -727,8 +718,6 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
-  if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
-    omittedAttrs.push_back("comment");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
