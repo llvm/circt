@@ -602,12 +602,37 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
       isa<AndOp, OrOp, XorOp>(inputOp)) {
     if (auto cstRHS = inputOp->getOperand(1).getDefiningOp<hw::ConstantOp>()) {
       auto extractedCst =
-          cstRHS.getValue().lshr(op.lowBit()).trunc(op.getType().getWidth());
-      if ((isa<AndOp>(inputOp) && extractedCst.isAllOnes()) ||
-          (isa<OrOp, XorOp>(inputOp) && extractedCst.isZero())) {
+          cstRHS.getValue().extractBits(op.getType().getWidth(), op.lowBit());
+      if (isa<OrOp, XorOp>(inputOp) && extractedCst.isZero()) {
         rewriter.replaceOpWithNewOp<ExtractOp>(
             op, op.getType(), inputOp->getOperand(0), op.lowBit());
         return success();
+      }
+
+      // `extract(and(a, cst))` -> `concat(extract(a), 0)` if we only need one
+      // extract to represent the result.  Turning it into a pile of extracts is
+      // always fine by our cost model, but we don't want to explode things into
+      // a ton of bits because it will bloat the IR and generated Verilog.
+      if (isa<AndOp>(inputOp)) {
+        // For our cost model, we only do this if the bit pattern is a
+        // contiguous series of ones.
+        unsigned lz = extractedCst.countLeadingZeros();
+        unsigned tz = extractedCst.countTrailingZeros();
+        unsigned pop = extractedCst.countPopulation();
+        if (extractedCst.getBitWidth() - lz - tz == pop) {
+          auto resultTy = rewriter.getIntegerType(pop);
+          SmallVector<Value> resultElts;
+          if (lz)
+            resultElts.push_back(rewriter.create<hw::ConstantOp>(
+                op.getLoc(), APInt::getZero(lz)));
+          resultElts.push_back(rewriter.createOrFold<ExtractOp>(
+              op.getLoc(), resultTy, inputOp->getOperand(0), op.lowBit() + tz));
+          if (tz)
+            resultElts.push_back(rewriter.create<hw::ConstantOp>(
+                op.getLoc(), APInt::getZero(tz)));
+          rewriter.replaceOpWithNewOp<ConcatOp>(op, resultElts);
+          return success();
+        }
       }
     }
   }
