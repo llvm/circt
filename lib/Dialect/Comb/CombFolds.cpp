@@ -1981,10 +1981,43 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
 
   // mux(!a, b, c) -> mux(a, c, b)
   Value subExpr;
-  if (matchPattern(op.cond(), m_Complement(m_Any(&subExpr)))) {
+  Operation *condOp = op.cond().getDefiningOp();
+  if (condOp && matchPattern(condOp, m_Complement(m_Any(&subExpr)))) {
     rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), subExpr,
                                        op.falseValue(), op.trueValue());
     return success();
+  }
+
+  // Same but with Demorgan's law.
+  // mux(and(~a, ~b, ~c), x, y) -> mux(or(a, b, c), y, x)
+  // mux(or(~a, ~b, ~c), x, y) -> mux(and(a, b, c), y, x)
+  if (condOp && condOp->hasOneUse()) {
+    SmallVector<Value> invertedOperands;
+
+    /// Scan all the operands to see if they are complemented.  If so, build a
+    /// vector of them and return true, otherwise return false.
+    auto getInvertedOperands = [&]() -> bool {
+      for (Value operand : condOp->getOperands()) {
+        if (matchPattern(operand, m_Complement(m_Any(&subExpr))))
+          invertedOperands.push_back(subExpr);
+        else
+          return false;
+      }
+      return true;
+    };
+
+    if (isa<AndOp>(condOp) && getInvertedOperands()) {
+      auto newOr = rewriter.createOrFold<OrOp>(op.getLoc(), invertedOperands);
+      rewriter.replaceOpWithNewOp<MuxOp>(op, newOr, op.falseValue(),
+                                         op.trueValue());
+      return success();
+    }
+    if (isa<OrOp>(condOp) && getInvertedOperands()) {
+      auto newAnd = rewriter.createOrFold<AndOp>(op.getLoc(), invertedOperands);
+      rewriter.replaceOpWithNewOp<MuxOp>(op, newAnd, op.falseValue(),
+                                         op.trueValue());
+      return success();
+    }
   }
 
   if (auto falseMux =

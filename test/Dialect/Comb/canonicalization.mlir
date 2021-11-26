@@ -44,12 +44,19 @@ hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
 }
 
 // CHECK-LABEL: @notMux
-hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
-// CHECK-NEXT: comb.mux %c, %b, %a : i4
+hw.module @notMux(%a: i4, %b: i4, %cond: i1, %cond2: i1) -> (o: i4, o2: i4) {
+  // CHECK-NEXT: comb.mux %cond, %b, %a : i4
   %c1 = hw.constant 1 : i1
-  %0 = comb.xor %c, %c1 : i1
+  %0 = comb.xor %cond, %c1 : i1
   %1 = comb.mux %0, %a, %b : i4
-  hw.output %1 : i4
+
+  // CHECK-NEXT: %1 = comb.and %cond, %cond2 : i1
+  // CHECK-NEXT: %2 = comb.mux %1, %b, %a : i4
+  %2 = comb.xor %cond2, %c1 : i1
+  %3 = comb.or %0, %2 : i1
+  %4 = comb.mux %3, %a, %b : i4
+
+  hw.output %1, %4 : i4, i4
 }
 
 // mux(a, 0, 1) -> ~a
@@ -1191,10 +1198,8 @@ hw.module @muxCommon(%cond: i1, %cond2: i1,
   %0 = comb.mux %cond, %arg0, %arg1 : i32
   %o6 = comb.mux %cond2, %arg0, %0 : i32
   
-  // CHECK: [[NCOND:%.*]] = comb.xor %cond, %true : i1
-  // CHECK: [[NCOND2:%.*]] = comb.xor %cond2, %true : i1
-  // CHECK: [[CONDS:%.*]] = comb.or [[NCOND2]], [[NCOND]] : i1
-  // CHECK: [[O7:%.*]] = comb.mux [[CONDS]], %arg0, %arg1 : i32
+  // CHECK: [[CONDS:%.*]] = comb.and %cond2, %cond : i1
+  // CHECK: [[O7:%.*]] = comb.mux [[CONDS]], %arg1, %arg0 : i32
   %1 = comb.mux %cond, %arg1, %arg0 : i32
   %o7 = comb.mux %cond2, %1, %arg0 : i32
 
