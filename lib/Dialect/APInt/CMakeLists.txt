@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTAPInt
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRInferTypeOpInterface
   )
 
   add_dependencies(circt-headers MLIRAPIntIncGen)
