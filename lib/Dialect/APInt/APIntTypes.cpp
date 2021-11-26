@@ -1,4 +1,4 @@
-//===- APIntTypes.cpp - HW types code defs -----------------------------------===//
+//===- APIntTypes.cpp - APInt types code defs -----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,9 +19,7 @@ using namespace circt::apint;
 #include "circt/Dialect/APInt/APIntTypes.cpp.inc"
 
 /// Parses a type registered to this dialect
-Type APIntDialect::parseType(DialectAsmParser &parser) const {
-  return Type();
-}
+Type APIntDialect::parseType(DialectAsmParser &parser) const { return Type(); }
 
 /// Print a type registered to this dialect
 void APIntDialect::printType(Type type, DialectAsmPrinter &printer) const {

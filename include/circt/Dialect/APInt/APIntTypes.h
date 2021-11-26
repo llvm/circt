@@ -1,4 +1,4 @@
-//===- APIntTypes.h - types for the APInt dialect -------------------*- C++ -*-===//
+//===- APIntTypes.h - types for the APInt dialect ---------------*- C++ -*-===//
 //
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Types for APInt are mostly in tablegen. This file should contain C++ types used
-// in MLIR type parameters and other supporting declarations.
+// Types for APInt are mostly in tablegen. This file should contain C++ types
+// used in MLIR type parameters and other supporting declarations.
 //
 //===----------------------------------------------------------------------===//
 
