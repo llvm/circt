@@ -283,6 +283,7 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
     auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 2;
+    // Only fold if we have at least 1 bit of width to represent the `1` value.
     if (width != 0)
       return getIntAttr(getType(), APInt(width, 1));
   }
@@ -872,7 +873,7 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnes()));
 
-  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // one bit is identity.  Only applies to UInt since we can't make a cast
   // here.
   if (isUInt1(input().getType()))
     return input();
@@ -888,7 +889,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, !attr.getValue().isZero()));
 
-  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // one bit is identity.  Only applies to UInt since we can't make a cast
   // here.
   if (isUInt1(input().getType()))
     return input();
@@ -1194,7 +1195,7 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   auto inputType = input.getType().cast<IntType>();
   int shiftAmount = amount();
 
-  // shl(x, 0) -> x
+  // shr(x, 0) -> x
   if (shiftAmount == 0)
     return input;
 
