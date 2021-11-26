@@ -17,6 +17,7 @@
 // DIALECT-NEXT: llhd
 // DIALECT-NEXT: llvm
 // DIALECT-NEXT: memref
+// DIALECT-NEXT: moore
 // DIALECT-NEXT: msft
 // DIALECT-NEXT: scf
 // DIALECT-NEXT: seq
