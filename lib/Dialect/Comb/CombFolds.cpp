@@ -2444,7 +2444,6 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
   rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), newLHS, newRHS);
 }
 
-// Canonicalizes a ICmp with a single constant
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
 
@@ -2498,25 +2497,48 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       break;
     case ICmpPredicate::ult:
       // x < max -> x != max
-      if (rhs.isMaxValue())
+      if (rhs.isAllOnes())
         return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
       // x < min -> false
-      if (rhs.isMinValue())
+      if (rhs.isZero())
         return replaceWithConstantI1(0);
       // x < min+1 -> x == min
-      if ((rhs - 1).isMinValue())
+      if ((rhs - 1).isZero())
         return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs - 1));
+
+      // x < 0xF0 => extract(x, 0..3) != 0
+      if (rhs.countLeadingOnes() + rhs.countTrailingZeros() ==
+          rhs.getBitWidth()) {
+        auto numZeros = rhs.countTrailingZeros();
+        auto smallType = rewriter.getIntegerType(numZeros);
+        auto smaller =
+            rewriter.create<ExtractOp>(op.getLoc(), smallType, op.lhs(), 0);
+        return replaceWith(ICmpPredicate::ne, smaller,
+                           getConstant(APInt::getZero(numZeros)));
+      }
+
       break;
     case ICmpPredicate::ugt:
       // x > min -> x != min
-      if (rhs.isMinValue())
+      if (rhs.isZero())
         return replaceWith(ICmpPredicate::ne, op.lhs(), op.rhs());
       // x > max -> false
-      if (rhs.isMaxValue())
+      if (rhs.isAllOnes())
         return replaceWithConstantI1(0);
       // x > max-1 -> x == max
-      if ((rhs + 1).isMaxValue())
+      if ((rhs + 1).isAllOnes())
         return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs + 1));
+
+      // x > 7 => extract(x, 3) != 0
+      if ((rhs + 1).isPowerOf2()) {
+        auto numOnes = rhs.countTrailingOnes();
+        auto smallType = rewriter.getIntegerType(rhs.getBitWidth() - numOnes);
+        auto smaller = rewriter.create<ExtractOp>(op.getLoc(), smallType,
+                                                  op.lhs(), numOnes);
+        return replaceWith(ICmpPredicate::ne, smaller,
+                           getConstant(APInt::getZero(smallType.getWidth())));
+      }
+
       break;
     case ICmpPredicate::sle:
       // x <= max -> true
@@ -2532,13 +2554,13 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       return replaceWith(ICmpPredicate::sgt, op.lhs(), getConstant(rhs - 1));
     case ICmpPredicate::ule:
       // x <= max -> true
-      if (rhs.isMaxValue())
+      if (rhs.isAllOnes())
         return replaceWithConstantI1(1);
       // x <= c -> x < (c+1)
       return replaceWith(ICmpPredicate::ult, op.lhs(), getConstant(rhs + 1));
     case ICmpPredicate::uge:
       // x >= min -> true
-      if (rhs.isMinValue())
+      if (rhs.isZero())
         return replaceWithConstantI1(1);
       // x >= c -> x > (c-1)
       return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));

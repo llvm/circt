@@ -412,6 +412,23 @@ hw.module @compareConcatEliminationFalseCases(%arg0 : i4, %arg1: i9, %arg2: i7) 
   hw.output %o : i1
 }
 
+// CHECK-LABEL: @compareExtractFold
+hw.module @compareExtractFold(%arg0: i8) -> (o1: i1, o2: i1) {
+  %c3_i8 = hw.constant 3 : i8
+  %0 = comb.icmp ugt %arg0, %c3_i8 : i8
+  // CHECK: %0 = comb.extract %arg0 from 2 : (i8) -> i6
+  // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6 
+
+  // CHECK: %2 = comb.extract %arg0 from 0 : (i8) -> i6 
+  // CHECK: %3 = comb.icmp ne %2, %c0_i6 : i6 
+  %c192_i8 = hw.constant 192 : i8
+  %1 = comb.icmp ult %arg0, %c192_i8 : i8
+
+  // CHECK: hw.output %1, %3 :
+  hw.output %0, %1 : i1, i1
+}
+
+
 // Validates that extract(cat(a, b, c)) -> cat(b, c) when it aligns with the exact elements, or simply
 // a when it is a single full element.
 // CHECK-LABEL: hw.module @extractCatAlignWithExactElements
@@ -695,7 +712,6 @@ hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: 
   hw.output %1, %2, %4, %6 : i8, i14, i8, i8
   // CHECK: hw.output %2, %1, %5, %7 : i8, i14, i8, i8
 }
-
 
 // CHECK-LABEL: hw.module @fold_mux_tree1
 hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
