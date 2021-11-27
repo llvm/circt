@@ -2,6 +2,9 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %s.anno.json %s > %t.one-file.sv && verilator --sv --lint-only %t.one-file.sv
 ; REQUIRES: verilator
 
+; XFAIL: *
+; https://github.com/llvm/circt/issues/2243
+
 circuit Top :
   module Submodule :
     input clock : Clock
