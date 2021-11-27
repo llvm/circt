@@ -2,6 +2,9 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
 
+; XFAIL: *
+; https://github.com/llvm/circt/issues/2243
+
 circuit Top :
   module Submodule :
     input clock : Clock
