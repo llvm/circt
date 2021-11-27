@@ -25,10 +25,3 @@ Type APIntDialect::parseType(DialectAsmParser &parser) const { return Type(); }
 void APIntDialect::printType(Type type, DialectAsmPrinter &printer) const {
   llvm_unreachable("unexpected 'apint' type kind");
 }
-
-void APIntDialect::registerTypes() {
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/APInt/APIntTypes.cpp.inc"
-      >();
-}
