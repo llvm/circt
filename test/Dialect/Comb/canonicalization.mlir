@@ -668,26 +668,32 @@ hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (out: i1) {
 }
 
 // CHECK-LABEL: hw.module @narrow_extract_from_and
-hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8) {
+hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: i8) {
   %c240_i32 = hw.constant 240 : i32  // 0xF0
   %0 = comb.and %arg0, %c240_i32 : i32
   %1 = comb.extract %0 from 3 : (i32) -> i8
 
   %2 = comb.extract %0 from 2 : (i32) -> i14
 
-  // CHECK: %0 = comb.extract %arg0 from 2 : (i32) -> i14
-  // CHECK: %1 = comb.and %0, %c60_i14 : i14
+  // CHECK: %0 = comb.extract %arg0 from 4 : (i32) -> i4
+  // CHECK: %1 = comb.concat %c0_i8, %0, %c0_i2 : i8, i4, i2
 
-  // CHECK: %2 = comb.extract %arg0 from 4 : (i32) -> i4
-  // CHECK: %3 = comb.concat %c0_i3, %2, %false : i3, i4, i1
+  // CHECK: %2 = comb.concat %c0_i3, %0, %false : i3, i4, i1
   %c42_i32 = hw.constant 42 : i32  // 0b101010
   %3 = comb.and %arg0, %c42_i32 : i32
   %4 = comb.extract %3 from 1 : (i32) -> i8  
-  // CHECK: %4 = comb.extract %arg0 from 1 : (i32) -> i8
-  // CHECK: %5 = comb.and %4, %c21_i8 : i8
-  // CHECK: hw.output %3, %1, %5 : i8, i14, i8
+  // CHECK: %3 = comb.extract %arg0 from 1 : (i32) -> i5
+  // CHECK: %4 = comb.and %3, %c-11_i5 : i5
+  // CHECK: %5 = comb.concat %c0_i3, %4 : i3, i5
 
-  hw.output %1, %2, %4 : i8, i14, i8
+  %c12_i8 = hw.constant 12 : i8
+  %5 = comb.extract %arg0 from 23 : (i32) -> i8
+  %6 = comb.and %5, %c12_i8 : i8
+  // CHECK: %6 = comb.extract %arg0 from 25 : (i32) -> i2
+  // CHECK: %7 = comb.concat %c0_i4, %6, %c0_i2 : i4, i2, i2
+ 
+  hw.output %1, %2, %4, %6 : i8, i14, i8, i8
+  // CHECK: hw.output %2, %1, %5, %7 : i8, i14, i8, i8
 }
 
 

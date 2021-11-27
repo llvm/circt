@@ -901,6 +901,42 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
       }
     }
 
+    // If this is an and from an extract op, try shrinking the extract.
+    if (auto extractOp = inputs[0].getDefiningOp<ExtractOp>()) {
+      if (size == 2 &&
+          // We can shrink it if the mask has leading or trailing zeros.
+          (value.countLeadingZeros() || value.countTrailingZeros())) {
+        unsigned lz = value.countLeadingZeros();
+        unsigned tz = value.countTrailingZeros();
+
+        // Start by extracting the smaller number of bits.
+        auto smallTy = rewriter.getIntegerType(value.getBitWidth() - lz - tz);
+        Value smallElt = rewriter.createOrFold<ExtractOp>(
+            extractOp.getLoc(), smallTy, extractOp->getOperand(0),
+            extractOp.lowBit() + tz);
+        // Apply the 'and' mask if needed.
+        APInt smallMask = value.extractBits(smallTy.getWidth(), tz);
+        if (!smallMask.isAllOnes()) {
+          auto loc = inputs.back().getLoc();
+          smallElt = rewriter.createOrFold<AndOp>(
+              loc, smallElt, rewriter.create<hw::ConstantOp>(loc, smallMask));
+        }
+
+        // The final replacement will be a concat of the leading/trailing zeros
+        // along with the smaller extracted value.
+        SmallVector<Value> resultElts;
+        if (lz)
+          resultElts.push_back(
+              rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(lz)));
+        resultElts.push_back(smallElt);
+        if (tz)
+          resultElts.push_back(
+              rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(tz)));
+        rewriter.replaceOpWithNewOp<ConcatOp>(op, resultElts);
+        return success();
+      }
+    }
+
     // and(concat(x, cst1), a, b, c, cst2)
     //    ==> and(a, b, c, concat(and(x,cst2'), and(cst1,cst2'')).
     // We do this for even more multi-use concats since they are "just wiring".
