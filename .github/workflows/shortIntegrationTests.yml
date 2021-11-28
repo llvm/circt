@@ -13,6 +13,8 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
 
 jobs:
   # Build CIRCT and run its tests using a Docker container with all the
