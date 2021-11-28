@@ -26,8 +26,8 @@ with Context() as ctx, Location.unknown():
   print(buffer.getvalue())
   # INMEMORY: module test(
   # INMEMORY:   output out);
-  # INMEMORY:   assign out = 1'h1;
-  # INMEMORY: endmodul
+  # INMEMORY:   assign out = 1'h0;
+  # INMEMORY: endmodule
 
   cwd = os.getcwd()
   circt.export_split_verilog(m, cwd)
