@@ -689,8 +689,10 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest()))
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest())) {
           connect.erase();
+          ++numErasedOp;
+        }
       }
       continue;
     }
@@ -717,10 +719,14 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     for (auto result : op.getResults())
       foldedAny |= replaceValueIfPossible(result);
 
+    if (foldedAny)
+      ++numFoldedOp;
+
     // If the operation folded to a constant then we can probably nuke it.
     if (foldedAny && op.use_empty() &&
         (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
       op.erase();
+      ++numErasedOp;
       continue;
     }
   }

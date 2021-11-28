@@ -56,6 +56,10 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
     Use optimistic constant propagation to delete ports and unreachable IR.
   }];
   let constructor = "circt::firrtl::createIMConstPropPass()";
+  let statistics = [
+    Statistic<"numFoldedOp", "num-folded-op", "Number of operations folded">,
+    Statistic<"numErasedOp", "num-erased-op", "Number of operations erased">
+  ];
 }
 
 def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
