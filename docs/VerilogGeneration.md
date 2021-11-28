@@ -72,7 +72,7 @@ The current set of "tool capability" Lowering Options is:
  * `disallowLocalVariables` (default=`false`).  If true, do not emit
    SystemVerilog locally scoped "automatic" or logic declarations - emit top
    level wire and reg's instead.
- * `enforceVerifLabels` (default=`false`).  If true, verification statements
+ * `verifLabels` (default=`false`).  If true, verification statements
    like `assert`, `assume`, and `cover` will always be emitted with a label. If
    the statement has no label in the IR, a generic one will be created. Some EDA
    tools require verification statements to be labeled.
