@@ -49,8 +49,13 @@ class LatticeValue {
     ///
     /// This is named "InvalidValue" instead of "Invalid" to avoid confusion
     /// about whether the lattice value is corrupted.  "InvalidValue" is a
-    /// valid lattice state, and a can move up to Constant or Overdefined.
+    /// valid lattice state, and a can move up to ValidValue, Constant or
+    /// Overdefined.
     InvalidValue,
+
+    /// A value that is not to be an invalid value. This state may be changed to
+    /// Constant or Overdefined.
+    ValidValue,
 
     /// A value that is known to be a constant. This state may be changed to
     /// overdefined.
@@ -82,6 +87,7 @@ public:
   bool isInvalidValue() const {
     return valueAndTag.getInt() == Kind::InvalidValue;
   }
+  bool isValidValue() const { return valueAndTag.getInt() == Kind::ValidValue; }
   bool isConstant() const { return valueAndTag.getInt() == Kind::Constant; }
   bool isOverdefined() const {
     return valueAndTag.getInt() == Kind::Overdefined;
@@ -94,6 +100,10 @@ public:
 
   void markInvalidValue(InvalidValueAttr value) {
     valueAndTag.setPointerAndInt(value, Kind::InvalidValue);
+  }
+
+  void markValidValueValue() {
+    valueAndTag.setPointerAndInt(nullptr, Kind::ValidValue);
   }
 
   /// Mark the lattice value as constant.
@@ -129,8 +139,17 @@ public:
     if (rhs.isInvalidValue())
       return false;
 
-    // If we are an InvalidValue, then upgrade to Constant or Overdefined.
+    // If we are an InvalidValue, then upgrade to ValidValue, Constant or
+    // Overdefined.
     if (isInvalidValue()) {
+      valueAndTag = rhs.valueAndTag;
+      return true;
+    }
+
+    // If we are an ValidValue, then upgrade to Constant or Overdefined.
+    if (isValidValue()) {
+      if (rhs.isValidValue())
+        return false;
       valueAndTag = rhs.valueAndTag;
       return true;
     }
@@ -155,7 +174,7 @@ public:
 private:
   /// The attribute value if this is a constant and the tag for the element
   /// kind.  The attribute is always an IntegerAttr.
-  llvm::PointerIntPair<Attribute, 2, Kind> valueAndTag;
+  llvm::PointerIntPair<Attribute, 3, Kind> valueAndTag;
 };
 } // end anonymous namespace
 
@@ -172,6 +191,19 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   bool isOverdefined(Value value) const {
     auto it = latticeValues.find(value);
     return it != latticeValues.end() && it->second.isOverdefined();
+  }
+
+  bool isValidValue(Value value) const {
+    auto it = latticeValues.find(value);
+    return it != latticeValues.end() && it->second.isValidValue();
+  }
+
+  void markValidValue(Value value) {
+    auto &entry = latticeValues[value];
+    if (!entry.isValidValue()) {
+      entry.markValidValueValue();
+      changedLatticeValueWorklist.push_back(value);
+    }
   }
 
   /// Mark the given value as overdefined. This means that we cannot refine a
@@ -331,8 +363,8 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
     return LatticeValue();
 
   auto result = it->second;
-  // Unknown/overdefined stay whatever they are.
-  if (result.isUnknown() || result.isOverdefined())
+  // Unknown/overdefined/valid stay whatever they are.
+  if (result.isUnknown() || result.isOverdefined() || result.isValidValue())
     return result;
   // InvalidValue gets wider.
   if (result.isInvalidValue())
@@ -580,8 +612,16 @@ void IMConstPropPass::visitOperation(Operation *op) {
   // are not ready to be resolved, bail out and wait for them to resolve.
   SmallVector<Attribute, 8> operandConstants;
   operandConstants.reserve(op->getNumOperands());
+
+  // If some operand is invalid value, the operand might become constant after
+  // iterations. We mark overdefined only if all operands are already
+  // overdefined.
+  bool isAllOverdefined = true;
+
   for (Value operand : op->getOperands()) {
     auto &operandLattice = latticeValues[operand];
+
+    isAllOverdefined &= operandLattice.isOverdefined();
 
     // If the operand is an unknown value, then we generally don't want to
     // process it - we want to wait until the value is resolved to by the SCCP
@@ -608,8 +648,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
   SmallVector<OpFoldResult, 8> foldResults;
   foldResults.reserve(op->getNumResults());
   if (failed(op->fold(operandConstants, foldResults))) {
-    for (auto value : op->getResults())
-      markOverdefined(value);
+    for (auto value : op->getResults()) {
+      if (isAllOverdefined)
+        markOverdefined(value);
+      else
+        markValidValue(value);
+    }
     return;
   }
 
@@ -654,8 +698,9 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // InvalidValue, update it and return true.  Otherwise return false.
   auto replaceValueIfPossible = [&](Value value) -> bool {
     auto it = latticeValues.find(value);
+
     if (it == latticeValues.end() || it->second.isOverdefined() ||
-        it->second.isUnknown())
+        it->second.isUnknown() || it->second.isValidValue())
       return false;
 
     // TODO: Unique constants into the entry block of the module.
@@ -689,7 +734,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest()))
+        if (isDeletableWireOrReg(destOp) &&
+            !(isOverdefined(connect.dest()) || isValidValue(connect.dest())))
           connect.erase();
       }
       continue;

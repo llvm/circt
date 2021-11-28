@@ -542,3 +542,26 @@ firrtl.circuit "dntOutput" {
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }
 }
+
+// -----
+
+firrtl.circuit "ContinueInvalidValue"   {
+  // CHECK-LABEL: firrtl.module @ContinueInvalidValue
+  firrtl.module @ContinueInvalidValue(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<2>) {
+    %r1 = firrtl.reg %clock  : !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  : !firrtl.uint<1>
+    %r3 = firrtl.reg %clock  : !firrtl.uint<1>
+    %r4 = firrtl.reg %clock  : !firrtl.uint<1>
+
+
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %r1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %r3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %r2, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %r4, %r3 : !firrtl.uint<1>, !firrtl.uint<1>
+    %0 = firrtl.add %r1, %r4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK: %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.connect %b, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %b, %0 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+}
