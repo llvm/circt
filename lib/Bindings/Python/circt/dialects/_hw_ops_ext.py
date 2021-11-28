@@ -160,6 +160,9 @@ class ModuleLike:
     if len(parameters) > 0 or "parameters" not in attributes:
       attributes["parameters"] = ArrayAttr.get(parameters)
 
+    if "comment" not in attributes:
+      attributes["comment"] = StringAttr.get("")
+
     attributes["type"] = TypeAttr.get(
         FunctionType.get(inputs=input_types, results=output_types))
 
