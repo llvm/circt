@@ -64,7 +64,7 @@ The current set of "tool capability" Lowering Options is:
 
  * `noAlwaysComb` (default=`false`).  If true, emits `sv.alwayscomb` as Verilog
    `always @(*)` statements.  Otherwise, print them as `always_comb`.
- * `allowExprInEventControl` (default=`false`).   If true, expressions are
+ * `exprInEventControl` (default=`false`).   If true, expressions are
    allowed in the sensitivity list of `always` statements, otherwise they are
    forced to be simple wires. Some EDA tools rely on these being simple wires.
  * `disallowPackedArrays` (default=`false`).  If true, eliminate packed arrays
