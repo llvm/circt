@@ -26,7 +26,7 @@ with Context() as ctx, Location.unknown():
   print(buffer.getvalue())
   # INMEMORY: module test(
   # INMEMORY:   output out);
-  # INMEMORY:   assign out = 1'h0;
+  # INMEMORY:   assign out = 1'h1;
   # INMEMORY: endmodule
 
   cwd = os.getcwd()
