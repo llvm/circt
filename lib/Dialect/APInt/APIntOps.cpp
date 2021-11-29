@@ -37,7 +37,7 @@ LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
   unsigned resultWidth = std::max(lhs.getWidth(), rhs.getWidth()) + 1;
   IntegerType::SignednessSemantics signedness;
 
-  if (lhs.isSigned() == rhs.isSigned()) {
+  if (lhs.getSignedness() == rhs.getSignedness()) {
     // max(w1, w2) + 1 in case both operands use the same signedness
     // the signedness is also identical to the operands
     signedness = lhs.getSignedness();
@@ -82,7 +82,7 @@ LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
   const unsigned resultWidth = lhs.getWidth() + rhs.getWidth();
   IntegerType::SignednessSemantics signedness;
 
-  if (lhs.isSigned() == rhs.isSigned()) {
+  if (lhs.getSignedness() == rhs.getSignedness()) {
     // the signedness is also identical to the operands
     signedness = lhs.getSignedness();
   } else {
