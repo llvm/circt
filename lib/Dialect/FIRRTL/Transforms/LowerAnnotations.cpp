@@ -45,72 +45,96 @@ struct TokenAnnoTarget {
   SmallVector<TargetToken> component;
 };
 
-/// The (local) target of an annotation, resolved.
-struct AnnoTarget {
-  Operation *op;
-  size_t portNum;
-  unsigned fieldIdx = 0;
-  AnnoTarget(Operation *op) : op(op), portNum(~0UL) {}
-  AnnoTarget(Operation *mod, size_t portNum) : op(mod), portNum(portNum) {}
-  AnnoTarget() : op(nullptr), portNum(~0UL) {}
-  operator bool() const { return op != nullptr; }
+class AnnoPathValue {
+  AnnoPathValue(Operation *op, unsigned fieldIdx = 0,
+                ArrayRef<InstanceOp> path = {})
+      : op(op), fieldIdx(0), portNum(~0UL), instances(path) {}
+  AnnoPathValue(FModuleLike *mod, unsigned fieldIdx = 0, size_t portNum = ~0ULL,
+                ArrayRef<InstanceOp> path = {})
+      : op(mod), fieldIdx(fieldIdx), portNum(portNum), instances(path) {}
 
+  FIRRTLType getType() const;
+  ArrayRef<InstanceOp> getPath() const { return instances; }
+  bool isLocal() const { return instances.empty(); };
   bool isPort() const { return op && portNum != ~0UL; }
   bool isInstance() const { return op && isa<InstanceOp>(op); }
+
   FModuleOp getModule() const {
     if (auto mod = dyn_cast<FModuleOp>(op))
       return mod;
     return op->getParentOfType<FModuleOp>();
   }
-  FIRRTLType getType() const {
-    if (!op)
-      return FIRRTLType();
-    if (portNum != ~0UL) {
-      if (auto mod = dyn_cast<FModuleLike>(op))
-        return mod.getPortType(portNum).getSubTypeByFieldID(fieldIdx);
-      if (isa<MemOp, InstanceOp>(op))
-        return op->getResult(portNum)
-            .getType()
-            .cast<FIRRTLType>()
-            .getSubTypeByFieldID(fieldIdx);
-      llvm_unreachable("Unknown port instruction");
-    }
-    if (op->getNumResults() == 0)
-      return FIRRTLType();
-    return op->getResult(0).getType().cast<FIRRTLType>().getSubTypeByFieldID(
-        fieldIdx);
-  }
-};
-
-// The potentially non-local resolved annotation.
-struct AnnoPathValue {
-  SmallVector<InstanceOp> instances;
-  AnnoTarget ref;
-
-  AnnoPathValue() = default;
-  AnnoPathValue(CircuitOp op) : ref(op) {}
-  AnnoPathValue(Operation *op) : ref(op) {}
-  AnnoPathValue(const SmallVectorImpl<InstanceOp> &insts, AnnoTarget b)
-      : instances(insts.begin(), insts.end()), ref(b) {}
-
-  bool isLocal() const { return instances.empty(); }
 
   template <typename... T>
   bool isOpOfType() const {
-    if (!ref || ref.isPort())
+    if (!op || isPort())
       return false;
-    return isa<T...>(ref.op);
+    return isa<T...>(op);
   }
+
+private:
+  SmallVector<InstanceOp, 4> instances;
+  Operation *op;
+  size_t portNum;
+  unsigned fieldIdx = 0;
 };
 
 /// State threaded through functions for resolving and applying annotations.
-struct ApplyState {
+struct AnnoApplyState {
+  AnnoApplyState(SymbolTable &symTbl) : symTbl(symTbl) {}
   CircuitOp circuit;
   SymbolTable &symTbl;
   llvm::function_ref<void(DictionaryAttr)> addToWorklistFn;
+  size_t newID() { return ++id; }
+
+private:
+  size_t id;
 };
 
+
 } // namespace
+
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
+/// of a specific type associated with a key in a dictionary.  However, this is
+/// specialized to print a useful error message, specific to custom annotation
+/// process, on failure.
+template <typename A>
+static A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
+                  Location loc, Twine className, Twine path = Twine()) {
+  // Check that the key exists.
+  auto value = dict.get(key);
+  if (!value) {
+    SmallString<128> msg;
+    if (path.isTriviallyEmpty())
+      msg = ("Annotation '" + className + "' did not contain required key '" +
+             key + "'.")
+                .str();
+    else
+      msg = ("Annotation '" + className + "' with path '" + path +
+             "' did not contain required key '" + key + "'.")
+                .str();
+    mlir::emitError(loc, msg).attachNote()
+        << "The full Annotation is reproduced here: " << root << "\n";
+    return nullptr;
+  }
+  // Check that the value has the correct type.
+  auto valueA = value.dyn_cast_or_null<A>();
+  if (!valueA) {
+    SmallString<128> msg;
+    if (path.isTriviallyEmpty())
+      msg = ("Annotation '" + className +
+             "' did not contain the correct type for key '" + key + "'.")
+                .str();
+    else
+      msg = ("Annotation '" + className + "' with path '" + path +
+             "' did not contain the correct type for key '" + key + "'.")
+                .str();
+    mlir::emitError(loc, msg).attachNote()
+        << "The full Annotation is reproduced here: " << root << "\n";
+    return nullptr;
+  }
+  return valueA;
+}
 
 /// Abstraction over namable things.  Get a name in a generic way.
 static StringRef getName(Operation *op) {
@@ -543,115 +567,138 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
 }
 
-//===----------------------------------------------------------------------===//
-// Driving table
-//===----------------------------------------------------------------------===//
+        //===----------------------------------------------------------------------===//
+        // Driving table
+        //===----------------------------------------------------------------------===//
 
-namespace {
-struct AnnoRecord {
-  llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, ApplyState)>
-      resolver;
-  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr, ApplyState)>
-      applier;
-};
-} // end anonymous namespace
+        namespace {
+        struct AnnoRecord {
+          llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr,
+                                                     ApplyState)>
+              resolver;
+          llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr,
+                                           ApplyState)>
+              applier;
+        };
+        } // end anonymous namespace
 
-static const llvm::StringMap<AnnoRecord> annotationRecords{{
+        static const llvm::StringMap<AnnoRecord> annotationRecords{
+          {"sifive.enterprise.firrtl.MarkDUTAnnotation",
+           {stdResolve, applyWithoutTarget<>}},
+              {"sifive.enterprise.grandcentral.DataTapsAnnotation",
+               {stdResolve, applyGCDataTap}},
+              {"sifive.enterprise.grandcentral.MemTapAnnotation", {stdResolve, applyGCMemTap}},
+               {
+                  "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+                  {stdResolve, applyGCSigDriver}},
+              {"sifive.enterprise.grandcentral.GrandCentralView$",
+               {stdResolve, applyGCView}},
+              {"SerializedViewAnnotation", {stdResolve, applyGCView}},
+              {
+                  "sifive.enterprise.grandcentral.ViewAnnotation",
+                  {stdResolve, applyGCView},
+              },
+              {
+                  "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
+                  {stdResolve, applyModRep},
 
-//    {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
+              } //    {"firrtl.transforms.DontTouchAnnotation",
+                //    {stdResolve, applyDontTouch}},
 
-    // Testing Annotation
-    {"circt.test", {stdResolve, applyWithoutTarget<true>}},
-    {"circt.testNT", {noResolve, applyWithoutTarget<>}},
-    {"circt.missing", {tryResolve, applyWithoutTarget<>}}
+          // Testing Annotation
+          {"circt.test", {stdResolve, applyWithoutTarget<true>}},
+              {"circt.testNT", {noResolve, applyWithoutTarget<>}}, {
+            "circt.missing", { tryResolve, applyWithoutTarget<> }
+          }
+        }
+      };
 
-}};
-
-/// Lookup a record for a given annotation class.  Optionally, returns the
-/// record for "circuit.missing" if the record doesn't exist.
-static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
-                                              bool ignoreUnhandledAnno) {
-  auto ii = annotationRecords.find(annoStr);
-  if (ii != annotationRecords.end())
-    return &ii->second;
-  if (ignoreUnhandledAnno)
-    return &annotationRecords.find("circt.missing")->second;
-  return nullptr;
-}
-
-//===----------------------------------------------------------------------===//
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
-
-namespace {
-struct LowerAnnotationsPass
-    : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
-  void runOnOperation() override;
-  LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState state);
-
-  bool ignoreUnhandledAnno = false;
-  bool ignoreClasslessAnno = false;
-  SmallVector<DictionaryAttr> worklistAttrs;
-};
-} // end anonymous namespace
-
-LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
-                                                    ApplyState state) {
-  // Lookup the class
-  StringRef annoClassVal;
-  if (auto annoClass = anno.getNamed("class"))
-    annoClassVal = annoClass->second.cast<StringAttr>().getValue();
-  else if (ignoreClasslessAnno)
-    annoClassVal = "circt.missing";
-  else
-    return state.circuit.emitError("Annotation without a class: ") << anno;
-
-  // See if we handle the class
-  auto record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
-  if (!record)
-    return state.circuit.emitWarning("Unhandled annotation: ") << annoClassVal;
-
-  // Try to apply the annotation
-  auto target = record->resolver(anno, state);
-  if (!target)
-    return state.circuit.emitError("Unable to resolve target of annotation: ")
-           << annoClassVal;
-  if (record->applier(*target, anno, state).failed())
-    return state.circuit.emitError("Unable to apply annotation: ")
-           << annoClassVal;
-  return success();
-}
-
-// This is the main entrypoint for the lowering pass.
-void LowerAnnotationsPass::runOnOperation() {
-  CircuitOp circuit = getOperation();
-  // Grab the annotations.
-  if (auto raw = circuit->getAttrOfType<ArrayAttr>("raw_annotations")) {
-    SymbolTable modules(circuit);
-    for (auto anno : raw)
-      worklistAttrs.push_back(anno.cast<DictionaryAttr>());
-    // Clear the raw annotations.
-    circuit->removeAttr("raw_annotations");
-    ApplyState state{circuit, modules,
-                     [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
-
-    };
-    size_t numFailures = 0;
-    while (!worklistAttrs.empty()) {
-      auto attr = worklistAttrs.pop_back_val();
-      if (applyAnnotation(attr, state).failed())
-        ++numFailures;
-    }
-    if (numFailures)
-      signalPassFailure();
+  /// Lookup a record for a given annotation class.  Optionally, returns the
+  /// record for "circuit.missing" if the record doesn't exist.
+  static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
+                                                bool ignoreUnhandledAnno) {
+    auto ii = annotationRecords.find(annoStr);
+    if (ii != annotationRecords.end())
+      return &ii->second;
+    if (ignoreUnhandledAnno)
+      return &annotationRecords.find("circt.missing")->second;
+    return nullptr;
   }
-}
 
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
-    bool ignoreUnhandledAnnotations, bool ignoreClasslessAnnotations) {
-  auto pass = std::make_unique<LowerAnnotationsPass>();
-  pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
-  pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
-  return pass;
-}
+  //===----------------------------------------------------------------------===//
+  // Pass Infrastructure
+  //===----------------------------------------------------------------------===//
+
+  namespace {
+  struct LowerAnnotationsPass
+      : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
+    void runOnOperation() override;
+    LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState state);
+
+    bool ignoreUnhandledAnno = false;
+    bool ignoreClasslessAnno = false;
+    SmallVector<DictionaryAttr> worklistAttrs;
+  };
+  } // end anonymous namespace
+
+  LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
+                                                      ApplyState state) {
+    // Lookup the class
+    StringRef annoClassVal;
+    if (auto annoClass = anno.getNamed("class"))
+      annoClassVal = annoClass->second.cast<StringAttr>().getValue();
+    else if (ignoreClasslessAnno)
+      annoClassVal = "circt.missing";
+    else
+      return state.circuit.emitError("Annotation without a class: ") << anno;
+
+    // See if we handle the class
+    auto record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
+    if (!record)
+      return state.circuit.emitWarning("Unhandled annotation: ")
+             << annoClassVal;
+
+    // Try to apply the annotation
+    auto target = record->resolver(anno, state);
+    if (!target)
+      return state.circuit.emitError("Unable to resolve target of annotation: ")
+             << annoClassVal;
+    if (record->applier(*target, anno, state).failed())
+      return state.circuit.emitError("Unable to apply annotation: ")
+             << annoClassVal;
+    return success();
+  }
+
+  // This is the main entrypoint for the lowering pass.
+  void LowerAnnotationsPass::runOnOperation() {
+    CircuitOp circuit = getOperation();
+    // Grab the annotations.
+    if (auto raw = circuit->getAttrOfType<ArrayAttr>("raw_annotations")) {
+      SymbolTable modules(circuit);
+      for (auto anno : raw)
+        worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+      // Clear the raw annotations.
+      circuit->removeAttr("raw_annotations");
+      ApplyState state{circuit, modules,
+                       [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
+
+      };
+      size_t numFailures = 0;
+      while (!worklistAttrs.empty()) {
+        auto attr = worklistAttrs.pop_back_val();
+        if (applyAnnotation(attr, state).failed())
+          ++numFailures;
+      }
+      if (numFailures)
+        signalPassFailure();
+    }
+  }
+
+  /// This is the pass constructor.
+  std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
+      bool ignoreUnhandledAnnotations, bool ignoreClasslessAnnotations) {
+    auto pass = std::make_unique<LowerAnnotationsPass>();
+    pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
+    pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
+    return pass;
+  }
