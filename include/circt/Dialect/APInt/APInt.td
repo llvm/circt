@@ -21,7 +21,11 @@ def APIntDialect : Dialect {
   let summary = "Types and operations for apint dialect";
   let description = [{
     This dialect defines the `apint` dialect, which is intended to represent
-    lossless arbitrary precision integer arithmetics.
+    lossless arbitrary precision integer arithmetics. This is achieved by
+    adjusting the bit widths to prevent under- and overflows while considering
+    necessary sign-extensions for operations with different signedness.
+    Hence, an addition with operands of type `ui2` and `ui2` yields in a result
+    type `ui3` whereas an addition of `si2` and `ui2` yields in `si4`.
   }];
 
   let cppNamespace = "::circt::apint";
