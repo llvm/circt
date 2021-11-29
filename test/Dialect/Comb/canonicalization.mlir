@@ -1269,3 +1269,32 @@ hw.module @flatten_multi_use_and(%arg0: i8, %arg1: i8, %arg2: i8)
   // CHECK: hw.output %0, %1 
   hw.output %0, %1 : i8, i8
 }
+
+// CHECK-LABEL: hw.module @muxCommonOp(
+// This handles various cases of mux(cond, someop(...), someop(...)).
+hw.module @muxCommonOp(%cond: i1,
+                       %arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32)
+  -> (o1: i128, o2: i128, o3: i128) {
+  %allones = hw.constant -1 : i32
+  %0 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
+  %1 = comb.concat %arg0, %arg2, %arg2, %arg3 : i32, i32, i32, i32
+  %o1 = comb.mux %cond, %0, %1 : i128
+  // CHECK: %0 = comb.concat %c-1_i32, %arg1 : i32, i32 
+  // CHECK: %1 = comb.concat %arg0, %arg2 : i32, i32 
+  // CHECK: %2 = comb.mux %cond, %0, %1 : i64 
+  // CHECK: [[O1:%.*]] = comb.concat %2, %arg2, %arg3 : i64, i32, i32 
+
+  %2 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
+  %3 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
+  %o2 = comb.mux %cond, %2, %3 : i128
+  // CHECK: [[O2:%.*]] = comb.concat %c-1_i32, %arg1, %arg2, %arg3 : i32, i32, i32, i32 
+
+  %4 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
+  %5 = comb.concat %allones, %arg2, %arg2, %arg3 : i32, i32, i32, i32
+  %o3 = comb.mux %cond, %4, %5 : i128
+  // CHECK: [[M3:%.*]] = comb.mux %cond, %arg1, %arg2 : i32 
+  // CHECK: [[O3:%.*]] = comb.concat %c-1_i32, [[M3]], %arg2, %arg3 : i32, i32, i32, i32 
+ 
+  // CHECK: hw.output [[O1]], [[O2]], [[O3]]
+  hw.output %o1, %o2, %o3 : i128, i128, i128
+}

@@ -1970,6 +1970,95 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   return true;
 }
 
+/// This function is invoke when we find a mux with true/false operations that
+/// have the same opcode.  Check to see if we can strength reduce the mux by
+/// applying it to less data by applying this transformation:
+///   `mux(cond, op(a, b), op(a, c))` -> `op(a, mux(cond, b, c))`
+static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
+                                   Operation *falseOp,
+                                   PatternRewriter &rewriter) {
+  // Right now we only apply to concat.
+  // TODO: Generalize this to and, or, xor, icmp(!), which all occur in practice
+  if (!isa<ConcatOp>(trueOp))
+    return false;
+
+  size_t numTrueOperands = trueOp->getNumOperands();
+  size_t numFalseOperands = falseOp->getNumOperands();
+
+  if (!numTrueOperands || !numFalseOperands ||
+      (trueOp->getOperands().front() != falseOp->getOperands().front() &&
+       trueOp->getOperands().back() != falseOp->getOperands().back()))
+    return false;
+
+  // Pull all leading shared operands out into their own op if any are common.
+  if (trueOp->getOperands().front() == falseOp->getOperands().front()) {
+    SmallVector<Value> operands;
+    size_t i;
+    for (i = 0; i < numTrueOperands; ++i) {
+      Value trueOperand = trueOp->getOperand(i);
+      if (trueOperand == falseOp->getOperand(i))
+        operands.push_back(trueOperand);
+      else
+        break;
+    }
+    if (i == numTrueOperands) {
+      // Selecting between distinct, but lexically identical, concats.
+      rewriter.replaceOp(mux, trueOp->getResult(0));
+      return true;
+    }
+
+    Value sharedMSB = rewriter.createOrFold<ConcatOp>(mux->getLoc(), operands);
+    operands.clear();
+
+    // Get a concat of the LSB's on each side.
+    operands.append(trueOp->operand_begin() + i, trueOp->operand_end());
+    Value trueLSB = rewriter.createOrFold<ConcatOp>(trueOp->getLoc(), operands);
+    operands.clear();
+    operands.append(falseOp->operand_begin() + i, falseOp->operand_end());
+    Value falseLSB =
+        rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
+    // Merge the LSBs with a new mux and concat the MSB with the LSB to be done.
+    Value lsb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.cond(), trueLSB,
+                                             falseLSB);
+    rewriter.replaceOpWithNewOp<ConcatOp>(mux, sharedMSB, lsb);
+    return true;
+  }
+
+  // If trailing operands match, try to commonize them.
+  if (trueOp->getOperands().back() == falseOp->getOperands().back()) {
+    SmallVector<Value> operands;
+    size_t i;
+    for (i = 0;; ++i) {
+      Value trueOperand = trueOp->getOperand(numTrueOperands - i - 1);
+      if (trueOperand == falseOp->getOperand(numFalseOperands - i - 1))
+        operands.push_back(trueOperand);
+      else
+        break;
+    }
+    std::reverse(operands.begin(), operands.end());
+    Value sharedLSB = rewriter.createOrFold<ConcatOp>(mux->getLoc(), operands);
+    operands.clear();
+
+    // Get a concat of the MSB's on each side.
+    // FIXME: Support - on indexed iterators!!
+    operands.append(trueOp->operand_begin(),
+                    std::prev(trueOp->operand_end(), i));
+    Value trueMSB = rewriter.createOrFold<ConcatOp>(trueOp->getLoc(), operands);
+    operands.clear();
+    operands.append(falseOp->operand_begin(),
+                    std::prev(falseOp->operand_end(), i));
+    Value falseMSB =
+        rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
+    // Merge the MSBs with a new mux and concat the MSB with the LSB to be done.
+    Value msb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.cond(), trueMSB,
+                                             falseMSB);
+    rewriter.replaceOpWithNewOp<ConcatOp>(mux, msb, sharedLSB);
+    return true;
+  }
+
+  return false;
+}
+
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
@@ -2129,6 +2218,13 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   // mux(cond, a, x|y|z|a) -> (x|y|z)&sext(~cond) | a
   if (foldCommonMuxValue(op, true, rewriter))
     return success();
+
+  // `mux(cond, op(a, b), op(a, c))` -> `op(a, mux(cond, b, c))`
+  if (Operation *trueOp = op.trueValue().getDefiningOp())
+    if (Operation *falseOp = op.falseValue().getDefiningOp())
+      if (trueOp->getName() == falseOp->getName())
+        if (foldCommonMuxOperation(op, trueOp, falseOp, rewriter))
+          return success();
 
   return failure();
 }
