@@ -553,7 +553,6 @@ firrtl.circuit "ContinueInvalidValue"   {
     %r3 = firrtl.reg %clock  : !firrtl.uint<1>
     %r4 = firrtl.reg %clock  : !firrtl.uint<1>
 
-
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %r1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>

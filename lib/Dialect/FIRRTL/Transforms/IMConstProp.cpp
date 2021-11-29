@@ -102,7 +102,7 @@ public:
     valueAndTag.setPointerAndInt(value, Kind::InvalidValue);
   }
 
-  void markValidValueValue() {
+  void markValidValue() {
     valueAndTag.setPointerAndInt(nullptr, Kind::ValidValue);
   }
 
@@ -188,20 +188,22 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     return executableBlocks.count(block);
   }
 
-  bool isOverdefined(Value value) const {
-    auto it = latticeValues.find(value);
-    return it != latticeValues.end() && it->second.isOverdefined();
-  }
-
   bool isValidValue(Value value) const {
     auto it = latticeValues.find(value);
     return it != latticeValues.end() && it->second.isValidValue();
   }
 
+  bool isOverdefined(Value value) const {
+    auto it = latticeValues.find(value);
+    return it != latticeValues.end() && it->second.isOverdefined();
+  }
+
+  /// Mark the given value as valid value. This means that we may refine a
+  /// specific constant for this value in the future but yet to determined.
   void markValidValue(Value value) {
     auto &entry = latticeValues[value];
     if (!entry.isValidValue()) {
-      entry.markValidValueValue();
+      entry.markValidValue();
       changedLatticeValueWorklist.push_back(value);
     }
   }
@@ -644,11 +646,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
   }
 
   // Simulate the result of folding this operation to a constant. If folding
-  // fails or was an in-place fold, mark the results as overdefined.
+  // fails or was an in-place fold, mark the results as valid value or
+  // overdefined.
   SmallVector<OpFoldResult, 8> foldResults;
   foldResults.reserve(op->getNumResults());
   if (failed(op->fold(operandConstants, foldResults))) {
     for (auto value : op->getResults()) {
+      // If all the operands are overdefined, then we cannot refine anymore so
+      // mark overdefined.
       if (isAllOverdefined)
         markOverdefined(value);
       else
