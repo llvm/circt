@@ -44,12 +44,19 @@ hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
 }
 
 // CHECK-LABEL: @notMux
-hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
-// CHECK-NEXT: comb.mux %c, %b, %a : i4
+hw.module @notMux(%a: i4, %b: i4, %cond: i1, %cond2: i1) -> (o: i4, o2: i4) {
+  // CHECK-NEXT: comb.mux %cond, %b, %a : i4
   %c1 = hw.constant 1 : i1
-  %0 = comb.xor %c, %c1 : i1
+  %0 = comb.xor %cond, %c1 : i1
   %1 = comb.mux %0, %a, %b : i4
-  hw.output %1 : i4
+
+  // CHECK-NEXT: %1 = comb.and %cond, %cond2 : i1
+  // CHECK-NEXT: %2 = comb.mux %1, %b, %a : i4
+  %2 = comb.xor %cond2, %c1 : i1
+  %3 = comb.or %0, %2 : i1
+  %4 = comb.mux %3, %a, %b : i4
+
+  hw.output %1, %4 : i4, i4
 }
 
 // mux(a, 0, 1) -> ~a
@@ -280,14 +287,15 @@ hw.module @flattenMuxMixed(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i
 }
 
 // CHECK-LABEL: @flattenNotOnDifferentCond
-hw.module @flattenNotOnDifferentCond(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i8, %arg4 : i8) -> (o1 : i8) {
+hw.module @flattenNotOnDifferentCond(%arg0: i1, %arg1: i1, %arg2: i1,
+ %arg3: i8, %arg4 : i8, %arg5: i8, %arg6: i8) -> (o1 : i8) {
 // CHECK-NEXT:    %0 = comb.mux %arg0, %arg3, %arg4 : i8
-// CHECK-NEXT:    %1 = comb.mux %arg1, %0, %arg4 : i8
-// CHECK-NEXT:    %2 = comb.mux %arg2, %1, %arg4 : i8
+// CHECK-NEXT:    %1 = comb.mux %arg1, %0, %arg5 : i8
+// CHECK-NEXT:    %2 = comb.mux %arg2, %1, %arg6 : i8
 // CHECK-NEXT:    hw.output %2 : i8
   %0 = comb.mux %arg0, %arg3, %arg4 : i8
-  %1 = comb.mux %arg1, %0,    %arg4 : i8
-  %2 = comb.mux %arg2, %1,    %arg4 : i8
+  %1 = comb.mux %arg1, %0,    %arg5 : i8
+  %2 = comb.mux %arg2, %1,    %arg6 : i8
   hw.output %2 : i8
 }
 
@@ -403,6 +411,23 @@ hw.module @compareConcatEliminationFalseCases(%arg0 : i4, %arg1: i9, %arg2: i7) 
   %o = comb.or %2, %3, %4, %5, %6 : i1
   hw.output %o : i1
 }
+
+// CHECK-LABEL: @compareExtractFold
+hw.module @compareExtractFold(%arg0: i8) -> (o1: i1, o2: i1) {
+  %c3_i8 = hw.constant 3 : i8
+  %0 = comb.icmp ugt %arg0, %c3_i8 : i8
+  // CHECK: %0 = comb.extract %arg0 from 2 : (i8) -> i6
+  // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6 
+
+  // CHECK: %2 = comb.extract %arg0 from 0 : (i8) -> i6 
+  // CHECK: %3 = comb.icmp ne %2, %c0_i6 : i6 
+  %c192_i8 = hw.constant 192 : i8
+  %1 = comb.icmp ult %arg0, %c192_i8 : i8
+
+  // CHECK: hw.output %1, %3 :
+  hw.output %0, %1 : i1, i1
+}
+
 
 // Validates that extract(cat(a, b, c)) -> cat(b, c) when it aligns with the exact elements, or simply
 // a when it is a single full element.
@@ -659,6 +684,35 @@ hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (out: i1) {
   hw.output %6 : i1
 }
 
+// CHECK-LABEL: hw.module @narrow_extract_from_and
+hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: i8) {
+  %c240_i32 = hw.constant 240 : i32  // 0xF0
+  %0 = comb.and %arg0, %c240_i32 : i32
+  %1 = comb.extract %0 from 3 : (i32) -> i8
+
+  %2 = comb.extract %0 from 2 : (i32) -> i14
+
+  // CHECK: %0 = comb.extract %arg0 from 4 : (i32) -> i4
+  // CHECK: %1 = comb.concat %c0_i8, %0, %c0_i2 : i8, i4, i2
+
+  // CHECK: %2 = comb.concat %c0_i3, %0, %false : i3, i4, i1
+  %c42_i32 = hw.constant 42 : i32  // 0b101010
+  %3 = comb.and %arg0, %c42_i32 : i32
+  %4 = comb.extract %3 from 1 : (i32) -> i8  
+  // CHECK: %3 = comb.extract %arg0 from 1 : (i32) -> i5
+  // CHECK: %4 = comb.and %3, %c-11_i5 : i5
+  // CHECK: %5 = comb.concat %c0_i3, %4 : i3, i5
+
+  %c12_i8 = hw.constant 12 : i8
+  %5 = comb.extract %arg0 from 23 : (i32) -> i8
+  %6 = comb.and %5, %c12_i8 : i8
+  // CHECK: %6 = comb.extract %arg0 from 25 : (i32) -> i2
+  // CHECK: %7 = comb.concat %c0_i4, %6, %c0_i2 : i4, i2, i2
+ 
+  hw.output %1, %2, %4, %6 : i8, i14, i8, i8
+  // CHECK: hw.output %2, %1, %5, %7 : i8, i14, i8, i8
+}
+
 // CHECK-LABEL: hw.module @fold_mux_tree1
 hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
   // CHECK-NEXT: %0 = hw.array_create %d, %c, %b, %a : i8
@@ -745,6 +799,30 @@ hw.module @fold_mux_tree4(%sel: i2, %a: i8, %b: i8, %c: i8) -> (y: i8) {
   %4 = comb.icmp eq %sel, %c0_i2 : i2
   %5 = comb.mux %4, %a, %3 : i8
   hw.output %5 : i8
+}
+
+// CHECK-LABEL: hw.module @fold_mux_tree5
+// This mux tree has an "and" of two selectors.
+hw.module @fold_mux_tree5(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %d, %d, %d, %b, %a, %c, %b, %a : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c-4_i3 = hw.constant -4 : i3
+  %c3_i3 = hw.constant 3 : i3
+  %c0_i3 = hw.constant 0 : i3
+  %c1_i3 = hw.constant 1 : i3
+  %c2_i3 = hw.constant 2 : i3
+  %0 = comb.icmp eq %sel, %c2_i3 : i3
+  %1 = comb.mux %0, %c, %d : i8
+  %2 = comb.icmp eq %sel, %c1_i3 : i3
+  %3 = comb.mux %2, %b, %1 : i8
+  %4 = comb.icmp eq %sel, %c0_i3 : i3
+  %5 = comb.icmp eq %sel, %c3_i3 : i3
+  %6 = comb.or %5, %4 : i1
+  %7 = comb.mux %6, %a, %3 : i8
+  %8 = comb.icmp eq %sel, %c-4_i3 : i3
+  %9 = comb.mux %8, %b, %7 : i8
+  hw.output %9 : i8
 }
 
 // CHECK-LABEL: hw.module @dont_fold_mux_tree1
@@ -1121,8 +1199,12 @@ hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
   hw.output %0 : i25
 }
 
-// CHECK-LABEL: hw.module @muxNot
-hw.module @muxNot(%cond: i1, %arg0: i32) -> (o1: i32, o1: i32) {
+// CHECK-LABEL: hw.module @muxCommon
+// This handles various cases of mux(cond, x, someop(x, y, z)).
+hw.module @muxCommon(%cond: i1, %cond2: i1,
+                     %arg0: i32, %arg1: i32, %arg2: i32, %arg3: i32)
+  -> (o1: i32, o2: i32, o3: i32, o4: i32, o5: i32, orResult: i32,
+      o6: i32, o7: i32) {
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1135,8 +1217,55 @@ hw.module @muxNot(%cond: i1, %arg0: i32) -> (o1: i32, o1: i32) {
   // CHECK: [[O2:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
   %o2 = comb.mux %cond, %arg0, %notArg0 : i32
 
-  // CHECK: hw.output [[O1]], [[O2]]
-  hw.output %o1, %o2 : i32, i32
+  // CHECK: [[OR_PARTIAL:%.*]] = comb.or %arg1, %arg2 : i32
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[OR_PARTIAL2:%.*]] = comb.and [[CONDEXT]], [[OR_PARTIAL]] : i32
+  // CHECK: [[O3:%.*]] = comb.or [[OR_PARTIAL2]], %arg0 : i32
+  %or = comb.or %arg0, %arg1, %arg2 : i32
+  %o3 = comb.mux %cond, %or, %arg0 : i32
+
+  // CHECK: [[AND_PARTIAL:%.*]] = comb.and %arg1, %arg2 : i32
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[AND_PARTIAL2:%.*]] = comb.or [[CONDEXT]], [[AND_PARTIAL]] : i32
+  // CHECK: [[O4:%.*]] = comb.and [[AND_PARTIAL2]], %arg0 : i32
+  %and = comb.and %arg0, %arg1, %arg2 : i32
+  %o4 = comb.mux %cond, %arg0, %and : i32
+
+  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[OR1:%.*]] = comb.or %arg1, %arg2, %arg3 : i32
+  // CHECK: [[ORRESULT:%.*]] = comb.or [[OR1]], %arg0 : i32
+  // CHECK: [[MASKED_OR:%.*]] = comb.and [[CONDEXT]], [[OR1]] : i32
+  // CHECK: [[O5:%.*]] = comb.or [[MASKED_OR]], %arg0 : i32
+  %orResult = comb.or %arg0, %arg1, %arg2, %arg3 : i32
+  %o5 = comb.mux %cond, %orResult, %arg0 : i32
+
+  // CHECK: [[CONDS:%.*]] = comb.or %cond2, %cond : i1
+  // CHECK: [[O6:%.*]] = comb.mux [[CONDS]], %arg0, %arg1 : i32
+  %0 = comb.mux %cond, %arg0, %arg1 : i32
+  %o6 = comb.mux %cond2, %arg0, %0 : i32
+  
+  // CHECK: [[CONDS:%.*]] = comb.and %cond2, %cond : i1
+  // CHECK: [[O7:%.*]] = comb.mux [[CONDS]], %arg1, %arg0 : i32
+  %1 = comb.mux %cond, %arg1, %arg0 : i32
+  %o7 = comb.mux %cond2, %1, %arg0 : i32
+
+  // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
+  // CHECK: [[O6]], [[O7]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7
+    : i32, i32, i32, i32, i32, i32, i32, i32
 }
 
+// CHECK-LABEL: @flatten_multi_use_and
+hw.module @flatten_multi_use_and(%arg0: i8, %arg1: i8, %arg2: i8)
+   -> (o1: i8, o2: i8) {
+  %c1 = hw.constant 15 : i8
+  %0 = comb.and %arg0, %c1 : i8
+  // CHECK: %0 = comb.and %arg0, %c15_i8 : i8
 
+  %c2 = hw.constant 7 : i8
+  %1 = comb.and %arg1, %0, %arg2, %c2 : i8
+  // CHECK: %1 = comb.and %arg1, %arg0, %arg2, %c7_i8 : i8
+
+  // CHECK: hw.output %0, %1 
+  hw.output %0, %1 : i8, i8
+}

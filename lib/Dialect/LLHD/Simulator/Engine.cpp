@@ -38,7 +38,7 @@ Engine::Engine(
 
   // Insert explicit instantiation of the design root.
   OpBuilder insertInst =
-      OpBuilder::atBlockTerminator(&rootEntity.getBody().getBlocks().front());
+      OpBuilder::atBlockEnd(&rootEntity.getBody().getBlocks().front());
   insertInst.create<InstOp>(rootEntity.getBlocks().front().back().getLoc(),
                             llvm::None, root, root, ArrayRef<Value>(),
                             ArrayRef<Value>());

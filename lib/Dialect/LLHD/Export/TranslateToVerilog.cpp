@@ -79,9 +79,7 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
     out << ";\n";
 
     // Print the operations within the entity
-    for (auto iter = entryBlock.begin();
-         iter != entryBlock.end() && !dyn_cast<llhd::TerminatorOp>(iter);
-         ++iter) {
+    for (auto iter = entryBlock.begin(); iter != entryBlock.end(); ++iter) {
       if (failed(printOperation(&(*iter), 4))) {
         return emitError(iter->getLoc(), "Operation not supported!");
       }
