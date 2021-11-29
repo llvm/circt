@@ -92,18 +92,31 @@ inline auto m_Any(Value *val) { return AnyCapturedValueMatcher(val); }
 ///
 /// Example: op(1, 2, op(3, 4), 5) -> op(1, 2, 3, 4, 5)  // returns true
 ///
-template <typename Op>
-static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
-  auto inputs = op.inputs();
+static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
+  auto inputs = op->getOperands();
 
   for (size_t i = 0, size = inputs.size(); i != size; ++i) {
-    // Don't duplicate logic.
-    if (!inputs[i].hasOneUse())
+    Operation *flattenOp = inputs[i].getDefiningOp();
+    if (!flattenOp || flattenOp->getName() != op->getName())
       continue;
-    auto flattenOp = inputs[i].template getDefiningOp<Op>();
-    if (!flattenOp)
-      continue;
-    auto flattenOpInputs = flattenOp.inputs();
+
+    // Don't duplicate logic when it has multiple uses.
+    if (!inputs[i].hasOneUse()) {
+      // We can fold a multi-use binary operation into this one if this allows a
+      // constant to fold though.  For example, fold
+      //    (or a, b, c, (or d, cst1), cst2) --> (or a, b, c, d, cst1, cst2)
+      // since the constants will both fold and we end up with the equiv cost.
+      //
+      // We don't do this for add/mul because the hardware won't be shared
+      // between the two ops if duplicated.
+      if (flattenOp->getNumOperands() != 2 || !isa<AndOp, OrOp, XorOp>(op) ||
+          !flattenOp->getOperand(1).getDefiningOp<hw::ConstantOp>() ||
+          !inputs.back().getDefiningOp<hw::ConstantOp>())
+        continue;
+    }
+
+    // Otherwise, flatten away.
+    auto flattenOpInputs = flattenOp->getOperands();
 
     SmallVector<Value, 4> newOperands;
     newOperands.reserve(size + flattenOpInputs.size());
@@ -113,7 +126,9 @@ static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
     newOperands.append(flattenOpInputs.begin(), flattenOpInputs.end());
     newOperands.append(flattenOpIndex + 1, inputs.end());
 
-    rewriter.replaceOpWithNewOp<Op>(op, op.getType(), newOperands);
+    Value result =
+        createGenericOp(op->getLoc(), op->getName(), newOperands, rewriter);
+    rewriter.replaceOp(op, result);
     return true;
   }
   return false;
@@ -1597,7 +1612,7 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
       if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
         if (auto prevExtract = inputs[i - 1].getDefiningOp<ExtractOp>()) {
           if (extract.input() == prevExtract.input()) {
-            auto thisWidth = extract.getType().getIntOrFloatBitWidth();
+            auto thisWidth = extract.getType().getWidth();
             if (prevExtract.lowBit() == extract.lowBit() + thisWidth) {
               auto prevWidth = prevExtract.getType().getIntOrFloatBitWidth();
               auto resType = rewriter.getIntegerType(thisWidth + prevWidth);

@@ -1255,4 +1255,17 @@ hw.module @muxCommon(%cond: i1, %cond2: i1,
     : i32, i32, i32, i32, i32, i32, i32, i32
 }
 
+// CHECK-LABEL: @flatten_multi_use_and
+hw.module @flatten_multi_use_and(%arg0: i8, %arg1: i8, %arg2: i8)
+   -> (o1: i8, o2: i8) {
+  %c1 = hw.constant 15 : i8
+  %0 = comb.and %arg0, %c1 : i8
+  // CHECK: %0 = comb.and %arg0, %c15_i8 : i8
 
+  %c2 = hw.constant 7 : i8
+  %1 = comb.and %arg1, %0, %arg2, %c2 : i8
+  // CHECK: %1 = comb.and %arg1, %arg0, %arg2, %c7_i8 : i8
+
+  // CHECK: hw.output %0, %1 
+  hw.output %0, %1 : i8, i8
+}
