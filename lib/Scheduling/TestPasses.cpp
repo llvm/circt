@@ -120,7 +120,7 @@ static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
   prob.setIncomingDelay(unitOpr, 0.0f);
   prob.setOutgoingDelay(unitOpr, 0.0f);
 
-  // parse operator type info (again) to extract physical delays
+  // parse operator type info (again) to extract delays
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
     for (auto &elem : parseArrayOfDicts<float>(attr, "incdelay")) {
       auto opr = prob.getOrInsertOperatorType(std::get<0>(elem));
@@ -261,9 +261,8 @@ void TestChainingProblemPass::runOnFunction() {
   for (auto *op : prob.getOperations()) {
     if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
       prob.setStartTime(op, startTimeAttr.getInt());
-    if (auto physicalTimeAttr =
-            op->getAttrOfType<FloatAttr>("problemPhysicalStartTime"))
-      prob.setPhysicalStartTime(op, physicalTimeAttr.getValueAsDouble());
+    if (auto sticAttr = op->getAttrOfType<FloatAttr>("problemStartTimeInCycle"))
+      prob.setStartTimeInCycle(op, sticAttr.getValueAsDouble());
   }
 
   if (failed(prob.verify())) {

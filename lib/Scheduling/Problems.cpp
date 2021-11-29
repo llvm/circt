@@ -168,32 +168,32 @@ LogicalResult ChainingProblem::checkCycleTime() {
 }
 
 LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
-  auto incDelay = getIncomingDelay(opr);
-  auto outDelay = getOutgoingDelay(opr);
+  auto incomingDelay = getIncomingDelay(opr);
+  auto outgoingDelay = getOutgoingDelay(opr);
 
-  if (!incDelay || !outDelay)
+  if (!incomingDelay || !outgoingDelay)
     return getContainingOp()->emitError()
-           << "Missing physical delays for operator type '" << opr << "'";
+           << "Missing delays for operator type '" << opr << "'";
 
-  float zInc = *incDelay;
-  float zOut = *outDelay;
+  float iDel = *incomingDelay;
+  float oDel = *outgoingDelay;
   float ct = *getCycleTime();
 
-  if (zInc < 0.0f || zOut < 0.0f)
+  if (iDel < 0.0f || oDel < 0.0f)
     return getContainingOp()->emitError()
-           << "Negative physical delays for operator type '" << opr << "'";
+           << "Negative delays for operator type '" << opr << "'";
 
-  if (zInc > ct)
+  if (iDel > ct)
     return getContainingOp()->emitError()
-           << "Incoming delay (" << zInc << ") for operator type '" << opr
+           << "Incoming delay (" << iDel << ") for operator type '" << opr
            << "' exceeds cycle time (" << ct << ")";
 
-  if (zOut > ct)
+  if (oDel > ct)
     return getContainingOp()->emitError()
-           << "Outgoing delay (" << zOut << ") for operator type '" << opr
+           << "Outgoing delay (" << oDel << ") for operator type '" << opr
            << "' exceeds cycle time (" << ct << ")";
 
-  if (*getLatency(opr) == 0 && zInc != zOut)
+  if (*getLatency(opr) == 0 && iDel != oDel)
     return getContainingOp()->emitError()
            << "Incoming & outgoing delay must be equal for zero-latency "
               "operator type '"
@@ -202,22 +202,22 @@ LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
   return success();
 }
 
-LogicalResult ChainingProblem::verifyPhysicalStartTime(Operation *op) {
-  auto physStartTime = getPhysicalStartTime(op);
-  if (!physStartTime)
-    return op->emitError("Operation has no physical start time");
+LogicalResult ChainingProblem::verifyStartTimeInCycle(Operation *op) {
+  auto startTimeInCycle = getStartTimeInCycle(op);
+  if (!startTimeInCycle)
+    return op->emitError("Operation has no start time in cycle");
 
-  float pst = *physStartTime;
-  float zInc = *getIncomingDelay(*getLinkedOperatorType(op));
+  float stic = *startTimeInCycle;
+  float iDel = *getIncomingDelay(*getLinkedOperatorType(op));
   float ct = *getCycleTime();
 
-  if (!(pst + zInc <= ct))
+  if (!(stic + iDel <= ct))
     return op->emitError("Operation violates cycle time constraint");
 
   return success();
 }
 
-LogicalResult ChainingProblem::verifyPhysicalPrecedence(Dependence dep) {
+LogicalResult ChainingProblem::verifyPrecedenceInCycle(Dependence dep) {
   // Auxiliary edges don't transport values.
   if (dep.isAuxiliary())
     return success();
@@ -236,18 +236,18 @@ LogicalResult ChainingProblem::verifyPhysicalPrecedence(Dependence dep) {
 
   // We have stI + latI == stJ, i.e. `i` ends in the same cycle as `j` starts.
   // If `i` is combinational, both ops also start in the same cycle, and we must
-  // include `i`'s physical start time in the path delay. Otherwise, `i` started
-  // in an earlier cycle and just contributes its outgoing delay to the path.
-  float pstI = latI == 0 ? *getPhysicalStartTime(i) : 0.0f;
-  float zOutI = *getOutgoingDelay(*getLinkedOperatorType(i));
-  float pstJ = *getPhysicalStartTime(j);
+  // include `i`'s start time in that cycle in the path delay. Otherwise, `i`
+  // started in an earlier cycle and just contributes its outgoing delay to the
+  // path.
+  float sticI = latI == 0 ? *getStartTimeInCycle(i) : 0.0f;
+  float oDelI = *getOutgoingDelay(*getLinkedOperatorType(i));
+  float sticJ = *getStartTimeInCycle(j);
 
-  if (!(pstI + zOutI <= pstJ))
+  if (!(sticI + oDelI <= sticJ))
     return getContainingOp()->emitError()
-           << "Physical delays violated in time step " << stJ
-           << " for dependence:"
-           << "\n  from: " << *i << ", result available in z=" << (pstI + zOutI)
-           << "\n  to:   " << *j << ", starts in z=" << pstJ;
+           << "Precedence violated in cycle " << stJ << " for dependence:"
+           << "\n  from: " << *i << ", result after z=" << (sticI + oDelI)
+           << "\n  to:   " << *j << ", starts in z=" << sticJ;
 
   return success();
 }
@@ -271,12 +271,12 @@ LogicalResult ChainingProblem::verify() {
     return failure();
 
   for (auto *op : getOperations())
-    if (failed(verifyPhysicalStartTime(op)))
+    if (failed(verifyStartTimeInCycle(op)))
       return failure();
 
   for (auto *op : getOperations())
     for (auto dep : getDependences(op))
-      if (failed(verifyPhysicalPrecedence(dep)))
+      if (failed(verifyPrecedenceInCycle(dep)))
         return failure();
 
   return success();

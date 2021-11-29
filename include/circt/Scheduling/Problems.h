@@ -282,27 +282,28 @@ public:
 };
 
 /// This class models the accumulation of physical propagation delays on
-/// combinational paths along SSA dependences within a scheduling problem's
-/// abstract time steps/cycles.
+/// combinational paths along SSA dependences.
 ///
 /// Each operator type is annotated with estimated values for incoming and
 /// outgoing delays. Combinational operators (zero-latency, no internal
-/// registers) have only a single propagation delay; this important special case
-/// is modeled by setting the incoming and outgoing delays to the same value.
+/// registers) have only a single delay; this important special case is modeled
+/// by setting the incoming and outgoing delays to the same value.
 ///
-/// A solution to this problem comprises physical start times for each operation
-/// that satisfy a given cycle time constraint.
+/// A solution to this problem comprises per-operation start times in a
+/// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
+/// determined by the underlying scheduling problem. The start times in the
+/// respective cycles must satisfy a given cycle time constraint.
 class ChainingProblem : public virtual Problem {
 private:
   ProblemProperty<float> cycleTime;
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
-  OperationProperty<float> physicalStartTime;
+  OperationProperty<float> startTimeInCycle;
 
 public:
   explicit ChainingProblem(Operation *containingOp) : Problem(containingOp) {}
 
-  /// The cycle time constrains the accumulated propagation delays along
-  /// combinational paths inside a time step.
+  /// The cycle time constrains the accumulated delays along combinational paths
+  /// inside a time step.
   Optional<float> getCycleTime() { return cycleTime; }
   void setCycleTime(float time) { cycleTime = time; }
 
@@ -326,13 +327,13 @@ public:
     outgoingDelay[opr] = delay;
   }
 
-  /// The physical start time is computed by the scheduler. It is relative to
-  /// the beginning of the cycle that \p op starts in.
-  Optional<float> getPhysicalStartTime(Operation *op) {
-    return physicalStartTime.lookup(op);
+  /// Computed by the scheduler, this start time is relative to the beginning of
+  /// the cycle that \p op starts in.
+  Optional<float> getStartTimeInCycle(Operation *op) {
+    return startTimeInCycle.lookup(op);
   }
-  void setPhysicalStartTime(Operation *op, float time) {
-    physicalStartTime[op] = time;
+  void setStartTimeInCycle(Operation *op, float time) {
+    startTimeInCycle[op] = time;
   }
 
 protected:
@@ -343,14 +344,14 @@ protected:
   /// zero-latency operator type.
   virtual LogicalResult checkDelays(OperatorType opr);
 
-  /// \p op has a non-negative physical start time, which is also early enough
-  /// in the scheduled time step to accommodate the linked operator type's
-  /// incoming delay.
-  virtual LogicalResult verifyPhysicalStartTime(Operation *op);
+  /// \p op has a non-negative start time in its cycle, which is also early
+  /// enough in the scheduled time step to accommodate the linked operator
+  /// type's incoming delay.
+  virtual LogicalResult verifyStartTimeInCycle(Operation *op);
   /// If \p dep is an SSA edge and its source operation finishes in the same
   /// time step as the destination operation, the source's result is available
-  /// before the destination's physical start time.
-  virtual LogicalResult verifyPhysicalPrecedence(Dependence dep);
+  /// before the destination starts in that cycle.
+  virtual LogicalResult verifyPrecedenceInCycle(Dependence dep);
 
 public:
   virtual LogicalResult check() override;
