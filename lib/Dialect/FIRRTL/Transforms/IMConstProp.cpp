@@ -735,7 +735,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
         if (isDeletableWireOrReg(destOp) &&
-          !(isOverdefined(connect.dest()) || isValidValue(connect.dest()))) {
+            !(isOverdefined(connect.dest()) || isValidValue(connect.dest()))) {
           connect.erase();
           ++numErasedOp;
         }
