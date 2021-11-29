@@ -413,19 +413,27 @@ hw.module @compareConcatEliminationFalseCases(%arg0 : i4, %arg1: i9, %arg2: i7) 
 }
 
 // CHECK-LABEL: @compareExtractFold
-hw.module @compareExtractFold(%arg0: i8) -> (o1: i1, o2: i1) {
+hw.module @compareExtractFold(%arg0: i8) -> (o1: i1, o2: i1, o3: i1) {
+  // x > 0b00000011 -> extract(x, 2..8) != 0b000000
   %c3_i8 = hw.constant 3 : i8
   %0 = comb.icmp ugt %arg0, %c3_i8 : i8
   // CHECK: %0 = comb.extract %arg0 from 2 : (i8) -> i6
   // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6 
 
-  // CHECK: %2 = comb.extract %arg0 from 0 : (i8) -> i6 
-  // CHECK: %3 = comb.icmp ne %2, %c0_i6 : i6 
+  // x < 0b11000000 -> extract(x, 6..8) != 0b11
   %c192_i8 = hw.constant 192 : i8
   %1 = comb.icmp ult %arg0, %c192_i8 : i8
+  // CHECK: %2 = comb.extract %arg0 from 6 : (i8) -> i2
+  // CHECK: %3 = comb.icmp ne %2, %c-1_i2 : i2
 
-  // CHECK: hw.output %1, %3 :
-  hw.output %0, %1 : i1, i1
+  // The following used to be erroneously folded to `%arg0`.
+  %c0_i2 = hw.constant 0 : i2
+  %2 = comb.concat %c0_i2, %arg0 : i2, i8
+  %c768_i10 = hw.constant 768 : i10
+  %3 = comb.icmp ult %2, %c768_i10 : i10
+
+  // CHECK: hw.output %1, %3, %true :
+  hw.output %0, %1, %3 : i1, i1, i1
 }
 
 
