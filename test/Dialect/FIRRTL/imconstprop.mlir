@@ -558,7 +558,7 @@ firrtl.circuit "ContinueInvalidValue"   {
     firrtl.connect %r3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r2, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r4, %r3 : !firrtl.uint<1>, !firrtl.uint<1>
-    %0 = firrtl.add %r1, %r4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    %0 = firrtl.add %r2, %r4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     // CHECK: %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
     // CHECK-NEXT: firrtl.connect %b, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
     firrtl.connect %b, %0 : !firrtl.uint<2>, !firrtl.uint<2>
