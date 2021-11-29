@@ -675,16 +675,16 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                              op.lowBit());
       return success();
     }
-    if (sext->hasOneUse()) {
-      // `extract(lowbit, sext(x))` when extracted bits are all sign bits.
-      if (op.lowBit() >= sextInputWidth - 1) {
-        auto int1Type = rewriter.getI1Type();
-        auto signBit = rewriter.create<ExtractOp>(
-            sext.getLoc(), int1Type, sext.input(), sextInputWidth - 1);
-        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), signBit);
-        return success();
-      }
+    // `extract(lowbit, sext(x))` when extracted bits are all sign bits.
+    if (op.lowBit() >= sextInputWidth - 1) {
+      auto int1Type = rewriter.getI1Type();
+      auto signBit = rewriter.create<ExtractOp>(
+          sext.getLoc(), int1Type, sext.input(), sextInputWidth - 1);
+      rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), signBit);
+      return success();
+    }
 
+    if (sext->hasOneUse()) {
       // `extract(lowBit, sext(x))` -> `extract(lowBit, smaller_sext(x))`.
       if (neededBits < sext.getType().getIntOrFloatBitWidth()) {
         auto newSExtType = rewriter.getIntegerType(neededBits);

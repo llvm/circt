@@ -1020,7 +1020,7 @@ hw.module @sext_extract1(%arg0: i4) -> (a: i4) {
 
 // CHECK-LABEL: hw.module @sext_extract2
 hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
-  // CHECK-NEXT:  %0 = comb.extract %arg0 from 1 : (i4) -> i3
+  // CHECK-NEXT: %0 = comb.extract %arg0 from 1 : (i4) -> i3
   %0 = comb.sext %arg0 : (i4) -> i8
   %1 = comb.extract %0 from 1 : (i8) -> i3
   // CHECK: hw.output %0
@@ -1028,13 +1028,15 @@ hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
 }
 
 // CHECK-LABEL: hw.module @sext_extract3
-hw.module @sext_extract3(%arg0: i4) -> (a: i3) {
-  // CHECK-NEXT: %0 = comb.extract %arg0 from 3 : (i4) -> i1
+hw.module @sext_extract3(%arg0: i4) -> (a: i3, b: i8) {
+  // CHECK-NEXT: %0 = comb.sext %arg0 : (i4) -> i8
   %0 = comb.sext %arg0 : (i4) -> i8
-  // CHECK-NEXT: %1 = comb.sext %0 : (i1) -> i3
+
+  // CHECK-NEXT: %1 = comb.extract %arg0 from 3 : (i4) -> i1
+  // CHECK-NEXT: %2 = comb.sext %1 : (i1) -> i3
   %1 = comb.extract %0 from 3 : (i8) -> i3
-  // CHECK: hw.output %1
-  hw.output %1 : i3
+  // CHECK: hw.output %2, %0
+  hw.output %1, %0 : i3, i8
 }
 
 // == Begin: test cases from LowerToHW ==
