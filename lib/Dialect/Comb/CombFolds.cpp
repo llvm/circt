@@ -1577,20 +1577,6 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
     if (auto subConcat = inputs[i].getDefiningOp<ConcatOp>())
       return flattenConcat(i, i, subConcat->getOperands());
 
-    // We can flatten a sext into the concat, since a sext is an extraction of
-    // a sign bit plus the input value itself.
-    if (auto sext = inputs[i].getDefiningOp<SExtOp>()) {
-      unsigned inputWidth = sext.input().getType().getIntOrFloatBitWidth();
-
-      auto sign = rewriter.create<ExtractOp>(op.getLoc(), rewriter.getI1Type(),
-                                             sext.input(), inputWidth - 1);
-      SmallVector<Value> replacements;
-      unsigned signWidth = sext.getType().getIntOrFloatBitWidth() - inputWidth;
-      replacements.append(signWidth, sign);
-      replacements.push_back(sext.input());
-      return flattenConcat(i, i, replacements);
-    }
-
     // Check for canonicalization due to neighboring operands.
     if (i != 0) {
       // Merge neighboring constants.
