@@ -2603,15 +2603,16 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       if ((rhs - 1).isZero())
         return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs - 1));
 
-      // x < 0xF0 => extract(x, 0..3) != 0
+      // x < 0xE0 -> extract(x, 5..7) != 0b111
       if (rhs.countLeadingOnes() + rhs.countTrailingZeros() ==
           rhs.getBitWidth()) {
-        auto numZeros = rhs.countTrailingZeros();
-        auto smallType = rewriter.getIntegerType(numZeros);
-        auto smaller =
-            rewriter.create<ExtractOp>(op.getLoc(), smallType, op.lhs(), 0);
-        return replaceWith(ICmpPredicate::ne, smaller,
-                           getConstant(APInt::getZero(numZeros)));
+        auto numOnes = rhs.countLeadingOnes();
+        auto smallType = rewriter.getIntegerType(numOnes);
+        auto smaller = rewriter.create<ExtractOp>(
+            op.getLoc(), smallType, op.lhs(), rhs.getBitWidth() - numOnes);
+        return replaceWith(
+            ICmpPredicate::ne, smaller,
+            getConstant(APInt::getAllOnes(smallType.getWidth())));
       }
 
       break;
@@ -2626,7 +2627,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       if ((rhs + 1).isAllOnes())
         return replaceWith(ICmpPredicate::eq, op.lhs(), getConstant(rhs + 1));
 
-      // x > 7 => extract(x, 3) != 0
+      // x > 0x07 -> extract(x, 3..7) != 0b00000
       if ((rhs + 1).isPowerOf2()) {
         auto numOnes = rhs.countTrailingOnes();
         auto smallType = rewriter.getIntegerType(rhs.getBitWidth() - numOnes);
