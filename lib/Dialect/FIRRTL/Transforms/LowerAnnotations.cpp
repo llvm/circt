@@ -436,7 +436,7 @@ static std::string canonicalizeTarget(StringRef target) {
 /// Split a target into a base target (including a reference if one exists) and
 /// an optional array of subfield/subindex tokens.
 std::pair<StringRef, llvm::Optional<ArrayAttr>>
-splitTarget(StringRef target, MLIRContext *context) {
+circt::firrtl::splitTarget(StringRef target, MLIRContext *context) {
   if (target.empty())
     return {target, None};
 
@@ -502,9 +502,9 @@ splitTarget(StringRef target, MLIRContext *context) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-FlatSymbolRefAttr buildNLA(
+FlatSymbolRefAttr circt::firrtl::buildNLA(
     CircuitOp circuit, size_t nlaSuffix,
-    SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
+    SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;

@@ -26,14 +26,17 @@ public:
                 ArrayRef<InstanceOp> path = {}) : op(op), portNum(~0ULL), fieldIdx(fieldIdx), instances(path.begin(), path.end()) {}
   AnnoPathValue(FModuleLike mod, unsigned fieldIdx = 0, size_t portNum = ~0ULL,
                 ArrayRef<InstanceOp> path = {})
-      : op(op), portNum(portNum), fieldIdx(fieldIdx),
+      : op(mod), portNum(portNum), fieldIdx(fieldIdx),
         instances(path.begin(), path.end()) {}
 
   bool isLocal() const { return instances.empty(); }
   bool isPort() const { return op && portNum != ~0ULL; }
   bool isInstance() const { return op && isa<InstanceOp>(op); }
   
-  FIRRTLType getType() const;
+  FIRRTLType getType() const {
+    return op->getResultTypes()[0].cast<FIRRTLType>().getSubTypeByFieldID(
+        fieldIdx);
+  }
   ArrayRef<InstanceOp> getPath() const { return instances; }
   unsigned getField() const { return fieldIdx; }
   size_t getPort() const { return portNum; }

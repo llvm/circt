@@ -1709,7 +1709,7 @@ static StringAttr canonicalizeTarget(StringAttr target) {
 // Long term, these should move to their passes.
 //===----------------------------------------------------------------------===//
 
-LogicalResult applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
                             AnnoApplyState state) {
   auto clazz = "sifive.enterprise.grandcentral.MemTapAnnotation";
   auto context = state.circuit.getContext();
