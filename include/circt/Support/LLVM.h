@@ -176,6 +176,9 @@ namespace OpTrait {}
 
 // Import things we want into our namespace.
 namespace circt {
+// clang-tidy removes following using directives incorrectly. So force
+// clang-tidy to ignore them.
+// NOLINTBEGIN(misc-unused-using-decls)
 using mlir::ArrayAttr;
 using mlir::AsmParser;
 using mlir::AsmPrinter;
@@ -261,6 +264,7 @@ using mlir::ValueRange;
 using mlir::VectorType;
 using mlir::WalkResult;
 namespace OpTrait = mlir::OpTrait;
+// NOLINTEND(misc-unused-using-decls)
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_LLVM_H
