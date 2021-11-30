@@ -248,7 +248,7 @@ struct TestChainingProblemPass
 void TestChainingProblemPass::runOnFunction() {
   auto func = getFunction();
 
-  ChainingProblem prob(func);
+  auto prob = ChainingProblem::get(func);
   constructProblem(prob, func);
   constructChainingProblem(prob, func);
 

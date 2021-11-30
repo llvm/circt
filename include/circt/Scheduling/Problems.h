@@ -294,14 +294,14 @@ public:
 /// determined by the underlying scheduling problem. The start times in the
 /// respective cycles must satisfy a given cycle time constraint.
 class ChainingProblem : public virtual Problem {
+  DEFINE_FACTORY_METHOD(ChainingProblem)
+
 private:
   ProblemProperty<float> cycleTime;
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
   OperationProperty<float> startTimeInCycle;
 
 public:
-  explicit ChainingProblem(Operation *containingOp) : Problem(containingOp) {}
-
   /// The cycle time constrains the accumulated delays along combinational paths
   /// inside a time step.
   Optional<float> getCycleTime() { return cycleTime; }
