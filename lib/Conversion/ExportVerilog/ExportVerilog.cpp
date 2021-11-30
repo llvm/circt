@@ -8,6 +8,11 @@
 //
 // This is the main Verilog emitter implementation.
 //
+// CAREFUL: This file covers the emission phase of `ExportVerilog` which mainly
+// walks the IR and produces output. Do NOT modify the IR during this walk, as
+// emission occurs in a highly parallel fashion. If you need to modify the IR,
+// do so during the preparation phase which lives in `PrepareForEmission.cpp`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
@@ -3563,11 +3568,6 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 void ModuleEmitter::emitBind(BindOp op) {
-  // Check we're not in a parallel region since we need access to the contents
-  // of other modules, which are unstable in parallel code.
-  assert(!state.shared.isInParallelMode &&
-         "bind emission requires single thread");
-
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
@@ -3662,9 +3662,6 @@ void ModuleEmitter::emitBind(BindOp op) {
 StringRef ModuleEmitter::getNameRemotely(Value value,
                                          const ModulePortInfo &modulePorts,
                                          HWModuleOp remoteModule) {
-  assert(!state.shared.isInParallelMode &&
-         "cross-module access requires single thread");
-
   if (auto barg = value.dyn_cast<BlockArgument>())
     return state.globalNames.getPortVerilogName(
         remoteModule, modulePorts.inputs[barg.getArgNumber()]);
@@ -4175,7 +4172,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
   // If we are parallelizing emission, we emit each independent operation to a
   // string buffer in parallel, then concat at the end.
-  isInParallelMode = true;
   parallelForEach(context, thingsToEmit, [&](StringOrOpToEmit &stringOrOp) {
     auto *op = stringOrOp.getOperation();
     if (!op)
@@ -4194,7 +4190,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     emitOperation(state, op);
     stringOrOp.setString(buffer);
   });
-  isInParallelMode = false;
 
   // Finally emit each entry now that we know it is a string.
   for (auto &entry : thingsToEmit) {
@@ -4352,13 +4347,11 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   emitter.gatherFiles(true);
 
   // Emit each file in parallel if context enables it.
-  emitter.isInParallelMode = true;
   parallelForEach(module->getContext(), emitter.files.begin(),
                   emitter.files.end(), [&](auto &it) {
                     createSplitOutputFile(it.first, it.second, dirname,
                                           emitter);
                   });
-  emitter.isInParallelMode = false;
 
   // Write the file list.
   SmallString<128> filelistPath(dirname);
