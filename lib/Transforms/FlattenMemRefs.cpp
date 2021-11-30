@@ -205,7 +205,7 @@ struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
     // It is up to users of this pass to define how these rewritten functions
     // are to be implemented.
     rewriter.setInsertionPoint(op->getParentOfType<FuncOp>());
-    auto calledFunction = dyn_cast<CallOpInterface>(*op).resolveCallable();
+    auto *calledFunction = dyn_cast<CallOpInterface>(*op).resolveCallable();
     FunctionType funcType = FunctionType::get(
         op.getContext(), newCallOp.getOperandTypes(), convResTypes);
     FuncOp newFuncOp;
