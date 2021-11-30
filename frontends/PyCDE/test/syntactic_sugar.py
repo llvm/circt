@@ -31,7 +31,7 @@ class Top:
     obj_to_value([42, 45], dim(types.i8, 2))
     obj_to_value(5, types.i8)
 
-    BarType.create({"foo": 7})
+    BarType({"foo": 7})
 
     Taps()
     StupidLegacy(ignore=no_connect)
