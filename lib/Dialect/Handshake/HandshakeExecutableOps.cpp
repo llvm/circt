@@ -279,31 +279,19 @@ bool ConstantOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
-bool ExternalMemoryOp::tryExecute(
-    llvm::DenseMap<mlir::Value, llvm::Any> & /*valueMap*/,
-    llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
-    llvm::DenseMap<mlir::Value, double> & /*timeMap*/,
-    std::vector<std::vector<llvm::Any>> & /*store*/,
-    std::vector<mlir::Value> & /*scheduleList*/) {
-  // todo(mortbopet): implement execution of ExternalMemoryOp's.
-  assert(false && "implement me");
-  return 0;
-}
-
-bool MemoryOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
-                          llvm::DenseMap<unsigned, unsigned> &memoryMap,
-                          llvm::DenseMap<mlir::Value, double> &timeMap,
-                          std::vector<std::vector<llvm::Any>> &store,
-                          std::vector<mlir::Value> &scheduleList) {
-  Operation *op = getOperation();
-  int opIndex = 0;
+template <typename TMemOp>
+static bool
+executeMemoryOperation(TMemOp op, unsigned buffer, int opIndex,
+                       llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                       llvm::DenseMap<unsigned, unsigned> &memoryMap,
+                       llvm::DenseMap<mlir::Value, double> &timeMap,
+                       std::vector<std::vector<llvm::Any>> &store,
+                       std::vector<mlir::Value> &scheduleList) {
   bool notReady = false;
-  unsigned buffer = memoryMap[id()];
-
-  for (unsigned i = 0; i < stCount(); i++) {
+  for (unsigned i = 0; i < op.stCount(); i++) {
     mlir::Value data = op->getOperand(opIndex++);
     mlir::Value address = op->getOperand(opIndex++);
-    mlir::Value nonceOut = op->getResult(ldCount() + i);
+    mlir::Value nonceOut = op->getResult(op.ldCount() + i);
     if ((!valueMap.count(data) || !valueMap.count(address))) {
       notReady = true;
       continue;
@@ -330,10 +318,10 @@ bool MemoryOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     valueMap.erase(address);
   }
 
-  for (unsigned i = 0; i < ldCount(); i++) {
+  for (unsigned i = 0; i < op.ldCount(); i++) {
     mlir::Value address = op->getOperand(opIndex++);
     mlir::Value dataOut = op->getResult(i);
-    mlir::Value nonceOut = op->getResult(ldCount() + stCount() + i);
+    mlir::Value nonceOut = op->getResult(op.ldCount() + op.stCount() + i);
     if (!valueMap.count(address)) {
       notReady = true;
       continue;
@@ -357,6 +345,16 @@ bool MemoryOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     valueMap.erase(address);
   }
   return (notReady) ? false : true;
+}
+
+bool MemoryOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                          llvm::DenseMap<unsigned, unsigned> &memoryMap,
+                          llvm::DenseMap<mlir::Value, double> &timeMap,
+                          std::vector<std::vector<llvm::Any>> &store,
+                          std::vector<mlir::Value> &scheduleList) {
+  unsigned buffer = memoryMap[id()];
+  return executeMemoryOperation(*this, buffer, 0, valueMap, memoryMap, timeMap,
+                                store, scheduleList);
 }
 
 bool LoadOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
@@ -399,6 +397,17 @@ bool LoadOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     llvm_unreachable("why?");
   }
   return true;
+}
+
+bool ExternalMemoryOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  unsigned buffer = llvm::any_cast<unsigned>(valueMap[memref()]);
+  return executeMemoryOperation(*this, buffer, 1, valueMap, memoryMap, timeMap,
+                                store, scheduleList);
 }
 
 bool StoreOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
