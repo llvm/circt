@@ -23,6 +23,7 @@ Value emitReg(OpBuilder &builder, Type elementTy, Value input, Value tstart) {
                                      ArrayRef<Value>({c0}), zeroAttr, zeroAttr,
                                      tstart, zeroAttr);
 }
+
 std::pair<Value, Value> insertForOpEntryLogic(OpBuilder &builder,
                                               Value isFirstIter, Value lb,
                                               Value ub, Value step,

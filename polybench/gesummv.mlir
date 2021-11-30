@@ -4,7 +4,7 @@
 #reg_w  = {"wr_latency"= 1}
 hir.func.extern @i32Multiplier at %t (%a:i32, %b:i32) ->(%result: i32 delay 4)
 
-hir.func @gesummv at %t(
+hir.func @gesummv_hir at %t(
 %alpha:i32, 
 %beta:i32, 
 %tmp:!hir.memref<8xi32> ports [#bram_w] , 
@@ -57,14 +57,15 @@ hir.func @gesummv at %t(
           : !hir.func<(i32,i32)->(i32 delay 4)>
         %y = hir.load %yreg[port 0][%0] at %tj + 5
           :!hir.memref<(bank 1)xi32>
-        %y_next = comb.add %t1, %y :i32
+        %y_next = comb.add %t2, %y :i32
         hir.store %y_next to %yreg[port 1][%0] at %tj+5 
           : !hir.memref<(bank 1)xi32>
         hir.next_iter at %tj + 1
     }
     %tmp_in = hir.load %tmpreg[port 0][%0] at %tf + 5
       :!hir.memref<(bank 1)xi32>
-    hir.store %tmp_in to %tmp[port 0][%i_i3] at %tf + 5 
+    %i_i3_delayed = hir.delay %i_i3 by 5 at %tf : i3
+    hir.store %tmp_in to %tmp[port 0][%i_i3_delayed] at %tf + 5 
       : !hir.memref<8xi32>
     %y = hir.load %yreg[port 0][%0] at %tf + 5
       :!hir.memref<(bank 1)xi32>

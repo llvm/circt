@@ -298,7 +298,9 @@ LogicalResult StandardToHIRPass::convertOp(mlir::scf::ForOp op) {
 
   auto forOp = builder.create<hir::ForOp>(
       op.getLoc(), hir::TimeType::get(op.getContext()), lb, ub, step,
-      SmallVector<Value>({}), Value(), IntegerAttr());
+      SmallVector<Value>({}),
+      ArrayAttr::get(builder.getContext(), ArrayRef<Attribute>({})), Value(),
+      IntegerAttr());
   BlockAndValueMapping mapper;
   op.getLoopBody().cloneInto(&forOp.getLoopBody(), mapper);
   if (Attribute unrollAttr = op->getAttr("hir.unroll"))

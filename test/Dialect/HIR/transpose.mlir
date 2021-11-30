@@ -26,3 +26,4 @@ hir.func @transpose_hir at %t(
     }
     hir.return
 }
+

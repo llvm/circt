@@ -62,7 +62,13 @@ private:
 
 public:
   Value lookup(Value hirValue) {
-    assert(mapHIRToHWValue.find(hirValue) != mapHIRToHWValue.end());
+    if (mapHIRToHWValue.find(hirValue) == mapHIRToHWValue.end()) {
+      (hirValue.getDefiningOp() ? hirValue.getDefiningOp()
+                                : hirValue.getParentRegion()->getParentOp())
+          ->emitError(
+              "Could not find the corresponding hw Value in HIRToHWMapping.");
+      assert(false);
+    }
     return mapHIRToHWValue.lookup(hirValue);
   }
   void map(Value hirValue, Value hwValue) {

@@ -2,7 +2,7 @@
 #bram_w = {"wr_latency"= 1}
 #reg_r  = {"rd_latency" = 0}
 #reg_w  = {"wr_latency"= 1}
-hir.func @floyd_warshall at %t(
+hir.func @floyd_warshall_hir at %t(
 %n:i32, 
 %path_r:!hir.memref<8x8xi32> ports [#bram_r],
 %path_w:!hir.memref<8x8xi32> ports[#bram_w]

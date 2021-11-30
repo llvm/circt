@@ -280,7 +280,8 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
     ```
   }];
 
-  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step,Variadic<AnyType>:$iter_args,
+  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType:
+  $step,Variadic<AnyType>:$iter_args, OptionalAttr<ArrayAttr>: $iter_arg_delays,
       Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let regions = (region SizedRegion<1>:$body);
   let results = (outs Variadic<AnyType>:$iterResults, HIR_TimeType:$t_end);
@@ -317,7 +318,8 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
 def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects, AttrSizedOperandSegments]> {
   let summary = "for operation";
 
-  let arguments = (ins I1:$condition, Variadic<AnyType>:$iter_args, Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins I1:$condition,
+  Variadic<AnyType>:$iter_args,OptionalAttr<ArrayAttr>:$iter_arg_delays, Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs Variadic<AnyType>:$iterResults, HIR_TimeType:$t_end);
   let regions = (region SizedRegion<1>:$body);
   let parser = [{return parse$cppClass(parser,result);}];
@@ -329,9 +331,6 @@ def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects, AttrSizedOpera
     Block* addEntryBlock();
   }];
 
-  let builders = [OpBuilder<(ins "Value":$condition, "ArrayRef<Value>":$iter_args, "Value":$tstart, "IntegerAttr":$offset),[{
-    build($_builder,$_state,hir::TimeType::get($_builder.getContext()), condition, iter_args, tstart, offset);
-  }]>];
   let hasCanonicalizeMethod =true;
 }
 

@@ -307,8 +307,9 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
         getConstantX(builder, iterArg.getType())->getResult(0);
     placeholderIterArgs.push_back(backwardIterArg);
     auto forwardIterArg = mapHIRToHWValue.lookup(iterArg);
-    builder->create<comb::MuxOp>(uLoc, tNextBegin, forwardIterArg,
-                                 backwardIterArg);
+    mapHIRToHWValue.map(op.body().front().getArgument(i),
+                        builder->create<comb::MuxOp>(
+                            uLoc, tNextBegin, forwardIterArg, backwardIterArg));
   }
 
   mapHIRToHWValue.map(op.getIterTimeVar(), iterTimeVar);
@@ -673,7 +674,6 @@ LogicalResult HIRToHWPass::visitOp(hir::BusBroadcastOp op) {
 
 LogicalResult HIRToHWPass::visitOp(hir::DelayOp op) {
   auto input = mapHIRToHWValue.lookup(op.input());
-  assert(input);
   auto name = helper::getOptionalName(op, 0);
   mapHIRToHWValue.map(op.res(), getDelayedValue(builder, input, op.delay(),
                                                 name, op.getLoc(), clk, reset));

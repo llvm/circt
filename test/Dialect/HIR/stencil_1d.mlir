@@ -7,7 +7,7 @@
 
 hir.func.extern @weighted_sum at %t(%v0:i32,%wt0:i32, %v1:i32,%wt1:i32)->(%result:i32 delay 1)
 
-hir.func @stencil_1d at %t(
+hir.func @stencil_1d_hir at %t(
   %Ai :!hir.memref<64xi32> ports [#bram_r],
   %Bw : !hir.memref<64xi32> ports [#bram_w],
   %w0 :i32,
