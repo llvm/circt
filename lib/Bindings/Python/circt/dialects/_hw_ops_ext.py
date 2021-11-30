@@ -160,9 +160,6 @@ class ModuleLike:
     if len(parameters) > 0 or "parameters" not in attributes:
       attributes["parameters"] = ArrayAttr.get(parameters)
 
-    if "comment" not in attributes:
-      attributes["comment"] = StringAttr.get("")
-
     attributes["type"] = TypeAttr.get(
         FunctionType.get(inputs=input_types, results=output_types))
 
@@ -285,6 +282,29 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
 class HWModuleOp(ModuleLike):
   """Specialization for the HW module op class."""
 
+  def __init__(
+      self,
+      name,
+      input_ports=[],
+      output_ports=[],
+      *,
+      parameters=[],
+      attributes={},
+      body_builder=None,
+      loc=None,
+      ip=None,
+  ):
+    if "comment" not in attributes:
+      attributes["comment"] = StringAttr.get("")
+    super().__init__(name,
+                     input_ports,
+                     output_ports,
+                     parameters=parameters,
+                     attributes=attributes,
+                     body_builder=body_builder,
+                     loc=loc,
+                     ip=ip)
+
   @property
   def body(self):
     return self.regions[0]
@@ -324,7 +344,29 @@ class HWModuleOp(ModuleLike):
 
 class HWModuleExternOp(ModuleLike):
   """Specialization for the HW module op class."""
-  pass
+
+  def __init__(
+      self,
+      name,
+      input_ports=[],
+      output_ports=[],
+      *,
+      parameters=[],
+      attributes={},
+      body_builder=None,
+      loc=None,
+      ip=None,
+  ):
+    if "comment" not in attributes:
+      attributes["comment"] = StringAttr.get("")
+    super().__init__(name,
+                     input_ports,
+                     output_ports,
+                     parameters=parameters,
+                     attributes=attributes,
+                     body_builder=body_builder,
+                     loc=loc,
+                     ip=ip)
 
 
 class ConstantOp:
