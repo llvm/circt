@@ -4235,8 +4235,6 @@ LogicalResult circt::exportVerilog(ModuleOp module, bool separateModules,
 
   SharedEmitterState::EmissionList list;
 
-  // If more than one file,
-
   // Collect the contents of the main file. This is a container for anything
   // not explicitly split out into a separate file.
   emitter.collectOpsForFile(emitter.rootFile, list);
