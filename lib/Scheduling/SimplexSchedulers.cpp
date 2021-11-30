@@ -20,6 +20,7 @@
 #include "llvm/Support/Format.h"
 
 #include <algorithm>
+#include <limits>
 
 #define DEBUG_TYPE "simplex-schedulers"
 
@@ -61,12 +62,16 @@ protected:
   /// The dashed parts always contain the zero respectively the identity matrix,
   /// and therefore are not stored explicitly.
   ///
-  ///                        ◀─────nColumns──▶
+  ///                        ◀───nColumns────▶
+  ///           nParameters────┐
+  ///                        ◀─┴─▶
   ///                       ┌─────┬───────────┬ ─ ─ ─ ─ ┐
-  ///        objectiveRow > │. . .│. . ... . .│    0        ▲
+  ///                      ▲│. . .│. . ... . .│    0        ▲
+  ///           nObjectives││. . .│. . ... . .│         │   │
+  ///                      ▼│. . .│. . ... . .│             │
   ///                       ├─────┼───────────┼ ─ ─ ─ ─ ┤   │
-  ///  firstConstraintRow > │. . .│. . ... . .│1            │
-  ///                       │. . .│. . ... . .│  1      │   │nRows
+  ///  firstConstraintRow > │. . .│. . ... . .│1            │nRows
+  ///                       │. . .│. . ... . .│  1      │   │
   ///                       │. . .│. . ... . .│    1        │
   ///                       │. . .│. . ... . .│      1  │   │
   ///                       │. . .│. . ... . .│        1    ▼
@@ -114,16 +119,18 @@ protected:
   /// pivoted into basis again.
   DenseSet<unsigned> frozenVariables;
 
-  /// Number of rows in the tableau = 1 + |deps|.
+  /// Number of rows in the tableau = |obj| + |deps|.
   unsigned nRows;
-  /// Number of explicitly stored columns in the tableau = 3 + |ops|.
+  /// Number of explicitly stored columns in the tableau = |params| + |ops|.
   unsigned nColumns;
 
-  /// The first row encodes the LP's objective function.
-  static constexpr unsigned objectiveRow = 0;
+  // Number of objective rows.
+  unsigned nObjectives;
   /// All other rows encode linear constraints.
-  static constexpr unsigned firstConstraintRow = 1;
+  unsigned &firstConstraintRow = nObjectives;
 
+  // Number of parameters (fixed for now).
+  static constexpr unsigned nParameters = 3;
   /// The first column corresponds to the always-one "parameter" in u = (1,S,T).
   static constexpr unsigned parameter1Column = 0;
   /// The second column corresponds to the variable-freezing parameter S.
@@ -131,12 +138,16 @@ protected:
   /// The third column corresponds to the parameter T, i.e. the current II.
   static constexpr unsigned parameterTColumn = 2;
   /// All other (explicitly stored) columns represent non-basic variables.
-  static constexpr unsigned firstNonBasicVariableColumn = 3;
+  static constexpr unsigned firstNonBasicVariableColumn = nParameters;
 
   virtual Problem &getProblem() = 0;
+  virtual bool fillObjectiveRow(SmallVector<int> &row, unsigned obj);
   virtual void fillConstraintRow(SmallVector<int> &row,
                                  Problem::Dependence dep);
   void buildTableau();
+
+  int getParametricConstant(unsigned row);
+  SmallVector<int> getObjectiveVector(unsigned column);
   Optional<unsigned> findPivotRow();
   Optional<unsigned> findPivotColumn(unsigned pivotRow,
                                      bool allowPositive = false);
@@ -213,6 +224,14 @@ public:
 // SimplexSchedulerBase
 //===----------------------------------------------------------------------===//
 
+bool SimplexSchedulerBase::fillObjectiveRow(SmallVector<int> &row,
+                                            unsigned obj) {
+  assert(obj == 0);
+  // Minimize start time of user-specified last operation.
+  row[startTimeLocations[startTimeVariables[lastOp]]] = 1;
+  return false;
+}
+
 void SimplexSchedulerBase::fillConstraintRow(SmallVector<int> &row,
                                              Problem::Dependence dep) {
   auto &prob = getProblem();
@@ -243,7 +262,7 @@ void SimplexSchedulerBase::buildTableau() {
   }
 
   // one column for each parameter (1,S,T), and for all operations
-  nColumns = 3 + nonBasicVariables.size();
+  nColumns = nParameters + nonBasicVariables.size();
 
   // Helper to grow both the tableau and the implicit column vector.
   auto addRow = [&]() -> SmallVector<int> & {
@@ -251,9 +270,14 @@ void SimplexSchedulerBase::buildTableau() {
     return tableau.emplace_back(nColumns, 0);
   };
 
-  // Set up the objective row.
-  auto &objRowVec = addRow();
-  objRowVec[startTimeLocations[startTimeVariables[lastOp]]] = 1;
+  // Set up the objective rows.
+  nObjectives = 0;
+  bool hasMoreObjectives;
+  do {
+    auto &objRowVec = addRow();
+    hasMoreObjectives = fillObjectiveRow(objRowVec, nObjectives);
+    ++nObjectives;
+  } while (hasMoreObjectives);
 
   // Now set up rows/constraints for the dependences.
   for (auto *op : prob.getOperations()) {
@@ -265,41 +289,63 @@ void SimplexSchedulerBase::buildTableau() {
     }
   }
 
-  // `objectiveRow` + one row per dependence
+  // one row per objective + one row per dependence
   nRows = tableau.size();
 }
 
+int SimplexSchedulerBase::getParametricConstant(unsigned row) {
+  auto &rowVec = tableau[row];
+  // Compute the dot-product ~B[row] * u between the constant matrix and the
+  // parameter vector.
+  return rowVec[parameter1Column] + rowVec[parameterSColumn] * parameterS +
+         rowVec[parameterTColumn] * parameterT;
+}
+
+SmallVector<int> SimplexSchedulerBase::getObjectiveVector(unsigned column) {
+  SmallVector<int> objVec;
+  // Extract the column vector C^T[column] from the cost matrix.
+  for (unsigned obj = 0; obj < nObjectives; ++obj)
+    objVec.push_back(tableau[obj][column]);
+  return objVec;
+}
+
 Optional<unsigned> SimplexSchedulerBase::findPivotRow() {
-  // Find the first row for which the dot product ~B_p u is negative.
-  for (unsigned row = firstConstraintRow; row < nRows; ++row) {
-    auto &rowVec = tableau[row];
-    int rowVal = rowVec[parameter1Column] +
-                 rowVec[parameterSColumn] * parameterS +
-                 rowVec[parameterTColumn] * parameterT;
-    if (rowVal < 0)
+  // Find the first row in which the parametric constant is negative.
+  for (unsigned row = firstConstraintRow; row < nRows; ++row)
+    if (getParametricConstant(row) < 0)
       return row;
-  }
 
   return None;
 }
 
 Optional<unsigned> SimplexSchedulerBase::findPivotColumn(unsigned pivotRow,
                                                          bool allowPositive) {
-  Optional<int> maxQuot;
+  SmallVector<int> maxQuot(nObjectives, std::numeric_limits<int>::min());
   Optional<unsigned> pivotCol;
-  // Look for negative entries in the ~A part of the tableau. If multiple
-  // candidates exist, take the one with maximum of the quotient:
-  // tableau[objectiveRow][col] / pivotCand
+
+  // Look for non-zero entries in the constraint matrix (~A part of the
+  // tableau). If multiple candidates exist, take the one corresponding to the
+  // lexicographical maximum (over the objective rows) of the quotients:
+  //   tableau[<objective row>][col] / pivotCand
   for (unsigned col = firstNonBasicVariableColumn; col < nColumns; ++col) {
     if (frozenVariables.count(
             nonBasicVariables[col - firstNonBasicVariableColumn]))
       continue;
+
     int pivotCand = tableau[pivotRow][col];
+    // Only negative candidates bring us closer to the optimal solution.
+    // However, when freezing variables to a certain value, we accept that the
+    // value of the objective function degrades.
     if (pivotCand < 0 || (allowPositive && pivotCand > 0)) {
-      // The ~A part of the tableau has only {-1, 0, 1} entries by construction.
+      // The constraint matrix has only {-1, 0, 1} entries by construction.
       assert(pivotCand * pivotCand == 1);
-      int quot = tableau[objectiveRow][col] / pivotCand;
-      if (!maxQuot || quot > *maxQuot) {
+
+      SmallVector<int> quot;
+      for (unsigned obj = 0; obj < nObjectives; ++obj)
+        quot.push_back(tableau[obj][col] / pivotCand);
+
+      if (std::lexicographical_compare(maxQuot.begin(), maxQuot.end(),
+                                       quot.begin(), quot.end())) {
         maxQuot = quot;
         pivotCol = col;
       }
@@ -337,7 +383,7 @@ void SimplexSchedulerBase::pivot(unsigned pivotRow, unsigned pivotColumn) {
   implicitBasicVariableColumnVector[pivotRow] = 1;
 
   int pivotElem = tableau[pivotRow][pivotColumn];
-  // The ~A part of the tableau has only {-1, 0, 1} entries by construction.
+  // The constraint matrix has only {-1, 0, 1} entries by construction.
   assert(pivotElem * pivotElem == 1);
   // Make `tableau[pivotRow][pivotColumn]` := 1
   multiplyRow(pivotRow, 1 / pivotElem);
@@ -378,8 +424,8 @@ void SimplexSchedulerBase::pivot(unsigned pivotRow, unsigned pivotColumn) {
 }
 
 LogicalResult SimplexSchedulerBase::solveTableau() {
-  // Iterate as long as we find rows to pivot on (~B_p u is negative), otherwise
-  // an optimal solution has been found.
+  // Iterate as long as we find rows to pivot on, otherwise an optimal solution
+  // has been found.
   while (auto pivotRow = findPivotRow()) {
     // Look for pivot elements.
     if (auto pivotCol = findPivotColumn(*pivotRow)) {
@@ -498,9 +544,8 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
   // `factor1` to `timeStep`. For cyclic problems, one would perform a modulo
   // decomposition: S = `factor1` + `factorT` * T, with `factor1` < T.
   //
-  // This translation does not change the value of ~B_p u (the dot product of
-  // the the first three columns with parameters), hence we do not need to solve
-  // the tableau again.
+  // This translation does not change the values of the parametric constants,
+  // hence we do not need to solve the tableau again.
   //
   // Note: I added a negation of the factors here, which is not mentioned in the
   // paper's text, but apparently used in the example. Without it, the intended
@@ -527,12 +572,10 @@ void SimplexSchedulerBase::storeStartTimes() {
         prob.setStartTime(op, 0);
       continue;
     }
-    // For the variables currently in basis, we look up the solution in the ~B
-    // part of the tableau.
-    auto &rowVec = tableau[-startTimeLocations[startTimeVar]];
-    unsigned startTime = rowVec[parameter1Column] +
-                         rowVec[parameterSColumn] * parameterS +
-                         rowVec[parameterTColumn] * parameterT;
+    // For the variables currently in basis, we look up the solution in the
+    // tableau.
+    unsigned startTime =
+        getParametricConstant(-startTimeLocations[startTimeVar]);
     prob.setStartTime(op, startTime);
   }
 }
@@ -587,7 +630,7 @@ LogicalResult SimplexScheduler::schedule() {
   LLVM_DEBUG(
       dbgs() << "Final tableau:\n"; dumpTableau();
       dbgs() << "Optimal solution found with start time of last operation = "
-             << -tableau[objectiveRow][parameter1Column] << '\n');
+             << -getParametricConstant(0) << '\n');
 
   storeStartTimes();
   return success();
@@ -617,8 +660,7 @@ LogicalResult CyclicSimplexScheduler::schedule() {
   LLVM_DEBUG(dbgs() << "Final tableau:\n"; dumpTableau();
              dbgs() << "Optimal solution found with II = " << parameterT
                     << " and start time of last operation = "
-                    << -tableau[objectiveRow][parameter1Column] << '\n');
-
+                    << -getParametricConstant(0) << '\n');
   prob.setInitiationInterval(parameterT);
   storeStartTimes();
   return success();
@@ -707,7 +749,7 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
   LLVM_DEBUG(
       dbgs() << "Final tableau:\n"; dumpTableau();
       dbgs() << "Feasible solution found with start time of last operation = "
-             << -tableau[objectiveRow][parameter1Column] << '\n');
+             << -getParametricConstant(0) << '\n');
 
   return success();
 }
