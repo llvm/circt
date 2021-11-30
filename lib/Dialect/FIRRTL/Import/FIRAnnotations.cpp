@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationLowering.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -30,163 +31,24 @@ using namespace circt;
 using namespace firrtl;
 using mlir::UnitAttr;
 
-DictionaryAttr cloneWithNewField(DictionaryAttr anno, StringRef field, Attribute newValue) {
-auto context = anno.getContext();
+
+DictionaryAttr cloneWithNewField(DictionaryAttr anno, StringRef field,
+                                 Attribute newValue) {
+  auto context = anno.getContext();
   SmallVector<NamedAttribute, 4> newAttr;
   bool found = false;
-  for (auto f:anno) {
+  for (auto f : anno) {
     if (f.first == field) {
       newAttr.push_back(std::make_pair(f.first, newValue));
-    found = true;
-    } else{
-        newAttr.push_back(f);    
+      found = true;
+    } else {
+      newAttr.push_back(f);
     }
   }
   if (!found)
-    newAttr.emplace_back(Identifier::get("target",context), StringAttr::get(context,"~"));
+    newAttr.emplace_back(Identifier::get("target", context),
+                         StringAttr::get(context, "~"));
   return DictionaryAttr::get(context, newAttr);
-}
-
-/// Split a target into a base target (including a reference if one exists) and
-/// an optional array of subfield/subindex tokens.
-static std::pair<StringRef, llvm::Optional<ArrayAttr>>
-splitTarget(StringRef target, MLIRContext *context) {
-  if (target.empty())
-    return {target, None};
-
-  // Find the string index where the target can be partitioned into the "base
-  // target" and the "target".  The "base target" is the module or instance and
-  // the "target" is everything else.  This has two variants that need to be
-  // considered:
-  //
-  //   1) A Local target, e.g., ~Foo|Foo>bar.baz
-  //   2) An instance target, e.g., ~Foo|Foo/bar:Bar>baz.qux
-  //
-  // In (1), this should be partitioned into ["~Foo|Foo>bar", ".baz"].  In (2),
-  // this should be partitioned into ["~Foo|Foo/bar:Bar", ">baz.qux"].
-  bool isInstance = false;
-  size_t fieldBegin = target.find_if_not([&isInstance](char c) {
-    switch (c) {
-    case '/':
-      return isInstance = true;
-    case '>':
-      return !isInstance;
-    case '[':
-    case '.':
-      return false;
-    default:
-      return true;
-    };
-  });
-
-  // Exit if the target does not contain a subfield or subindex.
-  if (fieldBegin == StringRef::npos)
-    return {target, None};
-
-  auto targetBase = target.take_front(fieldBegin);
-  target = target.substr(fieldBegin);
-  SmallVector<Attribute> annotationVec;
-  SmallString<16> temp;
-  for (auto c : target.drop_front()) {
-    if (c == ']') {
-      // Create a IntegerAttr with the previous sub-index token.
-      APInt subIndex;
-      if (!temp.str().getAsInteger(10, subIndex))
-        annotationVec.push_back(IntegerAttr::get(IntegerType::get(context, 64),
-                                                 subIndex.getZExtValue()));
-      else
-        // We don't have a good way to emit error here. This will be reported as
-        // an error in the FIRRTL parser.
-        annotationVec.push_back(StringAttr::get(context, temp));
-      temp.clear();
-    } else if (c == '[' || c == '.') {
-      // Create a StringAttr with the previous token.
-      if (!temp.empty())
-        annotationVec.push_back(StringAttr::get(context, temp));
-      temp.clear();
-    } else
-      temp.push_back(c);
-  }
-  // Save the last token.
-  if (!temp.empty())
-    annotationVec.push_back(StringAttr::get(context, temp));
-
-  return {targetBase, ArrayAttr::get(context, annotationVec)};
-}
-
-/// Split out non-local paths.  This will return a set of target strings for
-/// each named entity along the path.
-/// c|c:ai/Am:bi/Bm>d.agg[3] ->
-/// c|c>ai, c|Am>bi, c|Bm>d.agg[2]
-static SmallVector<std::tuple<std::string, std::string, std::string>>
-expandNonLocal(StringRef target) {
-  SmallVector<std::tuple<std::string, std::string, std::string>> retval;
-  StringRef circuit;
-  std::tie(circuit, target) = target.split('|');
-  while (target.count(':')) {
-    StringRef nla;
-    std::tie(nla, target) = target.split(':');
-    StringRef inst, mod;
-    std::tie(mod, inst) = nla.split('/');
-    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod.str(),
-                        inst.str());
-  }
-  if (target.empty()) {
-    retval.emplace_back(circuit.str(), "", "");
-  } else {
-
-    StringRef mod, name;
-    // remove aggregate
-    auto targetBase =
-        target.take_until([](char c) { return c == '.' || c == '['; });
-    std::tie(mod, name) = targetBase.split('>');
-    if (name.empty())
-      name = mod;
-    retval.emplace_back((circuit + "|" + target).str(), mod, name);
-  }
-  return retval;
-}
-
-/// Make an anchor for a non-local annotation.  Use the expanded path to build
-/// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(
-    CircuitOp circuit, size_t nlaSuffix,
-    SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
-  OpBuilder b(circuit.getBodyRegion());
-  SmallVector<Attribute> mods;
-  SmallVector<Attribute> insts;
-  for (auto &nla : nlas) {
-    mods.push_back(
-        FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(nla)));
-    insts.push_back(StringAttr::get(circuit.getContext(), std::get<2>(nla)));
-  }
-  auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
-  auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(
-      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), modAttr, instAttr);
-  return FlatSymbolRefAttr::get(nla);
-}
-
-/// Append the argument `target` to the `annotation` using the key "target".
-static inline void appendTarget(NamedAttrList &annotation, ArrayAttr target) {
-  annotation.append("target", target);
-}
-
-/// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
-/// subfield/subindex information from a Target string.  Subfield/subindex
-/// information will be placed in the key "target" at the back of the
-/// Annotation.  If no subfield/subindex information, the Annotation is
-/// unmodified.  Return the split input target as a base target (include a
-/// reference if one exists) and an optional array containing subfield/subindex
-/// tokens.
-static std::pair<StringRef, llvm::Optional<ArrayAttr>>
-splitAndAppendTarget(NamedAttrList &annotation, StringRef target,
-                     MLIRContext *context) {
-  auto targetPair = splitTarget(target, context);
-  if (targetPair.second.hasValue())
-    appendTarget(annotation, targetPair.second.getValue());
-
-  return targetPair;
 }
 
 /// Return an input \p target string in canonical form.  This converts a Legacy
@@ -233,7 +95,8 @@ static StringAttr canonicalizeTarget(StringAttr target) {
   if (target.getValue()[0] == '~')
     return target;
 
-  return StringAttr::get(target.getContext(), canonicalizeTarget(target.getValue()));
+  return StringAttr::get(target.getContext(),
+                         canonicalizeTarget(target.getValue()));
 }
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
@@ -333,10 +196,10 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
   llvm_unreachable("Impossible unhandled JSON type");
 }
 
-static std::string addNLATargets(
-    MLIRContext *context, StringRef targetStrRef, CircuitOp circuit,
-    size_t &nlaNumber, NamedAttrList &metadata,
-    SmallVectorImpl<Attribute> &mutableAnnotationMap) {
+static std::string
+addNLATargets(MLIRContext *context, StringRef targetStrRef, CircuitOp circuit,
+              size_t &nlaNumber, NamedAttrList &metadata,
+              SmallVectorImpl<Attribute> &mutableAnnotationMap) {
 
   auto nlaTargets = expandNonLocal(targetStrRef);
 
@@ -350,10 +213,9 @@ static std::string addNLATargets(
     NamedAttrList pathmetadata;
     pathmetadata.append("circt.nonlocal", nlaSym);
     pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-    pathmetadata
-        .append("target", StringAttr::get(context, std::get<0>(nlaTargets[i])));
-            mutableAnnotationMap.push_back(
-                DictionaryAttr::get(context, pathmetadata));
+    pathmetadata.append("target",
+                        StringAttr::get(context, std::get<0>(nlaTargets[i])));
+    mutableAnnotationMap.push_back(DictionaryAttr::get(context, pathmetadata));
   }
 
   // Annotations on the element instance.
@@ -391,19 +253,19 @@ DictionaryAttr firrtl::normalizeTarget(DictionaryAttr anno) {
 
 //     // Build a mutable map of Target to Annotation.
 //   llvm::StringMap<llvm::SmallVector<Attribute>> mutableAnnotationMap;
-  
-
 
 //   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
 //     auto object = (*array)[i].getAsObject();
 //     auto p = path.index(i);
 //     if (!object) {
-//       p.report("Expected annotations to be an array of objects, but found an "
+//       p.report("Expected annotations to be an array of objects, but found an
+//       "
 //                "array of something else.");
 //       return false;
 //     }
 //     // Find and remove the "target" field from the Annotation object if it
-//     // exists.  In the FIRRTL Dialect, the target will be implicitly specified
+//     // exists.  In the FIRRTL Dialect, the target will be implicitly
+//     specified
 //     // based on where the attribute is applied.
 //     auto optTarget = findAndEraseTarget(object, p);
 //     if (!optTarget)
@@ -429,7 +291,8 @@ DictionaryAttr firrtl::normalizeTarget(DictionaryAttr anno) {
 //       return false;
 //     }
 
-//     auto leafTarget = addNLATargets(context, targetStrRef, circuit, nlaNumber,
+//     auto leafTarget = addNLATargets(context, targetStrRef, circuit,
+//     nlaNumber,
 //                                     metadata, mutableAnnotationMap);
 
 //     mutableAnnotationMap[leafTarget].push_back(
@@ -561,10 +424,10 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value,
 ///   2) Scattered annotations for how components bind to interfaces
 static Optional<DictionaryAttr> parseAugmentedType(
     MLIRContext *context, DictionaryAttr augmentedType, DictionaryAttr root,
-    SmallVectorImpl<Attribute> &newAnnotations,
-    StringRef companion, StringAttr name, StringAttr defName,
-    Optional<IntegerAttr> id, Optional<StringAttr>(description), Location loc,
-    unsigned &annotationID, Twine clazz, Twine path = {}) {
+    SmallVectorImpl<Attribute> &newAnnotations, StringRef companion,
+    StringAttr name, StringAttr defName, Optional<IntegerAttr> id,
+    Optional<StringAttr>(description), Location loc, unsigned &annotationID,
+    Twine clazz, Twine path = {}) {
 
   /// Return a new identifier that can be used to link scattered annotations
   /// together.  This mutates the by-reference parameter annotationID.
@@ -812,8 +675,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
     newAnnotations.push_back(
         DictionaryAttr::getWithSorted(context, elementScattered));
     dontTouch.append("target", StringAttr::get(context, localTarget));
-    newAnnotations.push_back(
-        DictionaryAttr::getWithSorted(context, dontTouch));
+    newAnnotations.push_back(DictionaryAttr::getWithSorted(context, dontTouch));
 
     return DictionaryAttr::getWithSorted(context, elementIface);
   }
@@ -887,8 +749,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
 /// doing lots of unnecessary unpacking/repacking of string-encoded types.
 static Optional<Attribute>
 scatterOMIR(Attribute original, unsigned &annotationID,
-            SmallVectorImpl<Attribute> &newAnnotations,
-            CircuitOp circuit, size_t &nlaNumber) {
+            SmallVectorImpl<Attribute> &newAnnotations, CircuitOp circuit,
+            size_t &nlaNumber) {
   auto *ctx = original.getContext();
 
   // Convert a string-encoded type to a dictionary that includes the type
@@ -934,8 +796,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
           auto leafTarget = addNLATargets(ctx, canonTarget, circuit, nlaNumber,
                                           tracker, newAnnotations);
           tracker.append("target", StringAttr::get(ctx, leafTarget));
-          newAnnotations.push_back(
-              DictionaryAttr::get(ctx, tracker));
+          newAnnotations.push_back(DictionaryAttr::get(ctx, tracker));
 
           return addID(tpe, value);
         }
@@ -1036,9 +897,8 @@ scatterOMIR(Attribute original, unsigned &annotationID,
 /// "name".  Anything else is illegal Object Model.
 static Optional<std::pair<StringRef, DictionaryAttr>>
 scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
-               SmallVectorImpl<Attribute> &newAnnotations,
-               CircuitOp circuit, size_t &nlaNumber, Location loc,
-               unsigned index) {
+               SmallVectorImpl<Attribute> &newAnnotations, CircuitOp circuit,
+               size_t &nlaNumber, Location loc, unsigned index) {
   // The input attribute must be a dictionary.
   DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
   if (!dict) {
@@ -1104,8 +964,8 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
 /// The "fields" member may be absent.  If so, then construct an empty array.
 static Optional<DictionaryAttr>
 scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
-              SmallVectorImpl<Attribute> &newAnnotations,
-              CircuitOp circuit, size_t &nlaNumber, Location loc) {
+              SmallVectorImpl<Attribute> &newAnnotations, CircuitOp circuit,
+              size_t &nlaNumber, Location loc) {
 
   /// The input attribute must be a dictionary.
   DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
@@ -1176,10 +1036,10 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
 /// Main entry point to handle scattering of an OMIRAnnotation.  Return the
 /// modified optional attribute on success and None on failure.  Any scattered
 /// annotations will be added to the reference argument `newAnnotations`.
-static Optional<DictionaryAttr> scatterOMIRAnnotation(
-    DictionaryAttr dict, unsigned &annotationID,
-    SmallVectorImpl<Attribute> &newAnnotations,
-    CircuitOp circuit, size_t &nlaNumber, Location loc) {
+static Optional<DictionaryAttr>
+scatterOMIRAnnotation(DictionaryAttr dict, unsigned &annotationID,
+                      SmallVectorImpl<Attribute> &newAnnotations,
+                      CircuitOp circuit, size_t &nlaNumber, Location loc) {
 
   auto nodes = tryGetAs<ArrayAttr>(dict, dict, "nodes", loc, omirAnnoClass);
   if (!nodes)
@@ -1206,42 +1066,42 @@ static Optional<DictionaryAttr> scatterOMIRAnnotation(
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSON(json::Value & value,
-                             SmallVectorImpl<Attribute> & attrs,
-                             json::Path path, MLIRContext * context) {
+bool circt::firrtl::fromJSON(json::Value &value,
+                             SmallVectorImpl<Attribute> &attrs, json::Path path,
+                             MLIRContext *context) {
 
-    // The JSON value must be an array of objects.  Anything else is reported as
-    // invalid.
-    auto array = value.getAsArray();
-    if (!array) {
-      path.report(
-          "Expected annotations to be an array, but found something else.");
+  // The JSON value must be an array of objects.  Anything else is reported as
+  // invalid.
+  auto array = value.getAsArray();
+  if (!array) {
+    path.report(
+        "Expected annotations to be an array, but found something else.");
+    return false;
+  }
+
+  // Build an array of annotations.
+  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+    auto object = (*array)[i].getAsObject();
+    auto p = path.index(i);
+    if (!object) {
+      p.report("Expected annotations to be an array of objects, but found an "
+               "array of something else.");
       return false;
     }
 
-    // Build an array of annotations.
-    for (size_t i = 0, e = (*array).size(); i != e; ++i) {
-      auto object = (*array)[i].getAsObject();
-      auto p = path.index(i);
-      if (!object) {
-        p.report("Expected annotations to be an array of objects, but found an "
-                 "array of something else.");
-        return false;
+    // Build up the Attribute to represent the Annotation
+    NamedAttrList metadata;
+
+    for (auto field : *object) {
+      if (auto value = convertJSONToAttribute(context, field.second, p)) {
+        metadata.append(field.first, value);
+        continue;
       }
-
-      // Build up the Attribute to represent the Annotation
-      NamedAttrList metadata;
-
-      for (auto field : *object) {
-        if (auto value = convertJSONToAttribute(context, field.second, p)) {
-          metadata.append(field.first, value);
-          continue;
-        }
-        return false;
-      }
-
-      attrs.push_back(DictionaryAttr::get(context, metadata));
+      return false;
     }
 
-    return true;
+    attrs.push_back(DictionaryAttr::get(context, metadata));
   }
+
+  return true;
+}
