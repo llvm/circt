@@ -8,7 +8,6 @@
   %0 = hw.constant 1 : i64
   // CHECK-NEXT: %[[P0:.*]] = llhd.prb %[[ARG0]]
   %1 = llhd.prb %arg0 : !llhd.sig<i64>
-  "llhd.terminator"() {} : () -> ()
 // CHECK-NEXT: }
 }) {sym_name="foo", ins=2, type=(!llhd.sig<i64>, !llhd.sig<i64>, !llhd.sig<i64>)->()} : () -> ()
 
@@ -16,7 +15,6 @@
 // CHECK-NEXT: llhd.entity @bar () -> (%{{.*}} : !llhd.sig<i64>) {
 "llhd.entity"() ({
 ^body(%0 : !llhd.sig<i64>):
-  "llhd.terminator"() {} : () -> ()
 // CHECK-NEXT: }
 }) {sym_name="bar", ins=0, type=(!llhd.sig<i64>)->()} : () -> ()
 
@@ -24,7 +22,6 @@
 // CHECK-NEXT: llhd.entity @baz (%{{.*}} : !llhd.sig<i64>) -> () {
 "llhd.entity"() ({
 ^body(%arg0 : !llhd.sig<i64>):
-  "llhd.terminator"() {} : () -> ()
 // CHECK-NEXT: }
 }) {sym_name="baz", ins=1, type=(!llhd.sig<i64>)->()} : () -> ()
 
@@ -32,6 +29,5 @@
 // CHECK-NEXT: llhd.entity @out_of_names () -> () {
 "llhd.entity"() ({
 ^body:
-  "llhd.terminator"() {} : () -> ()
 // CHECK-NEXT : }
 }) {sym_name="out_of_names", ins=0, type=()->()} : () -> ()

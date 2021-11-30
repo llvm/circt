@@ -286,12 +286,6 @@ struct SharedEmitterState {
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
 
-  /// Flag indicating whether emission is currently in a parallel processing
-  /// mode. This is used for runtime assertions to ensure that certain blocks of
-  /// the code which cross-reference into other modules do so only in sequential
-  /// regions.
-  std::atomic<bool> isInParallelMode = {};
-
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
                               GlobalNameTable globalNames)
       : designOp(designOp), options(options),

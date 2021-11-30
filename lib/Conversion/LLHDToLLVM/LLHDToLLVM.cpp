@@ -733,6 +733,10 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(
         op->getLoc(), entityOp.getName(), funcTy);
 
+    // Add a return to the entity for later inclusion into the LLVM function.
+    rewriter.setInsertionPointToEnd(&entityOp.getBlocks().front());
+    rewriter.create<LLVM::ReturnOp>(op->getLoc(), ValueRange{});
+
     // Inline the entity region in the new llvm function.
     rewriter.inlineRegionBefore(entityOp.getBody(), llvmFunc.getBody(),
                                 llvmFunc.end());
@@ -746,25 +750,6 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 private:
   size_t &sigCounter;
   size_t &regCounter;
-};
-} // namespace
-
-namespace {
-/// Convert an `"llhd.terminator" operation to `llvm.return`.
-struct TerminatorOpConversion : public ConvertToLLVMPattern {
-  explicit TerminatorOpConversion(MLIRContext *ctx,
-                                  LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::TerminatorOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Just replace the original op with return void.
-    rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, ValueRange());
-
-    return success();
-  }
 };
 } // namespace
 
@@ -2655,8 +2640,8 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
                CombMuxOpConversion>(converter);
 
   // Unit conversion patterns.
-  patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
-               HaltOpConversion>(ctx, converter);
+  patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
+                                                                     converter);
   patterns.add<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.

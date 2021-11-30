@@ -46,21 +46,17 @@ static IntegerAttr getIntAttr(Type type, const APInt &value) {
 }
 
 /// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
-/// type.  This handles both the known width and unknown width case, but returns
-/// a null attribute for zero width results.
+/// type. This handles both the known width and unknown width case.
 static IntegerAttr getIntZerosAttr(Type type) {
   int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
-  if (width == 0)
-    return {};
   return getIntAttr(type, APInt(width, 0));
 }
 
-/// Return true if this operation's operands and results all have known width,
-/// or if the result has zero width result (which we cannot constant fold).
+/// Return true if this operation's operands and results all have a known width.
 /// This only works for integer types.
-static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
+static bool hasKnownWidthIntTypes(Operation *op) {
   auto resultType = op->getResult(0).getType().cast<IntType>();
-  if (!resultType.hasWidth() || resultType.getWidth() == 0)
+  if (!resultType.hasWidth())
     return false;
   for (Value operand : op->getOperands())
     if (!operand.getType().cast<IntType>().hasWidth())
@@ -103,9 +99,8 @@ static bool isUselessName(StringRef name) {
 /// zero-width dynamic values with a constant of value 0.
 static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
                                             int32_t destWidth) {
-  // We never support constant folding to unknown or zero width values: APInt
-  // can't do it.
-  if (destWidth <= 0)
+  // We never support constant folding to unknown width values.
+  if (destWidth < 0)
     return {};
 
   // Extension signedness follows the operand sign.
@@ -139,9 +134,9 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                         const function_ref<APInt(APSInt, APSInt)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
 
-  // We cannot fold something to an unknown or zero width.
+  // We cannot fold something to an unknown width.
   auto resultType = op->getResult(0).getType().cast<IntType>();
-  if (resultType.getWidthOrSentinel() <= 0)
+  if (resultType.getWidthOrSentinel() < 0)
     return {};
 
   // Determine the operand widths. This is either dictated by the operand type,
@@ -283,6 +278,7 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
     auto width = getType().getWidthOrSentinel();
     if (width == -1)
       width = 2;
+    // Only fold if we have at least 1 bit of width to represent the `1` value.
     if (width != 0)
       return getIntAttr(getType(), APInt(width, 1));
   }
@@ -466,7 +462,7 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 1);
+      commonWidth = std::max(commonWidth, 0);
 
       // leq(x, const) -> 0 where const < minValue of the unsigned type of x
       // This can never occur since const is unsigned and cannot be less than 0.
@@ -522,7 +518,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 1);
+      commonWidth = std::max(commonWidth, 0);
 
       // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
       // Handled explicitly above.
@@ -578,7 +574,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 1);
+      commonWidth = std::max(commonWidth, 0);
 
       // geq(x, const) -> 0 where const > maxValue of the unsigned type of x
       if (isUnsigned &&
@@ -628,7 +624,7 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
     if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
       auto commonWidth =
           std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
-      commonWidth = std::max(commonWidth, 1);
+      commonWidth = std::max(commonWidth, 0);
 
       // gt(x, const) -> 0 where const >= maxValue of the unsigned type of x
       if (isUnsigned &&
@@ -828,7 +824,7 @@ OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   // Signed to signed is a noop, unsigned operands prepend a zero bit.
@@ -841,7 +837,7 @@ OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   // FIRRTL negate always adds a bit.
@@ -855,7 +851,7 @@ OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
@@ -865,14 +861,14 @@ OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   // x == -1
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnes()));
 
-  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // one bit is identity.  Only applies to UInt since we can't make a cast
   // here.
   if (isUInt1(input().getType()))
     return input();
@@ -881,14 +877,14 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, !attr.getValue().isZero()));
 
-  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // one bit is identity.  Only applies to UInt since we can't make a cast
   // here.
   if (isUInt1(input().getType()))
     return input();
@@ -897,7 +893,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   // popcount(x) & 1
@@ -917,7 +913,7 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (!hasKnownWidthIntTypes(*this))
     return {};
 
   // Constant fold cat.
@@ -935,7 +931,7 @@ OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
 
 LogicalResult DShlPrimOp::canonicalize(DShlPrimOp op,
                                        PatternRewriter &rewriter) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(op))
+  if (!hasKnownWidthIntTypes(op))
     return failure();
 
   // dshl(x, cst) -> shl(x, cst).  The result size is generally much wider than
@@ -954,7 +950,7 @@ LogicalResult DShlPrimOp::canonicalize(DShlPrimOp op,
 
 LogicalResult DShrPrimOp::canonicalize(DShrPrimOp op,
                                        PatternRewriter &rewriter) {
-  if (!hasKnownWidthIntTypesAndNonZeroResult(op))
+  if (!hasKnownWidthIntTypes(op))
     return failure();
 
   // dshr(x, cst) -> shr(x, cst).  The result size is generally much wider than
@@ -1009,7 +1005,7 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
     return input();
 
   // Constant fold.
-  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (hasKnownWidthIntTypes(*this))
     if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
       return getIntAttr(
           getType(), attr.getValue().lshr(lo()).truncOrSelf(hi() - lo() + 1));
@@ -1194,13 +1190,15 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   auto inputType = input.getType().cast<IntType>();
   int shiftAmount = amount();
 
-  // shl(x, 0) -> x
+  // shr(x, 0) -> x
   if (shiftAmount == 0)
     return input;
 
   auto inputWidth = inputType.getWidthOrSentinel();
   if (inputWidth == -1)
     return {};
+  if (inputWidth == 0)
+    return getIntZerosAttr(getType());
 
   // shr(x, cst) where cst is all of x's bits and x is unsigned is 0.
   // If x is signed, it is the sign bit.
@@ -1222,7 +1220,7 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
 
 LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
   auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
-  if (inputWidth == -1)
+  if (inputWidth <= 0)
     return failure();
 
   // If we know the input width, we can canonicalize this into a BitsPrimOp.
@@ -1245,7 +1243,7 @@ LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
 LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
                                        PatternRewriter &rewriter) {
   auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
-  if (inputWidth == -1)
+  if (inputWidth <= 0)
     return failure();
 
   // If we know the input width, we can canonicalize this into a BitsPrimOp.
@@ -1257,7 +1255,7 @@ LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
 }
 
 OpFoldResult HeadPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (hasKnownWidthIntTypes(*this))
     if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>()) {
       int shiftAmount =
           input().getType().cast<IntType>().getWidthOrSentinel() - amount();
@@ -1269,7 +1267,7 @@ OpFoldResult HeadPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult TailPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+  if (hasKnownWidthIntTypes(*this))
     if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
       return getIntAttr(getType(), attr.getValue().truncOrSelf(
                                        getType().getWidthOrSentinel()));
@@ -1279,7 +1277,7 @@ OpFoldResult TailPrimOp::fold(ArrayRef<Attribute> operands) {
 LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
                                        PatternRewriter &rewriter) {
   auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
-  if (inputWidth == -1)
+  if (inputWidth <= 0)
     return failure();
 
   // If we know the input width, we can canonicalize this into a BitsPrimOp.
@@ -1470,8 +1468,8 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   auto srcWidth = srcType.getBitWidthOrSentinel();
   auto destWidth = destType.getBitWidthOrSentinel();
 
-  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth > 0 &&
-      destWidth > 0 && destWidth < srcWidth) {
+  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
+      destWidth >= 0 && destWidth < srcWidth) {
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType = destType.cast<IntType>();
     if (tmpType.isSigned())
@@ -1550,7 +1548,7 @@ struct foldResetMux : public mlir::RewritePattern {
     auto regTy = reg.getType();
     if (con.dest().getType() != regTy || con.src().getType() != regTy ||
         mux.high().getType() != regTy || mux.low().getType() != regTy ||
-        regTy.getBitWidthOrSentinel() < 1)
+        regTy.getBitWidthOrSentinel() < 0)
       return failure();
 
     // Ok, we know we are doing the transformation.
@@ -1649,7 +1647,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   auto regTy = reg.getType();
   if (con.dest().getType() != regTy || con.src().getType() != regTy ||
       mux.high().getType() != regTy || mux.low().getType() != regTy ||
-      regTy.getBitWidthOrSentinel() < 1)
+      regTy.getBitWidthOrSentinel() < 0)
     return failure();
 
   // Ok, we know we are doing the transformation.

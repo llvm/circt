@@ -26,6 +26,17 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 
+#define DEFINE_FACTORY_METHOD(ProblemClass)                                    \
+protected:                                                                     \
+  ProblemClass() {}                                                            \
+                                                                               \
+public:                                                                        \
+  static ProblemClass get(Operation *containingOp) {                           \
+    ProblemClass prob;                                                         \
+    prob.setContainingOp(containingOp);                                        \
+    return prob;                                                               \
+  }
+
 namespace circt {
 namespace scheduling {
 
@@ -73,9 +84,9 @@ namespace scheduling {
 /// for each registered operation, and the precedence constraints as modeled by
 /// the dependences are satisfied.
 class Problem {
+  DEFINE_FACTORY_METHOD(Problem)
+
 public:
-  /// Initialize a scheduling problem corresponding to \p containingOp.
-  explicit Problem(Operation *containingOp) : containingOp(containingOp) {}
   virtual ~Problem() = default;
 
   friend detail::DependenceIterator;
@@ -157,6 +168,8 @@ public:
 public:
   /// Return the operation containing this problem, e.g. to emit diagnostics.
   Operation *getContainingOp() { return containingOp; }
+  /// Set the operation containing this problem, e.g. to emit diagnostics.
+  void setContainingOp(Operation *op) { containingOp = op; }
 
   /// Return true if \p op is part of this problem.
   bool hasOperation(Operation *op) { return operations.contains(op); }
@@ -235,13 +248,13 @@ public:
 /// interval, in which the execution of multiple iterations/samples/etc. may
 /// overlap.
 class CyclicProblem : public virtual Problem {
+  DEFINE_FACTORY_METHOD(CyclicProblem)
+
 private:
   DependenceProperty<unsigned> distance;
   ProblemProperty<unsigned> initiationInterval;
 
 public:
-  explicit CyclicProblem(Operation *containingOp) : Problem(containingOp) {}
-
   /// The distance determines whether a dependence has to be satisfied in the
   /// same iteration (distance=0 or not set), or distance-many iterations later.
   Optional<unsigned> getDistance(Dependence dep) {
@@ -280,13 +293,12 @@ public:
 /// exceed the operator type's limit. These constraints do not apply to operator
 /// types without a limit (not set, or 0).
 class SharedOperatorsProblem : public virtual Problem {
+  DEFINE_FACTORY_METHOD(SharedOperatorsProblem)
+
 private:
   OperatorTypeProperty<unsigned> limit;
 
 public:
-  explicit SharedOperatorsProblem(Operation *containingOp)
-      : Problem(containingOp) {}
-
   /// The limit is the maximum number of operations using \p opr that are
   /// allowed to start in the same time step.
   Optional<unsigned> getLimit(OperatorType opr) { return limit.lookup(opr); }
@@ -315,10 +327,7 @@ public:
 ///      not exceed the operator type's limit.
 class ModuloProblem : public virtual CyclicProblem,
                       public virtual SharedOperatorsProblem {
-public:
-  explicit ModuloProblem(Operation *containingOp)
-      : Problem(containingOp), CyclicProblem(containingOp),
-        SharedOperatorsProblem(containingOp) {}
+  DEFINE_FACTORY_METHOD(ModuloProblem)
 
 protected:
   /// \p opr is not oversubscribed in any congruence class modulo II.
@@ -330,5 +339,7 @@ public:
 
 } // namespace scheduling
 } // namespace circt
+
+#undef DEFINE_FACTORY_METHOD
 
 #endif // CIRCT_SCHEDULING_PROBLEMS_H

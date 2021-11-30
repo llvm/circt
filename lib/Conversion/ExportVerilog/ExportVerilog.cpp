@@ -8,6 +8,11 @@
 //
 // This is the main Verilog emitter implementation.
 //
+// CAREFUL: This file covers the emission phase of `ExportVerilog` which mainly
+// walks the IR and produces output. Do NOT modify the IR during this walk, as
+// emission occurs in a highly parallel fashion. If you need to modify the IR,
+// do so during the preparation phase which lives in `PrepareForEmission.cpp`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
@@ -573,6 +578,12 @@ public:
                                  std::function<void(Value)> operandEmitter,
                                  ArrayAttr symAttrs, ModuleNameManager &names);
 
+  /// Emit the value of a StringAttr as one or more Verilog "one-line" comments
+  /// ("//").  Break the comment to respect the emittedLineLength and trim
+  /// whitespace after a line break.  Do nothing if the StringAttr is null or
+  /// the value is empty.
+  void emitComment(StringAttr comment);
+
 private:
   void operator=(const EmitterBase &) = delete;
   EmitterBase(const EmitterBase &) = delete;
@@ -681,6 +692,65 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Emit any text after the last substitution.
   os << string;
+}
+
+void EmitterBase::emitComment(StringAttr comment) {
+  if (!comment)
+    return;
+
+  // Set a line length for the comment.  Subtract off the leading comment and
+  // space ("// ") as well as the current indent level to simplify later
+  // arithmetic.  Ensure that this line length doesn't go below zero.
+  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
+  if (lineLength > state.options.emittedLineLength)
+    lineLength = 0;
+
+  // Process the comment in line chunks extracted from manually specified line
+  // breaks.  This is done to preserve user-specified line breaking if used.
+  auto ref = comment.getValue();
+  StringRef line;
+  while (!ref.empty()) {
+    std::tie(line, ref) = ref.split("\n");
+    // Emit each comment line breaking it if it exceeds the emittedLineLength.
+    for (;;) {
+      indent();
+      os << "// ";
+
+      // Base case 1: the entire comment fits on one line.
+      if (line.size() <= lineLength) {
+        os << line << "\n";
+        break;
+      }
+
+      // The comment does NOT fit on one line.  Use a simple algorithm to find
+      // a position to break the line:
+      //   1) Search backwards for whitespace and break there if you find it.
+      //   2) If no whitespace exists in (1), search forward for whitespace
+      //      and break there.
+      // This algorithm violates the emittedLineLength if (2) ever occurrs,
+      // but it's dead simple.
+      auto breakPos = line.rfind(' ', lineLength);
+      // No whitespace exists looking backwards.
+      if (breakPos == StringRef::npos) {
+        breakPos = line.find(' ', lineLength);
+        // No whitespace exists looking forward (you hit the end of the
+        // string).
+        if (breakPos == StringRef::npos)
+          breakPos = line.size();
+      }
+
+      // Emit up to the break position.  Trim any whitespace after the break
+      // position.  Exit if nothing is left to emit.  Otherwise, update the
+      // comment ref and continue;
+      os << line.take_front(breakPos) << "\n";
+      breakPos = line.find_first_not_of(' ', breakPos);
+      // Base Case 2: nothing left except whitespace.
+      if (breakPos == StringRef::npos)
+        break;
+
+      line = line.drop_front(breakPos);
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -3498,11 +3568,6 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 void ModuleEmitter::emitBind(BindOp op) {
-  // Check we're not in a parallel region since we need access to the contents
-  // of other modules, which are unstable in parallel code.
-  assert(!state.shared.isInParallelMode &&
-         "bind emission requires single thread");
-
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
@@ -3597,9 +3662,6 @@ void ModuleEmitter::emitBind(BindOp op) {
 StringRef ModuleEmitter::getNameRemotely(Value value,
                                          const ModulePortInfo &modulePorts,
                                          HWModuleOp remoteModule) {
-  assert(!state.shared.isInParallelMode &&
-         "cross-module access requires single thread");
-
   if (auto barg = value.dyn_cast<BlockArgument>())
     return state.globalNames.getPortVerilogName(
         remoteModule, modulePorts.inputs[barg.getArgNumber()]);
@@ -3652,6 +3714,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
+
+  emitComment(module.commentAttr());
 
   os << "module " << getVerilogModuleName(module);
 
@@ -4108,7 +4172,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
   // If we are parallelizing emission, we emit each independent operation to a
   // string buffer in parallel, then concat at the end.
-  isInParallelMode = true;
   parallelForEach(context, thingsToEmit, [&](StringOrOpToEmit &stringOrOp) {
     auto *op = stringOrOp.getOperation();
     if (!op)
@@ -4127,7 +4190,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     emitOperation(state, op);
     stringOrOp.setString(buffer);
   });
-  isInParallelMode = false;
 
   // Finally emit each entry now that we know it is a string.
   for (auto &entry : thingsToEmit) {
@@ -4285,13 +4347,11 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   emitter.gatherFiles(true);
 
   // Emit each file in parallel if context enables it.
-  emitter.isInParallelMode = true;
   parallelForEach(module->getContext(), emitter.files.begin(),
                   emitter.files.end(), [&](auto &it) {
                     createSplitOutputFile(it.first, it.second, dirname,
                                           emitter);
                   });
-  emitter.isInParallelMode = false;
 
   // Write the file list.
   SmallString<128> filelistPath(dirname);

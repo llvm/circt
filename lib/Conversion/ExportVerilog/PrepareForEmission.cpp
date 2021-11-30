@@ -10,6 +10,11 @@
 // gets involved.  This allows us to do some transformations that would be
 // awkward to implement inline in the emitter.
 //
+// NOTE: This file covers the preparation phase of `ExportVerilog` which mainly
+// legalizes the IR and makes adjustments necessary for emission. This is the
+// place to mutate the IR if emission needs it. The IR cannot be modified during
+// emission itself, which happens in parallel.
+//
 //===----------------------------------------------------------------------===//
 
 #include "ExportVerilogInternals.h"

@@ -116,10 +116,8 @@ void ProcessLoweringPass::runOnOperation() {
     op.getOperation()->dropAllDefinedValueUses();
     op.getOperation()->erase();
 
-    // Replace the llhd.halt or llhd.wait with the implicit entity terminator
-    builder.setInsertionPointToEnd(&entity.body().front());
+    // Remove the remaining llhd.halt or llhd.wait terminator
     Operation *terminator = entity.body().front().getTerminator();
-    builder.create<llhd::TerminatorOp>(terminator->getLoc());
     terminator->dropAllReferences();
     terminator->dropAllUses();
     terminator->erase();

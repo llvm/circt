@@ -197,8 +197,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
       rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
     }
 
-    // Replace the output with an LLHD terminator.
-    rewriter.create<llhd::TerminatorOp>(entity.getLoc());
+    // Remove the output op.
     rewriter.eraseOp(output);
 
     return success();

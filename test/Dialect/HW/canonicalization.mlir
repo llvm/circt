@@ -523,15 +523,6 @@ hw.module @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> (result: i8) {
   hw.output %b : i8
 }
 
-// CHECK-LABEL: hw.module @concat_fold_2
-hw.module @concat_fold_2(%arg0: i3, %arg1: i1) -> (result: i9) {
-  // CHECK-NEXT:  %0 = comb.extract %arg0 from 2 : (i3) -> i1
-  %b = comb.sext %arg0 : (i3) -> i8
-  // CHECK-NEXT:  = comb.concat %0, %0, %0, %0, %0, %arg0, %arg1 : i1, i1, i1, i1, i1, i3, i1
-  %c = comb.concat %b, %arg1 : i8, i1
-  hw.output %c : i9
-}
-
 // CHECK-LABEL: hw.module @concat_fold_3
 // CHECK-NEXT:    %c60_i7 = hw.constant 60 : i7
 // CHECK-NEXT:    %0 = comb.concat %c60_i7, %arg0 : i7, i1
@@ -818,9 +809,10 @@ hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (result: i12) {
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
-// CHECK-NEXT:   %1 = comb.extract %arg0 from 2 : (i12) -> i10
-// CHECK-NEXT:   %2 = comb.concat %0, %0, %1 : i1, i1, i10
-// CHECK-NEXT:   hw.output %2
+// CHECK-NEXT:   %1 = comb.sext %0 : (i1) -> i2 
+// CHECK-NEXT:   %2 = comb.extract %arg0 from 2 : (i12) -> i10
+// CHECK-NEXT:   %3 = comb.concat %1, %2 : i2, i10
+// CHECK-NEXT:   hw.output %3
 hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (result: i12) {
   %c2_i12 = hw.constant 2 : i12
   %0 = comb.shrs %arg0, %c2_i12 : i12
@@ -1028,7 +1020,7 @@ hw.module @sext_extract1(%arg0: i4) -> (a: i4) {
 
 // CHECK-LABEL: hw.module @sext_extract2
 hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
-  // CHECK-NEXT:  %0 = comb.extract %arg0 from 1 : (i4) -> i3
+  // CHECK-NEXT: %0 = comb.extract %arg0 from 1 : (i4) -> i3
   %0 = comb.sext %arg0 : (i4) -> i8
   %1 = comb.extract %0 from 1 : (i8) -> i3
   // CHECK: hw.output %0
@@ -1036,13 +1028,15 @@ hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
 }
 
 // CHECK-LABEL: hw.module @sext_extract3
-hw.module @sext_extract3(%arg0: i4) -> (a: i3) {
-  // CHECK-NEXT: %0 = comb.extract %arg0 from 3 : (i4) -> i1
+hw.module @sext_extract3(%arg0: i4) -> (a: i3, b: i8) {
+  // CHECK-NEXT: %0 = comb.sext %arg0 : (i4) -> i8
   %0 = comb.sext %arg0 : (i4) -> i8
-  // CHECK-NEXT: %1 = comb.sext %0 : (i1) -> i3
+
+  // CHECK-NEXT: %1 = comb.extract %arg0 from 3 : (i4) -> i1
+  // CHECK-NEXT: %2 = comb.sext %1 : (i1) -> i3
   %1 = comb.extract %0 from 3 : (i8) -> i3
-  // CHECK: hw.output %1
-  hw.output %1 : i3
+  // CHECK: hw.output %2, %0
+  hw.output %1, %0 : i3, i8
 }
 
 // == Begin: test cases from LowerToHW ==
