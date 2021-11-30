@@ -4222,7 +4222,8 @@ static void prepareForEmission(ModuleOp module,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+LogicalResult circt::exportVerilog(ModuleOp module, bool separateModules,
+                                   llvm::raw_ostream &os) {
   // Prepare the ops in the module for emission and legalize the names that will
   // end up in the output.
   LoweringOptions options(module);
@@ -4230,9 +4231,11 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
-  emitter.gatherFiles(false);
+  emitter.gatherFiles(separateModules);
 
   SharedEmitterState::EmissionList list;
+
+  // If more than one file,
 
   // Collect the contents of the main file. This is a container for anything
   // not explicitly split out into a separate file.
@@ -4269,7 +4272,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
     // TODO: This should be moved up to circt-opt and circt-translate.
     applyLoweringCLOptions(getOperation());
 
-    if (failed(exportVerilog(getOperation(), os)))
+    if (failed(exportVerilog(getOperation(), /*separateModules=*/false, os)))
       signalPassFailure();
   }
 

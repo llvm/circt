@@ -25,7 +25,12 @@ createExportSplitVerilogPass(llvm::StringRef directory = "./");
 
 /// Export a module containing HW, and SV dialect code. Requires that the SV
 /// dialect is loaded in to the context.
-mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
+/// If `separateModules` is set to `true`, this function will output the split
+/// file header with every file (matching the semantics of
+/// `exportSplitVerilog`). Otherwise, only files explicitly specified using the
+/// `hw.output_file` attribute will emit a file header.
+mlir::LogicalResult exportVerilog(mlir::ModuleOp module, bool separateModules,
+                                  llvm::raw_ostream &os);
 
 /// Export a module containing HW, and SV dialect code, as one file per SV
 /// module. Requires that the SV dialect is loaded in to the context.
