@@ -1,11 +1,11 @@
 #bram_r = {"rd_latency"= 1}
+#bram_rw = {"rd_latency"= 1, "wr_latency"= 1}
 #bram_w = {"wr_latency"= 1}
 #reg_r  = {"rd_latency" = 0}
 #reg_w  = {"wr_latency"= 1}
 hir.func @floyd_warshall_hir at %t(
 %n:i32, 
-%path_r:!hir.memref<8x8xi32> ports [#bram_r],
-%path_w:!hir.memref<8x8xi32> ports[#bram_w]
+%path:!hir.memref<8x8xi32> ports [#bram_r, #bram_rw]
 ){
 
   %c0_i4 = hw.constant 0:i4
@@ -32,35 +32,34 @@ hir.func @floyd_warshall_hir at %t(
         %j_i3 = comb.extract %j from 0 :(i4)->(i3)
 
         //load path[i][j]
-        %p_i_j = hir.load %path_r[port 0][%i_i3,%j_i3] at %tj
+        %p_i_j = hir.load %path[port 0][%i_i3,%j_i3] at %tj
         : !hir.memref<8x8xi32> 
 
-        %p_i_j2 = hir.delay %p_i_j by 2 at %tj : i32 
+        %p_i_j1 = hir.delay %p_i_j by 1 at %tj+1 : i32 
 
         //load path[i][k]
-        %p_i_k = hir.load %path_r[port 0][%i_i3,%k_i3] at %tj+1
+        %p_i_k = hir.load %path[port 1][%i_i3,%k_i3] at %tj + 1
         : !hir.memref<8x8xi32> 
 
-        %p_i_k1 = hir.delay %p_i_k by 1 at %tj+2 : i32 
-
         //load path[k][j]
-        %p_k_j = hir.load %path_r[port 0][%k_i3,%j_i3] at %tj + 2
+        %p_k_j = hir.load %path[port 0][%k_i3,%j_i3] at %tj + 1
         : !hir.memref<8x8xi32>
 
         //sum = add path[i][k]+path[k][j]
-        %sum = comb.add %p_i_k1,%p_k_j  : i32
+        %sum = comb.add %p_i_k,%p_k_j  : i32
 
         //cond = hir.lt (path[i][j], sum)
-        %cond = comb.icmp ult %p_i_j2, %sum : i32
+        %cond = comb.icmp ult %p_i_j1, %sum : i32
 
         //out =hir.select (cond,path[i][j],sum)
-        %out = comb.mux %cond, %p_i_j2, %sum  :i32
+        %out = comb.mux %cond, %p_i_j1, %sum  :i32
 
         //store out to p_reg_r
-        hir.store %out to %path_w[port 0][%i_i3,%j_i3] at %tj + 3
+        %j_i3_delayed = hir.delay %j_i3 by 1 at %tj+1 : i3
+        hir.store %out to %path[port 1][%i_i3,%j_i3_delayed] at %tj + 2
         : !hir.memref<8x8xi32>
 
-        hir.next_iter at %tj + 4
+        hir.next_iter at %tj + 2
       }
       hir.next_iter at %tfj + 1
     }
