@@ -2863,6 +2863,26 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
   printImplicitSSAName(p, op, attr, {"ruw"});
 }
 
+void SeqMemOp::build(OpBuilder &builder, OperationState &result,
+                     FIRRTLType elementType, unsigned numElements, RUWAttr ruw,
+                     StringRef name, ArrayRef<Attribute> annotations) {
+  build(builder, result,
+        CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
+        name, builder.getArrayAttr(annotations));
+}
+
+//===----------------------------------------------------------------------===//
+// CombMemOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+void CombMemOp::build(OpBuilder &builder, OperationState &result,
+                      FIRRTLType elementType, unsigned numElements,
+                      StringRef name, ArrayRef<Attribute> annotations) {
+  build(builder, result,
+        CMemoryType::get(builder.getContext(), elementType, numElements), name,
+        builder.getArrayAttr(annotations));
+}
+
 //===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
