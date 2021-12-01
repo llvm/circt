@@ -265,6 +265,20 @@ bool SinkOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
   return true;
 }
 
+void BufferOp::execute(std::vector<llvm::Any> &ins,
+                       std::vector<llvm::Any> &outs) {
+  outs[0] = ins[0];
+}
+
+bool BufferOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                          llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
+                          llvm::DenseMap<mlir::Value, double> &timeMap,
+                          std::vector<std::vector<llvm::Any>> & /*store*/,
+                          std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList,
+                      getNumSlots());
+}
+
 void ConstantOp::execute(std::vector<llvm::Any> & /*ins*/,
                          std::vector<llvm::Any> &outs) {
   auto attr = (*this)->getAttrOfType<mlir::IntegerAttr>("value");
