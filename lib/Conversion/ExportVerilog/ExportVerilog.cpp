@@ -315,7 +315,7 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
     collectFileLineColLocs(op->getLoc(), locationSet);
 
   auto printLoc = [&](FileLineColLoc loc) {
-    sstr << loc.getFilename();
+    sstr << loc.getFilename().getValue();
     if (auto line = loc.getLine()) {
       sstr << ':' << line;
       if (auto col = loc.getColumn())
@@ -3950,12 +3950,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+        if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
-        if (auto sym = resultAttr.second.dyn_cast<FlatSymbolRefAttr>())
+        if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p + numArgs);
   };
@@ -4005,7 +4005,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         }
       }
 
-      auto destFile = Identifier::get(outputPath, op->getContext());
+      auto destFile = StringAttr::get(outputPath, op->getContext());
       auto &file = files[destFile];
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
@@ -4318,7 +4318,7 @@ createOutputFile(StringRef fileName, StringRef dirname,
   return output;
 }
 
-static void createSplitOutputFile(Identifier fileName, FileInfo &file,
+static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
                                   StringRef dirname,
                                   SharedEmitterState &emitter) {
   auto output = createOutputFile(fileName, dirname, emitter);

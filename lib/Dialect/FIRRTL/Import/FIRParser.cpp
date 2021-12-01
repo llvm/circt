@@ -54,7 +54,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
 } // namespace circt
 
 std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
-    StringRef spelling, bool skipParsing, Identifier &locatorFilenameCache,
+    StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
   if (!spelling.startswith("@[") || !spelling.endswith("]"))
@@ -111,10 +111,10 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
   auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
                                unsigned columnNo) -> FileLineColLoc {
     // Check our single-entry cache for this filename.
-    Identifier filenameId = locatorFilenameCache;
+    StringAttr filenameId = locatorFilenameCache;
     if (filenameId.str() != filename) {
       // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId = Identifier::get(filename, context);
+      locatorFilenameCache = filenameId = StringAttr::get(filename, context);
 
       // If we miss in the filename cache, we also miss in the FileLineColLoc
       // cache.
@@ -188,11 +188,11 @@ struct SharedParserConstants {
   SharedParserConstants(MLIRContext *context, FIRParserOptions options)
       : context(context), options(options),
         emptyArrayAttr(ArrayAttr::get(context, {})),
-        loIdentifier(Identifier::get("lo", context)),
-        hiIdentifier(Identifier::get("hi", context)),
-        amountIdentifier(Identifier::get("amount", context)),
-        fieldIndexIdentifier(Identifier::get("fieldIndex", context)),
-        indexIdentifier(Identifier::get("index", context)) {}
+        loIdentifier(StringAttr::get("lo", context)),
+        hiIdentifier(StringAttr::get("hi", context)),
+        amountIdentifier(StringAttr::get("amount", context)),
+        fieldIndexIdentifier(StringAttr::get("fieldIndex", context)),
+        indexIdentifier(StringAttr::get("index", context)) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -215,8 +215,8 @@ struct SharedParserConstants {
   const ArrayAttr emptyArrayAttr;
 
   /// Cached identifiers used in primitives.
-  const Identifier loIdentifier, hiIdentifier, amountIdentifier;
-  const Identifier fieldIndexIdentifier, indexIdentifier;
+  const StringAttr loIdentifier, hiIdentifier, amountIdentifier;
+  const StringAttr fieldIndexIdentifier, indexIdentifier;
 
 private:
   SharedParserConstants(const SharedParserConstants &) = delete;
@@ -413,7 +413,7 @@ private:
   FIRLexer &lexer;
 
   /// This is a single-entry cache for filenames in locators.
-  Identifier locatorFilenameCache;
+  StringAttr locatorFilenameCache;
   /// This is a single-entry cache for FileLineCol locations.
   FileLineColLoc fileLineColLocCache;
 };
@@ -1008,7 +1008,7 @@ ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
     NamedAttrList modAttr;
     for (auto attr : dict.getValue()) {
       // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
+      if (attr.getName() == "target")
         continue;
       modAttr.push_back(attr);
     }
@@ -1058,11 +1058,11 @@ FIRParser::splitAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
     // into the annotation as a "target" field.
     NamedAttrList modAttr;
     for (auto attr : dict.getValue()) {
-      if (attr.first.str() == "target") {
+      if (attr.getName().str() == "target") {
         if (targetTokens.size() > 1) {
           auto newTargetAttr =
               ArrayAttr::get(constants.context, targetTokens.drop_front());
-          modAttr.push_back(NamedAttribute(attr.first, newTargetAttr));
+          modAttr.push_back(NamedAttribute(attr.getName(), newTargetAttr));
         }
         continue;
       }
@@ -1843,7 +1843,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
   unsigned numOperandsExpected;
-  SmallVector<Identifier, 2> attrNames;
+  SmallVector<StringAttr, 2> attrNames;
 
   // Get information about the primitive in question.
   switch (kind) {
@@ -3383,7 +3383,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   }
 
   NamedAttrList parameters;
-  SmallPtrSet<Identifier, 8> seenNames;
+  SmallPtrSet<StringAttr, 8> seenNames;
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {

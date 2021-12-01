@@ -875,9 +875,9 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   for (auto attr : extModule->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portDirections" && attr.first != "portNames" &&
-        attr.first != "portTypes" && attr.first != "portAnnotations" &&
-        attr.first != "portSyms")
+    if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
+        attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
+        attr.getName() != "portSyms")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -895,20 +895,20 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get("portDirections", context),
+      NamedAttribute(StringAttr::get("portDirections", context),
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portNames", context),
                                           builder.getArrayAttr(newArgNames)));
 
-  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portTypes", context),
                                           builder.getArrayAttr(newPortTypes)));
 
-  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portSyms", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portSyms", context),
                                           builder.getArrayAttr(newArgSyms)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get("portAnnotations", context),
+      NamedAttribute(StringAttr::get("portAnnotations", context),
                      builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
@@ -949,9 +949,9 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto attr : module->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != "portDirections" &&
-        attr.first != "portTypes" && attr.first != "portAnnotations" &&
-        attr.first != "portSyms")
+    if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
+        attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
+        attr.getName() != "portSyms")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
@@ -969,18 +969,18 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get("portDirections", context),
+      NamedAttribute(StringAttr::get("portDirections", context),
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
 
-  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portTypes", context),
                                           builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portSyms", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portSyms", context),
                                           builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get("portAnnotations", context),
+      NamedAttribute(StringAttr::get("portAnnotations", context),
                      builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.

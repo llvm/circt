@@ -54,7 +54,7 @@ private:
 
   void emitSourceInfo(Location input, SmallString<64> &into);
   void emitOMNode(Attribute node, llvm::json::OStream &jsonStream);
-  void emitOMField(Identifier fieldName, DictionaryAttr field,
+  void emitOMField(StringAttr fieldName, DictionaryAttr field,
                    llvm::json::OStream &jsonStream);
   void emitOptionalRTLPorts(DictionaryAttr node,
                             llvm::json::OStream &jsonStream);
@@ -428,16 +428,16 @@ void EmitOMIRPass::emitOMNode(Attribute node, llvm::json::OStream &jsonStream) {
   }
 
   // Extract and order the fields of this node.
-  SmallVector<std::tuple<unsigned, Identifier, DictionaryAttr>> orderedFields;
+  SmallVector<std::tuple<unsigned, StringAttr, DictionaryAttr>> orderedFields;
   auto fieldsDict = dict.getAs<DictionaryAttr>("fields");
   if (fieldsDict) {
     for (auto nameAndField : fieldsDict.getValue()) {
-      auto fieldDict = nameAndField.second.dyn_cast<DictionaryAttr>();
+      auto fieldDict = nameAndField.getValue().dyn_cast<DictionaryAttr>();
       if (!fieldDict) {
         getOperation()
                 .emitError("OMField must be a dictionary")
                 .attachNote(getOperation().getLoc())
-            << nameAndField.second;
+            << nameAndField.getValue();
         anyFailures = true;
         return;
       }
@@ -446,7 +446,7 @@ void EmitOMIRPass::emitOMNode(Attribute node, llvm::json::OStream &jsonStream) {
       if (auto indexAttr = fieldDict.getAs<IntegerAttr>("index"))
         index = indexAttr.getValue().getLimitedValue();
 
-      orderedFields.push_back({index, nameAndField.first, fieldDict});
+      orderedFields.push_back({index, nameAndField.getName(), fieldDict});
     }
     llvm::sort(orderedFields,
                [](auto a, auto b) { return std::get<0>(a) < std::get<0>(b); });
@@ -472,7 +472,7 @@ void EmitOMIRPass::emitOMNode(Attribute node, llvm::json::OStream &jsonStream) {
 /// Emit a single `OMField` as JSON. This expects the field's name to be
 /// provided from the outside, for example as the field name that this attribute
 /// has in the surrounding dictionary.
-void EmitOMIRPass::emitOMField(Identifier fieldName, DictionaryAttr field,
+void EmitOMIRPass::emitOMField(StringAttr fieldName, DictionaryAttr field,
                                llvm::json::OStream &jsonStream) {
   // Extract the `info` field and serialize the location.
   auto infoAttr = field.getAs<LocationAttr>("info");
@@ -603,8 +603,8 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
     // Handle regular dictionaries.
     jsonStream.object([&] {
       for (auto field : attr.getValue()) {
-        jsonStream.attributeBegin(field.first);
-        emitValue(field.second, jsonStream);
+        jsonStream.attributeBegin(field.getName());
+        emitValue(field.getValue(), jsonStream);
         jsonStream.attributeEnd();
         if (anyFailures)
           return;

@@ -14,7 +14,7 @@ jobs:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210929220136
+      image: ghcr.io/circt/images/circt-ci-build:20211130162811
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.

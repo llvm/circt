@@ -260,10 +260,10 @@ struct SharedEmitterState {
 
   /// The additional files to emit, with the output file name as the key into
   /// the map.
-  llvm::MapVector<Identifier, FileInfo> files;
+  llvm::MapVector<StringAttr, FileInfo> files;
 
   /// The various file lists and their contents to emit
-  llvm::StringMap<SmallVector<Identifier>> fileLists;
+  llvm::StringMap<SmallVector<StringAttr>> fileLists;
 
   /// A list of operations replicated in each output file (e.g., `sv.verbatim`
   /// or `sv.ifdef` without dedicated output file).

@@ -1012,11 +1012,11 @@ scatterOMIR(Attribute original, unsigned &annotationID,
       .Case<DictionaryAttr>([&](DictionaryAttr dict) -> Optional<Attribute> {
         NamedAttrList newAttrs;
         for (auto pairs : dict) {
-          auto maybeValue = scatterOMIR(pairs.second, annotationID,
+          auto maybeValue = scatterOMIR(pairs.getValue(), annotationID,
                                         newAnnotations, circuit, nlaNumber);
           if (!maybeValue)
             return None;
-          newAttrs.append(pairs.first, maybeValue.getValue());
+          newAttrs.append(pairs.getName(), maybeValue.getValue());
         }
         return DictionaryAttr::get(ctx, newAttrs);
       })
@@ -1071,7 +1071,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
   FileLineColLoc fileLineColLocCache;
 
   // Convert location from a string to a location attribute.
@@ -1140,7 +1140,7 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
   FileLineColLoc fileLineColLocCache;
 
   // Convert the location from a string to a location attribute.

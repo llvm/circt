@@ -17,6 +17,7 @@
 using namespace mlir;
 using namespace circt;
 using namespace comb;
+using namespace matchers;
 
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
@@ -70,22 +71,6 @@ template <typename SubType>
 static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
   return ComplementMatcher(subExpr);
 }
-
-namespace {
-/// Terminal matcher, always returns true.
-struct AnyCapturedValueMatcher {
-  Value *what;
-  AnyCapturedValueMatcher(Value *what) : what(what) {}
-  bool match(Value op) const {
-    *what = op;
-    return true;
-  }
-};
-} // end anonymous namespace
-
-// TODO(llvm merge): Remove this when https://reviews.llvm.org/D113905 is
-// merged in.
-inline auto m_Any(Value *val) { return AnyCapturedValueMatcher(val); }
 
 /// Flattens a single input in `op` if `hasOneUse` is true and it can be defined
 /// as an Op. Returns true if successful, and false otherwise.
