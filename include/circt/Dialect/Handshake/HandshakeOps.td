@@ -209,7 +209,8 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 }
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
-  AllTypesMatch<["operand", "result"]>]> {
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>]> {
   let summary = "buffer operation";
 
   let description = [{
