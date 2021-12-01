@@ -3638,15 +3638,8 @@ void ModuleEmitter::emitBind(BindOp op) {
 
     // Emit the value as an expression.
     auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
-    if (name.empty()) {
-      // Non stable names will come from expressions.  Since we are lowering the
-      // instance also, we can ensure that expressions feeding bound instances
-      // will be lowered consistently to verilog-namable entities.
-      os << childVerilogName.getValue() << '_' << inst.getName() << '_'
-         << elt.getName() << ')';
-    } else {
-      os << name << ')';
-    }
+    assert(!name.empty() && "bind port connection must have a name");
+    os << name << ')';
   }
   if (!isFirst) {
     os << '\n';
@@ -3655,10 +3648,11 @@ void ModuleEmitter::emitBind(BindOp op) {
   os << ");\n";
 }
 
-/// Return the name of a value without using the name map.  This is needed when
-/// looking into an instance from a different module as happens with bind.  It
-/// may return "" when unable to determine a name.  This works in situations
-/// where names are pre-legalized during prepare.
+/// Return the name of a value in a remote module to be used in a `bind`
+/// statement. This function examines the remote module `remoteModule` and looks
+/// up the corresponding name in the provide `GlobalNameTable`. This requires
+/// that all names this function may be asked to lookup have been legalized and
+/// added to that name table.
 StringRef ModuleEmitter::getNameRemotely(Value value,
                                          const ModulePortInfo &modulePorts,
                                          HWModuleOp remoteModule) {
@@ -3666,16 +3660,33 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
     return state.globalNames.getPortVerilogName(
         remoteModule, modulePorts.inputs[barg.getArgNumber()]);
 
-  if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
+  Operation *valueOp = value.getDefiningOp();
+
+  // Handle wires/registers, likely as instance inputs.
+  if (auto readinout = dyn_cast<ReadInOutOp>(valueOp)) {
     auto *wireInput = readinout.input().getDefiningOp();
     if (!wireInput)
       return {};
-
     if (isa<WireOp, RegOp>(wireInput))
       return state.globalNames.getDeclarationVerilogName(wireInput);
   }
-  if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
-    return state.globalNames.getDeclarationVerilogName(localparam);
+
+  // Handle values being driven onto wires, likely as instance outputs.
+  if (isa<InstanceOp>(valueOp)) {
+    for (auto &use : value.getUses()) {
+      Operation *user = use.getOwner();
+      if (!isa<AssignOp>(user) || use.getOperandNumber() != 1)
+        continue;
+      Value drivenOnto = user->getOperand(0);
+      Operation *drivenOntoOp = drivenOnto.getDefiningOp();
+      if (isa<WireOp, RegOp>(drivenOntoOp))
+        return state.globalNames.getDeclarationVerilogName(drivenOntoOp);
+    }
+  }
+
+  // Handle local parameters.
+  if (isa<LocalParamOp>(valueOp))
+    return state.globalNames.getDeclarationVerilogName(valueOp);
   return {};
 }
 
