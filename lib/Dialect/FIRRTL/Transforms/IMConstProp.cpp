@@ -11,6 +11,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/APInt.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -354,7 +355,7 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
     return result; // Already the right width, we're done.
 
   // Otherwise, extend the constant using the signedness of the source.
-  resultConstant = resultConstant.extOrTrunc(destWidth);
+  resultConstant = extOrTruncZeroWidth(resultConstant, destWidth);
   return LatticeValue(IntegerAttr::get(destType.getContext(), resultConstant));
 }
 
