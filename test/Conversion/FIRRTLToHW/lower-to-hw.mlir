@@ -1430,6 +1430,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>
     // CHECK-NEXT: sv.assign %1, %2 : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
+  }
 
   // CHECK-LABEL: hw.module @zero_width_constant()
   // https://github.com/llvm/circt/issues/2269
