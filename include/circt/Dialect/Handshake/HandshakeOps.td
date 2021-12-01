@@ -488,7 +488,7 @@ def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
   }];
 
   let results = (outs AnyType:$result);
-  let assemblyFormat = [{ operands attr-dict `:` type($result)}];
+  let assemblyFormat = [{ attr-dict `:` type($result)}];
 }
 
 def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
@@ -500,7 +500,7 @@ def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
   }];
 
   let results = (outs AnyType:$result);
-  let assemblyFormat = [{ operands attr-dict `:` type($result)}];
+  let assemblyFormat = [{ attr-dict `:` type($result)}];
 }
 
 def ConstantOp : Handshake_Op<"constant", [
@@ -563,7 +563,7 @@ def StartOp : Handshake_Op<"start", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins)>];
-  let assemblyFormat = [{ operands attr-dict `:` type($result)}];
+  let assemblyFormat = [{ attr-dict `:` type($result)}];
 }
 
 def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
