@@ -15,6 +15,7 @@ class MooreType<string name> : TypeDef<MooreDialect, name> { }
 class WrapperTypeBase<string name, string mnemo> : MooreType<name> {
   let mnemonic = mnemo;
   let parameters = (ins "::mlir::Type":$nestedType);
+  let assemblyFormat = "`<` $nestedType `>`";
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::Type":$nestedType), [{

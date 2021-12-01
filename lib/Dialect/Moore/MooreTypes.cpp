@@ -28,47 +28,6 @@ using namespace circt::moore;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// LValue / RValue printers and parsers
-//===----------------------------------------------------------------------===//
-
-static Type parseNestedType(DialectAsmParser &parser) {
-  Type nestedType;
-  if (parser.parseLess())
-    return Type();
-
-  llvm::SMLoc loc = parser.getCurrentLocation();
-  if (parser.parseType(nestedType)) {
-    parser.emitError(loc, "No type found.");
-    return nullptr;
-  }
-
-  if (parser.parseGreater())
-    return Type();
-
-  return nestedType;
-}
-
-Type LValueType::parse(DialectAsmParser &p) {
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), parseNestedType(p));
-}
-
-void LValueType::print(DialectAsmPrinter &p) const {
-  p << "lvalue<" << getNestedType() << '>';
-}
-
-Type RValueType::parse(DialectAsmParser &p) {
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), parseNestedType(p));
-}
-
-void RValueType::print(DialectAsmPrinter &p) const {
-  p << "rvalue<" << getNestedType() << '>';
-}
-
-//===----------------------------------------------------------------------===//
 // Register types to dialect
 //===----------------------------------------------------------------------===//
 
