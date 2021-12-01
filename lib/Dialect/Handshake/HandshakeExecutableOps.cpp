@@ -88,7 +88,7 @@ static bool tryToExecute(Operation *op,
     std::vector<llvm::Any> out(outs.size());
     auto generalOp = dyn_cast<GeneralOpInterface>(op);
     if (!generalOp)
-      op->emitError("Undefined execution for the current op");
+      op->emitOpError("Undefined execution for the current op");
     generalOp.execute(in, out);
     storeValues(out, outs, valueMap);
     updateTime(ins, outs, timeMap, latency);
@@ -120,7 +120,7 @@ bool MergeOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
   for (mlir::Value in : op->getOperands()) {
     if (valueMap.count(in) == 1) {
       if (found)
-        op->emitError("More than one valid input to Merge!");
+        op->emitOpError("More than one valid input to Merge!");
       auto t = valueMap[in];
       valueMap[op->getResult(0)] = t;
       timeMap[op->getResult(0)] = timeMap[in];
@@ -131,7 +131,7 @@ bool MergeOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     i++;
   }
   if (!found)
-    op->emitError("No valid input to Merge!");
+    op->emitOpError("No valid input to Merge!");
   scheduleList.push_back(getResult());
   return true;
 }
@@ -174,7 +174,7 @@ bool ControlMergeOp::tryExecute(
   for (mlir::Value in : op->getOperands()) {
     if (valueMap.count(in) == 1) {
       if (found)
-        op->emitError("More than one valid input to CMerge!");
+        op->emitOpError("More than one valid input to CMerge!");
       auto t = valueMap[in];
       valueMap[op->getResult(0)] = t;
       timeMap[op->getResult(0)] = timeMap[in];
@@ -190,7 +190,7 @@ bool ControlMergeOp::tryExecute(
     i++;
   }
   if (!found)
-    op->emitError("No valid input to CMerge!");
+    op->emitOpError("No valid input to CMerge!");
   scheduleList = toVector(op->getResults());
   return true;
 }

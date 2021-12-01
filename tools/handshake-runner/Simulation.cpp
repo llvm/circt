@@ -353,7 +353,7 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::DivSIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   if (!any_cast<APInt>(in[1]).getZExtValue())
-    return op.emitError() << "Division By Zero!";
+    return op.emitOpError() << "Division By Zero!";
 
   out[0] = any_cast<APInt>(in[0]).sdiv(any_cast<APInt>(in[1]));
   return success();
@@ -363,7 +363,7 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::DivUIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   if (!any_cast<APInt>(in[1]).getZExtValue())
-    return op.emitError() << "Division By Zero!";
+    return op.emitOpError() << "Division By Zero!";
   out[0] = any_cast<APInt>(in[0]).udiv(any_cast<APInt>(in[1]));
   return success();
 }
@@ -408,14 +408,14 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::LoadOp op,
   }
   unsigned ptr = any_cast<unsigned>(in[0]);
   if (ptr >= store.size())
-    return op.emitError() << "Unknown memory identified by pointer '" << ptr
-                          << "'";
+    return op.emitOpError()
+           << "Unknown memory identified by pointer '" << ptr << "'";
 
   auto &ref = store[ptr];
   if (address >= ref.size())
-    return op.emitError() << "Out-of-bounds access to memory '" << ptr
-                          << "'. Memory has " << ref.size()
-                          << " elements but requested element " << address;
+    return op.emitOpError()
+           << "Out-of-bounds access to memory '" << ptr << "'. Memory has "
+           << ref.size() << " elements but requested element " << address;
 
   Any result = ref[address];
   out[0] = result;
@@ -437,13 +437,13 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::StoreOp op,
   }
   unsigned ptr = any_cast<unsigned>(in[1]);
   if (ptr >= store.size())
-    return op.emitError() << "Unknown memory identified by pointer '" << ptr
-                          << "'";
+    return op.emitOpError()
+           << "Unknown memory identified by pointer '" << ptr << "'";
   auto &ref = store[ptr];
   if (address >= ref.size())
-    return op.emitError() << "Out-of-bounds access to memory '" << ptr
-                          << "'. Memory has " << ref.size()
-                          << " elements but requested element " << address;
+    return op.emitOpError()
+           << "Out-of-bounds access to memory '" << ptr << "'. Memory has "
+           << ref.size() << " elements but requested element " << address;
   ref[address] = in[0];
 
   double storeTime = storeTimes[ptr];
@@ -561,7 +561,7 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
     }
     ++instIter;
   } else
-    return op->emitError() << "Callable was not a function";
+    return op->emitOpError() << "Callable was not a function";
 
   return success();
 }
@@ -625,11 +625,11 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
 
       return success();
     } else {
-      return instanceOp.emitError()
+      return instanceOp.emitOpError()
              << "Function '" << funcSym << "' not found in module";
     }
   } else
-    return instanceOp.emitError()
+    return instanceOp.emitOpError()
            << "Missing 'module' attribute for InstanceOp";
 
   llvm_unreachable("Fatal error reached before this point");
@@ -687,7 +687,7 @@ HandshakeExecuter::HandshakeExecuter(
               return execute(op, inValues, outValues);
             })
             .Default([](auto op) {
-              return op->emitError() << "Unknown operation!";
+              return op->emitOpError() << "Unknown operation!";
             });
 
     if (res.failed()) {
@@ -808,8 +808,9 @@ HandshakeExecuter::HandshakeExecuter(
               strat = ExecuteStrategy::Return;
               return execute(op, inValues, outValues);
             })
-            .Default(
-                [](auto op) { return op->emitError() << "Unknown operation"; });
+            .Default([](auto op) {
+              return op->emitOpError() << "Unknown operation";
+            });
 
     if (res.failed()) {
       successFlag = false;
