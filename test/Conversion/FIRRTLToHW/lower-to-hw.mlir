@@ -1285,6 +1285,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %o3, %r3 : !firrtl.uint<32>, !firrtl.uint<32>
     firrtl.connect %o4, %r4 : !firrtl.uint<100>, !firrtl.uint<100>
   }
+  
   // CHECK-LABEL: hw.module @init1DVector
   firrtl.module @init1DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %r = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
@@ -1429,5 +1430,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>
     // CHECK-NEXT: sv.assign %1, %2 : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
+
+  // CHECK-LABEL: hw.module @zero_width_constant()
+  // https://github.com/llvm/circt/issues/2269
+  firrtl.module @zero_width_constant(out %a: !firrtl.uint<0>) {
+    // CHECK-NEXT: hw.output
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    firrtl.connect %a, %c0_ui0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 }
