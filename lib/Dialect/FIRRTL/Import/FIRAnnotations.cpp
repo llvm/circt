@@ -101,9 +101,9 @@ splitTarget(StringRef target, MLIRContext *context) {
 /// each named entity along the path.
 /// c|c:ai/Am:bi/Bm>d.agg[3] ->
 /// c|c>ai, c|Am>bi, c|Bm>d.agg[2]
-static SmallVector<std::tuple<std::string, std::string, std::string>>
+static SmallVector<std::tuple<std::string, StringRef, StringRef>>
 expandNonLocal(StringRef target) {
-  SmallVector<std::tuple<std::string, std::string, std::string>> retval;
+  SmallVector<std::tuple<std::string, StringRef, StringRef>> retval;
   StringRef circuit;
   std::tie(circuit, target) = target.split('|');
   while (target.count(':')) {
@@ -111,8 +111,7 @@ expandNonLocal(StringRef target) {
     std::tie(nla, target) = target.split(':');
     StringRef inst, mod;
     std::tie(mod, inst) = nla.split('/');
-    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod.str(),
-                        inst.str());
+    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod, inst);
   }
   if (target.empty()) {
     retval.emplace_back(circuit.str(), "", "");
@@ -132,9 +131,9 @@ expandNonLocal(StringRef target) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(
-    CircuitOp circuit, size_t nlaSuffix,
-    SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
+static FlatSymbolRefAttr
+buildNLA(CircuitOp circuit, size_t nlaSuffix,
+         SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
