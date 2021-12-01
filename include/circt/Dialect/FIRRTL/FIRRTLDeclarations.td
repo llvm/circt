@@ -92,8 +92,8 @@ def CombMemOp : FIRRTLOp<"combmem"> {
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
   let hasCanonicalizer = true;
   let builders = [
-    OpBuilder<(ins "FIRRTLType":$elementType,
-                                        "unsigned":$numElements, "mlir::StringRef":$name,
+    OpBuilder<(ins "FIRRTLType":$elementType, "unsigned":$numElements, 
+                   "mlir::StringRef":$name,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations)>
   ];
 
@@ -111,8 +111,8 @@ def SeqMemOp : FIRRTLOp<"seqmem"> {
   let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
   let hasCanonicalizer = true;
   let builders = [
-    OpBuilder<(ins "FIRRTLType":$elementType,
-                                        "unsigned":$numElements, "RUWAttr":$ruw, "mlir::StringRef":$name, 
+    OpBuilder<(ins "FIRRTLType":$elementType, "unsigned":$numElements, 
+                   "RUWAttr":$ruw, "mlir::StringRef":$name, 
                    CArg<"ArrayRef<Attribute>","{}">:$annotations)>
   ];
 }

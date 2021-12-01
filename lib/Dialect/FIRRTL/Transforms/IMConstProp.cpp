@@ -239,7 +239,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markBlockExecutable(Block *block);
   void markWireOrUnresetableRegOp(Operation *wireOrReg);
   void markRegResetOp(RegResetOp regReset);
-  void markRegOp(RegOp reg);
   void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
