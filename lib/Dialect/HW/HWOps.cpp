@@ -232,6 +232,11 @@ bool hw::isAnyModule(Operation *module) {
          isa<HWModuleGeneratedOp>(module);
 }
 
+/// Return true if isAnyModule or instance.
+bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
+  return isAnyModule(moduleOrInstance) || isa<InstanceOp>(moduleOrInstance);
+}
+
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
 FunctionType hw::getModuleType(Operation *moduleOrInstance) {
@@ -296,7 +301,8 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const ModulePortInfo &ports,
                         ArrayAttr parameters,
-                        ArrayRef<NamedAttribute> attributes) {
+                        ArrayRef<NamedAttribute> attributes,
+                        StringAttr comment) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -305,7 +311,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argNames, resultNames;
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
-  auto exportPortIdent = Identifier::get("hw.exportPort", builder.getContext());
+  auto exportPortIdent = StringAttr::get("hw.exportPort", builder.getContext());
 
   for (auto elt : ports.inputs) {
     if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
@@ -347,6 +353,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
                       builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
+  if (!comment)
+    comment = builder.getStringAttr("");
+  result.addAttribute("comment", comment);
   result.addAttributes(attributes);
   result.addRegion();
 }
@@ -354,8 +363,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes);
+                       ArrayRef<NamedAttribute> attributes,
+                       StringAttr comment) {
+  buildModule(builder, result, name, ports, parameters, attributes, comment);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -372,8 +382,10 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports,
                        ArrayAttr parameters,
-                       ArrayRef<NamedAttribute> attributes) {
-  build(builder, result, name, ModulePortInfo(ports), parameters, attributes);
+                       ArrayRef<NamedAttribute> attributes,
+                       StringAttr comment) {
+  build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
+        comment);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -398,7 +410,7 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes, {});
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -417,7 +429,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 const ModulePortInfo &ports,
                                 StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, parameters, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes, {});
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -436,7 +448,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 ModulePortInfo hw::getModulePortInfo(Operation *op) {
-  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+  assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> inputs, outputs;
@@ -469,7 +481,7 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
-  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+  assert(isAnyModuleOrInstance(op) &&
          "Can only get module ports from an instance or module");
 
   SmallVector<PortInfo> results;
@@ -525,7 +537,7 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
-    if (argAttr.first == name)
+    if (argAttr.getName() == name)
       return true;
   return false;
 }
@@ -632,6 +644,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("parameters", ArrayAttr::get(context, parameters));
+  if (!hasAttribute("comment", result.attributes))
+    result.addAttribute("comment", StringAttr::get(context, ""));
 
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
@@ -713,6 +727,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
+  if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
+    omittedAttrs.push_back("comment");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);

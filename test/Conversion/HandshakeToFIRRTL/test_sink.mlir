@@ -14,6 +14,6 @@
 // CHECK:           }
 // CHECK:         }
 handshake.func @test_sink(%arg0: index, %arg1: none, ...) -> (none) {
-  "handshake.sink"(%arg0) : (index) -> ()
-  handshake.return %arg1 : none
+  sink %arg0 : index
+  return %arg1 : none
 }

@@ -116,7 +116,7 @@ bool OutputFileAttr::isDirectory() {
 
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
 /// OutputFileAttr ::= 'output_file<' directory ',' name (',' Option)* '>'
-Attribute OutputFileAttr::parse(DialectAsmParser &p, Type type) {
+Attribute OutputFileAttr::parse(AsmParser &p, Type type) {
   StringAttr filename;
   if (p.parseLess() || p.parseAttribute<StringAttr>(filename))
     return Attribute();
@@ -147,8 +147,8 @@ Attribute OutputFileAttr::parse(DialectAsmParser &p, Type type) {
                              BoolAttr::get(context, includeReplicatedOps));
 }
 
-void OutputFileAttr::print(DialectAsmPrinter &p) const {
-  p << "output_file<" << getFilename();
+void OutputFileAttr::print(AsmPrinter &p) const {
+  p << "<" << getFilename();
   if (getExcludeFromFilelist().getValue())
     p << ", excludeFromFileList";
   if (getIncludeReplicatedOps().getValue())
@@ -162,7 +162,7 @@ void OutputFileAttr::print(DialectAsmPrinter &p) const {
 
 /// Option         ::= 'includeReplicatedOp'
 /// OutputFileAttr ::= 'output_file<' name (',' Option)* '>'
-Attribute FileListAttr::parse(DialectAsmParser &p, Type type) {
+Attribute FileListAttr::parse(AsmParser &p, Type type) {
   StringAttr filename;
   if (p.parseLess() || p.parseAttribute<StringAttr>(filename) ||
       p.parseGreater())
@@ -171,8 +171,8 @@ Attribute FileListAttr::parse(DialectAsmParser &p, Type type) {
   return FileListAttr::get(context, filename);
 }
 
-void FileListAttr::print(DialectAsmPrinter &p) const {
-  p << "output_filelist<" << getFilename() << ">";
+void FileListAttr::print(AsmPrinter &p) const {
+  p << "<" << getFilename() << ">";
 }
 
 FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
@@ -185,7 +185,7 @@ FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
 // InnerRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute InnerRefAttr::parse(DialectAsmParser &p, Type type) {
+Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
   SymbolRefAttr attr;
   if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) ||
       p.parseGreater())
@@ -197,8 +197,8 @@ Attribute InnerRefAttr::parse(DialectAsmParser &p, Type type) {
                            attr.getLeafReference());
 }
 
-void InnerRefAttr::print(DialectAsmPrinter &p) const {
-  p << getMnemonic() << "<";
+void InnerRefAttr::print(AsmPrinter &p) const {
+  p << "<";
   p.printSymbolName(getModule().getValue());
   p << "::";
   p.printSymbolName(getName().getValue());
@@ -209,13 +209,13 @@ void InnerRefAttr::print(DialectAsmPrinter &p) const {
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamDeclAttr::parse(DialectAsmParser &p, Type type) {
+Attribute ParamDeclAttr::parse(AsmParser &p, Type type) {
   llvm::errs() << "Should never parse raw\n";
   abort();
 }
 
-void ParamDeclAttr::print(DialectAsmPrinter &p) const {
-  p << "param.decl<" << getName() << ": " << getType();
+void ParamDeclAttr::print(AsmPrinter &p) const {
+  p << "<" << getName() << ": " << getType();
   if (getValue())
     p << " = " << getValue();
   p << ">";
@@ -225,7 +225,7 @@ void ParamDeclAttr::print(DialectAsmPrinter &p) const {
 // ParamDeclRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamDeclRefAttr::parse(DialectAsmParser &p, Type type) {
+Attribute ParamDeclRefAttr::parse(AsmParser &p, Type type) {
   StringAttr name;
   if (p.parseLess() || p.parseAttribute(name) || p.parseGreater())
     return Attribute();
@@ -233,15 +233,15 @@ Attribute ParamDeclRefAttr::parse(DialectAsmParser &p, Type type) {
   return ParamDeclRefAttr::get(name, type);
 }
 
-void ParamDeclRefAttr::print(DialectAsmPrinter &p) const {
-  p << "param.decl.ref<" << getName() << ">";
+void ParamDeclRefAttr::print(AsmPrinter &p) const {
+  p << "<" << getName() << ">";
 }
 
 //===----------------------------------------------------------------------===//
 // ParamVerbatimAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamVerbatimAttr::parse(DialectAsmParser &p, Type type) {
+Attribute ParamVerbatimAttr::parse(AsmParser &p, Type type) {
   StringAttr text;
   if (p.parseLess() || p.parseAttribute(text) || p.parseGreater())
     return Attribute();
@@ -249,8 +249,8 @@ Attribute ParamVerbatimAttr::parse(DialectAsmParser &p, Type type) {
   return ParamVerbatimAttr::get(p.getContext(), text, type);
 }
 
-void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
-  p << "param.verbatim<" << getValue() << ">";
+void ParamVerbatimAttr::print(AsmPrinter &p) const {
+  p << "<" << getValue() << ">";
 }
 
 //===----------------------------------------------------------------------===//
@@ -635,7 +635,7 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
   return Base::get(operands[0].getContext(), opcode, operands, type);
 }
 
-Attribute ParamExprAttr::parse(DialectAsmParser &p, Type type) {
+Attribute ParamExprAttr::parse(AsmParser &p, Type type) {
   // We require an opcode suffix like `#hw.param.expr.add`, we don't allow
   // parsing a plain `#hw.param.expr` on its own.
   p.emitError(p.getNameLoc(), "#hw.param.expr should have opcode suffix");
@@ -663,8 +663,8 @@ static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
   return ParamExprAttr::get(*opcode, operands);
 }
 
-void ParamExprAttr::print(DialectAsmPrinter &p) const {
-  p << "param.expr." << stringifyPEO(getOpcode()) << '<';
+void ParamExprAttr::print(AsmPrinter &p) const {
+  p << "." << stringifyPEO(getOpcode()) << '<';
   llvm::interleaveComma(getOperands(), p.getStream(),
                         [&](Attribute op) { p.printAttributeWithoutType(op); });
   p << '>';

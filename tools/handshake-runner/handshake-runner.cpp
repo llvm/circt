@@ -13,6 +13,7 @@
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -62,6 +63,12 @@ int main(int argc, char **argv) {
   mlir::MLIRContext context;
   context.loadDialect<StandardOpsDialect, memref::MemRefDialect,
                       handshake::HandshakeDialect>();
+
+  // functions feeding into HLS tools might have attributes from high(er) level
+  // dialects or parsers. Allow unregistered dialects to not fail in these
+  // cases.
+  context.allowUnregisteredDialects();
+
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
   mlir::OwningModuleRef module(mlir::parseSourceFile(source_mgr, &context));

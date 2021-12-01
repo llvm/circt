@@ -11,6 +11,7 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
 
   i1 = IntegerType.get_signless(1)
+  i2 = IntegerType.get_signless(2)
   i32 = IntegerType.get_signless(32)
 
   m = Module.create()
@@ -18,6 +19,7 @@ with Context() as ctx, Location.unknown():
 
     def build(module):
       constI32 = hw.ConstantOp(IntegerAttr.get(i32, 1))
+      constI2 = hw.ConstantOp(IntegerAttr.get(i2, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
       # CHECK: All arguments must be the same type to create an array
@@ -37,8 +39,8 @@ with Context() as ctx, Location.unknown():
       # CHECK: [[ARRAY1:%.+]] = hw.array_create %[[CONST]], %[[CONST]], %[[CONST]] : i32
       array1 = hw.ArrayCreateOp.create([constI32, constI32, constI32])
 
-      # CHECK: hw.array_get [[ARRAY1]][%c1_i32] : !hw.array<3xi32>
-      hw.ArrayGetOp.create(array1, constI32)
+      # CHECK: hw.array_get [[ARRAY1]][%c1_i2] : !hw.array<3xi32>
+      hw.ArrayGetOp.create(array1, constI2)
       # CHECK: %c-2_i2 = hw.constant -2 : i2
       # CHECK: hw.array_get [[ARRAY1]][%c-2_i2] : !hw.array<3xi32>
       hw.ArrayGetOp.create(array1, 2)

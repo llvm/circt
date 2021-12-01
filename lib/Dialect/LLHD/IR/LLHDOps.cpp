@@ -229,41 +229,60 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
-// SigExtractOp
+// SigExtractOp and PtrExtractOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::SigExtractOp::fold(ArrayRef<Attribute> operands) {
+template <class Op>
+static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
 
   if (!operands[1])
     return nullptr;
 
   // llhd.sig.extract(input, 0) with inputWidth == resultWidth => input
-  if (resultWidth() == inputWidth() &&
+  if (op.resultWidth() == op.inputWidth() &&
       operands[1].cast<IntegerAttr>().getValue().isZero())
-    return input();
+    return op.input();
 
   return nullptr;
 }
 
+OpFoldResult llhd::SigExtractOp::fold(ArrayRef<Attribute> operands) {
+  return foldSigPtrExtractOp(*this, operands);
+}
+
+OpFoldResult llhd::PtrExtractOp::fold(ArrayRef<Attribute> operands) {
+  return foldSigPtrExtractOp(*this, operands);
+}
+
 //===----------------------------------------------------------------------===//
-// SigArraySliceOp
+// SigArraySliceOp and PtrArraySliceOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::SigArraySliceOp::fold(ArrayRef<Attribute> operands) {
-
+template <class Op>
+static OpFoldResult foldSigPtrArraySliceOp(Op op,
+                                           ArrayRef<Attribute> operands) {
   if (!operands[1])
     return nullptr;
 
   // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
-  if (resultWidth() == inputWidth() &&
+  if (op.resultWidth() == op.inputWidth() &&
       operands[1].cast<IntegerAttr>().getValue().isZero())
-    return input();
+    return op.input();
 
   return nullptr;
 }
 
-LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
-                                                  PatternRewriter &rewriter) {
+OpFoldResult llhd::SigArraySliceOp::fold(ArrayRef<Attribute> operands) {
+  return foldSigPtrArraySliceOp(*this, operands);
+}
+
+OpFoldResult llhd::PtrArraySliceOp::fold(ArrayRef<Attribute> operands) {
+  return foldSigPtrArraySliceOp(*this, operands);
+}
+
+template <class Op>
+static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
+                                                    PatternRewriter &rewriter) {
   IntegerAttr amountAttr, indexAttr;
 
   if (!matchPattern(op.lowIndex(), m_Constant(&indexAttr)))
@@ -277,7 +296,7 @@ LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
                                      m_Constant(&amountAttr)))) {
     uint64_t amount = amountAttr.getValue().getZExtValue();
     uint64_t index = indexAttr.getValue().getZExtValue();
-    auto shrOp = op.input().getDefiningOp<llhd::ShrOp>();
+    auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
     unsigned baseWidth = shrOp.getBaseWidth();
 
     if (amount + index + op.resultWidth() <= baseWidth) {
@@ -293,9 +312,8 @@ LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
   // llhd.sig.array_slice(llhd.sig.array_slice(target, a), b)
   //   => llhd.sig.array_slice(target, a+b)
   IntegerAttr a;
-  if (matchPattern(op.input(), m_Op<llhd::SigArraySliceOp>(matchers::m_Any(),
-                                                           m_Constant(&a)))) {
-    auto sliceOp = op.input().getDefiningOp<llhd::SigArraySliceOp>();
+  if (matchPattern(op.input(), m_Op<Op>(matchers::m_Any(), m_Constant(&a)))) {
+    auto sliceOp = op.input().template getDefiningOp<Op>();
     op.inputMutable().assign(sliceOp.input());
     Value newIndex = rewriter.create<hw::ConstantOp>(
         op->getLoc(), a.getValue() + indexAttr.getValue());
@@ -307,13 +325,23 @@ LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
   return failure();
 }
 
+LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
+                                                  PatternRewriter &rewriter) {
+  return canonicalizeSigPtrArraySliceOp(op, rewriter);
+}
+
+LogicalResult llhd::PtrArraySliceOp::canonicalize(llhd::PtrArraySliceOp op,
+                                                  PatternRewriter &rewriter) {
+  return canonicalizeSigPtrArraySliceOp(op, rewriter);
+}
+
 //===----------------------------------------------------------------------===//
-// SigArrayGetOp
+// SigArrayGetOp and PtrArrayGetOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
-                                                PatternRewriter &rewriter) {
-
+template <class Op>
+static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
+                                                  PatternRewriter &rewriter) {
   // llhd.sig.array_get(llhd.shr(hidden, base, constant amt), constant index)
   IntegerAttr indexAttr, amountAttr;
   if (matchPattern(op.index(), m_Constant(&indexAttr)) &&
@@ -322,7 +350,7 @@ LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
                                      m_Constant(&amountAttr)))) {
     APInt index = indexAttr.getValue();
     APInt amount = amountAttr.getValue();
-    auto shrOp = op.input().getDefiningOp<llhd::ShrOp>();
+    auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
     unsigned baseWidth = shrOp.getBaseWidth();
     unsigned hiddenWidth = shrOp.getHiddenWidth();
 
@@ -353,30 +381,59 @@ LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
   return failure();
 }
 
+LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
+                                                PatternRewriter &rewriter) {
+  return canonicalizeSigPtrArrayGetOp(op, rewriter);
+}
+
+LogicalResult llhd::PtrArrayGetOp::canonicalize(llhd::PtrArrayGetOp op,
+                                                PatternRewriter &rewriter) {
+  return canonicalizeSigPtrArrayGetOp(op, rewriter);
+}
+
 //===----------------------------------------------------------------------===//
-// SigStructExtractOp
+// SigStructExtractOp and PtrStructExtractOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results) {
-  Type type =
-      operands[0]
-          .getType()
-          .cast<llhd::SigType>()
-          .getUnderlyingType()
-          .cast<hw::StructType>()
-          .getFieldType(
-              attrs.getNamed("field")->second.cast<StringAttr>().getValue());
+template <class SigPtrType>
+static LogicalResult
+inferReturnTypesOfStructExtractOp(MLIRContext *context, Optional<Location> loc,
+                                  ValueRange operands, DictionaryAttr attrs,
+                                  mlir::RegionRange regions,
+                                  SmallVectorImpl<Type> &results) {
+  Type type = operands[0]
+                  .getType()
+                  .cast<SigPtrType>()
+                  .getUnderlyingType()
+                  .template cast<hw::StructType>()
+                  .getFieldType(attrs.getNamed("field")
+                                    ->getValue()
+                                    .cast<StringAttr>()
+                                    .getValue());
   if (!type) {
     context->getDiagEngine().emit(loc.getValueOr(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(llhd::SigType::get(type));
+  results.push_back(SigPtrType::get(type));
   return success();
+}
+
+LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  return inferReturnTypesOfStructExtractOp<llhd::SigType>(
+      context, loc, operands, attrs, regions, results);
+}
+
+LogicalResult llhd::PtrStructExtractOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  return inferReturnTypesOfStructExtractOp<llhd::PtrType>(
+      context, loc, operands, attrs, regions, results);
 }
 
 //===----------------------------------------------------------------------===//
@@ -482,11 +539,12 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
   result.addAttribute(circt::llhd::EntityOp::getTypeAttrName(),
                       TypeAttr::get(type));
 
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, args, argTypes))
+  auto &body = *result.addRegion();
+  if (parser.parseRegion(body, args, argTypes))
     return failure();
+  if (body.empty())
+    body.push_back(std::make_unique<Block>().release());
 
-  llhd::EntityOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
 
@@ -564,11 +622,6 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 }
 
 LogicalResult circt::llhd::EntityOp::verifyBody() {
-  // Body must not be empty.
-  if (isExternal())
-    return emitOpError("defining external entity with the entity instruction "
-                       "is not allowed, use the intended instruction instead.");
-
   // check signal names are unique
   llvm::StringMap<bool> sigMap;
   llvm::StringMap<bool> instMap;
@@ -622,15 +675,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
   return success();
 }
 
-LogicalResult circt::llhd::ProcOp::verifyBody() {
-  // Body must not be empty, this indicates an external process. We use
-  // another instruction to reference external processes.
-  if (isExternal()) {
-    return emitOpError("defining external processes with the proc instruction "
-                       "is not allowed, use the intended instruction instead.");
-  }
-  return success();
-}
+LogicalResult circt::llhd::ProcOp::verifyBody() { return success(); }
 
 static LogicalResult verify(llhd::ProcOp op) {
   // Check that the ins attribute is smaller or equal the number of

@@ -25,67 +25,12 @@ using namespace circt::llhd;
 #include "circt/Dialect/LLHD/IR/LLHDAttributes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// Helpers
-//===----------------------------------------------------------------------===//
-
-/// Parse a nested type, enclosed in angle brackts (`<...>`).
-static Type parseNestedType(DialectAsmParser &parser) {
-  Type underlyingType;
-  if (parser.parseLess())
-    return Type();
-
-  llvm::SMLoc loc = parser.getCurrentLocation();
-  if (parser.parseType(underlyingType)) {
-    parser.emitError(loc, "No signal type found. Signal needs an underlying "
-                          "type.");
-    return nullptr;
-  }
-
-  if (parser.parseGreater())
-    return Type();
-
-  return underlyingType;
-}
-
-//===----------------------------------------------------------------------===//
-// Signal Type
-//===----------------------------------------------------------------------===//
-
-/// Parse a signal type.
-/// Syntax: sig ::= !llhd.sig<type>
-Type SigType::parse(DialectAsmParser &p) {
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), parseNestedType(p));
-}
-
-void SigType::print(DialectAsmPrinter &p) const {
-  p << "sig<" << getUnderlyingType() << '>';
-}
-
-//===----------------------------------------------------------------------===//
-// Pointer Type
-//===----------------------------------------------------------------------===//
-
-/// Parse a pointer type.
-/// Syntax: ptr ::= !llhd.ptr<type>
-Type PtrType::parse(DialectAsmParser &p) {
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), parseNestedType(p));
-}
-
-void PtrType::print(DialectAsmPrinter &p) const {
-  p << "ptr<" << getUnderlyingType() << '>';
-}
-
-//===----------------------------------------------------------------------===//
 // Time Attribute
 //===----------------------------------------------------------------------===//
 
 /// Parse a time attribute.
 /// Syntax: timeattr ::= #llhd.time<[time][timeUnit], [delta]d, [epsilon]e>
-Attribute TimeAttr::parse(DialectAsmParser &p, Type type) {
+Attribute TimeAttr::parse(AsmParser &p, Type type) {
   llvm::StringRef timeUnit;
   unsigned time = 0;
   unsigned delta = 0;
@@ -110,9 +55,9 @@ Attribute TimeAttr::parse(DialectAsmParser &p, Type type) {
                     p.getContext(), time, timeUnit, delta, eps);
 }
 
-void TimeAttr::print(DialectAsmPrinter &p) const {
-  p << getMnemonic() << "<" << getTime() << getTimeUnit() << ", " << getDelta()
-    << "d, " << getEpsilon() << "e>";
+void TimeAttr::print(AsmPrinter &p) const {
+  p << "<" << getTime() << getTimeUnit() << ", " << getDelta() << "d, "
+    << getEpsilon() << "e>";
 }
 
 LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,

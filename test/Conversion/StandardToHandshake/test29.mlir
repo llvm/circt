@@ -5,35 +5,20 @@
 // CHECK-SAME:                               %[[VAL_0:.*]]: memref<4xi32>,
 // CHECK-SAME:                               %[[VAL_1:.*]]: index,
 // CHECK-SAME:                               %[[VAL_2:.*]]: none, ...) -> none attributes {argNames = ["in0", "in1", "inCtrl"], resNames = ["outCtrl"]} {
-// CHECK:   %[[LDDATA_STNONE_LDNONE:.+]]:3 = handshake.extmemory[ld = 1, st = 1] (%[[VAL_0]] : memref<4xi32>) (%[[STDATA_STIDX0:.+]]#0, %[[STDATA_STIDX0:.+]]#1, %[[LDIDX0:.+]]) {id = 0 : i32} : (i32, index, index) -> (i32, none, none)
-// CHECK:   %[[STNONE_STNONE:.+]]:2 = "handshake.fork"(%[[LDDATA_STNONE_LDNONE:.+]]#1) {control = true} : (none) -> (none, none)
-
-// Fork index0 and index1 to load and store operation.
-// CHECK:   %[[IDX0:.+]] = "handshake.merge"(%[[VAL_1]]) : (index) -> index
-// CHECK:   %[[IDX0_IDX0:.+]]:2 = "handshake.fork"(%[[IDX0:.+]]) {control = false} : (index) -> (index, index)
-
-// Fork input control signal.
-// CHECK:   %[[CTRL_CTRL_CTRL:.+]]:3 = "handshake.fork"(%[[VAL_2]]) {control = true} : (none) -> (none, none, none)
-// CHECK:   %[[CTRL_CTRL:.+]]:2 = "handshake.fork"(%[[CTRL_CTRL_CTRL:.+]]#2) {control = true} : (none) -> (none, none)
-
-// This indicates the completion of all operations.
-// CHECK:   %[[STLDNONE_AND_CTRL:.+]] = "handshake.join"(%[[CTRL_CTRL:.+]]#1, %[[STNONE_STNONE:.+]]#1, %[[LDDATA_STNONE_LDNONE:.+]]#2) {control = true} : (none, none, none) -> none
-
-// Store operation logic.
-// CHECK:   %[[C1_I32:.+]] = "handshake.constant"(%[[CTRL_CTRL:.+]]#0) {value = 11 : i32} : (none) -> i32
-// CHECK:   %[[STDATA_STIDX0:.+]]:2 = "handshake.store"(%[[C1_I32:.+]], %[[IDX0_IDX0:.+]]#1, %[[CTRL_CTRL_CTRL:.+]]#1) : (i32, index, none) -> (i32, index)
-
-// This indicates the completion of store operation.
-// CHECK:   %[[STNONE_AND_CTRL:.+]] = "handshake.join"(%[[CTRL_CTRL_CTRL:.+]]#0, %[[STNONE_STNONE:.+]]#0) {control = true} : (none, none) -> none
-
-// Load operation logic.
-// CHECK:   %[[LDDATA:.+]], %[[LDIDX0:.+]] = "handshake.load"(%[[IDX0_IDX0:.+]]#0, %[[LDDATA_STNONE_LDNONE:.+]]#0, %[[STNONE_AND_CTRL:.+]]) : (index, i32, none) -> (i32, index)
-
-// Result of load operation is sinked.
-// CHECK:   "handshake.sink"(%[[LDDATA:.+]]) : (i32) -> ()
-// CHECK:   handshake.return %[[STLDNONE_AND_CTRL:.+]] : none
-// CHECK: }
-
+// CHECK:           %[[VAL_3:.*]]:3 = extmemory[ld = 1, st = 1] (%[[VAL_0]] : memref<4xi32>) (%[[VAL_4:.*]], %[[VAL_5:.*]], %[[VAL_6:.*]]) {id = 0 : i32} : (i32, index, index) -> (i32, none, none)
+// CHECK:           %[[VAL_7:.*]]:2 = fork [2] %[[VAL_3]]#1 : none
+// CHECK:           %[[VAL_8:.*]] = merge %[[VAL_1]] : index
+// CHECK:           %[[VAL_9:.*]]:2 = fork [2] %[[VAL_8]] : index
+// CHECK:           %[[VAL_10:.*]]:3 = fork [3] %[[VAL_2]] : none
+// CHECK:           %[[VAL_11:.*]]:2 = fork [2] %[[VAL_10]]#2 : none
+// CHECK:           %[[VAL_12:.*]] = join %[[VAL_11]]#1, %[[VAL_7]]#1, %[[VAL_3]]#2 : none
+// CHECK:           %[[VAL_13:.*]] = constant %[[VAL_11]]#0 {value = 11 : i32} : i32
+// CHECK:           %[[VAL_4]], %[[VAL_5]] = store {{\[}}%[[VAL_9]]#1] %[[VAL_13]], %[[VAL_10]]#1 : index, i32
+// CHECK:           %[[VAL_14:.*]] = join %[[VAL_10]]#0, %[[VAL_7]]#0 : none
+// CHECK:           %[[VAL_15:.*]], %[[VAL_6]] = load {{\[}}%[[VAL_9]]#0] %[[VAL_3]]#0, %[[VAL_14]] : index, i32
+// CHECK:           sink %[[VAL_15]] : i32
+// CHECK:           return %[[VAL_12]] : none
+// CHECK:         }
 func @load_store(%0 : memref<4xi32>, %1 : index) {
   %c1 = arith.constant 11 : i32
   memref.store %c1, %0[%1] : memref<4xi32>

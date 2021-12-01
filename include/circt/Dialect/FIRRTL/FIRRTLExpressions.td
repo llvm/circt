@@ -89,7 +89,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
     }];
 
   let arguments = (ins APSIntAttr:$value);
-  let results = (outs NonZeroIntType:$result);
+  let results = (outs IntType:$result);
 
   // Need a custom parser/printer to avoid redundant type for the attribute and
   // the op itself.

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -test-spo-problem -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -test-shared-operators-problem -verify-diagnostics -split-input-file
 
 // expected-error@+2 {{Limited operator type '_0' has zero latency}}
 // expected-error@+1 {{problem check failed}}

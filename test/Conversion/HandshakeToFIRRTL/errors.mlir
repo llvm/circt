@@ -5,17 +5,17 @@
 module {
   handshake.func @bar(%ctrl : none) -> (none) {
     %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
-    handshake.return %0: none
+    return %0: none
   }
 
   handshake.func @foo(%ctrl : none) -> (none) {
     %0 = handshake.instance @bar(%ctrl) : (none) -> (none)
-    handshake.return %0: none  
+    return %0: none  
   }
   
   handshake.func @baz(%ctrl : none) -> (none) {
     %0 = handshake.instance @foo(%ctrl) : (none) -> (none)
-    handshake.return %0: none  
+    return %0: none  
   }
 }
 
@@ -26,15 +26,15 @@ module {
 module {
   handshake.func @bar(%ctrl : none) -> (none) {
     %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
-    handshake.return %0: none
+    return %0: none
   }
 
   handshake.func @foo(%ctrl : none) -> (none) {
     %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
-    handshake.return %0: none  
+    return %0: none  
   }
   
   handshake.func @baz(%ctrl : none) -> (none) {
-    handshake.return %ctrl: none  
+    return %ctrl: none  
   }
 }

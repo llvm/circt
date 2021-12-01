@@ -73,7 +73,7 @@ static Type lowerType(Type type) {
       if (!etype)
         return {};
       // TODO: make hw::StructType contain StringAttrs.
-      auto name = Identifier::get(element.name.getValue(), type.getContext());
+      auto name = StringAttr::get(element.name.getValue(), type.getContext());
       hwfields.push_back(hw::StructType::FieldInfo{name, etype});
     }
     return hw::StructType::get(type.getContext(), hwfields);
@@ -190,7 +190,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(Identifier::get(attrBase, ctx),
+    old.emplace_back(StringAttr::get(attrBase, ctx),
                      hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
     top->setAttrs(old);
   }
@@ -198,7 +198,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);
@@ -224,6 +224,10 @@ mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
   std::set_union(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
                  std::back_inserter(retval));
   return retval;
+}
+
+static unsigned getBitWidthFromVectorSize(unsigned size) {
+  return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
 }
 
 //===----------------------------------------------------------------------===//
@@ -768,9 +772,9 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   // in sorted order which is nicely stable.
   SmallVector<Attribute> newParams;
   for (const NamedAttribute &entry : paramsOptional.getValue()) {
-    auto name = builder.getStringAttr(entry.first.strref());
-    auto type = TypeAttr::get(entry.second.getType());
-    auto value = ignoreValues ? Attribute() : entry.second;
+    auto name = entry.getName();
+    auto type = TypeAttr::get(entry.getValue().getType());
+    auto value = ignoreValues ? Attribute() : entry.getValue();
     auto paramAttr =
         hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
     newParams.push_back(paramAttr);
@@ -938,8 +942,13 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We know it must be the destination operand due to the types, but the
   // source may not match the destination width.
   auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-  if (destTy.getBitWidthOrSentinel() !=
-      connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+
+  if (!destTy.isGround()) {
+    // If types are not ground type and they don't match, we give up.
+    if (destTy != connectSrc.getType().cast<FIRRTLType>())
+      return {};
+  } else if (destTy.getBitWidthOrSentinel() !=
+             connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
     // The only type mismatchs we care about is due to integer width
     // differences.
     auto destWidth = destTy.getBitWidthOrSentinel();
@@ -1127,6 +1136,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
+  Value getExtOrTruncArrayValue(Value array, FIRRTLType sourceType,
+                                FIRRTLType destType, bool allowTruncate);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1147,6 +1158,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SpecialConstantOp op);
+  LogicalResult visitExpr(SubindexOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -1472,6 +1484,81 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
+/// Return the lowered array value whose type is converted into `destType`.
+/// We have to care about the extension/truncation/signedness of each element.
+/// If returns a null value for complex arrays such as arrays with bundles.
+Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
+                                              FIRRTLType sourceType,
+                                              FIRRTLType destType,
+                                              bool allowTruncate) {
+  SmallVector<Value> resultBuffer;
+
+  // Helper function to cast each element of array to dest type.
+  auto cast = [&](Value value, FIRRTLType sourceType, FIRRTLType destType) {
+    auto srcWidth = sourceType.cast<IntType>().getWidthOrSentinel();
+    auto destWidth = destType.cast<IntType>().getWidthOrSentinel();
+    auto resultType = builder.getIntegerType(destWidth);
+
+    if (srcWidth == destWidth)
+      return value;
+
+    if (srcWidth > destWidth) {
+      if (allowTruncate)
+        return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
+
+      builder.emitError("operand should not be a truncation");
+      return Value();
+    }
+
+    if (sourceType.cast<IntType>().isSigned())
+      return builder.createOrFold<comb::SExtOp>(resultType, value);
+    auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
+    return builder.createOrFold<comb::ConcatOp>(zero, value);
+  };
+
+  // This recursive function constructs the output array.
+  std::function<LogicalResult(Value, FIRRTLType, FIRRTLType)> recurse =
+      [&](Value src, FIRRTLType srcType, FIRRTLType destType) -> LogicalResult {
+    return TypeSwitch<FIRRTLType, LogicalResult>(srcType)
+        .Case<FVectorType>([&](auto srcVectorType) {
+          auto destVectorType = destType.cast<FVectorType>();
+          unsigned size = resultBuffer.size();
+          unsigned indexWidth =
+              getBitWidthFromVectorSize(srcVectorType.getNumElements());
+          for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
+                                          destVectorType.getNumElements());
+               i != e; ++i) {
+            auto iIdx = getOrCreateIntConstant(indexWidth, i);
+            auto arrayIndex = builder.create<hw::ArrayGetOp>(src, iIdx);
+            if (failed(recurse(arrayIndex, srcVectorType.getElementType(),
+                               destVectorType.getElementType())))
+              return failure();
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(array);
+          return success();
+        })
+        .Case<IntType>([&](auto) {
+          if (auto result = cast(src, srcType, destType)) {
+            resultBuffer.push_back(result);
+            return success();
+          }
+          return failure();
+        })
+        .Default([&](auto) { return failure(); });
+  };
+
+  if (failed(recurse(array, sourceType, destType)))
+    return Value();
+
+  assert(resultBuffer.size() == 1 &&
+         "resultBuffer must only contain a result array if `success` is true");
+  return resultBuffer[0];
+}
+
 /// Return the lowered value corresponding to the specified original value and
 /// then extend it to match the width of destType if needed.
 ///
@@ -1499,6 +1586,16 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // Otherwise, FIRRTL semantics is that an extension from a zero bit value
     // always produces a zero value in the destination width.
     return getOrCreateIntConstant(destWidth, 0);
+  }
+
+  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+    // Types already match.
+    if (destType == value.getType())
+      return result;
+
+    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
+                                   destType.cast<FIRRTLType>(),
+                                   /* allowTruncate */ false);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1548,6 +1645,16 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     // Otherwise, FIRRTL semantics is that an extension from a zero bit value
     // always produces a zero value in the destination width.
     return getOrCreateIntConstant(destWidth, 0);
+  }
+
+  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+    // Types already match.
+    if (destType == value.getType())
+      return result;
+
+    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
+                                   destType.cast<FIRRTLType>(),
+                                   /* allowTruncate */ true);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1852,12 +1959,39 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
+  // Zero width values must be lowered to nothing.
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
   return setLowering(op, getOrCreateIntConstant(op.value()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   return setLowering(op,
                      getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
+  Value value = getPossiblyInoutLoweredValue(op.input());
+  if (!resultType || !value) {
+    op.emitError() << "input lowering failed";
+    return failure();
+  }
+
+  auto iIdx = getOrCreateIntConstant(
+      getBitWidthFromVectorSize(
+          op.input().getType().cast<FVectorType>().getNumElements()),
+      op.index());
+
+  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
+  if (value.getType().isa<sv::InOutType>())
+    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
+  // Otherwise, hw::ArrayGetOp
+  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -2027,18 +2161,22 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Randomly initialize everything in the register. If the register
   // is an aggregate type, then assign random values to all its
   // constituent ground types.
-  // TODO: Extend this so it recursively initializes everything.
   auto randomInit = [&]() {
     auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-    TypeSwitch<Type>(type)
-        .Case<hw::UnpackedArrayType>([&](auto a) {
-          for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-            auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
-            auto arrayIndex = builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-            emitRandomInit(arrayIndex, a.getElementType());
-          }
-        })
-        .Default([&](auto type) { emitRandomInit(reg, type); });
+    std::function<void(Value, Type)> recurse = [&](Value reg, Type type) {
+      TypeSwitch<Type>(type)
+          .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
+            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
+              auto iIdx =
+                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
+              auto arrayIndex =
+                  builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
+              recurse(arrayIndex, a.getElementType());
+            }
+          })
+          .Default([&](auto type) { emitRandomInit(reg, type); });
+    };
+    recurse(reg, type);
   };
 
   // Emit the initializer expression for simulation that fills it with random
@@ -2895,6 +3033,39 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
                      sv::EventControl::AtPosEdge, resetSignal,
                      [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+    return success();
+  }
+
+  if (srcVal.getType().isa<hw::ArrayType>() && destType != op.src().getType()) {
+    // If the connection is about array and types do not match, it might be a
+    // connection between vectors with different lengths. For such cases, we can
+    // not use usual assignments. It is necessary to assign each elements
+    // recursively.
+    std::function<void(Value, Value, Type, Type)> recurse = [&](Value dest,
+                                                                Value src,
+                                                                Type dstType,
+                                                                Type srcType) {
+      TypeSwitch<Type>(srcType)
+          .Case<FVectorType>([&](auto srcVectorType) {
+            auto destVectorType = destType.cast<FVectorType>();
+            for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
+                                            destVectorType.getNumElements());
+                 i != e; ++i) {
+              auto idx =
+                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
+              auto destInOutOp =
+                  builder.create<sv::ArrayIndexInOutOp>(dest, idx);
+              auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
+
+              recurse(destInOutOp, srcGetOp, destVectorType.getElementType(),
+                      srcVectorType.getElementType());
+            }
+          })
+          .Case<IntType>([&](auto) { builder.create<sv::AssignOp>(dest, src); })
+          .Default([&](auto) { llvm_unreachable("must fail before"); });
+    };
+    recurse(destVal, srcVal, destType, op.src().getType());
+
     return success();
   }
 

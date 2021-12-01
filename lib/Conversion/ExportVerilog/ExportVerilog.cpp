@@ -8,6 +8,11 @@
 //
 // This is the main Verilog emitter implementation.
 //
+// CAREFUL: This file covers the emission phase of `ExportVerilog` which mainly
+// walks the IR and produces output. Do NOT modify the IR during this walk, as
+// emission occurs in a highly parallel fashion. If you need to modify the IR,
+// do so during the preparation phase which lives in `PrepareForEmission.cpp`.
+//
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
@@ -285,30 +290,6 @@ static StringRef getVerilogDeclWord(Operation *op,
   return isProcedural ? "automatic logic" : "wire";
 }
 
-/// Return the name of a value without using the name map.  This is needed when
-/// looking into an instance from a different module as happens with bind.  It
-/// may return "" when unable to determine a name.  This works in situations
-/// where names are pre-legalized during prepare.
-static StringRef getNameRemotely(Value value, const ModulePortInfo &modulePorts,
-                                 HWModuleOp mod,
-                                 const GlobalNameTable &globalNames) {
-  if (auto barg = value.dyn_cast<BlockArgument>())
-    return globalNames.getPortVerilogName(
-        mod, modulePorts.inputs[barg.getArgNumber()]);
-
-  if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
-    auto *wireInput = readinout.input().getDefiningOp();
-    if (!wireInput)
-      return {};
-
-    if (isa<WireOp, RegOp>(wireInput))
-      return globalNames.getDeclarationVerilogName(wireInput);
-  }
-  if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
-    return globalNames.getDeclarationVerilogName(localparam);
-  return {};
-}
-
 /// Pull any FileLineCol locs out of the specified location and add it to the
 /// specified set.
 static void collectFileLineColLocs(Location loc,
@@ -334,7 +315,7 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
     collectFileLineColLocs(op->getLoc(), locationSet);
 
   auto printLoc = [&](FileLineColLoc loc) {
-    sstr << loc.getFilename();
+    sstr << loc.getFilename().getValue();
     if (auto line = loc.getLine()) {
       sstr << ':' << line;
       if (auto col = loc.getColumn())
@@ -511,18 +492,21 @@ namespace {
 class VerilogEmitterState {
 public:
   explicit VerilogEmitterState(ModuleOp designOp,
+                               const SharedEmitterState &shared,
                                const LoweringOptions &options,
                                const SymbolCache &symbolCache,
                                const GlobalNameTable &globalNames,
                                raw_ostream &os)
-      : designOp(designOp), options(options), symbolCache(symbolCache),
-        globalNames(globalNames), os(os) {}
+      : designOp(designOp), shared(shared), options(options),
+        symbolCache(symbolCache), globalNames(globalNames), os(os) {}
 
   /// This is the root mlir::ModuleOp that holds the whole design being emitted.
   ModuleOp designOp;
 
+  const SharedEmitterState &shared;
+
   /// The emitter options which control verilog emission.
-  const LoweringOptions options;
+  const LoweringOptions &options;
 
   /// This is a cache of various information about the IR, in frozen state.
   const SymbolCache &symbolCache;
@@ -594,6 +578,12 @@ public:
                                  std::function<void(Value)> operandEmitter,
                                  ArrayAttr symAttrs, ModuleNameManager &names);
 
+  /// Emit the value of a StringAttr as one or more Verilog "one-line" comments
+  /// ("//").  Break the comment to respect the emittedLineLength and trim
+  /// whitespace after a line break.  Do nothing if the StringAttr is null or
+  /// the value is empty.
+  void emitComment(StringAttr comment);
+
 private:
   void operator=(const EmitterBase &) = delete;
   EmitterBase(const EmitterBase &) = delete;
@@ -606,7 +596,6 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  SmallVector<SmallString<12>, 8> symOps;
   auto namify = [&](Attribute sym, SymbolCache::Item item) {
     // CAVEAT: These accesses can reach into other modules through inner name
     // references, which are currently being processed. Do not add those remote
@@ -616,9 +605,7 @@ void EmitterBase::emitTextWithSubstitutions(
     // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
-        auto portInfos = getAllModulePortInfos(itemOp);
-        return state.globalNames.getPortVerilogName(itemOp,
-                                                    portInfos[item.getPort()]);
+        return state.globalNames.getPortVerilogName(itemOp, item.getPort());
       }
       if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
               itemOp))
@@ -633,21 +620,10 @@ void EmitterBase::emitTextWithSubstitutions(
     return StringRef("<INVALID>");
   };
 
-  for (auto sym : symAttrs) {
-    if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
-      if (auto symOp = state.symbolCache.getDefinition(fsym))
-        symOps.push_back(namify(sym, symOp));
-    if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
-      auto symOp =
-          state.symbolCache.getDefinition(isym.getModule(), isym.getName());
-      symOps.push_back(namify(sym, symOp));
-    }
-  }
-
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
-  unsigned numSymOps = symOps.size();
+  unsigned numSymOps = symAttrs.size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
     while (1) {
@@ -689,7 +665,17 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        os << symOps[symOpNum];
+        auto sym = symAttrs[symOpNum];
+        StringRef symVerilogName;
+        if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
+          if (auto *symOp = state.symbolCache.getDefinition(fsym))
+            symVerilogName = namify(sym, symOp);
+        } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+          auto symOp =
+              state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+          symVerilogName = namify(sym, symOp);
+        }
+        os << symVerilogName;
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -706,6 +692,65 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Emit any text after the last substitution.
   os << string;
+}
+
+void EmitterBase::emitComment(StringAttr comment) {
+  if (!comment)
+    return;
+
+  // Set a line length for the comment.  Subtract off the leading comment and
+  // space ("// ") as well as the current indent level to simplify later
+  // arithmetic.  Ensure that this line length doesn't go below zero.
+  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
+  if (lineLength > state.options.emittedLineLength)
+    lineLength = 0;
+
+  // Process the comment in line chunks extracted from manually specified line
+  // breaks.  This is done to preserve user-specified line breaking if used.
+  auto ref = comment.getValue();
+  StringRef line;
+  while (!ref.empty()) {
+    std::tie(line, ref) = ref.split("\n");
+    // Emit each comment line breaking it if it exceeds the emittedLineLength.
+    for (;;) {
+      indent();
+      os << "// ";
+
+      // Base case 1: the entire comment fits on one line.
+      if (line.size() <= lineLength) {
+        os << line << "\n";
+        break;
+      }
+
+      // The comment does NOT fit on one line.  Use a simple algorithm to find
+      // a position to break the line:
+      //   1) Search backwards for whitespace and break there if you find it.
+      //   2) If no whitespace exists in (1), search forward for whitespace
+      //      and break there.
+      // This algorithm violates the emittedLineLength if (2) ever occurrs,
+      // but it's dead simple.
+      auto breakPos = line.rfind(' ', lineLength);
+      // No whitespace exists looking backwards.
+      if (breakPos == StringRef::npos) {
+        breakPos = line.find(' ', lineLength);
+        // No whitespace exists looking forward (you hit the end of the
+        // string).
+        if (breakPos == StringRef::npos)
+          breakPos = line.size();
+      }
+
+      // Emit up to the break position.  Trim any whitespace after the break
+      // position.  Exit if nothing is left to emit.  Otherwise, update the
+      // comment ref and continue;
+      os << line.take_front(breakPos) << "\n";
+      breakPos = line.find_first_not_of(' ', breakPos);
+      // Base Case 2: nothing left except whitespace.
+      if (breakPos == StringRef::npos)
+        break;
+
+      line = line.drop_front(breakPos);
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -726,6 +771,9 @@ public:
   void emitStatement(Operation *op);
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
+
+  StringRef getNameRemotely(Value value, const ModulePortInfo &modulePorts,
+                            HWModuleOp remoteModule);
 
   //===--------------------------------------------------------------------===//
   // Methods for formatting types.
@@ -2153,51 +2201,6 @@ void NameCollector::collectNames(Block &block) {
 }
 
 //===----------------------------------------------------------------------===//
-// TypeScopeEmitter
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// This emits typescope-related operations.
-class TypeScopeEmitter
-    : public EmitterBase,
-      public hw::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
-public:
-  /// Create a TypeScopeEmitter for the specified module emitter.
-  TypeScopeEmitter(ModuleEmitter &emitter)
-      : EmitterBase(emitter.state), emitter(emitter) {}
-
-  void emitTypeScopeBlock(Block &body);
-
-private:
-  friend class TypeScopeVisitor<TypeScopeEmitter, LogicalResult>;
-
-  LogicalResult visitTypeScope(TypedeclOp op);
-
-  ModuleEmitter &emitter;
-};
-
-} // end anonymous namespace
-
-void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
-  for (auto &op : body) {
-    if (failed(dispatchTypeScopeVisitor(&op))) {
-      op.emitOpError("cannot emit this type scope op to Verilog");
-      os << "<<unsupported op: " << op.getName().getStringRef() << ">>\n";
-    }
-  }
-}
-
-LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
-  indent() << "typedef ";
-  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
-                          false);
-  os << ' ' << op.getPreferredName();
-  emitter.printUnpackedTypePostfix(op.type(), os);
-  os << ";\n";
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // StmtEmitter
 //===----------------------------------------------------------------------===//
 
@@ -2259,6 +2262,8 @@ private:
   LogicalResult visitSV(InterfaceInstanceOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitStmt(TypeScopeOp op);
+  LogicalResult visitStmt(TypedeclOp op);
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
@@ -2584,6 +2589,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ++operandIndex;
     ++numStatementsEmitted;
   }
+  return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
+  emitStatementBlock(*op.getBodyBlock());
+  return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
+  os << "typedef ";
+  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
+                          false);
+  os << ' ' << op.getPreferredName();
+  emitter.printUnpackedTypePostfix(op.type(), os);
+  os << ";\n";
   return success();
 }
 
@@ -3617,23 +3637,57 @@ void ModuleEmitter::emitBind(BindOp op) {
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
-    auto name =
-        getNameRemotely(portVal, parentPortInfo, parentMod, state.globalNames);
-    if (name.empty()) {
-      // Non stable names will come from expressions.  Since we are lowering the
-      // instance also, we can ensure that expressions feeding bound instances
-      // will be lowered consistently to verilog-namable entities.
-      os << childVerilogName.getValue() << '_' << inst.getName() << '_'
-         << elt.getName() << ')';
-    } else {
-      os << name << ')';
-    }
+    auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
+    assert(!name.empty() && "bind port connection must have a name");
+    os << name << ')';
   }
   if (!isFirst) {
     os << '\n';
     indent();
   }
   os << ");\n";
+}
+
+/// Return the name of a value in a remote module to be used in a `bind`
+/// statement. This function examines the remote module `remoteModule` and looks
+/// up the corresponding name in the provide `GlobalNameTable`. This requires
+/// that all names this function may be asked to lookup have been legalized and
+/// added to that name table.
+StringRef ModuleEmitter::getNameRemotely(Value value,
+                                         const ModulePortInfo &modulePorts,
+                                         HWModuleOp remoteModule) {
+  if (auto barg = value.dyn_cast<BlockArgument>())
+    return state.globalNames.getPortVerilogName(
+        remoteModule, modulePorts.inputs[barg.getArgNumber()]);
+
+  Operation *valueOp = value.getDefiningOp();
+
+  // Handle wires/registers, likely as instance inputs.
+  if (auto readinout = dyn_cast<ReadInOutOp>(valueOp)) {
+    auto *wireInput = readinout.input().getDefiningOp();
+    if (!wireInput)
+      return {};
+    if (isa<WireOp, RegOp>(wireInput))
+      return state.globalNames.getDeclarationVerilogName(wireInput);
+  }
+
+  // Handle values being driven onto wires, likely as instance outputs.
+  if (isa<InstanceOp>(valueOp)) {
+    for (auto &use : value.getUses()) {
+      Operation *user = use.getOwner();
+      if (!isa<AssignOp>(user) || use.getOperandNumber() != 1)
+        continue;
+      Value drivenOnto = user->getOperand(0);
+      Operation *drivenOntoOp = drivenOnto.getDefiningOp();
+      if (isa<WireOp, RegOp>(drivenOntoOp))
+        return state.globalNames.getDeclarationVerilogName(drivenOntoOp);
+    }
+  }
+
+  // Handle local parameters.
+  if (isa<LocalParamOp>(valueOp))
+    return state.globalNames.getDeclarationVerilogName(valueOp);
+  return {};
 }
 
 void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
@@ -3669,12 +3723,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     names.addName(nullptr, verilogName);
   }
 
-  // Rewrite the module body into compliance with our emission expectations, and
-  // collect/rename symbols within the body that conflict.
-  prepareHWModule(*module.getBodyBlock(), state.options);
-
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
+
+  emitComment(module.commentAttr());
 
   os << "module " << getVerilogModuleName(module);
 
@@ -3876,131 +3928,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 // Top level "file" emitter logic
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-/// Information to control the emission of a single operation into a file.
-struct OpFileInfo {
-  /// The operation to be emitted.
-  Operation *op;
-
-  /// Where among the replicated per-file operations the `op` above should be
-  /// emitted.
-  size_t position = 0;
-};
-
-/// Information to control the emission of a list of operations into a file.
-struct FileInfo {
-  /// The operations to be emitted into a separate file, and where among the
-  /// replicated per-file operations the operation should be emitted.
-  SmallVector<OpFileInfo, 1> ops;
-
-  /// Whether to emit the replicated per-file operations.
-  bool emitReplicatedOps = true;
-
-  /// Whether to include this file as part of the emitted file list.
-  bool addToFilelist = true;
-};
-
-/// This class wraps an operation or a fixed string that should be emitted.
-class StringOrOpToEmit {
-public:
-  explicit StringOrOpToEmit(Operation *op) : pointerData(op), length(~0ULL) {}
-
-  explicit StringOrOpToEmit(StringRef string) {
-    pointerData = (Operation *)nullptr;
-    setString(string);
-  }
-
-  ~StringOrOpToEmit() {
-    if (const void *ptr = pointerData.dyn_cast<const void *>())
-      free(const_cast<void *>(ptr));
-  }
-
-  /// If the value is an Operation*, return it.  Otherwise return null.
-  Operation *getOperation() const {
-    return pointerData.dyn_cast<Operation *>();
-  }
-
-  /// If the value wraps a string, return it.  Otherwise return null.
-  StringRef getStringData() const {
-    if (const void *ptr = pointerData.dyn_cast<const void *>())
-      return StringRef((const char *)ptr, length);
-    return StringRef();
-  }
-
-  /// This method transforms the entry from an operation to a string value.
-  void setString(StringRef value) {
-    assert(pointerData.is<Operation *>() && "shouldn't already be a string");
-    length = value.size();
-    void *data = malloc(length);
-    memcpy(data, value.data(), length);
-    pointerData = (const void *)data;
-  }
-
-  // These move just fine.
-  StringOrOpToEmit(StringOrOpToEmit &&rhs)
-      : pointerData(rhs.pointerData), length(rhs.length) {
-    rhs.pointerData = (Operation *)nullptr;
-  }
-
-private:
-  StringOrOpToEmit(const StringOrOpToEmit &) = delete;
-  void operator=(const StringOrOpToEmit &) = delete;
-  PointerUnion<Operation *, const void *> pointerData;
-  size_t length;
-};
-
-/// This class tracks the top-level state for the emitters, which is built and
-/// then shared across all per-file emissions that happen in parallel.
-struct SharedEmitterState {
-  /// The MLIR module to emit.
-  ModuleOp designOp;
-
-  /// The main file that collects all operations that are neither replicated
-  /// per-file ops nor specifically assigned to a file.
-  FileInfo rootFile;
-
-  /// The additional files to emit, with the output file name as the key into
-  /// the map.
-  llvm::MapVector<Identifier, FileInfo> files;
-
-  /// The various file lists and their contents to emit
-  llvm::StringMap<SmallVector<Identifier>> fileLists;
-
-  /// A list of operations replicated in each output file (e.g., `sv.verbatim`
-  /// or `sv.ifdef` without dedicated output file).
-  SmallVector<Operation *, 0> replicatedOps;
-
-  /// Whether any error has been encountered during emission.
-  std::atomic<bool> encounteredError = {};
-
-  /// A cache of symbol -> defining ops built once and used by each of the
-  /// verilog module emitters.  This is built at "gatherFiles" time.
-  SymbolCache symbolCache;
-
-  // Emitter options extracted from the top-level module.
-  const LoweringOptions options;
-
-  /// This is a set is populated at "gather" time, containing the hw.module
-  /// operations that have a sv.bind in them.
-  SmallPtrSet<Operation *, 8> modulesContainingBinds;
-
-  /// Information about renamed global symbols, parameters, etc.
-  const GlobalNameTable globalNames;
-
-  explicit SharedEmitterState(ModuleOp designOp, GlobalNameTable globalNames)
-      : designOp(designOp), options(designOp),
-        globalNames(std::move(globalNames)) {}
-  void gatherFiles(bool separateModules);
-
-  using EmissionList = std::vector<StringOrOpToEmit>;
-
-  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
-  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
-};
-
-} // namespace
-
 /// Organize the operations in the root MLIR module into output files to be
 /// generated. If `separateModules` is true, a handful of top-level
 /// declarations will be split into separate output files even in the absence
@@ -4034,12 +3961,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+        if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
-        if (auto sym = resultAttr.second.dyn_cast<FlatSymbolRefAttr>())
+        if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p + numArgs);
   };
@@ -4089,7 +4016,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         }
       }
 
-      auto destFile = Identifier::get(outputPath, op->getContext());
+      auto destFile = StringAttr::get(outputPath, op->getContext());
       auto &file = files[destFile];
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
@@ -4219,8 +4146,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<InterfaceOp, VerbatimOp, IfDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
-        ModuleEmitter emitter(state);
-        TypeScopeEmitter(emitter).emitTypeScopeBlock(*typedecls.getBodyBlock());
+        ModuleEmitter(state).emitStatement(typedecls);
       })
       .Default([&](auto *op) {
         state.encounteredError = true;
@@ -4241,7 +4167,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   // If we aren't parallelizing output, directly output each operation to the
   // specified stream.
   if (!parallelize) {
-    VerilogEmitterState state(designOp, options, symbolCache, globalNames, os);
+    VerilogEmitterState state(designOp, *this, options, symbolCache,
+                              globalNames, os);
     for (auto &entry : thingsToEmit) {
       if (auto *op = entry.getOperation())
         emitOperation(state, op);
@@ -4256,7 +4183,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
   // If we are parallelizing emission, we emit each independent operation to a
   // string buffer in parallel, then concat at the end.
-  //
   parallelForEach(context, thingsToEmit, [&](StringOrOpToEmit &stringOrOp) {
     auto *op = stringOrOp.getOperation();
     if (!op)
@@ -4270,8 +4196,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
     SmallString<256> buffer;
     llvm::raw_svector_ostream tmpStream(buffer);
-    VerilogEmitterState state(designOp, options, symbolCache, globalNames,
-                              tmpStream);
+    VerilogEmitterState state(designOp, *this, options, symbolCache,
+                              globalNames, tmpStream);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
   });
@@ -4287,9 +4213,20 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     }
 
     // If this wasn't emitted to a string (e.g. it is a bind) do so now.
-    VerilogEmitterState state(designOp, options, symbolCache, globalNames, os);
+    VerilogEmitterState state(designOp, *this, options, symbolCache,
+                              globalNames, os);
     emitOperation(state, op);
   }
+}
+
+/// Prepare the given MLIR module for emission.
+static void prepareForEmission(ModuleOp module,
+                               const LoweringOptions &options) {
+  SmallVector<HWModuleOp> modulesToPrepare;
+  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  parallelForEach(module->getContext(), modulesToPrepare, [&](auto op) {
+    prepareHWModule(*op.getBodyBlock(), options);
+  });
 }
 
 //===----------------------------------------------------------------------===//
@@ -4297,11 +4234,13 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 //===----------------------------------------------------------------------===//
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  // Rename module names and interfaces to not conflict with each other or with
-  // Verilog keywords.
+  // Prepare the ops in the module for emission and legalize the names that will
+  // end up in the output.
+  LoweringOptions options(module);
+  prepareForEmission(module, options);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
-  SharedEmitterState emitter(module, std::move(globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
   SharedEmitterState::EmissionList list;
@@ -4390,7 +4329,7 @@ createOutputFile(StringRef fileName, StringRef dirname,
   return output;
 }
 
-static void createSplitOutputFile(Identifier fileName, FileInfo &file,
+static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
                                   StringRef dirname,
                                   SharedEmitterState &emitter) {
   auto output = createOutputFile(fileName, dirname, emitter);
@@ -4409,19 +4348,21 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 }
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
-  // Rename module names and interfaces to not conflict with each other or with
-  // Verilog keywords.
+  // Prepare the ops in the module for emission and legalize the names that will
+  // end up in the output.
+  LoweringOptions options(module);
+  prepareForEmission(module, options);
   GlobalNameTable globalNames = legalizeGlobalNames(module);
 
-  SharedEmitterState emitter(module, std::move(globalNames));
+  SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
 
   // Emit each file in parallel if context enables it.
-  mlir::parallelForEach(module->getContext(), emitter.files.begin(),
-                        emitter.files.end(), [&](auto &it) {
-                          createSplitOutputFile(it.first, it.second, dirname,
-                                                emitter);
-                        });
+  parallelForEach(module->getContext(), emitter.files.begin(),
+                  emitter.files.end(), [&](auto &it) {
+                    createSplitOutputFile(it.first, it.second, dirname,
+                                          emitter);
+                  });
 
   // Write the file list.
   SmallString<128> filelistPath(dirname);

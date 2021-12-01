@@ -1,5 +1,5 @@
-// RUN: circt-opt %s -test-spo-problem -allow-unregistered-dialect
-// RUN: circt-opt %s -test-simplex-scheduler=with=SharedPipelinedOperatorsProblem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
+// RUN: circt-opt %s -test-shared-operators-problem -allow-unregistered-dialect
+// RUN: circt-opt %s -test-simplex-scheduler=with=SharedOperatorsProblem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
 
 // SIMPLEX-LABEL: full_load
 func @full_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {

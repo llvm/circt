@@ -1127,3 +1127,17 @@ sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 
+// Regression test for a bug where bind emission would not use sanitized names.
+hw.module @NastyPortParent() {
+  %false = hw.constant false
+  %0 = hw.instance "foo" sym @foo @NastyPort(".lots$of.dots": %false: i1) -> (".more.dots": i1) {doNotPrint = true}
+}
+hw.module @NastyPort(%.lots$of.dots: i1) -> (".more.dots": i1) {
+  %false = hw.constant false
+  hw.output %false : i1
+}
+sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
+// CHECK-LABEL: bind NastyPortParent NastyPort foo (
+// CHECK-NEXT:    ._lots24of_dots (foo__lots24of_dots)
+// CHECK-NEXT:    ._more_dots     (foo__more_dots)
+// CHECK-NEXT:  );

@@ -622,7 +622,8 @@ firrtl.module @issue437(out %tmp19: !firrtl.uint<1>) {
 }
 
 // CHECK-LABEL: firrtl.module @issue446
-// CHECK-NEXT: firrtl.xor %inp_1, %inp_1
+// CHECK-NEXT: [[TMP:%.+]] = firrtl.constant 0 : !firrtl.uint<0>
+// CHECK-NEXT: firrtl.connect %tmp10, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<0>
 firrtl.module @issue446(in %inp_1: !firrtl.sint<0>, out %tmp10: !firrtl.uint<1>) {
   %0 = firrtl.xor %inp_1, %inp_1 : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<0>
   firrtl.connect %tmp10, %0 : !firrtl.uint<1>, !firrtl.uint<0>
@@ -637,7 +638,8 @@ firrtl.module @xorUnsized(in %inp_1: !firrtl.sint, out %tmp10: !firrtl.uint) {
 
 // https://github.com/llvm/circt/issues/516
 // CHECK-LABEL: @issue516
-// CHECK-NEXT: firrtl.div
+// CHECK-NEXT: [[TMP:%.+]] = firrtl.constant 0 : !firrtl.uint<0>
+// CHECK-NEXT: firrtl.connect %tmp3, [[TMP]] : !firrtl.uint<0>, !firrtl.uint<0>
 firrtl.module @issue516(in %inp_0: !firrtl.uint<0>, out %tmp3: !firrtl.uint<0>) {
   %0 = firrtl.div %inp_0, %inp_0 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
   firrtl.connect %tmp3, %0 : !firrtl.uint<0>, !firrtl.uint<0>
@@ -1901,7 +1903,7 @@ firrtl.module @constReg(in %clock: !firrtl.clock,
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:  %[[C11:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-  // CHECK:  firrtl.connect %out, %[[C11]] 
+  // CHECK:  firrtl.connect %out, %[[C11]]
 }
 
 // CHECK-LABEL: firrtl.module @constReg
@@ -1918,7 +1920,7 @@ firrtl.module @constReg2(in %clock: !firrtl.clock,
   %2 = firrtl.xor %r1, %r2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:  %[[C12:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-  // CHECK:  firrtl.connect %out, %[[C12]] 
+  // CHECK:  firrtl.connect %out, %[[C12]]
 }
 
 // CHECK-LABEL: firrtl.module @constReg3
@@ -1989,7 +1991,7 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
 
 // CHECK-LABEL: firrtl.module @namedrop
 firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  // CHECK-NOT: _T_ 
+  // CHECK-NOT: _T_
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %_T_0 = firrtl.node %in : !firrtl.uint<1>
   %_T_1 = firrtl.wire : !firrtl.uint<1>

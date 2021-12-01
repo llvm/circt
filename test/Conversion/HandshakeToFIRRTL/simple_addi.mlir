@@ -28,5 +28,5 @@
 // CHECK: }
 handshake.func @simple_addi(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, none) {
   %0 = arith.addi %arg0, %arg1 : index
-  handshake.return %0, %arg2 : index, none
+  return %0, %arg2 : index, none
 }

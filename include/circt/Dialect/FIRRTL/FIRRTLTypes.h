@@ -192,6 +192,12 @@ public:
 
   /// Return true if this type has a known width.
   bool hasWidth() { return getWidth().hasValue(); }
+
+  /// Return a new type with the width changed to a different value.
+  ConcreteType changeWidth(int32_t width) {
+    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
+                             width);
+  }
 };
 
 class SIntType;

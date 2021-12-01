@@ -83,8 +83,8 @@
 // CHECK:   firrtl.connect %[[VAL_63]], %[[VAL_61]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK: }
 handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
-  %0 = "handshake.buffer"(%arg0) {control = true, sequential = true, slots = 3 : i32} : (none) -> none
-  handshake.return %0, %arg1 : none, none
+  %0 = buffer [3] %arg0 {sequential = true} : none
+  return %0, %arg1 : none, none
 }
 
 // -----
@@ -126,6 +126,6 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK:   firrtl.connect %[[VAL_67]], %[[VAL_65]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK: }
 handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none) {
-  %0 = "handshake.buffer"(%arg0) {control = false, sequential = true, slots = 2 : i32} : (index) -> index
-  handshake.return %0, %arg1 : index, none
+  %0 = buffer [2] %arg0 {sequential = true} : index
+  return %0, %arg1 : index, none
 }

@@ -148,10 +148,10 @@ bool circt::hw::hasHWInOutType(Type type) {
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.
-static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
+static ParseResult parseHWElementType(Type &result, AsmParser &p) {
   // If this is an HW dialect type, then we don't need/want the !hw. prefix
   // redundantly specified.
-  auto fullString = p.getFullSymbolSpec();
+  auto fullString = static_cast<DialectAsmParser &>(p).getFullSymbolSpec();
   auto *curPtr = p.getCurrentLocation().getPointer();
   auto typeString =
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
@@ -169,7 +169,7 @@ static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
   return p.parseType(result);
 }
 
-static void printHWElementType(Type element, DialectAsmPrinter &p) {
+static void printHWElementType(Type element, AsmPrinter &p) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
@@ -193,7 +193,7 @@ Type IntType::get(Attribute width) {
   return Base::get(width.getContext(), width);
 }
 
-Type IntType::parse(DialectAsmParser &p) {
+Type IntType::parse(AsmParser &p) {
   // The bitwidth of the parameter size is always 32 bits.
   auto int32Type = p.getBuilder().getIntegerType(32);
 
@@ -203,8 +203,8 @@ Type IntType::parse(DialectAsmParser &p) {
   return get(width);
 }
 
-void IntType::print(DialectAsmPrinter &p) const {
-  p << "int<";
+void IntType::print(AsmPrinter &p) const {
+  p << "<";
   p.printAttributeWithoutType(getWidth());
   p << '>';
 }
@@ -228,7 +228,7 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
 
 /// Parse a list of field names and types within <>. E.g.:
 /// <foo: i7, bar: i8>
-static ParseResult parseFields(DialectAsmParser &p,
+static ParseResult parseFields(AsmParser &p,
                                SmallVectorImpl<FieldInfo> &parameters) {
   return p.parseCommaSeparatedList(
       mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
@@ -242,7 +242,7 @@ static ParseResult parseFields(DialectAsmParser &p,
 }
 
 /// Print out a list of named fields surrounded by <>.
-static void printFields(DialectAsmPrinter &p, ArrayRef<FieldInfo> fields) {
+static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
   p << '<';
   llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
     p << field.name << ": " << field.type;
@@ -250,17 +250,14 @@ static void printFields(DialectAsmPrinter &p, ArrayRef<FieldInfo> fields) {
   p << ">";
 }
 
-Type StructType::parse(DialectAsmParser &p) {
+Type StructType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
   if (parseFields(p, parameters))
     return Type();
   return get(p.getContext(), parameters);
 }
 
-void StructType::print(DialectAsmPrinter &p) const {
-  p << "struct";
-  printFields(p, getElements());
-}
+void StructType::print(AsmPrinter &p) const { printFields(p, getElements()); }
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())
@@ -278,17 +275,14 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 // Union Type
 //===----------------------------------------------------------------------===//
 
-Type UnionType::parse(DialectAsmParser &p) {
+Type UnionType::parse(AsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
   if (parseFields(p, parameters))
     return Type();
   return get(p.getContext(), parameters);
 }
 
-void UnionType::print(DialectAsmPrinter &p) const {
-  p << "union";
-  printFields(p, getElements());
-}
+void UnionType::print(AsmPrinter &p) const { printFields(p, getElements()); }
 
 Type UnionType::getFieldType(mlir::StringRef fieldName) {
   for (const auto &field : getElements())
@@ -301,7 +295,7 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 // ArrayType
 //===----------------------------------------------------------------------===//
 
-Type ArrayType::parse(DialectAsmParser &p) {
+Type ArrayType::parse(AsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
@@ -320,8 +314,8 @@ Type ArrayType::parse(DialectAsmParser &p) {
   return get(p.getContext(), inner, dims[0]);
 }
 
-void ArrayType::print(DialectAsmPrinter &p) const {
-  p << "array<" << getSize() << "x";
+void ArrayType::print(AsmPrinter &p) const {
+  p << "<" << getSize() << "x";
   printHWElementType(getElementType(), p);
   p << '>';
 }
@@ -337,7 +331,7 @@ LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
 
-Type UnpackedArrayType::parse(DialectAsmParser &p) {
+Type UnpackedArrayType::parse(AsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
@@ -357,8 +351,8 @@ Type UnpackedArrayType::parse(DialectAsmParser &p) {
   return get(p.getContext(), inner, dims[0]);
 }
 
-void UnpackedArrayType::print(DialectAsmPrinter &p) const {
-  p << "uarray<" << getSize() << "x";
+void UnpackedArrayType::print(AsmPrinter &p) const {
+  p << "<" << getSize() << "x";
   printHWElementType(getElementType(), p);
   p << '>';
 }
@@ -375,7 +369,7 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 // InOutType
 //===----------------------------------------------------------------------===//
 
-Type InOutType::parse(DialectAsmParser &p) {
+Type InOutType::parse(AsmParser &p) {
   Type inner;
   if (p.parseLess() || parseHWElementType(inner, p) || p.parseGreater())
     return Type();
@@ -387,8 +381,8 @@ Type InOutType::parse(DialectAsmParser &p) {
   return get(p.getContext(), inner);
 }
 
-void InOutType::print(DialectAsmPrinter &p) const {
-  p << "inout<";
+void InOutType::print(AsmPrinter &p) const {
+  p << "<";
   printHWElementType(getElementType(), p);
   p << '>';
 }
@@ -431,7 +425,7 @@ TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
   return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
 }
 
-Type TypeAliasType::parse(DialectAsmParser &p) {
+Type TypeAliasType::parse(AsmParser &p) {
   SymbolRefAttr ref;
   Type type;
   if (p.parseLess() || p.parseAttribute(ref) || p.parseComma() ||
@@ -441,8 +435,8 @@ Type TypeAliasType::parse(DialectAsmParser &p) {
   return get(ref, type);
 }
 
-void TypeAliasType::print(DialectAsmPrinter &p) const {
-  p << getMnemonic() << "<" << getRef() << ", " << getInnerType() << ">";
+void TypeAliasType::print(AsmPrinter &p) const {
+  p << "<" << getRef() << ", " << getInnerType() << ">";
 }
 
 /// Return the Typedecl referenced by this TypeAlias, given the module to look

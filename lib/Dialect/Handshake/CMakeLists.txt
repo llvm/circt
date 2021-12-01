@@ -1,4 +1,5 @@
 set(HANDSHAKE_SRCS
+  HandshakeExecutableOps.cpp
   HandshakeOps.cpp
   HandshakeDialect.cpp
   )

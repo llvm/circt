@@ -36,8 +36,8 @@
 // CHECK: firrtl.module @test_mux(in %[[VAL_29:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_30:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_31:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_32:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_33:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_34:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_35:.*]]: !firrtl.clock, in %[[VAL_36:.*]]: !firrtl.uint<1>) {
 // CHECK:   %[[VAL_37:.*]], %[[VAL_38:.*]], %[[VAL_39:.*]], %[[VAL_40:.*]] = firrtl.instance handshake_mux0  @handshake_mux_in_ui64_ui64_ui64_out_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG3:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, ...) -> (index, none) {
-  %0 = "handshake.mux"(%arg0, %arg1, %arg2): (index, index, index) -> index
-  handshake.return %0, %arg3 : index, none
+  %0 = mux %arg0 [%arg1, %arg2] : index, index
+  return %0, %arg3 : index, none
 }
 
 // -----
@@ -53,8 +53,8 @@ handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, 
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA3]], %[[MUX1]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX2]]
 handshake.func @test_mux_3way(%arg0: index, %arg1: index, %arg2: index, %arg3: index, %arg4: none, ...) -> (index, none) {
-  %0 = "handshake.mux"(%arg0, %arg1, %arg2, %arg3): (index, index, index, index) -> index
-  handshake.return %0, %arg4 : index, none
+  %0 = mux %arg0 [%arg1, %arg2, %arg3] : index, index
+  return %0, %arg4 : index, none
 }
 
 // -----
@@ -80,8 +80,8 @@ handshake.func @test_mux_3way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // CHECK: %[[MUX7:.+]] = firrtl.mux({{.+}}, %[[MUX6]], %[[MUX5]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX7]]
 handshake.func @test_mux_8way(%arg0: index, %arg1: index, %arg2: index, %arg3: index, %arg4: index, %arg5: index, %arg6: index, %arg7: index, %arg8: index, %arg9: none, ...) -> (index, none) {
-  %0 = "handshake.mux"(%arg0, %arg1, %arg2, %arg3, %arg4, %arg5, %arg6, %arg7, %arg8): (index, index, index, index, index, index, index, index, index) -> index
-  handshake.return %0, %arg9 : index, none
+  %0 = mux %arg0 [%arg1, %arg2, %arg3, %arg4, %arg5, %arg6, %arg7, %arg8] : index, index
+  return %0, %arg9 : index, none
 }
 
 // -----
@@ -101,8 +101,8 @@ handshake.func @test_mux_8way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // CHECK: %[[MUX4:.+]] = firrtl.mux({{.+}}, %[[DATA5]], %[[MUX3]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX4]]
 handshake.func @test_mux_5way(%arg0: index, %arg1: index, %arg2: index, %arg3: index, %arg4: index, %arg5: index, %arg6: none, ...) -> (index, none) {
-  %0 = "handshake.mux"(%arg0, %arg1, %arg2, %arg3, %arg4, %arg5): (index, index, index, index, index, index) -> index
-  handshake.return %0, %arg6 : index, none
+  %0 = mux %arg0 [%arg1, %arg2, %arg3, %arg4, %arg5] : index, index
+  return %0, %arg6 : index, none
 }
 
 // -----
@@ -124,6 +124,6 @@ handshake.func @test_mux_5way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // CHECK: %[[MUX5:.+]] = firrtl.mux({{.+}}, %[[MUX3]], %[[MUX4]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX5]]
 handshake.func @test_mux_6way(%arg0: index, %arg1: index, %arg2: index, %arg3: index, %arg4: index, %arg5: index, %arg6: index, %arg7: none, ...) -> (index, none) {
-  %0 = "handshake.mux"(%arg0, %arg1, %arg2, %arg3, %arg4, %arg5, %arg6): (index, index, index, index, index, index, index) -> index
-  handshake.return %0, %arg7 : index, none
+  %0 = mux %arg0 [%arg1, %arg2, %arg3, %arg4, %arg5, %arg6] : index, index
+  return %0, %arg7 : index, none
 }

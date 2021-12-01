@@ -287,8 +287,9 @@ things will work better together if we keep the compiler consistent.
 First, unlike something like LLVM IR, keep in mind that the HW dialect is a
 model of hardware -- each operation generally corresponds to an instance of
 hardware, it is not an "instruction" that is executed by an imperative CPU.
-As such, the primary concerns are area and latency, not "number of operations
-executed".  As such, here are important concerns that general purpose
+As such, the primary concerns are area and latency (and size of generated
+Verilog), not "number of operations executed".  As such, here are important
+concerns that general purpose
 transformations should consider, ordered from most important to least important.
 
 **Simple transformations are always profitable**
@@ -305,13 +306,19 @@ synthesized design, and often unblock secondary transformations.
 **Reducing widths of non-trivial operations is always profitable**
 
 It is always a good idea to reduce the width of non-trivial operands like add,
-multiply, shift, divide, and, or (etc) since it produces less hardware and
-enables other simplifications.  This is even true if it grows the IR size by
-increasing the number of truncations and extensions in the IR.
+multiply, shift, divide, `and`, `or` (etc) since it produces less hardware and
+enables other simplifications.
 
 That said, it is a bad idea to *duplicate* operations to reduce widths: for
 example, it is better to have one large multiply with many users than to clone
 it because one user only needs some of the output bits.
+
+It is also beneficial to reduce widths, even if it adds a truncations or
+extensions in the IR (because they are "just wires"). However, there are limits:
+any and-by-constant could be lowered to a concat of each bit principle,
+e.g. it is legal to turn `and(x, 9)` into `concat(x[3], 00, x[0])`.  Doing so is
+considered unprofitable though, because it bloats the IR (and generated
+Verilog).
 
 **Don't get overly tricky with divide and remainder**
 
@@ -323,11 +330,16 @@ the result bits).
 
 **Constants and moving bits around is free**
 
-Operations for constants, truncation, zero/sign extension, concatenation of 
-signals, and other similar operations are considered free since they generally
-do not synthesize into hardware.  All things being equal it is good to reduce
-the number of instances of these (to reduce IR size and increase canonical form)
-but it is ok to introduce more of these to improve on other metrics above.
+The following are considered "free" for area and latency concerns:
+
+1) `hw.constant`
+2) concatenation (including zero/sign extension) and truncation
+3) `comb.and` and `comb.or` with a constant.
+4) Other similar operations that do not synthesize into hardware. 
+
+All things being equal it is good to reduce the number of instances of these (to
+reduce IR size and increase canonical form) but it is ok to introduce more of
+these to improve on other metrics above.
 
 **Ordering Concat and Extract**
 

@@ -78,6 +78,11 @@ def InstanceOp : FIRRTLOp<"instance", [
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
+    /// and updates any users of the remaining ports to point at the new
+    /// instance.
+    InstanceOp erasePorts(OpBuilder &builder, ArrayRef<unsigned> portIndices);
   }];
 }
 

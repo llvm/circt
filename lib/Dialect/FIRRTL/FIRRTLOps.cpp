@@ -23,11 +23,13 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FormatVariadic.h"
 
+using llvm::SmallDenseSet;
 using mlir::RegionRange;
 using namespace circt;
 using namespace firrtl;
@@ -862,12 +864,12 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   DictionaryAttr paramDict = paramDictOpt.getValue();
   auto checkParmValue = [&](NamedAttribute elt) -> bool {
-    auto value = elt.second;
+    auto value = elt.getValue();
     if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
         value.isa<FloatAttr>())
       return true;
-    op.emitError() << "has unknown extmodule parameter value '" << elt.first
-                   << "' = " << value;
+    op.emitError() << "has unknown extmodule parameter value '"
+                   << elt.getName().getValue() << "' = " << value;
     return false;
   };
 
@@ -954,6 +956,41 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                builder.getStringAttr(name), module.getPortDirectionsAttr(),
                module.getPortNamesAttr(), builder.getArrayAttr(annotations),
                portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+}
+
+/// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
+/// updates any users of the remaining ports to point at the new instance.
+InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
+                                  ArrayRef<unsigned> portIndices) {
+  if (portIndices.empty())
+    return *this;
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(portDirectionsAttr()), portIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(portNames().getValue(), portIndices);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(portAnnotations().getValue(), portIndices);
+
+  auto newOp = builder.create<InstanceOp>(
+      getLoc(), newResultTypes, moduleName(), name(), newPortDirections,
+      newPortNames, annotations().getValue(), newPortAnnotations, lowerToBind(),
+      inner_symAttr());
+
+  SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
+  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
+       oldIdx != numOldPorts; ++oldIdx) {
+    if (portSet.contains(oldIdx)) {
+      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+      continue;
+    }
+    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
+    ++newIdx;
+  }
+
+  return newOp;
 }
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
@@ -1801,8 +1838,8 @@ LogicalResult impl::inferReturnTypes(
 /// attribute does not exist.
 static Attribute getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
   for (auto attr : attrs)
-    if (attr.first == name)
-      return attr.second;
+    if (attr.getName() == name)
+      return attr.getValue();
   llvm::report_fatal_error("attribute '" + name + "' not found");
 }
 
@@ -1850,9 +1887,6 @@ static ParseResult parseConstantOp(OpAsmParser &parser,
   // APInt as appropriate.
   if (resultType.hasWidth()) {
     auto width = (unsigned)resultType.getWidthOrSentinel();
-    if (width == 0)
-      return parser.emitError(loc, "zero bit constants aren't allowed");
-
     if (width > value.getBitWidth()) {
       // sext is always safe here, even for unsigned values, because the
       // parseOptionalInteger method will return something with a zero in the
@@ -2762,7 +2796,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
   return success();
 }
 

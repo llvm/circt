@@ -24,12 +24,16 @@
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Transforms/Passes.h"
 
 namespace circt {
 
 inline void registerAllPasses() {
   // Conversion Passes
   registerConversionPasses();
+
+  // Transformation passes
+  registerTransformsPasses();
 
   // Standard Passes
   calyx::registerPasses();

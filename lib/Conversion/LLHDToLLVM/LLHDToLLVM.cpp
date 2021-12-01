@@ -697,7 +697,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
         {i8PtrTy, entityStatePtrTy, LLVM::LLVMPointerType::get(sigTy)}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate);
+    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate,
+                                      typeConverter);
 
     OpBuilder bodyBuilder =
         OpBuilder::atBlockBegin(&entityOp.getBlocks().front());
@@ -721,7 +722,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       final.remapInput(i + 3, gep.getResult());
     }
 
-    rewriter.applySignatureConversion(&entityOp.getBody(), final);
+    rewriter.applySignatureConversion(&entityOp.getBody(), final,
+                                      typeConverter);
 
     // Get the converted entity signature.
     auto funcTy = LLVM::LLVMFunctionType::get(
@@ -730,6 +732,10 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     // Create the a new llvm function to house the lowered entity.
     auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(
         op->getLoc(), entityOp.getName(), funcTy);
+
+    // Add a return to the entity for later inclusion into the LLVM function.
+    rewriter.setInsertionPointToEnd(&entityOp.getBlocks().front());
+    rewriter.create<LLVM::ReturnOp>(op->getLoc(), ValueRange{});
 
     // Inline the entity region in the new llvm function.
     rewriter.inlineRegionBefore(entityOp.getBody(), llvmFunc.getBody(),
@@ -744,25 +750,6 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 private:
   size_t &sigCounter;
   size_t &regCounter;
-};
-} // namespace
-
-namespace {
-/// Convert an `"llhd.terminator" operation to `llvm.return`.
-struct TerminatorOpConversion : public ConvertToLLVMPattern {
-  explicit TerminatorOpConversion(MLIRContext *ctx,
-                                  LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::TerminatorOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Just replace the original op with return void.
-    rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, ValueRange());
-
-    return success();
-  }
 };
 } // namespace
 
@@ -811,7 +798,8 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     intermediate.addInputs(procArgTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&procOp.getBody(), intermediate);
+    rewriter.applySignatureConversion(&procOp.getBody(), intermediate,
+                                      typeConverter);
 
     // Get the final signature conversion.
     OpBuilder bodyBuilder =
@@ -2652,8 +2640,8 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
                CombMuxOpConversion>(converter);
 
   // Unit conversion patterns.
-  patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
-               HaltOpConversion>(ctx, converter);
+  patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
+                                                                     converter);
   patterns.add<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.

@@ -31,19 +31,117 @@ using namespace circt;
 using namespace firrtl;
 using mlir::UnitAttr;
 
+/// Split a target into a base target (including a reference if one exists) and
+/// an optional array of subfield/subindex tokens.
+static std::pair<StringRef, llvm::Optional<ArrayAttr>>
+splitTarget(StringRef target, MLIRContext *context) {
+  if (target.empty())
+    return {target, None};
 
-DictionaryAttr cloneWithNewField(DictionaryAttr anno, StringRef field,
-                                 Attribute newValue) {
-  auto context = anno.getContext();
-  SmallVector<NamedAttribute, 4> newAttr;
-  bool found = false;
-  for (auto f : anno) {
-    if (f.first == field) {
-      newAttr.push_back(std::make_pair(f.first, newValue));
-      found = true;
-    } else {
-      newAttr.push_back(f);
-    }
+  // Find the string index where the target can be partitioned into the "base
+  // target" and the "target".  The "base target" is the module or instance and
+  // the "target" is everything else.  This has two variants that need to be
+  // considered:
+  //
+  //   1) A Local target, e.g., ~Foo|Foo>bar.baz
+  //   2) An instance target, e.g., ~Foo|Foo/bar:Bar>baz.qux
+  //
+  // In (1), this should be partitioned into ["~Foo|Foo>bar", ".baz"].  In (2),
+  // this should be partitioned into ["~Foo|Foo/bar:Bar", ">baz.qux"].
+  bool isInstance = false;
+  size_t fieldBegin = target.find_if_not([&isInstance](char c) {
+    switch (c) {
+    case '/':
+      return isInstance = true;
+    case '>':
+      return !isInstance;
+    case '[':
+    case '.':
+      return false;
+    default:
+      return true;
+    };
+  });
+
+  // Exit if the target does not contain a subfield or subindex.
+  if (fieldBegin == StringRef::npos)
+    return {target, None};
+
+  auto targetBase = target.take_front(fieldBegin);
+  target = target.substr(fieldBegin);
+  SmallVector<Attribute> annotationVec;
+  SmallString<16> temp;
+  for (auto c : target.drop_front()) {
+    if (c == ']') {
+      // Create a IntegerAttr with the previous sub-index token.
+      APInt subIndex;
+      if (!temp.str().getAsInteger(10, subIndex))
+        annotationVec.push_back(IntegerAttr::get(IntegerType::get(context, 64),
+                                                 subIndex.getZExtValue()));
+      else
+        // We don't have a good way to emit error here. This will be reported as
+        // an error in the FIRRTL parser.
+        annotationVec.push_back(StringAttr::get(context, temp));
+      temp.clear();
+    } else if (c == '[' || c == '.') {
+      // Create a StringAttr with the previous token.
+      if (!temp.empty())
+        annotationVec.push_back(StringAttr::get(context, temp));
+      temp.clear();
+    } else
+      temp.push_back(c);
+  }
+  // Save the last token.
+  if (!temp.empty())
+    annotationVec.push_back(StringAttr::get(context, temp));
+
+  return {targetBase, ArrayAttr::get(context, annotationVec)};
+}
+
+/// Split out non-local paths.  This will return a set of target strings for
+/// each named entity along the path.
+/// c|c:ai/Am:bi/Bm>d.agg[3] ->
+/// c|c>ai, c|Am>bi, c|Bm>d.agg[2]
+static SmallVector<std::tuple<std::string, StringRef, StringRef>>
+expandNonLocal(StringRef target) {
+  SmallVector<std::tuple<std::string, StringRef, StringRef>> retval;
+  StringRef circuit;
+  std::tie(circuit, target) = target.split('|');
+  while (target.count(':')) {
+    StringRef nla;
+    std::tie(nla, target) = target.split(':');
+    StringRef inst, mod;
+    std::tie(mod, inst) = nla.split('/');
+    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod, inst);
+  }
+  if (target.empty()) {
+    retval.emplace_back(circuit.str(), "", "");
+  } else {
+
+    StringRef mod, name;
+    // remove aggregate
+    auto targetBase =
+        target.take_until([](char c) { return c == '.' || c == '['; });
+    std::tie(mod, name) = targetBase.split('>');
+    if (name.empty())
+      name = mod;
+    retval.emplace_back((circuit + "|" + target).str(), mod, name);
+  }
+  return retval;
+}
+
+/// Make an anchor for a non-local annotation.  Use the expanded path to build
+/// the module and name list in the anchor.
+static FlatSymbolRefAttr
+buildNLA(CircuitOp circuit, size_t nlaSuffix,
+         SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
+  OpBuilder b(circuit.getBodyRegion());
+  SmallVector<Attribute> mods;
+  SmallVector<Attribute> insts;
+  for (auto &nla : nlas) {
+    mods.push_back(
+        FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(nla)));
+    insts.push_back(StringAttr::get(circuit.getContext(), std::get<2>(nla)));
   }
   if (!found)
     newAttr.emplace_back(Identifier::get("target", context),
@@ -853,11 +951,11 @@ scatterOMIR(Attribute original, unsigned &annotationID,
       .Case<DictionaryAttr>([&](DictionaryAttr dict) -> Optional<Attribute> {
         NamedAttrList newAttrs;
         for (auto pairs : dict) {
-          auto maybeValue = scatterOMIR(pairs.second, annotationID,
+          auto maybeValue = scatterOMIR(pairs.getValue(), annotationID,
                                         newAnnotations, circuit, nlaNumber);
           if (!maybeValue)
             return None;
-          newAttrs.append(pairs.first, maybeValue.getValue());
+          newAttrs.append(pairs.getName(), maybeValue.getValue());
         }
         return DictionaryAttr::get(ctx, newAttrs);
       })
@@ -911,7 +1009,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
   FileLineColLoc fileLineColLocCache;
 
   // Convert location from a string to a location attribute.
@@ -980,7 +1078,7 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
   FileLineColLoc fileLineColLocCache;
 
   // Convert the location from a string to a location attribute.

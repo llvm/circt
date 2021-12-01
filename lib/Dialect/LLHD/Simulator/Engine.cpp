@@ -38,7 +38,7 @@ Engine::Engine(
 
   // Insert explicit instantiation of the design root.
   OpBuilder insertInst =
-      OpBuilder::atBlockTerminator(&rootEntity.getBody().getBlocks().front());
+      OpBuilder::atBlockEnd(&rootEntity.getBody().getBlocks().front());
   insertInst.create<InstOp>(rootEntity.getBlocks().front().back().getLoc(),
                             llvm::None, root, root, ArrayRef<Value>(),
                             ArrayRef<Value>());
@@ -100,7 +100,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
   for (size_t i = 0, e = state->instances.size(); i < e; ++i) {
     wakeupQueue.push_back(i);
     auto &inst = state->instances[i];
-    auto expectedFPtr = engine->lookup(inst.unit);
+    auto expectedFPtr = engine->lookupPacked(inst.unit);
     if (!expectedFPtr) {
       llvm::errs() << "Could not lookup " << inst.unit << "!\n";
       return -1;

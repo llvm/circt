@@ -213,7 +213,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
 def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
-    See the HW-SV rationale document for details on operand ordering.
+    See the comb rationale document for details on operand ordering.
   }];
 
   let hasFolder = true;

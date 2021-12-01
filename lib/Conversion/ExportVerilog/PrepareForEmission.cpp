@@ -10,6 +10,11 @@
 // gets involved.  This allows us to do some transformations that would be
 // awkward to implement inline in the emitter.
 //
+// NOTE: This file covers the preparation phase of `ExportVerilog` which mainly
+// legalizes the IR and makes adjustments necessary for emission. This is the
+// place to mutate the IR if emission needs it. The IR cannot be modified during
+// emission itself, which happens in parallel.
+//
 //===----------------------------------------------------------------------===//
 
 #include "ExportVerilogInternals.h"
@@ -284,13 +289,14 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   Operation *parentOp = findParentInNonProceduralRegion(op);
   OpBuilder builder(parentOp);
   auto reg = builder.create<RegOp>(op->getLoc(), opValue.getType());
-  builder.setInsertionPointAfter(op);
 
-  // Everything using the expr now uses the reg.
+  // Everything using the expr now uses a read_inout of the reg.
   auto value = builder.create<ReadInOutOp>(op->getLoc(), reg);
   opValue.replaceAllUsesWith(value);
 
-  // We assign the side effect expr to the reg.
+  // We assign the side effect expr to the reg immediately after that expression
+  // is computed.
+  builder.setInsertionPointAfter(op);
   builder.create<BPAssignOp>(op->getLoc(), reg, opValue);
   return true;
 }
@@ -347,18 +353,24 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
                                     const LoweringOptions &options) {
-  // True if these operations are in a procedural region.
-  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
 
-  for (Block::iterator opIterator = block.begin(), e = block.end();
-       opIterator != e;) {
-    auto &op = *opIterator++;
-
+  // First step, check any nested blocks that exist in this region.  This walk
+  // can pull things out to our level of the hierarchy.
+  for (auto &op : block) {
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
         prepareHWModule(region.front(), options);
     }
+  }
+
+  // Next, walk all of the operations at this level.
+
+  // True if these operations are in a procedural region.
+  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+  for (Block::iterator opIterator = block.begin(), e = block.end();
+       opIterator != e;) {
+    auto &op = *opIterator++;
 
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple

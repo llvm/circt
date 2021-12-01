@@ -254,7 +254,11 @@ static void addAnnotation(AnnoPathValue ref, ArrayRef<NamedAttribute> anno) {
   if (ref.getField()) {
     SmallVector<NamedAttribute> annoField(anno.begin(), anno.end());
     annoField.emplace_back(
+<<<<<<< HEAD
         Identifier::get("circt.fieldID", ref.getOp()->getContext()),
+=======
+        StringAttr::get("circt.fieldID", ref.op->getContext()),
+>>>>>>> origin/main
         IntegerAttr::get(
             IntegerType::get(ref.getOp()->getContext(), 32, IntegerType::Signless),
             ref.getField()));
@@ -614,13 +618,14 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
     state.circuit.emitError("No target field in annotation ") << anno;
     return {};
   }
-  if (!target->second.isa<StringAttr>()) {
+  if (!target->getValue().isa<StringAttr>()) {
     state.circuit.emitError(
         "Target field in annotation doesn't contain string ")
         << anno;
     return {};
   }
-  return stdResolveImpl(target->second.cast<StringAttr>().getValue(), state);
+  return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
+                        state);
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
@@ -628,7 +633,8 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
                                           AnnoApplyState state) {
   auto target = anno.getNamed("target");
   if (target)
-    return stdResolveImpl(target->second.cast<StringAttr>().getValue(), state);
+    return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
+                          state);
   return AnnoPathValue(state.circuit);
 }
 
@@ -646,12 +652,12 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
     return failure();
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno) {
-    if (na.first != "target") {
+    if (na.getName() != "target") {
       newAnnoAttrs.push_back(na);
     } else if (!target.isLocal()) {
       auto sym = scatterNonLocalPath(target, state);
       newAnnoAttrs.push_back(
-          {Identifier::get("circt.nonlocal", anno.getContext()), sym});
+          {StringAttr::get("circt.nonlocal", anno.getContext()), sym});
     }
   }
   addAnnotation(target, newAnnoAttrs);
@@ -754,7 +760,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   // Lookup the class
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
-    annoClassVal = annoClass->second.cast<StringAttr>().getValue();
+    annoClassVal = annoClass->getValue().cast<StringAttr>().getValue();
   else if (ignoreClasslessAnno)
     annoClassVal = "circt.missing";
   else

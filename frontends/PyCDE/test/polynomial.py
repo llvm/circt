@@ -156,6 +156,11 @@ poly.print()
 
 poly.emit_outputs()
 
+# OUTPUT-LABEL: `ifndef __PYCDE_TYPES__
+# OUTPUT: `define __PYCDE_TYPES__
+# OUTPUT: typedef struct packed {logic a; } exTypedef;
+# OUTPUT: `endif // __PYCDE_TYPES__
+
 # OUTPUT-LABEL:   module PolyComputeForCoeff_62_42_6(
 # OUTPUT:    input  [31:0] x,
 # OUTPUT:    output [31:0] y);
