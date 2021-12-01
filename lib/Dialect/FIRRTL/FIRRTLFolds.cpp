@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Support/APInt.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -105,7 +106,7 @@ static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
 
   // Extension signedness follows the operand sign.
   if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>())
-    return result.getAPSInt().extOrTrunc(destWidth);
+    return extOrTruncZeroWidth(result.getAPSInt(), destWidth);
 
   // If the operand is zero bits, then we can return a zero of the result
   // type.
@@ -344,8 +345,10 @@ OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
                                  [=](APSInt a, APSInt b) -> APInt {
-                                   return getType().isUnsigned() ? a.lshr(b)
-                                                                 : a.ashr(b);
+                                   return getType().isUnsigned() ||
+                                                  !a.getBitWidth()
+                                              ? a.lshr(b)
+                                              : a.ashr(b);
                                  });
 }
 
@@ -469,8 +472,7 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // leq(x, const) -> 0 where const < minValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .slt(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
@@ -483,8 +485,7 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // leq(x, const) -> 1 where const >= maxValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .sge(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -523,10 +524,8 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
       // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
       // Handled explicitly above.
 
-      // lt(x, const) -> 0 where const <= minValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .sle(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
@@ -539,8 +538,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // lt(x, const) -> 1 where const > maxValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .sgt(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -585,8 +583,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // geq(x, const) -> 0 where const > maxValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .sgt(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
@@ -595,8 +592,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // geq(x, const) -> 1 where const <= minValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .sle(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -635,8 +631,7 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // gt(x, const) -> 0 where const >= maxValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .sge(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
@@ -645,8 +640,7 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // gt(x, const) -> 1 where const < minValue of the signed type of x
       if (!isUnsigned &&
-          rhsCst.getValue()
-              .sextOrSelf(commonWidth)
+          sextOrSelfZeroWidth(rhsCst.getValue(), commonWidth)
               .slt(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -920,9 +914,9 @@ OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
     if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
       auto destWidth = getType().getWidthOrSentinel();
-      APInt tmp1 = lhs.getValue().zext(destWidth)
+      APInt tmp1 = lhs.getValue().zextOrSelf(destWidth)
                    << rhs.getValue().getBitWidth();
-      APInt tmp2 = rhs.getValue().zext(destWidth);
+      APInt tmp2 = rhs.getValue().zextOrSelf(destWidth);
       return getIntAttr(getType(), tmp1 | tmp2);
     }
 
@@ -1150,7 +1144,7 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
     if (destWidth == -1)
       return {};
 
-    if (inputType.isSigned())
+    if (inputType.isSigned() && cst.getValue().getBitWidth())
       return getIntAttr(getType(), cst.getValue().sext(destWidth));
     return getIntAttr(getType(), cst.getValue().zext(destWidth));
   }
