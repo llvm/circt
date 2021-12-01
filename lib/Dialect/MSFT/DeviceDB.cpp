@@ -113,8 +113,8 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
                                   mlir::Operation *op) {
   size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
-    StringRef attrName = attr.first;
-    llvm::TypeSwitch<Attribute>(attr.second)
+    StringRef attrName = attr.getName();
+    llvm::TypeSwitch<Attribute>(attr.getValue())
 
         // Handle switch instance.
         .Case([&](SwitchInstanceAttr instSwitch) {

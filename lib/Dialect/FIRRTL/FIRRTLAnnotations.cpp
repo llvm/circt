@@ -115,11 +115,11 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   ArrayRef<NamedAttribute>::iterator it;
   if (sorted) {
     it = llvm::lower_bound(attrs, key);
-    if (it != attrs.end() && it->first != key)
+    if (it != attrs.end() && it->getName() != key)
       it = attrs.end();
   } else {
     it = llvm::find_if(
-        attrs, [key](NamedAttribute attr) { return attr.first == key; });
+        attrs, [key](NamedAttribute attr) { return attr.getName() == key; });
   }
 
   // Fast path in case there are no annotations in the dictionary and we are not
@@ -130,7 +130,7 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   // Fast path in case there already is an entry in the dictionary, it matches
   // the set, and, in the case we're supposed to remove empty sets, we're not
   // leaving an empty entry in the dictionary.
-  if (it != attrs.end() && it->second == annoSet.getArrayAttr() &&
+  if (it != attrs.end() && it->getValue() == annoSet.getArrayAttr() &&
       !annoSet.empty())
     return originalDict;
 
@@ -140,7 +140,7 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   newAttrs.append(attrs.begin(), it);
   if (!annoSet.empty())
     newAttrs.push_back(
-        {Identifier::get(key, annoSet.getContext()), annoSet.getArrayAttr()});
+        {StringAttr::get(key, annoSet.getContext()), annoSet.getArrayAttr()});
   if (it != attrs.end())
     newAttrs.append(it + 1, attrs.end());
   return sorted ? DictionaryAttr::getWithSorted(annoSet.getContext(), newAttrs)
@@ -226,7 +226,7 @@ bool AnnotationSet::addDontTouch() {
   if (hasDontTouch())
     return false;
   addAnnotations(DictionaryAttr::get(
-      getContext(), {{Identifier::get("class", getContext()),
+      getContext(), {{StringAttr::get("class", getContext()),
                       StringAttr::get(getContext(), dontTouchAnnoClass)}}));
   return true;
 }

@@ -469,12 +469,12 @@ void handshake::FuncOp::build(OpBuilder &builder, OperationState &state,
   state.attributes.append(attrs.begin(), attrs.end());
 
   if (const auto *argNamesAttrIt = llvm::find_if(
-          attrs, [&](auto attr) { return attr.first == "argNames"; });
+          attrs, [&](auto attr) { return attr.getName() == "argNames"; });
       argNamesAttrIt == attrs.end())
     state.addAttribute("argNames", builder.getArrayAttr({}));
 
   if (llvm::find_if(attrs, [&](auto attr) {
-        return attr.first == "resNames";
+        return attr.getName() == "resNames";
       }) == attrs.end())
     state.addAttribute("resNames", builder.getArrayAttr({}));
 

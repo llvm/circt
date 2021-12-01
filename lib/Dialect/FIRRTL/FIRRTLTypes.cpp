@@ -35,13 +35,13 @@ using mlir::TypeStorageAllocator;
 // Type Printing
 //===----------------------------------------------------------------------===//
 
-static void printType(Type type, DialectAsmPrinter &os);
+static void printType(Type type, AsmPrinter &os);
 
 /// Print a type with a custom printer implementation.
 ///
 /// This only prints a subset of all types in the dialect. Use `printType`
 /// instead, which will call this function in turn, as appropriate.
-static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &os) {
+static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
   auto printWidthQualifier = [&](Optional<int32_t> width) {
     if (width)
       os << '<' << width.getValue() << '>';
@@ -85,7 +85,7 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &os) {
 }
 
 /// Print a type defined by this dialect.
-static void printType(Type type, DialectAsmPrinter &os) {
+static void printType(Type type, AsmPrinter &os) {
   // Try the generated type printer.
   if (succeeded(generatedTypePrinter(type, os)))
     return;
@@ -102,8 +102,7 @@ static void printType(Type type, DialectAsmPrinter &os) {
 // Type Parsing
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseFIRRTLType(FIRRTLType &result,
-                                   DialectAsmParser &parser);
+static ParseResult parseFIRRTLType(FIRRTLType &result, AsmParser &parser);
 
 /// Parse a type with a custom parser implementation.
 ///
@@ -127,8 +126,8 @@ static ParseResult parseFIRRTLType(FIRRTLType &result,
 ///
 /// bundle-elt ::= identifier ':' type
 /// ```
-static OptionalParseResult customTypeParser(DialectAsmParser &parser,
-                                            StringRef name, Type &result) {
+static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
+                                            Type &result) {
   auto *context = parser.getContext();
   if (name.equals("clock"))
     return result = ClockType::get(context), success();
@@ -217,8 +216,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
 /// This will first try the generated type parsers and then resort to the custom
 /// parser implementation. Emits an error and returns failure if `name` does not
 /// refer to a type defined in this dialect.
-static ParseResult parseType(Type &result, StringRef name,
-                             DialectAsmParser &parser) {
+static ParseResult parseType(Type &result, StringRef name, AsmParser &parser) {
   OptionalParseResult parseResult;
 
   // Try the generated type parser.
@@ -242,7 +240,7 @@ static ParseResult parseType(Type &result, StringRef name,
 /// Note that only a subset of types defined in the FIRRTL dialect inherit from
 /// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
 static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
-                                   DialectAsmParser &parser) {
+                                   AsmParser &parser) {
   Type type;
   if (failed(parseType(type, name, parser)))
     return failure();
@@ -258,8 +256,7 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
 ///
 /// Note that only a subset of types defined in the FIRRTL dialect inherit from
 /// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
-static ParseResult parseFIRRTLType(FIRRTLType &result,
-                                   DialectAsmParser &parser) {
+static ParseResult parseFIRRTLType(FIRRTLType &result, AsmParser &parser) {
   StringRef name;
   if (parser.parseKeyword(&name))
     return failure();
@@ -965,14 +962,14 @@ std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
 // CMemory Type
 //===----------------------------------------------------------------------===//
 
-void CMemoryType::print(mlir::DialectAsmPrinter &printer) const {
-  printer << "cmemory<";
+void CMemoryType::print(AsmPrinter &printer) const {
+  printer << "<";
   // Don't print element types with "!firrtl.".
   printType(getElementType(), printer);
   printer << ", " << getNumElements() << ">";
 }
 
-Type CMemoryType::parse(DialectAsmParser &parser) {
+Type CMemoryType::parse(AsmParser &parser) {
   FIRRTLType elementType;
   unsigned numElements;
   if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
