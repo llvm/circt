@@ -199,6 +199,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
 
   let extraClassDeclaration = [{
     Block &getBodyBlock() { return body().front(); }
+    unsigned getStageNumber();
   }];
 }
 

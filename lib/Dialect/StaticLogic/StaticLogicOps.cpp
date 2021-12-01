@@ -208,6 +208,18 @@ static LogicalResult verifyPipelineRegisterOp(PipelineRegisterOp op) {
   return success();
 }
 
+unsigned PipelineStageOp::getStageNumber() {
+  unsigned number = 0;
+  auto *op = getOperation();
+  auto parent = op->getParentOfType<PipelineWhileOp>();
+  Operation *stage = &parent.getStagesBlock().front();
+  while (stage != op && stage->getNextNode()) {
+    ++number;
+    stage = stage->getNextNode();
+  }
+  return number;
+}
+
 //===----------------------------------------------------------------------===//
 // PipelineTerminatorOp
 //===----------------------------------------------------------------------===//
