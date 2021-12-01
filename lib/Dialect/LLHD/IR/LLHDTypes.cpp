@@ -25,61 +25,6 @@ using namespace circt::llhd;
 #include "circt/Dialect/LLHD/IR/LLHDAttributes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// Helpers
-//===----------------------------------------------------------------------===//
-
-/// Parse a nested type, enclosed in angle brackts (`<...>`).
-static Type parseNestedType(AsmParser &parser) {
-  Type underlyingType;
-  if (parser.parseLess())
-    return Type();
-
-  llvm::SMLoc loc = parser.getCurrentLocation();
-  if (parser.parseType(underlyingType)) {
-    parser.emitError(loc, "No signal type found. Signal needs an underlying "
-                          "type.");
-    return nullptr;
-  }
-
-  if (parser.parseGreater())
-    return Type();
-
-  return underlyingType;
-}
-
-//===----------------------------------------------------------------------===//
-// Signal Type
-//===----------------------------------------------------------------------===//
-
-/// Parse a signal type.
-/// Syntax: sig ::= !llhd.sig<type>
-Type SigType::parse(AsmParser &p) {
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), parseNestedType(p));
-}
-
-void SigType::print(AsmPrinter &p) const {
-  p << "<" << getUnderlyingType() << '>';
-}
-
-//===----------------------------------------------------------------------===//
-// Pointer Type
-//===----------------------------------------------------------------------===//
-
-/// Parse a pointer type.
-/// Syntax: ptr ::= !llhd.ptr<type>
-Type PtrType::parse(AsmParser &p) {
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                    p.getContext(), parseNestedType(p));
-}
-
-void PtrType::print(AsmPrinter &p) const {
-  p << "<" << getUnderlyingType() << '>';
-}
-
-//===----------------------------------------------------------------------===//
 // Time Attribute
 //===----------------------------------------------------------------------===//
 

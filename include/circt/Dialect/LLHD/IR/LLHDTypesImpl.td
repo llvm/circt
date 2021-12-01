@@ -28,8 +28,8 @@ def SigTypeImpl : LLHDType<"Sig"> {
 
   let mnemonic = "sig";
   let parameters = (ins "::mlir::Type":$underlyingType);
+  let assemblyFormat = "`<` $underlyingType `>`";
 
-  let skipDefaultBuilders = 1;
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::Type":$underlyingType), [{
       return $_get(underlyingType.getContext(), underlyingType);
@@ -47,8 +47,8 @@ def PtrTypeImpl : LLHDType<"Ptr"> {
 
   let mnemonic = "ptr";
   let parameters = (ins "::mlir::Type":$underlyingType);
+  let assemblyFormat = "`<` $underlyingType `>`";
 
-  let skipDefaultBuilders = 1;
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::Type":$underlyingType), [{
       return $_get(underlyingType.getContext(), underlyingType);
