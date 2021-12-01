@@ -10,11 +10,22 @@
 //
 //===----------------------------------------------------------------------===//
 
+def VariableDeclOp : MIROp<"vardecl", []> {
+  let summary = "A variable declaration";
+
+  let arguments = (ins StrAttr:$name, I32Attr:$init);
+  let results = (outs MooreLValueType:$result);
+  let assemblyFormat = "$name `=` $init attr-dict `:` type($result)";
+}
+
 //===----------------------------------------------------------------------===//
 // Assignment Statements
 //===----------------------------------------------------------------------===//
 
-def AssignOp : MIROp<"assign", []> {
+def AssignOp : MIROp<"assign",
+    [TypesMatchWith<"src and dest types have to match", "src", "dest",
+     "LValueType::get($_self.cast<RValueType>().getNestedType())">]> {
+
   let summary = "Continuous assignment";
   let description = [{
     A SystemVerilog assignment statement 'x = y;'.
