@@ -1903,7 +1903,7 @@ firrtl.module @constReg(in %clock: !firrtl.clock,
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:  %[[C11:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-  // CHECK:  firrtl.connect %out, %[[C11]] 
+  // CHECK:  firrtl.connect %out, %[[C11]]
 }
 
 // CHECK-LABEL: firrtl.module @constReg
@@ -1920,7 +1920,7 @@ firrtl.module @constReg2(in %clock: !firrtl.clock,
   %2 = firrtl.xor %r1, %r2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:  %[[C12:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-  // CHECK:  firrtl.connect %out, %[[C12]] 
+  // CHECK:  firrtl.connect %out, %[[C12]]
 }
 
 // CHECK-LABEL: firrtl.module @constReg3
@@ -1991,7 +1991,7 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
 
 // CHECK-LABEL: firrtl.module @namedrop
 firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  // CHECK-NOT: _T_ 
+  // CHECK-NOT: _T_
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %_T_0 = firrtl.node %in : !firrtl.uint<1>
   %_T_1 = firrtl.wire : !firrtl.uint<1>
