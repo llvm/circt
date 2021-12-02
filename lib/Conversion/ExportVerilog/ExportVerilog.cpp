@@ -105,6 +105,36 @@ static Attribute getInt32Attr(MLIRContext *ctx, uint32_t value) {
   return Builder(ctx).getI32IntegerAttr(value);
 }
 
+/// Given an expression that is spilled into a temporary wire, try to synthesize
+/// a better name than "_T_42" based on the structure of the expression.
+static StringAttr inferStructuralNameForTemporary(Value expr) {
+  StringAttr result;
+
+  // Generate a pretty name for VerbatimExpr's that look macro-like using the
+  // same logic that generates the MLIR syntax name.
+  if (auto verbatim = expr.getDefiningOp<VerbatimExprOp>()) {
+    verbatim.getAsmResultNames([&](Value, StringRef name) {
+      result = StringAttr::get(expr.getContext(), name);
+    });
+  }
+  if (auto verbatim = expr.getDefiningOp<VerbatimExprSEOp>()) {
+    verbatim.getAsmResultNames([&](Value, StringRef name) {
+      result = StringAttr::get(expr.getContext(), name);
+    });
+  }
+
+  // TODO: handle other common patterns.
+
+  // Make sure any synthesized name starts with an _.
+  if (!result || result.strref().empty())
+    return {};
+
+  if (result.strref().front() != '_')
+    result = StringAttr::get(expr.getContext(), "_" + result.strref());
+
+  return result;
+}
+
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
 /// a temporary wire.
@@ -1503,7 +1533,10 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
          "Should only be called on expressions thought to be inlined");
 
   emitter.outOfLineExpressions.insert(op);
-  names.addName(op->getResult(0), "_tmp");
+  if (auto name = inferStructuralNameForTemporary(op->getResult(0)))
+    names.addName(op->getResult(0), name);
+  else
+    names.addName(op->getResult(0), "_tmp");
 
   // Remember that this subexpr needs to be emitted independently.
   tooLargeSubExpressions.push_back(op);
@@ -2147,7 +2180,13 @@ void NameCollector::collectNames(Block &block) {
         // case we end up spilling this.
         // FIXME: This is highly unprincipled and should be removed.
         //   https://github.com/llvm/circt/issues/1752
-        names.addName(result, op.getAttrOfType<StringAttr>("name"));
+        auto nameAttr = op.getAttrOfType<StringAttr>("name");
+
+        // If we don't have a specified pretty name, try to infer a name from
+        // the structure of the expression.
+        if (!nameAttr)
+          nameAttr = inferStructuralNameForTemporary(result);
+        names.addName(result, nameAttr);
 
         // Don't measure or emit wires that are emitted inline (i.e. the wire
         // definition is emitted on the line of the expression instead of a
