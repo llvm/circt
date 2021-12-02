@@ -2219,12 +2219,13 @@ void NameCollector::collectNames(Block &block) {
         // Remember that this expression should be emitted out of line.
         moduleEmitter.outOfLineExpressions.insert(&op);
 
-        // Since this will be used out-of-line, we'll need a name for it.  If
-        // this expression has a random "name" attribute, keep track of it in
-        // case we end up spilling this.
-        // FIXME: This is highly unprincipled and should be removed.
-        //   https://github.com/llvm/circt/issues/1752
-        auto nameAttr = op.getAttrOfType<StringAttr>("name");
+        // Use a dialect (sv) attribute to get a hint for the name if all else
+        // fails.
+        auto nameAttr = op.getAttrOfType<StringAttr>("sv.namehint");
+        // Add '_' to namehint if it's not already there.
+        if (nameAttr && !nameAttr.getValue().startswith("_"))
+          nameAttr =
+              StringAttr::get(op.getContext(), "_" + nameAttr.getValue());
 
         // If we don't have a specified pretty name, try to infer a name from
         // the structure of the expression.
