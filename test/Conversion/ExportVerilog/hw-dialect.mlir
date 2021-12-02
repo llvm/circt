@@ -70,6 +70,9 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %subArr = hw.array_create %allone, %ab, %allone : i4
   %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
 
+  // Having "sv.namehint" (and checking that it works) anywhere will inherently
+  // make tests brittle. This line breaking does not mean your change is no
+  // good! You'll just have to find a new place for `sv.namehint`.
   %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
   %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
 
