@@ -2037,8 +2037,8 @@ firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in
 // Issue #2197
 // CHECK-LABEL: @Issue2197
 firrtl.module @Issue2197(in %clock: !firrtl.clock, out %x: !firrtl.uint<2>) {
-  // CHECK: [[TMP:%.+]] = firrtl.invalidvalue : !firrtl.uint<2>
-  // CHECK-NEXT: firrtl.connect %x, [[TMP]] : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK: [[ZERO:%.+]] = firrtl.constant 0 : !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.connect %x, [[ZERO]] : !firrtl.uint<2>, !firrtl.uint<2>
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   %reg = firrtl.reg %clock : !firrtl.uint<2>
   %0 = firrtl.pad %invalid_ui1, 2 : (!firrtl.uint<1>) -> !firrtl.uint<2>
