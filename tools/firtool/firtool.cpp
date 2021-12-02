@@ -128,6 +128,12 @@ static cl::opt<std::string>
     replSeqMemFile("repl-seq-mem-file",
                    cl::desc("file name for seq mem metadata"), cl::init(""));
 
+static cl::opt<bool>
+    ignoreReadEnableMem("ignore-read-enable-mem",
+                        cl::desc("ignore the read enable signal, instead of "
+                                 "assigning X on read disable"),
+                        cl::init(false));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -415,7 +421,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputSplitVerilog || outputFormat == OutputVerilogIR) {
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
                                          nonConstAsyncResetValueIsError));
-    pm.addPass(sv::createHWMemSimImplPass(replSeqMem));
+    pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
     if (extractTestCode)
       pm.addPass(sv::createSVExtractTestCodePass());

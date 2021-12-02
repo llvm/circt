@@ -46,7 +46,10 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
 public:
-  HWMemSimImplPass(bool e) { replSeqMem = e; }
+  HWMemSimImplPass(bool e, bool ignoreEn) {
+    replSeqMem = e;
+    ignoreReadEnableMem = ignoreEn;
+  }
 
 private:
   void generateMemory(HWModuleOp op, FirMemory mem);
@@ -121,10 +124,12 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     addr = addPipelineStages(b, mem.readLatency, clock, addr);
 
     // Read Logic
-    Value ren =
+    Value rdata =
         b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
-    Value x = b.create<sv::ConstantXOp>(ren.getType());
-    Value rdata = b.create<comb::MuxOp>(en, ren, x);
+    if (!ignoreReadEnableMem) {
+      Value x = b.create<sv::ConstantXOp>(rdata.getType());
+      rdata = b.create<comb::MuxOp>(en, rdata, x);
+    }
     outputs.push_back(rdata);
   }
 
@@ -305,6 +310,7 @@ void HWMemSimImplPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(bool replSeqMem) {
-  return std::make_unique<HWMemSimImplPass>(replSeqMem);
+std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(bool replSeqMem,
+                                                        bool ignoreReadEnable) {
+  return std::make_unique<HWMemSimImplPass>(replSeqMem, ignoreReadEnable);
 }

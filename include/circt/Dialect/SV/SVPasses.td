@@ -95,7 +95,10 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
 
   let options = [
     Option<"replSeqMem", "repl-seq-mem", "bool",
-                "false", "Prepare seq mems for macro replacement">
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnableMem", "ignore-read-enable-mem", "bool",
+                "false",
+    "ignore the read enable signal, instead of assigning X on read disable">
    ];
 }
 
