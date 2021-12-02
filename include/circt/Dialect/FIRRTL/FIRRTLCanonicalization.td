@@ -62,6 +62,9 @@ def IsInvalid : Constraint<
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
 
+def GetZeroConstant : NativeCodeCall<
+  "$_builder.create<ConstantOp>($0.getLoc(), APSInt($0.getType().cast<FIRRTLType>().getBitWidthOrSentinel()))">;
+
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
   (LEQPrimOp (ConstantOp:$lhs $_), $rhs),
@@ -152,10 +155,10 @@ def SubWithInvalidOp : Pat<
     (KnownWidth $x), (IsInvalid $y)
   ]>;
 
-// pad(invalid, width) -> invalid
+// pad(invalid, width) -> zero<width>
 def PadInvalid : Pat<
-  (PadPrimOp (InvalidValueOp), $_),
-  (InvalidValueOp), []>;
+  (PadPrimOp:$result (InvalidValueOp), $_),
+  (GetZeroConstant $result), []>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // DontTouch application
