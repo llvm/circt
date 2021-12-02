@@ -6,7 +6,7 @@ import os
 
 
 # PyCDE needs a custom version of this to support python classes.
-def var_to_attribute(obj) -> ir.Attribute:
+def _obj_to_attribute(obj) -> ir.Attribute:
   """Create an MLIR attribute from a Python object for a few common cases."""
   if obj is None:
     return ir.BoolAttr.get(False)
@@ -22,15 +22,15 @@ def var_to_attribute(obj) -> ir.Attribute:
   if isinstance(obj, str):
     return ir.StringAttr.get(obj)
   if isinstance(obj, list) or isinstance(obj, tuple):
-    arr = [var_to_attribute(x) for x in obj]
+    arr = [_obj_to_attribute(x) for x in obj]
     if all(arr):
       return ir.ArrayAttr.get(arr)
   if isinstance(obj, dict):
-    attrs = {name: var_to_attribute(value) for name, value in obj.items()}
+    attrs = {name: _obj_to_attribute(value) for name, value in obj.items()}
     return ir.DictAttr.get(attrs)
   if hasattr(obj, "__dict__"):
     attrs = {
-        name: var_to_attribute(value) for name, value in obj.__dict__.items()
+        name: _obj_to_attribute(value) for name, value in obj.__dict__.items()
     }
     return ir.DictAttr.get(attrs)
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute. "
@@ -66,11 +66,11 @@ class OpOperandConnect(support.OpOperand):
   """An OpOperand pycde extension which adds a connect method."""
 
   def connect(self, obj, result_type=None):
-    val = obj_to_value(obj, self.type, result_type)
+    val = _obj_to_value(obj, self.type, result_type)
     support.connect(self, val)
 
 
-def obj_to_value(x, type, result_type=None):
+def _obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
   assert x is not None
   from .value import Value
@@ -78,7 +78,7 @@ def obj_to_value(x, type, result_type=None):
 
   type = support.type_to_pytype(type)
   if isinstance(type, hw.TypeAliasType):
-    return obj_to_value(x, type.inner_type, type)
+    return _obj_to_value(x, type.inner_type, type)
 
   if result_type is None:
     result_type = type
@@ -106,7 +106,7 @@ def obj_to_value(x, type, result_type=None):
     if len(x) != type.size:
       raise ValueError("List must have same size as array "
                        f"{len(x)} vs {type.size}")
-    list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
+    list_of_vals = list(map(lambda x: _obj_to_value(x, elemty), x))
     # CIRCT's ArrayCreate op takes the array in reverse order.
     with get_user_loc():
       return hw.ArrayCreateOp(reversed(list_of_vals))
@@ -119,7 +119,7 @@ def obj_to_value(x, type, result_type=None):
     for (fname, ftype) in fields:
       if fname not in x:
         raise ValueError(f"Could not find expected field: {fname}")
-      elem_name_values.append((fname, obj_to_value(x[fname], ftype)))
+      elem_name_values.append((fname, _obj_to_value(x[fname], ftype)))
       x.pop(fname)
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")

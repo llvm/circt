@@ -25,4 +25,17 @@ def FlattenMemRef : Pass<"flatten-memref", "ModuleOp"> {
   let dependentDialects = ["memref::MemRefDialect"];
 }
 
+def FlattenMemRefCalls : Pass<"flatten-memref-calls", "ModuleOp"> {
+  let summary = "Flatten memref calls";
+  let description = [{
+    Flattens calls to functions which have multidimensional memrefs as arguments.
+    This is done by casting memref arguments through memref.subview operations.
+    Any called functions which had their type signatures changes will be replaced
+    by a private function definition with the new signature.
+    It is up to users of this pass to define how these rewritten functions are
+    to be implemented.}];
+  let constructor = "circt::createFlattenMemRefCallsPass()";
+  let dependentDialects = ["memref::MemRefDialect"];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES

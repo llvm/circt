@@ -16,7 +16,7 @@ class WireNames:
   def build(ports):
     foo = ports.data_in[0]
     foo.name = "foo"
-    arr_data = dim(32, 4).create([1, 2, 3, 4], "arr_data")
+    arr_data = dim(32, 4)([1, 2, 3, 4], "arr_data")
     ports.set_all_ports({
         'a': foo.reg(ports.clk).reg(ports.clk),
         'b': arr_data[ports.sel],

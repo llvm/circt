@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OperationSupport.h"
@@ -29,6 +30,13 @@ using namespace circt;
 static bool isUniDimensional(MemRefType memref) {
   return memref.getShape().size() == 1;
 }
+
+/// A struct for maintaining function declarations which needs to be rewritten,
+/// if they contain memref arguments that was flattened.
+struct FunctionRewrite {
+  FuncOp op;
+  FunctionType type;
+};
 
 // Flatten indices by generating the product of the i'th index and the [0:i-1]
 // shapes, for each index, and then summing these.
@@ -172,8 +180,14 @@ struct BranchOpConversion : public OpConversionPattern<mlir::BranchOp> {
   }
 };
 
+// Rewrites a call op signature to flattened types. If rewriteFunctions is set,
+// will also replace the callee with a private definition of the called
+// function of the updated signature.
 struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
-  using OpConversionPattern::OpConversionPattern;
+  CallOpConversion(TypeConverter &typeConverter, MLIRContext *context,
+                   bool rewriteFunctions = false)
+      : OpConversionPattern(typeConverter, context),
+        rewriteFunctions(rewriteFunctions) {}
 
   LogicalResult
   matchAndRewrite(mlir::CallOp op, OpAdaptor adaptor,
@@ -181,10 +195,33 @@ struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
     llvm::SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
-    rewriter.replaceOpWithNewOp<mlir::CallOp>(
+    auto newCallOp = rewriter.replaceOpWithNewOp<mlir::CallOp>(
         op, adaptor.callee(), convResTypes, adaptor.getOperands());
+
+    if (!rewriteFunctions)
+      return success();
+
+    // Override any definition corresponding to the updated signature.
+    // It is up to users of this pass to define how these rewritten functions
+    // are to be implemented.
+    rewriter.setInsertionPoint(op->getParentOfType<FuncOp>());
+    auto *calledFunction = dyn_cast<CallOpInterface>(*op).resolveCallable();
+    FunctionType funcType = FunctionType::get(
+        op.getContext(), newCallOp.getOperandTypes(), convResTypes);
+    FuncOp newFuncOp;
+    if (calledFunction)
+      newFuncOp = rewriter.replaceOpWithNewOp<FuncOp>(calledFunction,
+                                                      op.getCallee(), funcType);
+    else
+      newFuncOp =
+          rewriter.create<FuncOp>(op.getLoc(), op.getCallee(), funcType);
+    newFuncOp.setVisibility(SymbolTable::Visibility::Private);
+
     return success();
   }
+
+private:
+  bool rewriteFunctions;
 };
 
 template <typename TOp>
@@ -225,24 +262,51 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
   });
 }
 
+// Materializes a multidimensional memory to unidimensional memory by using a
+// memref.subview operation.
+// TODO: This is also possible for dynamically shaped memories.
+static Value materializeSubViewFlattening(OpBuilder &builder, MemRefType type,
+                                          ValueRange inputs, Location loc) {
+  assert(type.hasStaticShape() &&
+         "Can only subview flatten memref's with static shape (for now...).");
+  MemRefType sourceType = inputs[0].getType().cast<MemRefType>();
+  int64_t memSize = sourceType.getNumElements();
+  unsigned dims = sourceType.getShape().size();
+
+  // Build offset, sizes and strides
+  SmallVector<OpFoldResult> sizes(dims, builder.getIndexAttr(0));
+  SmallVector<OpFoldResult> offsets(dims, builder.getIndexAttr(1));
+  offsets[offsets.size() - 1] = builder.getIndexAttr(memSize);
+  SmallVector<OpFoldResult> strides(dims, builder.getIndexAttr(1));
+
+  // Generate the appropriate return type:
+  MemRefType outType = MemRefType::get({memSize}, type.getElementType());
+  return builder.create<memref::SubViewOp>(loc, outType, inputs[0], sizes,
+                                           offsets, strides);
+}
+
+static void populateTypeConversionPatterns(TypeConverter &typeConverter) {
+  // Add default conversion for all types generically.
+  typeConverter.addConversion([](Type type) { return type; });
+  // Add specific conversion for memref types.
+  typeConverter.addConversion([](MemRefType memref) {
+    if (isUniDimensional(memref))
+      return memref;
+    return MemRefType::get(llvm::SmallVector<int64_t>{memref.getNumElements()},
+                           memref.getElementType());
+  });
+}
+
 struct FlattenMemRefPass : public FlattenMemRefBase<FlattenMemRefPass> {
 public:
   void runOnOperation() override {
 
     auto *ctx = &getContext();
     TypeConverter typeConverter;
-    // Add default conversion for all types generically.
-    typeConverter.addConversion([](Type type) { return type; });
-    // Add specific conversion for memref types.
-    typeConverter.addConversion([](MemRefType memref) {
-      if (isUniDimensional(memref))
-        return memref;
-      return MemRefType::get(
-          llvm::SmallVector<int64_t>{memref.getNumElements()},
-          memref.getElementType());
-    });
+    populateTypeConversionPatterns(typeConverter);
 
     RewritePatternSet patterns(ctx);
+    SetVector<StringRef> rewrittenCallees;
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
                  CallOpConversion>(typeConverter, ctx);
@@ -259,10 +323,49 @@ public:
   }
 };
 
+struct FlattenMemRefCallsPass
+    : public FlattenMemRefCallsBase<FlattenMemRefCallsPass> {
+public:
+  void runOnOperation() override {
+    auto *ctx = &getContext();
+    TypeConverter typeConverter;
+    populateTypeConversionPatterns(typeConverter);
+    RewritePatternSet patterns(ctx);
+
+    // Only run conversion on call ops within the body of the function. callee
+    // functions are rewritten by rewriteFunctions=true. We do not use
+    // populateFuncOpTypeConversionPattern to rewrite the function signatures,
+    // since non-called functions should not have their types converted.
+    // It is up to users of this pass to define how these rewritten functions
+    // are to be implemented.
+    patterns.add<CallOpConversion>(typeConverter, ctx,
+                                   /*rewriteFunctions=*/true);
+
+    ConversionTarget target(*ctx);
+    target.addLegalDialect<memref::MemRefDialect, mlir::BuiltinDialect>();
+    addGenericLegalityConstraint<mlir::CallOp>(target);
+
+    // Add a target materializer to handle memory flattening through
+    // memref.subview operations.
+    typeConverter.addTargetMaterialization(materializeSubViewFlattening);
+
+    if (applyPartialConversion(getOperation(), target, std::move(patterns))
+            .failed()) {
+      signalPassFailure();
+      return;
+    }
+  }
+};
+
 } // namespace
 
 namespace circt {
 std::unique_ptr<mlir::Pass> createFlattenMemRefPass() {
   return std::make_unique<FlattenMemRefPass>();
 }
+
+std::unique_ptr<mlir::Pass> createFlattenMemRefCallsPass() {
+  return std::make_unique<FlattenMemRefCallsPass>();
+}
+
 } // namespace circt

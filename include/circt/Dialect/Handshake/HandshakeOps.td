@@ -682,6 +682,7 @@ def LoadOp : Handshake_Op<"load", [
   let builders = [OpBuilder<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def StoreOp : Handshake_Op<"store", [
@@ -715,6 +716,7 @@ def StoreOp : Handshake_Op<"store", [
       [OpBuilder<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def JoinOp : Handshake_Op<"join", [
