@@ -2370,9 +2370,8 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
     if (firstNonEmptyElemWidth == 1) {
       signBit = firstNonEmptyValue;
     } else {
-      signBit = rewriter.create<ExtractOp>(
-          op.getLoc(), IntegerType::get(rewriter.getContext(), 1),
-          firstNonEmptyValue, firstNonEmptyElemWidth - 1);
+      signBit = rewriter.create<ExtractOp>(op.getLoc(), firstNonEmptyValue,
+                                           firstNonEmptyElemWidth - 1, 1);
     }
 
     auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
@@ -2592,12 +2591,10 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       if (rhs.countLeadingOnes() + rhs.countTrailingZeros() ==
           rhs.getBitWidth()) {
         auto numOnes = rhs.countLeadingOnes();
-        auto smallType = rewriter.getIntegerType(numOnes);
         auto smaller = rewriter.create<ExtractOp>(
-            op.getLoc(), smallType, op.lhs(), rhs.getBitWidth() - numOnes);
-        return replaceWith(
-            ICmpPredicate::ne, smaller,
-            getConstant(APInt::getAllOnes(smallType.getWidth())));
+            op.getLoc(), op.lhs(), rhs.getBitWidth() - numOnes, numOnes);
+        return replaceWith(ICmpPredicate::ne, smaller,
+                           getConstant(APInt::getAllOnes(numOnes)));
       }
 
       break;
@@ -2615,11 +2612,11 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       // x > 0x07 -> extract(x, 3..7) != 0b00000
       if ((rhs + 1).isPowerOf2()) {
         auto numOnes = rhs.countTrailingOnes();
-        auto smallType = rewriter.getIntegerType(rhs.getBitWidth() - numOnes);
-        auto smaller = rewriter.create<ExtractOp>(op.getLoc(), smallType,
-                                                  op.lhs(), numOnes);
+        auto newWidth = rhs.getBitWidth() - numOnes;
+        auto smaller = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(),
+                                                  numOnes, newWidth);
         return replaceWith(ICmpPredicate::ne, smaller,
-                           getConstant(APInt::getZero(smallType.getWidth())));
+                           getConstant(APInt::getZero(newWidth)));
       }
 
       break;
