@@ -94,6 +94,8 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   seeded_pdb = msft.PlacementDB(top.operation, devdb)
 
+  print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 49))
+  # CHECK: #msft.physloc<M20K, 2, 50, 1>
   print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
 
