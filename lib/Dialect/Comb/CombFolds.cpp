@@ -545,6 +545,37 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
   return success();
 }
 
+// Transforms extract(lo, replicate(a, N)) into replicate(a, N-c).
+static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
+                                 PatternRewriter &rewriter) {
+  auto extractResultWidth = op.getType().getWidth();
+  auto replicateEltWidth =
+      replicate.getOperand().getType().getIntOrFloatBitWidth();
+
+  // If the extract starts at the base of an element and is an even multiple,
+  // we can replace the extract with a smaller replicate.
+  if (op.lowBit() % replicateEltWidth == 0 &&
+      extractResultWidth % replicateEltWidth == 0) {
+    rewriter.replaceOpWithNewOp<ReplicateOp>(op, op.getType(),
+                                             replicate.getOperand());
+    return true;
+  }
+
+  // If the extract is completely contained in one element, extract from the
+  // element.
+  if (op.lowBit() % replicateEltWidth + extractResultWidth <=
+      replicateEltWidth) {
+    rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(),
+                                           replicate.getOperand(),
+                                           op.lowBit() % replicateEltWidth);
+    return true;
+  }
+
+  // We don't currently handle the case of extracting from non-whole elements,
+  // e.g. `extract (replicate 2-bit-thing, N), 1`.
+  return false;
+}
+
 // Pattern matches on extract(f(a, b)), and transforms f(extract(a), extract(b))
 // for some known f. This is performed by analyzing all usage sites of the
 // result of f(a, b). When this transformation returns true, it mutates all the
@@ -617,6 +648,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // extract(lo, cat(a, b, c, d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
   if (auto innerCat = dyn_cast_or_null<ConcatOp>(inputOp))
     return extractConcatToConcatExtract(op, innerCat, rewriter);
+
+  // extract(lo, replicate(a))
+  if (auto replicate = dyn_cast_or_null<ReplicateOp>(inputOp))
+    if (extractFromReplicate(op, replicate, rewriter))
+      return success();
 
   // extract(f(a, b)) = f(extract(a), extract(b)). This is performed only when
   // the number of bits to operation f can be reduced. See documentation of

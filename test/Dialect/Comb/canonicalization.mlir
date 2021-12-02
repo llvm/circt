@@ -692,6 +692,26 @@ hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (out: i1) {
   hw.output %6 : i1
 }
 
+// CHECK-LABEL: hw.module @extract_from_replicate
+hw.module @extract_from_replicate(%x: i8) -> (r0: i16, r1: i4, r2: i8) {
+  // CHECK-NEXT: %0 = comb.replicate %x : (i8) -> i24
+  %0 = comb.replicate %x : (i8) -> i24
+
+  // CHECK-NEXT: %1 = comb.replicate %x : (i8) -> i16
+  %r1 = comb.extract %0 from 8 : (i24) -> i16
+
+  // CHECK-NEXT: %2 = comb.extract %x from 2 : (i8) -> i4
+  %r2 = comb.extract %0 from 2 : (i24) -> i4
+
+  // We don't know how to simplify this (yet?)
+  // CHECK-NEXT: %3 = comb.extract %0 from 2 : (i24) -> i8
+  %r3 = comb.extract %0 from 2 : (i24) -> i8
+
+  // CHECK-NEXT: hw.output %1, %2, %3 : 
+  hw.output %r1, %r2, %r3 : i16, i4, i8
+}
+
+
 // CHECK-LABEL: hw.module @narrow_extract_from_and
 hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: i8) {
   %c240_i32 = hw.constant 240 : i32  // 0xF0
