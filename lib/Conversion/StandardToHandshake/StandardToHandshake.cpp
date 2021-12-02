@@ -721,12 +721,12 @@ typedef llvm::MapVector<Value, std::vector<Operation *>> MemRefToMemoryAccessOp;
 // a memory node for each memref and connect it to its load/store ops
 LogicalResult replaceMemoryOps(handshake::FuncOp f,
                                ConversionPatternRewriter &rewriter,
-                               MemRefToMemoryAccessOp &MemRefOps) {
+                               MemRefToMemoryAccessOp &memRefOps) {
 
   std::vector<Operation *> opsToErase;
 
   // Replace load and store ops with the corresponding handshake ops
-  // Need to traverse ops in blocks to store them in MemRefOps in program order
+  // Need to traverse ops in blocks to store them in memRefOps in program order
   for (Operation &op : f.getOps()) {
     if (!isMemoryOp(&op))
       continue;
@@ -795,7 +795,7 @@ LogicalResult replaceMemoryOps(handshake::FuncOp f,
           op.emitOpError("Load/store operation cannot be handled.");
         });
 
-    MemRefOps[memref].push_back(newOp);
+    memRefOps[memref].push_back(newOp);
     opsToErase.push_back(&op);
   }
 
@@ -1453,11 +1453,11 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
     return newFuncOp.emitOpError("failed to rewrite Affine loops");
 
   // Perform dataflow conversion
-  MemRefToMemoryAccessOp MemOps;
+  MemRefToMemoryAccessOp memOps;
   returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
         // Map from original memref to new load/store operations.
-        return replaceMemoryOps(nfo, rewriter, MemOps);
+        return replaceMemoryOps(nfo, rewriter, memOps);
       },
       ctx, newFuncOp));
 
@@ -1480,7 +1480,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   bool lsq = false;
   returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
-        return connectToMemory(nfo, MemOps, lsq, rewriter);
+        return connectToMemory(nfo, memOps, lsq, rewriter);
       },
       ctx, newFuncOp));
 
