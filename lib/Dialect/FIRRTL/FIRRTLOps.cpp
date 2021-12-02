@@ -2865,10 +2865,10 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLType elementType, unsigned numElements, RUWAttr ruw,
-                     StringRef name, ArrayRef<Attribute> annotations) {
+                     StringRef name, ArrayAttr annotations) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
-        name, builder.getArrayAttr(annotations));
+        name, annotations);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2877,10 +2877,10 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
                       FIRRTLType elementType, unsigned numElements,
-                      StringRef name, ArrayRef<Attribute> annotations) {
+                      StringRef name, ArrayAttr annotations) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
-        builder.getArrayAttr(annotations));
+        annotations);
 }
 
 //===----------------------------------------------------------------------===//

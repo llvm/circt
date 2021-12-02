@@ -293,6 +293,7 @@ static T &operator<<(T &os, const ResetKind &kind) {
   case ResetKind::Sync:
     return os << "sync";
   }
+  return os;
 }
 
 //===----------------------------------------------------------------------===//

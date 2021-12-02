@@ -2660,8 +2660,6 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto vectorType = type.dyn_cast<FVectorType>();
   if (!vectorType)
     return emitError("cmem requires vector type");
-  auto memType = CMemoryType::get(vectorType.getElementType(),
-                                  vectorType.getNumElements());
 
   auto annotations = getConstants().emptyArrayAttr;
   if (!getConstants().options.rawAnnotations)
@@ -2669,7 +2667,9 @@ ParseResult FIRStmtParser::parseCombMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<CombMemOp>(memType, id, annotations);
+  auto result =
+      builder.create<CombMemOp>(vectorType.getElementType(),
+                                vectorType.getNumElements(), id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2699,8 +2699,6 @@ ParseResult FIRStmtParser::parseSeqMem() {
   auto vectorType = type.dyn_cast<FVectorType>();
   if (!vectorType)
     return emitError("smem requires vector type");
-  auto memType = CMemoryType::get(getContext(), vectorType.getElementType(),
-                                  vectorType.getNumElements());
 
   auto annotations = getConstants().emptyArrayAttr;
   if (!getConstants().options.rawAnnotations)
@@ -2708,7 +2706,9 @@ ParseResult FIRStmtParser::parseSeqMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<SeqMemOp>(memType, ruw, id, annotations);
+  auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
+                                         vectorType.getNumElements(), ruw, id,
+                                         annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
