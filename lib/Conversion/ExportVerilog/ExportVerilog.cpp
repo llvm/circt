@@ -530,6 +530,7 @@ private:
 //===----------------------------------------------------------------------===//
 // EmitterBase
 //===----------------------------------------------------------------------===//
+
 namespace {
 
 class EmitterBase {
@@ -583,6 +584,11 @@ public:
   /// whitespace after a line break.  Do nothing if the StringAttr is null or
   /// the value is empty.
   void emitComment(StringAttr comment);
+
+  /// Given an expression that is spilled into a temporary wire, try to
+  /// synthesize a better name than "_T_42" based on the structure of the
+  /// expression.
+  StringAttr inferStructuralNameForTemporary(Value expr);
 
 private:
   void operator=(const EmitterBase &) = delete;
@@ -751,6 +757,74 @@ void EmitterBase::emitComment(StringAttr comment) {
       line = line.drop_front(breakPos);
     }
   }
+}
+
+/// Given an expression that is spilled into a temporary wire, try to synthesize
+/// a better name than "_T_42" based on the structure of the expression.
+StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
+  StringAttr result;
+
+  // Look through read_inout.
+  if (auto read = expr.getDefiningOp<ReadInOutOp>())
+    return inferStructuralNameForTemporary(read.input());
+
+  // Generate a pretty name for VerbatimExpr's that look macro-like using the
+  // same logic that generates the MLIR syntax name.
+  if (auto verbatim = expr.getDefiningOp<VerbatimExprOp>()) {
+    verbatim.getAsmResultNames([&](Value, StringRef name) {
+      result = StringAttr::get(expr.getContext(), name);
+    });
+  }
+
+  if (auto verbatim = expr.getDefiningOp<VerbatimExprSEOp>()) {
+    verbatim.getAsmResultNames([&](Value, StringRef name) {
+      result = StringAttr::get(expr.getContext(), name);
+    });
+  }
+
+  // Module ports carry names!
+  if (auto blockArg = expr.dyn_cast<BlockArgument>()) {
+    auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
+    StringRef name =
+        state.globalNames.getPortVerilogName(moduleOp, blockArg.getArgNumber());
+    result = StringAttr::get(expr.getContext(), name);
+  }
+
+  // Uses of a wire or register can be done inline.
+  if (auto *op = expr.getDefiningOp()) {
+    if (isa<WireOp, RegOp>(op)) {
+      StringRef name = state.globalNames.getDeclarationVerilogName(op);
+      result = StringAttr::get(expr.getContext(), name);
+    }
+  }
+
+  // If this is an extract from a namable object, derive a name from it.
+  if (auto extract = expr.getDefiningOp<ExtractOp>()) {
+    if (auto operandName = inferStructuralNameForTemporary(extract.input())) {
+      unsigned numBits = extract.getType().getWidth();
+      if (numBits == 1)
+        result =
+            StringAttr::get(expr.getContext(), operandName.strref() + "_" +
+                                                   Twine(extract.lowBit()));
+      else
+        result = StringAttr::get(expr.getContext(),
+                                 operandName.strref() + "_" +
+                                     Twine(extract.lowBit() + numBits - 1) +
+                                     "to" + Twine(extract.lowBit()));
+    }
+  }
+
+  // TODO: handle other common patterns.
+
+  // Make sure any synthesized name starts with an _.
+  if (!result || result.strref().empty())
+    return {};
+
+  // Make sure that all temporary names start with an underscore.
+  if (result.strref().front() != '_')
+    result = StringAttr::get(expr.getContext(), "_" + result.strref());
+
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1503,7 +1577,10 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
          "Should only be called on expressions thought to be inlined");
 
   emitter.outOfLineExpressions.insert(op);
-  names.addName(op->getResult(0), "_tmp");
+  if (auto name = inferStructuralNameForTemporary(op->getResult(0)))
+    names.addName(op->getResult(0), name);
+  else
+    names.addName(op->getResult(0), "_tmp");
 
   // Remember that this subexpr needs to be emitted independently.
   tooLargeSubExpressions.push_back(op);
@@ -2147,7 +2224,13 @@ void NameCollector::collectNames(Block &block) {
         // case we end up spilling this.
         // FIXME: This is highly unprincipled and should be removed.
         //   https://github.com/llvm/circt/issues/1752
-        names.addName(result, op.getAttrOfType<StringAttr>("name"));
+        auto nameAttr = op.getAttrOfType<StringAttr>("name");
+
+        // If we don't have a specified pretty name, try to infer a name from
+        // the structure of the expression.
+        if (!nameAttr)
+          nameAttr = moduleEmitter.inferStructuralNameForTemporary(result);
+        names.addName(result, nameAttr);
 
         // Don't measure or emit wires that are emitted inline (i.e. the wire
         // definition is emitted on the line of the expression instead of a

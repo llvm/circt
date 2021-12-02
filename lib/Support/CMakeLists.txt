@@ -8,7 +8,8 @@ add_circt_library(CIRCTSupport
   FieldRef.cpp
   LoweringOptions.cpp
   Path.cpp
-  
+  APInt.cpp
+
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC

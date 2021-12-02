@@ -131,16 +131,16 @@ hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
   // DISALLOW: wire _T_1 = _T[1];
   // DISALLOW: initial begin
   sv.initial {
-    // CHECK: automatic logic [1:0] _T = magic;
+    // CHECK: automatic logic [1:0] _magic = magic;
     // DISALLOW: _T = magic;
     %RANDOM = sv.verbatim.expr.se "magic" : () -> i2 {symbols = []}
 
-    // CHECK: tick_value_2 = _T[0];
+    // CHECK: tick_value_2 = _magic[0];
     // DISALLOW-NEXT: tick_value_2 = _T_0;
     %1 = comb.extract %RANDOM from 0 : (i2) -> i1
     sv.bpassign %tick_value_2, %1 : i1
 
-    // CHECK: counter_value = _T[1];
+    // CHECK: counter_value = _magic[1];
     // DISALLOW-NEXT: counter_value = _T_1;
     %2 = comb.extract %RANDOM from 1 : (i2) -> i1
     sv.bpassign %counter_value, %2 : i1

@@ -895,18 +895,18 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
   %b = sv.reg sym @regSym : !hw.inout<i42>
 
   sv.initial {
-    // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
+    // CHECK: automatic logic [41:0] _SIDEEFFECT = SIDEEFFECT;
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
-    // CHECK: automatic logic [41:0] _T_0 = b;
+    // CHECK: automatic logic [41:0] _T = b;
     %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [#hw.innerNameRef<@DontDuplicateSideEffectingVerbatim::@regSym>]}
-    // CHECK: a = _T;
+    // CHECK: a = _SIDEEFFECT;
     sv.bpassign %a, %tmp : i42
-    // CHECK: a = _T;
+    // CHECK: a = _SIDEEFFECT;
     sv.bpassign %a, %tmp : i42
 
-    // CHECK: a = _T_0;
+    // CHECK: a = _T;
     sv.bpassign %a, %verb_tmp : i42
-    // CHECK: a = _T_0;
+    // CHECK: a = _T;
     sv.bpassign %a, %verb_tmp : i42
     %tmp2 = sv.verbatim.expr "NO_EFFECT_" : () -> i42
     // CHECK: a = NO_EFFECT_;
@@ -955,13 +955,13 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   %regValue = sv.reg : !hw.inout<i42>
   // CHECK: initial begin
   sv.initial {
-    // CHECK: automatic logic [63:0] _T = `THING;
-    // CHECK: automatic logic [41:0] _T_0 = a + a;
-    // CHECK: automatic logic [41:0] _T_1 = _T_0 + b;
-    // CHECK: automatic logic [41:0] _T_2;
+    // CHECK: automatic logic [63:0] _THING = `THING;
+    // CHECK: automatic logic [41:0] _T = a + a;
+    // CHECK: automatic logic [41:0] _T_0 = _T + b;
+    // CHECK: automatic logic [41:0] _T_1;
     %thing = sv.verbatim.expr "`THING" : () -> i64
 
-    // CHECK: regValue = _T[44:3];
+    // CHECK: regValue = _THING[44:3];
     %v = comb.extract %thing from 3 : (i64) -> i42
     sv.bpassign %regValue, %v : i42
 
@@ -969,30 +969,30 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     // inline because it just references ports.
     %tmp = comb.add %a, %a : i42
     sv.bpassign %regValue, %tmp : i42
-    // CHECK: regValue = _T_0;
+    // CHECK: regValue = _T;
 
     // tmp2 is as well.  This can be emitted inline because it just references
     // a port and an already-emitted-inline variable 'a'.
     %tmp2 = comb.add %tmp, %b : i42
     sv.bpassign %regValue, %tmp2 : i42
-    // CHECK: regValue = _T_1;
+    // CHECK: regValue = _T_0;
 
     %tmp3 = comb.add %tmp2, %b : i42
     sv.bpassign %regValue, %tmp3 : i42
-    // CHECK: regValue = _T_1 + b;
+    // CHECK: regValue = _T_0 + b;
 
     // CHECK: `ifdef FOO
     sv.ifdef.procedural "FOO" {
-      // CHECK: _T_2 = a + a;
+      // CHECK: _T_1 = a + a;
       // tmp is multi-use so it needs a temporary, but cannot be emitted inline
       // because it is in an ifdef.
       %tmp4 = comb.add %a, %a : i42
       sv.bpassign %regValue, %tmp4 : i42
-      // CHECK: regValue = _T_2;
+      // CHECK: regValue = _T_1;
 
       %tmp5 = comb.add %tmp4, %b : i42
       sv.bpassign %regValue, %tmp5 : i42
-      // CHECK: regValue = _T_2 + b;
+      // CHECK: regValue = _T_1 + b;
     }
   }
 
@@ -1003,9 +1003,11 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   sv.initial {
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
     // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + {{..}}31{really_really_long_port[10]}},
-    // CHECK: really_really_long_port};
-    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
-    // CHECK:                                           [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
+    // CHECK-SAME: really_really_long_port};
+    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] =
+    // CHECK-SAME: [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
+    // CHECK:  [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
+    // CHECK:  [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
 
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
