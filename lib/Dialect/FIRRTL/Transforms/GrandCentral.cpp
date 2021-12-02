@@ -1706,8 +1706,8 @@ static StringAttr canonicalizeTarget(StringAttr target) {
 
 //===----------------------------------------------------------------------===//
 // Specific annotation implementations
-// Long term, these should move to their passes.
 //===----------------------------------------------------------------------===//
+#if 0 // TODO
 
 LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
                             AnnoApplyState state) {
@@ -1772,7 +1772,6 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
   return success();
 }
 
-#if 0 //TODO
 // Describes tap points into the design.  This has the following structure:
 //   blackBox: ModuleTarget
 //   keys: Seq[DataTapKey]

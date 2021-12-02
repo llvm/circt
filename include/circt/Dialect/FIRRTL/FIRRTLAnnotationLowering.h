@@ -65,6 +65,8 @@ public:
     return isa<T...>(op);
   }
 
+  mlir::MLIRContext* getContext() const { return op->getContext(); }
+
 private:
   Operation *op;
   size_t portNum;
@@ -131,16 +133,16 @@ StringRef getAnnoClass(DictionaryAttr anno);
 // Pass Specific Annotation lowering
 //===----------------------------------------------------------------------===//
 
-LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
-                          AnnoApplyState state);
-LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
-                          AnnoApplyState state);
-LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
-                               AnnoApplyState state);
-LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
-                             AnnoApplyState state);
-LogicalResult applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
-                            AnnoApplyState state);
+// LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
+//                           AnnoApplyState state);
+// LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
+//                           AnnoApplyState state);
+// LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
+//                                AnnoApplyState state);
+// LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
+//                              AnnoApplyState state);
+// LogicalResult applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
+//                             AnnoApplyState state);
 
 } // namespace firrtl
 } // namespace circt

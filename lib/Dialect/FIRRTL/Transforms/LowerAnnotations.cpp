@@ -23,6 +23,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringExtras.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -681,18 +682,35 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
 }
 
-//===----------------------------------------------------------------------===//
-// Driving table
-//===----------------------------------------------------------------------===//
+static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
+                                    AnnoApplyState state) {
+if (target.isPort()) {
+  assert(0 && "TODO");
+  return failure();
+}
+if (isa<FModuleLike>(target.getOp())) {
+  AnnotationSet annos(target.getOp());
+  annos.addDontTouch();
+  annos.applyToOperation(target.getOp());
+  return success();
+}
+ target.getOp()->setAttr(hw::InnerName::getInnerNameAttrName(),
+                        mlir::UnitAttr::get(target.getContext()));
+  return success();
+}
 
-namespace {
-struct AnnoRecord {
-  llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, AnnoApplyState)>
-      resolver;
-  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr,
-                                   AnnoApplyState)>
-      applier;
-};
+    //===----------------------------------------------------------------------===//
+    // Driving table
+    //===----------------------------------------------------------------------===//
+
+    namespace {
+  struct AnnoRecord {
+    llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, AnnoApplyState)>
+        resolver;
+    llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr,
+                                     AnnoApplyState)>
+        applier;
+  };
 } // end anonymous namespace
 
 static const llvm::StringMap<AnnoRecord> annotationRecords{
@@ -700,8 +718,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {stdResolve, applyWithoutTarget<>}},
 //    {"sifive.enterprise.grandcentral.DataTapsAnnotation",
 //     {stdResolve, applyGCDataTap}},
-    {"sifive.enterprise.grandcentral.MemTapAnnotation",
-     {stdResolve, applyGCMemTap}},
+//    {"sifive.enterprise.grandcentral.MemTapAnnotation",
+//     {stdResolve, applyGCMemTap}},
 //    {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
 //     {stdResolve, applyGCSigDriver}},
 //    {"sifive.enterprise.grandcentral.GrandCentralView$",
@@ -715,8 +733,8 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
 //        "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
 //        {stdResolve, applyModRep},
 //    },
-     //    {"firrtl.transforms.DontTouchAnnotation",
-      //    {stdResolve, applyDontTouch}},
+         {"firrtl.transforms.DontTouchAnnotation",
+          {stdResolve, applyDontTouch}},
 
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
