@@ -254,11 +254,7 @@ static void addAnnotation(AnnoPathValue ref, ArrayRef<NamedAttribute> anno) {
   if (ref.getField()) {
     SmallVector<NamedAttribute> annoField(anno.begin(), anno.end());
     annoField.emplace_back(
-<<<<<<< HEAD
-        Identifier::get("circt.fieldID", ref.getOp()->getContext()),
-=======
-        StringAttr::get("circt.fieldID", ref.op->getContext()),
->>>>>>> origin/main
+        mlir::Identifier::get("circt.fieldID", ref.getOp()->getContext()),
         IntegerAttr::get(
             IntegerType::get(ref.getOp()->getContext(), 32, IntegerType::Signless),
             ref.getField()));

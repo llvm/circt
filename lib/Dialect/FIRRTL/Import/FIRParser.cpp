@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "FIRAnnotations.h"
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -41,6 +40,190 @@ using llvm::SourceMgr;
 using mlir::LocationAttr;
 
 namespace json = llvm::json;
+
+//===----------------------------------------------------------------------===//
+// Annotation-related utilities
+//===----------------------------------------------------------------------===//
+
+/// Convert arbitrary JSON to an MLIR Attribute.
+static Attribute convertJSONToAttribute(MLIRContext *context,
+                                        json::Value &value, json::Path p) {
+  // String or quoted JSON
+  if (auto a = value.getAsString()) {
+    // Test to see if this might be quoted JSON (a string that is actually
+    // JSON).  Sometimes FIRRTL developers will do this to serialize objects
+    // that the Scala FIRRTL Compiler doesn't know about.
+    auto unquotedValue = json::parse(a.getValue());
+    auto err = unquotedValue.takeError();
+    // If this parsed without an error, then it's more JSON and recurse on
+    // that.
+    if (!err)
+      return convertJSONToAttribute(context, unquotedValue.get(), p);
+    // If there was an error, then swallow it and handle this as a string.
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {});
+    return StringAttr::get(context, a.getValue());
+  }
+
+  // Integer
+  if (auto a = value.getAsInteger())
+    return IntegerAttr::get(IntegerType::get(context, 64), a.getValue());
+
+  // Float
+  if (auto a = value.getAsNumber())
+    return FloatAttr::get(mlir::FloatType::getF64(context), a.getValue());
+
+  // Boolean
+  if (auto a = value.getAsBoolean())
+    return BoolAttr::get(context, a.getValue());
+
+  // Null
+  if (auto a = value.getAsNull())
+    return mlir::UnitAttr::get(context);
+
+  // Object
+  if (auto a = value.getAsObject()) {
+    NamedAttrList metadata;
+    for (auto b : *a)
+      metadata.append(
+          b.first, convertJSONToAttribute(context, b.second, p.field(b.first)));
+    return DictionaryAttr::get(context, metadata);
+  }
+
+  // Array
+  if (auto a = value.getAsArray()) {
+    SmallVector<Attribute> metadata;
+    for (size_t i = 0, e = (*a).size(); i != e; ++i)
+      metadata.push_back(convertJSONToAttribute(context, (*a)[i], p.index(i)));
+    return ArrayAttr::get(context, metadata);
+  }
+
+  llvm_unreachable("Impossible unhandled JSON type");
+}
+
+/// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
+/// represented as a Target-keyed arrays of attributes.  The input JSON value is
+/// checked, at runtime, to be an array of objects.  Returns true if successful,
+/// false if unsuccessful.
+static bool fromJSON(json::Value &value,
+                             SmallVectorImpl<Attribute> &attrs, json::Path path,
+                             MLIRContext *context, bool isOMIR) {
+
+  // The JSON value must be an array of objects.  Anything else is reported as
+  // invalid.
+  auto array = value.getAsArray();
+  if (!array) {
+    path.report(
+        "Expected annotations to be an array, but found something else.");
+    return false;
+  }
+
+  // Build an array of annotations.
+  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+    auto object = (*array)[i].getAsObject();
+    auto p = path.index(i);
+    if (!object) {
+      p.report("Expected annotations to be an array of objects, but found an "
+               "array of something else.");
+      return false;
+    }
+
+    // Build up the Attribute to represent the Annotation
+    NamedAttrList metadata;
+
+    for (auto field : *object) {
+      if (isOMIR) {
+
+        // Validate that this looks like an OMNode.  This should have three
+        // fields:
+        //   - "info": String
+        //   - "id": String that starts with "OMID:"
+        //   - "fields": Array<Object>
+        // Fields is optional and is a dictionary encoded as an array of
+        // objects:
+        //   - "info": String
+        //   - "name": String
+        //   - "value": JSON
+        // The dictionary is keyed by the "name" member and the array of fields
+        // is guaranteed to not have collisions of the "name" key.
+        auto maybeInfo = object->getString("info");
+        if (!maybeInfo) {
+          p.report(
+              "OMNode missing mandatory member \"info\" with type \"string\"");
+          return false;
+        }
+        auto maybeID = object->getString("id");
+        if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
+          p.report(
+              "OMNode missing mandatory member \"id\" with type \"string\" "
+              "that starts with \"OMID:\"");
+          return false;
+        }
+        auto *maybeFields = object->get("fields");
+        if (maybeFields && !maybeFields->getAsArray()) {
+          p.report("OMNode has \"fields\" member with incorrect type (expected "
+                   "\"array\")");
+          return false;
+        }
+        Attribute fields;
+        if (!maybeFields)
+          fields = DictionaryAttr::get(context, {});
+        else {
+          auto array = *maybeFields->getAsArray();
+          NamedAttrList fieldAttrs;
+          for (size_t i = 0, e = array.size(); i != e; ++i) {
+            auto *field = array[i].getAsObject();
+            auto pI = p.field("fields").index(i);
+            if (!field) {
+              pI.report("OMNode has field that is not an \"object\"");
+              return false;
+            }
+            auto maybeInfo = field->getString("info");
+            if (!maybeInfo) {
+              pI.report("OMField missing mandatory member \"info\" with type "
+                        "\"string\"");
+              return false;
+            }
+            auto maybeName = field->getString("name");
+            if (!maybeName) {
+              pI.report("OMField missing mandatory member \"name\" with type "
+                        "\"string\"");
+              return false;
+            }
+            auto *maybeValue = field->get("value");
+            if (!maybeValue) {
+              pI.report("OMField missing mandatory member \"value\"");
+              return false;
+            }
+            NamedAttrList values;
+            values.append("info",
+                          StringAttr::get(context, maybeInfo.getValue()));
+            values.append("value", convertJSONToAttribute(context, *maybeValue,
+                                                          pI.field("value")));
+            fieldAttrs.append(maybeName.getValue(),
+                              DictionaryAttr::get(context, values));
+          }
+          fields = DictionaryAttr::get(context, fieldAttrs);
+        }
+
+        metadata.append("info", StringAttr::get(context, maybeInfo.getValue()));
+        metadata.append("id", convertJSONToAttribute(
+                                  context, *object->get("id"), p.field("id")));
+        metadata.append("fields", fields);
+      } else {
+      auto value = convertJSONToAttribute(context, field.second, p);
+      if (!value) {
+        p.report("Failed to convert JSON to attribte");
+        return false;
+      }
+      metadata.append(field.first, value);
+    }
+    }
+
+    attrs.push_back(DictionaryAttr::get(context, metadata));
+  }
+
+  return true;
+}
 
 //===----------------------------------------------------------------------===//
 // Parser-related utilities
@@ -358,18 +541,6 @@ struct FIRParser {
 
   ParseResult parseOptionalRUW(RUWAttr &result);
 
-  //===--------------------------------------------------------------------===//
-  // Annotation Utilities
-  //===--------------------------------------------------------------------===//
-
-  /// Convert the input "tokens" to a range of field IDs. Considering a FIRRTL
-  /// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will
-  /// be converted to a field ID range of [2, 2]; tokens "[1]" will be converted
-  /// to [4, 6]. The generated field ID range will then be attached to the
-  /// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
-  /// annotation.
-  Optional<unsigned> getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
-                                          Type type);
 private:
   FIRParser(const FIRParser &) = delete;
   void operator=(const FIRParser &) = delete;
@@ -860,269 +1031,6 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   }
 
   return success();
-}
-
-/// Convert the input "tokens" to a range of field IDs. Considering a FIRRTL
-/// aggregate type, "{foo: UInt<1>, bar: UInt<1>}[2]", tokens "[0].foo" will be
-/// converted to a field ID range of [2, 2]; tokens "[1]" will be converted to
-/// [4, 6]. The generated field ID range will then be attached to the
-/// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
-/// annotation.
-Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
-                                                   Type type) {
-  if (!type)
-    return None;
-  if (tokens.empty())
-    return 0;
-
-  auto currentType = type.cast<FIRRTLType>();
-  unsigned id = 0;
-
-  auto getMessage = [&](unsigned tokenIdx) {
-    // Construct a string for error emission.
-    SmallString<16> message("the " + std::to_string(tokenIdx) +
-                            "-th token of ");
-    for (auto token : tokens) {
-      if (auto intAttr = token.dyn_cast<IntegerAttr>()) {
-        message.push_back('[');
-        intAttr.getValue().toStringSigned(message);
-        message.push_back(']');
-      } else if (auto strAttr = token.dyn_cast<StringAttr>()) {
-        message.push_back('.');
-        message.append(strAttr.getValue());
-      }
-    }
-    return message;
-  };
-
-  unsigned tokenIdx = 0;
-  for (auto token : tokens) {
-    ++tokenIdx;
-    if (auto bundleType = currentType.dyn_cast<BundleType>()) {
-      auto subFieldAttr = token.dyn_cast<StringAttr>();
-      if (!subFieldAttr) {
-        emitError(loc, "expect a string for " + getMessage(tokenIdx));
-        return None;
-      }
-
-      // Token should point to valid sub-field.
-      auto subField = subFieldAttr.getValue();
-      auto index = bundleType.getElementIndex(subField);
-      if (!index) {
-        emitError(loc, getMessage(tokenIdx) + " is not found in the bundle");
-        return None;
-      }
-
-      id += bundleType.getFieldID(index.getValue());
-      currentType = bundleType.getElementType(subField);
-      continue;
-    }
-
-    if (auto vectorType = currentType.dyn_cast<FVectorType>()) {
-      auto subIndexAttr = token.dyn_cast<IntegerAttr>();
-      if (!subIndexAttr) {
-        emitError(loc, "expect an integer for " + getMessage(tokenIdx));
-        return None;
-      }
-
-      // Token should be a valid index of the vector.
-      auto subIndex = subIndexAttr.getValue().getZExtValue();
-      if (subIndex >= vectorType.getNumElements()) {
-        emitError(loc, getMessage(tokenIdx) + " is out of range in the vector");
-        return None;
-      }
-
-      id += vectorType.getFieldID(subIndex);
-      currentType = vectorType.getElementType();
-      continue;
-    }
-
-    emitError(loc, getMessage(tokenIdx) + " expects an aggregate type");
-    return None;
-  }
-
-  return id;
-}
-
-/// In the input "annotations", an annotation will have a "target" entry when it
-/// is only applicable to part of what it is attached to. In this method, we
-/// convert the tokens contained by the "target" entry to a range of field IDs
-/// and return the converted annotations.
-ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
-                                           SMLoc loc, Type type = nullptr) {
-  // This stores the annotations applicable to all fields of the op result.
-  SmallVector<Attribute, 8> annotationVec;
-
-  for (auto a : annotations) {
-    // If the annotation does not contain a "target" entry, it is applicable to
-    // all fields of the op result.
-    auto dict = a.cast<DictionaryAttr>();
-    auto targetAttr = dict.get("target");
-    if (!targetAttr) {
-      annotationVec.push_back(a);
-      continue;
-    }
-
-    // Otherwise, the annotation is only applicable to part of the op result.
-    // Get a range of field IDs to indicate the applicable fields of the
-    // annotation.
-    auto fieldID =
-        getFieldIDFromTokens(targetAttr.cast<ArrayAttr>(), loc, type);
-    if (!fieldID)
-      continue;
-
-    // Remove the "target" entry from the annotation.
-    NamedAttrList modAttr;
-    for (auto attr : dict.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.getName() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-
-    // Construct the SubAnnotationAttr for the annotation.
-    auto subAnnotation =
-        SubAnnotationAttr::get(constants.context, fieldID.getValue(),
-                               DictionaryAttr::get(constants.context, modAttr));
-
-    annotationVec.push_back(subAnnotation);
-  }
-
-  return ArrayAttr::get(constants.context, annotationVec);
-}
-
-/// Split the input "annotations" into two parts: (1) Annotations applicable to
-/// all op results; (2) Annotations only applicable to one specific result. The
-/// second kind of annotations are store densely in an ArrayAttr and can be
-/// accessed using the result index.
-std::pair<ArrayAttr, ArrayAttr>
-FIRParser::splitAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
-                            ArrayRef<std::pair<StringAttr, Type>> ports) {
-  // This stores the annotations applicable to all op ports.
-  SmallVector<Attribute, 8> annotationVec;
-  // This stores the mapping between port names and port-specific annotations.
-  llvm::StringMap<SmallVector<Attribute, 4>> portAnnotationMap;
-
-  for (auto a : annotations) {
-    // If the annotation does not contain a "target" entry, it is applicable to
-    // all op ports.
-    auto dict = a.cast<DictionaryAttr>();
-    auto targetAttr = dict.get("target");
-    if (!targetAttr) {
-      annotationVec.push_back(a);
-      continue;
-    }
-
-    // The first token should always indicate the port name.
-    auto targetTokens = targetAttr.cast<ArrayAttr>().getValue();
-    auto portName = targetTokens[0].dyn_cast<StringAttr>();
-    if (!portName) {
-      emitError(loc, "the first token is invalid");
-      continue;
-    }
-
-    // If there's more than one tokens, the remaining tokens should be added
-    // into the annotation as a "target" field.
-    NamedAttrList modAttr;
-    for (auto attr : dict.getValue()) {
-      if (attr.getName().str() == "target") {
-        if (targetTokens.size() > 1) {
-          auto newTargetAttr =
-              ArrayAttr::get(constants.context, targetTokens.drop_front());
-          modAttr.push_back(NamedAttribute(attr.getName(), newTargetAttr));
-        }
-        continue;
-      }
-      modAttr.push_back(attr);
-    }
-
-    portAnnotationMap[portName.getValue()].push_back(
-        DictionaryAttr::get(constants.context, modAttr));
-  }
-
-  SmallVector<Attribute, 16> portAnnotationVec;
-  for (auto port : ports) {
-    auto portAnnotation = portAnnotationMap.lookup(port.first.getValue());
-    portAnnotationVec.push_back(
-        convertSubAnnotations(portAnnotation, loc, port.second));
-  }
-
-  return {ArrayAttr::get(constants.context, annotationVec),
-          ArrayAttr::get(constants.context, portAnnotationVec)};
-}
-
-/// Return the set of annotations for a given Target.
-ArrayAttr FIRParser::getAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                                    TargetSet &targetSet, Type type = nullptr) {
-  // Early exit if no annotations exist.  This avoids the cost of constructing
-  // strings representing targets if no annotation can possibly exist.
-  if (constants.annotationMap.empty())
-    return constants.emptyArrayAttr;
-
-  // Stack the annotations for all targets.
-  SmallVector<Attribute, 4> annotations;
-  for (auto target : targets) {
-    // Flatten the input twine into a SmallVector for lookup.
-    SmallString<64> targetStr;
-    target.toVector(targetStr);
-
-    // Record that we've seen this target.
-    targetSet.insert(targetStr);
-
-    // Note: We are not allowed to mutate annotationMap here.  Make sure to only
-    // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
-    if (auto result = constants.annotationMap.lookup(targetStr)) {
-      if (!result.empty())
-        annotations.append(result.begin(), result.end());
-    }
-  }
-
-  if (!annotations.empty())
-    return convertSubAnnotations(annotations, loc, type);
-  return constants.emptyArrayAttr;
-}
-
-/// Return the set of annotations for a given Target. If the operation has
-/// variadic results, such as MemOp and InstanceOp, this method should be used
-/// to get annotations.
-std::pair<ArrayAttr, ArrayAttr>
-FIRParser::getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                               ArrayRef<std::pair<StringAttr, Type>> ports,
-                               TargetSet &targetSet) {
-  // Early exit if no annotations exist.  This avoids the cost of constructing
-  // strings representing targets if no annotation can possibly exist.
-  if (constants.annotationMap.empty()) {
-    SmallVector<Attribute, 4> portAnnotations(
-        ports.size(), ArrayAttr::get(constants.context, {}));
-    return {constants.emptyArrayAttr,
-            ArrayAttr::get(constants.context, portAnnotations)};
-  }
-
-  // Stack the annotations for all targets.
-  SmallVector<Attribute, 4> annotations;
-  for (auto target : targets) {
-    // Flatten the input twine into a SmallVector for lookup.
-    SmallString<64> targetStr;
-    target.toVector(targetStr);
-
-    // Record that we've seen this target.
-    targetSet.insert(targetStr);
-
-    // Note: We are not allowed to mutate annotationMap here.  Make sure to only
-    // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
-    if (auto result = constants.annotationMap.lookup(targetStr)) {
-      if (!result.empty())
-        annotations.append(result.begin(), result.end());
-    }
-  }
-
-  if (!annotations.empty())
-    return splitAnnotations(annotations, loc, ports);
-
-  SmallVector<Attribute, 4> portAnnotations(
-      ports.size(), ArrayAttr::get(constants.context, {}));
-  return {constants.emptyArrayAttr,
-          ArrayAttr::get(constants.context, portAnnotations)};
 }
 
 //===----------------------------------------------------------------------===//
@@ -2993,7 +2901,7 @@ FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
 
   json::Path::Root root;
   if (!fromJSON(annotations.get(), attrs, root,
-                   getContext())) {
+                   getContext(), false)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3065,8 +2973,8 @@ FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromOMIRJSON(annotations.get(), attrs, root,
-                    circuit.getContext())) {
+  if (!fromJSON(annotations.get(), attrs, root,
+                    circuit.getContext(), true)) {
     auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";

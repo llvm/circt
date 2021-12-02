@@ -1,5 +1,4 @@
 add_circt_translation_library(CIRCTImportFIRFile
-  FIRAnnotations.cpp
   FIRLexer.cpp
   FIRParser.cpp
   FIRParserAsserts.cpp
