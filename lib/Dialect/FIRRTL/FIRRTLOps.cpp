@@ -1006,8 +1006,8 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-InstanceOp InstanceOp::cloneAndInsertPorts(
-    ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+InstanceOp
+InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   auto portSize = ports.size();
   auto newPortCount = getNumResults() + portSize;
   SmallVector<Direction> newPortDirections;
@@ -1041,10 +1041,10 @@ InstanceOp InstanceOp::cloneAndInsertPorts(
   }
 
   // Create a new instance op with the reset inserted.
-  return OpBuilder(*this).create<InstanceOp>(getLoc(),
-      newPortTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnos,
-      lowerToBind(), inner_symAttr());
+  return OpBuilder(*this).create<InstanceOp>(
+      getLoc(), newPortTypes, moduleName(), name(), newPortDirections,
+      newPortNames, annotations().getValue(), newPortAnnos, lowerToBind(),
+      inner_symAttr());
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
