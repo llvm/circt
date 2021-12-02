@@ -804,6 +804,26 @@ hw.module @SignedShiftRightPrecendence(%p: i1, %x: i45) -> (o: i45) {
   hw.output %1 : i45
 }
 
+// CHECK-LABEL: module replicate
+hw.module @replicate(%arg0: i7, %arg1: i1) -> (r1: i21, r2: i9, r3: i16, r4: i16) {
+  // CHECK: assign r1 = {3{arg0}};
+  %r1 = comb.replicate %arg0 : (i7) -> i21
+
+  // CHECK: assign r2 = {9{arg1}};
+  %r2 = comb.replicate %arg1 : (i1) -> i9
+
+  // CHECK: assign r3 = {{[{]}}{9{arg0[6]}}, arg0};
+  %0 = comb.extract %arg0 from 6 : (i7) -> i1
+  %1 = comb.replicate %0 : (i1) -> i9
+  %r3 = comb.concat %1, %arg0 : i9, i7
+
+  // CHECK: assign r4 = {2{arg0, arg1}};
+  %2 = comb.concat %arg0, %arg1 : i7, i1
+  %r4 = comb.replicate %2 : (i8) -> i16
+
+  hw.output %r1, %r2, %r3, %r4 : i21, i9, i16, i16
+}
+
 // CHECK-LABEL: module parameters
 // CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
 // CHECK-NEXT:   parameter [0:0]  p2) (

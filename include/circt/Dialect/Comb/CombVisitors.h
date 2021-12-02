@@ -38,9 +38,10 @@ public:
             // Reduction Operators
             ParityOp,
             // Other operations.
-            SExtOp, ConcatOp, ExtractOp, MuxOp>([&](auto expr) -> ResultType {
-          return thisCast->visitComb(expr, args...);
-        })
+            SExtOp, ConcatOp, ReplicateOp, ExtractOp, MuxOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitComb(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidComb(op, args...);
         });
@@ -101,6 +102,7 @@ public:
   // Other operations.
   HANDLE(SExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
+  HANDLE(ReplicateOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
 #undef HANDLE

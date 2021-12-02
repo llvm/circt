@@ -1008,6 +1008,18 @@ hw.module @wire5() -> () {
   hw.output
 }
 
+// CHECK-LABEL: hw.module @replicate
+hw.module @replicate(%arg0: i7) -> (r1: i9, r2: i7) {
+  %c2 = hw.constant 2 : i3
+  %r1 = comb.replicate %c2 : (i3) -> i9
+  
+// CHECK-NEXT: %c146_i9 = hw.constant 146 : i9 
+  %r2 = comb.replicate %arg0 : (i7) -> i7
+
+// CHECK-NEXT:  hw.output %c146_i9, %arg0
+  hw.output %r1, %r2 : i9, i7
+}
+
 // CHECK-LABEL: hw.module @sext_extract1
 hw.module @sext_extract1(%arg0: i4) -> (a: i4) {
   // CHECK-NEXT:  %0 = comb.sext %arg0 : (i4) -> i5

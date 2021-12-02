@@ -240,6 +240,36 @@ def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
   }];
 }
 
+def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
+  let summary = "Concatenate the operand a constant number of times";
+
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let verifier = "return ::verifyReplicateOp(*this);";
+
+  let builders = [
+    OpBuilder<(ins "Value":$operand, "int32_t":$multiple), [{
+      auto bitWidth = operand.getType().cast<IntegerType>().getWidth();
+      auto resultType = $_builder.getIntegerType(bitWidth*multiple);
+      return build($_builder, $_state, resultType, operand);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Returns the number of times the operand is replicated.
+    size_t getMultiple() {
+      auto opWidth = input().getType().cast<IntegerType>().getWidth();
+      return getType().getWidth()/opWidth;
+    }
+  }];
+}
+
 // Select one of two values based on a condition.
 def MuxOp : CombOp<"mux",
  [NoSideEffect, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {

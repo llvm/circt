@@ -135,6 +135,25 @@ static LogicalResult verifySExtOp(SExtOp op) {
   return success();
 }
 
+static LogicalResult verifyReplicateOp(ReplicateOp op) {
+  // The source must be equal or smaller than the dest type, and an even
+  // multiple of it.  Both are already known to be signless integers.
+  auto srcWidth = op.getOperand().getType().cast<IntegerType>().getWidth();
+  auto dstWidth = op.getType().getWidth();
+  if (srcWidth == 0)
+    return op.emitOpError("replicate does not take zero bit integer");
+
+  if (srcWidth > dstWidth)
+    return op.emitOpError("replicate cannot shrink bitwidth of operand"),
+           failure();
+
+  if (dstWidth % srcWidth)
+    return op.emitOpError("replicate must produce integer multiple of operand"),
+           failure();
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//

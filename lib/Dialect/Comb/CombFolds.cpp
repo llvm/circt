@@ -283,6 +283,34 @@ LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+OpFoldResult ReplicateOp::fold(ArrayRef<Attribute> constants) {
+  // Replicate one time -> noop.
+  if (getType().getWidth() == input().getType().getIntOrFloatBitWidth())
+    return input();
+
+  // Constant fold.
+  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
+    if (input.getValue().getBitWidth() == 1) {
+      if (input.getValue().isZero())
+        return getIntAttr(APInt::getZero(getType().getWidth()), getContext());
+      return getIntAttr(APInt::getAllOnes(getType().getWidth()), getContext());
+    }
+
+    APInt result = APInt::getZeroWidth();
+    for (auto i = getMultiple(); i != 0; --i)
+      result = result.concat(input.getValue());
+    return getIntAttr(result, getContext());
+  }
+
+  return {};
+}
+
+LogicalResult ReplicateOp::canonicalize(ReplicateOp op,
+                                        PatternRewriter &rewriter) {
+  // TODO.
+  return failure();
+}
+
 OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold.
   if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>())

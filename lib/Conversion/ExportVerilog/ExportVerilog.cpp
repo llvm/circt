@@ -1441,6 +1441,7 @@ private:
   SubExprInfo visitComb(ParityOp op) { return emitUnary(op, "^", true); }
 
   SubExprInfo visitComb(SExtOp op);
+  SubExprInfo visitComb(ReplicateOp op);
   SubExprInfo visitComb(ConcatOp op);
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
@@ -1749,6 +1750,27 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   os << ", ";
   emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
   os << '}';
+  return {Symbol, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
+  os << '{' << op.getMultiple() << '{';
+
+  // If the subexpression is an inline concat, we can emit it as part of the
+  // replicate.
+  if (auto concatOp = op.getOperand().getDefiningOp<ConcatOp>()) {
+    if (op.getOperand().hasOneUse() &&
+        !emitter.outOfLineExpressions.count(concatOp)) {
+      llvm::interleaveComma(concatOp.getOperands(), os, [&](Value v) {
+        emitSubExpr(v, LowestPrecedence, OOLBinary);
+      });
+      os << "}}";
+      return {Symbol, IsUnsigned};
+    }
+  }
+
+  emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
+  os << "}}";
   return {Symbol, IsUnsigned};
 }
 
