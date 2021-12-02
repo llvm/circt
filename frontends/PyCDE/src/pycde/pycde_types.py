@@ -130,8 +130,8 @@ def PyCDEType(type):
 
     def __call__(self, value_obj, name: str = None):
       """Create a Value of this type from a python object."""
-      from .support import obj_to_value
-      v = obj_to_value(value_obj, self, self)
+      from .support import _obj_to_value
+      v = _obj_to_value(value_obj, self, self)
       if name is not None:
         v.name = name
       return v

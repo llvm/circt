@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, Input, module, generator, obj_to_value, types, dim,
-                   System, no_connect)
+from pycde import (Output, Input, module, generator, types, dim, System,
+                   no_connect)
 from pycde.module import externmodule
 
 
@@ -27,9 +27,9 @@ class Top:
 
   @generator
   def build(_):
-    obj_to_value({"foo": 7}, types.struct({"foo": types.i12}))
-    obj_to_value([42, 45], dim(types.i8, 2))
-    obj_to_value(5, types.i8)
+    types.struct({"foo": types.i12})({"foo": 7})
+    dim(types.i8, 2)([42, 45])
+    types.i8(5)
 
     BarType({"foo": 7})
 

@@ -8,7 +8,6 @@ from .devicedb import *
 from .system import *
 from .pycde_types import *
 from .value import *
-from .support import obj_to_value
 from circt.support import connect
 
 import mlir.ir
