@@ -45,32 +45,6 @@ mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
 }
 
 //===----------------------------------------------------------------------===//
-// SV Interface type logic.
-//===----------------------------------------------------------------------===//
-
-Type InterfaceType::parse(AsmParser &p) {
-  FlatSymbolRefAttr iface;
-  if (p.parseLess() || p.parseAttribute(iface) || p.parseGreater())
-    return Type();
-  return get(p.getContext(), iface);
-}
-
-void InterfaceType::print(AsmPrinter &p) const {
-  p << "<" << getInterface() << ">";
-}
-
-Type ModportType::parse(AsmParser &p) {
-  SymbolRefAttr modPort;
-  if (p.parseLess() || p.parseAttribute(modPort) || p.parseGreater())
-    return Type();
-  return get(p.getContext(), modPort);
-}
-
-void ModportType::print(AsmPrinter &p) const {
-  p << "<" << getModport() << ">";
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
