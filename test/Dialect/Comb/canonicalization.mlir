@@ -338,13 +338,13 @@ hw.module @compareStrengthReductionRetainCat(%arg0: i9, %arg1: i9) -> (o : i1) {
 // Validates that narrowing signed comparisons without stripping the common suffix
 // must not pad an additional sign bit.
 // CHECK-LABEL: hw.module @compareStrengthSignedCommonSuffix
-// CHECK-NEXT:    [[ARG0:%[0-9]+]] = comb.concat %arg0, %arg0 : i9, i9
-// CHECK-NEXT:    [[ARG1:%[0-9]+]] = comb.concat %arg1, %arg1 : i9, i9
+// CHECK-NEXT:    [[ARG0:%[0-9]+]] = comb.replicate %arg0 : (i9) -> i18
+// CHECK-NEXT:    [[ARG1:%[0-9]+]] = comb.replicate %arg1 : (i9) -> i18
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.icmp sge [[ARG0]], [[ARG1]] : i18
 // CHECK-NEXT:    hw.output [[RES]] : i1
 hw.module @compareStrengthSignedCommonSuffix(%arg0: i9, %arg1: i9) -> (o : i1) {
   %0 = comb.concat %arg0, %arg0, %arg1 : i9, i9, i9
-  %1 = comb.concat %arg1, %arg1, %arg1 : i9, i9, i9
+  %1 = comb.replicate %arg1 : (i9) -> i27
   %2 = comb.icmp sge %0, %1 : i27
   hw.output %2 : i1
 }
@@ -1006,7 +1006,7 @@ hw.module @combine_icmp_compare_concat0(%thing: i3) -> (a: i1) {
   %1 = comb.icmp ne %0, %c0 : i7
 
   // CHECK: %c0_i6 = hw.constant 0 : i6
-  // CHECK: %0 = comb.concat %thing, %thing : i3, i3
+  // CHECK: %0 = comb.replicate %thing : (i3) -> i6
   // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6
   // CHECK: hw.output %1 : i1
   hw.output %1 : i1
@@ -1034,7 +1034,7 @@ hw.module @combine_icmp_compare_concat2(%thing: i3) -> (a: i1) {
   hw.output %1 : i1
 
   // CHECK: %c0_i6 = hw.constant 0 : i6
-  // CHECK: %0 = comb.concat %thing, %thing : i3, i3
+  // CHECK: %0 = comb.replicate %thing : (i3) -> i6
   // CHECK: %1 = comb.icmp eq %0, %c0_i6 : i6
   // CHECK: hw.output %1 : i1
 }

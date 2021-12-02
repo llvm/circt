@@ -1620,7 +1620,12 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
     return success();
   };
 
+  Value commonOperand = inputs[0];
   for (size_t i = 0; i != size; ++i) {
+    // Check to see if all operands are the same.
+    if (inputs[i] != commonOperand)
+      commonOperand = Value();
+
     // If an operand to the concat is itself a concat, then we can fold them
     // together.
     if (auto subConcat = inputs[i].getDefiningOp<ConcatOp>())
@@ -1643,7 +1648,7 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
       }
 
       // Merge neighboring extracts of neighboring inputs, e.g.
-      // {A[3], A[2]} -> A[3,2]
+      // {A[3], A[2]} -> A[3:2]
       if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
         if (auto prevExtract = inputs[i - 1].getDefiningOp<ExtractOp>()) {
           if (extract.input() == prevExtract.input()) {
@@ -1659,6 +1664,12 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
         }
       }
     }
+  }
+
+  // If all operands were the same, then this is a replicate.
+  if (commonOperand) {
+    rewriter.replaceOpWithNewOp<ReplicateOp>(op, op.getType(), commonOperand);
+    return success();
   }
 
   // Return true if this extract is an extract of the sign bit of its input.
@@ -2352,9 +2363,9 @@ static size_t computeCommonPrefixLength(const Range &a, const Range &b) {
   return commonPrefixLength;
 }
 
-static size_t getTotalWidth(const OperandRange &range) {
+static size_t getTotalWidth(ArrayRef<Value> operands) {
   size_t totalWidth = 0;
-  for (auto operand : range) {
+  for (auto operand : operands) {
     // getIntOrFloatBitWidth should never raise, since all arguments to
     // ConcatOp are integers.
     ssize_t width = operand.getType().getIntOrFloatBitWidth();
@@ -2364,37 +2375,53 @@ static size_t getTotalWidth(const OperandRange &range) {
   return totalWidth;
 }
 
-// Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
-// comparison on common prefix and suffixes. Returns success() if a rewriting
-// happens.
-static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
-                                                  ConcatOp rhs,
+/// Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
+/// comparison on common prefix and suffixes. Returns success() if a rewriting
+/// happens.  This handles both concat and replicate.
+static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
+                                                  Operation *rhs,
                                                   PatternRewriter &rewriter) {
   // It is safe to assume that [{lhsOperands, rhsOperands}.size() > 0] and
   // all elements have non-zero length. Both these invariants are verified
   // by the ConcatOp verifier.
-  auto lhsOperands = lhs.getOperands();
-  auto rhsOperands = rhs.getOperands();
+  SmallVector<Value> lhsOperands;
+  if (auto concat = dyn_cast<ConcatOp>(lhs))
+    lhsOperands.assign(concat.operand_begin(), concat.operand_end());
+  else
+    lhsOperands.assign(cast<ReplicateOp>(lhs).getMultiple(),
+                       lhs->getOperand(0));
+  SmallVector<Value> rhsOperands;
+  if (auto concat = dyn_cast<ConcatOp>(rhs))
+    rhsOperands.assign(concat.operand_begin(), concat.operand_end());
+  else
+    rhsOperands.assign(cast<ReplicateOp>(rhs).getMultiple(),
+                       rhs->getOperand(0));
+  ArrayRef<Value> lhsOperandsRef = lhsOperands, rhsOperandsRef = rhsOperands;
+
   size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
 
   size_t commonPrefixLength =
       computeCommonPrefixLength(lhsOperands, rhsOperands);
   size_t commonSuffixLength = computeCommonPrefixLength(
-      llvm::reverse(lhsOperands.drop_front(commonPrefixLength)),
-      llvm::reverse(rhsOperands.drop_front(commonPrefixLength)));
+      llvm::reverse(lhsOperandsRef.drop_front(commonPrefixLength)),
+      llvm::reverse(rhsOperandsRef.drop_front(commonPrefixLength)));
 
   auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
     return success();
   };
 
-  auto directOrCat = [&](const OperandRange &range) -> Value {
-    assert(range.size() > 0);
-    if (range.size() == 1) {
-      return range.front();
-    }
-
-    return rewriter.create<ConcatOp>(op.getLoc(), range);
+  auto formCatOrReplicate = [&](Location loc,
+                                ArrayRef<Value> operands) -> Value {
+    assert(!operands.empty());
+    Value sameElement = operands[0];
+    for (size_t i = 1, e = operands.size(); i != e && sameElement; ++i)
+      if (sameElement != operands[i])
+        sameElement = Value();
+    if (sameElement)
+      return rewriter.createOrFold<ReplicateOp>(loc, sameElement,
+                                                operands.size());
+    return rewriter.createOrFold<ConcatOp>(loc, operands);
   };
 
   auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
@@ -2410,17 +2437,17 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   }
 
   size_t commonPrefixTotalWidth =
-      getTotalWidth(lhsOperands.take_front(commonPrefixLength));
+      getTotalWidth(lhsOperandsRef.take_front(commonPrefixLength));
   size_t commonSuffixTotalWidth =
-      getTotalWidth(lhsOperands.take_back(commonSuffixLength));
-  auto lhsOnly =
-      lhsOperands.drop_front(commonPrefixLength).drop_back(commonSuffixLength);
-  auto rhsOnly =
-      rhsOperands.drop_front(commonPrefixLength).drop_back(commonSuffixLength);
+      getTotalWidth(lhsOperandsRef.take_back(commonSuffixLength));
+  auto lhsOnly = lhsOperandsRef.drop_front(commonPrefixLength)
+                     .drop_back(commonSuffixLength);
+  auto rhsOnly = rhsOperandsRef.drop_front(commonPrefixLength)
+                     .drop_back(commonSuffixLength);
 
   auto replaceWithoutReplicatingSignBit = [&]() {
-    auto newLhs = directOrCat(lhsOnly);
-    auto newRhs = directOrCat(rhsOnly);
+    auto newLhs = formCatOrReplicate(lhs->getLoc(), lhsOnly);
+    auto newRhs = formCatOrReplicate(rhs->getLoc(), rhsOnly);
     return replaceWith(op.predicate(), newLhs, newRhs);
   };
 
@@ -2428,15 +2455,8 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
     auto firstNonEmptyValue = lhsOperands[0];
     auto firstNonEmptyElemWidth =
         firstNonEmptyValue.getType().getIntOrFloatBitWidth();
-    Value signBit;
-
-    // Skip creating an ExtractOp where possible.
-    if (firstNonEmptyElemWidth == 1) {
-      signBit = firstNonEmptyValue;
-    } else {
-      signBit = rewriter.create<ExtractOp>(op.getLoc(), firstNonEmptyValue,
-                                           firstNonEmptyElemWidth - 1, 1);
-    }
+    Value signBit = rewriter.createOrFold<ExtractOp>(
+        op.getLoc(), firstNonEmptyValue, firstNonEmptyElemWidth - 1, 1);
 
     auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
     auto newRhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly);
@@ -2765,14 +2785,13 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   // icmp(cat(prefix, a, b, suffix), cat(prefix, c, d, suffix)) => icmp(cat(a,
   // b), cat(c, d)). contains special handling for sign bit in signed
   // compressions.
-  if (auto lhs = dyn_cast_or_null<ConcatOp>(op.lhs().getDefiningOp())) {
-    if (auto rhs = dyn_cast_or_null<ConcatOp>(op.rhs().getDefiningOp())) {
-      auto rewriteResult = matchAndRewriteCompareConcat(op, lhs, rhs, rewriter);
-      if (rewriteResult.succeeded()) {
-        return success();
+  if (Operation *opLHS = op.lhs().getDefiningOp())
+    if (Operation *opRHS = op.rhs().getDefiningOp())
+      if (isa<ConcatOp, ReplicateOp>(opLHS) &&
+          isa<ConcatOp, ReplicateOp>(opRHS)) {
+        if (succeeded(matchAndRewriteCompareConcat(op, opLHS, opRHS, rewriter)))
+          return success();
       }
-    }
-  }
 
   return failure();
 }

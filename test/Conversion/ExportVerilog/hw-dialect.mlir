@@ -73,7 +73,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
   %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
 
-  %36 = comb.concat %a, %a, %a : i4, i4, i4
+  %36 = comb.replicate %a : (i4) -> i12
 
   %39 = hw.struct_extract %structA["bar"] : !hw.struct<foo: i2, bar: i4>
   %40 = hw.struct_inject %structA["bar"], %a : !hw.struct<foo: i2, bar: i4>

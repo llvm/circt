@@ -1775,20 +1775,6 @@ SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
-  // If all of the operands are the same, we emit this as a SystemVerilog
-  // replicate operation, ala SV Spec 11.4.12.1.
-  auto firstOperand = op.getOperand(0);
-  bool allSame = llvm::all_of(op.getOperands(), [&firstOperand](auto operand) {
-    return operand == firstOperand;
-  });
-
-  if (allSame) {
-    os << '{' << op.getNumOperands() << '{';
-    emitSubExpr(firstOperand, LowestPrecedence, OOLUnary);
-    os << "}}";
-    return {Symbol, IsUnsigned};
-  }
-
   os << '{';
   llvm::interleaveComma(op.getOperands(), os, [&](Value v) {
     emitSubExpr(v, LowestPrecedence, OOLBinary);

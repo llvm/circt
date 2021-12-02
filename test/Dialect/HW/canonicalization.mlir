@@ -564,6 +564,14 @@ hw.module @concat_fold6(%arg0: i5, %arg1: i3) -> (result: i4) {
   hw.output %2 : i4
 }
 
+// CHECK-LABEL: hw.module @concat_fold7(%arg0: i5) -> (result: i20) {
+// CHECK-NEXT: %0 = comb.replicate %arg0 : (i5) -> i20
+// CHECK-NEXT: hw.output %0 : i20
+hw.module @concat_fold7(%arg0: i5) -> (result: i20) {
+  %0 = comb.concat %arg0, %arg0, %arg0, %arg0 : i5, i5, i5, i5
+  hw.output %0 : i20
+}
+
 // CHECK-LABEL: hw.module @mux_fold0(%arg0: i3, %arg1: i3)
 // CHECK-NEXT:    hw.output %arg0 : i3
 hw.module @mux_fold0(%arg0: i3, %arg1: i3) -> (result: i3) {
