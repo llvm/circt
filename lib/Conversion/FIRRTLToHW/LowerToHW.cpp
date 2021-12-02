@@ -186,7 +186,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   auto ctx = top.getContext();
   if (!anno)
     return;
-  if (auto dir = anno.getAs<StringAttr>("directory")) {
+  if (auto dir = anno.getMember<StringAttr>("directory")) {
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
@@ -194,7 +194,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
                      hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
     top->setAttrs(old);
   }
-  if (auto file = anno.getAs<StringAttr>("filename")) {
+  if (auto file = anno.getMember<StringAttr>("filename")) {
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
@@ -841,7 +841,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
           moduleHierarchyFileAttrName,
           hw::OutputFileAttr::getFromFilename(
               &getContext(),
-              hierAnno.get("filename").cast<StringAttr>().getValue(),
+              hierAnno.getMember<StringAttr>("filename").getValue(),
               /*excludeFromFileList=*/true));
   };
   if (annos.removeAnnotation(dutAnnoClass))
