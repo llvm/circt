@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -24,6 +25,38 @@ namespace py = pybind11;
 using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
+
+namespace pybind11 {
+namespace detail {
+/// Casts object <-> PhysLocationAttr
+template <>
+struct type_caster<PhysLocationAttr> {
+  PYBIND11_TYPE_CASTER(PhysLocationAttr, _("PhysLocationAttr"));
+  bool load(handle src, bool) {
+    py::object capsule = mlirApiObjectToCapsule(src);
+    Attribute attr = unwrap(mlirPythonCapsuleToAttribute(capsule.ptr()));
+    if (auto physLoc = attr.dyn_cast_or_null<PhysLocationAttr>()) {
+      value = physLoc;
+      return true;
+    }
+    return true;
+  }
+  static handle cast(PhysLocationAttr v, return_value_policy, handle) {
+    py::object capsule = py::reinterpret_steal<py::object>(
+        mlirPythonAttributeToCapsule(wrap(v)));
+
+    auto attr = py::module::import(MAKE_MLIR_PYTHON_QUALNAME("ir"))
+                    .attr("Attribute")
+                    .attr(MLIR_PYTHON_CAPI_FACTORY_ATTR)(capsule)
+                    .release();
+
+    return py::module::import("circt.dialects.msft")
+        .attr("PhysLocationAttr")(attr)
+        .release();
+  }
+};
+} // namespace detail
+} // namespace pybind11
 
 class PrimitiveDB {
 public:
@@ -63,13 +96,14 @@ public:
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
-  py::object getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
-                                    uint64_t column, uint64_t nearestToY) {
+  PhysLocationAttr getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+                                          uint64_t column,
+                                          uint64_t nearestToY) {
     MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
         db, prim, column, nearestToY);
     if (!nearest.ptr)
-      return py::none();
-    return py::cast(nearest);
+      return {};
+    return unwrap(nearest).cast<PhysLocationAttr>();
   }
   void walkPlacements(
       py::function pycb,
@@ -93,10 +127,11 @@ public:
           std::string subpath(p.subpath, p.subpathLength);
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
+          auto physLoc = unwrap(loc).cast<PhysLocationAttr>();
           if (!p.op.ptr) {
-            pycb(loc, py::none());
+            pycb(physLoc, py::none());
           } else {
-            pycb(loc, std::make_tuple(p.path, subpath, p.op));
+            pycb(physLoc, std::make_tuple(p.path, subpath, p.op));
           }
         },
         cBounds, cPrim, &pycb);
