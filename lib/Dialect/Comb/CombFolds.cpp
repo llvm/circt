@@ -656,6 +656,14 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   auto *inputOp = op.input().getDefiningOp();
 
+  // If the extracted bits are all known, then return the result.
+  auto knownBits = computeKnownBits(op.input())
+                       .extractBits(op.getType().getWidth(), op.lowBit());
+  if (knownBits.isConstant()) {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, knownBits.getConstant());
+    return success();
+  }
+
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
   if (auto innerExtract = dyn_cast_or_null<ExtractOp>(inputOp)) {
     rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(),

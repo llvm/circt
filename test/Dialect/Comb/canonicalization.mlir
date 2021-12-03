@@ -256,6 +256,22 @@ hw.module @extractNested(%0: i5) -> (o1 : i1) {
   hw.output %3 : i1
 }
 
+// CHECK-LABEL: @extractConstant
+hw.module @extractConstant(%arg0: i5, %cond1: i1, %cond2: i1) -> (o1: i1, o2: i4) {
+  //c2 ? (c1 ? 4'h2 : 4'h4) : 4'h0;
+  %c0 = hw.constant 0 : i4
+  %c2 = hw.constant 2 : i4
+  %c4 = hw.constant 4 : i4
+  %0 = comb.mux %cond1, %c0, %c4 : i4
+  %1 = comb.mux %cond2, %0, %c2 : i4
+
+  // CHECK: %false = hw.constant false
+  // CHECK: hw.output %false, 
+  %2 = comb.extract %1 from 3 : (i4) -> i1
+  hw.output %2, %1 : i1, i4
+}
+
+
 // CHECK-LABEL: @flattenMuxTrue
 hw.module @flattenMuxTrue(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (o1 : i8) {
 // CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg1, %arg4
