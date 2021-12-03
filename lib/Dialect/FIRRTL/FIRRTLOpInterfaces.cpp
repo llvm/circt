@@ -78,7 +78,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   auto portSymbols = module.getPortSymbolsAttr();
   if (!portSymbols)
     return module.emitOpError("requires valid port symbols");
-  if (portSymbols.size() != numPorts)
+  if (!portSymbols.empty() && portSymbols.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port symbols";
   if (llvm::any_of(portSymbols.getValue(),
                    [](Attribute attr) { return !attr.isa<StringAttr>(); }))
