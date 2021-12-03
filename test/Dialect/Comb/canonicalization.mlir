@@ -1149,37 +1149,6 @@ hw.module @test1560(%value: i38) -> (a: i1) {
   // CHECK: }
 }
 
-// CHECK-LABEL: hw.module @test_sext
-// Test sext folds.
-hw.module @test_sext(%value: i8, %v9: i9) -> (a: i10, b: i11, c: i10) {
-  // Known zero sign bit.
-  %false = hw.constant false
-  %0 = comb.concat %false, %value : i1, i8
-  // CHECK: %0 = comb.concat %false, %value
-  %1 = comb.sext %0 : (i9) -> i10
-  // CHECK: %1 = comb.concat %c0_i2, %value
-
-  // Known one sign bit.
-  %c128 = hw.constant 128 : i8
-  %2 = comb.or %value, %c128 : i8
-  %3 = comb.sext %2 : (i8) -> i11
-  // CHECK: %2 = comb.or %value, %c-128_i8 : i8
-  // CHECK: %3 = comb.concat %c-1_i3, %2 : i3, i8
-
-  // Check KnownBitAnalysis for xor.
-  %c256 = hw.constant 256 : i9
-  %a = comb.and %v9, %0 : i9
-  %4 = comb.xor %a, %c256 : i9
-  %5 = comb.sext %4 : (i9) -> i10
-
-  // CHECK: %4 = comb.and %v9, %0 : i9
-  // CHECK: %5 = comb.xor %4, %c-256_i9 : i9
-  // CHECK: %6 = comb.concat %true, %5 : i1, i9
-
-  // CHECK: hw.output %1, %3, %6
-  hw.output %1, %3, %5: i10, i11, i10
-}
-
 // CHECK-LABEL: hw.module @extractShift
 hw.module @extractShift(%arg0: i4) -> (o1 : i1, o2: i1) {
   %c1 = hw.constant 1: i4

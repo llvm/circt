@@ -48,14 +48,11 @@ llhd.entity @check_bitwise() -> () {
   // CHECK-NEXT: wire [31:0] _[[EXT:.*]] = _[[A]][36:5];
   %13 = comb.extract %a from 5 : (i64) -> i32
 
-  // CHECK-NEXT: wire [63:0] _[[SEXT:.*]] = {{[{][{]}}32{_[[EXT]][31]{{[}][}]}}, _[[EXT]]};
-  %14 = comb.sext %13 : (i32) -> i64
-
-  // CHECK-NEXT: wire [191:0] _{{.*}} = {_[[A]], _[[SEXT]], _[[A]]};
-  %15 = comb.concat %a, %14, %a : i64, i64, i64
+  // CHECK-NEXT: wire [127:0] _{{.*}} = {_[[A]], _[[A]]};
+  %15 = comb.concat %a, %a : i64, i64
 
   // CHECK-NEXT: wire _[[COND:.*]] = 1'd1;
-  // CHECK-NEXT: wire [63:0] _{{.*}} = _[[COND]] ? _[[A]] : _[[SEXT]];
+  // CHECK-NEXT: wire [63:0] _{{.*}} = _[[COND]] ? _[[A]] : _{{.*}};
   %cond = hw.constant 1 : i1
-  %16 = comb.mux %cond, %a, %14 : i64
+  %16 = comb.mux %cond, %a, %11 : i64
 }

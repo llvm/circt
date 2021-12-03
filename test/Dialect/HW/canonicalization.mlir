@@ -476,16 +476,6 @@ hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (result: i11) {
   hw.output %0 : i11
 }
 
-// CHECK-LABEL: hw.module @sext_constant_folding() -> (result: i5) {
-// CHECK-NEXT:  %c-8_i5 = hw.constant -8 : i5
-// CHECK-NEXT:  hw.output %c-8_i5 : i5
-
-hw.module @sext_constant_folding() -> (result: i5) {
-  %c8_i4 = hw.constant 8 : i4
-  %0 = comb.sext %c8_i4 : (i4) -> i5
-  hw.output %0 : i5
-}
-
 // CHECK-LABEL: hw.module @parity_constant_folding1() -> (result: i1) {
 // CHECK-NEXT:  %true = hw.constant true
 // CHECK-NEXT:  hw.output %true : i1
@@ -902,13 +892,6 @@ hw.module @icmp_fold_1bit_eq1(%arg: i1) -> (result: i1, a: i1, b: i1, c: i1) {
   hw.output %0, %1, %2, %3 : i1, i1, i1, i1
 }
 
-// CHECK-LABEL: hw.module @sext_identical(%a: i1) -> (result: i1) {
-// CHECK-NEXT:   hw.output %a : i1
-hw.module @sext_identical(%a: i1) -> (result: i1) {
-  %0 = comb.sext %a : (i1) -> i1
-  hw.output %0 : i1
-}
-
 // CHECK-LABEL:  hw.module @sub_fold1(%arg0: i7) -> (result: i7) {
 // CHECK-NEXT:    %c-1_i7 = hw.constant -1 : i7
 // CHECK-NEXT:    hw.output %c-1_i7 : i7
@@ -1049,37 +1032,6 @@ hw.module @replicate(%arg0: i7) -> (r1: i9, r2: i7) {
 
 // CHECK-NEXT:  hw.output %c146_i9, %arg0
   hw.output %r1, %r2 : i9, i7
-}
-
-// CHECK-LABEL: hw.module @sext_extract1
-hw.module @sext_extract1(%arg0: i4) -> (a: i4) {
-  // CHECK-NEXT:  %0 = comb.sext %arg0 : (i4) -> i5
-  %0 = comb.sext %arg0 : (i4) -> i8
-  // CHECK-NEXT:  = comb.extract %0 from 1 : (i5) -> i4
-  %1 = comb.extract %0 from 1 : (i8) -> i4
-  // CHECK: hw.output %1
-  hw.output %1 : i4
-}
-
-// CHECK-LABEL: hw.module @sext_extract2
-hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
-  // CHECK-NEXT: %0 = comb.extract %arg0 from 1 : (i4) -> i3
-  %0 = comb.sext %arg0 : (i4) -> i8
-  %1 = comb.extract %0 from 1 : (i8) -> i3
-  // CHECK: hw.output %0
-  hw.output %1 : i3
-}
-
-// CHECK-LABEL: hw.module @sext_extract3
-hw.module @sext_extract3(%arg0: i4) -> (a: i3, b: i8) {
-  // CHECK-NEXT: %0 = comb.sext %arg0 : (i4) -> i8
-  %0 = comb.sext %arg0 : (i4) -> i8
-
-  // CHECK-NEXT: %1 = comb.extract %arg0 from 3 : (i4) -> i1
-  // CHECK-NEXT: %2 = comb.replicate %1 : (i1) -> i3
-  %1 = comb.extract %0 from 3 : (i8) -> i3
-  // CHECK: hw.output %2, %0
-  hw.output %1, %0 : i3, i8
 }
 
 // == Begin: test cases from LowerToHW ==

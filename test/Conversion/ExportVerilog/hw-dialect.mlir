@@ -55,7 +55,10 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %28 = comb.parity %a : i4
   %29 = comb.concat %a, %a, %b : i4, i4, i4
   %30 = comb.extract %a from 1 : (i4) -> i2
-  %31 = comb.sext %a : (i4) -> i9
+
+  %tmp = comb.extract %a from 3 : (i4) -> i1
+  %tmp2 = comb.replicate %tmp : (i1) -> i5
+  %31 = comb.concat %tmp2, %a : i5, i4
   %33 = comb.mux %cond, %a, %b : i4
 
   %allone = hw.constant 15 : i4
@@ -295,16 +298,6 @@ hw.module @extract_all(%tmp85: i1) -> (tmp106: i1) {
 }
 // CHECK-LABEL: module extract_all
 // CHECK:  assign tmp106 = tmp85;
-
-// https://github.com/llvm/circt/issues/320
-hw.module @literal_extract(%inp_1: i349) -> (tmp6: i349) {
-  %c-58836_i17 = hw.constant -58836 : i17
-  %0 = comb.sext %c-58836_i17 : (i17) -> i349
-  hw.output %0 : i349
-}
-// CHECK-LABEL: module literal_extract
-// CHECK: localparam [16:0] _T = 17'h11A2C;
-// CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
 hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-LABEL: module wires(

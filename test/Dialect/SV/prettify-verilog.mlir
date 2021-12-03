@@ -206,7 +206,7 @@ hw.module @unary_sink_crash(%arg0: i1) {
 
 // CHECK-LABEL: hw.module @unary_sink_no_duplicate
 // https://github.com/llvm/circt/issues/2097
-hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i11) {
+hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
   %ones = hw.constant 15: i4
 
   // CHECK-NOT: comb.xor
@@ -224,12 +224,11 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i11) {
   %a = comb.extract %0 from 0 : (i4) -> i1
   %b = comb.extract %0 from 1 : (i4) -> i1
   %c = comb.extract %0 from 2 : (i4) -> i2
-  %d = comb.sext %0 : (i4) -> i7
 
 
   // CHECK: hw.output
-  %r = comb.concat %a, %b, %c, %d : i1, i1, i2, i7
-  hw.output %r : i11
+  %r = comb.concat %a, %b, %c : i1, i1, i2
+  hw.output %r : i4
 }
 
 
