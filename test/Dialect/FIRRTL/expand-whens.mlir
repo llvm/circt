@@ -460,6 +460,7 @@ firrtl.module @vector_of_bundle(in %p : !firrtl.uint<1>, out %ret: !firrtl.vecto
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK: firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NOT: firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:     firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
