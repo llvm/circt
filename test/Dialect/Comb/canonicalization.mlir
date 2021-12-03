@@ -1219,7 +1219,7 @@ hw.module @addSubParam<p1: i4>(%a: i4) -> (o1: i4, o2: i4, o3: i4) {
 
 // CHECK-LABEL: muxConstantsFold
 hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
-  // CHECK-NEXT: %0 = comb.sext %cond : (i1) -> i25
+  // CHECK-NEXT: %0 = comb.replicate %cond : (i1) -> i25
   %c0_i25 = hw.constant 0 : i25
   %c-1_i25 = hw.constant -1 : i25
   %0 = comb.mux %cond, %c-1_i25, %c0_i25 : i25
@@ -1236,30 +1236,30 @@ hw.module @muxCommon(%cond: i1, %cond2: i1,
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[O1:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
   %o1 = comb.mux %cond, %notArg0, %arg0 : i32
 
   // CHECK: [[CONDNOT:%.*]] = comb.xor %cond, %true : i1
-  // CHECK: [[CONDEXT:%.*]] = comb.sext [[CONDNOT]] : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate [[CONDNOT]] : (i1) -> i32
   // CHECK: [[O2:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
   %o2 = comb.mux %cond, %arg0, %notArg0 : i32
 
   // CHECK: [[OR_PARTIAL:%.*]] = comb.or %arg1, %arg2 : i32
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[OR_PARTIAL2:%.*]] = comb.and [[CONDEXT]], [[OR_PARTIAL]] : i32
   // CHECK: [[O3:%.*]] = comb.or [[OR_PARTIAL2]], %arg0 : i32
   %or = comb.or %arg0, %arg1, %arg2 : i32
   %o3 = comb.mux %cond, %or, %arg0 : i32
 
   // CHECK: [[AND_PARTIAL:%.*]] = comb.and %arg1, %arg2 : i32
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[AND_PARTIAL2:%.*]] = comb.or [[CONDEXT]], [[AND_PARTIAL]] : i32
   // CHECK: [[O4:%.*]] = comb.and [[AND_PARTIAL2]], %arg0 : i32
   %and = comb.and %arg0, %arg1, %arg2 : i32
   %o4 = comb.mux %cond, %arg0, %and : i32
 
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[OR1:%.*]] = comb.or %arg1, %arg2, %arg3 : i32
   // CHECK: [[ORRESULT:%.*]] = comb.or [[OR1]], %arg0 : i32
   // CHECK: [[MASKED_OR:%.*]] = comb.and [[CONDEXT]], [[OR1]] : i32

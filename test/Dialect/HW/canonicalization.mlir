@@ -807,7 +807,7 @@ hw.module @shrs_fold3(%arg0: i12) -> (result: i12) {
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
-// CHECK-NEXT:   %1 = comb.sext %0 : (i1) -> i12
+// CHECK-NEXT:   %1 = comb.replicate %0 : (i1) -> i12
 // CHECK-NEXT:   hw.output %1 : i12
 hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (result: i12) {
   %c12_i12 = hw.constant 12 : i12
@@ -817,7 +817,7 @@ hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (result: i12) {
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
-// CHECK-NEXT:   %1 = comb.sext %0 : (i1) -> i2 
+// CHECK-NEXT:   %1 = comb.replicate %0 : (i1) -> i2 
 // CHECK-NEXT:   %2 = comb.extract %arg0 from 2 : (i12) -> i10
 // CHECK-NEXT:   %3 = comb.concat %1, %2 : i2, i10
 // CHECK-NEXT:   hw.output %3
@@ -929,15 +929,15 @@ hw.module @issue955() -> (result: i100, a: i100) {
   hw.output %1, %3 : i100, i100
 }
 
-// CHECK-LABEL: sext_and_one_bit
-hw.module @sext_and_one_bit(%bit: i1) -> (a: i65, b: i8, c: i8) {
+// CHECK-LABEL: replicate_and_one_bit
+hw.module @replicate_and_one_bit(%bit: i1) -> (a: i65, b: i8, c: i8) {
   %c-18446744073709551616_i65 = hw.constant -18446744073709551616 : i65
-  %0 = comb.sext %bit : (i1) -> i65
+  %0 = comb.replicate %bit : (i1) -> i65
   %1 = comb.and %0, %c-18446744073709551616_i65 : i65
   // CHECK: [[A:%[0-9]+]] = comb.concat %bit, %c0_i64 : i1, i64
 
   %c4_i8 = hw.constant 4 : i8
-  %2 = comb.sext %bit : (i1) -> i8
+  %2 = comb.replicate %bit : (i1) -> i8
   %3 = comb.and %2, %c4_i8 : i8
   // CHECK: [[B:%[0-9]+]] = comb.concat %c0_i5, %bit, %c0_i2 : i5, i1, i2
 
@@ -1053,7 +1053,7 @@ hw.module @sext_extract3(%arg0: i4) -> (a: i3, b: i8) {
   %0 = comb.sext %arg0 : (i4) -> i8
 
   // CHECK-NEXT: %1 = comb.extract %arg0 from 3 : (i4) -> i1
-  // CHECK-NEXT: %2 = comb.sext %1 : (i1) -> i3
+  // CHECK-NEXT: %2 = comb.replicate %1 : (i1) -> i3
   %1 = comb.extract %0 from 3 : (i8) -> i3
   // CHECK: hw.output %2, %0
   hw.output %1, %0 : i3, i8

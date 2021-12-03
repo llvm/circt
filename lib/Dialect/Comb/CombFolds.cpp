@@ -267,6 +267,12 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
 }
 
 LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
+  // sext(onebit) -> replicate.
+  if (op.getOperand().getType().isInteger(1)) {
+    rewriter.replaceOpWithNewOp<ReplicateOp>(op, op.getType(), op.getOperand());
+    return success();
+  }
+
   // If the sign bit is known, we can fold this to a simpler operation.
   auto knownBits = computeKnownBits(op.input());
   if (knownBits.isNegative() || knownBits.isNonNegative()) {
@@ -420,7 +426,7 @@ OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
-  // ShrSOp(x, cst) -> Concat(sext(extract(x, topbit)),extract(x))
+  // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
   if (!matchPattern(op.rhs(), m_RConstant(value)))
     return failure();
@@ -428,9 +434,9 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), width - 1, 1);
-  auto sext = rewriter.create<SExtOp>(op.getLoc(),
-                                      rewriter.getIntegerType(shift), topbit);
+  auto topbit =
+      rewriter.createOrFold<ExtractOp>(op.getLoc(), op.lhs(), width - 1, 1);
+  auto sext = rewriter.createOrFold<ReplicateOp>(op.getLoc(), topbit, shift);
 
   if (width <= shift) {
     rewriter.replaceOp(op, {sext});
@@ -936,12 +942,13 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 
     // Handle 'and' with a single bit constant on the RHS.
     if (size == 2 && value.isPowerOf2()) {
-      // If the LHS is a sign extend from a single bit, we can 'concat' it
+      // If the LHS is a replicate from a single bit, we can 'concat' it
       // into place.  e.g.:
-      //   `sext(x) & 4` -> `concat(zeros, x, zeros)`
-      if (auto sext = inputs[0].getDefiningOp<SExtOp>()) {
-        auto sextOperand = sext.getOperand();
-        if (sextOperand.getType().isInteger(1)) {
+      //   `replicate(x) & 4` -> `concat(zeros, x, zeros)`
+      // TODO: Generalize this for non-single-bit operands.
+      if (auto replicate = inputs[0].getDefiningOp<ReplicateOp>()) {
+        auto replicateOperand = replicate.getOperand();
+        if (replicateOperand.getType().isInteger(1)) {
           unsigned resultWidth = op.getType().getIntOrFloatBitWidth();
           auto trailingZeros = value.countTrailingZeros();
 
@@ -952,7 +959,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
                 op.getLoc(), APInt::getZero(resultWidth - trailingZeros - 1));
             concatOperands.push_back(highZeros);
           }
-          concatOperands.push_back(sextOperand);
+          concatOperands.push_back(replicateOperand);
           if (trailingZeros != 0) {
             auto lowZeros = rewriter.create<hw::ConstantOp>(
                 op.getLoc(), APInt::getZero(trailingZeros));
@@ -1920,12 +1927,12 @@ static Value extractOperandFromFullyAssociative(Operation *fullyAssoc,
   return opWithoutExcluded;
 }
 
-/// Fold things like `mux(cond, x|y|z|a, a)` -> `(x|y|z)&sext(cond) | a` and
-/// `mux(cond, a, x|y|z|a) -> `(x|y|z)&sext(~cond) | a` (when isTrueOperand is
-/// true.  Return true on successful transformation, false if not.
+/// Fold things like `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond)|a` and
+/// `mux(cond, a, x|y|z|a) -> `(x|y|z)&replicate(~cond) | a` (when isTrueOperand
+/// is true.  Return true on successful transformation, false if not.
 ///
 /// These are various forms of "predicated ops" that can be handled with a
-/// sext/and combination.
+/// replicate/and combination.
 static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
                                PatternRewriter &rewriter) {
   // Check to see the operand in question is an operation.  If it is a port,
@@ -1989,15 +1996,15 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
     cond = invertBoolValue(cond);
 
   auto extendedCond =
-      rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), cond);
+      rewriter.createOrFold<ReplicateOp>(op.getLoc(), op.getType(), cond);
 
   // Handle the fully associative ops, start by pulling out the subexpression
   // from a many operand version of the op.
   auto restOfAssoc =
       extractOperandFromFullyAssociative(subExpr, opNo, rewriter);
 
-  // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&sext(cond) | a`
-  // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&sext(cond) ^ a`
+  // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond) | a`
+  // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&replicate(cond) ^ a`
   if (isa<OrOp, XorOp>(subExpr)) {
     auto masked =
         rewriter.createOrFold<AndOp>(op.getLoc(), extendedCond, restOfAssoc);
@@ -2008,7 +2015,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
     return true;
   }
 
-  // `mux(cond, a, x&y&z&a)` -> `((x&y&z)|sext(cond)) & a`
+  // `mux(cond, a, x&y&z&a)` -> `((x&y&z)|replicate(cond)) & a`
   assert(isa<AndOp>(subExpr) && "unexpected operation here");
   auto masked =
       rewriter.createOrFold<OrOp>(op.getLoc(), extendedCond, restOfAssoc);
@@ -2165,9 +2172,9 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       }
 
       // If the true value is all ones and the false is all zeros then we have a
-      // sext pattern.
+      // replicate pattern.
       if (value.isAllOnes() && value2.isZero()) {
-        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), op.cond());
+        rewriter.replaceOpWithNewOp<ReplicateOp>(op, op.getType(), op.cond());
         return success();
       }
     }
@@ -2258,10 +2265,10 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       return success();
   }
 
-  // mux(cond, x|y|z|a, a) -> (x|y|z)&sext(cond) | a
+  // mux(cond, x|y|z|a, a) -> (x|y|z)&replicate(cond) | a
   if (foldCommonMuxValue(op, false, rewriter))
     return success();
-  // mux(cond, a, x|y|z|a) -> (x|y|z)&sext(~cond) | a
+  // mux(cond, a, x|y|z|a) -> (x|y|z)&replicate(~cond) | a
   if (foldCommonMuxValue(op, true, rewriter))
     return success();
 
