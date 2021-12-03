@@ -101,14 +101,6 @@ class ParityOp:
   pass
 
 
-class SExtOp:
-
-  @classmethod
-  def create(cls, input=None, result_type=None):
-    mapping = {"input": input} if input else {}
-    return UnaryOpBuilder(cls, result_type, mapping, needs_result_type=True)
-
-
 # Sugar classes for the various non-variadic binary ops.
 @BinaryOp
 class DivSOp:
