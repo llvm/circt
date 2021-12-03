@@ -1266,6 +1266,7 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 static void printArrayCreateOp(OpAsmPrinter &p, ArrayCreateOp op) {
   p << " ";
   p.printOperands(op.inputs());
+  p.printOptionalAttrDict(op->getAttrs());
   p << " : " << op.inputs()[0].getType();
 }
 
