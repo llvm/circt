@@ -193,7 +193,11 @@ public:
 
   void visitDecl(RegOp op) {
     // Registers are initialized to themselves.
-    // TODO: register of bundle type are not supported.
+    // TODO: register of aggregate types are not supported.
+    if (!op.getType().cast<FIRRTLType>().isGround()) {
+      op.emitError() << "aggegate type register is not supported";
+      return;
+    }
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
     driverMap[getFieldRefFromValue(op.result())] = connect;
@@ -201,9 +205,11 @@ public:
 
   void visitDecl(RegResetOp op) {
     // Registers are initialized to themselves.
-    // TODO: register of bundle type are not supported.
-    assert(!op.result().getType().isa<BundleType>() &&
-           "registers can't be bundle type");
+    // TODO: register of aggregate types are not supported.
+    if (!op.getType().cast<FIRRTLType>().isGround()) {
+      op.emitError() << "aggegate type register is not supported";
+      return;
+    }
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
     driverMap[getFieldRefFromValue(op.result())] = connect;
