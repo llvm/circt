@@ -296,7 +296,7 @@ class IntBinaryPrimOp<string mnemonic, Type resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
 let inferType = "impl::inferAddSubResult" in {
-  let hasCanonicalizer = true in {
+  let hasCanonicalizeMethod = true in {
     def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
     def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
   }
@@ -480,7 +480,6 @@ def PadPrimOp : PrimOp<"pad"> {
   }];
 
   let parseValidator = "impl::validateOneOperandOneConst";
-  let hasCanonicalizer = true;
 }
 
 class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
