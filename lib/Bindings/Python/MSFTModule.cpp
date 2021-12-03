@@ -26,38 +26,6 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
-namespace pybind11 {
-namespace detail {
-/// Casts object <-> PhysLocationAttr
-template <>
-struct type_caster<PhysLocationAttr> {
-  PYBIND11_TYPE_CASTER(PhysLocationAttr, _("PhysLocationAttr"));
-  bool load(handle src, bool) {
-    py::object capsule = mlirApiObjectToCapsule(src);
-    Attribute attr = unwrap(mlirPythonCapsuleToAttribute(capsule.ptr()));
-    if (auto physLoc = attr.dyn_cast_or_null<PhysLocationAttr>()) {
-      value = physLoc;
-      return true;
-    }
-    return true;
-  }
-  static handle cast(PhysLocationAttr v, return_value_policy, handle) {
-    py::object capsule = py::reinterpret_steal<py::object>(
-        mlirPythonAttributeToCapsule(wrap(v)));
-
-    auto attr = py::module::import(MAKE_MLIR_PYTHON_QUALNAME("ir"))
-                    .attr("Attribute")
-                    .attr(MLIR_PYTHON_CAPI_FACTORY_ATTR)(capsule)
-                    .release();
-
-    return py::module::import("circt.dialects.msft")
-        .attr("PhysLocationAttr")(attr)
-        .release();
-  }
-};
-} // namespace detail
-} // namespace pybind11
-
 class PrimitiveDB {
 public:
   PrimitiveDB(MlirContext ctxt) { db = circtMSFTCreatePrimitiveDB(ctxt); }
@@ -142,6 +110,8 @@ private:
 };
 
 /// Populate the msft python module.
+DEFINE_ATTRIBUTE_CASTER(PhysLocationAttr, "PhysLocationAttr", "circt.dialects.msft")
+
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   mlirMSFTRegisterPasses();
 
