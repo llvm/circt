@@ -115,6 +115,7 @@ firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.
 }
 
 // -----
+
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.vector<vector<uint<1>, 1>, 1>) {
   // expected-error @-1 {{sink "out[0][0]" not fully initialized}}
@@ -122,6 +123,7 @@ firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.
 }
 
 // -----
+
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.vector<bundle<a:uint<1>, b:uint<1>>, 1>) {
   // expected-error @-1 {{sink "out[0].a" not fully initialized}}
