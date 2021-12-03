@@ -9,8 +9,8 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %b = comb.add %a, %a : i12
   %c = comb.mul %a, %b : i12
 
-  // CHECK-NEXT:    [[RES2:%[0-9]+]] = comb.sext %arg0 : (i3) -> i7
-  %d = comb.sext %arg0 : (i3) -> i7
+  // CHECK-NEXT:    [[RES2:%[0-9]+]] = comb.concat %arg0, %arg0, %arg1
+  %d = comb.concat %arg0, %arg0, %arg1 : i3, i3, i1
 
   // CHECK-NEXT:    [[RES4:%[0-9]+]] = comb.concat %c42_i12 : i12
   %conc1 = comb.concat %a : i12

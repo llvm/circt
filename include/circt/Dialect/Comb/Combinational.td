@@ -192,20 +192,6 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   ];
 }
 
-def SExtOp : CombOp<"sext", [NoSideEffect]> {
-  let summary = "Sign extend an integer to an equal or larger integer";
-
-  let arguments = (ins HWIntegerType:$input);
-  let results = (outs HWIntegerType:$result);
-
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-
-  let hasFolder = true;
-  let hasCanonicalizeMethod = true;
-  let verifier = "return ::verifySExtOp(*this);";
-}
-
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
@@ -237,6 +223,36 @@ def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
+  }];
+}
+
+def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
+  let summary = "Concatenate the operand a constant number of times";
+
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let verifier = "return ::verifyReplicateOp(*this);";
+
+  let builders = [
+    OpBuilder<(ins "Value":$operand, "int32_t":$multiple), [{
+      auto bitWidth = operand.getType().cast<IntegerType>().getWidth();
+      auto resultType = $_builder.getIntegerType(bitWidth*multiple);
+      return build($_builder, $_state, resultType, operand);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Returns the number of times the operand is replicated.
+    size_t getMultiple() {
+      auto opWidth = input().getType().cast<IntegerType>().getWidth();
+      return getType().getWidth()/opWidth;
+    }
   }];
 }
 

@@ -117,7 +117,7 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   // If this operation has any users that cannot inline the operation, then
   // don't duplicate any of them.
   for (auto *user : op->getUsers()) {
-    if (isa<comb::ExtractOp, hw::ArraySliceOp, comb::SExtOp>(user))
+    if (isa<comb::ExtractOp, hw::ArraySliceOp>(user))
       return false;
   }
 

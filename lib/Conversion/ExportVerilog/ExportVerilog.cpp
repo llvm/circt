@@ -1446,7 +1446,7 @@ private:
   // regardless of the operands."
   SubExprInfo visitComb(ParityOp op) { return emitUnary(op, "^", true); }
 
-  SubExprInfo visitComb(SExtOp op);
+  SubExprInfo visitComb(ReplicateOp op);
   SubExprInfo visitComb(ConcatOp op);
   SubExprInfo visitComb(ExtractOp op);
   SubExprInfo visitComb(ICmpOp op);
@@ -1728,51 +1728,28 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   return expInfo;
 }
 
-SubExprInfo ExprEmitter::visitComb(SExtOp op) {
-  auto inWidth = op.getOperand().getType().getIntOrFloatBitWidth();
-  auto destWidth = op.getType().getIntOrFloatBitWidth();
+SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
+  os << '{' << op.getMultiple() << '{';
 
-  // Handle sign extend from a single bit in a pretty way.
-  if (inWidth == 1) {
-    os << '{' << destWidth << '{';
-    emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
-    os << "}}";
-    return {Symbol, IsUnsigned};
+  // If the subexpression is an inline concat, we can emit it as part of the
+  // replicate.
+  if (auto concatOp = op.getOperand().getDefiningOp<ConcatOp>()) {
+    if (op.getOperand().hasOneUse() &&
+        !emitter.outOfLineExpressions.count(concatOp)) {
+      llvm::interleaveComma(concatOp.getOperands(), os, [&](Value v) {
+        emitSubExpr(v, LowestPrecedence, OOLBinary);
+      });
+      os << "}}";
+      return {Symbol, IsUnsigned};
+    }
   }
 
-  // Otherwise, this is a sign extension of a general expression.
-  os << '{';
-  if (destWidth - inWidth == 1) {
-    // Special pattern for single bit extension, where we just need the bit.
-    emitSubExpr(op.getOperand(), Unary, OOLUnary);
-    os << '[' << (inWidth - 1) << ']';
-  } else {
-    // General pattern for multi-bit extension: splat the bit.
-    os << '{' << (destWidth - inWidth) << '{';
-    emitSubExpr(op.getOperand(), Unary, OOLUnary);
-    os << '[' << (inWidth - 1) << "]}}";
-  }
-  os << ", ";
   emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
-  os << '}';
+  os << "}}";
   return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
-  // If all of the operands are the same, we emit this as a SystemVerilog
-  // replicate operation, ala SV Spec 11.4.12.1.
-  auto firstOperand = op.getOperand(0);
-  bool allSame = llvm::all_of(op.getOperands(), [&firstOperand](auto operand) {
-    return operand == firstOperand;
-  });
-
-  if (allSame) {
-    os << '{' << op.getNumOperands() << '{';
-    emitSubExpr(firstOperand, LowestPrecedence, OOLUnary);
-    os << "}}";
-    return {Symbol, IsUnsigned};
-  }
-
   os << '{';
   llvm::interleaveComma(op.getOperands(), os, [&](Value v) {
     emitSubExpr(v, LowestPrecedence, OOLBinary);
@@ -2116,15 +2093,6 @@ static bool isExpressionUnableToInline(Operation *op) {
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
-
-    // Sign extend (when the operand isn't a single bit) requires a bitselect
-    // syntactically so it uses its expression multiple times.
-    if (auto sext = dyn_cast<SExtOp>(user)) {
-      auto sextOperandType = sext.getOperand().getType().cast<IntegerType>();
-      if (sextOperandType.getWidth() != 1 &&
-          !isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-    }
 
     // Always blocks must have a name in their sensitivity list, not an expr.
     if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {

@@ -1511,7 +1511,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
     }
 
     if (sourceType.cast<IntType>().isSigned())
-      return builder.createOrFold<comb::SExtOp>(resultType, value);
+      return comb::createOrFoldSExt(value, resultType, builder);
     auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
@@ -1612,7 +1612,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder.createOrFold<comb::SExtOp>(resultType, result);
+    return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -1674,7 +1674,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder.createOrFold<comb::SExtOp>(resultType, result);
+    return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
