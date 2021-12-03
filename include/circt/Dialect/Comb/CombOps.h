@@ -43,6 +43,12 @@ using llvm::KnownBits;
 /// in neither set is unknown.
 KnownBits computeKnownBits(Value value);
 
+/// Create a sign extension operation from a value of integer type to an equal
+/// or larger integer type.
+Value createOrFoldSExt(Location loc, Value value, Type destTy,
+                       OpBuilder &builder);
+Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
+
 } // namespace comb
 } // namespace circt
 

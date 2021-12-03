@@ -13,11 +13,37 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace comb;
+
+/// Create a sign extension operation from a value of integer type to an equal
+/// or larger integer type.
+Value comb::createOrFoldSExt(Location loc, Value value, Type destTy,
+                             OpBuilder &builder) {
+  IntegerType valueType = value.getType().dyn_cast<IntegerType>();
+  assert(valueType && destTy.isa<IntegerType>() &&
+         valueType.getWidth() <= destTy.getIntOrFloatBitWidth() &&
+         valueType.getWidth() != 0 && "invalid sext operands");
+  // If already the right size, we are done.
+  if (valueType == destTy)
+    return value;
+
+  // sext is concat with a replicate of the sign bits and the bottom part.
+  auto signBit =
+      builder.createOrFold<ExtractOp>(loc, value, valueType.getWidth() - 1, 1);
+  auto signBits = builder.createOrFold<ReplicateOp>(
+      loc, signBit, destTy.getIntOrFloatBitWidth() - valueType.getWidth());
+  return builder.createOrFold<ConcatOp>(loc, signBits, value);
+}
+
+Value comb::createOrFoldSExt(Value value, Type destTy,
+                             ImplicitLocOpBuilder &builder) {
+  return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
+}
 
 //===----------------------------------------------------------------------===//
 // ICmpOp

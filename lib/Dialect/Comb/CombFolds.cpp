@@ -743,6 +743,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                              op.lowBit());
       return success();
     }
+
     // `extract(lowbit, sext(x))` when extracted bits are all sign bits.
     if (op.lowBit() >= sextInputWidth - 1) {
       auto int1Type = rewriter.getI1Type();
@@ -2123,7 +2124,6 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
     operands.clear();
 
     // Get a concat of the MSB's on each side.
-    // FIXME: Support - on indexed iterators!!
     operands.append(trueOperands.begin(), trueOperands.end() - i);
     Value trueMSB = rewriter.createOrFold<ConcatOp>(trueOp->getLoc(), operands);
     operands.clear();
