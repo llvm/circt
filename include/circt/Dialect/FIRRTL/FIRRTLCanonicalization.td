@@ -15,9 +15,18 @@
 
 include "circt/Dialect/FIRRTL/FIRRTL.td"
 
+/// Constraint that matches a ConstantOp, SpecialConstantOp, or InvalidValueOp.
+def AnyConstantOp : Constraint<CPred<[{
+  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp>
+    ($0.getDefiningOp())
+  }]>>;
+
 /// Constraint that matches non-constant operations. Used to ensure that the
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
-def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
+def NonConstantOp : Constraint<CPred<[{
+  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp>
+    ($0.getDefiningOp())
+  }]>>;
 
 // Constraint that matches empty attribute dictionaries.  Used to ensure that
 // there are no FIRRTL annotation on an operation.
@@ -67,27 +76,27 @@ def GetZeroConstant : NativeCodeCall<
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
-  (LEQPrimOp (ConstantOp:$lhs $_), $rhs),
+  (LEQPrimOp $lhs, $rhs),
   (GEQPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // lt(const, x) -> gt(x, const)
 def LTWithConstLHS : Pat<
-  (LTPrimOp (ConstantOp:$lhs $_), $rhs),
+  (LTPrimOp $lhs, $rhs),
   (GTPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // geq(const, x) -> leq(x, const)
 def GEQWithConstLHS : Pat<
-  (GEQPrimOp (ConstantOp:$lhs $_), $rhs),
+  (GEQPrimOp $lhs, $rhs),
   (LEQPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // gt(const, x) -> lt(x, const)
 def GTWithConstLHS : Pat<
-  (GTPrimOp (ConstantOp:$lhs $_), $rhs),
+  (GTPrimOp $lhs, $rhs),
   (LTPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
