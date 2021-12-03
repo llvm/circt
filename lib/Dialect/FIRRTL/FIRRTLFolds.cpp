@@ -100,6 +100,9 @@ static bool isUselessName(StringRef name) {
 /// zero-width dynamic values with a constant of value 0.
 static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
                                             int32_t destWidth) {
+  assert(operand.getType().isa<IntType>() &&
+         "getExtendedConstant is limited to integer types");
+
   // We never support constant folding to unknown width values.
   if (destWidth < 0)
     return {};
