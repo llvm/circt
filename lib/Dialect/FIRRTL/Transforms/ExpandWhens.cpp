@@ -155,6 +155,7 @@ public:
         return;
       }
 
+      // If this is a vector type, recurse to each of the elements.
       if (auto vectorType = type.dyn_cast<FVectorType>()) {
         for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
           id++;
