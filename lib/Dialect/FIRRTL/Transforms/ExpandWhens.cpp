@@ -155,6 +155,14 @@ public:
         return;
       }
 
+      if (auto vectorType = type.dyn_cast<FVectorType>()) {
+        for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
+          id++;
+          declare(vectorType.getElementType(), flow);
+        }
+        return;
+      }
+
       // If this is an analog type, it does not need to be tracked.
       if (auto analogType = type.dyn_cast<AnalogType>())
         return;
