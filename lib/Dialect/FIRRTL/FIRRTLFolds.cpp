@@ -233,10 +233,6 @@ OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
-  /// Any folding here requires a bitwidth extension.
-
-  /// If both operands are constant, and the result is integer with known
-  /// widths, then perform constant folding.
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
                                  [=](APSInt a, APSInt b) { return a + b; });
 }

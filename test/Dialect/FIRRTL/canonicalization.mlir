@@ -11,7 +11,7 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c1_si1 = firrtl.constant 1 : !firrtl.sint<1>
 
-  /// No effect
+  // No effect
   // CHECK: firrtl.connect %out_ui1, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   %0 = firrtl.asUInt %ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out_ui1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -25,7 +25,7 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   %3 = firrtl.asAsyncReset %asyncreset : (!firrtl.asyncreset) -> !firrtl.asyncreset
   firrtl.connect %out_asyncreset, %3 : !firrtl.asyncreset, !firrtl.asyncreset
 
-  /// Constant fold.
+  // Constant fold.
   // CHECK: firrtl.connect %out_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   %4 = firrtl.asUInt %c1_si1 : (!firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.connect %out_ui1, %4 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -306,7 +306,7 @@ firrtl.module @NEQ(in %in1: !firrtl.uint<1>,
   %2 = firrtl.neq %in4, %c0_ui1 : (!firrtl.uint<4>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.orr %in4
-  // CHECK-NEXT: firrtl.connec
+  // CHECK-NEXT: firrtl.connect
 
   %c15_ui4 = firrtl.constant 15 : !firrtl.uint<4>
   %3 = firrtl.neq %in4, %c15_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
@@ -314,7 +314,6 @@ firrtl.module @NEQ(in %in1: !firrtl.uint<1>,
   // CHECK: [[ANDR:%.+]] = firrtl.andr %in4
   // CHECK-NEXT: firrtl.not [[ANDR]]
   // CHECK-NEXT: firrtl.connect
-
 }
 
 // CHECK-LABEL: firrtl.module @Cat
@@ -397,13 +396,13 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
 
   // CHECK: firrtl.connect %out, %c7_ui4
   %c7_ui4 = firrtl.constant 7 : !firrtl.uint<4>
-  %c1_ui0 = firrtl.constant 0 : !firrtl.uint<1>
-  %2 = firrtl.mux (%c1_ui0, %in, %c7_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %2 = firrtl.mux (%c0_ui1, %in, %c7_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %2 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.connect %out1, %cond
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %3 = firrtl.mux (%cond, %c1_ui1, %c1_ui0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %3 = firrtl.mux (%cond, %c1_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.connect %out, %in
@@ -430,8 +429,8 @@ firrtl.module @Pad(in %in1u: !firrtl.uint<1>,
   firrtl.connect %out1u, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.connect %outu, %c1_ui4
-  %c1_ui0 = firrtl.constant 1 : !firrtl.uint<1>
-  %1 = firrtl.pad %c1_ui0, 4 : (!firrtl.uint<1>) -> !firrtl.uint<4>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %1 = firrtl.pad %c1_ui1, 4 : (!firrtl.uint<1>) -> !firrtl.uint<4>
   firrtl.connect %outu, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.connect %outs, %c-1_si4
@@ -449,8 +448,8 @@ firrtl.module @Shl(in %in1u: !firrtl.uint<1>,
   firrtl.connect %out1u, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.connect %outu, %c8_ui4
-  %c1_ui0 = firrtl.constant 1 : !firrtl.uint<1>
-  %1 = firrtl.shl %c1_ui0, 3 : (!firrtl.uint<1>) -> !firrtl.uint<4>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %1 = firrtl.shl %c1_ui1, 3 : (!firrtl.uint<1>) -> !firrtl.uint<4>
   firrtl.connect %outu, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
@@ -509,6 +508,7 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   firrtl.connect %out1s, %8 : !firrtl.sint<1>, !firrtl.sint<1>
 
   // Issue #1064: https://github.com/llvm/circt/issues/1064
+  // CHECK: firrtl.connect %out1u, %c0_ui0
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %9 = firrtl.dshr %in0u, %c1_ui1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
   firrtl.connect %out1u, %9 : !firrtl.uint<1>, !firrtl.uint<0>
@@ -527,7 +527,6 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
   // CHECK-NEXT: firrtl.connect %out3u, [[BITS]]
   %1 = firrtl.tail %in4u, 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
   firrtl.connect %out3u, %1 : !firrtl.uint<3>, !firrtl.uint<3>
-
 
   // CHECK: firrtl.connect %out3u, %c2_ui3
   %c10_ui4 = firrtl.constant 10 : !firrtl.uint<4>
@@ -561,9 +560,8 @@ firrtl.circuit "Andr" {
 }
 
 // CHECK-LABEL: firrtl.module @Reduce
-firrtl.module @Reduce(in %a: !firrtl.uint<1>, in %aS: !firrtl.sint<1>,
-                      out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
-                      out %d: !firrtl.uint<1>, out %e: !firrtl.uint<1>) {
+firrtl.module @Reduce(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
+                      out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
   %0 = firrtl.andr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
   %1 = firrtl.orr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
   %2 = firrtl.xorr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -573,17 +571,14 @@ firrtl.module @Reduce(in %a: !firrtl.uint<1>, in %aS: !firrtl.sint<1>,
   // CHECK: firrtl.connect %c, %a
   firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %d, %a
-
-  %3 = firrtl.andr %aS : (!firrtl.sint<1>) -> !firrtl.uint<1>
-  firrtl.connect %e, %3 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 
 // CHECK-LABEL: firrtl.module @subaccess
 firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<uint<8>, 16>) {
+  // CHECK: [[TMP:%.+]] = firrtl.subindex %vec0[11]
+  // CHECK-NEXT: firrtl.connect %result, [[TMP]]
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
-
-  // CHECK: firrtl.subindex %vec0[11]
   %0 = firrtl.subaccess %vec0[%c11_ui8] : !firrtl.vector<uint<8>, 16>, !firrtl.uint<8>
   firrtl.connect %result, %0 :!firrtl.uint<8>, !firrtl.uint<8>
 }
@@ -2077,13 +2072,11 @@ firrtl.module @ZeroWidthPad(out %b: !firrtl.sint<1>) {
 }
 
 // CHECK-LABEL: @ZeroWidthCat
-firrtl.circuit "ZeroWidthCat"   {
-  firrtl.module @ZeroWidthCat(out %a: !firrtl.uint<1>) {
-    %one = firrtl.constant 1 : !firrtl.uint<1>
-    %zw = firrtl.constant 0 : !firrtl.uint<0>
-    %0 = firrtl.cat %one, %zw : (!firrtl.uint<1>, !firrtl.uint<0>) -> !firrtl.uint<1>
-    firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-  }
+firrtl.module @ZeroWidthCat(out %a: !firrtl.uint<1>) {
+  %one = firrtl.constant 1 : !firrtl.uint<1>
+  %zw = firrtl.constant 0 : !firrtl.uint<0>
+  %0 = firrtl.cat %one, %zw : (!firrtl.uint<1>, !firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:      %[[one:.+]] = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK-NEXT: firrtl.connect %a, %[[one]]
 }
