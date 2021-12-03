@@ -1027,6 +1027,47 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
+InstanceOp
+InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  auto portSize = ports.size();
+  auto newPortCount = getNumResults() + portSize;
+  SmallVector<Direction> newPortDirections;
+  newPortDirections.reserve(newPortCount);
+  SmallVector<Attribute> newPortNames;
+  newPortNames.reserve(newPortCount);
+  SmallVector<Type> newPortTypes;
+  newPortTypes.reserve(newPortCount);
+  SmallVector<Attribute> newPortAnnos;
+  newPortAnnos.reserve(newPortCount);
+
+  unsigned oldIndex = 0;
+  unsigned newIndex = 0;
+  while (oldIndex + newIndex < newPortCount) {
+    // Check if we should insert a port here.
+    if (newIndex < portSize && ports[newIndex].first == oldIndex) {
+      auto &newPort = ports[newIndex].second;
+      newPortDirections.push_back(newPort.direction);
+      newPortNames.push_back(newPort.name);
+      newPortTypes.push_back(newPort.type);
+      newPortAnnos.push_back(newPort.annotations.getArrayAttr());
+      ++newIndex;
+    } else {
+      // Copy the next old port.
+      newPortDirections.push_back(getPortDirection(oldIndex));
+      newPortNames.push_back(getPortName(oldIndex));
+      newPortTypes.push_back(getType(oldIndex));
+      newPortAnnos.push_back(getPortAnnotation(oldIndex));
+      ++oldIndex;
+    }
+  }
+
+  // Create a new instance op with the reset inserted.
+  return OpBuilder(*this).create<InstanceOp>(
+      getLoc(), newPortTypes, moduleName(), name(), newPortDirections,
+      newPortNames, annotations().getValue(), newPortAnnos, lowerToBind(),
+      inner_symAttr());
+}
+
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto module = (*this)->getParentOfType<FModuleOp>();
   auto referencedModule =

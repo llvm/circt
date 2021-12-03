@@ -83,6 +83,11 @@ def InstanceOp : FIRRTLOp<"instance", [
     /// and updates any users of the remaining ports to point at the new
     /// instance.
     InstanceOp erasePorts(OpBuilder &builder, ArrayRef<unsigned> portIndices);
+
+    /// Clone the instance op and add ports.  This is usually used in
+    /// conjuction with adding ports to the referenced module. This will emit
+    /// the new InstanceOp to the same location.
+    InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
   }];
 }
 
