@@ -14,7 +14,7 @@ other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
     - [Fully associative operations are variadic](#fully-associative-operations-are-variadic)
     - [Operators carry signs instead of types](#operators-carry-signs-instead-of-types)
     - [No implicit extensions of operands](#no-implicit-extensions-of-operands)
-    - [No "Replication", "ZExt", or "Complement" Operators](#no-replication-zext-or-complement-operators)
+    - [No "Complement", "Negate", "ZExt", "SExt", Operators](#no-complement-negate-zext-sext-operators)
     - [No multibit mux operations](#no-multibit-mux-operations)
   - [Endianness: operand ordering and internal representation](#endianness-operand-ordering-and-internal-representation)
   - [Bitcasts](#bitcasts)
@@ -89,26 +89,24 @@ get better separation of concerns in the Verilog printer if we wanted really
 fancy extension elision. So far, very simple techniques have been enough to get
 reasonable output.
 
-### No "Replication", "ZExt", or "Complement" Operators
+### No "Complement", "Negate", "ZExt", "SExt", Operators
 
 We choose to omit several operators that you might expect, in order to make the
 IR more regular, easy to transform, and have fewer canonical forms.
 
- * No `~x` complement operator: instead use `comb.xor(x, -1)`.
-
- * No `{42{x}}` Replication operator (System Verilog 11.4.12.1) to replicate an
-   operand a constant N times.  We decided that this was redundant and just
-   sugar for the `comb.concat` operator, so we just use `comb.concat` (with the
-   same operand multiple times) instead.
+ * No `~x` complement or `-x` negation operator: instead use `comb.xor(x, -1)`.
+   or `comb.sub(0, x)` respectively.  These avoid having to duplicate many folds
+   between `xor` and `sub`.
 
  * No zero extension operator to add high zero bits.  This is strictly redundant
-   with `concat(zero, value)`.  The `comb.sext` operator exists because it
-   efficiently models large sign extensions which are common, and would require
-   many operands if modeled as a concat operator (in contrast, a zero extension
-   always requires a single zero value).
+   with `concat(zero, value)`.
+   
+ * No sign extension operator to add high sign bits.  `sext(x)` is strictly
+   redundant with `concat(replicate(extract(x, highbit)), x)`.
 
 The absence of these operations doesn't affect the expressive ability of the IR,
-and ExportVerilog will notice these and generate the compact Verilog syntax.
+and ExportVerilog will notice these and generate the compact Verilog syntax
+e.g. a complement or negate when needed.
 
 ### No multibit mux operations
 
@@ -333,7 +331,7 @@ the result bits).
 The following are considered "free" for area and latency concerns:
 
 1) `hw.constant`
-2) concatenation (including zero/sign extension) and truncation
+2) concatenation (including zero/sign extension idioms) and truncation
 3) `comb.and` and `comb.or` with a constant.
 4) Other similar operations that do not synthesize into hardware. 
 

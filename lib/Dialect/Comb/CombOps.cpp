@@ -149,18 +149,6 @@ bool ICmpOp::isNotEqualZero() {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifySExtOp(SExtOp op) {
-  // The source must be equal or smaller than the dest type.  Both are already
-  // known to be signless integers.
-  auto srcType = op.getOperand().getType().cast<IntegerType>();
-  if (srcType.getWidth() > op.getType().getWidth()) {
-    op.emitOpError("extension must increase bitwidth of operand");
-    return failure();
-  }
-
-  return success();
-}
-
 static LogicalResult verifyReplicateOp(ReplicateOp op) {
   // The source must be equal or smaller than the dest type, and an even
   // multiple of it.  Both are already known to be signless integers.

@@ -266,42 +266,6 @@ static bool narrowOperationWidth(Op op, ValueRange inputs,
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
-  // Constant fold.
-  if (auto input = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    auto destWidth = getType().getWidth();
-    return getIntAttr(input.getValue().sext(destWidth), getContext());
-  }
-
-  if (getType().getWidth() == input().getType().getIntOrFloatBitWidth())
-    return input();
-
-  return {};
-}
-
-LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
-  // sext(onebit) -> replicate.
-  if (op.getOperand().getType().isInteger(1)) {
-    rewriter.replaceOpWithNewOp<ReplicateOp>(op, op.getType(), op.getOperand());
-    return success();
-  }
-
-  // If the sign bit is known, we can fold this to a simpler operation.
-  auto knownBits = computeKnownBits(op.input());
-  if (knownBits.isNegative() || knownBits.isNonNegative()) {
-    // Ok, we know the sign bit, strength reduce this into a concat of the
-    // appropriate constant.
-    unsigned numBits =
-        op.getType().getWidth() - op.input().getType().getIntOrFloatBitWidth();
-    APInt cstBits = knownBits.isNegative() ? APInt::getAllOnes(numBits)
-                                           : APInt::getZero(numBits);
-    auto signBits = rewriter.create<hw::ConstantOp>(op.getLoc(), cstBits);
-    rewriter.replaceOpWithNewOp<ConcatOp>(op, signBits, op.input());
-    return success();
-  }
-  return failure();
-}
-
 OpFoldResult ReplicateOp::fold(ArrayRef<Attribute> constants) {
   // Replicate one time -> noop.
   if (getType().getWidth() == input().getType().getIntOrFloatBitWidth())
@@ -741,38 +705,6 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                               shlOp->getOperand(1), newCst);
           return success();
         }
-
-  if (auto sext = dyn_cast_or_null<SExtOp>(inputOp)) {
-    // `extract(lowBit, sext(x))` -> `extract(lowBit, x)`.
-    auto neededBits = op.getType().getIntOrFloatBitWidth() + op.lowBit();
-    auto sextInputWidth = sext.input().getType().getIntOrFloatBitWidth();
-    if (neededBits <= sextInputWidth) {
-      rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), sext.input(),
-                                             op.lowBit());
-      return success();
-    }
-
-    // `extract(lowbit, sext(x))` when extracted bits are all sign bits.
-    if (op.lowBit() >= sextInputWidth - 1) {
-      auto int1Type = rewriter.getI1Type();
-      auto signBit = rewriter.create<ExtractOp>(
-          sext.getLoc(), int1Type, sext.input(), sextInputWidth - 1);
-      rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), signBit);
-      return success();
-    }
-
-    if (sext->hasOneUse()) {
-      // `extract(lowBit, sext(x))` -> `extract(lowBit, smaller_sext(x))`.
-      if (neededBits < sext.getType().getIntOrFloatBitWidth()) {
-        auto newSExtType = rewriter.getIntegerType(neededBits);
-        auto newSExt =
-            rewriter.create<SExtOp>(sext.getLoc(), newSExtType, sext.input());
-        rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), newSExt,
-                                               op.lowBit());
-        return success();
-      }
-    }
-  }
 
   return failure();
 }

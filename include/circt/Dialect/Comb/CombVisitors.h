@@ -38,7 +38,7 @@ public:
             // Reduction Operators
             ParityOp,
             // Other operations.
-            SExtOp, ConcatOp, ReplicateOp, ExtractOp, MuxOp>(
+            ConcatOp, ReplicateOp, ExtractOp, MuxOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitComb(expr, args...);
             })
@@ -100,7 +100,6 @@ public:
   HANDLE(ICmpOp, Binary);
 
   // Other operations.
-  HANDLE(SExtOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ReplicateOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);

@@ -392,24 +392,6 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
         << ":" << op.lowBit() << "];\n";
     return success();
   }
-  if (auto op = dyn_cast<comb::SExtOp>(inst)) {
-    out.PadToColumn(indentAmount);
-    out << "wire ";
-    if (failed(printType(op.result().getType())))
-      return failure();
-    out << " ";
-    printVariableName(op.result());
-    out << " = ";
-    out << "{{"
-        << (op.result().getType().getIntOrFloatBitWidth() -
-            op.input().getType().getIntOrFloatBitWidth())
-        << "{";
-    printVariableName(op.input());
-    out << "[" << (op.input().getType().getIntOrFloatBitWidth() - 1) << "]}}, ";
-    printVariableName(op.input());
-    out << "};\n";
-    return success();
-  }
   if (auto op = dyn_cast<comb::ConcatOp>(inst)) {
     out.PadToColumn(indentAmount);
     out << "wire ";
