@@ -37,6 +37,19 @@ static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
                           value);
 }
 
+/// Flatten concat and mux operands into a vector.
+static void getConcatOperands(Value v, SmallVectorImpl<Value> &result) {
+  if (auto concat = v.getDefiningOp<ConcatOp>()) {
+    for (auto op : concat.getOperands())
+      getConcatOperands(op, result);
+  } else if (auto repl = v.getDefiningOp<ReplicateOp>()) {
+    for (size_t i = 0, e = repl.getMultiple(); i != e; ++i)
+      getConcatOperands(repl.getOperand(), result);
+  } else {
+    result.push_back(v);
+  }
+}
+
 namespace {
 struct ConstantIntMatcher {
   APInt &value;
@@ -1654,6 +1667,42 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
         }
       }
 
+      // If the two operands are the same, turn them into a replicate.
+      if (inputs[i] == inputs[i - 1]) {
+        Value replacement =
+            rewriter.createOrFold<ReplicateOp>(op.getLoc(), inputs[i], 2);
+        return flattenConcat(i - 1, i, replacement);
+      }
+
+      // If this input is a replicate, see if we can fold it with the previous
+      // one.
+      if (auto repl = inputs[i].getDefiningOp<ReplicateOp>()) {
+        // ... x, repl(x, n), ...  ==> ..., repl(x, n+1), ...
+        if (repl.getOperand() == inputs[i - 1]) {
+          Value replacement = rewriter.createOrFold<ReplicateOp>(
+              op.getLoc(), repl.getOperand(), repl.getMultiple() + 1);
+          return flattenConcat(i - 1, i, replacement);
+        }
+        // ... repl(x, n), repl(x, m), ...  ==> ..., repl(x, n+m), ...
+        if (auto prevRepl = inputs[i - 1].getDefiningOp<ReplicateOp>()) {
+          if (prevRepl.getOperand() == repl.getOperand()) {
+            Value replacement = rewriter.createOrFold<ReplicateOp>(
+                op.getLoc(), repl.getOperand(),
+                repl.getMultiple() + prevRepl.getMultiple());
+            return flattenConcat(i - 1, i, replacement);
+          }
+        }
+      }
+
+      // ... repl(x, n), x, ...  ==> ..., repl(x, n+1), ...
+      if (auto repl = inputs[i - 1].getDefiningOp<ReplicateOp>()) {
+        if (repl.getOperand() == inputs[i]) {
+          Value replacement = rewriter.createOrFold<ReplicateOp>(
+              op.getLoc(), inputs[i], repl.getMultiple() + 1);
+          return flattenConcat(i - 1, i, replacement);
+        }
+      }
+
       // Merge neighboring extracts of neighboring inputs, e.g.
       // {A[3], A[2]} -> A[3:2]
       if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
@@ -1677,36 +1726,6 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   if (commonOperand) {
     rewriter.replaceOpWithNewOp<ReplicateOp>(op, op.getType(), commonOperand);
     return success();
-  }
-
-  // Return true if this extract is an extract of the sign bit of its input.
-  auto isSignBitExtract = [](ExtractOp op) -> bool {
-    if (op.getType().getIntOrFloatBitWidth() != 1)
-      return false;
-    return op.lowBit() == op.input().getType().getIntOrFloatBitWidth() - 1;
-  };
-
-  // Folds concat back into a sext.
-  if (auto extract = inputs[0].getDefiningOp<ExtractOp>()) {
-    if (extract.input() == inputs.back() && isSignBitExtract(extract)) {
-      // Check intermediate bits.
-      bool allMatch = true;
-      // The intermediate bits are allowed to be difference instances of
-      // extract (because canonicalize doesn't do CSE automatically) so long
-      // as they are getting the sign bit.
-      for (size_t i = 1, e = inputs.size() - 1; i != e; ++i) {
-        auto extractInner = inputs[i].getDefiningOp<ExtractOp>();
-        if (!extractInner || extractInner.input() != inputs.back() ||
-            !isSignBitExtract(extractInner)) {
-          allMatch = false;
-          break;
-        }
-      }
-      if (allMatch) {
-        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), inputs.back());
-        return success();
-      }
-    }
   }
 
   return failure();
@@ -2035,21 +2054,26 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
   if (!isa<ConcatOp>(trueOp))
     return false;
 
-  size_t numTrueOperands = trueOp->getNumOperands();
-  size_t numFalseOperands = falseOp->getNumOperands();
+  // Decode the operands, looking through recursive concats and replicates.
+  SmallVector<Value> trueOperands, falseOperands;
+  getConcatOperands(trueOp->getResult(0), trueOperands);
+  getConcatOperands(falseOp->getResult(0), falseOperands);
+
+  size_t numTrueOperands = trueOperands.size();
+  size_t numFalseOperands = falseOperands.size();
 
   if (!numTrueOperands || !numFalseOperands ||
-      (trueOp->getOperands().front() != falseOp->getOperands().front() &&
-       trueOp->getOperands().back() != falseOp->getOperands().back()))
+      (trueOperands.front() != falseOperands.front() &&
+       trueOperands.back() != falseOperands.back()))
     return false;
 
   // Pull all leading shared operands out into their own op if any are common.
-  if (trueOp->getOperands().front() == falseOp->getOperands().front()) {
+  if (trueOperands.front() == falseOperands.front()) {
     SmallVector<Value> operands;
     size_t i;
     for (i = 0; i < numTrueOperands; ++i) {
-      Value trueOperand = trueOp->getOperand(i);
-      if (trueOperand == falseOp->getOperand(i))
+      Value trueOperand = trueOperands[i];
+      if (trueOperand == falseOperands[i])
         operands.push_back(trueOperand);
       else
         break;
@@ -2060,17 +2084,23 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
       return true;
     }
 
-    Value sharedMSB = rewriter.createOrFold<ConcatOp>(mux->getLoc(), operands);
+    Value sharedMSB;
+    if (llvm::all_of(operands, [&](Value v) { return v == operands.front(); }))
+      sharedMSB = rewriter.createOrFold<ReplicateOp>(
+          mux->getLoc(), operands.front(), operands.size());
+    else
+      sharedMSB = rewriter.createOrFold<ConcatOp>(mux->getLoc(), operands);
     operands.clear();
 
     // Get a concat of the LSB's on each side.
-    operands.append(trueOp->operand_begin() + i, trueOp->operand_end());
+    operands.append(trueOperands.begin() + i, trueOperands.end());
     Value trueLSB = rewriter.createOrFold<ConcatOp>(trueOp->getLoc(), operands);
     operands.clear();
-    operands.append(falseOp->operand_begin() + i, falseOp->operand_end());
+    operands.append(falseOperands.begin() + i, falseOperands.end());
     Value falseLSB =
         rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
-    // Merge the LSBs with a new mux and concat the MSB with the LSB to be done.
+    // Merge the LSBs with a new mux and concat the MSB with the LSB to be
+    // done.
     Value lsb = rewriter.createOrFold<MuxOp>(mux->getLoc(), mux.cond(), trueLSB,
                                              falseLSB);
     rewriter.replaceOpWithNewOp<ConcatOp>(mux, sharedMSB, lsb);
@@ -2078,12 +2108,12 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
   }
 
   // If trailing operands match, try to commonize them.
-  if (trueOp->getOperands().back() == falseOp->getOperands().back()) {
+  if (trueOperands.back() == falseOperands.back()) {
     SmallVector<Value> operands;
     size_t i;
     for (i = 0;; ++i) {
-      Value trueOperand = trueOp->getOperand(numTrueOperands - i - 1);
-      if (trueOperand == falseOp->getOperand(numFalseOperands - i - 1))
+      Value trueOperand = trueOperands[numTrueOperands - i - 1];
+      if (trueOperand == falseOperands[numFalseOperands - i - 1])
         operands.push_back(trueOperand);
       else
         break;
@@ -2094,12 +2124,10 @@ static bool foldCommonMuxOperation(MuxOp mux, Operation *trueOp,
 
     // Get a concat of the MSB's on each side.
     // FIXME: Support - on indexed iterators!!
-    operands.append(trueOp->operand_begin(),
-                    std::prev(trueOp->operand_end(), i));
+    operands.append(trueOperands.begin(), trueOperands.end() - i);
     Value trueMSB = rewriter.createOrFold<ConcatOp>(trueOp->getLoc(), operands);
     operands.clear();
-    operands.append(falseOp->operand_begin(),
-                    std::prev(falseOp->operand_end(), i));
+    operands.append(falseOperands.begin(), falseOperands.end() - i);
     Value falseMSB =
         rewriter.createOrFold<ConcatOp>(falseOp->getLoc(), operands);
     // Merge the MSBs with a new mux and concat the MSB with the LSB to be done.
@@ -2391,32 +2419,10 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
   // It is safe to assume that [{lhsOperands, rhsOperands}.size() > 0] and
   // all elements have non-zero length. Both these invariants are verified
   // by the ConcatOp verifier.
-  SmallVector<Value> lhsOperands;
-  if (auto concat = dyn_cast<ConcatOp>(lhs))
-    lhsOperands.assign(concat.operand_begin(), concat.operand_end());
-  else
-    lhsOperands.assign(cast<ReplicateOp>(lhs).getMultiple(),
-                       lhs->getOperand(0));
-  SmallVector<Value> rhsOperands;
-  if (auto concat = dyn_cast<ConcatOp>(rhs))
-    rhsOperands.assign(concat.operand_begin(), concat.operand_end());
-  else
-    rhsOperands.assign(cast<ReplicateOp>(rhs).getMultiple(),
-                       rhs->getOperand(0));
+  SmallVector<Value> lhsOperands, rhsOperands;
+  getConcatOperands(lhs->getResult(0), lhsOperands);
+  getConcatOperands(rhs->getResult(0), rhsOperands);
   ArrayRef<Value> lhsOperandsRef = lhsOperands, rhsOperandsRef = rhsOperands;
-
-  size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
-
-  size_t commonPrefixLength =
-      computeCommonPrefixLength(lhsOperands, rhsOperands);
-  size_t commonSuffixLength = computeCommonPrefixLength(
-      llvm::reverse(lhsOperandsRef.drop_front(commonPrefixLength)),
-      llvm::reverse(rhsOperandsRef.drop_front(commonPrefixLength)));
-
-  auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
-    return success();
-  };
 
   auto formCatOrReplicate = [&](Location loc,
                                 ArrayRef<Value> operands) -> Value {
@@ -2437,11 +2443,17 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
     return success();
   };
 
-  if (commonPrefixLength == numElements) {
+  size_t commonPrefixLength =
+      computeCommonPrefixLength(lhsOperands, rhsOperands);
+  if (commonPrefixLength == lhsOperands.size()) {
     // cat(a, b, c) == cat(a, b, c) -> 1
-    return replaceWithConstantI1(
-        applyCmpPredicateToEqualOperands(op.predicate()));
+    bool result = applyCmpPredicateToEqualOperands(op.predicate());
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, result));
+    return success();
   }
+
+  size_t commonSuffixLength = computeCommonPrefixLength(
+      llvm::reverse(lhsOperandsRef), llvm::reverse(rhsOperandsRef));
 
   size_t commonPrefixTotalWidth =
       getTotalWidth(lhsOperandsRef.take_front(commonPrefixLength));
@@ -2465,8 +2477,8 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, Operation *lhs,
     Value signBit = rewriter.createOrFold<ExtractOp>(
         op.getLoc(), firstNonEmptyValue, firstNonEmptyElemWidth - 1, 1);
 
-    auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
-    auto newRhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly);
+    auto newLhs = rewriter.create<ConcatOp>(lhs->getLoc(), signBit, lhsOnly);
+    auto newRhs = rewriter.create<ConcatOp>(rhs->getLoc(), signBit, rhsOnly);
     return replaceWith(op.predicate(), newLhs, newRhs);
   };
 

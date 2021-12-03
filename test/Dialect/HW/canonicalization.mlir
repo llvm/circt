@@ -534,10 +534,12 @@ hw.module @concat_fold_3(%arg0: i1) -> (result: i8) {
 }
 
 // CHECK-LABEL: hw.module @concat_fold_4
-// CHECK-NEXT:   %0 = comb.sext %arg0 : (i3) -> i5
 hw.module @concat_fold_4(%arg0: i3) -> (result: i5) {
+  // CHECK-NEXT: %0 = comb.extract %arg0 from 2 : (i3) -> i1 
   %0 = comb.extract %arg0 from 2 : (i3) -> (i1)
+  // CHECK-NEXT: %1 = comb.replicate %0 : (i1) -> i2
   %1 = comb.concat %0, %0, %arg0 : i1, i1, i3
+  // CHECK-NEXT: %2 = comb.concat %1, %arg0 : i2, i3
   hw.output %1 : i5
 }
 
@@ -571,6 +573,27 @@ hw.module @concat_fold7(%arg0: i5) -> (result: i20) {
   %0 = comb.concat %arg0, %arg0, %arg0, %arg0 : i5, i5, i5, i5
   hw.output %0 : i20
 }
+
+// CHECK-LABEL: hw.module @concat_fold8
+hw.module @concat_fold8(%arg0: i5, %arg1: i3) -> (r0: i28, r1: i28, r2: i13) {
+  %0 = comb.replicate %arg0 : (i5) -> i20
+
+  // CHECK-NEXT: %0 = comb.replicate %arg0 : (i5) -> i25 
+  // CHECK-NEXT: %1 = comb.concat %arg1, %0 : i3, i25
+  %1 = comb.concat %arg1, %arg0, %0 : i3, i5, i20
+
+  // CHECK-NEXT: %2 = comb.replicate %arg0 : (i5) -> i25
+  // CHECK-NEXT: %3 = comb.concat %arg1, %2 : i3, i25
+  %2 = comb.concat %arg1, %0, %arg0 : i3, i20, i5
+
+  // CHECK-NEXT: %4 = comb.replicate %arg0 : (i5) -> i10
+  // CHECK-NEXT: %5 = comb.concat %arg1, %4 : i3, i10
+  %3 = comb.concat %arg1, %arg0, %arg0 : i3, i5, i5
+
+  // CHECK-NEXT: hw.output %1, %3, %5
+  hw.output %1, %2, %3 : i28, i28, i13
+}
+
 
 // CHECK-LABEL: hw.module @mux_fold0(%arg0: i3, %arg1: i3)
 // CHECK-NEXT:    hw.output %arg0 : i3
