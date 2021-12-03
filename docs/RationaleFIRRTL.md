@@ -508,6 +508,13 @@ firrtl.when %cond  {
 firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
 ```
 
+The CHIRRTL operations and types are contained in the CHIRRTL dialect.  The is
+primary reason to move them into their own dialect was to keep the CHIRRTL
+types out of the FIRRTL dialect type hiearchy. We tried to have the CHIRRTL
+dialect depend on the FIRRTL dialect, but the flow checking in FIRRTL had to
+know about CHIRRTL operations, which created a circular dependency.  To
+simplify how this is handled, both dialects are contained in the same library.
+
 For a historical discussion of this issue and its development see
 [`llvm/circt#1561`](https://github.com/llvm/circt/issues/1561).
 
