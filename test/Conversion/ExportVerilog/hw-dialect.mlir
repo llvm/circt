@@ -73,7 +73,10 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %subArr = hw.array_create %allone, %ab, %allone : i4
   %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
 
-  %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
+  // Having "sv.namehint" (and checking that it works) anywhere will inherently
+  // make tests brittle. This line breaking does not mean your change is no
+  // good! You'll just have to find a new place for `sv.namehint`.
+  %elem2d = hw.array_get %array2d[%a] { sv.namehint="array2d_idx_0_name" } : !hw.array<12 x array<10xi4>>
   %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
 
   %36 = comb.replicate %a : (i4) -> i12
@@ -120,7 +123,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:.+]] = array2d[a];
+// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:_array2d_idx_0_name]] = array2d[a];
 // CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;

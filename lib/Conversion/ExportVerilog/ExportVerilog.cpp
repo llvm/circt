@@ -768,53 +768,59 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
   if (auto read = expr.getDefiningOp<ReadInOutOp>())
     return inferStructuralNameForTemporary(read.input());
 
-  // Generate a pretty name for VerbatimExpr's that look macro-like using the
-  // same logic that generates the MLIR syntax name.
-  if (auto verbatim = expr.getDefiningOp<VerbatimExprOp>()) {
-    verbatim.getAsmResultNames([&](Value, StringRef name) {
-      result = StringAttr::get(expr.getContext(), name);
-    });
-  }
-
-  if (auto verbatim = expr.getDefiningOp<VerbatimExprSEOp>()) {
-    verbatim.getAsmResultNames([&](Value, StringRef name) {
-      result = StringAttr::get(expr.getContext(), name);
-    });
-  }
-
   // Module ports carry names!
   if (auto blockArg = expr.dyn_cast<BlockArgument>()) {
     auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
     StringRef name =
         state.globalNames.getPortVerilogName(moduleOp, blockArg.getArgNumber());
     result = StringAttr::get(expr.getContext(), name);
-  }
 
-  // Uses of a wire or register can be done inline.
-  if (auto *op = expr.getDefiningOp()) {
+  } else if (auto *op = expr.getDefiningOp()) {
+    // Uses of a wire or register can be done inline.
     if (isa<WireOp, RegOp>(op)) {
       StringRef name = state.globalNames.getDeclarationVerilogName(op);
       result = StringAttr::get(expr.getContext(), name);
+
+    } else if (auto nameHint = op->getAttrOfType<StringAttr>("sv.namehint")) {
+      // Use a dialect (sv) attribute to get a hint for the name if the op
+      // doesn't explicitly specify it. Do this last
+      result = nameHint;
+
+    } else {
+      TypeSwitch<Operation *>(op)
+          // Generate a pretty name for VerbatimExpr's that look macro-like
+          // using the same logic that generates the MLIR syntax name.
+          .Case([&result](VerbatimExprOp verbatim) {
+            verbatim.getAsmResultNames([&](Value, StringRef name) {
+              result = StringAttr::get(verbatim.getContext(), name);
+            });
+          })
+          .Case([&result](VerbatimExprSEOp verbatim) {
+            verbatim.getAsmResultNames([&](Value, StringRef name) {
+              result = StringAttr::get(verbatim.getContext(), name);
+            });
+          })
+
+          // If this is an extract from a namable object, derive a name from it.
+          .Case([&result, this](ExtractOp extract) {
+            if (auto operandName =
+                    inferStructuralNameForTemporary(extract.input())) {
+              unsigned numBits = extract.getType().getWidth();
+              if (numBits == 1)
+                result = StringAttr::get(extract.getContext(),
+                                         operandName.strref() + "_" +
+                                             Twine(extract.lowBit()));
+              else
+                result =
+                    StringAttr::get(extract.getContext(),
+                                    operandName.strref() + "_" +
+                                        Twine(extract.lowBit() + numBits - 1) +
+                                        "to" + Twine(extract.lowBit()));
+            }
+          });
+      // TODO: handle other common patterns.
     }
   }
-
-  // If this is an extract from a namable object, derive a name from it.
-  if (auto extract = expr.getDefiningOp<ExtractOp>()) {
-    if (auto operandName = inferStructuralNameForTemporary(extract.input())) {
-      unsigned numBits = extract.getType().getWidth();
-      if (numBits == 1)
-        result =
-            StringAttr::get(expr.getContext(), operandName.strref() + "_" +
-                                                   Twine(extract.lowBit()));
-      else
-        result = StringAttr::get(expr.getContext(),
-                                 operandName.strref() + "_" +
-                                     Twine(extract.lowBit() + numBits - 1) +
-                                     "to" + Twine(extract.lowBit()));
-    }
-  }
-
-  // TODO: handle other common patterns.
 
   // Make sure any synthesized name starts with an _.
   if (!result || result.strref().empty())
@@ -2187,18 +2193,10 @@ void NameCollector::collectNames(Block &block) {
         // Remember that this expression should be emitted out of line.
         moduleEmitter.outOfLineExpressions.insert(&op);
 
-        // Since this will be used out-of-line, we'll need a name for it.  If
-        // this expression has a random "name" attribute, keep track of it in
-        // case we end up spilling this.
-        // FIXME: This is highly unprincipled and should be removed.
-        //   https://github.com/llvm/circt/issues/1752
-        auto nameAttr = op.getAttrOfType<StringAttr>("name");
-
-        // If we don't have a specified pretty name, try to infer a name from
-        // the structure of the expression.
-        if (!nameAttr)
-          nameAttr = moduleEmitter.inferStructuralNameForTemporary(result);
-        names.addName(result, nameAttr);
+        // Get an explicitly set name or try to infer a name from the structure
+        // of the expression.
+        names.addName(result,
+                      moduleEmitter.inferStructuralNameForTemporary(result));
 
         // Don't measure or emit wires that are emitted inline (i.e. the wire
         // definition is emitted on the line of the expression instead of a
