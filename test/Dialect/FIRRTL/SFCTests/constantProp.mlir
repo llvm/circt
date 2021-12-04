@@ -181,10 +181,8 @@ firrtl.circuit "padZeroReg"   {
       %n = firrtl.node %c171_ui8  : !firrtl.uint<8>
       %1 = firrtl.cat %n, %r : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
       firrtl.connect %z, %1 : !firrtl.uint<16>, !firrtl.uint<16>
-    // CHECK: %[[C7:.+]] = firrtl.constant 171 : !firrtl.uint<8>
-    // CHECK: %[[invalid:.+]] = firrtl.invalidvalue : !firrtl.uint<8>
-    // CHECK: %[[C7_0:.+]] = firrtl.cat %c171_ui8, %invalid_ui8 
-    // CHECK-NEXT: firrtl.connect %z, %[[C7_0]] : !firrtl.uint<16>, !firrtl.uint<16>
+    // CHECK: %[[TMP:.+]] = firrtl.constant 43776 : !firrtl.uint<16>
+    // CHECK-NEXT: firrtl.connect %z, %[[TMP]] : !firrtl.uint<16>, !firrtl.uint<16>
   }
 }
 

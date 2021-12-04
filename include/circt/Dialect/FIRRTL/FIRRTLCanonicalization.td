@@ -64,15 +64,8 @@ def ZeroConstantOp : Constraint<Or<[
         "$0.getDefiningOp<SpecialConstantOp>().value() == false">
 ]>>;
 
-def IsInvalid : Constraint<
-  CPred<"$0.getDefiningOp<InvalidValueOp>()">
->;
-
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
-
-def GetZeroConstant : NativeCodeCall<
-  "$_builder.create<ConstantOp>($0.getLoc(), APSInt($0.getType().cast<FIRRTLType>().getBitWidthOrSentinel()))">;
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
@@ -141,33 +134,6 @@ def RegResetWithZeroReset : Pat<
 def GetWidthAsIntAttr : NativeCodeCall<
   "IntegerAttr::get(IntegerType::get($_builder.getContext(), 32, IntegerType::Signless), "
                     "$0.getType().cast<FIRRTLType>().getBitWidthOrSentinel())">;
-
-// add(x, invalid) -> pad(x, width)
-//
-// This is legal because it aligns with the Scala FIRRTL Compiler
-// interpretation of lowering invalid to constant zero before constant
-// propagation.
-def AddWithInvalidOp : Pat<
-  (AddPrimOp:$result $x, $y),
-  (PadPrimOp $x, (GetWidthAsIntAttr $result)), [
-    (KnownWidth $x), (IsInvalid $y)
-  ]>;
-
-// sub(x, invalid) -> pad(x, width)
-//
-// This is legal because it aligns with the Scala FIRRTL Compiler
-// interpretation of lowering invalid to constant zero before constant
-// propagation.
-def SubWithInvalidOp : Pat<
-  (SubPrimOp:$result $x, $y),
-  (PadPrimOp $x, (GetWidthAsIntAttr $result)), [
-    (KnownWidth $x), (IsInvalid $y)
-  ]>;
-
-// pad(invalid, width) -> zero<width>
-def PadInvalid : Pat<
-  (PadPrimOp:$result (InvalidValueOp), $_),
-  (GetZeroConstant $result), []>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // DontTouch application
