@@ -2124,7 +2124,8 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfterValue(memory);
     auto memoryPortOp = builder.create<MemoryPortOp>(
-        resultType, memory, direction, id);
+        resultType, CMemoryPortType::get(getContext()), memory, direction, id,
+        getConstants().emptyArrayAttr);
     memoryData = memoryPortOp.getResult(0);
     memoryPort = memoryPortOp.getResult(1);
   }
@@ -2661,7 +2662,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   MemOp result = builder.create<MemOp>(
         resultTypes, readLatency, writeLatency, depth, ruw,
-        builder.getArrayAttr(resultNames), id);
+        resultNames, id);
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());

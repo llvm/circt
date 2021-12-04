@@ -1707,24 +1707,23 @@ static StringAttr canonicalizeTarget(StringAttr target) {
 //===----------------------------------------------------------------------===//
 // Specific annotation implementations
 //===----------------------------------------------------------------------===//
-#if 0 // TODO
 
 LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
                             AnnoApplyState state) {
-  auto clazz = "sifive.enterprise.grandcentral.MemTapAnnotation";
   auto context = state.circuit.getContext();
+  auto clazz = "sifive.enterprise.grandcentral.MemTapAnnotation";
+  auto classAttr = StringAttr::get(context, clazz);
+  auto loc = state.circuit.getLoc();
   auto id = state.newID();
+
   NamedAttrList attrs;
-  auto sourceAttr =
-      tryGetAs<StringAttr>(anno, anno, "source", state.circuit.getLoc(), clazz);
+  attrs.append("class", classAttr);
+  attrs.append("id", id);
+  auto sourceAttr = tryGetAs<StringAttr>(anno, anno, "source", loc, clazz);
   if (!sourceAttr)
     return failure();
-  attrs.append("target",
-               StringAttr::get(state.circuit.getContext(),
-                               canonicalizeTarget(sourceAttr.getValue())));
-  attrs.append(anno.getNamed("class").getValue());
-  attrs.append("id", id);
-  state.addToWorklistFn(DictionaryAttr::get(context, attrs));
+  state.applyAnno(canonicalizeTarget(sourceAttr.getValue()) , attrs);
+
   auto tapsAttr =
       tryGetAs<ArrayAttr>(anno, anno, "taps", state.circuit.getLoc(), clazz);
   if (!tapsAttr)
@@ -1733,7 +1732,7 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
     auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
     if (!tap) {
       mlir::emitError(
-          state.circuit.getLoc(),
+          loc,
           "Annotation '" + Twine(clazz) + "' with path '.taps[" + Twine(i) +
               "]' contained an unexpected type (expected a string).")
               .attachNote()
@@ -1741,36 +1740,14 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
       return failure();
     }
     NamedAttrList foo;
-    foo.append("class", anno.get("class"));
+    foo.append("class", classAttr);
     foo.append("id", id);
     foo.append("word", IntegerAttr::get(IntegerType::get(context, 64), i));
-    auto canonTarget = canonicalizeTarget(tap);
-    auto NLATargets = expandNonLocal(canonTarget.getValue());
-    auto leafTarget =
-        splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
-            .first;
-    if (NLATargets.size() > 1) {
-      buildNLA(state.circuit, state.newID().getValue().getZExtValue(),
-               NLATargets);
-      foo.append("circt.nonlocal",
-                 FlatSymbolRefAttr::get(context, canonTarget.getValue()));
-    }
-    foo.append("target", canonTarget);
-    state.addToWorklistFn(DictionaryAttr::get(context, foo));
-
-    for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-      NamedAttrList pathmetadata;
-      pathmetadata.append(
-          "circt.nonlocal",
-          FlatSymbolRefAttr::get(context, canonTarget.getValue()));
-      pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-      pathmetadata.append("target",
-                          StringAttr::get(context, std::get<0>(NLATargets[i])));
-      state.addToWorklistFn(DictionaryAttr::get(context, pathmetadata));
-    }
+    state.applyAnno(canonicalizeTarget(tap), foo);
   }
   return success();
 }
+
 
 // Describes tap points into the design.  This has the following structure:
 //   blackBox: ModuleTarget
@@ -1791,46 +1768,47 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
 // A Literal is a FIRRTL IR literal serialized to a string.  For now, just
 // store the string.
 // TODO: Parse the literal string into a UInt or SInt literal.
-LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
                              AnnoApplyState state) {
-  auto context = anno.getContext();
+  auto context = state.circuit.getContext();
   auto clazz = "sifive.enterprise.grandcentral.DataTapsAnnotation";
+  auto classAttr = StringAttr::get(context, clazz);
+  auto loc = state.circuit.getLoc();
   auto id = state.newID();
+
   NamedAttrList attrs;
-  // TODO  attrs.append("class", classAttr);
-  auto blackBoxAttr = tryGetAs<StringAttr>(anno, anno, "blackBox",
-                                           state.circuit.getLoc(), clazz);
+  attrs.append("class", classAttr);
+  auto blackBoxAttr = tryGetAs<StringAttr>(anno, anno, "blackBox", loc, clazz);
   if (!blackBoxAttr)
     return failure();
-  attrs.append("target", canonicalizeTarget(blackBoxAttr));
-  state.addToWorklistFn(DictionaryAttr::getWithSorted(context, attrs));
-  //    addDontTouch(target);
+  auto ctarget = canonicalizeTarget(blackBoxAttr.getValue());
+  state.applyAnno(ctarget, attrs);
+  state.setDontTouch(ctarget);
 
   // Process all the taps.
-  auto keyAttr =
-      tryGetAs<ArrayAttr>(anno, anno, "keys", state.circuit.getLoc(), clazz);
+  auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, clazz);
   if (!keyAttr)
     return failure();
   for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
     auto b = keyAttr[i];
     auto path = ("keys[" + Twine(i) + "]").str();
     auto bDict = b.cast<DictionaryAttr>();
-    auto classAttr = tryGetAs<StringAttr>(bDict, anno, "class",
-                                          state.circuit.getLoc(), clazz, path);
+    auto classAttr =
+        tryGetAs<StringAttr>(bDict, anno, "class", loc, clazz, path);
     if (!classAttr)
       return failure();
 
     // The "portName" field is common across all sub-types of DataTapKey.
     NamedAttrList port;
-    auto portNameAttr = tryGetAs<StringAttr>(
-        bDict, anno, "portName", state.circuit.getLoc(), clazz, path);
+    auto portNameAttr =
+        tryGetAs<StringAttr>(bDict, anno, "portName", loc, clazz, path);
     if (!portNameAttr)
       return failure();
     auto maybePortTarget = canonicalizeTarget(portNameAttr.getValue());
-    auto portPair = splitAndAppendTarget(port, maybePortTarget, context);
+    auto portPair =
+        splitAndAppendTarget(port, maybePortTarget, context);
     port.append("class", classAttr);
     port.append("id", id);
-    // addDontTouch(portPair.first, portPair.second);
 
     if (classAttr.getValue() ==
         "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
@@ -1839,42 +1817,21 @@ LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
       source.append("class", bDict.get("class"));
       source.append("id", id);
       source.append("portID", portID);
-      auto sourceAttr = tryGetAs<StringAttr>(
-          bDict, anno, "source", state.circuit.getLoc(), clazz, path);
+      source.append("type", StringAttr::get(context, "source"));
+      auto sourceAttr =
+          tryGetAs<StringAttr>(bDict, anno, "source", loc, clazz, path);
       if (!sourceAttr)
         return failure();
       auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
-      auto NLATargets = expandNonLocal(maybeSourceTarget);
-      auto leafTarget =
-          splitAndAppendTarget(source, std::get<0>(NLATargets.back()), context);
-      FlatSymbolRefAttr nlaSym;
-      if (NLATargets.size() > 1) {
-        nlaSym = buildNLA(state.circuit,
-                          state.newID().getValue().getZExtValue(), NLATargets);
-        source.append("circt.nonstate.circuit.getLoc()al", nlaSym);
-      }
-      source.append("type", StringAttr::get(context, "source"));
-      source.append("target", StringAttr::get(context, leafTarget.first));
-      state.addToWorklistFn(DictionaryAttr::get(context, source));
-      // addDontTouch(leafTarget.first, leafTarget.second);
-
-      for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-        NamedAttrList pathmetadata;
-        pathmetadata.append("circt.nonlocal", nlaSym);
-        pathmetadata.append(
-            "class",
-            StringAttr::get(context, "circt.nonstate.circuit.getLoc()al"));
-        pathmetadata.append(
-            "target", StringAttr::get(context, std::get<0>(NLATargets[i])));
-        state.addToWorklistFn(DictionaryAttr::get(context, pathmetadata));
-      }
+      state.applyAnno(maybeSourceTarget, source);
+      state.setDontTouch(maybeSourceTarget);
 
       // Port Annotations generation.
       port.append("portID", portID);
       port.append("type", StringAttr::get(context, "portName"));
-      port.append("target", StringAttr::get(context, portPair.first));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
-      return success();
+      state.applyAnno(portPair.first, port);
+      state.setDontTouch(portPair.first);
+      continue;
     }
 
     if (classAttr.getValue() ==
@@ -1883,64 +1840,64 @@ LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
       auto portID = state.newID();
       module.append("class", classAttr);
       module.append("id", id);
-      auto internalPathAttr = tryGetAs<StringAttr>(
-          bDict, anno, "internalPath", state.circuit.getLoc(), clazz, path);
-      auto moduleAttr = tryGetAs<StringAttr>(
-          bDict, anno, "module", state.circuit.getLoc(), clazz, path);
+      auto internalPathAttr =
+          tryGetAs<StringAttr>(bDict, anno, "internalPath", loc, clazz, path);
+      auto moduleAttr =
+          tryGetAs<StringAttr>(bDict, anno, "module", loc, clazz, path);
       if (!internalPathAttr || !moduleAttr)
         return failure();
       module.append("internalPath", internalPathAttr);
       module.append("portID", portID);
-      module.append("target", canonicalizeTarget(moduleAttr));
-      state.addToWorklistFn(DictionaryAttr::getWithSorted(context, module));
-      // addDontTouch(moduleTarget);
+      auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+      state.applyAnno(moduleTarget, module);
+      state.setDontTouch(moduleTarget);
 
       // Port Annotations generation.
       port.append("portID", portID);
-      port.append("target", StringAttr::get(context, portPair.first));
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
-      return success();
+      state.applyAnno(portPair.first, port);
+      continue;
     }
 
     if (classAttr.getValue() ==
         "sifive.enterprise.grandcentral.DeletedDataTapKey") {
       // Port Annotations generation.
-      state.addToWorklistFn(DictionaryAttr::get(context, port));
-      return success();
+      state.applyAnno(portPair.first, port);
+      continue;
     }
 
     if (classAttr.getValue() ==
         "sifive.enterprise.grandcentral.LiteralDataTapKey") {
       NamedAttrList literal;
       literal.append("class", classAttr);
-      auto literalAttr = tryGetAs<StringAttr>(
-          bDict, anno, "literal", state.circuit.getLoc(), clazz, path);
+      auto literalAttr =
+          tryGetAs<StringAttr>(bDict, anno, "literal", loc, clazz, path);
       if (!literalAttr)
         return failure();
       literal.append("literal", literalAttr);
-      literal.append("target", StringAttr::get(context, portPair.first));
+
       // Port Annotaiton generation.
-      state.addToWorklistFn(DictionaryAttr::get(context, literal));
-      return success();
+      state.applyAnno(portPair.first, literal);
+      continue;
     }
 
     mlir::emitError(
-        state.circuit.getLoc(),
-        "Annotation '" + Twine(clazz) + "' with path '" + path + ".class" +
-            +"' contained an unknown/unimplemented DataTapKey class '" +
-            classAttr.getValue() + "'.")
+        loc, "Annotation '" + Twine(clazz) + "' with path '" + path + ".class" +
+                 +"' contained an unknown/unimplemented DataTapKey class '" +
+                 classAttr.getValue() + "'.")
             .attachNote()
         << "The full Annotation is reprodcued here: " << anno << "\n";
     return failure();
+    }
   }
-  return success();
-}
 
 // Scatter signal driver annotations to the sources *and* the targets of the
 // drives.
-LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
                                AnnoApplyState state) {
+  auto context = state.circuit.getContext();
   auto clazz = "sifive.enterprise.grandcentral.SignalDriverAnnotation";
+  auto classAttr = StringAttr::get(context, clazz);
+  auto loc = state.circuit.getLoc();
   auto id = state.newID();
 
   // Rework the circuit-level annotation to no longer include the
@@ -1959,9 +1916,7 @@ LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
   fields.append("annotations", annotationsAttr);
   fields.append("circuit", circuitAttr);
   fields.append("circuitPackage", circuitPackageAttr);
-  fields.append("target", StringAttr::get(state.circuit.getContext(), "~"));
-  state.addToWorklistFn(
-      DictionaryAttr::get(state.circuit.getContext(), fields));
+  state.applyAnno(canonicalizeTarget("~"), fields);
 
   // A callback that will scatter every source and sink target pair to the
   // corresponding two ends of the connection.
@@ -2017,49 +1972,49 @@ LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
       fields.append("dir", StringAttr::get(state.circuit.getContext(),
                                            isSource ? "source" : "sink"));
 
-      // Handle subfield and non-local targets.
-      auto NLATargets = expandNonLocal(canonTarget);
-      auto leafTarget = splitAndAppendTarget(
-          fields, std::get<0>(NLATargets.back()), state.circuit.getContext());
-      if (NLATargets.size() > 1) {
-        buildNLA(state.circuit, state.newID().getValue().getZExtValue(),
-                 NLATargets);
-        fields.append(
-            "circt.nonlocal",
-            FlatSymbolRefAttr::get(state.circuit.getContext(), canonTarget));
-      }
-      fields.append("target", StringAttr::get(state.circuit.getContext(),
-                                              leafTarget.first));
-      state.addToWorklistFn(
-          DictionaryAttr::get(state.circuit.getContext(), fields));
+      state.applyAnno(canonTarget, fields);
 
       // Add a don't touch annotation to whatever this annotation targets.
-      // TODO addDontTouch(leafTarget.first, leafTarget.second);
+      state.setDontTouch(canonTarget);
 
       // Keep track of the enclosing module.
-      annotatedModules.insert(
-          (StringRef(std::get<0>(NLATargets.back())).split("|").first + "|" +
-           std::get<1>(NLATargets.back()))
-              .str());
-
-      // Annotate instances along the NLA path.
-      for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-        NamedAttrList fields;
-        fields.append(
-            "circt.nonlocal",
-            FlatSymbolRefAttr::get(state.circuit.getContext(), canonTarget));
-        fields.append("class", StringAttr::get(state.circuit.getContext(),
-                                               "circt.nonlocal"));
-        fields.append("target", StringAttr::get(state.circuit.getContext(),
-                                                std::get<0>(NLATargets[i])));
-        state.addToWorklistFn(
-            DictionaryAttr::get(state.circuit.getContext(), fields));
-      }
+//TODO
+      // annotatedModules.insert(
+      //     (StringRef(std::get<0>(NLATargets.back())).split("|").first + "|" +
+      //      std::get<1>(NLATargets.back()))
+      //         .str());
     }
 
     return true;
+  };
+
+  // Handle the source and sink targets.
+  auto sourcesAttr =
+      tryGetAs<ArrayAttr>(anno, anno, "sourceTargets", loc, clazz);
+  auto sinksAttr = tryGetAs<ArrayAttr>(anno, anno, "sinkTargets", loc, clazz);
+  if (!sourcesAttr || !sinksAttr)
+    return failure();
+  unsigned i = 0;
+  for (auto attr : sourcesAttr)
+    if (!handleTarget(attr, i++, true))
+      return failure();
+  i = 0;
+  for (auto attr : sinksAttr)
+    if (!handleTarget(attr, i++, false))
+      return failure();
+
+  // Indicate which modules have embedded `SignalDriverAnnotation`s.
+  for (auto &module : annotatedModules) {
+    NamedAttrList fields;
+    fields.append("class", classAttr);
+    fields.append("id", id);
+    state.applyAnno(module.getKey(), fields);
   }
+
+  return success();
 }
+
+#if 0 // TODO
 
 LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state) {
@@ -2110,56 +2065,55 @@ auto context = state.circuit.getContext();
   return true;
 }
 
-LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
+#endif
+
+LogicalResult circt::firrtl::applyModRep(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state) {
-  //        if (clazz ==
-  //          "sifive.enterprise.grandcentral.ModuleReplacementAnnotation")
-  //          {
-  auto id = state.newID();
-  NamedAttrList fields;
-  auto annotationsAttr = tryGetAs<ArrayAttr>(anno, anno, "annotations",
-                                             state.circuit.getLoc(), clazz);
-  auto circuitAttr = tryGetAs<StringAttr>(anno, anno, "circuit",
-                                          state.circuit.getLoc(), clazz);
-  auto circuitPackageAttr = tryGetAs<StringAttr>(anno, anno, "circuitPackage",
-                                                 state.circuit.getLoc(), clazz);
-  auto dontTouchesAttr = tryGetAs<ArrayAttr>(anno, anno, "dontTouches",
-                                             state.circuit.getLoc(), clazz);
-  if (!annotationsAttr || !circuitAttr || !circuitPackageAttr ||
-      !dontTouchesAttr)
-    return false;
-  fields.append("class", classAttr);
-  fields.append("id", id);
-  fields.append("annotations", annotationsAttr);
-  fields.append("circuit", circuitAttr);
-  fields.append("circuitPackage", circuitPackageAttr);
-  fields.append("target", StringAttr::get(context, "~"));
-  newAnnotations.push_back(DictionaryAttr::get(context, fields));
+  auto context = state.circuit.getContext();
+  auto clazz = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation";
+auto classAttr = StringAttr::get(context, clazz);
+auto loc = state.circuit.getLoc();
+auto id = state.newID();
 
-  // Add a don't touches for each target in "dontTouches" list
-  for (auto dontTouch : dontTouchesAttr) {
-    StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
-    if (!targetString) {
-      mlir::emitError(state.circuit.getLoc(),
-                      "ModuleReplacementAnnotation dontTouches "
-                      "entries must be strings")
-              .attachNote()
-          << "annotation:" << anno << "\n";
-      return false;
-    }
-    auto canonTarget = canonicalizeTarget(targetString.getValue());
-    auto nlaTargets = expandNonLocal(canonTarget);
-    auto leafTarget =
-        splitAndAppendTarget(fields, std::get<0>(nlaTargets.back()), context);
+NamedAttrList fields;
+auto annotationsAttr = tryGetAs<ArrayAttr>(anno, anno, "annotations",
+                                           state.circuit.getLoc(), clazz);
+auto circuitAttr =
+    tryGetAs<StringAttr>(anno, anno, "circuit", state.circuit.getLoc(), clazz);
+auto circuitPackageAttr = tryGetAs<StringAttr>(anno, anno, "circuitPackage",
+                                               state.circuit.getLoc(), clazz);
+auto dontTouchesAttr = tryGetAs<ArrayAttr>(anno, anno, "dontTouches",
+                                           state.circuit.getLoc(), clazz);
+if (!annotationsAttr || !circuitAttr || !circuitPackageAttr || !dontTouchesAttr)
+  return failure();
+fields.append("class", classAttr);
+fields.append("id", id);
+fields.append("annotations", annotationsAttr);
+fields.append("circuit", circuitAttr);
+fields.append("circuitPackage", circuitPackageAttr);
+state.applyAnno(canonicalizeTarget("~"), fields);
 
-    // Add a don't touch annotation to whatever this annotation targets.
-    addDontTouch(leafTarget.first, leafTarget.second);
+// Add a don't touches for each target in "dontTouches" list
+for (auto dontTouch : dontTouchesAttr) {
+  StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
+  if (!targetString) {
+    mlir::emitError(state.circuit.getLoc(),
+                    "ModuleReplacementAnnotation dontTouches "
+                    "entries must be strings")
+            .attachNote()
+        << "annotation:" << anno << "\n";
+    return failure();
+  }
+  auto canonTarget = canonicalizeTarget(targetString.getValue());
+
+  // Add a don't touch annotation to whatever this annotation targets.
+  state.setDontTouch(canonTarget);
   }
 
   auto targets =
       tryGetAs<ArrayAttr>(anno, anno, "targets", state.circuit.getLoc(), clazz);
   if (!targets)
-    return false;
+    return failure();
   for (auto targetAttr : targets) {
     NamedAttrList fields;
     fields.append("id", id);
@@ -2170,31 +2124,10 @@ LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
           "ModuleReplacementAnnotation targets entries must be strings")
               .attachNote()
           << "annotation:" << anno << "\n";
-      return false;
+      return failure();
     }
     auto canonTarget = canonicalizeTarget(targetString.getValue());
-    auto nlaTargets = expandNonLocal(canonTarget);
-    auto leafTarget =
-        splitAndAppendTarget(fields, std::get<0>(nlaTargets.back()), context);
-    if (nlaTargets.size() > 1) {
-      buildNLA(circuit, ++nlaNumber, nlaTargets);
-      fields.append("circt.nonlocal",
-                    FlatSymbolRefAttr::get(context, canonTarget));
-    }
-    fields.append("target", StringAttr::get(context, leafTarget.first));
-    newAnnotations.push_back(DictionaryAttr::get(context, fields));
-
-    // Annotate instances along the NLA path.
-    for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
-      NamedAttrList fields;
-      fields.append("circt.nonlocal",
-                    FlatSymbolRefAttr::get(context, canonTarget));
-      fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-      fields.append("target",
-                    StringAttr::get(context, std::get<0>(nlaTargets[i])));
-      newAnnotations.push_back(DictionaryAttr::get(context, fields));
-    }
+    state.applyAnno(canonTarget, fields);
   }
+  return success();
 }
-
-#endif //TODO

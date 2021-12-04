@@ -76,12 +76,18 @@ private:
 
 /// State threaded through functions for resolving and applying annotations.
 struct AnnoApplyState {
-  AnnoApplyState(CircuitOp circuit, SymbolTable &symTbl,
-                 llvm::function_ref<void(DictionaryAttr)> addFn)
-      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addFn) {}
+  AnnoApplyState(
+      CircuitOp circuit, SymbolTable &symTbl,
+      llvm::function_ref<void(DictionaryAttr)> addFn,
+      llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyFn)
+      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addFn),
+        applyAnno(applyFn) {}
   CircuitOp circuit;
   SymbolTable &symTbl;
   llvm::function_ref<void(DictionaryAttr)> addToWorklistFn;
+  llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyAnno;
+  void setDontTouch(StringRef target);
+
   IntegerAttr newID() {
     return IntegerAttr::get(IntegerType::get(circuit.getContext(), 64), ++id);
   }
@@ -121,28 +127,22 @@ FlatSymbolRefAttr buildNLA(AnnoPathValue target, AnnoApplyState state);
 std::pair<StringRef, llvm::Optional<ArrayAttr>>
 splitTarget(StringRef target, MLIRContext *context);
 
-/// Make an anchor for a non-local annotation.  Use the expanded path to build
-/// the module and name list in the anchor.
-FlatSymbolRefAttr
-buildNLA(CircuitOp circuit, size_t nlaSuffix,
-         SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas);
-
 StringRef getAnnoClass(DictionaryAttr anno);
 
 //===----------------------------------------------------------------------===//
 // Pass Specific Annotation lowering
 //===----------------------------------------------------------------------===//
 
-// LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
-//                           AnnoApplyState state);
-// LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
-//                           AnnoApplyState state);
-// LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
-//                                AnnoApplyState state);
-// LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
-//                              AnnoApplyState state);
-// LogicalResult applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
-//                             AnnoApplyState state);
+LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
+                          AnnoApplyState state);
+LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
+                          AnnoApplyState state);
+LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
+                               AnnoApplyState state);
+LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
+                             AnnoApplyState state);
+LogicalResult applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
+                             AnnoApplyState state);
 
 } // namespace firrtl
 } // namespace circt

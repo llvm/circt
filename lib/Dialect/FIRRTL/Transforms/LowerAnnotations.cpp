@@ -62,6 +62,10 @@ static inline void appendTarget(NamedAttrList &annotation, ArrayAttr target) {
 // Global Helpers 
 //===----------------------------------------------------------------------===//
 
+void AnnoApplyState::setDontTouch(StringRef target) {
+
+}
+
 /// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
 /// subfield/subindex information from a Target string.  Subfield/subindex
 /// information will be placed in the key "target" at the back of the
@@ -114,22 +118,22 @@ circt::firrtl::expandNonLocal(StringRef target) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-FlatSymbolRefAttr circt::firrtl::buildNLA(AnnoPathValue target,
-                                          AnnoApplyState state) {
-  OpBuilder b(state.circuit.getBodyRegion());
+static FlatSymbolRefAttr buildNLA(AnnoPathValue target,
+                                          CircuitOp circuit, SymbolTable& symTbl) {
+  OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
   for (auto inst : target.getInstances()) {
     mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
-    insts.push_back(StringAttr::get(state.circuit.getContext(), inst.name()));
+    insts.push_back(StringAttr::get(circuit.getContext(), inst.name()));
   }
   mods.push_back(FlatSymbolRefAttr::get(target.getModule()));
   insts.push_back(target.getOp()->getAttrOfType<StringAttr>("name"));
-  auto modAttr = ArrayAttr::get(state.circuit.getContext(), mods);
-  auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", modAttr,
+  auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
+  auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
+  auto nla = b.create<NonLocalAnchor>(circuit.getLoc(), "nla", modAttr,
                                       instAttr);
-  state.symTbl.insert(nla);
+  symTbl.insert(nla);
   return FlatSymbolRefAttr::get(nla);
 }
 
@@ -343,10 +347,10 @@ static LogicalResult updateArray(StringRef indexStr, AnnoPathValue &entity) {
 /// Convert a parsed target string to a resolved target structure.  This
 /// resolves all names and aggregates from a parsed target.
 Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
-                                        AnnoApplyState state) {
+                                        CircuitOp circuit, SymbolTable& symTbl) {
   // Validate circuit name.
-  if (!path.circuit.empty() && state.circuit.name() != path.circuit) {
-    state.circuit->emitError("circuit name doesn't match annotation '")
+  if (!path.circuit.empty() && circuit.name() != path.circuit) {
+    circuit->emitError("circuit name doesn't match annotation '")
         << path.circuit << '\'';
     return {};
   }
@@ -354,29 +358,29 @@ Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
   if (path.module.empty()) {
     assert(path.name.empty() && path.instances.empty() &&
            path.component.empty());
-    return AnnoPathValue(state.circuit);
+    return AnnoPathValue(circuit);
   }
 
   // Resolve all instances for non-local paths.
   SmallVector<InstanceOp> instances;
   for (auto p : path.instances) {
-    auto mod = state.symTbl.lookup<FModuleOp>(p.first);
+    auto mod = symTbl.lookup<FModuleOp>(p.first);
     if (!mod) {
-      state.circuit->emitError("module doesn't exist '") << p.first << '\'';
+      circuit->emitError("module doesn't exist '") << p.first << '\'';
       return {};
     }
     auto resolved = findNamedThing(p.second, mod);
     if (!resolved.isInstance()) {
-      state.circuit.emitError("cannot find instance '")
+      circuit.emitError("cannot find instance '")
           << p.second << "' in '" << mod.getName() << "'";
       return {};
     }
     instances.push_back(cast<InstanceOp>(resolved.getOp()));
   }
   // The final module is where the named target is (or is the named target).
-  auto mod = state.symTbl.lookup<FModuleLike>(path.module);
+  auto mod = symTbl.lookup<FModuleLike>(path.module);
   if (!mod) {
-    state.circuit->emitError("module doesn't exist '") << path.module << '\'';
+    circuit->emitError("module doesn't exist '") << path.module << '\'';
     return {};
   }
   AnnoPathValue ref;
@@ -386,7 +390,7 @@ Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
   } else {
     ref = findNamedThing(path.name, mod);
     if (!ref) {
-      state.circuit->emitError("cannot find name '")
+      circuit->emitError("cannot find name '")
           << path.name << "' in " << mod.moduleName();
       return {};
     }
@@ -503,7 +507,7 @@ circt::firrtl::splitTarget(StringRef target, MLIRContext *context) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-FlatSymbolRefAttr circt::firrtl::buildNLA(
+static FlatSymbolRefAttr buildNLA(
     CircuitOp circuit, size_t nlaSuffix,
     SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
@@ -565,14 +569,14 @@ static Optional<TokenAnnoTarget> tokenizePath(StringRef origTarget) {
 /// path.
 // FIXME: uniq annotation chain links
 static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
-                                             AnnoApplyState state) {
+                                             CircuitOp circuit, SymbolTable& symTbl) {
 
-  FlatSymbolRefAttr sym = buildNLA(target, state);
+  FlatSymbolRefAttr sym = buildNLA(target, circuit, symTbl);
 
   NamedAttrList pathmetadata;
   pathmetadata.append("circt.nonlocal", sym);
   pathmetadata.append(
-      "class", StringAttr::get(state.circuit.getContext(), "circt.nonlocal"));
+      "class", StringAttr::get(circuit.getContext(), "circt.nonlocal"));
   for (auto item : target.getInstances())
     addAnnotation(AnnoPathValue(item), pathmetadata);
 
@@ -592,17 +596,17 @@ static Optional<AnnoPathValue> noResolve(DictionaryAttr anno,
 /// Implementation of standard resolution.  First parses the target path, then
 /// resolves it.
 static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
-                                              AnnoApplyState state) {
+                                              CircuitOp circuit, SymbolTable& symTbl) {
   auto pathStr = canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
   auto tokens = tokenizePath(path);
   if (!tokens) {
-    state.circuit->emitError("Cannot tokenize annotation path ") << rawPath;
+    circuit->emitError("Cannot tokenize annotation path ") << rawPath;
     return {};
   }
 
-  return resolveEntities(*tokens, state);
+  return resolveEntities(*tokens, circuit, symTbl);
 }
 
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
@@ -622,7 +626,7 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
     return {};
   }
   return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
-                        state);
+                        state.circuit, state.symTbl);
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
@@ -631,7 +635,7 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
   auto target = anno.getNamed("target");
   if (target)
     return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
-                          state);
+                          state.circuit, state.symTbl);
   return AnnoPathValue(state.circuit);
 }
 
@@ -643,7 +647,8 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
 /// field from the annotaiton.  Optionally handles non-local annotations.
 static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
                                             DictionaryAttr anno,
-                                            AnnoApplyState state,
+                                            CircuitOp circuit,
+                                            SymbolTable& symTbl,
                                             bool allowNonLocal) {
   if (!allowNonLocal && !target.isLocal())
     return failure();
@@ -652,7 +657,7 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
     if (na.getName() != "target") {
       newAnnoAttrs.push_back(na);
     } else if (!target.isLocal()) {
-      auto sym = scatterNonLocalPath(target, state);
+      auto sym = scatterNonLocalPath(target, circuit, symTbl);
       newAnnoAttrs.push_back(
           {StringAttr::get("circt.nonlocal", anno.getContext()), sym});
     }
@@ -670,7 +675,7 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
                                         AnnoApplyState state) {
   if (!target.isOpOfType<T, Tr...>())
     return failure();
-  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+  return applyWithoutTargetImpl(target, anno, state.circuit, state.symTbl, allowNonLocal);
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
@@ -679,7 +684,7 @@ template <bool allowNonLocal = false>
 static LogicalResult applyWithoutTarget(AnnoPathValue target,
                                         DictionaryAttr anno,
                                         AnnoApplyState state) {
-  return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
+  return applyWithoutTargetImpl(target, anno, state.circuit, state.symTbl, allowNonLocal);
 }
 
 static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
@@ -716,12 +721,12 @@ if (isa<FModuleLike>(target.getOp())) {
 static const llvm::StringMap<AnnoRecord> annotationRecords{
     {"sifive.enterprise.firrtl.MarkDUTAnnotation",
      {stdResolve, applyWithoutTarget<>}},
-//    {"sifive.enterprise.grandcentral.DataTapsAnnotation",
-//     {stdResolve, applyGCDataTap}},
-//    {"sifive.enterprise.grandcentral.MemTapAnnotation",
-//     {stdResolve, applyGCMemTap}},
-//    {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
-//     {stdResolve, applyGCSigDriver}},
+    {"sifive.enterprise.grandcentral.DataTapsAnnotation",
+     {stdResolve, applyGCDataTap}},
+    {"sifive.enterprise.grandcentral.MemTapAnnotation",
+     {tryResolve, applyGCMemTap}},
+    {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
+     {stdResolve, applyGCSigDriver}},
 //    {"sifive.enterprise.grandcentral.GrandCentralView$",
 //     {stdResolve, applyGCView}},
 //    {"SerializedViewAnnotation", {stdResolve, applyGCView}},
@@ -729,10 +734,10 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
 //        "sifive.enterprise.grandcentral.ViewAnnotation",
 //        {stdResolve, applyGCView},
 //    },
-//    {
-//        "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
-//        {stdResolve, applyModRep},
-//    },
+    {
+        "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
+        {stdResolve, applyModRep},
+    },
          {"firrtl.transforms.DontTouchAnnotation",
           {stdResolve, applyDontTouch}},
 
@@ -806,11 +811,19 @@ void LowerAnnotationsPass::runOnOperation() {
       worklistAttrs.push_back(anno.cast<DictionaryAttr>());
     // Clear the raw annotations.
     circuit->removeAttr("raw_annotations");
-    AnnoApplyState state{
+    AnnoApplyState state {
         circuit, modules,
-        [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
-
-    };
+        [&](DictionaryAttr anno) { worklistAttrs.push_back(anno); },
+        [&](StringRef target, NamedAttrList anno) {
+          auto context = circuit.getContext();
+          auto foo = stdResolveImpl(target, circuit, modules);
+          if (!foo) {
+            state.circuit.emitError(
+                       "Unable to resolve target of annotation");
+            return failure();
+          }
+          return applyWithoutTargetImpl(*foo, DictionaryAttr::get(context, anno), circuit, modules, true);
+        }};
     size_t numFailures = 0;
     while (!worklistAttrs.empty()) {
       auto attr = worklistAttrs.pop_back_val();
