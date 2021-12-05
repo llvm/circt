@@ -278,6 +278,12 @@ static LogicalResult canonicalizePrimOp(
   if (width != resultValue.getType().cast<FIRRTLType>().getBitWidthOrSentinel())
     resultValue = rewriter.create<PadPrimOp>(op->getLoc(), resultValue, width);
 
+  // Insert a cast if this is a uint vs. sint or vice versa.
+  if (type.isa<SIntType>() && resultValue.getType().isa<UIntType>())
+    resultValue = rewriter.create<AsSIntPrimOp>(op->getLoc(), resultValue);
+  else if (type.isa<UIntType>() && resultValue.getType().isa<SIntType>())
+    resultValue = rewriter.create<AsUIntPrimOp>(op->getLoc(), resultValue);
+
   assert(type == resultValue.getType() && "canonicalization changed type");
   rewriter.replaceOp(op, resultValue);
   return success();
@@ -357,8 +363,6 @@ LogicalResult SubPrimOp::canonicalize(SubPrimOp op, PatternRewriter &rewriter) {
         if (isConstantZero(operands[0])) {
           Value value =
               rewriter.create<NegPrimOp>(op.getLoc(), op.getOperand(1));
-          if (op.getType().isa<UIntType>())
-            value = rewriter.create<AsUIntPrimOp>(op.getLoc(), value);
           return value;
         }
         return {};

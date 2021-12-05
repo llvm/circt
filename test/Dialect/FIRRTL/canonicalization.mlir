@@ -2259,4 +2259,21 @@ firrtl.module @Issue2251(out %o: !firrtl.sint<15>) {
   // CHECK-NEXT: firrtl.connect %o, %[[zero]]
 }
 
+// Issue mentioned in #2289
+// CHECK-LABEL: @Issue2289
+firrtl.module @Issue2289(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<5>) {
+  %r = firrtl.reg %clock  : !firrtl.uint<1>
+  firrtl.connect %r, %r : !firrtl.uint<1>, !firrtl.uint<1>
+  %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %0 = firrtl.dshl %c1_ui1, %r : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  %1 = firrtl.sub %c0_ui4, %0 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<5>
+  firrtl.connect %out, %1 : !firrtl.uint<5>, !firrtl.uint<5>
+  // CHECK:      %[[dshl:.+]] = firrtl.dshl
+  // CHECK-NEXT: %[[neg:.+]] = firrtl.neg %[[dshl]]
+  // CHECK-NEXT: %[[pad:.+]] = firrtl.pad %[[neg]], 5
+  // CHECK-NEXT: %[[cast:.+]] = firrtl.asUInt %[[pad]]
+  // CHECK-NEXT: firrtl.connect %out, %[[cast]]
+}
+
 }
