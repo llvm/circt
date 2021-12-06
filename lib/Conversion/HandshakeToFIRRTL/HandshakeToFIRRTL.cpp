@@ -424,9 +424,10 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
   std::function<Value(ArrayRef<Value>)> buildTreeRec =
       [&](ArrayRef<Value> operands) {
         assert(!operands.empty());
+        Value retVal;
         // Base case
         if (operands.size() == 1)
-          return operands.front();
+          retVal = operands.front();
         else {
           // Mux case. In each layer we take a look at the significant bit wrt.
           // the # of operands provided, and split the operands at the log2
@@ -440,11 +441,12 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
           auto lowerTree = buildTreeRec(front);
           auto upperTree = buildTreeRec(back);
           auto layerSelect = createBits(select, selectBit);
-          return rewriter
-              .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect, upperTree,
-                                 lowerTree)
-              .result();
+          retVal = rewriter
+                       .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect,
+                                          upperTree, lowerTree)
+                       .result();
         }
+        return retVal;
       };
 
   return buildTreeRec(inputs);
