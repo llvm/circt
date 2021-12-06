@@ -140,21 +140,23 @@ bool MuxOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                        llvm::DenseMap<mlir::Value, double> &timeMap,
                        std::vector<std::vector<llvm::Any>> & /*store*/,
                        std::vector<mlir::Value> &scheduleList) {
-  Operation *op = getOperation();
-  mlir::Value control = op->getOperand(0);
+  mlir::Value control = selectOperand();
   if (valueMap.count(control) == 0)
     return false;
   auto controlValue = valueMap[control];
   auto controlTime = timeMap[control];
-  mlir::Value in = llvm::any_cast<APInt>(controlValue) == 0 ? op->getOperand(1)
-                                                            : op->getOperand(2);
+  auto opIdx = llvm::any_cast<APInt>(controlValue).getZExtValue();
+  assert(opIdx < dataOperands().size() &&
+         "Trying to select a non-existing mux operand");
+
+  mlir::Value in = dataOperands()[opIdx];
   if (valueMap.count(in) == 0)
     return false;
   auto inValue = valueMap[in];
   auto inTime = timeMap[in];
   double time = std::max(controlTime, inTime);
-  valueMap[op->getResult(0)] = inValue;
-  timeMap[op->getResult(0)] = time;
+  valueMap[result()] = inValue;
+  timeMap[result()] = time;
 
   // Consume the inputs.
   valueMap.erase(control);
