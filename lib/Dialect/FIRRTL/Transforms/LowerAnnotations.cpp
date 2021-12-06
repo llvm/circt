@@ -45,6 +45,15 @@ struct TokenAnnoTarget {
   StringRef name;
   // Any aggregates indexed.
   SmallVector<TargetToken> component;
+  void dump() const {
+    llvm::errs() << "{circuit: " << circuit << ", instances: {";
+    for (auto& inst : instances)
+      llvm::errs() << "(" << inst.first << ", " << inst.second << ")";
+    llvm::errs() << "}, module: " << module << ", name: " << name << " component: {";
+    for (auto& i : component)
+      llvm::errs() << (i.isIndex ? "[" : ".") << i.name << (i.isIndex ? "]" : "");
+      llvm::errs() << "}}\n";
+  }
 };
 
 } // namespace
@@ -127,8 +136,8 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target,
     mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
     insts.push_back(StringAttr::get(circuit.getContext(), inst.name()));
   }
-  mods.push_back(FlatSymbolRefAttr::get(target.getModule()));
-  insts.push_back(target.getOp()->getAttrOfType<StringAttr>("name"));
+  //mods.push_back(FlatSymbolRefAttr::get(target.getModule()));
+  //insts.push_back(target.getOp()->getAttrOfType<StringAttr>("name"));
   auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
   auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
   auto nla = b.create<NonLocalAnchor>(circuit.getLoc(), "nla", modAttr,
@@ -348,6 +357,8 @@ static LogicalResult updateArray(StringRef indexStr, AnnoPathValue &entity) {
 /// resolves all names and aggregates from a parsed target.
 Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
                                         CircuitOp circuit, SymbolTable& symTbl) {
+                                          llvm::errs() << "Resolving " ; path.dump();
+                                        
   // Validate circuit name.
   if (!path.circuit.empty() && circuit.name() != path.circuit) {
     circuit->emitError("circuit name doesn't match annotation '")
@@ -652,6 +663,7 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
                                             bool allowNonLocal) {
   if (!allowNonLocal && !target.isLocal())
     return failure();
+  
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno) {
     if (na.getName() != "target") {
@@ -727,13 +739,13 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {tryResolve, applyGCMemTap}},
     {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
      {stdResolve, applyGCSigDriver}},
-//    {"sifive.enterprise.grandcentral.GrandCentralView$",
+//    {"sifive.enterprise.grandcentral.GrandCentralView",
 //     {stdResolve, applyGCView}},
 //    {"SerializedViewAnnotation", {stdResolve, applyGCView}},
-//    {
-//        "sifive.enterprise.grandcentral.ViewAnnotation",
-//        {stdResolve, applyGCView},
-//    },
+    {
+        "sifive.enterprise.grandcentral.ViewAnnotation",
+        {stdResolve, applyGCView},
+    },
     {
         "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
         {stdResolve, applyModRep},
@@ -765,11 +777,14 @@ static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
 namespace {
 struct LowerAnnotationsPass
     : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
+  LowerAnnotationsPass(bool ignoreUnhandledAnnotations,
+                       bool ignoreClasslessAnnotations) {
+    ignoreAnnotationUnknown = ignoreUnhandledAnnotations;
+    ignoreAnnotationClassless = ignoreClasslessAnnotations;
+  }
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, AnnoApplyState state);
 
-  bool ignoreUnhandledAnno = false;
-  bool ignoreClasslessAnno = false;
   SmallVector<DictionaryAttr> worklistAttrs;
 };
 } // end anonymous namespace
@@ -780,13 +795,13 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
     annoClassVal = annoClass->getValue().cast<StringAttr>().getValue();
-  else if (ignoreClasslessAnno)
+  else if (ignoreAnnotationClassless)
     annoClassVal = "circt.missing";
   else
     return state.circuit.emitError("Annotation without a class: ") << anno;
 
   // See if we handle the class
-  auto record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
+  auto record = getAnnotationHandler(annoClassVal, ignoreAnnotationUnknown);
   if (!record)
     return state.circuit.emitWarning("Unhandled annotation: ") << annoClassVal;
 
@@ -797,7 +812,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
            << annoClassVal;
   if (record->applier(*target, anno, state).failed())
     return state.circuit.emitError("Unable to apply annotation: ")
-           << annoClassVal;
+           << anno;
   return success();
 }
 
@@ -838,8 +853,7 @@ void LowerAnnotationsPass::runOnOperation() {
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
     bool ignoreUnhandledAnnotations, bool ignoreClasslessAnnotations) {
-  auto pass = std::make_unique<LowerAnnotationsPass>();
-  pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
-  pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
+  auto pass = std::make_unique<LowerAnnotationsPass>(
+      ignoreUnhandledAnnotations, ignoreClasslessAnnotations);
   return pass;
 }

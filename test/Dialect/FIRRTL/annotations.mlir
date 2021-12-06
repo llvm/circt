@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-lower-annotations)' -split-input-file %s |FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-lower-annotations{disable-annotation-classless=true})' -split-input-file %s |FileCheck %s
 
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
@@ -40,7 +40,7 @@ firrtl.circuit "FooNL"  attributes {raw_annotations = [
 
 // -----
 
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", class = "circt.test", target = "~"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~"}]}  {
   firrtl.module @Foo() {
     firrtl.skip
   }
@@ -54,21 +54,6 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo"}]
 }
 
 // -----
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo"}]}  {
-  firrtl.module @Foo() {
-    firrtl.skip
-  }
-}
-
-// -----
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Foo"}]}  {
-  firrtl.module @Foo() {
-    firrtl.skip
-  }
-}
-
-// -----
-
 firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Foo"}]}  {
   firrtl.module @Foo() {
     firrtl.skip
@@ -95,7 +80,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Ba
 // A ReferenceTarget, ComponentName, or InstanceTarget pointing at an Instance
 // should work.
 
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Foo>bar"}, {b = "b", target = "~Foo|Foo>bar"}, {c = "c", target = "~Foo|Foo/bar:Bar"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Foo>bar"}, {b = "b", target = "~Foo|Foo>bar"}, {c = "c", class="circt.test", target = "~Foo|Foo/bar:Bar"}]}  {
   firrtl.module @Bar() {
     firrtl.skip
   }
@@ -115,7 +100,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Fo
 
 // Test result annotations of InstanceOp.
 
-firrtl.circuit "Foo"  attributes {raw_annotations = [{one, target = "~Foo|Foo>bar.a"}, {target = "~Foo|Foo>bar.b.baz", two}, {target = "~Foo|Foo/bar:Bar>b.qux", three}, {four, target = "~Foo|Foo>bar'c"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{one, target = "~Foo|Foo>bar.a"}, {target = "~Foo|Foo>bar.b.baz", two}, {target = "~Foo|Foo/bar:Bar>b.qux", three}, {four, target = "~Foo|Foo>bar.c"}]}  {
   firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>, out %c: !firrtl.uint<1>) {
   }
   firrtl.module @Foo() {

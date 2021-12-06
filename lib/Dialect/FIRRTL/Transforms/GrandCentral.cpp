@@ -2014,58 +2014,54 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
   return success();
 }
 
-#if 0 // TODO
-
-LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
+LogicalResult circt::firrtl::applyGCView(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state) {
-auto context = state.circuit.getContext();
-  //        if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
-  //                   "SerializedViewAnnotation" ||
-  //        clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
-  auto viewAnnotationClass =
-      StringAttr::get(context, "sifive.enterprise.grandcentral.ViewAnnotation");
+  auto context = state.circuit.getContext();
+  auto clazz = "sifive.enterprise.grandcentral.SignalDriverAnnotation";
+  auto classAttr = StringAttr::get(context, clazz);
+  auto loc = state.circuit.getLoc();
   auto id = state.newID();
+  
   NamedAttrList companionAttrs, parentAttrs;
-  companionAttrs.append("class", viewAnnotationClass);
+  companionAttrs.append("class", classAttr);
   companionAttrs.append("id", id);
   companionAttrs.append("type", StringAttr::get(context, "companion"));
   auto viewAttr = tryGetAs<DictionaryAttr>(anno, anno, "view",
                                            state.circuit.getLoc(), clazz);
   if (!viewAttr)
-    return false;
+    return failure();
   auto name =
       tryGetAs<StringAttr>(anno, anno, "name", state.circuit.getLoc(), clazz);
   if (!name)
-    return false;
+    return failure();
   companionAttrs.append("name", name);
   auto companionAttr = tryGetAs<StringAttr>(anno, anno, "companion",
                                             state.circuit.getLoc(), clazz);
   if (!companionAttr)
-    return false;
-  companionAttrs.append("target", companionAttr);
-  newAnnotations.push_back(DictionaryAttr::get(context, companionAttrs));
+    return failure();
+  state.applyAnno(companionAttr.getValue(), companionAttrs);
+
   auto parentAttr =
       tryGetAs<StringAttr>(anno, anno, "parent", state.circuit.getLoc(), clazz);
   if (!parentAttr)
-    return false;
-  parentAttrs.append("class", viewAnnotationClass);
+    return failure();
+  parentAttrs.append("class", classAttr);
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("type", StringAttr::get(context, "parent"));
-  parentAttrs.append("target", parentAttr);
-  newAnnotations.push_back(DictionaryAttr::get(context, parentAttrs));
-  auto prunedAttr = parseAugmentedType(
-      context, viewAttr, anno, newAnnotations, companionAttr.getValue(), name,
-      {}, id, {}, state.circuit.getLoc(), annotationID, clazz, "view");
-  if (!prunedAttr)
-    return false;
+  state.applyAnno(parentAttr, parentAttrs);
 
-  newAnnotations.push_back(cloneWithNewField(prunedAttr.getValue(), "target",
-                                             StringAttr::get(context, "~")));
-  return true;
+  // TODO:
+  // auto prunedAttr = parseAugmentedType(
+  //     context, viewAttr, anno, newAnnotations, companionAttr.getValue(),
+  //     name,
+  //     {}, id, {}, state.circuit.getLoc(), annotationID, clazz, "view");
+  // if (!prunedAttr)
+  //   return failure();
+  // state.applyAnno(canonicalizeTarget("~"), prunedAttr);
+  return success();
 }
 
-#endif
 
 LogicalResult circt::firrtl::applyModRep(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state) {

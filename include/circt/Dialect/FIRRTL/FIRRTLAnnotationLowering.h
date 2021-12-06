@@ -34,7 +34,13 @@ public:
   bool isInstance() const { return op && isa<InstanceOp>(op); }
   
   FIRRTLType getType() const {
-    return op->getResultTypes()[0].cast<FIRRTLType>().getSubTypeByFieldID(
+    FIRRTLType t;
+    if (auto mod = dyn_cast<FModuleLike>(op))
+      t = mod.getPortType(portNum);
+    else 
+    t = op->getResultTypes()[0].cast<FIRRTLType>();
+
+    return t.getSubTypeByFieldID(
         fieldIdx);
   }
   ArrayRef<InstanceOp> getPath() const { return instances; }
