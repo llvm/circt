@@ -46,6 +46,8 @@ public:
   PlacementDB(MlirOperation top, PrimitiveDB *seed) {
     db = circtMSFTCreatePlacementDB(top, seed ? seed->db
                                               : CirctMSFTPrimitiveDB{nullptr});
+    pyPhysLocationAttr =
+        py::module::import("circt.dialects.msft").attr("PhysLocationAttr");
   }
   ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
@@ -64,14 +66,13 @@ public:
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
-  PhysLocationAttr getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
-                                          uint64_t column,
-                                          uint64_t nearestToY) {
+  py::handle getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+                                    uint64_t column, uint64_t nearestToY) {
     MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
         db, prim, column, nearestToY);
     if (!nearest.ptr)
-      return {};
-    return unwrap(nearest).cast<PhysLocationAttr>();
+      return py::none();
+    return pyPhysLocationAttr.attr("cast")(nearest);
   }
   void walkPlacements(
       py::function pycb,
@@ -95,7 +96,9 @@ public:
           std::string subpath(p.subpath, p.subpathLength);
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
-          auto physLoc = unwrap(loc).cast<PhysLocationAttr>();
+          auto physLoc = py::module::import("circt.dialects.msft")
+                             .attr("PhysLocationAttr")
+                             .attr("cast")(loc);
           if (!p.op.ptr) {
             pycb(physLoc, py::none());
           } else {
@@ -107,11 +110,10 @@ public:
 
 private:
   CirctMSFTPlacementDB db;
+  py::handle pyPhysLocationAttr;
 };
 
 /// Populate the msft python module.
-DEFINE_ATTRIBUTE_CASTER(PhysLocationAttr, "PhysLocationAttr", "circt.dialects.msft")
-
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   mlirMSFTRegisterPasses();
 
