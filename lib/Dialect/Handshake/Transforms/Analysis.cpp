@@ -144,8 +144,13 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
   // "." with "_".
   std::string opDialectName = op->getName().getStringRef().str();
   std::replace(opDialectName.begin(), opDialectName.end(), '.', '_');
-  std::string opName =
-      (instanceName + "." + opDialectName + std::to_string(opIDs[op])).str();
+  std::string opName = (instanceName + "." + opDialectName).str();
+
+  // Follow the naming convention used in FIRRTL lowering.
+  if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id"); idAttr)
+    opName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
+  else
+    opName += std::to_string(opIDs[op]);
 
   outfile << "\"" << opName << "\""
           << " [";
@@ -506,6 +511,32 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   return instanceName;
 }
 
+namespace {
+struct HandshakeAddIDsPass : public HandshakeAddIDsBase<HandshakeAddIDsPass> {
+  void runOnOperation() override {
+    handshake::FuncOp funcOp = getOperation();
+    auto *ctx = &getContext();
+    OpBuilder builder(funcOp);
+    funcOp.walk([&](Operation *op) {
+      if (op->hasAttr("handshake_id"))
+        return;
+      llvm::SmallVector<NamedAttribute> attrs;
+      llvm::copy(op->getAttrs(), std::back_inserter(attrs));
+      attrs.push_back(builder.getNamedAttr(
+          "handshake_id",
+          IntegerAttr::get(IndexType::get(ctx),
+                           opCounters[op->getName().getStringRef().str()]++)));
+
+      op->setAttrs(DictionaryAttr::get(ctx, attrs));
+    });
+  };
+
+private:
+  /// Maintain a counter for each operation type in the function.
+  std::map<std::string, unsigned> opCounters;
+};
+} // namespace
+
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::handshake::createHandshakeDotPrintPass() {
   return std::make_unique<HandshakeDotPrintPass>();
@@ -514,4 +545,8 @@ circt::handshake::createHandshakeDotPrintPass() {
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::handshake::createHandshakeOpCountPass() {
   return std::make_unique<HandshakeOpCountPass>();
+}
+
+std::unique_ptr<mlir::Pass> circt::handshake::createHandshakeAddIDsPass() {
+  return std::make_unique<HandshakeAddIDsPass>();
 }

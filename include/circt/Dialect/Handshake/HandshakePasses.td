@@ -53,4 +53,14 @@ def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp
   let constructor = "circt::handshake::createHandshakeRemoveBuffersPass()";
 }
 
+def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
+  let summary = "Add a unique ID to each operation in a handshake function.";
+  let description = [{
+    This pass adds a unique ID to each operation in a handshake function. This
+    unique id can be used in lowerings facilitate mapping lowered IR back to the
+    handshake code which it originated from.
+  }];
+  let constructor = "circt::handshake::createHandshakeAddIDsPass()";
+}
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD
