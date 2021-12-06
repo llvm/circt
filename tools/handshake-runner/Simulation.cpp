@@ -375,10 +375,22 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::DivFOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::arith::IndexCastOp,
+LogicalResult HandshakeExecuter::execute(mlir::arith::IndexCastOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
-  out[0] = in[0];
+  Type outType = op.getOut().getType();
+  APInt inValue = any_cast<APInt>(in[0]);
+  APInt outValue;
+  if (outType.isIndex())
+    outValue =
+        APInt(IndexType::kInternalStorageBitWidth, inValue.getZExtValue());
+  else if (outType.isIntOrFloat())
+    outValue = APInt(outType.getIntOrFloatBitWidth(), inValue.getZExtValue());
+  else {
+    return op.emitOpError() << "unhandled output type";
+  }
+
+  out[0] = outValue;
   return success();
 }
 
@@ -760,9 +772,14 @@ HandshakeExecuter::HandshakeExecuter(
                                   scheduleList))
         readyList.push_back(&op);
       else {
-        LLVM_DEBUG(dbgs() << "EXECUTED: " << op << "\n");
-        for (auto out : op.getResults())
-          LLVM_DEBUG(debugArg("OUT", out, valueMap[out], time));
+        LLVM_DEBUG({
+          dbgs() << "EXECUTED: " << op << "\n";
+          for (auto out : op.getResults()) {
+            auto valueIt = valueMap.find(out);
+            if (valueIt != valueMap.end())
+              debugArg("OUT", out, valueMap[out], time);
+          }
+        });
       }
       for (mlir::Value out : scheduleList)
         scheduleUses(readyList, valueMap, out);
