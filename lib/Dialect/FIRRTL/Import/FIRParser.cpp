@@ -3404,6 +3404,11 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       if (parseIntLit(result, "invalid integer parameter"))
         return failure();
 
+      // If the integer parameter is less than 32-bits, sign extend this to a
+      // 32-bit value.  This needs to eventually emit as a 32-bit value in
+      // Verilog and we want to get the size correct immediately.
+      result = result.sextOrSelf(32);
+
       value = builder.getIntegerAttr(
           builder.getIntegerType(result.getBitWidth()), result);
       break;
