@@ -147,7 +147,8 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
   std::string opName = (instanceName + "." + opDialectName).str();
 
   // Follow the naming convention used in FIRRTL lowering.
-  if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id"); idAttr)
+  auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id");
+  if (idAttr)
     opName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
   else
     opName += std::to_string(opIDs[op]);
@@ -230,6 +231,12 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
 
                    return label;
                  });
+  /// If we have an ID attribute, we'll add the ID of the operation as well.
+  /// This helps crossprobing the diagram with the Handshake IR and waveform
+  /// diagrams.
+  if (idAttr)
+    outfile << " " << std::to_string(idAttr.getValue().getZExtValue());
+
   outfile << "\"";
 
   /// Style; add dashed border for control nodes
