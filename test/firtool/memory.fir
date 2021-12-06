@@ -1,4 +1,5 @@
 ; RUN: firtool %s --format=fir  --lower-to-hw | FileCheck %s 
+; RUN: firtool %s --format=fir  --lower-to-hw --ignore-read-enable-mem | FileCheck --check-prefix=READ %s 
 
 circuit Qux:
   module Qux:
@@ -51,6 +52,22 @@ circuit Qux:
     memory.rw.wmask <= rwMask
     memory.rw.wdata <= rwDataIn
     rwDataOut <= memory.rw.rdata
+
+
+; READ-LABEL:  hw.module @FIRRTLMem_1_1_1_8_16_1_1_1_0_1_a
+; READ:    %[[vtrue:.+]] = hw.constant true
+; READ:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
+; READ-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
+; READ-NEXT:    %[[v2:.+]] = sv.reg  : !hw.inout<i4>
+; READ-NEXT:    sv.always posedge %R0_clk {
+; READ-NEXT:      sv.passign %[[v0]], %R0_en : i1
+; READ-NEXT:      sv.passign %[[v2]], %R0_addr : i4
+; READ-NEXT:    }
+; READ-NEXT:    %[[v3:.+]] = sv.read_inout %[[v2]] : !hw.inout<i4>
+; READ-NEXT:    %[[v4:.+]] = sv.array_index_inout %[[vMemory]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+; READ-NEXT:    %[[v6:.+]] = sv.read_inout %[[v4]] : !hw.inout<i8>
+; READ:    hw.output %[[v6]]
+
 ; CHECK:  hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
 ; CHECK:  hw.module @FIRRTLMem_1_1_1_8_16_1_1_1_0_1_a(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1) -> (R0_data: i8, RW0_rdata: i8) {
 ; CHECK:    %[[vtrue:.+]] = hw.constant true
