@@ -1397,8 +1397,8 @@ static ConnectOp getSingleConnectUserOf(Value value) {
 }
 
 // Forward simple values through wire's and reg's.
-static LogicalResult foldSingleSetConnect(ConnectOp op,
-                                          PatternRewriter &rewriter) {
+static LogicalResult canonicalizeSingleSetConnect(ConnectOp op,
+                                                  PatternRewriter &rewriter) {
   // While we can do this for nearly all wires, we currently limit it to simple
   // things.
   Operation *connectedDecl = op.dest().getDefiningOp();
@@ -1454,7 +1454,7 @@ LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
 
   // If there is a simple value connected to a foldable decl like a wire or reg,
   // see if we can eliminate the decl.
-  if (succeeded(foldSingleSetConnect(op, rewriter)))
+  if (succeeded(canonicalizeSingleSetConnect(op, rewriter)))
     return success();
 
   return failure();
