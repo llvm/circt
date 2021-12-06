@@ -1736,7 +1736,7 @@ getMuxChainCondConstant(Value cond, Value indexValue, bool isInverted,
   }
 
   return false;
-};
+}
 
 /// Given a mux, check to see if the "on true" value (or "on false" value if
 /// isFalseSide=true) is a mux tree with the same condition.  This allows us

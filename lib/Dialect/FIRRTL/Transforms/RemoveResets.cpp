@@ -88,7 +88,7 @@ static bool isInvalid(Value val) {
     updateVal(op->getResult(0));
   };
   return false;
-};
+}
 
 void RemoveResetsPass::runOnOperation() {
   LLVM_DEBUG(
