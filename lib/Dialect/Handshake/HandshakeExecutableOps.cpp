@@ -114,16 +114,15 @@ bool MergeOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                          llvm::DenseMap<mlir::Value, double> &timeMap,
                          std::vector<std::vector<llvm::Any>> & /*store*/,
                          std::vector<mlir::Value> &scheduleList) {
-  Operation *op = getOperation();
   bool found = false;
   int i = 0;
-  for (mlir::Value in : op->getOperands()) {
+  for (mlir::Value in : getOperands()) {
     if (valueMap.count(in) == 1) {
       if (found)
-        op->emitOpError("More than one valid input to Merge!");
+        emitOpError("More than one valid input to Merge!");
       auto t = valueMap[in];
-      valueMap[op->getResult(0)] = t;
-      timeMap[op->getResult(0)] = timeMap[in];
+      valueMap[result()] = t;
+      timeMap[result()] = timeMap[in];
       // Consume the inputs.
       valueMap.erase(in);
       found = true;
@@ -131,7 +130,7 @@ bool MergeOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
     i++;
   }
   if (!found)
-    op->emitOpError("No valid input to Merge!");
+    emitOpError("No valid input to Merge!");
   scheduleList.push_back(getResult());
   return true;
 }
@@ -170,30 +169,26 @@ bool ControlMergeOp::tryExecute(
     llvm::DenseMap<mlir::Value, double> &timeMap,
     std::vector<std::vector<llvm::Any>> & /*store*/,
     std::vector<mlir::Value> &scheduleList) {
-  Operation *op = getOperation();
   bool found = false;
-  int i = 0;
-  for (mlir::Value in : op->getOperands()) {
-    if (valueMap.count(in) == 1) {
+  for (auto in : llvm::enumerate(getOperands())) {
+    if (valueMap.count(in.value()) == 1) {
       if (found)
-        op->emitOpError("More than one valid input to CMerge!");
-      auto t = valueMap[in];
-      valueMap[op->getResult(0)] = t;
-      timeMap[op->getResult(0)] = timeMap[in];
+        emitOpError("More than one valid input to CMerge!");
+      valueMap[result()] = valueMap[in.value()];
+      timeMap[result()] = timeMap[in.value()];
 
-      valueMap[op->getResult(1)] = APInt(INDEX_WIDTH, i);
-      timeMap[op->getResult(1)] = timeMap[in];
+      valueMap[index()] = APInt(INDEX_WIDTH, in.index());
+      timeMap[index()] = timeMap[in.value()];
 
       // Consume the inputs.
-      valueMap.erase(in);
+      valueMap.erase(in.value());
 
       found = true;
     }
-    i++;
   }
   if (!found)
-    op->emitOpError("No valid input to CMerge!");
-  scheduleList = toVector(op->getResults());
+    emitOpError("No valid input to CMerge!");
+  scheduleList = toVector(getResults());
   return true;
 }
 
@@ -216,19 +211,18 @@ bool ConditionalBranchOp::tryExecute(
     llvm::DenseMap<mlir::Value, double> &timeMap,
     std::vector<std::vector<llvm::Any>> & /*store*/,
     std::vector<mlir::Value> &scheduleList) {
-  Operation *op = getOperation();
-  mlir::Value control = op->getOperand(0);
+  mlir::Value control = conditionOperand();
   if (valueMap.count(control) == 0)
     return false;
   auto controlValue = valueMap[control];
   auto controlTime = timeMap[control];
-  mlir::Value in = op->getOperand(1);
+  mlir::Value in = dataOperand();
   if (valueMap.count(in) == 0)
     return false;
   auto inValue = valueMap[in];
   auto inTime = timeMap[in];
-  mlir::Value out = llvm::any_cast<APInt>(controlValue) != 0 ? op->getResult(0)
-                                                             : op->getResult(1);
+  mlir::Value out =
+      llvm::any_cast<APInt>(controlValue) != 0 ? trueResult() : falseResult();
   double time = std::max(controlTime, inTime);
   valueMap[out] = inValue;
   timeMap[out] = time;
@@ -378,12 +372,11 @@ bool LoadOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
                         llvm::DenseMap<mlir::Value, double> &timeMap,
                         std::vector<std::vector<llvm::Any>> & /*store*/,
                         std::vector<mlir::Value> &scheduleList) {
-  Operation *op = getOperation();
-  mlir::Value address = op->getOperand(0);
-  mlir::Value data = op->getOperand(1);
-  mlir::Value nonce = op->getOperand(2);
-  mlir::Value addressOut = op->getResult(1);
-  mlir::Value dataOut = op->getResult(0);
+  mlir::Value address = getOperand(0);
+  mlir::Value data = getOperand(1);
+  mlir::Value nonce = getOperand(2);
+  mlir::Value addressOut = getResult(1);
+  mlir::Value dataOut = getResult(0);
   if ((valueMap.count(address) && !valueMap.count(nonce)) ||
       (!valueMap.count(address) && valueMap.count(nonce)) ||
       (!valueMap.count(address) && !valueMap.count(nonce) &&
