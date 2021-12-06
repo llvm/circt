@@ -759,6 +759,11 @@ HandshakeExecuter::HandshakeExecuter(
       if (!handshakeOp.tryExecute(valueMap, memoryMap, timeMap, store,
                                   scheduleList))
         readyList.push_back(&op);
+      else {
+        LLVM_DEBUG(dbgs() << "EXECUTED: " << op << "\n");
+        for (auto out : op.getResults())
+          LLVM_DEBUG(debugArg("OUT", out, valueMap[out], time));
+      }
       for (mlir::Value out : scheduleList)
         scheduleUses(readyList, valueMap, out);
       continue;
@@ -811,6 +816,7 @@ HandshakeExecuter::HandshakeExecuter(
             .Default([](auto op) {
               return op->emitOpError() << "Unknown operation";
             });
+    LLVM_DEBUG(dbgs() << "EXECUTED: " << op << "\n");
 
     if (res.failed()) {
       successFlag = false;
