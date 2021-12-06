@@ -357,8 +357,6 @@ static LogicalResult updateArray(StringRef indexStr, AnnoPathValue &entity) {
 /// resolves all names and aggregates from a parsed target.
 Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
                                         CircuitOp circuit, SymbolTable& symTbl) {
-                                          llvm::errs() << "Resolving " ; path.dump();
-                                        
   // Validate circuit name.
   if (!path.circuit.empty() && circuit.name() != path.circuit) {
     circuit->emitError("circuit name doesn't match annotation '")
@@ -756,7 +754,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
-    {"circt.missing", {tryResolve, applyWithoutTarget<>}}};
+    {"circt.missing", {tryResolve, applyWithoutTarget<true>}}};
 
 /// Lookup a record for a given annotation class.  Optionally, returns the
 /// record for "circuit.missing" if the record doesn't exist.
