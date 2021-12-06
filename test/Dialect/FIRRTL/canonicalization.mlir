@@ -2276,4 +2276,13 @@ firrtl.module @Issue2289(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
   // CHECK-NEXT: firrtl.connect %out, %[[cast]]
 }
 
+// Issue mentioned in #2291
+// CHECK-LABEL: @Issue2291
+firrtl.module @Issue2291(out %out: !firrtl.uint<1>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %clock = firrtl.asClock %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+  %0 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }

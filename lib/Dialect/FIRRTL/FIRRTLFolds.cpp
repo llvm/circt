@@ -137,10 +137,10 @@ static Optional<APSInt> getConstant(Attribute operand) {
     if (attr.getType().isa<ClockType, ResetType, AsyncResetType>())
       return APSInt(1);
   }
-  if (auto attr = operand.dyn_cast<IntegerAttr>())
-    return attr.getAPSInt();
   if (auto attr = operand.dyn_cast<BoolAttr>())
     return APSInt(APInt(1, attr.getValue()));
+  if (auto attr = operand.dyn_cast<IntegerAttr>())
+    return attr.getAPSInt();
   return {};
 }
 
