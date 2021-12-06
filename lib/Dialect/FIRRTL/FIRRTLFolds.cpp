@@ -1435,13 +1435,25 @@ static LogicalResult canonicalizeSingleSetConnect(ConnectOp op,
 
   // Ok, we know we are doing the transformation.
 
-  // Make sure the constant dominates all users.
-  if (srcValueOp && srcValueOp != &declBlock->front())
-    srcValueOp->moveBefore(&declBlock->front());
+  auto replacement = op.src();
+  if (srcValueOp) {
+    // Replace with constant zero.
+    if (isa<InvalidValueOp>(srcValueOp)) {
+      auto constant =
+          rewriter.create<ConstantOp>(op.dest().getLoc(), op.dest().getType(),
+                                      getIntZerosAttr(op.dest().getType()));
+      replacement = constant;
+    }
+    // This will be replaced with the constant source.  First, make sure the
+    // constant dominates all users.
+    else if (srcValueOp != &declBlock->front()) {
+      srcValueOp->moveBefore(&declBlock->front());
+    }
+  }
 
   // Replace all things *using* the decl with the constant/port, and
   // remove the declaration.
-  rewriter.replaceOp(connectedDecl, op.src());
+  rewriter.replaceOp(connectedDecl, replacement);
 
   // Remove the connect.
   rewriter.eraseOp(op);
