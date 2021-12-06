@@ -240,6 +240,10 @@ static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
                 cl::init(""));
 
+static cl::opt<std::string> moduleSwappingOutDir(
+    "output-module-swapping-config",
+    cl::desc("directory to output module swapping config files"), cl::init(""));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -401,6 +405,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
     circuitPM.nest<firrtl::FModuleOp>().addPass(
         firrtl::createGrandCentralSignalMappingsPass());
+    circuitPM.addPass(
+        firrtl::createEmitModuleSwappingConfigPass(moduleSwappingOutDir));
   }
 
   // The above passes, IMConstProp in particular, introduce additional

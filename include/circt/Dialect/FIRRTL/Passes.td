@@ -323,6 +323,14 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
 }
 
+def EmitModuleSwappingConfig : Pass<"firrtl-emit-module-swapping-config",
+                                      "CircuitOp"> {
+  let summary = "Generate VCS and Verilator config files for replaced modules";
+  let constructor = "circt::firrtl::createEmitModuleSwappingConfigPass()";
+  let options = [Option<"outputDirectory", "output-directory", "std::string", "",
+      "Output directory for configuration files">];
+}
+
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let summary = "Check combinational cycles and emit errors";
   let description = [{

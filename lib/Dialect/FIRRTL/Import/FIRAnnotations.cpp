@@ -1757,10 +1757,10 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto nlaTargets = expandNonLocal(*canonTarget);
         auto leafTarget = splitAndAppendTarget(
             fields, std::get<0>(nlaTargets.back()), context);
+        FlatSymbolRefAttr nlaSym;
         if (nlaTargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, nlaTargets);
-          fields.append("circt.nonlocal",
-                        FlatSymbolRefAttr::get(context, *canonTarget));
+          nlaSym = buildNLA(circuit, ++nlaNumber, nlaTargets);
+          fields.append("circt.nonlocal", nlaSym);
         }
         newAnnotations[leafTarget.first].push_back(
             DictionaryAttr::get(context, fields));
@@ -1768,13 +1768,14 @@ bool circt::firrtl::scatterCustomAnnotations(
         // Annotate instances along the NLA path.
         for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
           NamedAttrList fields;
-          fields.append("circt.nonlocal",
-                        FlatSymbolRefAttr::get(context, *canonTarget));
+          fields.append("id", id);
+          fields.append("circt.nonlocal", nlaSym);
           fields.append("class", StringAttr::get(context, "circt.nonlocal"));
           newAnnotations[std::get<0>(nlaTargets[i])].push_back(
               DictionaryAttr::get(context, fields));
         }
       }
+      continue;
     }
 
     // Scatter trackers out from OMIR JSON.

@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentral.cpp
   GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
+  EmitModuleSwappingConfig.cpp
   IMConstProp.cpp
   InferResets.cpp
   InferWidths.cpp

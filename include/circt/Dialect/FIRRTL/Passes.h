@@ -67,6 +67,9 @@ std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralSignalMappingsPass();
 
+std::unique_ptr<mlir::Pass>
+createEmitModuleSwappingConfigPass(StringRef outputDirectory = "");
+
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 std::unique_ptr<mlir::Pass> createRemoveResetsPass();
