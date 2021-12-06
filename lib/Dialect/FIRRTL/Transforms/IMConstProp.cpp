@@ -181,7 +181,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push(value);
     }
   }
 
@@ -193,7 +193,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (!source.isOverdefined() && hasDontTouch(value))
       source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push(value);
   }
   void mergeLatticeValue(Value value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
@@ -225,7 +225,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push(value);
       valueEntry = source;
     }
   }
@@ -266,7 +266,7 @@ private:
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  SmallVector<Value, 64> changedLatticeValueWorklist;
+  std::queue<Value> changedLatticeValueWorklist;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -300,7 +300,8 @@ void IMConstPropPass::runOnOperation() {
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    Value changedVal = changedLatticeValueWorklist.pop_back_val();
+    Value changedVal = changedLatticeValueWorklist.front();
+    changedLatticeValueWorklist.pop();
     for (Operation *user : changedVal.getUsers()) {
       if (isBlockExecutable(user->getBlock()))
         visitOperation(user);
