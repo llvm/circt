@@ -1,6 +1,6 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, Input, module, generator, types, dim, System)
+from pycde import Output, Input, module, generator, types, dim, System
 
 
 @module
@@ -18,8 +18,8 @@ class WireNames:
     foo.name = "foo"
     arr_data = dim(32, 4)([1, 2, 3, 4], "arr_data")
     ports.set_all_ports({
-        'a': foo.reg(ports.clk).reg(ports.clk),
-        'b': arr_data[ports.sel],
+        "a": foo.reg(ports.clk).reg(ports.clk),
+        "b": arr_data[ports.sel],
     })
 
 
@@ -33,8 +33,8 @@ sys.print()
 # CHECK:    %c3_i32 = hw.constant 3 : i32
 # CHECK:    %c4_i32 = hw.constant 4 : i32
 # CHECK:    %{{.+}} = hw.array_create %c4_i32, %c3_i32, %c2_i32, %c1_i32 {sv.namehint = "arr_data"} : i32
-# CHECK:    %foo__reg1 = sv.reg  : !hw.inout<i32>
-# CHECK:    %foo__reg2 = sv.reg  : !hw.inout<i32>
+# CHECK:    %foo__reg1 = sv.reg sym @foo__reg1 : !hw.inout<i32>
+# CHECK:    %foo__reg2 = sv.reg sym @foo__reg2 : !hw.inout<i32>
 # CHECK:    %{{.+}} = sv.read_inout %foo__reg2 : !hw.inout<i32>
 # CHECK:    sv.alwaysff(posedge %clk)  {
 # CHECK:      %c0_i2 = hw.constant 0 : i2

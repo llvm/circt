@@ -7,7 +7,7 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   seq.compreg %i, %clk : i32
   // CHECK: %{{.+}} = seq.compreg %i, %clk, %rst, %c0_i32  : i32
   // CHECK: %{{.+}} = seq.compreg %i, %clk : i32
-  // SV: [[REG0:%.+]] = sv.reg  : !hw.inout<i32>
+  // SV: [[REG0:%.+]] = sv.reg sym @r0 : !hw.inout<i32>
   // SV: [[REG5:%.+]] = sv.read_inout [[REG0]] : !hw.inout<i32>
   // SV: sv.alwaysff(posedge %clk)  {
   // SV:   sv.passign [[REG0]], %i : i32
@@ -27,7 +27,7 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   // CHECK: %{{.+}} = seq.compreg %s, %clk : !hw.struct<foo: i32>
 
   // SV: [[REGST:%.+]] = hw.struct_create ([[REG5]]) : !hw.struct<foo: i32>
-  // SV: %foo = sv.reg  : !hw.inout<struct<foo: i32>>
+  // SV: %foo = sv.reg sym @foo : !hw.inout<struct<foo: i32>>
   // SV: sv.alwaysff(posedge %clk)  {
   // SV:   sv.passign %foo, %s : !hw.struct<foo: i32>
   // SV: }(syncreset : posedge %rst)  {

@@ -46,6 +46,10 @@ public:
                                             reg.nameAttr());
     svReg->setDialectAttrs(reg->getDialectAttrs());
 
+    // If the seq::CompRegOp has a name, set this for the sv::RegOp inner_sym.
+    if (!reg.name().empty())
+      svReg.inner_symAttr(reg.nameAttr());
+
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
       rewriter.create<sv::AlwaysFFOp>(
