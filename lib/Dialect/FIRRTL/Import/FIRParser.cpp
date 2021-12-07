@@ -1913,9 +1913,10 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   }
 #include "FIRTokenKinds.def"
 
-  // Expand `validif(a, b)` expressions to `mux(a, b, invalidvalue)`, since we
-  // do not provide an operation for `validif`. See docs/RationaleFIRRTL.md for
-  // more details on this.
+  // Expand `validif(a, b)` expressions to simply `b`.  A `validif` expression
+  // is converted to a direct connect by the Scala FIRRTL Compiler's
+  // `RemoveValidIfs` pass.  We circumvent that and just squash these during
+  // parsing.
   case FIRToken::lp_validif: {
     if (opTypes.size() != 2 || !integers.empty()) {
       emitError(loc, "operation requires two operands and no constants");
@@ -1932,8 +1933,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
       return failure();
     }
 
-    // We always skip emitting the validif mux because it always folds to the
-    // non-invalid operand.
+    // Skip the `validif` and emit the second, non-condition operand.
     result = operands[1];
     return success();
   }
