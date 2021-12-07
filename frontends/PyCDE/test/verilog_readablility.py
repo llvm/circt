@@ -1,6 +1,6 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import Output, Input, module, generator, types, dim, System
+from pycde import (Output, Input, module, generator, types, dim, System)
 
 
 @module
@@ -18,8 +18,8 @@ class WireNames:
     foo.name = "foo"
     arr_data = dim(32, 4)([1, 2, 3, 4], "arr_data")
     ports.set_all_ports({
-        "a": foo.reg(ports.clk).reg(ports.clk),
-        "b": arr_data[ports.sel],
+        'a': foo.reg(ports.clk).reg(ports.clk),
+        'b': arr_data[ports.sel],
     })
 
 
