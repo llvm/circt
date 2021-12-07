@@ -100,17 +100,17 @@ In the `FIRRTL` dialect, only modules have a symbol on them and it might be
 The NonLocalAnchor operation (`firrtl.nla`) can be used to identify the unique
  instance of a `FIRRTL` operation globally.
 `firrtl.nla` can be used to attach nonlocal annotations and also for metadata
- emission. 
+ emission.
 `firrtl.nla` defines a symbol and contains a list of module symbols followed
  by a list of instance names corresponding to each module.
  For example, in the following example, `@nla_0` specifies instance
  "baz" in module `@FooNL`, followed by instance
- `"bar"` in module `@BazNL`, followed by 
+ `"bar"` in module `@BazNL`, followed by
  the wire named `"w"` in module `@BarNL`.
 
 `firrtl.nla` can define a unique instance path, and each element along the way
  carries an annotation with class `circt. nonlocal`, which has a matching
- `circt. nonlocal` field pointing to the global op. 
+ `circt. nonlocal` field pointing to the global op.
  Thus instances participating in nonlocal paths are readily apparent.
 
  In the following example the `@nla_0` is used in the verbatim op
@@ -125,16 +125,16 @@ This example shows that the `firrtl.nla` can be used to attach a symbol with
 ``` mlir
  firrtl.circuit "FooNL"   {
     firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
-    firrtl.nla @nla_1 [@BarNL] ["w"] 
+    firrtl.nla @nla_1 [@BarNL] ["w"]
     firrtl.module @BarNL() {
-      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]} : !firrtl.uint      
+      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]} : !firrtl.uint
     }
     firrtl.module @BazNL() {
       firrtl.instance bar  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BarNL()
     }
     firrtl.module @FooNL() {
       firrtl.instance baz  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BazNL()
-    }    
+    }
   }
 
 sv.verbatim "{{0}}" { symbols = [@nla_0] }
@@ -146,9 +146,9 @@ Following is an example of attaching non local annotations with a specific insta
 ``` mlir
 firrtl.circuit "FooNL"   {
     firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
-    
+
     firrtl.module @BarNL() {
-      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint    
+      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint
     }
     firrtl.module @BazNL() {
       firrtl.instance bar  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @BarNL()
@@ -365,11 +365,11 @@ For a historical discussion of this issue and its development see:
 - [`llvm/circt#992`](https://github.com/llvm/circt/pull/992)
 
 ### `firrtl.bitcast`
-The bitcast operation represents a bitwise reinterpretation (cast) of a value. 
+The bitcast operation represents a bitwise reinterpretation (cast) of a value.
 It can be used to cast a vector or bundle type to an int type or vice-versa.
 The bit width of input and result types must be known.
 For an aggregate type, the bit width of every field must be known.
-This always synthesizes away in hardware, and follows the same endianness 
+This always synthesizes away in hardware, and follows the same endianness
 policy as `hw.bitcast`.
 
 ### `firrtl.mem`
@@ -392,25 +392,25 @@ A `firrtl.mem` has the following properties
 
 ##### Mask bitwidth
 Any aggregate memory data type is lowered to ground type by the
-`LowerTypes` pass. After lowering the data type, the data bitwidth must be 
-divisible by mask bitwidth. And we define the property granularity as: 
-`mask granularity = (Data bitwidth)/(Mask bitwidth)`. 
+`LowerTypes` pass. After lowering the data type, the data bitwidth must be
+divisible by mask bitwidth. And we define the property granularity as:
+`mask granularity = (Data bitwidth)/(Mask bitwidth)`.
 
-Each mask bit can guard the write to `mask granularity` number of data bits. 
-For a single-bit mask, one-bit guards write to the data, hence 
+Each mask bit can guard the write to `mask granularity` number of data bits.
+For a single-bit mask, one-bit guards write to the data, hence
 `mask granularity = data bitwidth`.
 
 #### Macro replacement
-Memories that satisfy the following conditions are candidates for macro replacement. 
+Memories that satisfy the following conditions are candidates for macro replacement.
 
     1. read latency and write latency of one
     2. only one readwrite port or write port
     3. zero or one read port
-    4. undefined read-under-write behavior  
+    4. undefined read-under-write behavior
 
 A memory generator defines the external module definition corresponding to the
  memory for macro replacement. Memory generators need metadata to generate the
- memory definition. SFC uses some metadata files to communicate with the 
+ memory definition. SFC uses some metadata files to communicate with the
  memory generators.
    `<design-name>.conf` is a file, that contains the metadata for the
    memories which are under the "design-under-test" module hierarchy.
@@ -423,9 +423,9 @@ A memory generator defines the external module definition corresponding to the
    1. `name` followed by the memory name.
    2. `depth` followed by the memory depth.
    3. `width` followed by the data bitwidth.
-   4. `ports` followed by the `mrw` for read-write port, 
+   4. `ports` followed by the `mrw` for read-write port,
    `mwrite` for a write port and `read` for a read port.
-   5. `mask_gran` followed by the mask granularity. 
+   5. `mask_gran` followed by the mask granularity.
 
 ### CHIRRTL Memories
 
@@ -561,7 +561,8 @@ firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
 
 ### `validif` represented as a multiplexer
 
-The FIRRTL spec describes a `validif(en, x)` operation that is used during lowering from high to low FIRRTL. Consider the following example:
+The FIRRTL spec describes a `validif(en, x)` operation that is used during
+lowering from high to low FIRRTL. Consider the following example:
 
 ```scala
 c <= invalid
@@ -575,22 +576,40 @@ Lowering will introduce the following intermediate representation in low FIRRTL:
 c <= validif(a, b)
 ```
 
-Since there is no precedence of this `validif` being used anywhere in the Chisel/FIRRTL ecosystem thus far and instead is always replaced by its right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an operation at all. Rather it directly replaces any `validif` in FIRRTL input with the following equivalent operations:
+Since there is no precedence of this `validif` being used anywhere in the
+Chisel/FIRRTL ecosystem thus far and instead is always replaced by its
+right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an
+operation at all. Rather it directly replaces any `validif` in FIRRTL input with
+the following equivalent operations:
 
 ```mlir
 %0 = firrtl.invalidvalue : !firrtl.uint<42>
 %c = firrtl.mux(%a, %b, %0) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
 ```
 
-A canonicalization then folds this combination of `firrtl.invalidvalue` and `firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream transformation passes.
+A canonicalization then folds this combination of `firrtl.invalidvalue` and
+`firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream
+transformation passes.
 
 ### Inline SystemVerilog through `verbatim.expr` operation
 
-The FIRRTL dialect offers a `firrtl.verbatim.expr` operation that allows for SystemVerilog expressions to be embedded verbatim in the IR. It is lowered to the corresponding `sv.verbatim.expr` operation of the underlying SystemVerilog dialect, which embeds it in the emitted output. The operation has a FIRRTL result type, and a variadic number of operands can be accessed from within the inline SystemVerilog source text through string interpolation of `{{0}}`-style placeholders.
+The FIRRTL dialect offers a `firrtl.verbatim.expr` operation that allows for
+SystemVerilog expressions to be embedded verbatim in the IR. It is lowered to
+the corresponding `sv.verbatim.expr` operation of the underlying SystemVerilog
+dialect, which embeds it in the emitted output. The operation has a FIRRTL
+result type, and a variadic number of operands can be accessed from within the
+inline SystemVerilog source text through string interpolation of `{{0}}`-style
+placeholders.
 
-The rationale behind this verbatim operation is to offer an escape hatch analogous to `asm ("...")` in C/C++ and other languages, giving the user or compiler passes full control of what exactly gets embedded in the output. Usually, though, you would rather add a new operation to the IR to properly represent additional constructs.
+The rationale behind this verbatim operation is to offer an escape hatch
+analogous to `asm ("...")` in C/C++ and other languages, giving the user or
+compiler passes full control of what exactly gets embedded in the
+output. Usually, though, you would rather add a new operation to the IR to
+properly represent additional constructs.
 
-As an example, a verbatim expression could be used to interact with yet-unsupported SystemVerilog constructs such as parametrized class typedef members:
+As an example, a verbatim expression could be used to interact with
+yet-unsupported SystemVerilog constructs such as parametrized class typedef
+members:
 
 ```mlir
 firrtl.module @Magic (out %n : !firrtl.uint<32>) {
