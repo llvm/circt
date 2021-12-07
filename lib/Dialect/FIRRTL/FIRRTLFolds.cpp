@@ -1119,16 +1119,6 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
 }
 
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
-  // mux(cond, x, invalid) -> x
-  // mux(cond, invalid, x) -> x
-  //
-  // These are NOT optimizations that the Scala FIRRTL Compiler makes.  However,
-  // these agree with the interpretation of mux with an invalid true of false
-  // condition as a conditionally valid statement.
-  if (operands[2].dyn_cast_or_null<InvalidValueAttr>())
-    return getOperand(1);
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
-    return getOperand(2);
 
   // mux(cond, x, x) -> x
   if (high() == low())

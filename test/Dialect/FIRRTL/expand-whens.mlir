@@ -299,6 +299,55 @@ firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %
 //CHECK-NEXT:   firrtl.connect %out, %9 : !firrtl.uint<2>, !firrtl.uint<2>
 //CHECK-NEXT: }
 
+// Test invalid value optimization
+// CHECK-LABEL: firrtl.module @InvalidValues
+firrtl.module @InvalidValues(in %p: !firrtl.uint<1>, out %out0: !firrtl.uint<2>, out %out1: !firrtl.uint<2>, out %out2: !firrtl.uint<2>, out %out3: !firrtl.uint<2>, out %out4: !firrtl.uint<2>, out %out5: !firrtl.uint<2>) {
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+  %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+
+  firrtl.when %p  {
+    firrtl.connect %out0, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else  {
+    firrtl.connect %out0, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out0, %c2_ui2
+
+  firrtl.when %p  {
+    firrtl.connect %out1, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else  {
+    firrtl.connect %out1, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out1, %c2_ui2
+
+  firrtl.connect %out2, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.connect %out2, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out2, %c2_ui2
+
+  firrtl.connect %out3, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.skip
+  } else  {
+    firrtl.connect %out3, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out3, %c2_ui2
+
+  firrtl.connect %out4, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.connect %out4, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out4, %c2_ui2
+
+  firrtl.connect %out5, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.skip
+  } else  {
+    firrtl.connect %out5, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out5, %c2_ui2
+}
+    
 // Test that registers are multiplexed with themselves.
 firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>

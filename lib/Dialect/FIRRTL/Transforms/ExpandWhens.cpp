@@ -183,10 +183,23 @@ public:
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
     auto whenTrue = getConnectedValue(whenTrueConn);
+    auto trueIsInvalid =
+        isa_and_nonnull<InvalidValueOp>(whenTrue.getDefiningOp());
     auto whenFalse = getConnectedValue(whenFalseConn);
-    auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
-    auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
-    return newConnect;
+    auto falseIsInvalid =
+        isa_and_nonnull<InvalidValueOp>(whenFalse.getDefiningOp());
+    // If one of the branches of the mux is an invalid value, we optimize the
+    // mux to be the non-invalid value.  This optimization can only be
+    // performed while lowering when-ops into muxes, and would not be legal as
+    // a more general mux folder.
+    // mux(cond, invalid, x) -> x
+    // mux(cond, x, invalid) -> x
+    Value newValue = whenTrue;
+    if (trueIsInvalid == falseIsInvalid)
+      newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
+    else if (trueIsInvalid)
+      newValue = whenFalse;
+    return b.create<ConnectOp>(loc, dest, newValue);
   }
 
   void visitDecl(WireOp op) { declareSinks(op.result(), Flow::Duplex); }
