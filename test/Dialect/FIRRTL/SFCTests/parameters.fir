@@ -15,4 +15,4 @@ circuit NegativeParameter:
 
 ; CHECK-LABEL: module NegativeParameter
 ; CHECK:         Foo #(
-; CHECK-NEXT:      .x(4294967295)
+; CHECK-NEXT:      .x(-1)

@@ -29,10 +29,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "name_thing",
-  ; CHECK: parameters = {DEFAULT = 0 : i32,
+  ; CHECK: parameters = {DEFAULT = 0 : ui32,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,
   ; CHECK:               FORMAT = "xyz_timeout=%d\0A",
-  ; CHECK:               WIDTH = 32 : i32}}
+  ; CHECK:               WIDTH = 32 : ui32}}
   ; CHECK-NOT: {
   extmodule MyParameterizedExtModule :
     input in: UInt
@@ -576,7 +576,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.sint<4>
 
   ; CHECK-LABEL: firrtl.extmodule @issue183()
-  ; CHECK: attributes {parameters = {A = -1 : i32}}
+  ; CHECK: attributes {parameters = {A = -1 : si32}}
   extmodule issue183:
      parameter A = -1
 

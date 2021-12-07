@@ -3410,7 +3410,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       result = result.sextOrSelf(32);
 
       value = builder.getIntegerAttr(
-          builder.getIntegerType(result.getBitWidth()), result);
+          builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
+          result);
       break;
     }
     case FIRToken::string: {
