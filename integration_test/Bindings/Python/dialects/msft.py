@@ -102,12 +102,15 @@ with ir.Context() as ctx, ir.Location.unknown():
   rc = seeded_pdb.add_placement(physAttr, path, "foo_subpath", resolved_inst)
   assert rc
 
-  print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
+  nearest = seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4)
+  assert isinstance(nearest, msft.PhysLocationAttr)
+  print(nearest)
 
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
 
   def print_placement(loc, placement):
+    assert isinstance(loc, msft.PhysLocationAttr)
     if placement:
       path = msft.RootedInstancePathAttr(placement[0])
       print(f"{loc}, {path}")
