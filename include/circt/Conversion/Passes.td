@@ -15,19 +15,6 @@
 
 include "mlir/Pass/PassBase.td"
 
-//===----------------------------------------------------------------------===//
-// StandardToHIR
-//===----------------------------------------------------------------------===//
-def StandardToHIR : Pass<"std-to-hir", "mlir::ModuleOp"> {
-  let summary = "Convert standard + scf + memref to HIR";
-  let description = [{
-    Lower a module of standard + scf + memref dialect to the HIR dialect.
-  }];
-
-  let constructor = "circt::createStandardToHIRPass()";
-  let dependentDialects = ["hir::HIRDialect", "mlir::StandardOpsDialect"];
-}
-
 def HIRToHW : Pass<"hir-to-hw", "mlir::ModuleOp"> {
   let summary = "Convert HIR to HW + Comb + SV dialect";
   let description = [{

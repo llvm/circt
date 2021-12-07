@@ -1,4 +1,4 @@
-
+// RUN: circt-opt %s
 hir.func @callee at %t(%x:i32)->(i32 delay 1){
     %res = hir.delay %x by 1  at %t : i32
     hir.return (%res):(i32)

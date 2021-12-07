@@ -9,23 +9,6 @@ def SimplifyCtrl : Pass<"hir-simplify-ctrl", "hir::FuncOp"> {
   let dependentDialects = ["circt::hw::HWDialect","circt::comb::CombDialect"];
 }
 
-def RegisterAllocation : Pass<"hir-register-alloc", "hir::FuncOp"> {
-  let summary = "Register allocation pass for HIR programs.";
-  let description = [{Allocates registers for pipeline balancing using hir.delay and hir.latch instructions.}];
-
-  let constructor = "circt::hir::createRegisterAllocationPass()";
-}
-
-def SeqScheduler : Pass<"hir-seq-scheduler", "hir::FuncOp"> {
-  let summary = "A Simple sequential scheduler for HIR.";
-  let description = [{This pass populates the schedule in an unscheduled HIR 
-  program assuming that the original program was sequential. The scheduler 
-  assumes a simple processor like model - only one operation can happen at 
-  a time and all memrefs alias.}];
-
-  let constructor = "circt::hir::createSeqSchedulerPass()";
-}
-
 def MemrefLowering : Pass<"hir-lower-memref", "mlir::ModuleOp"> {
   let summary = "Lower hir.memref to hir.bus.";
   let description = [{This pass lowers hir.memref to hir.bus for codegen.}];

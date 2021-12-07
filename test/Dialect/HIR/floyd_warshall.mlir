@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 #bram_r = {"rd_latency"= 1}
 #bram_rw = {"rd_latency"= 1, "wr_latency"= 1}
 #bram_w = {"wr_latency"= 1}

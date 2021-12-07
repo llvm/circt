@@ -1,4 +1,5 @@
 #bram_r = {"rd_latency"= 1}
+// RUN: circt-opt %s
 #bram_w = {"wr_latency"= 1}
 #reg_r  = {"rd_latency" = 0}
 #reg_w  = {"wr_latency"= 1}
