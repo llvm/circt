@@ -189,7 +189,7 @@ public:
     auto falseIsInvalid =
         isa_and_nonnull<InvalidValueOp>(whenFalse.getDefiningOp());
     // If one of the branches of the mux is an invalid value, we optimize the
-    // the mux to be the non-invalid value.  This optimization can only be
+    // mux to be the non-invalid value.  This optimization can only be
     // performed while lowering when-ops into muxes, and would not be legal as
     // a more general mux folder.
     // mux(cond, invalid, x) -> x
