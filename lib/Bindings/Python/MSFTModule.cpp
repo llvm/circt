@@ -26,6 +26,12 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
+static py::handle getPhysLocationAttr(MlirAttribute attr) {
+  return py::module::import("circt.dialects.msft")
+      .attr("PhysLocationAttr")(attr)
+      .release();
+}
+
 class PrimitiveDB {
 public:
   PrimitiveDB(MlirContext ctxt) { db = circtMSFTCreatePrimitiveDB(ctxt); }
@@ -46,8 +52,6 @@ public:
   PlacementDB(MlirOperation top, PrimitiveDB *seed) {
     db = circtMSFTCreatePlacementDB(top, seed ? seed->db
                                               : CirctMSFTPrimitiveDB{nullptr});
-    pyPhysLocationAttr =
-        py::module::import("circt.dialects.msft").attr("PhysLocationAttr");
   }
   ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
@@ -72,7 +76,7 @@ public:
         db, prim, column, nearestToY);
     if (!nearest.ptr)
       return py::none();
-    return pyPhysLocationAttr(nearest).release();
+    return getPhysLocationAttr(nearest);
   }
   void walkPlacements(
       py::function pycb,
@@ -96,9 +100,7 @@ public:
           std::string subpath(p.subpath, p.subpathLength);
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
-          auto physLoc = py::module::import("circt.dialects.msft")
-                             .attr("PhysLocationAttr")(loc)
-                             .release();
+          auto physLoc = getPhysLocationAttr(loc);
           if (!p.op.ptr) {
             pycb(physLoc, py::none());
           } else {
@@ -110,7 +112,6 @@ public:
 
 private:
   CirctMSFTPlacementDB db;
-  py::handle pyPhysLocationAttr;
 };
 
 /// Populate the msft python module.
