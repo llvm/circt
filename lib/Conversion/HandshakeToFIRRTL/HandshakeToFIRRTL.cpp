@@ -2387,8 +2387,18 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
     NameUniquer instanceUniquer = [&](Operation *op) {
       std::string instName = getInstanceName(op);
-      unsigned id = instanceNameCntr[instName]++;
-      return instName + std::to_string(id);
+
+      if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id");
+          idAttr) {
+        // We use a special naming convention for operations which have a
+        // 'handshake_id' attribute.
+        instName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
+      } else {
+        // Fallback to just prefixing with an integer.
+        instName += std::to_string(instanceNameCntr[instName]++);
+      }
+
+      return instName;
     };
 
     // Traverse and convert each operation in funcOp.
