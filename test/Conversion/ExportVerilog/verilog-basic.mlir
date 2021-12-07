@@ -40,8 +40,6 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   // CHECK: wire [1:0] _in4_1to0 = in4[1:0];
   // CHECK: wire [1:0] _in4_3to2 = in4[3:2];
-  // CHECK: wire [8:0] _T_0 = {1'h0, in4, in4};
-  // CHECK: wire [4:0] _T_1 = 5'h0 - {in4[3], in4};
 
   // CHECK: assign w1 = ~in4;
   %3 = comb.xor %in4, %c-1_i4 : i4
@@ -73,10 +71,13 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
   // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
-  %19 = comb.sext %in4 : (i4) -> i6
-  %20 = comb.sext %clock : (i1) -> i6
+  %tmp = comb.extract %in4 from 3 : (i4) -> i1
+  %tmp2 = comb.replicate %tmp : (i1) -> i2
+  %19 = comb.concat %tmp2, %in4 : i2, i4
+  %20 = comb.replicate %clock : (i1) -> i6
   %21 = comb.xor %18, %19, %20 : i6
-  %22 = comb.sext %in4 : (i4) -> i5
+  %tmp3 = comb.extract %in4 from 3 : (i4) -> i1
+  %22 = comb.concat %tmp3, %in4 : i1, i4
   %23 = comb.sub %c0_i5, %22 : i5
   %25 = comb.concat %c0_i2, %5 : i2, i2
   %26 = comb.concat %c0_i2, %9 : i2, i2
@@ -103,15 +104,8 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   sv.assign %w2, %29 : i16
   sv.assign %w2, %30 : i16
 
-  // CHECK: assign w3 = {{..}}7{_T_0[8]}}, _T_0};
-  // CHECK: assign w3 = {{..}}11{_T_1[4]}}, _T_1};
-  %32 = comb.sext %12 : (i9) -> i16
-  %33 = comb.sext %23 : (i5) -> i16
-
   %w3 = sv.wire : !hw.inout<i16>
   %w3_use = sv.read_inout %w3 : !hw.inout<i16>
-  sv.assign %w3, %32 : i16
-  sv.assign %w3, %33 : i16
 
 
  // CHECK: assign out1a = ^in4;
@@ -123,7 +117,8 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   // CHECK: assign out4s = $signed($signed(in4) >>> in4);
   // CHECK: assign sext17 = {w3[15], w3};
-  %35 = comb.sext %w3_use : (i16) -> i17
+  %36 = comb.extract %w3_use from 15 : (i16) -> i1
+  %35 = comb.concat %36, %w3_use : i1, i16
   hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35 : i1, i1, i1, i4, i4, i16, i16, i17
 }
 
@@ -388,7 +383,7 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 
   %0 = sv.read_inout %count : !hw.inout<i2>
   %1 = comb.mux %cond, %value, %0 : i2
-  %2 = comb.sext %reset : (i1) -> i2
+  %2 = comb.replicate %reset : (i1) -> i2
   %3 = comb.xor %2, %c-1_i2 : i2
   %4 = comb.and %3, %1 : i2
   sv.alwaysff(posedge %clock)  {

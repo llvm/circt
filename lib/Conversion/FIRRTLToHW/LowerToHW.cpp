@@ -186,7 +186,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   auto ctx = top.getContext();
   if (!anno)
     return;
-  if (auto dir = anno.getAs<StringAttr>("directory")) {
+  if (auto dir = anno.getMember<StringAttr>("directory")) {
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
@@ -194,7 +194,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
                      hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
     top->setAttrs(old);
   }
-  if (auto file = anno.getAs<StringAttr>("filename")) {
+  if (auto file = anno.getMember<StringAttr>("filename")) {
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
@@ -841,7 +841,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
           moduleHierarchyFileAttrName,
           hw::OutputFileAttr::getFromFilename(
               &getContext(),
-              hierAnno.get("filename").cast<StringAttr>().getValue(),
+              hierAnno.getMember<StringAttr>("filename").getValue(),
               /*excludeFromFileList=*/true));
   };
   if (annos.removeAnnotation(dutAnnoClass))
@@ -1511,7 +1511,7 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
     }
 
     if (sourceType.cast<IntType>().isSigned())
-      return builder.createOrFold<comb::SExtOp>(resultType, value);
+      return comb::createOrFoldSExt(value, resultType, builder);
     auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
@@ -1612,7 +1612,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder.createOrFold<comb::SExtOp>(resultType, result);
+    return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -1674,7 +1674,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder.createOrFold<comb::SExtOp>(resultType, result);
+    return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);

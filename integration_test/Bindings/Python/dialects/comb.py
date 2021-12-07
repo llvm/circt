@@ -36,12 +36,6 @@ with Context() as ctx, Location.unknown():
       parity = comb.ParityOp.create(result_type=i32)
       connect(parity.input, const.result)
 
-      # CHECK: comb.sext %[[CONST]]
-      comb.SExtOp.create(const.result, result_type=i32)
-      # CHECK: comb.sext %[[CONST]]
-      sext = comb.SExtOp.create(result_type=i32)
-      connect(sext.input, const.result)
-
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
       comb.DivSOp.create(const.result, const.result)
       # CHECK: comb.divs %[[CONST]], %[[CONST]]

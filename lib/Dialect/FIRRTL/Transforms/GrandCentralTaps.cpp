@@ -370,13 +370,14 @@ void GrandCentralTapsPass::runOnOperation() {
   // - Generate a body for the blackbox module with the signal mapping
 
   AnnotationSet circuitAnnotations(circuitOp);
-  if (auto dict = circuitAnnotations.getAnnotation(extractGrandCentralClass)) {
-    auto directory = dict.getAs<StringAttr>("directory");
+  if (auto extractAnno =
+          circuitAnnotations.getAnnotation(extractGrandCentralClass)) {
+    auto directory = extractAnno.getMember<StringAttr>("directory");
     if (!directory) {
       circuitOp->emitError()
           << "contained an invalid 'ExtractGrandCentralAnnotation' that does "
              "not contain a 'directory' field: "
-          << dict;
+          << extractAnno.getDict();
       return signalPassFailure();
     }
     maybeExtractDirectory = directory;

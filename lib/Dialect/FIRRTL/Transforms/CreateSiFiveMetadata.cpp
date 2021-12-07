@@ -186,7 +186,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto dirAnno = annos.getAnnotation(metadataDirectoryAnnoClass);
   StringRef metadataDir = "metadata";
   if (dirAnno)
-    if (auto dir = dirAnno.getAs<StringAttr>("dirname"))
+    if (auto dir = dirAnno.getMember<StringAttr>("dirname"))
       metadataDir = dir.getValue();
 
   if (testBenchJsonBuffer != "[]") {
@@ -377,8 +377,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       continue;
 
     // If its a blacklisted scala class, skip it.
-    if (auto scalaAnnoDict = annos.getAnnotation(scalaClassAnnoClass)) {
-      Annotation scalaAnno(scalaAnnoDict);
+    if (auto scalaAnno = annos.getAnnotation(scalaClassAnnoClass)) {
       auto scalaClass = scalaAnno.getMember<StringAttr>("className");
       if (scalaClass &&
           llvm::is_contained(classBlackList, scalaClass.getValue()))

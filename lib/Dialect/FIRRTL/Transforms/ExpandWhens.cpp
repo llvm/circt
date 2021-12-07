@@ -155,6 +155,15 @@ public:
         return;
       }
 
+      // If this is a vector type, recurse to each of the elements.
+      if (auto vectorType = type.dyn_cast<FVectorType>()) {
+        for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
+          id++;
+          declare(vectorType.getElementType(), flow);
+        }
+        return;
+      }
+
       // If this is an analog type, it does not need to be tracked.
       if (auto analogType = type.dyn_cast<AnalogType>())
         return;
@@ -174,17 +183,34 @@ public:
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
     auto whenTrue = getConnectedValue(whenTrueConn);
+    auto trueIsInvalid =
+        isa_and_nonnull<InvalidValueOp>(whenTrue.getDefiningOp());
     auto whenFalse = getConnectedValue(whenFalseConn);
-    auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
-    auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
-    return newConnect;
+    auto falseIsInvalid =
+        isa_and_nonnull<InvalidValueOp>(whenFalse.getDefiningOp());
+    // If one of the branches of the mux is an invalid value, we optimize the
+    // mux to be the non-invalid value.  This optimization can only be
+    // performed while lowering when-ops into muxes, and would not be legal as
+    // a more general mux folder.
+    // mux(cond, invalid, x) -> x
+    // mux(cond, x, invalid) -> x
+    Value newValue = whenTrue;
+    if (trueIsInvalid == falseIsInvalid)
+      newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
+    else if (trueIsInvalid)
+      newValue = whenFalse;
+    return b.create<ConnectOp>(loc, dest, newValue);
   }
 
   void visitDecl(WireOp op) { declareSinks(op.result(), Flow::Duplex); }
 
   void visitDecl(RegOp op) {
     // Registers are initialized to themselves.
-    // TODO: register of bundle type are not supported.
+    // TODO: register of aggregate types are not supported.
+    if (!op.getType().cast<FIRRTLType>().isGround()) {
+      op.emitError() << "aggegate type register is not supported";
+      return;
+    }
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
     driverMap[getFieldRefFromValue(op.result())] = connect;
@@ -192,9 +218,11 @@ public:
 
   void visitDecl(RegResetOp op) {
     // Registers are initialized to themselves.
-    // TODO: register of bundle type are not supported.
-    assert(!op.result().getType().isa<BundleType>() &&
-           "registers can't be bundle type");
+    // TODO: register of aggregate types are not supported.
+    if (!op.getType().cast<FIRRTLType>().isGround()) {
+      op.emitError() << "aggegate type register is not supported";
+      return;
+    }
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
     driverMap[getFieldRefFromValue(op.result())] = connect;

@@ -21,7 +21,6 @@
 namespace circt {
 namespace firrtl {
 
-class Annotation;
 class AnnotationSetIterator;
 class FModuleLike;
 
@@ -33,6 +32,68 @@ inline StringRef getPortAnnotationAttrName() { return "portAnnotations"; }
 
 /// Return the name of the dialect-prefixed attribute used for annotations.
 inline StringRef getDialectAnnotationAttrName() { return "firrtl.annotations"; }
+
+/// This class provides a read-only projection of an annotation.
+class Annotation {
+public:
+  Annotation() {}
+
+  explicit Annotation(Attribute attr) : attr(attr) {
+    assert(attr && "null attributes not allowed");
+  }
+
+  /// Get the data dictionary of this attribute.
+  DictionaryAttr getDict() const;
+
+  /// Get the field id this attribute targets.
+  unsigned getFieldID() const;
+
+  /// Get the underlying attribute.
+  Attribute getAttr() const { return attr; }
+
+  /// Return the 'class' that this annotation is representing.
+  StringAttr getClassAttr() const;
+  StringRef getClass() const;
+
+  /// Return true if this annotation matches any of the specified class names.
+  template <typename... Args>
+  bool isClass(Args... names) const {
+    return ClassIsa{getClassAttr()}(names...);
+  }
+
+  /// Return a member of the annotation.
+  template <typename AttrClass = Attribute>
+  AttrClass getMember(StringAttr name) const {
+    return getDict().getAs<AttrClass>(name);
+  }
+  template <typename AttrClass = Attribute>
+  AttrClass getMember(StringRef name) const {
+    return getDict().getAs<AttrClass>(name);
+  }
+
+  bool operator==(const Annotation &other) const { return attr == other.attr; }
+  bool operator!=(const Annotation &other) const { return !(*this == other); }
+  explicit operator bool() const { return bool(attr); }
+  bool operator!() const { return attr == nullptr; }
+
+private:
+  Attribute attr;
+
+  /// Helper struct to perform variadic class equality check.
+  struct ClassIsa {
+    StringAttr cls;
+
+    bool operator()() const { return false; }
+    template <typename T, typename... Rest>
+    bool operator()(T name, Rest... rest) const {
+      return compare(name) || (*this)(rest...);
+    }
+
+  private:
+    bool compare(StringAttr name) const { return cls == name; }
+    bool compare(StringRef name) const { return cls && cls.getValue() == name; }
+  };
+};
 
 /// This class provides a read-only projection over the MLIR attributes that
 /// represent a set of annotations.  It is intended to make this work less
@@ -137,12 +198,12 @@ public:
 
   /// If this annotation set has an annotation with the specified class name,
   /// return it.  Otherwise return a null DictionaryAttr.
-  DictionaryAttr getAnnotation(StringRef className) const {
+  Annotation getAnnotation(StringRef className) const {
     if (annotations.empty())
       return {};
     return getAnnotationImpl(className);
   }
-  DictionaryAttr getAnnotation(StringAttr className) const {
+  Annotation getAnnotation(StringAttr className) const {
     if (annotations.empty())
       return {};
     return getAnnotationImpl(className);
@@ -199,7 +260,10 @@ public:
   /// Remove all annotations with one of the given classes from this annotation
   /// set.
   template <typename... Args>
-  bool removeAnnotationsWithClass(Args... names);
+  bool removeAnnotationsWithClass(Args... names) {
+    return removeAnnotations(
+        [&](Annotation anno) { return anno.isClass(names...); });
+  }
 
   /// Remove all annotations from an operation for which `predicate` returns
   /// true. The predicate is guaranteed to be called on every annotation, such
@@ -222,75 +286,11 @@ public:
 private:
   bool hasAnnotationImpl(StringAttr className) const;
   bool hasAnnotationImpl(StringRef className) const;
-  DictionaryAttr getAnnotationImpl(StringAttr className) const;
-  DictionaryAttr getAnnotationImpl(StringRef className) const;
+  Annotation getAnnotationImpl(StringAttr className) const;
+  Annotation getAnnotationImpl(StringRef className) const;
 
   ArrayAttr annotations;
 };
-
-/// This class provides a read-only projection of an annotation.
-class Annotation {
-public:
-  Annotation(DictionaryAttr attrDict) : attrDict(attrDict) {
-    assert(attrDict && "null dictionaries not allowed");
-  }
-
-  DictionaryAttr getDict() const { return attrDict; }
-
-  /// Return the 'class' that this annotation is representing.
-  StringAttr getClassAttr() const;
-  StringRef getClass() const;
-
-  /// Return true if this annotation matches any of the specified class names.
-  template <typename... Args>
-  bool isClass(Args... names) const {
-    return ClassIsa{getClassAttr()}(names...);
-  }
-
-  /// Return a member of the annotation.
-  template <typename AttrClass = Attribute>
-  AttrClass getMember(StringAttr name) const {
-    // TODO: Once https://reviews.llvm.org/D103822 lands, the `const_cast` can
-    // go away.
-    return const_cast<DictionaryAttr &>(attrDict).getAs<AttrClass>(name);
-  }
-  template <typename AttrClass = Attribute>
-  AttrClass getMember(StringRef name) const {
-    // TODO: Once https://reviews.llvm.org/D103822 lands, the `const_cast` can
-    // go away.
-    return const_cast<DictionaryAttr &>(attrDict).getAs<AttrClass>(name);
-  }
-
-  bool operator==(const Annotation &other) const {
-    return attrDict == other.attrDict;
-  }
-  bool operator!=(const Annotation &other) const { return !(*this == other); }
-
-private:
-  DictionaryAttr attrDict;
-
-  /// Helper struct to perform variadic class equality check.
-  struct ClassIsa {
-    StringAttr cls;
-
-    bool operator()() const { return false; }
-    template <typename T, typename... Rest>
-    bool operator()(T name, Rest... rest) const {
-      return compare(name) || (*this)(rest...);
-    }
-
-  private:
-    bool compare(StringAttr name) const { return cls == name; }
-    bool compare(StringRef name) const { return cls && cls.getValue() == name; }
-  };
-};
-
-// Out-of-line impl since we need `Annotation` to be fully defined.
-template <typename... Args>
-bool AnnotationSet::removeAnnotationsWithClass(Args... names) {
-  return removeAnnotations(
-      [&](Annotation anno) { return anno.isClass(names...); });
-}
 
 // Iteration over the annotation set.
 class AnnotationSetIterator
@@ -331,7 +331,7 @@ struct PointerLikeTypeTraits<circt::firrtl::Annotation>
     : PointerLikeTypeTraits<mlir::Attribute> {
   using Annotation = circt::firrtl::Annotation;
   static inline void *getAsVoidPointer(Annotation v) {
-    return const_cast<void *>(v.getDict().getAsOpaquePointer());
+    return const_cast<void *>(v.getAttr().getAsOpaquePointer());
   }
   static inline Annotation getFromVoidPointer(void *p) {
     return Annotation(mlir::DictionaryAttr::getFromOpaquePointer(p));
@@ -353,7 +353,7 @@ struct DenseMapInfo<circt::firrtl::Annotation> {
             llvm::DenseMapInfo<void *>::getTombstoneKey())));
   }
   static unsigned getHashValue(Annotation val) {
-    return mlir::hash_value(val.getDict());
+    return mlir::hash_value(val.getAttr());
   }
   static bool isEqual(Annotation LHS, Annotation RHS) { return LHS == RHS; }
 };

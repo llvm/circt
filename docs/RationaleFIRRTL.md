@@ -525,15 +525,15 @@ of the parsing logic instead of duplication of grammar rules.
 
 ### `invalid` Invalidate Operation is an expression
 
-The FIRRTL spec describes an `x is invalid` statement that logically computes
-an invalid value and connects it to `x` according to flow semantics.  This
-behavior makes analysis and transformation a bit more complicated, because there
-are now two things that perform connections: `firrtl.connect` and the
-`x is invalid` operation.
+The FIRRTL spec describes an `is invalid` statement that logically computes an
+invalid value and connects it to `x` according to flow semantics.  This behavior
+makes analysis and transformation a bit more complicated, because there are now
+two things that perform connections: `firrtl.connect` and the `is invalid`
+operation.
 
-To make things easier to reason about, we split the `x is invalid` operation
-into two different ops: an `firrtl.invalidvalue` op that takes no operands
-and returns an invalid value, and a standard `firrtl.connect` operation that
+To make things easier to reason about, we split the `is invalid` operation into
+two different ops: an `firrtl.invalidvalue` op that takes no operands and
+returns an invalid value, and a standard `firrtl.connect` operation that
 connects the invalid value to the destination (or a `firrtl.attach` for analog
 values).  This has the same expressive power as the standard FIRRTL
 representation but is easier to work with.
@@ -611,34 +611,108 @@ endmodule
 
 The [FIRRTL
 Specification](https://github.com/chipsalliance/firrtl/blob/master/spec/spec.pdf)
-has undefined behavior for certain features.  When in doubt, FIRRTL dialect
-_typically_ chooses to implement undefined behavior in the same manner as the SFC.
+has undefined behavior for certain features.  For compatibility reasons, FIRRTL
+dialect _always_ chooses to implement undefined behavior in the same manner
+as the SFC.
 
 ### Invalid
 
-The SFC has a context-sensitive interpretation of invalid.
+The SFC has multiple context-sensitive interpretations of invalid.  Failure to
+implement all of these can result in formal equivalence failures when comparing
+CIRCT-generated Verilog with SFC-generated Verilog.  A list of these
+interpretations is enumerated below and then described in more detail.
 
-When an `is invalid` statement is used, the SFC will optimize this as a connect
-to a constant zero if the invalidated component is not assigned to inside a
-conditional block (`when`/`else`).  _This is an interpretation of invalid as a
-value that the compiler chooses to connect to a single component._
+1. An invalid value used in a `when`-encoded multiplexer tree results in a
+   direct connection to the non-invalid leg of the multiplexer.
+1. An invalid value driving the initialization value of a register (looking
+   through wires and connections within module scope) removes the reset from the
+   register.
+1. Any other use of an invalid value is treated as constant zero.
 
-When an `is invalid` statement is used to specify the default of a component
-that is connected to in a conditional block and the conditional block is not
-complete, then a conditionally valid (`validif`) statement is generated.  The
-conditionally valid statement connects a value when a condition is true and
-invalidates the component otherwise.  (This is modeled as a multiplexer in the
-FIRRTL dialect.)  When lowered, the SFC treats this invalidation as undefined
-behavior and will choose the valid path unconditionally.  _This is an
-interpretation of invalid as undefined behavior._  (See above for more
-information on `validif` and the modeling of this as a multiplexer.)
+Interpretation (1) means that either of the following circuits should be
+optimized to a direct connection from `bar` to `foo`:
 
-Instead of choosing to aggressively optimize undefined behavior, FIRRTL dialect
-and its passes use this context-sensitive interpretation of invalid.  Folds of
-primitive operations treat an invalid operand as a zero-valued constant.  Folds
-of multiplexers treat invalid operands as undefined behavior and will optimize
-away the invalid path.
+``` scala
+foo is invalid
+when cond:
+  foo <= bar
+```
 
-Propagation of invalid values is handled with extreme caution.  Any propagation
-can cause a later conflation of these two interpretations of invalid and produce
-subtle bugs.
+``` scala
+foo <= validif(cond, bar)
+```
+
+Note that the SFC implementation of this optimization is handled via two passes.
+An `ExpandWhens` (later refactored as `ExpandWhensAndCheck`) pass converts all
+`when` blocks to multiplexer trees.  Any invalid values that arise from this
+conversion produce `validif` expressions.  A later pass, `RemoveValidIfs`
+optimizes/removes `validif` by replacing it with a direct connection.
+
+It is important to note that the above two formulations using `when` or
+`validif` _are not equivalent to a mux formulation_ like the following.  The
+code below should be optimized using interpretation (3) of invalid as constant
+zero:
+
+``` scala
+wire inv: UInt<8>
+inv is invalid
+
+foo <= mux(cond, bar, inv)
+```
+
+A legal lowering of this is only to:
+
+``` scala
+foo <= mux(cond, bar, UInt<8>(0))
+```
+
+Interpretation (2) is a mechanism to remove unnecessary reset connections in a
+circuit as fewer resets can enable a higher performance design.  The SFC
+implementation of this works as a dedicated pass that does a module-local
+analysis looking for registers with resets whose initialization values come from
+invalidated signals.  This analysis only looks through wires and connections.
+It is legal to use an invalidated output port or instance input port.
+
+As an example, the following module should have register `r` converted to a
+reset-less register:
+
+``` scala
+wire inv: UInt<8>
+inv is invalid
+
+wire tmp: UInt<8>
+tmp <= inv
+
+reg r: UInt<8>, clock with : (reset => (reset, tmp))
+```
+
+Notably, if `tmp` is a `node`, this optimization should not be performed.
+
+Interpretation (3) is used in all other situations involving an invalid value.
+
+**Critically, the nature of an invalid value has context-sensitive information
+that relies on the exact structural nature of the circuit.**  It follows that
+any seemingly mundane optimization can result in an end-to-end miscompilations
+where the SFC is treated as ground truth.
+
+As an example, consider a reformulation of the `when` example above, but using a
+temporary, single-use, invalidated wire:
+
+``` scala
+wire inv: UInt<8>
+inv is invalid
+
+b <= inv
+when cond:
+  b <= a
+```
+
+This should _not_ produce a direction connection to `b` and should instead lower
+to:
+
+``` scala
+b <= mux(cond, a, inv)
+```
+
+It follows that interpretation (3) will then convert the false leg of the `mux`
+to a constant zero.

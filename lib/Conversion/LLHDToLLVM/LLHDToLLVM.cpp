@@ -1973,9 +1973,6 @@ using CombModSOpConversion =
 using CombICmpOpConversion =
     OneToOneConvertToLLVMPattern<comb::ICmpOp, LLVM::ICmpOp>;
 
-using CombSExtOpConversion =
-    OneToOneConvertToLLVMPattern<comb::SExtOp, LLVM::SExtOp>;
-
 // comb.mux supports any type thus this conversion relies on the type converter
 // to be able to convert the type of the operands and result to an LLVM_Type
 using CombMuxOpConversion =
@@ -2636,8 +2633,8 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Arithmetic conversion patterns.
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombSExtOpConversion,
-               CombMuxOpConversion>(converter);
+               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
+      converter);
 
   // Unit conversion patterns.
   patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,

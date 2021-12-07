@@ -29,8 +29,8 @@ struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  StringAttr sym;
-  Location loc;
+  StringAttr sym = {};
+  Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
 
   StringRef getName() const { return name ? name.getValue() : ""; }

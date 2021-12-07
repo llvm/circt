@@ -1,13 +1,5 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-func private @test_extend(%arg0: i4) -> i3 {
-  // expected-error @+1 {{extension must increase bitwidth of operand}}
-  %a = comb.sext %arg0 : (i4) -> i3
-  return %a : i3
-}
-
-// -----
-
 func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3

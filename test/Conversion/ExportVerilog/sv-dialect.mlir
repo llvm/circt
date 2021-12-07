@@ -556,9 +556,11 @@ hw.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) {
   // CHECK-NEXT: else
   // CHECK-NEXT:   tmp6 <= {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
   // CHECK-NEXT: end
-  sv.alwaysff(posedge %clock)  {
-    %0 = comb.sext %really_long_port : (i11) -> i25
-  %c12345_i25 = hw.constant 12345 : i25
+  sv.alwaysff(posedge %clock) {
+    %sign = comb.extract %really_long_port from 10 : (i11) -> i1
+    %signs = comb.replicate %sign : (i1) -> i14
+    %0 = comb.concat %signs, %really_long_port : i14, i11
+    %c12345_i25 = hw.constant 12345 : i25
     %1 = comb.and %0, %c12345_i25 : i25
     sv.passign %tmp6, %1 : i25
   }(syncreset : posedge %reset)  {
@@ -573,7 +575,9 @@ hw.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) {
   %tmp6 = sv.reg  : !hw.inout<i25>
 
   %c12345_i25 = hw.constant 12345 : i25
-  %0 = comb.sext %really_long_port : (i11) -> i25
+  %sign = comb.extract %really_long_port from 10 : (i11) -> i1
+  %signs = comb.replicate %sign : (i1) -> i14
+  %0 = comb.concat %signs, %really_long_port : i14, i11
   %1 = comb.and %0, %c12345_i25 : i25
   // CHECK:   wire [24:0] _T = {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
 
@@ -1012,7 +1016,9 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
 
-    %thing2 = comb.sext %really_really_long_port : (i11) -> i42
+    %sign = comb.extract %really_really_long_port from 10 : (i11) -> i1
+    %signs = comb.replicate %sign : (i1) -> i31
+    %thing2 = comb.concat %signs, %really_really_long_port : i31, i11
     %thing3 = comb.add %thing, %thing2 : i42  // multiuse.
 
     // multiuse, refers to other 'automatic logic' thing so must be emitted in

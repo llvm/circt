@@ -13,11 +13,37 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace comb;
+
+/// Create a sign extension operation from a value of integer type to an equal
+/// or larger integer type.
+Value comb::createOrFoldSExt(Location loc, Value value, Type destTy,
+                             OpBuilder &builder) {
+  IntegerType valueType = value.getType().dyn_cast<IntegerType>();
+  assert(valueType && destTy.isa<IntegerType>() &&
+         valueType.getWidth() <= destTy.getIntOrFloatBitWidth() &&
+         valueType.getWidth() != 0 && "invalid sext operands");
+  // If already the right size, we are done.
+  if (valueType == destTy)
+    return value;
+
+  // sext is concat with a replicate of the sign bits and the bottom part.
+  auto signBit =
+      builder.createOrFold<ExtractOp>(loc, value, valueType.getWidth() - 1, 1);
+  auto signBits = builder.createOrFold<ReplicateOp>(
+      loc, signBit, destTy.getIntOrFloatBitWidth() - valueType.getWidth());
+  return builder.createOrFold<ConcatOp>(loc, signBits, value);
+}
+
+Value comb::createOrFoldSExt(Value value, Type destTy,
+                             ImplicitLocOpBuilder &builder) {
+  return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
+}
 
 //===----------------------------------------------------------------------===//
 // ICmpOp
@@ -123,14 +149,21 @@ bool ICmpOp::isNotEqualZero() {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifySExtOp(SExtOp op) {
-  // The source must be equal or smaller than the dest type.  Both are already
-  // known to be signless integers.
-  auto srcType = op.getOperand().getType().cast<IntegerType>();
-  if (srcType.getWidth() > op.getType().getWidth()) {
-    op.emitOpError("extension must increase bitwidth of operand");
-    return failure();
-  }
+static LogicalResult verifyReplicateOp(ReplicateOp op) {
+  // The source must be equal or smaller than the dest type, and an even
+  // multiple of it.  Both are already known to be signless integers.
+  auto srcWidth = op.getOperand().getType().cast<IntegerType>().getWidth();
+  auto dstWidth = op.getType().getWidth();
+  if (srcWidth == 0)
+    return op.emitOpError("replicate does not take zero bit integer");
+
+  if (srcWidth > dstWidth)
+    return op.emitOpError("replicate cannot shrink bitwidth of operand"),
+           failure();
+
+  if (dstWidth % srcWidth)
+    return op.emitOpError("replicate must produce integer multiple of operand"),
+           failure();
 
   return success();
 }

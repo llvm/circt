@@ -44,7 +44,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
   r14: i1, r15: i1, r16: i1, r17: i1,
   r18: i1, r19: i1, r20: i1, r21: i1,
   r22: i1, r23: i1,
-  r24: i12, r25: i2, r26: i9, r27: i4, r28: i4,
+  r24: i12, r25: i2, r27: i4, r28: i4,
   r29: !hw.array<3xi4>
   ) {
 
@@ -74,7 +74,6 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
   %23 = comb.parity %a : i4
   %24 = comb.concat %a, %a, %b : i4, i4, i4
   %25 = comb.extract %a from 1 : (i4) -> i2
-  %26 = comb.sext %a : (i4) -> i9
   %27 = comb.mux %cond, %a, %b : i4
 
   %allone = hw.constant 15 : i4
@@ -86,10 +85,10 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
   %29 = hw.array_slice %array at %aPlusOne: (!hw.array<10xi4>) -> !hw.array<3xi4>
 
 
-  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29:
+  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %27, %28, %29:
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,
-    i12, i2,i9,i4, i4, !hw.array<3xi4>
+    i12,i2, i4, i4, !hw.array<3xi4>
 }
 
 hw.module @exprInlineTestIssue439(%clk: i1) {

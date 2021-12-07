@@ -105,9 +105,6 @@ func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   // CHECK: %[[EXT:.*]] = llvm.trunc %[[SHIFTED]] : i32 to i16
   %4 = comb.extract %arg0 from 5 : (i32) -> i16
 
-  // CHECK: llvm.sext %[[EXT]] : i16 to i32
-  %5 = comb.sext %4 : (i16) -> i32
-
   // CHECK: %[[INIT:.*]] = llvm.mlir.constant(0 : i96) : i96
   // CHECK: %[[A1:.*]] = llvm.mlir.constant(64 : i96) : i96
   // CHECK: %[[ZEXT1:.*]] = llvm.zext %arg0 : i32 to i96

@@ -127,7 +127,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     InterfaceMethod<"Get a port's annotations attribute",
     "ArrayAttr", "getAnnotationsAttrForPort", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
-      return $_op.getPortAnnotations()[portIndex].template cast<ArrayAttr>();
+      auto annos = $_op.getPortAnnotationsAttr();
+      if (annos.empty())
+        return annos; // annos already is an empty array
+      return annos[portIndex].template cast<ArrayAttr>();
     }]>,
 
     InterfaceMethod<"Get a port's annotations",
@@ -153,12 +156,15 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return $_op.getPortSymbolsAttr().getValue();
     }]>,
 
-    InterfaceMethod<"Get a port's symbol attribute",
+    InterfaceMethod<"Get a port symbol attribute",
     "StringAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
-      return $_op.getPortSymbols()[portIndex].template cast<StringAttr>();
+      auto syms = $_op.getPortSymbols();
+      if (syms.empty())
+        return StringAttr::get($_op.getContext(), "");
+      return syms[portIndex].template cast<StringAttr>();
     }]>,
 
-    InterfaceMethod<"Get a port's symbol",
+    InterfaceMethod<"Get a port symbol",
     "StringRef", "getPortSymbol", (ins "size_t":$portIndex), [{}], [{
       return $_op.getPortSymbolAttr(portIndex).getValue();
     }]>,
@@ -183,7 +189,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       $_op.setPortSymbolsAttr(ArrayAttr::get($_op.getContext(), symbols));
     }]>,
 
-    InterfaceMethod<"Set a port's symbol attribute", "void",
+    InterfaceMethod<"Set a port symbol attribute", "void",
     "setPortSymbolAttr", (ins "size_t":$portIndex, "StringAttr":$symbol), [{}],
     [{
       SmallVector<Attribute> symbols($_op.getPortSymbols().begin(),
@@ -197,7 +203,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       $_op.setPortSymbols(symbols);
     }]>,
 
-    InterfaceMethod<"Set a port's symbol", "void",
+    InterfaceMethod<"Set a port symbol", "void",
     "setPortSymbol", (ins "size_t":$portIndex, "StringRef":$symbol), [{}], [{
       $_op.setPortSymbolAttr(portIndex, StringAttr::get($_op.getContext(),
         symbol));

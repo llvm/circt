@@ -15,9 +15,18 @@
 
 include "circt/Dialect/FIRRTL/FIRRTL.td"
 
+/// Constraint that matches a ConstantOp, SpecialConstantOp, or InvalidValueOp.
+def AnyConstantOp : Constraint<CPred<[{
+  isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp>
+    ($0.getDefiningOp())
+  }]>>;
+
 /// Constraint that matches non-constant operations. Used to ensure that the
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
-def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
+def NonConstantOp : Constraint<CPred<[{
+  !isa_and_nonnull<ConstantOp, SpecialConstantOp, InvalidValueOp>
+    ($0.getDefiningOp())
+  }]>>;
 
 // Constraint that matches empty attribute dictionaries.  Used to ensure that
 // there are no FIRRTL annotation on an operation.
@@ -55,39 +64,32 @@ def ZeroConstantOp : Constraint<Or<[
         "$0.getDefiningOp<SpecialConstantOp>().value() == false">
 ]>>;
 
-def IsInvalid : Constraint<
-  CPred<"$0.getDefiningOp<InvalidValueOp>()">
->;
-
 def GetEmptyString : NativeCodeCall<
   "StringAttr::get($_builder.getContext(), {}) ">;
 
-def GetZeroConstant : NativeCodeCall<
-  "$_builder.create<ConstantOp>($0.getLoc(), APSInt($0.getType().cast<FIRRTLType>().getBitWidthOrSentinel()))">;
-
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
-  (LEQPrimOp (ConstantOp:$lhs $_), $rhs),
+  (LEQPrimOp $lhs, $rhs),
   (GEQPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // lt(const, x) -> gt(x, const)
 def LTWithConstLHS : Pat<
-  (LTPrimOp (ConstantOp:$lhs $_), $rhs),
+  (LTPrimOp $lhs, $rhs),
   (GTPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // geq(const, x) -> leq(x, const)
 def GEQWithConstLHS : Pat<
-  (GEQPrimOp (ConstantOp:$lhs $_), $rhs),
+  (GEQPrimOp $lhs, $rhs),
   (LEQPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // gt(const, x) -> lt(x, const)
 def GTWithConstLHS : Pat<
-  (GTPrimOp (ConstantOp:$lhs $_), $rhs),
+  (GTPrimOp $lhs, $rhs),
   (LTPrimOp $rhs, $lhs),
-  [(NonConstantOp $rhs)]>;
+  [(AnyConstantOp $lhs), (NonConstantOp $rhs)]>;
 
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
@@ -132,33 +134,6 @@ def RegResetWithZeroReset : Pat<
 def GetWidthAsIntAttr : NativeCodeCall<
   "IntegerAttr::get(IntegerType::get($_builder.getContext(), 32, IntegerType::Signless), "
                     "$0.getType().cast<FIRRTLType>().getBitWidthOrSentinel())">;
-
-// add(x, invalid) -> pad(x, width)
-//
-// This is legal because it aligns with the Scala FIRRTL Compiler
-// interpretation of lowering invalid to constant zero before constant
-// propagation.
-def AddWithInvalidOp : Pat<
-  (AddPrimOp:$result $x, $y),
-  (PadPrimOp $x, (GetWidthAsIntAttr $result)), [
-    (KnownWidth $x), (IsInvalid $y)
-  ]>;
-
-// sub(x, invalid) -> pad(x, width)
-//
-// This is legal because it aligns with the Scala FIRRTL Compiler
-// interpretation of lowering invalid to constant zero before constant
-// propagation.
-def SubWithInvalidOp : Pat<
-  (SubPrimOp:$result $x, $y),
-  (PadPrimOp $x, (GetWidthAsIntAttr $result)), [
-    (KnownWidth $x), (IsInvalid $y)
-  ]>;
-
-// pad(invalid, width) -> zero<width>
-def PadInvalid : Pat<
-  (PadPrimOp:$result (InvalidValueOp), $_),
-  (GetZeroConstant $result), []>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // DontTouch application

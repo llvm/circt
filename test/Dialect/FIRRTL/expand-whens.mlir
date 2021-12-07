@@ -299,6 +299,55 @@ firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %
 //CHECK-NEXT:   firrtl.connect %out, %9 : !firrtl.uint<2>, !firrtl.uint<2>
 //CHECK-NEXT: }
 
+// Test invalid value optimization
+// CHECK-LABEL: firrtl.module @InvalidValues
+firrtl.module @InvalidValues(in %p: !firrtl.uint<1>, out %out0: !firrtl.uint<2>, out %out1: !firrtl.uint<2>, out %out2: !firrtl.uint<2>, out %out3: !firrtl.uint<2>, out %out4: !firrtl.uint<2>, out %out5: !firrtl.uint<2>) {
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+  %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+
+  firrtl.when %p  {
+    firrtl.connect %out0, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else  {
+    firrtl.connect %out0, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out0, %c2_ui2
+
+  firrtl.when %p  {
+    firrtl.connect %out1, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else  {
+    firrtl.connect %out1, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out1, %c2_ui2
+
+  firrtl.connect %out2, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.connect %out2, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out2, %c2_ui2
+
+  firrtl.connect %out3, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.skip
+  } else  {
+    firrtl.connect %out3, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out3, %c2_ui2
+
+  firrtl.connect %out4, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.connect %out4, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out4, %c2_ui2
+
+  firrtl.connect %out5, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.when %p  {
+    firrtl.skip
+  } else  {
+    firrtl.connect %out5, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.connect %out5, %c2_ui2
+}
+    
 // Test that registers are multiplexed with themselves.
 firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -405,4 +454,62 @@ firrtl.module @analog(out %analog : !firrtl.analog<1>) {
   firrtl.connect %w_a, %c1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: @vector_simple
+firrtl.module @vector_simple(in %clock: !firrtl.clock, out %ret: !firrtl.vector<uint<1>, 1>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %0 = firrtl.subindex %ret[0] : !firrtl.vector<uint<1>, 1>
+  firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:      %0 = firrtl.subindex %ret[0] : !firrtl.vector<uint<1>, 1>
+  // CHECK-NEXT: firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1
+}
+
+// CHECK-LABEL: @shadow_when_vector
+firrtl.module @shadow_when_vector(in %p : !firrtl.uint<1>) {
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  firrtl.when %p {
+    %w = firrtl.wire : !firrtl.vector<uint<2>, 1>
+    %0 = firrtl.subindex %w[0] : !firrtl.vector<uint<2>, 1>
+    firrtl.connect %0, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %0, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK:      %w = firrtl.wire  : !firrtl.vector<uint<2>, 1>
+  // CHECK-NEXT: %0 = firrtl.subindex %w[0] : !firrtl.vector<uint<2>, 1>
+  // CHECK-NEXT: firrtl.connect %0, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+}
+
+// CHECK-LABEL: @multi_dim_vector
+firrtl.module @multi_dim_vector(in %p : !firrtl.uint<1>) {
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %w = firrtl.wire : !firrtl.vector<vector<uint<2>, 2>, 1>
+  %0 = firrtl.subindex %w[0] : !firrtl.vector<vector<uint<2>, 2>, 1>
+  %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<2>, 2>
+  %2 = firrtl.subindex %0[1] : !firrtl.vector<uint<2>, 2>
+  firrtl.when %p {
+    firrtl.connect %1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %2, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else {
+    firrtl.connect %1, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %2, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK:      [[MUX1:%.*]] = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.connect %1, [[MUX1]] : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK-NEXT: [[MUX2:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK-NEXT: firrtl.connect %2, [[MUX2]] : !firrtl.uint<2>, !firrtl.uint<2>
+}
+
+// CHECK-LABEL: @vector_of_bundle
+firrtl.module @vector_of_bundle(in %p : !firrtl.uint<1>, out %ret: !firrtl.vector<bundle<a:uint<1>>, 1>) {
+  %0 = firrtl.subindex %ret[0] : !firrtl.vector<bundle<a:uint<1>>, 1>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<a:uint<1>>) -> !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NOT: firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:     firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
 }

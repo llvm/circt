@@ -256,6 +256,22 @@ hw.module @extractNested(%0: i5) -> (o1 : i1) {
   hw.output %3 : i1
 }
 
+// CHECK-LABEL: @extractConstant
+hw.module @extractConstant(%arg0: i5, %cond1: i1, %cond2: i1) -> (o1: i1, o2: i4) {
+  //c2 ? (c1 ? 4'h2 : 4'h4) : 4'h0;
+  %c0 = hw.constant 0 : i4
+  %c2 = hw.constant 2 : i4
+  %c4 = hw.constant 4 : i4
+  %0 = comb.mux %cond1, %c0, %c4 : i4
+  %1 = comb.mux %cond2, %0, %c2 : i4
+
+  // CHECK: %false = hw.constant false
+  // CHECK: hw.output %false, 
+  %2 = comb.extract %1 from 3 : (i4) -> i1
+  hw.output %2, %1 : i1, i4
+}
+
+
 // CHECK-LABEL: @flattenMuxTrue
 hw.module @flattenMuxTrue(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (o1 : i8) {
 // CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg1, %arg4
@@ -338,13 +354,13 @@ hw.module @compareStrengthReductionRetainCat(%arg0: i9, %arg1: i9) -> (o : i1) {
 // Validates that narrowing signed comparisons without stripping the common suffix
 // must not pad an additional sign bit.
 // CHECK-LABEL: hw.module @compareStrengthSignedCommonSuffix
-// CHECK-NEXT:    [[ARG0:%[0-9]+]] = comb.concat %arg0, %arg0 : i9, i9
-// CHECK-NEXT:    [[ARG1:%[0-9]+]] = comb.concat %arg1, %arg1 : i9, i9
+// CHECK-NEXT:    [[ARG0:%[0-9]+]] = comb.replicate %arg0 : (i9) -> i18
+// CHECK-NEXT:    [[ARG1:%[0-9]+]] = comb.replicate %arg1 : (i9) -> i18
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.icmp sge [[ARG0]], [[ARG1]] : i18
 // CHECK-NEXT:    hw.output [[RES]] : i1
 hw.module @compareStrengthSignedCommonSuffix(%arg0: i9, %arg1: i9) -> (o : i1) {
   %0 = comb.concat %arg0, %arg0, %arg1 : i9, i9, i9
-  %1 = comb.concat %arg1, %arg1, %arg1 : i9, i9, i9
+  %1 = comb.replicate %arg1 : (i9) -> i27
   %2 = comb.icmp sge %0, %1 : i27
   hw.output %2 : i1
 }
@@ -692,6 +708,26 @@ hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (out: i1) {
   hw.output %6 : i1
 }
 
+// CHECK-LABEL: hw.module @extract_from_replicate
+hw.module @extract_from_replicate(%x: i8) -> (r0: i16, r1: i4, r2: i8) {
+  // CHECK-NEXT: %0 = comb.replicate %x : (i8) -> i24
+  %0 = comb.replicate %x : (i8) -> i24
+
+  // CHECK-NEXT: %1 = comb.replicate %x : (i8) -> i16
+  %r1 = comb.extract %0 from 8 : (i24) -> i16
+
+  // CHECK-NEXT: %2 = comb.extract %x from 2 : (i8) -> i4
+  %r2 = comb.extract %0 from 2 : (i24) -> i4
+
+  // We don't know how to simplify this (yet?)
+  // CHECK-NEXT: %3 = comb.extract %0 from 2 : (i24) -> i8
+  %r3 = comb.extract %0 from 2 : (i24) -> i8
+
+  // CHECK-NEXT: hw.output %1, %2, %3 : 
+  hw.output %r1, %r2, %r3 : i16, i4, i8
+}
+
+
 // CHECK-LABEL: hw.module @narrow_extract_from_and
 hw.module @narrow_extract_from_and(%arg0: i32) -> (o1: i8, o2: i14, o3: i8, o4: i8) {
   %c240_i32 = hw.constant 240 : i32  // 0xF0
@@ -986,7 +1022,7 @@ hw.module @combine_icmp_compare_concat0(%thing: i3) -> (a: i1) {
   %1 = comb.icmp ne %0, %c0 : i7
 
   // CHECK: %c0_i6 = hw.constant 0 : i6
-  // CHECK: %0 = comb.concat %thing, %thing : i3, i3
+  // CHECK: %0 = comb.replicate %thing : (i3) -> i6
   // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6
   // CHECK: hw.output %1 : i1
   hw.output %1 : i1
@@ -1014,7 +1050,7 @@ hw.module @combine_icmp_compare_concat2(%thing: i3) -> (a: i1) {
   hw.output %1 : i1
 
   // CHECK: %c0_i6 = hw.constant 0 : i6
-  // CHECK: %0 = comb.concat %thing, %thing : i3, i3
+  // CHECK: %0 = comb.replicate %thing : (i3) -> i6
   // CHECK: %1 = comb.icmp eq %0, %c0_i6 : i6
   // CHECK: hw.output %1 : i1
 }
@@ -1113,37 +1149,6 @@ hw.module @test1560(%value: i38) -> (a: i1) {
   // CHECK: }
 }
 
-// CHECK-LABEL: hw.module @test_sext
-// Test sext folds.
-hw.module @test_sext(%value: i8, %v9: i9) -> (a: i10, b: i11, c: i10) {
-  // Known zero sign bit.
-  %false = hw.constant false
-  %0 = comb.concat %false, %value : i1, i8
-  // CHECK: %0 = comb.concat %false, %value
-  %1 = comb.sext %0 : (i9) -> i10
-  // CHECK: %1 = comb.concat %c0_i2, %value
-
-  // Known one sign bit.
-  %c128 = hw.constant 128 : i8
-  %2 = comb.or %value, %c128 : i8
-  %3 = comb.sext %2 : (i8) -> i11
-  // CHECK: %2 = comb.or %value, %c-128_i8 : i8
-  // CHECK: %3 = comb.concat %c-1_i3, %2 : i3, i8
-
-  // Check KnownBitAnalysis for xor.
-  %c256 = hw.constant 256 : i9
-  %a = comb.and %v9, %0 : i9
-  %4 = comb.xor %a, %c256 : i9
-  %5 = comb.sext %4 : (i9) -> i10
-
-  // CHECK: %4 = comb.and %v9, %0 : i9
-  // CHECK: %5 = comb.xor %4, %c-256_i9 : i9
-  // CHECK: %6 = comb.concat %true, %5 : i1, i9
-
-  // CHECK: hw.output %1, %3, %6
-  hw.output %1, %3, %5: i10, i11, i10
-}
-
 // CHECK-LABEL: hw.module @extractShift
 hw.module @extractShift(%arg0: i4) -> (o1 : i1, o2: i1) {
   %c1 = hw.constant 1: i4
@@ -1199,7 +1204,7 @@ hw.module @addSubParam<p1: i4>(%a: i4) -> (o1: i4, o2: i4, o3: i4) {
 
 // CHECK-LABEL: muxConstantsFold
 hw.module @muxConstantsFold(%cond: i1) -> (o: i25) {
-  // CHECK-NEXT: %0 = comb.sext %cond : (i1) -> i25
+  // CHECK-NEXT: %0 = comb.replicate %cond : (i1) -> i25
   %c0_i25 = hw.constant 0 : i25
   %c-1_i25 = hw.constant -1 : i25
   %0 = comb.mux %cond, %c-1_i25, %c0_i25 : i25
@@ -1216,30 +1221,30 @@ hw.module @muxCommon(%cond: i1, %cond2: i1,
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[O1:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
   %o1 = comb.mux %cond, %notArg0, %arg0 : i32
 
   // CHECK: [[CONDNOT:%.*]] = comb.xor %cond, %true : i1
-  // CHECK: [[CONDEXT:%.*]] = comb.sext [[CONDNOT]] : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate [[CONDNOT]] : (i1) -> i32
   // CHECK: [[O2:%.*]] = comb.xor [[CONDEXT]], %arg0 : i32
   %o2 = comb.mux %cond, %arg0, %notArg0 : i32
 
   // CHECK: [[OR_PARTIAL:%.*]] = comb.or %arg1, %arg2 : i32
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[OR_PARTIAL2:%.*]] = comb.and [[CONDEXT]], [[OR_PARTIAL]] : i32
   // CHECK: [[O3:%.*]] = comb.or [[OR_PARTIAL2]], %arg0 : i32
   %or = comb.or %arg0, %arg1, %arg2 : i32
   %o3 = comb.mux %cond, %or, %arg0 : i32
 
   // CHECK: [[AND_PARTIAL:%.*]] = comb.and %arg1, %arg2 : i32
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[AND_PARTIAL2:%.*]] = comb.or [[CONDEXT]], [[AND_PARTIAL]] : i32
   // CHECK: [[O4:%.*]] = comb.and [[AND_PARTIAL2]], %arg0 : i32
   %and = comb.and %arg0, %arg1, %arg2 : i32
   %o4 = comb.mux %cond, %arg0, %and : i32
 
-  // CHECK: [[CONDEXT:%.*]] = comb.sext %cond : (i1) -> i32
+  // CHECK: [[CONDEXT:%.*]] = comb.replicate %cond : (i1) -> i32
   // CHECK: [[OR1:%.*]] = comb.or %arg1, %arg2, %arg3 : i32
   // CHECK: [[ORRESULT:%.*]] = comb.or [[OR1]], %arg0 : i32
   // CHECK: [[MASKED_OR:%.*]] = comb.and [[CONDEXT]], [[OR1]] : i32

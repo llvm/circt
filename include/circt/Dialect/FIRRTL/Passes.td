@@ -331,4 +331,9 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
+def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
+  let summary = "Remove module-scoped invalidated resets";
+  let constructor = "circt::firrtl::createRemoveResetsPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

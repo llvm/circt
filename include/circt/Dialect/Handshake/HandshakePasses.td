@@ -44,4 +44,26 @@ def HandshakeMaterializeForksSinks : Pass<"handshake-materialize-forks-sinks", "
   let constructor = "circt::handshake::createHandshakeMaterializeForksSinksPass()";
 }
 
+def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp"> {
+  let summary = "Remove buffers from handshake functions.";
+  let description = [{
+    This pass analyses a handshake.func operation and removes any buffers from
+    the function.
+  }];
+  let constructor = "circt::handshake::createHandshakeRemoveBuffersPass()";
+}
+
+def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
+  let summary = "Add an ID to each operation in a handshake function.";
+  let description = [{
+    This pass adds an ID to each operation in a handshake function. This id can
+    be used in lowerings facilitate mapping lowered IR back to the handshake code
+    which it originated from. An ID is unique with respect to other operations
+    of the same type in the function. The tuple of the operation name and the
+    operation ID denotes a unique identifier for the operation within the
+    `handshake.func` operation.
+  }];
+  let constructor = "circt::handshake::createHandshakeAddIDsPass()";
+}
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

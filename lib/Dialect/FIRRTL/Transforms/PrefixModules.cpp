@@ -56,11 +56,10 @@ static PrefixInfo getPrefixInfo(Operation *module) {
   AnnotationSet annotations(module);
 
   // Get the annotation from the module.
-  auto dict = annotations.getAnnotation(
+  auto anno = annotations.getAnnotation(
       "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation");
-  if (!dict)
+  if (!anno)
     return {"", false};
-  Annotation anno(dict);
 
   // Get the prefix from the annotation.
   StringRef prefix = "";
