@@ -52,7 +52,7 @@ struct TokenAnnoTarget {
     llvm::errs() << "}, module: " << module << ", name: " << name << " component: {";
     for (auto& i : component)
       llvm::errs() << (i.isIndex ? "[" : ".") << i.name << (i.isIndex ? "]" : "");
-      llvm::errs() << "}}\n";
+    llvm::errs() << "}}\n";
   }
 };
 
@@ -748,10 +748,15 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
         "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
         {stdResolve, applyModRep},
     },
-    {"firrtl.transforms.BlackBoxInlineAnno", {stdResolve, applyWithoutTarget<>}},
-     {
-        "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
-        {noResolve, applyWithoutTarget<>}},
+
+    {"freechips.rocketchip.objectmodel.OMIRAnnotation",
+     {noResolve, applyWithoutTarget<>}},
+    {"freechips.rocketchip.objectmodel.OMIRFileAnnotation",
+     {noResolve, applyWithoutTarget<>}},
+    {"firrtl.transforms.BlackBoxInlineAnno",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+     {noResolve, applyWithoutTarget<>}},
     {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
 
     // Testing Annotation
