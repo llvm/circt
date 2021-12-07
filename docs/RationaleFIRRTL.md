@@ -622,51 +622,15 @@ implement all of these can result in formal equivalence failures when comparing
 CIRCT-generated Verilog with SFC-generated Verilog.  A list of these
 interpretations is enumerated below and then described in more detail.
 
-1. An invalid value used in a `when`-encoded multiplexer tree results in a
-   direct connection to the non-invalid leg of the multiplexer.
 1. An invalid value driving the initialization value of a register (looking
    through wires and connections within module scope) removes the reset from the
    register.
+1. An invalid value used in a `when`-encoded multiplexer tree results in a
+   direct connection to the non-invalid leg of the multiplexer.
+1. A `validif` construct is a direct connection.
 1. Any other use of an invalid value is treated as constant zero.
 
-Interpretation (1) means that either of the following circuits should be
-optimized to a direct connection from `bar` to `foo`:
-
-``` scala
-foo is invalid
-when cond:
-  foo <= bar
-```
-
-``` scala
-foo <= validif(cond, bar)
-```
-
-Note that the SFC implementation of this optimization is handled via two passes.
-An `ExpandWhens` (later refactored as `ExpandWhensAndCheck`) pass converts all
-`when` blocks to multiplexer trees.  Any invalid values that arise from this
-conversion produce `validif` expressions.  A later pass, `RemoveValidIfs`
-optimizes/removes `validif` by replacing it with a direct connection.
-
-It is important to note that the above two formulations using `when` or
-`validif` _are not equivalent to a mux formulation_ like the following.  The
-code below should be optimized using interpretation (3) of invalid as constant
-zero:
-
-``` scala
-wire inv: UInt<8>
-inv is invalid
-
-foo <= mux(cond, bar, inv)
-```
-
-A legal lowering of this is only to:
-
-``` scala
-foo <= mux(cond, bar, UInt<8>(0))
-```
-
-Interpretation (2) is a mechanism to remove unnecessary reset connections in a
+Interpretation (1) is a mechanism to remove unnecessary reset connections in a
 circuit as fewer resets can enable a higher performance design.  The SFC
 implementation of this works as a dedicated pass that does a module-local
 analysis looking for registers with resets whose initialization values come from
@@ -688,7 +652,44 @@ reg r: UInt<8>, clock with : (reset => (reset, tmp))
 
 Notably, if `tmp` is a `node`, this optimization should not be performed.
 
-Interpretation (3) is used in all other situations involving an invalid value.
+Interpretation (2) and Interpretation (3) mean that either of the following
+circuits should be optimized to a direct connection from `bar` to `foo`:
+
+``` scala
+foo is invalid
+when cond:
+  foo <= bar
+```
+
+``` scala
+foo <= validif(cond, bar)
+```
+
+Note that the SFC implementation of this optimization is handled via two passes.
+An `ExpandWhens` (later refactored as `ExpandWhensAndCheck`) pass converts all
+`when` blocks to multiplexer trees.  Any invalid values that arise from this
+conversion produce `validif` expressions.  A later pass, `RemoveValidIfs`
+optimizes/removes `validif` by replacing it with a direct connection.
+
+It is important to note that the above two formulations using `when` or
+`validif` _are not equivalent to a mux formulation_ like the following.  The
+code below should be optimized using Interpretation (4) of invalid as constant
+zero:
+
+``` scala
+wire inv: UInt<8>
+inv is invalid
+
+foo <= mux(cond, bar, inv)
+```
+
+A legal lowering of this is only to:
+
+``` scala
+foo <= mux(cond, bar, UInt<8>(0))
+```
+
+Interpretation (4) is used in all other situations involving an invalid value.
 
 **Critically, the nature of an invalid value has context-sensitive information
 that relies on the exact structural nature of the circuit.**  It follows that
@@ -714,5 +715,5 @@ to:
 b <= mux(cond, a, inv)
 ```
 
-It follows that interpretation (3) will then convert the false leg of the `mux`
+It follows that interpretation (4) will then convert the false leg of the `mux`
 to a constant zero.
