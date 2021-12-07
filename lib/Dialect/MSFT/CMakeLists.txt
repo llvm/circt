@@ -30,6 +30,7 @@ add_circt_dialect_library(CIRCTMSFT
   MLIRIR
   MLIRTransforms
   CIRCTHW
+  CIRCTSeq
   CIRCTSV
    )
 

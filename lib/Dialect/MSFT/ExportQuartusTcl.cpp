@@ -18,6 +18,7 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Translation.h"
@@ -52,9 +53,12 @@ void emitInnerRefPart(TclOutputState &s, Operation *op) {
   StringAttr nameAttr;
   if (auto instOp = dyn_cast<msft::InstanceOp>(op))
     nameAttr = instOp.instanceNameAttr();
+  else if (auto regOp = dyn_cast<seq::CompRegOp>(op))
+    nameAttr = regOp.innerSymAttr();
   else if (auto name = op->getAttrOfType<StringAttr>("name"))
     nameAttr = name;
-  assert(nameAttr && "placed ops must have a name");
+  assert(nameAttr && !nameAttr.getValue().empty() &&
+         "placed ops must have a name");
 
   // We append new symbolRefs to the state, so s.symbolRefs.size() is the
   // index of the InnerRefAttr we are about to add.
@@ -185,6 +189,16 @@ void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
 
       // Add the symbol to the cache.
       cache.addDefinition(symName, inst);
+    }
+    for (auto reg : msftMod.getOps<seq::CompRegOp>()) {
+      if (!reg.innerSym().hasValue())
+        continue;
+
+      // Use the register inner symbol name.
+      StringAttr symName = reg.innerSymAttr();
+
+      // Add the symbol to the cache.
+      cache.addDefinition(symName, reg);
     }
   }
 

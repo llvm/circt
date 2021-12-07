@@ -8,7 +8,7 @@ from typing import Union
 from pycde.devicedb import PhysLocation, PrimitiveDB, PlacementDB
 from .appid import AppID
 
-from circt.dialects import hw, msft
+from circt.dialects import hw, msft, seq
 
 import mlir.ir as ir
 
@@ -22,11 +22,13 @@ class Instance:
 
   def __init__(self,
                module: type,
-               instOp: msft.InstanceOp,
+               instOp: Union[msft.InstanceOp, seq.CompRegOp],
                parent: Instance,
                sys: system.System,
                primdb: PrimitiveDB = None):
     assert module is not None
+    assert instOp is None or (isinstance(instOp, msft.InstanceOp) or
+                              isinstance(instOp, seq.CompRegOp))
     self.module = module
     self.instOp = instOp
     self.parent = parent
@@ -61,11 +63,14 @@ class Instance:
 
   @property
   def name(self):
-    return ir.StringAttr(self.instOp.sym_name).value
+    return self.name_attr.value
 
   @property
   def name_attr(self):
-    return ir.StringAttr(self.instOp.sym_name)
+    if isinstance(self.instOp, msft.InstanceOp):
+      return ir.StringAttr(self.instOp.sym_name)
+    elif isinstance(self.instOp, seq.CompRegOp):
+      return ir.StringAttr(self.instOp.innerSym)
 
   @property
   def is_root(self):
@@ -85,6 +90,11 @@ class Instance:
     if isinstance(circt_mod, msft.MSFTModuleExternOp):
       return
     for op in circt_mod.entry_block:
+      if isinstance(op, seq.CompRegOp):
+        inst = Instance(circt_mod, op, self, self.sys)
+        callback(inst)
+        continue
+
       if not isinstance(op, msft.InstanceOp):
         continue
 
