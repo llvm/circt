@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -24,6 +25,12 @@ namespace py = pybind11;
 using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
+
+static py::handle getPhysLocationAttr(MlirAttribute attr) {
+  return py::module::import("circt.dialects.msft")
+      .attr("PhysLocationAttr")(attr)
+      .release();
+}
 
 class PrimitiveDB {
 public:
@@ -63,13 +70,13 @@ public:
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
-  py::object getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+  py::handle getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
                                     uint64_t column, uint64_t nearestToY) {
     MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
         db, prim, column, nearestToY);
     if (!nearest.ptr)
       return py::none();
-    return py::cast(nearest);
+    return getPhysLocationAttr(nearest);
   }
   void walkPlacements(
       py::function pycb,
@@ -93,10 +100,11 @@ public:
           std::string subpath(p.subpath, p.subpathLength);
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
+          auto physLoc = getPhysLocationAttr(loc);
           if (!p.op.ptr) {
-            pycb(loc, py::none());
+            pycb(physLoc, py::none());
           } else {
-            pycb(loc, std::make_tuple(p.path, subpath, p.op));
+            pycb(physLoc, std::make_tuple(p.path, subpath, p.op));
           }
         },
         cBounds, cPrim, &pycb);
