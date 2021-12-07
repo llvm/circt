@@ -1888,6 +1888,7 @@ LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr
         << "The full Annotation is reprodcued here: " << anno << "\n";
     return failure();
     }
+    return success();
   }
 
 // Scatter signal driver annotations to the sources *and* the targets of the
@@ -1911,7 +1912,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
                                                  state.circuit.getLoc(), clazz);
   if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
     return failure();
-  // TODO  fields.append("class", classAttr);
+  fields.append("class", classAttr);
   fields.append("id", id);
   fields.append("annotations", annotationsAttr);
   fields.append("circuit", circuitAttr);
@@ -1920,7 +1921,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
 
   // A callback that will scatter every source and sink target pair to the
   // corresponding two ends of the connection.
-  llvm::StringSet annotatedModules;
+  DenseSet<Operation*> annotatedModules;
   auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
     auto targetId = state.newID();
     DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
@@ -1963,7 +1964,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
 
       // Assemble the annotation on this side of the connection.
       NamedAttrList fields;
-      // TODO      fields.append("class", classAttr);
+      fields.append("class", classAttr);
       fields.append("id", id);
       fields.append("targetId", targetId);
       fields.append("peer", pair.second ? remoteAttr : localAttr);
@@ -1978,11 +1979,10 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
       state.setDontTouch(canonTarget);
 
       // Keep track of the enclosing module.
-//TODO
-      // annotatedModules.insert(
-      //     (StringRef(std::get<0>(NLATargets.back())).split("|").first + "|" +
-      //      std::get<1>(NLATargets.back()))
-      //         .str());
+//      annotatedModules.insert(
+//           (StringRef(std::get<0>(NLATargets.back())).split("|").first + "|" +
+//            std::get<1>(NLATargets.back()))
+//               .str());
     }
 
     return true;
@@ -2004,11 +2004,11 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
       return failure();
 
   // Indicate which modules have embedded `SignalDriverAnnotation`s.
-  for (auto &module : annotatedModules) {
+  for (auto module : annotatedModules) {
     NamedAttrList fields;
     fields.append("class", classAttr);
     fields.append("id", id);
-    state.applyAnno(module.getKey(), fields);
+    state.applyAnnoOp(module, fields);
   }
 
   return success();

@@ -40,31 +40,35 @@ firrtl.circuit "FooNL"  attributes {raw_annotations = [
 
 // -----
 
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "ad", target = "~"}]}  {
   firrtl.module @Foo() {
     firrtl.skip
   }
 }
+    // CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "ad"}]}
 
 // -----
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "ab", target = "~Foo"}]}  {
   firrtl.module @Foo() {
     firrtl.skip
   }
 }
+    // CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "ab"}]}
 
 // -----
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Foo"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "ac", target = "~Foo|Foo"}]}  {
   firrtl.module @Foo() {
     firrtl.skip
   }
 }
+    // CHECK-LABEL: firrtl.circuit "Foo" {
+    // CHECK: firrtl.module @Foo() attributes {annotations = [{a = "ac"}]}
 
 // -----
 
 // A ModuleTarget Annotation is attached to the correct module.
 
-firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Bar"}]}  {
+firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "ae", target = "~Foo|Bar"}]}  {
   firrtl.extmodule @Bar(in a: !firrtl.uint<1>)
   firrtl.module @Foo(in %a: !firrtl.uint<1>) {
     %bar_a = firrtl.instance bar  @Bar(in a: !firrtl.uint<1>)
@@ -73,7 +77,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Ba
 }
 
     // CHECK-LABEL: firrtl.circuit "Foo" {
-    // CHECK: firrtl.module @Foo() attributes {raw_annotations = [{a = "a", target = "~Foo|Foo"}]}
+    // CHECK: firrtl.extmodule @Bar(in a: !firrtl.uint<1>) attributes {annotations = [{a = "ae"}]}
 
 // -----
 
@@ -89,12 +93,12 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Fo
   }
 }
     // CHECK-LABEL: firrtl.circuit "Foo"
-    // CHECK: firrtl.nla  @nla_1 [@Foo, @Bar] ["bar", "Bar"]
+    // CHECK: firrtl.nla  @nla [@Foo, @Bar] ["bar", "Bar"]
     // CHECK: firrtl.module @Bar
-    // CHECK-SAME annotations = [{c = "c"}]
+    // CHECK-SAME annotations = [{c = "c", circt.nonlocal = @nla, class = "circt.test"}]
     // CHECK: firrtl.module @Foo
     // CHECK: firrtl.instance bar
-    // CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]
+    // CHECK-SAME: annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {b = "b"}, {a = "a"}]
 
 // -----
 
@@ -109,12 +113,12 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{one, target = "~Foo|Foo>ba
 }
 
     // CHECK-LABEL: firrtl.circuit "Foo"
-    // CHECK: firrtl.nla @nla_1 [@Foo, @Bar] ["bar", "b"]
+    // CHECK: firrtl.nla @nla [@Foo, @Bar] ["bar", "b"]
     // CHECK: firrtl.module @Bar
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
+    // CHECK-SAME: [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, three}]
     // CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
     // CHECK-SAME: [{one}],
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
+    // CHECK-SAME: [{circt.fieldID = 1 : i32, two}],
     // CHECK-SAME: [{four}]
 
 // -----
@@ -123,13 +127,13 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{one, target = "~Foo|Foo>ba
 
 firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Foo>bar"}, {b = "b", target = "~Foo|Foo>bar"}]}  {
   firrtl.module @Foo() {
-    %bar = firrtl.combmem  : !firrtl.cmemory<uint<1>, 8>
+    %bar = firrtl.combmem : !firrtl.cmemory<uint<1>, 8>
   }
 }
 
     // CHECK-LABEL: module {
     // CHECK: firrtl.combmem
-    // CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+    // CHECK-SAME: annotations = [{b = "b"}, {a = "a"}]
 
 
 // -----
@@ -143,7 +147,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Fo
 }
     // CHECK-LABEL: module {
     // CHECK: firrtl.mem
-    // CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+    // CHECK-SAME: annotations = [{b = "b"}, {a = "a"}]
 
 // -----
  
@@ -158,8 +162,8 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a, target = "~Foo|Foo>bar.
     // CHECK-LABEL: module {
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 5, {b}>],
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
+    // CHECK-SAME: [{b, circt.fieldID = 5 : i32}, {a}],
+    // CHECK-SAME: [{circt.fieldID = 6 : i32, d}, {c, circt.fieldID = 2 : i32}]
 
 
 // -----
@@ -199,7 +203,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Fo
  
    // CHECK-LABEL: module {
     // CHECK: %bar = firrtl.wire
-    // CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+    // CHECK-SAME: annotations = [{b = "b"}, {a = "a"}]
 
 // -----
  
@@ -230,7 +234,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a = "a", target = "~Foo|Fo
 }
     // CHECK-LABEL: module {
     // CHECK: firrtl.seqmem
-    // CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+    // CHECK-SAME: annotations = [{b = "b"}, {a = "a"}]
 
 // -----
 
@@ -302,8 +306,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{one, target = "~Foo|Foo>ba
 }
     // CHECK-LABEL: module {
     // CHECK: %bar = firrtl.wire  {annotations =
-    // CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-    // CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+    // CHECK-SAME: [{circt.fieldID = 5 : i32, two}, {circt.fieldID = 1 : i32, one}]
 
 // -----
 // Subfield/Subindex annotations should be parsed correctly on registers
@@ -316,8 +319,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{one, target = "~Foo|Foo>ba
 
     // CHECK-LABEL: module {
     // CHECK: %bar = firrtl.reg %clock  {annotations =
-    // CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-    // CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+    // CHECK-SAME: [{circt.fieldID = 5 : i32, two}, {circt.fieldID = 1 : i32, one}]
 
 // -----
 // Subindices should not get sign-extended and cause problems.  This circuit has
@@ -332,8 +334,7 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{a, target = "~Foo|Foo>w[9]
 }
 
     // CHECK-LABEL: module {
-    // CHECK: %w = firrtl.wire {annotations =
-    // CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
+    // CHECK: %w = firrtl.wire {annotations =  [{a, circt.fieldID = 10 : i32}]}
 
 // -----
 // Annotations should apply even when the target's name is dropped.
@@ -376,17 +377,13 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{class = "firrtl.transforms
     firrtl.skip
   }
   firrtl.module @Foo(in %reset: !firrtl.uint<1>, in %clock: !firrtl.clock) {
-    // CHECK: %_T_0 = firrtl.wire  {annotations =
-    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: %_T_0 = firrtl.wire sym @_in_[[T:.*]]
     %_T_0 = firrtl.wire  : !firrtl.uint<1>
-    // CHECK: %_T_1 = firrtl.node %_T_0  {annotations =
-    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: %_T_1 = firrtl.node sym @_in_[[T:.*]]
     %_T_1 = firrtl.node %_T_0  : !firrtl.uint<1>
-    // CHECK: %_T_2 = firrtl.reg %clock  {annotations =
-    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: %_T_2 = firrtl.reg sym @_in_[[T:.*]]
     %_T_2 = firrtl.reg %clock  : !firrtl.uint<1>
-    // CHECK: %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations =
-    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: %_T_3 = firrtl.regreset sym @_in_[[T:.*]]
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
     // CHECK: %_T_4 = firrtl.seqmem Undefined  {annotations =
@@ -398,16 +395,13 @@ firrtl.circuit "Foo"  attributes {raw_annotations = [{class = "firrtl.transforms
     // CHECK: firrtl.memoryport Infer %_T_5 {annotations =
     // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     %_T_6_data, %_T_6_port = firrtl.memoryport Infer %_T_5  {name = "_T_6"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
-    // CHECK: firrtl.instance _T_7 {annotations =
-    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: firrtl.instance _T_7 sym @_in_[[T:.*]]
     firrtl.memoryport.access %_T_6_port[%reset], %clock : !firrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
     firrtl.instance _T_7  @Bar()
-    // CHECK: firrtl.mem Undefined  {annotations =
-    // CHECK_SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: firrtl.mem sym @_in_[[T:.*]]
     %_T_8_w = firrtl.mem Undefined  {depth = 8 : i64, name = "_T_8", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>
     %aggregate = firrtl.wire  : !firrtl.bundle<a: uint<1>>
-    // CHECK: %_T_9 = firrtl.node
-    // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    // CHECK: %_T_9 = firrtl.node sym @_in_[[T:.*]]
     %_T_9 = firrtl.node %aggregate  : !firrtl.bundle<a: uint<1>>
   }
 }
@@ -429,11 +423,9 @@ firrtl.circuit "AnnotationsBlockNodePruning"  attributes {raw_annotations = [{a,
 
 // -----
 
-// --------------------------------------------------------------------------------
 // SiFive-custom annotations related to the GrandCentral utility.  These
 // annotations do not conform to standard SingleTarget or NoTarget format and
 // need to be manually split up.
-// --------------------------------------------------------------------------------
 
 // Test sifive.enterprise.grandcentral.DataTapsAnnotation with all possible
 // variants of DataTapKeys.

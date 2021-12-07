@@ -136,8 +136,8 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target,
     mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
     insts.push_back(StringAttr::get(circuit.getContext(), inst.name()));
   }
-  //mods.push_back(FlatSymbolRefAttr::get(target.getModule()));
-  //insts.push_back(target.getOp()->getAttrOfType<StringAttr>("name"));
+  mods.push_back(FlatSymbolRefAttr::get(target.getModule()));
+  insts.push_back(target.getName());
   auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
   auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
   auto nla = b.create<NonLocalAnchor>(circuit.getLoc(), "nla", modAttr,
@@ -642,9 +642,16 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
 static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
                                           AnnoApplyState state) {
   auto target = anno.getNamed("target");
-  if (target)
+  if (target) {
+    if (!target->getValue().isa<StringAttr>()) {
+      state.circuit.emitError(
+          "Target field in annotation doesn't contain string ")
+          << anno;
+      return {};
+    }
     return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
                           state.circuit, state.symTbl);
+  }
   return AnnoPathValue(state.circuit);
 }
 
@@ -703,14 +710,14 @@ if (target.isPort()) {
   assert(0 && "TODO");
   return failure();
 }
-if (isa<FModuleLike>(target.getOp())) {
+if (isa<FModuleLike, MemoryPortOp, CombMemOp, SeqMemOp>(target.getOp())) {
   AnnotationSet annos(target.getOp());
   annos.addDontTouch();
   annos.applyToOperation(target.getOp());
   return success();
 }
  target.getOp()->setAttr(hw::InnerName::getInnerNameAttrName(),
-                        mlir::UnitAttr::get(target.getContext()));
+                        StringAttr::get(target.getContext(), Twine("_in_") + Twine(state.newID().getValue().getZExtValue())));
   return success();
 }
 
@@ -732,11 +739,11 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
     {"sifive.enterprise.firrtl.MarkDUTAnnotation",
      {stdResolve, applyWithoutTarget<>}},
     {"sifive.enterprise.grandcentral.DataTapsAnnotation",
-     {stdResolve, applyGCDataTap}},
+     {tryResolve, applyGCDataTap}},
     {"sifive.enterprise.grandcentral.MemTapAnnotation",
      {tryResolve, applyGCMemTap}},
     {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
-     {stdResolve, applyGCSigDriver}},
+     {tryResolve, applyGCSigDriver}},
     //    {"sifive.enterprise.grandcentral.GrandCentralView",
     //     {stdResolve, applyGCView}},
     //    {"SerializedViewAnnotation", {stdResolve, applyGCView}},
@@ -758,8 +765,9 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
     {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
      {noResolve, applyWithoutTarget<>}},
     {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
-
-    // Testing Annotation
+    {"firrtl.transforms.NoDedupAnnotation", {stdResolve, applyWithoutTarget<>}},
+    
+     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}}};
@@ -832,7 +840,7 @@ void LowerAnnotationsPass::runOnOperation() {
       worklistAttrs.push_back(anno.cast<DictionaryAttr>());
     // Clear the raw annotations.
     circuit->removeAttr("raw_annotations");
-    AnnoApplyState state {
+    AnnoApplyState state{
         circuit, modules,
         [&](DictionaryAttr anno) { worklistAttrs.push_back(anno); },
         [&](StringRef target, NamedAttrList anno) {
@@ -844,7 +852,13 @@ void LowerAnnotationsPass::runOnOperation() {
             return failure();
           }
           return applyWithoutTargetImpl(*foo, DictionaryAttr::get(context, anno), circuit, modules, true);
-        }};
+        },
+        [&](Operation* target, NamedAttrList anno) {
+          auto context = circuit.getContext();
+          return applyWithoutTargetImpl(
+              AnnoPathValue(target), DictionaryAttr::get(context, anno), circuit, modules, true);
+        }
+  };
     size_t numFailures = 0;
     while (!worklistAttrs.empty()) {
       auto attr = worklistAttrs.pop_back_val();

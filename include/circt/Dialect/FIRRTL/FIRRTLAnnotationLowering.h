@@ -35,15 +35,18 @@ public:
   
   FIRRTLType getType() const {
     FIRRTLType t;
-    if (auto mod = dyn_cast<FModuleLike>(op))
-      t = mod.getPortType(portNum);
-    else if (auto inst = dyn_cast<InstanceOp>(op))
-      t = inst.getResult(portNum).getType().cast<FIRRTLType>();
-    else 
+    if (isPort()) {
+      if (auto mod = dyn_cast<FModuleLike>(op))
+        t = mod.getPortType(portNum);
+      else if (auto inst = dyn_cast<InstanceOp>(op))
+        t = inst.getResult(portNum).getType().cast<FIRRTLType>();
+      else if (auto mem = dyn_cast<MemOp>(op))
+        t = mem.getResult(portNum).getType().cast<FIRRTLType>();
+    } else
       t = op->getResultTypes()[0].cast<FIRRTLType>();
-
-    return t.getSubTypeByFieldID(
-        fieldIdx);
+    if (!t)
+      return t;
+    return t.getSubTypeByFieldID(fieldIdx);
   }
   ArrayRef<InstanceOp> getPath() const { return instances; }
   unsigned getField() const { return fieldIdx; }
@@ -56,6 +59,19 @@ public:
   }
   Operation *getOp() const { return op; }
   ArrayRef<InstanceOp> getInstances() const { return instances; }
+  StringAttr getName() const {
+    if (isPort()) {
+      if (auto mod = dyn_cast<FModuleLike>(op))
+        return StringAttr::get(getContext(), mod.getPortName(portNum));
+      else if (auto inst = dyn_cast<InstanceOp>(op))
+        return inst.getPortName(portNum);
+      else if (auto mem = dyn_cast<MemOp>(op))
+        return mem.getPortName(portNum);
+    }
+    if (auto mod = dyn_cast<FModuleLike>(op))
+      return StringAttr::get(getContext(), mod.moduleName());
+      return op->getAttrOfType<StringAttr>("name");
+  }
 
   void setPort(size_t port) { portNum = port; }
   void setField(unsigned field)  { fieldIdx = field; }
@@ -87,13 +103,15 @@ struct AnnoApplyState {
   AnnoApplyState(
       CircuitOp circuit, SymbolTable &symTbl,
       llvm::function_ref<void(DictionaryAttr)> addFn,
-      llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyFn)
+      llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyFn,
+      llvm::function_ref<LogicalResult(Operation *, NamedAttrList)> applyOpFn)
       : circuit(circuit), symTbl(symTbl), addToWorklistFn(addFn),
-        applyAnno(applyFn) {}
+        applyAnno(applyFn), applyAnnoOp(applyOpFn) {}
   CircuitOp circuit;
   SymbolTable &symTbl;
   llvm::function_ref<void(DictionaryAttr)> addToWorklistFn;
   llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyAnno;
+  llvm::function_ref<LogicalResult(Operation*, NamedAttrList)> applyAnnoOp;
   void setDontTouch(StringRef target);
 
   IntegerAttr newID() {

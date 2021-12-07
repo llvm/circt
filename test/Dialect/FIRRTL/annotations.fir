@@ -6,15 +6,7 @@ circuit Foo: %[[{"a":"a"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {raw_annotations = [{a = "a", target = "~Foo"}]}
-
-; // -----
-
-circuit Foo: %[[{"a":"a", target = "~"}]]
-  module Foo:
-    skip
-
-    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {raw_annotations = [{a = "a", target = "~Foo"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {raw_annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -24,7 +16,7 @@ circuit Foo: %[[{"a":"a","target":"Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {raw_annotations = [{a = "a", target = "~Foo"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {raw_annotations = [{a = "a", target = "Foo"}]}
 
 ; // -----
 
@@ -43,5 +35,4 @@ circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.module @Foo() attributes {raw_annotations = [{a = "a", target = "~"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {raw_annotations = [{a = "a", target = "Foo.Foo"}]}
