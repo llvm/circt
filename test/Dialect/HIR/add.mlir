@@ -1,18 +1,21 @@
 // RUN: circt-opt %s
-hir.func @Array_Add at %t (%A:!hir.memref<128*i32, r>, 
-%B : !hir.memref<128*i32, r>, 
-%C:!hir.memref<128*i32, w>){
+#bram_r = {"rd_latency" = 1}
+#bram_w = {"wr_latency" = 1}
+hir.func @Array_Add at %t (%A:!hir.memref<128xi32> ports [#bram_r], 
+%B : !hir.memref<128xi32> ports [#bram_r], 
+%C:!hir.memref<128xi32> ports [#bram_w]){
 
-  %0 = hir.constant 0 
-  %1 = hir.constant 1 
-  %128 = hir.constant 128 
-  hir.for %i:i8 = %0:!hir.const to %128:!hir.const  step %1:!hir.const iter_time(%ti = %t offset %1){
-    hir.yield at %ti offset %1
-    %a = hir.mem_read %A[%i] at %ti :!hir.memref<128*i32,r>[i8] -> i32
-    %b = hir.mem_read %B[%i] at %ti : !hir.memref<128*i32, r>[i8] -> i32
-    %c = hir.add (%a, %b) : (i32, i32) -> (i32)
-    %i1 = hir.delay %i by %1 at %ti : i8 -> i8 
-    hir.mem_write %c to %C[%i1] at %ti offset %1 : (i32, !hir.memref<128*i32, w>[i8])
+  %c0_i8 = hw.constant 0: i8
+  %c1_i8 = hw.constant 1:i8 
+  %c128_i8 = hw.constant 128:i8 
+  hir.for %i:i8 = %c0_i8 to %c128_i8  step %c1_i8 iter_time(%ti = %t + 1){
+    %i_i7 = comb.extract %i from 0: (i8)->(i7)
+    %a = hir.load %A[port 0][%i_i7] at %ti :!hir.memref<128xi32>
+    %b = hir.load %B[port 0][%i_i7] at %ti : !hir.memref<128xi32>
+    %c = comb.add  %a, %b  : i32
+    %i_delayed_i7 = hir.delay %i_i7 by 1 at %ti : i7 
+    hir.store %c to %C[port 0][%i_delayed_i7] at %ti + 1 : !hir.memref<128xi32>
+    hir.next_iter at %ti + 1
   }
   hir.return
 }

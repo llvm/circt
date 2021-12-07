@@ -1,30 +1,11 @@
 // RUN: circt-opt %s
-hir.func @mac_test at %t (%a :i32, %b :i32, %c :i32) -> (){
-  hir.call @mult_3stage (%a,%b) at %t 
-  : !hir.interface<func(i32, i32) -> (i32 delay 3)>
-  hir.return
-}
-
-hir.func @mac at %t (%a :i32, %b :i32, %c :i32) -> (i32 delay 3){
-  %1 = hir.constant 1
-  %2 = hir.constant 2
-
-  //old multiplier
-  //%m = hir.call @mult_2stage (%a,%b) at %t 
-  //      : (i32 , i32) -> (i32 delay 2)
-
-  hir.call @mult_3stage (%a,%b) at %t 
-  : !hir.func<(i32, i32) -> ()>
-  //new multiplier
+hir.func.extern @mult_3stage at %t (%a:i32,%b:i32)->(%result:i32 delay 3)
+hir.func @mac at %t (%a :i32, %b :i32, %c :i32) -> (%result: i32 delay 3){
   %m = hir.call @mult_3stage (%a,%b) at %t 
   : !hir.func<(i32, i32) -> (i32 delay 3)>
+  %c2= hir.delay %c by 2 at %t : i32 
+  %res = comb.add  %m,%c2  : i32
+  %res_delayed = hir.delay %res by 1 at %t + 2: i32
 
-  //Delay added to match old multiplier.
-  %c2= hir.delay %c by %2 at %t : i32 -> i32
-  
-  %res = hir.add (%m,%c2) : (i32, i32) -> (i32)
-  %res1 = hir.delay %res by %1 at %t offset %2
-        : i32 -> i32
-
-  hir.return (%res1) : (i32)
+  hir.return (%res_delayed) : (i32)
 }
