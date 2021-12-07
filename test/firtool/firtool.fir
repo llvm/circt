@@ -9,15 +9,15 @@
 ; RUN: firtool %s --format=fir -verilog-ir | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
 
 
-circuit test_mod : %[[{"a": "a"}]]
+circuit test_mod : %[[{"a": "a", "class": "circt.test", "target": "~"}]]
 
 ; MLIR: firrtl.circuit "test_mod"
 
 ; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"
-; ANNOTATIONS-SAME: a = "a"
-; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
-; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
 ; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
+; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
+; ANNOTATIONS-SAME: a = "a"
 
 ; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
 ; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)
@@ -97,8 +97,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:  }
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
-; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
 ; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
+; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
 
 ; VERILOG-LABEL: module test_mod(
 ; VERILOG-NEXT:    input        clock, a,

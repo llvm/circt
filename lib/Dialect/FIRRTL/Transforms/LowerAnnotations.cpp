@@ -764,10 +764,12 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {stdResolve, applyWithoutTarget<>}},
     {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
      {noResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     {noResolve, applyWithoutTarget<>}},
     {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
     {"firrtl.transforms.NoDedupAnnotation", {stdResolve, applyWithoutTarget<>}},
-    
-     // Testing Annotation
+
+    // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}}};
