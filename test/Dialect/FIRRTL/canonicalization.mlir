@@ -457,16 +457,8 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %3 = firrtl.mux (%cond, %c1_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
 
-  // CHECK: firrtl.connect %out, %in
-  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
-  %4 = firrtl.mux (%cond, %in, %invalid_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.connect %out, %4 : !firrtl.uint<4>, !firrtl.uint<4>
-
-  // CHECK: firrtl.connect %out, %in
-  %5 = firrtl.mux (%cond, %invalid_ui4, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.connect %out, %5 : !firrtl.uint<4>, !firrtl.uint<4>
-
   // CHECK: firrtl.connect %out, %invalid_ui4
+  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
   %7 = firrtl.mux (%cond, %invalid_ui4, %invalid_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
 
@@ -1795,32 +1787,6 @@ firrtl.module @mul_cst_prop4(out %out_b: !firrtl.uint<15>) {
   firrtl.connect %out_b, %mul : !firrtl.uint<15>, !firrtl.uint<15>
   %mul2 = firrtl.mul %invalid_ui4, %tmp_a : (!firrtl.uint<8>, !firrtl.uint<7>) -> !firrtl.uint<15>
   firrtl.connect %out_b, %mul2 : !firrtl.uint<15>, !firrtl.uint<15>
-}
-
-// CHECK-LABEL: firrtl.module @MuxInvalidOpt
-firrtl.module @MuxInvalidOpt(in %cond: !firrtl.uint<1>, in %data: !firrtl.uint<4>, out %out1: !firrtl.uint<4>, out %out2: !firrtl.uint<4>, out %out3: !firrtl.uint<4>, out %out4: !firrtl.uint<4>) {
-  %invalid = firrtl.invalidvalue : !firrtl.uint<4>
-
-  // We can optimize out these mux's since the invalid value can take on any input.
-  %a = firrtl.mux(%cond, %data, %invalid) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK: firrtl.connect %out1, %data
-  firrtl.connect %out1, %a : !firrtl.uint<4>, !firrtl.uint<4>
-
-  %b = firrtl.mux(%cond, %invalid, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK: firrtl.connect %out2, %data
-  firrtl.connect %out2, %b : !firrtl.uint<4>, !firrtl.uint<4>
-
-  // This fold is required to return %data for SFC compatibility.
-  %false = firrtl.constant 0 : !firrtl.uint<1>
-  %c = firrtl.mux(%false, %data, %invalid) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK: firrtl.connect %out3, %data
-  firrtl.connect %out3, %c : !firrtl.uint<4>, !firrtl.uint<4>
-
-  // This fold is required to return %data for SFC compatibility.
-  %true = firrtl.constant 1 : !firrtl.uint<1>
-  %d = firrtl.mux(%true, %invalid, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK: firrtl.connect %out4, %data
-  firrtl.connect %out4, %d : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @MuxCanon
