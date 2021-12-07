@@ -72,7 +72,7 @@ public:
         db, prim, column, nearestToY);
     if (!nearest.ptr)
       return py::none();
-    return pyPhysLocationAttr.attr("cast")(nearest);
+    return pyPhysLocationAttr(nearest).release();
   }
   void walkPlacements(
       py::function pycb,
@@ -97,8 +97,8 @@ public:
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
           auto physLoc = py::module::import("circt.dialects.msft")
-                             .attr("PhysLocationAttr")
-                             .attr("cast")(loc);
+                             .attr("PhysLocationAttr")(loc)
+                             .release();
           if (!p.op.ptr) {
             pycb(physLoc, py::none());
           } else {
