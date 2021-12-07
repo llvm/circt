@@ -13,6 +13,8 @@
 #define CIRCT_DIALECT_FIRRTL_INSTANCEGRAPH_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/iterator.h"
@@ -224,6 +226,19 @@ struct InstancePathCache {
       : instanceGraph(instanceGraph) {}
   ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
 
+  /// Get the GlobalRefs for all the instance paths for the op.
+  unsigned getAllGlobalRefs(Operation *op, StringRef opName,
+                            SmallVectorImpl<Attribute> &glblRefs);
+
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
+  }
+
 private:
   /// An allocator for individual instance paths and entire path lists.
   llvm::BumpPtrAllocator allocator;
@@ -233,6 +248,9 @@ private:
 
   /// Append an instance to a path.
   InstancePath appendInstance(InstancePath path, InstanceOp inst);
+
+  /// Cache of module namespace.
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 };
 
 } // namespace firrtl

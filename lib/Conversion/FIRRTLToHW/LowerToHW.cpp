@@ -47,6 +47,7 @@ static const char testHarnessHierAnnoClass[] =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
 static const char verifBBClass[] =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
+static const char globalRefStr[] = "circt.globalRef";
 
 /// Attribute that indicates that the module hierarchy starting at the
 /// annotated module should be dumped to a file.
@@ -445,8 +446,8 @@ void FIRRTLModuleLowering::runOnOperation() {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
         })
-        .Case<NonLocalAnchor>([&](auto nla) {
-          // Just drop it.
+        .Case<hw::GlobalRef>([&](auto nla) {
+          nla->moveBefore(topLevelModule, topLevelModule->end());
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -2211,6 +2212,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     symName = op.nameAttr();
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
+  if (auto glblRef = op->getAttr(globalRefStr)) {
+    regResult->setAttr(globalRefStr, glblRef);
+  }
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
@@ -2241,6 +2245,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     symName = op.nameAttr();
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
+
+  if (auto glblRef = op->getAttr(globalRefStr)) {
+    regResult->setAttr(globalRefStr, glblRef);
+  }
   (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
@@ -2403,6 +2411,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
       /*sym_name=*/op.inner_symAttr());
+
+  if (auto glblRef = op->getAttr(globalRefStr)) {
+    inst->setAttr(globalRefStr, glblRef);
+  }
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
@@ -2498,6 +2510,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
+
+  if (auto glblRef = oldInstance->getAttr(globalRefStr)) {
+    newInstance->setAttr(globalRefStr, glblRef);
+  }
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
@@ -3167,7 +3183,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 /// `lowerVerificationStatement`.
 template <typename... Args>
 static Operation *buildImmediateVerifOp(ImplicitLocOpBuilder &builder,
-                                        StringRef opName, Args &&...args) {
+                                        StringRef opName, Args &&... args) {
   if (opName == "assert")
     return builder.create<sv::AssertOp>(std::forward<Args>(args)...);
   if (opName == "assume")
@@ -3182,7 +3198,7 @@ static Operation *buildImmediateVerifOp(ImplicitLocOpBuilder &builder,
 /// `lowerVerificationStatement`.
 template <typename... Args>
 static Operation *buildConcurrentVerifOp(ImplicitLocOpBuilder &builder,
-                                         StringRef opName, Args &&...args) {
+                                         StringRef opName, Args &&... args) {
   if (opName == "assert")
     return builder.create<sv::AssertConcurrentOp>(std::forward<Args>(args)...);
   if (opName == "assume")

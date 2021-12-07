@@ -224,6 +224,6 @@ firrtl.circuit "multiInstance2" attributes {
     firrtl.instance dut @DUTE() // expected-note {{parent is instantiated here}}
     firrtl.instance dut1 @DUTE() // expected-note {{parent is instantiated here}}
   }
-  firrtl.nla @nla1 [@multiInstance1] ["dut"]
-  firrtl.nla @nla2 [@multiInstance1] ["dut1"]
+  hw.globalRef @nla1 [#hw.innerNameRef<@multiInstance1::@dut>]
+  hw.globalRef @nla2 [#hw.innerNameRef<@multiInstance1::@dut1>]
 }

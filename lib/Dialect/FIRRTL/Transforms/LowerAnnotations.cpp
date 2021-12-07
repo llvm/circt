@@ -19,6 +19,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringExtras.h"
@@ -374,10 +376,10 @@ static Optional<TokenAnnoTarget> tokenizePath(StringRef origTarget) {
   if (!retval.circuit.empty() && retval.circuit[0] == '~')
     retval.circuit = retval.circuit.drop_front();
   while (target.count(':')) {
-    StringRef nla;
-    std::tie(nla, target) = target.split(':');
+    StringRef glbl;
+    std::tie(glbl, target) = target.split(':');
     StringRef inst, mod;
-    std::tie(mod, inst) = nla.split('/');
+    std::tie(mod, inst) = glbl.split('/');
     retval.instances.emplace_back(mod, inst);
   }
   // remove aggregate
@@ -406,23 +408,23 @@ static Optional<TokenAnnoTarget> tokenizePath(StringRef origTarget) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState state) {
+static FlatSymbolRefAttr buildGlbl(AnnoPathValue target, ApplyState state) {
   OpBuilder b(state.circuit.getBodyRegion());
-  SmallVector<Attribute> mods;
+  // SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
   for (auto inst : target.instances) {
-    mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
-    insts.push_back(StringAttr::get(state.circuit.getContext(), inst.name()));
+    // mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
+    insts.push_back(hw::InnerRefAttr::get(
+        inst->getParentOfType<FModuleOp>().getNameAttr(), inst.nameAttr()));
   }
-  mods.push_back(FlatSymbolRefAttr::get(target.ref.getModule()));
-  insts.push_back(
-      StringAttr::get(state.circuit.getContext(), getName(target.ref.op)));
-  auto modAttr = ArrayAttr::get(state.circuit.getContext(), mods);
+  // mods.push_back(FlatSymbolRefAttr::get(target.ref.getModule()));
+  insts.push_back(hw::InnerRefAttr::get(
+      target.ref.getModule().getNameAttr(),
+      StringAttr::get(state.circuit.getContext(), getName(target.ref.op))));
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", modAttr,
-                                      instAttr);
-  state.symTbl.insert(nla);
-  return FlatSymbolRefAttr::get(nla);
+  auto glbl = b.create<hw::GlobalRef>(state.circuit.getLoc(), "glbl", instAttr);
+  state.symTbl.insert(glbl);
+  return FlatSymbolRefAttr::get(glbl);
 }
 
 /// Scatter breadcrumb annotations corresponding to non-local annotations
@@ -432,7 +434,7 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState state) {
 static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
                                              ApplyState state) {
 
-  FlatSymbolRefAttr sym = buildNLA(target, state);
+  FlatSymbolRefAttr sym = buildGlbl(target, state);
 
   NamedAttrList pathmetadata;
   pathmetadata.append("circt.nonlocal", sym);

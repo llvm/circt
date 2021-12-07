@@ -142,6 +142,7 @@ static StringRef getSymOpName(Operation *symOp) {
           [&](InterfaceSignalOp op) { return op.sym_name(); })
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.sym_name(); })
+      .Case<GlobalRef>([&](GlobalRef op) { return ""; })
       .Default([&](Operation *op) { return ""; });
 }
 
@@ -673,9 +674,23 @@ void EmitterBase::emitTextWithSubstitutions(
         unsigned symOpNum = operandNo - op->getNumOperands();
         auto sym = symAttrs[symOpNum];
         StringRef symVerilogName;
+        std::string hierName;
         if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
-          if (auto *symOp = state.symbolCache.getDefinition(fsym))
-            symVerilogName = namify(sym, symOp);
+          if (auto *symOp = state.symbolCache.getDefinition(fsym)) {
+            if (auto glblRef = dyn_cast<GlobalRef>(symOp)) {
+              auto namepath = glblRef.namepath();
+              hierName =
+                  namepath[0].cast<InnerRefAttr>().getModule().getValue().str();
+              for (auto innerName : namepath.getAsRange<InnerRefAttr>()) {
+                auto innerSymOP = state.symbolCache.getDefinition(
+                    innerName.getModule(), innerName.getName());
+                auto symName = namify(sym, innerSymOP);
+                hierName += ("." + symName.str());
+              }
+              symVerilogName = hierName;
+            } else
+              symVerilogName = namify(sym, symOp);
+          }
         } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
           auto symOp =
               state.symbolCache.getDefinition(isym.getModule(), isym.getName());
@@ -4174,6 +4189,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
             separateFile(op);
           }
         })
+        .Case<GlobalRef>([&](GlobalRef op) {
+          symbolCache.addDefinition(op.getNameAttr(), op);
+        })
         .Default([&](auto *) {
           op.emitError("unknown operation");
           encounteredError = true;
@@ -4223,6 +4241,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
+      .Case<GlobalRef>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<BindInterfaceOp>(
           [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })

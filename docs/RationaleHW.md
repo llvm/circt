@@ -142,6 +142,69 @@ notable differences: for example:
    on the other hand, do support both of these.  Zero width ports are omitted (printed as
    comments) when generating verilog.
 
+### NonLocalAnchor
+The NonLocalAnchor operation (`hw.globalRef`) can be used to identify the unique
+ instance path of an operation globally.
+`hw.globalRef` can be used to attach nonlocal annotations and also for metadata
+ emission. 
+`hw.globalRef` defines a symbol and contains a list of module symbols followed
+ by a list of instance names corresponding to each module.
+ For example, in the following example, `@glbl_0` specifies instance
+ "baz" in module `@FooNL`, followed by instance
+ `"bar"` in module `@BazNL`, followed by 
+ the wire named `"w"` in module `@BarNL`.
+
+`hw.globalRef` can define a unique instance path, and each element along the way
+ carries an annotation with class `circt. nonlocal`, which has a matching
+ `circt. nonlocal` field pointing to the global op. 
+ Thus instances participating in nonlocal paths are readily apparent.
+
+ In the following example the `@glbl_0` is used in the verbatim op
+ to capture the final Verilog name of the wire `w`.
+
+The second `globalRef`, `@glbl_1` doesn't specify the instance path and is anchored
+ on all instances of `@BarNL`.
+This example shows that the `hw.globalRef` can be used to attach a symbol with
+ any operation.
+
+
+``` mlir
+ firrtl.circuit "FooNL"   {
+    hw.globalRef @glbl_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
+    hw.globalRef @glbl_1 [@BarNL] ["w"] 
+    firrtl.module @BarNL() {
+      %w = firrtl.wire  {annotations = [{circt.nonlocal = @glbl_0, class = "circt.nonlocal"}, {circt.nonlocal = @glbl_1, class = "circt.nonlocal"} ]} : !firrtl.uint      
+    }
+    firrtl.module @BazNL() {
+      firrtl.instance bar  {annotations = [{circt.nonlocal = @glbl_0, class = "circt.nonlocal"}]} @BarNL()
+    }
+    firrtl.module @FooNL() {
+      firrtl.instance baz  {annotations = [{circt.nonlocal = @glbl_0, class = "circt.nonlocal"}]} @BazNL()
+    }    
+  }
+
+sv.verbatim "{{0}}" { symbols = [@glbl_0] }
+sv.verbatim "{{0}}" { symbols = [@glbl_1] }
+```
+
+Following is an example of attaching non local annotations with a specific instance of the `wire` `w`.
+
+``` mlir
+firrtl.circuit "FooNL"   {
+    hw.globalRef @glbl_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
+    
+    firrtl.module @BarNL() {
+      %w = firrtl.wire  {annotations = [{circt.nonlocal = @glbl_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint    
+    }
+    firrtl.module @BazNL() {
+      firrtl.instance bar  {annotations = [{circt.nonlocal = @glbl_0, class = "circt.nonlocal"}]} @BarNL()
+    }
+    firrtl.module @FooNL() {
+      firrtl.instance baz  {annotations = [{circt.nonlocal = @glbl_0, class = "circt.nonlocal"}]} @BazNL()
+    }
+  }
+```
+
 ### Instance paths
 
 An IR for Hardware is different than an IR for Software in a very important way:

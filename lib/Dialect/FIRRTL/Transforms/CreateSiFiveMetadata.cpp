@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
@@ -73,7 +74,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // memmory conf file.
   auto createMemMetadata = [&](SmallVector<MemOp> &memList,
                                llvm::json::OStream &jsonStream,
-                               std::string &seqMemConfStr) {
+                               std::string &seqMemConfStr,
+                               SmallVector<Attribute> &syms) {
     if (memList.empty())
       return;
     // All the MemOp in the memList refer to the same FIRRTL memory. So just get
@@ -126,24 +128,13 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       // Record all the hierarchy names.
       SmallVector<std::string> hierNames;
       jsonStream.attributeArray("hierarchy", [&] {
-        for (auto memOp : memList) {
+        for (auto memOp : llvm::enumerate(memList)) {
           // Get the absolute path for the parent memory, to create the
           // hierarchy names.
-          auto paths = instancePathCache.getAbsolutePaths(
-              memOp->getParentOfType<FModuleOp>());
-          for (auto p : paths) {
-            if (p.empty())
-              continue;
-            const InstanceOp &x = p.front();
-            std::string hierName =
-                x->getParentOfType<FModuleOp>().getName().str();
-            for (InstanceOp inst : p) {
-              hierName = hierName + "." + inst.name().str();
-            }
-            hierName = hierName + "." + memOp.name().str();
-            hierNames.push_back(hierName);
-            jsonStream.value(hierName);
-          }
+          auto numPaths = instancePathCache.getAllGlobalRefs(
+              memOp.value(), memOp.value().name(), syms);
+          for (unsigned i = memOp.index(), e = i + numPaths; i < e; ++i)
+            jsonStream.value(("{{" + Twine(i) + "}}").str());
         }
       });
     });
@@ -169,15 +160,16 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     }
   }
   std::string seqMemConfStr;
+  SmallVector<Attribute> tbSyms, dutSyms;
   dutJson.array([&] {
     for (auto &dutM : dutMems)
-      createMemMetadata(dutM.second, dutJson, seqMemConfStr);
+      createMemMetadata(dutM.second, dutJson, seqMemConfStr, dutSyms);
   });
   testBenchJson.array([&] {
     // The tbConfStr is populated here, but unused, it will not be printed to
     // file.
     for (auto &tbM : tbMems)
-      createMemMetadata(tbM.second, testBenchJson, seqMemConfStr);
+      createMemMetadata(tbM.second, testBenchJson, seqMemConfStr, tbSyms);
   });
 
   auto *context = &getContext();
@@ -196,6 +188,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
         context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
     tbVerbatimOp->setAttr("output_file", fileAttr);
+    tbVerbatimOp->setAttr("symbols", builder.getArrayAttr(tbSyms));
   }
   if (dutJsonBuffer != "[]") {
     auto dutVerbatimOp =
@@ -203,6 +196,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
         context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
     dutVerbatimOp->setAttr("output_file", fileAttr);
+    dutVerbatimOp->setAttr("symbols", builder.getArrayAttr(dutSyms));
   }
   if (!seqMemConfStr.empty()) {
     auto confVerbatimOp =

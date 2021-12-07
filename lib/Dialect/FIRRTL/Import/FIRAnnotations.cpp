@@ -15,6 +15,8 @@
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -107,10 +109,10 @@ expandNonLocal(StringRef target) {
   StringRef circuit;
   std::tie(circuit, target) = target.split('|');
   while (target.count(':')) {
-    StringRef nla;
-    std::tie(nla, target) = target.split(':');
+    StringRef glbl;
+    std::tie(glbl, target) = target.split(':');
     StringRef inst, mod;
-    std::tie(mod, inst) = nla.split('/');
+    std::tie(mod, inst) = glbl.split('/');
     retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod, inst);
   }
   if (target.empty()) {
@@ -131,22 +133,26 @@ expandNonLocal(StringRef target) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr
-buildNLA(CircuitOp circuit, size_t nlaSuffix,
-         SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
+static FlatSymbolRefAttr buildGlbl(
+    CircuitOp circuit, size_t glblSuffix,
+    SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &glbls) {
   OpBuilder b(circuit.getBodyRegion());
-  SmallVector<Attribute> mods;
+  // SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
-  for (auto &nla : nlas) {
-    mods.push_back(
-        FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(nla)));
-    insts.push_back(StringAttr::get(circuit.getContext(), std::get<2>(nla)));
+  for (auto &glbl : glbls) {
+    // mods.push_back(
+    //    FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(glbl)));
+    // insts.push_back(StringAttr::get(circuit.getContext(),
+    // std::get<2>(glbl)));
+    insts.push_back(hw::InnerRefAttr::get(
+        StringAttr::get(circuit.getContext(), std::get<1>(glbl)),
+        StringAttr::get(circuit.getContext(), std::get<2>(glbl))));
   }
-  auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
+  // auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
   auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(
-      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), modAttr, instAttr);
-  return FlatSymbolRefAttr::get(nla);
+  auto glbl = b.create<hw::GlobalRef>(
+      circuit.getLoc(), "glbl_" + std::to_string(glblSuffix), instAttr);
+  return FlatSymbolRefAttr::get(glbl);
 }
 
 /// Append the argument `target` to the `annotation` using the key "target".
@@ -310,30 +316,30 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
   llvm_unreachable("Impossible unhandled JSON type");
 }
 
-static std::string addNLATargets(
+static std::string addGlblTargets(
     MLIRContext *context, StringRef targetStrRef, CircuitOp circuit,
-    size_t &nlaNumber, NamedAttrList &metadata,
+    size_t &glblNumber, NamedAttrList &metadata,
     llvm::StringMap<llvm::SmallVector<Attribute>> &mutableAnnotationMap) {
 
-  auto nlaTargets = expandNonLocal(targetStrRef);
+  auto glblTargets = expandNonLocal(targetStrRef);
 
-  FlatSymbolRefAttr nlaSym;
-  if (nlaTargets.size() > 1) {
-    nlaSym = buildNLA(circuit, ++nlaNumber, nlaTargets);
-    metadata.append("circt.nonlocal", nlaSym);
+  FlatSymbolRefAttr glblSym;
+  if (glblTargets.size() > 1) {
+    glblSym = buildGlbl(circuit, ++glblNumber, glblTargets);
+    metadata.append("circt.nonlocal", glblSym);
   }
 
-  for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+  for (int i = 0, e = glblTargets.size() - 1; i < e; ++i) {
     NamedAttrList pathmetadata;
-    pathmetadata.append("circt.nonlocal", nlaSym);
+    pathmetadata.append("circt.nonlocal", glblSym);
     pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
+    mutableAnnotationMap[std::get<0>(glblTargets[i])].push_back(
         DictionaryAttr::get(context, pathmetadata));
   }
 
   // Annotations on the element instance.
   auto leafTarget =
-      splitAndAppendTarget(metadata, std::get<0>(nlaTargets.back()), context)
+      splitAndAppendTarget(metadata, std::get<0>(glblTargets.back()), context)
           .first;
 
   return leafTarget.str();
@@ -346,7 +352,7 @@ static std::string addNLATargets(
 bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
                              json::Path path, CircuitOp circuit,
-                             size_t &nlaNumber) {
+                             size_t &glblNumber) {
   auto context = circuit.getContext();
 
   /// Examine an Annotation JSON object and return an optional string indicating
@@ -428,8 +434,8 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       return false;
     }
 
-    auto leafTarget = addNLATargets(context, targetStrRef, circuit, nlaNumber,
-                                    metadata, mutableAnnotationMap);
+    auto leafTarget = addGlblTargets(context, targetStrRef, circuit, glblNumber,
+                                     metadata, mutableAnnotationMap);
 
     mutableAnnotationMap[leafTarget].push_back(
         DictionaryAttr::get(context, metadata));
@@ -905,7 +911,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
 static Optional<Attribute>
 scatterOMIR(Attribute original, unsigned &annotationID,
             llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
-            CircuitOp circuit, size_t &nlaNumber) {
+            CircuitOp circuit, size_t &glblNumber) {
   auto *ctx = original.getContext();
 
   // Convert a string-encoded type to a dictionary that includes the type
@@ -950,8 +956,8 @@ scatterOMIR(Attribute original, unsigned &annotationID,
           if (!canonTarget)
             return None;
 
-          auto leafTarget = addNLATargets(ctx, *canonTarget, circuit, nlaNumber,
-                                          tracker, newAnnotations);
+          auto leafTarget = addGlblTargets(ctx, *canonTarget, circuit,
+                                           glblNumber, tracker, newAnnotations);
 
           newAnnotations[leafTarget].push_back(
               DictionaryAttr::get(ctx, tracker));
@@ -999,7 +1005,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
         SmallVector<Attribute> newArr;
         for (auto element : arr) {
           auto newElement = scatterOMIR(element, annotationID, newAnnotations,
-                                        circuit, nlaNumber);
+                                        circuit, glblNumber);
           if (!newElement)
             return None;
           newArr.push_back(newElement.getValue());
@@ -1012,7 +1018,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
         NamedAttrList newAttrs;
         for (auto pairs : dict) {
           auto maybeValue = scatterOMIR(pairs.getValue(), annotationID,
-                                        newAnnotations, circuit, nlaNumber);
+                                        newAnnotations, circuit, glblNumber);
           if (!maybeValue)
             return None;
           newAttrs.append(pairs.getName(), maybeValue.getValue());
@@ -1056,7 +1062,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
 static Optional<std::pair<StringRef, DictionaryAttr>>
 scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
                llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
-               CircuitOp circuit, size_t &nlaNumber, Location loc,
+               CircuitOp circuit, size_t &glblNumber, Location loc,
                unsigned index) {
   // The input attribute must be a dictionary.
   DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
@@ -1096,7 +1102,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
   if (!valueAttr)
     return None;
   auto newValue =
-      scatterOMIR(valueAttr, annotationID, newAnnotations, circuit, nlaNumber);
+      scatterOMIR(valueAttr, annotationID, newAnnotations, circuit, glblNumber);
   if (!newValue)
     return None;
 
@@ -1124,7 +1130,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
 static Optional<DictionaryAttr>
 scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
               llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
-              CircuitOp circuit, size_t &nlaNumber, Location loc) {
+              CircuitOp circuit, size_t &glblNumber, Location loc) {
 
   /// The input attribute must be a dictionary.
   DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
@@ -1175,7 +1181,7 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
       auto field = fieldAttr[i];
       if (auto newField =
               scatterOMField(field, root, annotationID, newAnnotations, circuit,
-                             nlaNumber, loc, i)) {
+                             glblNumber, loc, i)) {
         fieldAttrs.append(newField.getValue().first,
                           newField.getValue().second);
         continue;
@@ -1198,7 +1204,7 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
 static Optional<Attribute> scatterOMIRAnnotation(
     DictionaryAttr dict, unsigned &annotationID,
     llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
-    CircuitOp circuit, size_t &nlaNumber, Location loc) {
+    CircuitOp circuit, size_t &glblNumber, Location loc) {
 
   auto nodes = tryGetAs<ArrayAttr>(dict, dict, "nodes", loc, omirAnnoClass);
   if (!nodes)
@@ -1207,7 +1213,7 @@ static Optional<Attribute> scatterOMIRAnnotation(
   SmallVector<Attribute> newNodes;
   for (auto node : nodes) {
     auto newNode = scatterOMNode(node, dict, annotationID, newAnnotations,
-                                 circuit, nlaNumber, loc);
+                                 circuit, glblNumber, loc);
     if (!newNode)
       return None;
     newNodes.push_back(newNode.getValue());
@@ -1228,7 +1234,7 @@ static Optional<Attribute> scatterOMIRAnnotation(
 /// possible.
 bool circt::firrtl::scatterCustomAnnotations(
     llvm::StringMap<ArrayAttr> &annotationMap, CircuitOp circuit,
-    unsigned &annotationID, Location loc, size_t &nlaNumber) {
+    unsigned &annotationID, Location loc, size_t &glblNumber) {
   MLIRContext *context = circuit.getContext();
 
   // Exit if no anotations exist that target "~". Also ensure a spurious entry
@@ -1356,25 +1362,25 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
           if (!maybeSourceTarget)
             return false;
-          auto NLATargets = expandNonLocal(*maybeSourceTarget);
+          auto GlblTargets = expandNonLocal(*maybeSourceTarget);
           auto leafTarget = splitAndAppendTarget(
-              source, std::get<0>(NLATargets.back()), context);
-          FlatSymbolRefAttr nlaSym;
-          if (NLATargets.size() > 1) {
-            nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
-            source.append("circt.nonlocal", nlaSym);
+              source, std::get<0>(GlblTargets.back()), context);
+          FlatSymbolRefAttr glblSym;
+          if (GlblTargets.size() > 1) {
+            glblSym = buildGlbl(circuit, ++glblNumber, GlblTargets);
+            source.append("circt.nonlocal", glblSym);
           }
           source.append("type", StringAttr::get(context, "source"));
           newAnnotations[leafTarget.first].push_back(
               DictionaryAttr::get(context, source));
           addDontTouch(leafTarget.first, leafTarget.second);
 
-          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+          for (int i = 0, e = GlblTargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
-            pathmetadata.append("circt.nonlocal", nlaSym);
+            pathmetadata.append("circt.nonlocal", glblSym);
             pathmetadata.append("class",
                                 StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+            newAnnotations[std::get<0>(GlblTargets[i])].push_back(
                 DictionaryAttr::get(context, pathmetadata));
           }
 
@@ -1484,24 +1490,24 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
-        auto NLATargets = expandNonLocal(*canonTarget);
+        auto GlblTargets = expandNonLocal(*canonTarget);
         auto leafTarget =
-            splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
+            splitAndAppendTarget(foo, std::get<0>(GlblTargets.back()), context)
                 .first;
-        if (NLATargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, NLATargets);
+        if (GlblTargets.size() > 1) {
+          buildGlbl(circuit, ++glblNumber, GlblTargets);
           foo.append("circt.nonlocal",
                      FlatSymbolRefAttr::get(context, *canonTarget));
         }
         newAnnotations[leafTarget].push_back(DictionaryAttr::get(context, foo));
 
-        for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+        for (int i = 0, e = GlblTargets.size() - 1; i < e; ++i) {
           NamedAttrList pathmetadata;
           pathmetadata.append("circt.nonlocal",
                               FlatSymbolRefAttr::get(context, *canonTarget));
           pathmetadata.append("class",
                               StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(NLATargets[i])].push_back(
+          newAnnotations[std::get<0>(GlblTargets[i])].push_back(
               DictionaryAttr::get(context, pathmetadata));
         }
       }
@@ -1631,11 +1637,11 @@ bool circt::firrtl::scatterCustomAnnotations(
                         StringAttr::get(context, isSource ? "source" : "sink"));
 
           // Handle subfield and non-local targets.
-          auto NLATargets = expandNonLocal(*canonTarget);
+          auto GlblTargets = expandNonLocal(*canonTarget);
           auto leafTarget = splitAndAppendTarget(
-              fields, std::get<0>(NLATargets.back()), context);
-          if (NLATargets.size() > 1) {
-            buildNLA(circuit, ++nlaNumber, NLATargets);
+              fields, std::get<0>(GlblTargets.back()), context);
+          if (GlblTargets.size() > 1) {
+            buildGlbl(circuit, ++glblNumber, GlblTargets);
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
           }
@@ -1647,17 +1653,17 @@ bool circt::firrtl::scatterCustomAnnotations(
 
           // Keep track of the enclosing module.
           annotatedModules.insert(
-              (StringRef(std::get<0>(NLATargets.back())).split("|").first +
-               "|" + std::get<1>(NLATargets.back()))
+              (StringRef(std::get<0>(GlblTargets.back())).split("|").first +
+               "|" + std::get<1>(GlblTargets.back()))
                   .str());
 
-          // Annotate instances along the NLA path.
-          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+          // Annotate instances along the Glbl path.
+          for (int i = 0, e = GlblTargets.size() - 1; i < e; ++i) {
             NamedAttrList fields;
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
             fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+            newAnnotations[std::get<0>(GlblTargets[i])].push_back(
                 DictionaryAttr::get(context, fields));
           }
         }
@@ -1728,9 +1734,9 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
-        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto glblTargets = expandNonLocal(*canonTarget);
         auto leafTarget = splitAndAppendTarget(
-            fields, std::get<0>(nlaTargets.back()), context);
+            fields, std::get<0>(glblTargets.back()), context);
 
         // Add a don't touch annotation to whatever this annotation targets.
         addDontTouch(leafTarget.first, leafTarget.second);
@@ -1754,24 +1760,24 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
-        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto glblTargets = expandNonLocal(*canonTarget);
         auto leafTarget = splitAndAppendTarget(
-            fields, std::get<0>(nlaTargets.back()), context);
-        if (nlaTargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, nlaTargets);
+            fields, std::get<0>(glblTargets.back()), context);
+        if (glblTargets.size() > 1) {
+          buildGlbl(circuit, ++glblNumber, glblTargets);
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
         }
         newAnnotations[leafTarget.first].push_back(
             DictionaryAttr::get(context, fields));
 
-        // Annotate instances along the NLA path.
-        for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+        // Annotate instances along the Glbl path.
+        for (int i = 0, e = glblTargets.size() - 1; i < e; ++i) {
           NamedAttrList fields;
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
           fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
+          newAnnotations[std::get<0>(glblTargets[i])].push_back(
               DictionaryAttr::get(context, fields));
         }
       }
@@ -1780,7 +1786,7 @@ bool circt::firrtl::scatterCustomAnnotations(
     // Scatter trackers out from OMIR JSON.
     if (clazz == omirAnnoClass) {
       auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
-                                           circuit, nlaNumber, loc);
+                                           circuit, glblNumber, loc);
       if (!newAnno)
         return false;
       newAnnotations["~"].push_back(newAnno.getValue());

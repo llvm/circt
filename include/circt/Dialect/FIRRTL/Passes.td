@@ -29,6 +29,7 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
       "Ignore unknown annotations.">
   ];
+  let dependentDialects = ["hw::HWDialect"];
 }
 
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
@@ -48,6 +49,7 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
            "Concat all elements of the aggregate data into a single element.">
 
   ];
+  let dependentDialects = ["hw::HWDialect"];
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
@@ -112,6 +114,7 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
     Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
       "File to which emit seq meme metadata">
   ];
+  let dependentDialects = ["hw::HWDialect"];
 }
 
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {

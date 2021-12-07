@@ -16,6 +16,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -110,8 +112,8 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// Cached instance graph analysis.
   InstanceGraph *instanceGraph = nullptr;
 
-  /// Map of symbol name to NonLocalAnchor op.
-  llvm::StringMap<Operation *> nlaMap;
+  /// Map of symbol name to GlobalRef op.
+  llvm::StringMap<Operation *> glblRefMap;
 
   /// Boolean keeping track of any name changes.
   bool anythingChanged = false;
@@ -156,29 +158,33 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // referenced FModuleOp will be renamed later.
       auto newTarget = (prefix + getPrefix(target) + target.moduleName()).str();
       AnnotationSet instAnnos(instanceOp);
-      // If the instance has NonLocalAnchor, then update its module name also.
-      // There can be multiple NonLocalAnchors attached to the instance op.
+      // If the instance has GlobalRef, then update its module name also.
+      // There can be multiple GlobalRefs attached to the instance op.
 
       for (Annotation anno : instAnnos) {
         if (anno.isClass("circt.nonlocal"))
-          if (auto nla = anno.getMember("circt.nonlocal")) {
-            auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-            auto f = nlaMap.find(nlaName);
-            if (f == nlaMap.end())
-              instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
+          if (auto glblRef = anno.getMember("circt.nonlocal")) {
+            auto glblRefName = glblRef.cast<FlatSymbolRefAttr>().getValue();
+            auto f = glblRefMap.find(glblRefName);
+            if (f == glblRefMap.end())
+              instanceOp.emitError("cannot find GlobalRef :" + glblRefName);
             else {
-              auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
-              // Iterate over the modules of the NonLocalAnchor op, and update
+              auto glblRefOp = dyn_cast<hw::GlobalRef>(f->second);
+              // Iterate over the modules of the GlobalRef op, and update
               // it.
               SmallVector<Attribute, 4> newMods;
-              for (auto oldMod : nlaOp.modpath()) {
-                if (instanceOp.moduleNameAttr() ==
-                    oldMod.cast<FlatSymbolRefAttr>())
-                  newMods.push_back(FlatSymbolRefAttr::get(context, newTarget));
+              for (auto oldMod :
+                   glblRefOp.namepath().getAsRange<hw::InnerRefAttr>()) {
+                llvm::errs() << "\n instance mod:" << instanceOp.moduleName()
+                             << "  this mod::" << oldMod.getModule();
+                if (instanceOp.moduleName().equals(
+                        oldMod.getModule().getValue()))
+                  newMods.push_back(hw::InnerRefAttr::get(
+                      StringAttr::get(context, newTarget), oldMod.getName()));
                 else
-                  newMods.push_back(oldMod.cast<FlatSymbolRefAttr>());
+                  newMods.push_back(oldMod);
               }
-              nlaOp->setAttr("modpath", ArrayAttr::get(context, newMods));
+              glblRefOp->setAttr("namepath", ArrayAttr::get(context, newMods));
             }
           }
       }
@@ -310,9 +316,9 @@ void PrefixModulesPass::runOnOperation() {
   instanceGraph = &getAnalysis<InstanceGraph>();
   auto circuitOp = getOperation();
 
-  // Record all the NLA ops in the circt.
-  for (auto nla : circuitOp.body().getOps<NonLocalAnchor>())
-    nlaMap[nla.sym_name()] = nla;
+  // Record all the glblRef ops in the circt.
+  for (auto glblRef : circuitOp.body().getOps<hw::GlobalRef>())
+    glblRefMap[glblRef.sym_name()] = glblRef;
 
   // If the main module is prefixed, we have to update the CircuitOp.
   auto mainModule = instanceGraph->getTopLevelModule();
@@ -320,17 +326,18 @@ void PrefixModulesPass::runOnOperation() {
   if (!prefix.empty()) {
     auto newMainModuleName = ((prefix + circuitOp.name()).str());
     circuitOp.nameAttr(StringAttr::get(context, newMainModuleName));
-    // Now update all the NLAs that have the top level module symbol.
-    for (auto &n : nlaMap) {
-      auto nla = cast<NonLocalAnchor>(n.second);
-      auto oldMods = nla.modpath();
+    // Now update all the glblRefs that have the top level module symbol.
+    for (auto &n : glblRefMap) {
+      auto glblRef = cast<hw::GlobalRef>(n.second);
+      auto oldMods = glblRef.namepath();
       if (oldMods.empty())
         continue;
       SmallVector<Attribute, 4> newMods(oldMods.begin(), oldMods.end());
-      if (nla.modpath()[0].cast<FlatSymbolRefAttr>().getValue().equals(
-              mainModule.moduleName()))
-        newMods[0] = FlatSymbolRefAttr::get(context, newMainModuleName);
-      nla->setAttr("modpath", ArrayAttr::get(context, newMods));
+      auto iref = oldMods[0].cast<hw::InnerRefAttr>();
+      if (iref.getModule().getValue().equals(mainModule.moduleName()))
+        newMods[0] = hw::InnerRefAttr::get(
+            StringAttr::get(context, newMainModuleName), iref.getName());
+      glblRef->setAttr("namepath", ArrayAttr::get(context, newMods));
     }
   }
 

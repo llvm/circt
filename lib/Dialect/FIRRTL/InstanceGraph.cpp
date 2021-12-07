@@ -7,6 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -145,6 +148,71 @@ ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Operation *op) {
 
   absolutePathsCache.insert({op, pathList});
   return pathList;
+}
+
+unsigned
+InstancePathCache::getAllGlobalRefs(Operation *op, StringRef opName,
+                                    SmallVectorImpl<Attribute> &glblRefs) {
+  FModuleOp mod = op->getParentOfType<FModuleOp>();
+  assert(mod && "Operation does not have valid module parent");
+  auto circtOp = op->getParentOfType<CircuitOp>();
+  auto context = circtOp.getContext();
+  ArrayRef<InstancePath> pathList = getAbsolutePaths(mod);
+  SmallVector<Attribute> leafOpSymRefs;
+  auto glblName = "glblName_" + mod.getName().str() + "_" + opName.str();
+  auto builder = OpBuilder::atBlockBegin(circtOp.getBody());
+  CircuitNamespace currentCircuitNamespace(circtOp);
+  for (auto path : pathList) {
+    if (path.empty())
+      continue;
+    SmallVector<Attribute> namepath;
+    auto glblRefName = currentCircuitNamespace.newName(Twine(glblName));
+    auto symRefAttr =
+        FlatSymbolRefAttr::get(builder.getStringAttr(glblRefName));
+    glblRefs.push_back(symRefAttr);
+    auto glblSymRef = hw::GlobalRefAttr::get(context, symRefAttr);
+    leafOpSymRefs.push_back(glblSymRef);
+    for (InstanceOp instOp : path) {
+      namepath.push_back(hw::InnerRefAttr::getFromOperation(
+          instOp,
+          StringAttr::get(
+              context, getModuleNamespace(instOp->getParentOfType<FModuleOp>())
+                           .newName("inst")),
+          instOp->getParentOfType<FModuleOp>().getNameAttr()));
+      SmallVector<Attribute> instRefsList = {glblSymRef};
+      auto attrlist = instOp->getAttr("circt.globalRef");
+      if (attrlist) {
+        auto glblRefList =
+            attrlist.cast<ArrayAttr>()
+                .getValue()
+                .vec(); // in(), attrlist.cast<ArrayAttr>().end());
+        instRefsList.insert(instRefsList.end(), glblRefList.begin(),
+                            glblRefList.end()); // push_back(glblSymRef);
+        // instOp->setAttr("circt.globalRef", builder.getArrayAttr(
+        // glblRefList));
+      }
+      instOp->setAttr("circt.globalRef", builder.getArrayAttr(instRefsList));
+    }
+    namepath.push_back(hw::InnerRefAttr::getFromOperation(
+        op,
+        StringAttr::get(context, getModuleNamespace(mod).newName("memInst")),
+        mod.getNameAttr()));
+    builder.create<hw::GlobalRef>(builder.getUnknownLoc(),
+                                  builder.getStringAttr(glblRefName),
+                                  builder.getArrayAttr(namepath));
+  }
+  auto attrlist = op->getAttr("circt.globalRef");
+  auto numOfInstancePaths = leafOpSymRefs.size();
+  if (attrlist) {
+    auto glblRefList = attrlist.cast<ArrayAttr>()
+                           .getValue()
+                           .vec(); // in(), attrlist.cast<ArrayAttr>().end());
+    leafOpSymRefs.insert(leafOpSymRefs.end(), glblRefList.begin(),
+                         glblRefList.end());
+  }
+  op->setAttr("circt.globalRef", builder.getArrayAttr(leafOpSymRefs));
+
+  return numOfInstancePaths;
 }
 
 InstancePath InstancePathCache::appendInstance(InstancePath path,

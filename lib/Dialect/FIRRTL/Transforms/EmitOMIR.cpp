@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -41,7 +42,7 @@ struct Tracker {
   /// The operation onto which this tracker was annotated.
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
-  NonLocalAnchor nla;
+  hw::GlobalRef glbl;
 };
 
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
@@ -121,8 +122,8 @@ private:
   /// collected.
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, unsigned> symbolIndices;
-  /// Temporary `firrtl.nla` operations to be deleted at the end of the pass.
-  SmallVector<NonLocalAnchor> removeTempNLAs;
+  /// Temporary `firrtl.glbl` operations to be deleted at the end of the pass.
+  SmallVector<hw::GlobalRef> removeTempGlbls;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 };
 } // namespace
@@ -171,7 +172,7 @@ void EmitOMIRPass::runOnOperation() {
   trackers.clear();
   symbols.clear();
   symbolIndices.clear();
-  removeTempNLAs.clear();
+  removeTempGlbls.clear();
   moduleNamespaces.clear();
   CircuitOp circuitOp = getOperation();
 
@@ -179,7 +180,7 @@ void EmitOMIRPass::runOnOperation() {
   // all the actual `OMIRAnnotation`s that need processing and emission, as well
   // as an optional `OMIRFileAnnotation` that overrides the default OMIR output
   // file. Also while we're at it, keep track of all OMIR nodes that qualify as
-  // an SRAM and that require their trackers to be turned into NLAs starting at
+  // an SRAM and that require their trackers to be turned into Glbls starting at
   // the root of the hierarchy.
   SmallVector<ArrayRef<Attribute>> annoNodes;
   DenseSet<Attribute> sramIDs;
@@ -244,9 +245,9 @@ void EmitOMIRPass::runOnOperation() {
         anyFailures = true;
         return true;
       }
-      if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
-        tracker.nla =
-            dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
+      if (auto glblSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+        tracker.glbl =
+            dyn_cast_or_null<hw::GlobalRef>(symtbl->lookup(glblSym.getAttr()));
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
@@ -282,19 +283,20 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
-  // Delete the temporary NLAs. This requires us to visit all the nodes along
-  // the NLA's path and remove `circt.nonlocal` annotations referring to the
-  // NLA.
-  for (auto nla : removeTempNLAs) {
-    LLVM_DEBUG(llvm::dbgs() << "Removing " << nla << "\n");
-    for (auto modName : nla.modpath().getAsRange<FlatSymbolRefAttr>()) {
+  // Delete the temporary Glbls. This requires us to visit all the nodes along
+  // the Glbl's path and remove `circt.nonlocal` annotations referring to the
+  // Glbl.
+  for (auto glbl : removeTempGlbls) {
+    LLVM_DEBUG(llvm::dbgs() << "Removing " << glbl << "\n");
+    for (auto innerRef : glbl.namepath().getAsRange<hw::InnerRefAttr>()) {
+      auto modName = innerRef.getModule();
       Operation *mod = symtbl->lookup(modName.getValue());
       mod->walk([&](InstanceOp instOp) {
         AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
           auto match =
               anno.isClass("circt.nonlocal") &&
               anno.getMember<FlatSymbolRefAttr>("circt.nonlocal").getAttr() ==
-                  nla.sym_nameAttr();
+                  glbl.sym_nameAttr();
           if (match)
             LLVM_DEBUG(llvm::dbgs()
                        << "- Removing " << anno.getDict() << " from " << modName
@@ -303,9 +305,9 @@ void EmitOMIRPass::runOnOperation() {
         });
       });
     }
-    nla->erase();
+    glbl->erase();
   }
-  removeTempNLAs.clear();
+  removeTempGlbls.clear();
 
   // Emit the OMIR JSON as a verbatim op.
   auto builder = OpBuilder(circuitOp);
@@ -318,22 +320,22 @@ void EmitOMIRPass::runOnOperation() {
   verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
 }
 
-/// Make a tracker absolute by adding an NLA to it which starts at the root
+/// Make a tracker absolute by adding an Glbl to it which starts at the root
 /// module of the circuit. Generates an error if any module along the path is
 /// instantiated multiple times.
 void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   auto *context = &getContext();
   auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
 
-  // Pick a name for the NLA that doesn't collide with anything.
+  // Pick a name for the Glbl that doesn't collide with anything.
   auto opName = tracker.op->getAttrOfType<StringAttr>("name");
-  auto nlaName = circuitNamespace->newName("omir_nla_" + opName.getValue());
+  auto glblName = circuitNamespace->newName("omir_glbl_" + opName.getValue());
 
-  // Assemble the NLA annotation to be put on all the operations participating
+  // Assemble the Glbl annotation to be put on all the operations participating
   // in the path.
-  auto nlaAttr = builder.getDictionaryAttr({
+  auto glblAttr = builder.getDictionaryAttr({
       builder.getNamedAttr("circt.nonlocal",
-                           FlatSymbolRefAttr::get(context, nlaName)),
+                           FlatSymbolRefAttr::get(context, glblName)),
       builder.getNamedAttr("class", StringAttr::get(context, "circt.nonlocal")),
   });
 
@@ -357,25 +359,27 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     return;
   }
 
-  // Assemble the module and name path for the NLA. Also attach an NLA reference
-  // annotation to each instance participating in the path.
-  SmallVector<Attribute> modpath, namepath;
+  // Assemble the module and name path for the Glbl. Also attach an Glbl
+  // reference annotation to each instance participating in the path.
+  SmallVector<Attribute> namepath;
   auto addToPath = [&](Operation *op, StringAttr name) {
     AnnotationSet annos(op);
-    annos.addAnnotations(nlaAttr);
+    annos.addAnnotations(glblAttr);
     annos.applyToOperation(op);
-    modpath.push_back(FlatSymbolRefAttr::get(op->getParentOfType<FModuleOp>()));
-    namepath.push_back(name);
+    // modpath.push_back(FlatSymbolRefAttr::get(op->getParentOfType<FModuleOp>()));
+    // namepath.push_back(name);
+    namepath.push_back(hw::InnerRefAttr::get(
+        op->getParentOfType<FModuleOp>().getNameAttr(), name));
   };
   for (InstanceOp inst : paths[0])
     addToPath(inst, inst.nameAttr());
   addToPath(tracker.op, opName);
 
-  // Add the NLA to the tracker and mark it to be deleted later.
-  tracker.nla = builder.create<NonLocalAnchor>(
-      builder.getUnknownLoc(), builder.getStringAttr(nlaName),
-      builder.getArrayAttr(modpath), builder.getArrayAttr(namepath));
-  removeTempNLAs.push_back(tracker.nla);
+  // Add the Glbl to the tracker and mark it to be deleted later.
+  tracker.glbl = builder.create<hw::GlobalRef>(builder.getUnknownLoc(),
+                                               builder.getStringAttr(glblName),
+                                               builder.getArrayAttr(namepath));
+  removeTempGlbls.push_back(tracker.glbl);
 }
 
 /// Emit a source locator into a string, for inclusion in the `info` field of
@@ -691,13 +695,13 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   target.push_back('|');
 
   // Serialize the local or non-local module/instance hierarchy path.
-  if (tracker.nla) {
+  if (tracker.glbl) {
     bool notFirst = false;
     hw::InnerRefAttr instName;
-    for (auto modAndName : llvm::zip(tracker.nla.modpath().getValue(),
-                                     tracker.nla.namepath().getValue())) {
-      auto symAttr = std::get<0>(modAndName).cast<FlatSymbolRefAttr>();
-      auto nameAttr = std::get<1>(modAndName).cast<StringAttr>();
+    for (auto innerRef :
+         tracker.glbl.namepath().getAsRange<hw::InnerRefAttr>()) {
+      auto symAttr = innerRef.getModule();
+      auto nameAttr = innerRef.getName();
       Operation *module = symtbl->lookup(symAttr.getValue());
       assert(module);
       if (notFirst)
@@ -716,7 +720,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
         if (instOp.nameAttr() != nameAttr)
           return;
         LLVM_DEBUG(llvm::dbgs()
-                   << "Marking NLA-participating instance " << nameAttr
+                   << "Marking Glbl-participating instance " << nameAttr
                    << " in module " << symAttr << " as dont-touch\n");
         AnnotationSet::addDontTouch(instOp);
         instName = getInnerRefTo(instOp);
