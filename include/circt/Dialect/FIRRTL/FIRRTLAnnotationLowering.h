@@ -37,8 +37,10 @@ public:
     FIRRTLType t;
     if (auto mod = dyn_cast<FModuleLike>(op))
       t = mod.getPortType(portNum);
+    else if (auto inst = dyn_cast<InstanceOp>(op))
+      t = inst.getResult(portNum).getType().cast<FIRRTLType>();
     else 
-    t = op->getResultTypes()[0].cast<FIRRTLType>();
+      t = op->getResultTypes()[0].cast<FIRRTLType>();
 
     return t.getSubTypeByFieldID(
         fieldIdx);

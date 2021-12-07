@@ -737,19 +737,22 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {tryResolve, applyGCMemTap}},
     {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
      {stdResolve, applyGCSigDriver}},
-//    {"sifive.enterprise.grandcentral.GrandCentralView",
-//     {stdResolve, applyGCView}},
-//    {"SerializedViewAnnotation", {stdResolve, applyGCView}},
+    //    {"sifive.enterprise.grandcentral.GrandCentralView",
+    //     {stdResolve, applyGCView}},
+    //    {"SerializedViewAnnotation", {stdResolve, applyGCView}},
     {
         "sifive.enterprise.grandcentral.ViewAnnotation",
-        {stdResolve, applyGCView},
+        {noResolve, applyGCView},
     },
     {
         "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
         {stdResolve, applyModRep},
     },
-         {"firrtl.transforms.DontTouchAnnotation",
-          {stdResolve, applyDontTouch}},
+    {"firrtl.transforms.BlackBoxInlineAnno", {stdResolve, applyWithoutTarget<>}},
+     {
+        "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+        {noResolve, applyWithoutTarget<>}},
+    {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
 
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
