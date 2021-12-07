@@ -406,68 +406,50 @@ static std::string getSubModuleName(Operation *oldOp) {
   return subModuleName;
 }
 
+static std::pair<ArrayRef<Value>, ArrayRef<Value>>
+splitArrayRef(ArrayRef<Value> ref, unsigned pos) {
+  return {ref.take_front(pos), ref.drop_front(pos)};
+}
+
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
 /// using a binary-encoded select value.
 static Value createMuxTree(ArrayRef<Value> inputs, Value select,
                            Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
-  // Variables used to control iteration and select the appropriate bit.
-  size_t numInputs = inputs.size();
-  size_t numLayers = getNumIndexBits(numInputs);
-  size_t selectIdx = 0;
-
-  // Keep a vector of ValueRanges to represent the mux tree. Each value in the
-  // range is the output of a mux.
-  SmallVector<SmallVector<Value, 4>, 2> muxes;
-
-  // Helpers for repetetive calls.
+  Type muxDataType = inputs[0].getType();
   auto createBits = [&](Value select, size_t idx) {
     return rewriter.create<BitsPrimOp>(insertLoc, select, idx, idx);
   };
 
-  auto createMux = [&](Value select, ArrayRef<Value> operands, size_t idx) {
-    return rewriter.create<MuxPrimOp>(insertLoc, operands[0].getType(), select,
-                                      operands[idx + 1], operands[idx]);
-  };
+  std::function<Value(ArrayRef<Value>)> buildTreeRec =
+      [&](ArrayRef<Value> operands) {
+        assert(!operands.empty());
+        Value retVal;
+        // Base case
+        if (operands.size() == 1)
+          retVal = operands.front();
+        else {
+          // Mux case. In each layer we take a look at the significant bit wrt.
+          // the # of operands provided, and split the operands at the log2
+          // boundary. By doing so, every subsequent layer can the ignore the
+          // MSBs considered by its preceding layer.
+          unsigned selectBit = llvm::Log2_64_Ceil(operands.size()) - 1;
+          // Split the operands at the selected index
+          unsigned splitIdx = 1 << selectBit;
 
-  // Create an op to extract the least significant select bit.
-  auto selectBit = createBits(select, selectIdx);
+          auto [front, back] = splitArrayRef(operands, splitIdx);
+          auto lowerTree = buildTreeRec(front);
+          auto upperTree = buildTreeRec(back);
+          auto layerSelect = createBits(select, selectBit);
+          retVal = rewriter
+                       .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect,
+                                          upperTree, lowerTree)
+                       .result();
+        }
+        return retVal;
+      };
 
-  // Create the first layer of muxes for the inputs.
-  auto &initialValues = muxes.emplace_back();
-  for (size_t i = 0; i < numInputs - 1; i += 2)
-    initialValues.push_back(createMux(selectBit, inputs, i));
-
-  // If the number of inputs is odd, we need to add the last input as well.
-  if (numInputs % 2)
-    initialValues.push_back(inputs[numInputs - 1]);
-
-  // Create any inner layers of muxes.
-  for (size_t layer = 1; layer < numLayers; ++layer, ++selectIdx) {
-    // Get the previous layer of muxes.
-    auto &prevLayer = muxes[layer - 1];
-    size_t prevSize = prevLayer.size();
-
-    // Create an op to extract the select bit.
-    selectBit = createBits(select, selectIdx);
-
-    // Create this layer of muxes.
-    auto &values = muxes.emplace_back();
-    for (size_t i = 0; i < prevSize - 1; i += 2)
-      values.push_back(createMux(selectBit, prevLayer, i));
-
-    // If the number of values in the previous layer is odd, we need to add the
-    // last value as well.
-    if (prevSize % 2)
-      values.push_back(prevLayer[prevSize - 1]);
-
-    muxes.push_back(values);
-  }
-
-  // Get the last layer of muxes, which has a single value, and return it.
-  auto &lastLayer = muxes.back();
-  assert(lastLayer.size() == 1 && "mux tree didn't result in a single value");
-  return lastLayer[0];
+  return buildTreeRec(inputs);
 }
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals

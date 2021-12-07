@@ -73,9 +73,9 @@ handshake.func @test_mux_3way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // CHECK: %[[RESULT:.+]] = firrtl.subfield %[[VAL_9]](2)
 // CHECK: %[[MUX1:.+]] = firrtl.mux({{.+}}, %[[DATA2]], %[[DATA1]])
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA4]], %[[DATA3]])
+// CHECK: %[[MUX5:.+]] = firrtl.mux({{.+}}, %[[MUX2]], %[[MUX1]])
 // CHECK: %[[MUX3:.+]] = firrtl.mux({{.+}}, %[[DATA6]], %[[DATA5]])
 // CHECK: %[[MUX4:.+]] = firrtl.mux({{.+}}, %[[DATA8]], %[[DATA7]])
-// CHECK: %[[MUX5:.+]] = firrtl.mux({{.+}}, %[[MUX2]], %[[MUX1]])
 // CHECK: %[[MUX6:.+]] = firrtl.mux({{.+}}, %[[MUX4]], %[[MUX3]])
 // CHECK: %[[MUX7:.+]] = firrtl.mux({{.+}}, %[[MUX6]], %[[MUX5]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX7]]
@@ -105,6 +105,7 @@ handshake.func @test_mux_5way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
   return %0, %arg6 : index, none
 }
 
+
 // -----
 
 // Test a mux tree with multiple layers and a partial first layer (even).
@@ -119,9 +120,9 @@ handshake.func @test_mux_5way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // CHECK: %[[RESULT:.+]] = firrtl.subfield %[[VAL_7]](2)
 // CHECK: %[[MUX1:.+]] = firrtl.mux({{.+}}, %[[DATA2]], %[[DATA1]])
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA4]], %[[DATA3]])
-// CHECK: %[[MUX3:.+]] = firrtl.mux({{.+}}, %[[DATA6]], %[[DATA5]])
-// CHECK: %[[MUX4:.+]] = firrtl.mux({{.+}}, %[[MUX2]], %[[MUX1]])
-// CHECK: %[[MUX5:.+]] = firrtl.mux({{.+}}, %[[MUX3]], %[[MUX4]])
+// CHECK: %[[MUX3:.+]] = firrtl.mux({{.+}}, %[[MUX2]], %[[MUX1]])
+// CHECK: %[[MUX4:.+]] = firrtl.mux({{.+}}, %[[DATA6]], %[[DATA5]])
+// CHECK: %[[MUX5:.+]] = firrtl.mux({{.+}}, %[[MUX4]], %[[MUX3]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX5]]
 handshake.func @test_mux_6way(%arg0: index, %arg1: index, %arg2: index, %arg3: index, %arg4: index, %arg5: index, %arg6: index, %arg7: none, ...) -> (index, none) {
   %0 = mux %arg0 [%arg1, %arg2, %arg3, %arg4, %arg5, %arg6] : index, index
