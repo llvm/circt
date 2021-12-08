@@ -82,7 +82,7 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
 }
 
 static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
-                               Value clock, Value data) {
+                               Value clock, Value data, Value gate = {}) {
   if (!stages)
     return data;
 
@@ -90,8 +90,13 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
     auto reg = b.create<sv::RegOp>(data.getType());
 
     // pipeline stage
-    b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock,
-                           [&]() { b.create<sv::PAssignOp>(reg, data); });
+    b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
+      if (gate) {
+        b.create<sv::IfOp>(gate, [&]() { b.create<sv::PAssignOp>(reg, data); });
+      } else {
+        b.create<sv::PAssignOp>(reg, data);
+      }
+    });
     data = b.create<sv::ReadInOutOp>(reg);
   }
 
@@ -120,8 +125,17 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
     // Add pipeline stages
-    en = addPipelineStages(b, mem.readLatency, clock, en);
-    addr = addPipelineStages(b, mem.readLatency, clock, addr);
+    if (ignoreReadEnableMem) {
+      for (size_t j = 0, e = mem.readLatency; j != e; ++j) {
+        auto enLast = en;
+        if (j < e - 1)
+          en = addPipelineStages(b, 1, clock, en);
+        addr = addPipelineStages(b, 1, clock, addr, enLast);
+      }
+    } else {
+      en = addPipelineStages(b, mem.readLatency, clock, en);
+      addr = addPipelineStages(b, mem.readLatency, clock, addr);
+    }
 
     // Read Logic
     Value rdata =
