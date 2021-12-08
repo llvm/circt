@@ -445,6 +445,13 @@ sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@Ver
 // CHECK: VERB: module.extern symB `bar`
 
 
+// Should be able to nest interpolated symbols in extra braces
+hw.module @CheckNestedBracesSymbol() { hw.output }
+sv.verbatim "{{0}} {{{0}}}" {symbols = [@CheckNestedBracesSymbol]}
+// CHECK-LABEL: module CheckNestedBracesSymbol();
+// CHECK: CheckNestedBracesSymbol {CheckNestedBracesSymbol}
+
+
 sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
 // CHECK-LABL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
