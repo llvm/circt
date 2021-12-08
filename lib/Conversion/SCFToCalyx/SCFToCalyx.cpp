@@ -1486,19 +1486,23 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](staticlogic::PipelineRegisterOp op) {
+      // Condition registers are handled in BuildWhileGroups.
+      auto *parent = op->getParentOp();
+      auto stage = dyn_cast<staticlogic::PipelineStageOp>(parent);
+      if (!stage)
+        return;
+
+      // Create a register for each stage.
       for (size_t i = 0; i < op.getNumOperands(); ++i) {
         Value value = op.getOperand(i);
         Type resultType = value.getType();
         assert(resultType.isa<IntegerType>() &&
                "unsupported pipeline result type");
+        auto name = SmallString<20>("stage_");
+        name += std::to_string(stage.getStageNumber());
+        name += "_register_";
+        name += std::to_string(i);
         unsigned width = resultType.getIntOrFloatBitWidth();
-        auto *parent = op->getParentOp();
-        std::string prefix;
-        if (isa<staticlogic::PipelineWhileOp>(parent))
-          prefix = "condition_";
-        else if (auto stage = dyn_cast<staticlogic::PipelineStageOp>(parent))
-          prefix = "stage_" + std::to_string(stage.getStageNumber()) + "_";
-        std::string name = prefix + "register_" + std::to_string(i);
         auto reg = createReg(getComponentState(), rewriter, value.getLoc(),
                              name, width);
         value.replaceAllUsesWith(reg.out());
