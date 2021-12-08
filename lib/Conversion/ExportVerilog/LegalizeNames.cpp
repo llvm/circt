@@ -119,7 +119,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 /// keywords or themselves.  If so, add the replacement names to
 /// globalNameTable.
 void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
-  auto ctxt = module.getContext();
+  MLIRContext *ctxt = module.getContext();
   // If the module's symbol itself conflicts, then set a "verilogName" attribute
   // on the module to reflect the name we need to use.
   StringRef oldName = module.getName();
