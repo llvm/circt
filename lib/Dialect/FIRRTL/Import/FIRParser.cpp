@@ -14,6 +14,7 @@
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "../AnnotationDetails.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -118,6 +119,8 @@ static bool fromJSON(json::Value &value,
   }
 
   // Build an array of annotations.
+  SmallVector<Attribute> omnodes;
+
   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
     auto object = (*array)[i].getAsObject();
     auto p = path.index(i);
@@ -127,99 +130,108 @@ static bool fromJSON(json::Value &value,
       return false;
     }
 
-    // Build up the Attribute to represent the Annotation
-    NamedAttrList metadata;
+    if (isOMIR) {
 
-    for (auto field : *object) {
-      if (isOMIR) {
+      // Manually built up OMNode.
+      NamedAttrList omnode;
 
-        // Validate that this looks like an OMNode.  This should have three
-        // fields:
-        //   - "info": String
-        //   - "id": String that starts with "OMID:"
-        //   - "fields": Array<Object>
-        // Fields is optional and is a dictionary encoded as an array of
-        // objects:
-        //   - "info": String
-        //   - "name": String
-        //   - "value": JSON
-        // The dictionary is keyed by the "name" member and the array of fields
-        // is guaranteed to not have collisions of the "name" key.
-        auto maybeInfo = object->getString("info");
-        if (!maybeInfo) {
-          p.report(
-              "OMNode missing mandatory member \"info\" with type \"string\"");
-          return false;
-        }
-        auto maybeID = object->getString("id");
-        if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
-          p.report(
-              "OMNode missing mandatory member \"id\" with type \"string\" "
-              "that starts with \"OMID:\"");
-          return false;
-        }
-        auto *maybeFields = object->get("fields");
-        if (maybeFields && !maybeFields->getAsArray()) {
-          p.report("OMNode has \"fields\" member with incorrect type (expected "
-                   "\"array\")");
-          return false;
-        }
-        Attribute fields;
-        if (!maybeFields)
-          fields = DictionaryAttr::get(context, {});
-        else {
-          auto array = *maybeFields->getAsArray();
-          NamedAttrList fieldAttrs;
-          for (size_t i = 0, e = array.size(); i != e; ++i) {
-            auto *field = array[i].getAsObject();
-            auto pI = p.field("fields").index(i);
-            if (!field) {
-              pI.report("OMNode has field that is not an \"object\"");
-              return false;
-            }
-            auto maybeInfo = field->getString("info");
-            if (!maybeInfo) {
-              pI.report("OMField missing mandatory member \"info\" with type "
-                        "\"string\"");
-              return false;
-            }
-            auto maybeName = field->getString("name");
-            if (!maybeName) {
-              pI.report("OMField missing mandatory member \"name\" with type "
-                        "\"string\"");
-              return false;
-            }
-            auto *maybeValue = field->get("value");
-            if (!maybeValue) {
-              pI.report("OMField missing mandatory member \"value\"");
-              return false;
-            }
-            NamedAttrList values;
-            values.append("info",
-                          StringAttr::get(context, maybeInfo.getValue()));
-            values.append("value", convertJSONToAttribute(context, *maybeValue,
-                                                          pI.field("value")));
-            fieldAttrs.append(maybeName.getValue(),
-                              DictionaryAttr::get(context, values));
-          }
-          fields = DictionaryAttr::get(context, fieldAttrs);
-        }
-
-        metadata.append("info", StringAttr::get(context, maybeInfo.getValue()));
-        metadata.append("id", convertJSONToAttribute(
-                                  context, *object->get("id"), p.field("id")));
-        metadata.append("fields", fields);
-      } else {
-      auto value = convertJSONToAttribute(context, field.second, p);
-      if (!value) {
-        p.report("Failed to convert JSON to attribte");
+      // Validate that this looks like an OMNode.  This should have three
+      // fields:
+      //   - "info": String
+      //   - "id": String that starts with "OMID:"
+      //   - "fields": Array<Object>
+      // Fields is optional and is a dictionary encoded as an array of objects:
+      //   - "info": String
+      //   - "name": String
+      //   - "value": JSON
+      // The dictionary is keyed by the "name" member and the array of fields is
+      // guaranteed to not have collisions of the "name" key.
+      auto maybeInfo = object->getString("info");
+      if (!maybeInfo) {
+        p.report(
+            "OMNode missing mandatory member \"info\" with type \"string\"");
         return false;
       }
-      metadata.append(field.first, value);
-    }
-    }
+      auto maybeID = object->getString("id");
+      if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
+        p.report("OMNode missing mandatory member \"id\" with type \"string\" "
+                 "that starts with \"OMID:\"");
+        return false;
+      }
+      auto *maybeFields = object->get("fields");
+      if (maybeFields && !maybeFields->getAsArray()) {
+        p.report("OMNode has \"fields\" member with incorrect type (expected "
+                 "\"array\")");
+        return false;
+      }
+      Attribute fields;
+      if (!maybeFields)
+        fields = DictionaryAttr::get(context, {});
+      else {
+        auto array = *maybeFields->getAsArray();
+        NamedAttrList fieldAttrs;
+        for (size_t i = 0, e = array.size(); i != e; ++i) {
+          auto *field = array[i].getAsObject();
+          auto pI = p.field("fields").index(i);
+          if (!field) {
+            pI.report("OMNode has field that is not an \"object\"");
+            return false;
+          }
+          auto maybeInfo = field->getString("info");
+          if (!maybeInfo) {
+            pI.report("OMField missing mandatory member \"info\" with type "
+                      "\"string\"");
+            return false;
+          }
+          auto maybeName = field->getString("name");
+          if (!maybeName) {
+            pI.report("OMField missing mandatory member \"name\" with type "
+                      "\"string\"");
+            return false;
+          }
+          auto *maybeValue = field->get("value");
+          if (!maybeValue) {
+            pI.report("OMField missing mandatory member \"value\"");
+            return false;
+          }
+          NamedAttrList values;
+          values.append("info", StringAttr::get(context, maybeInfo.getValue()));
+          values.append("value", convertJSONToAttribute(context, *maybeValue,
+                                                        pI.field("value")));
+          fieldAttrs.append(maybeName.getValue(),
+                            DictionaryAttr::get(context, values));
+        }
+        fields = DictionaryAttr::get(context, fieldAttrs);
+      }
 
-    attrs.push_back(DictionaryAttr::get(context, metadata));
+      omnode.append("info", StringAttr::get(context, maybeInfo.getValue()));
+      omnode.append("id", convertJSONToAttribute(context, *object->get("id"),
+                                                 p.field("id")));
+      omnode.append("fields", fields);
+      omnodes.push_back(DictionaryAttr::get(context, omnode));
+    } else {
+      // Build up the Attribute to represent the Annotation
+      NamedAttrList metadata;
+
+      for (auto field : *object) {
+        if (auto value = convertJSONToAttribute(context, field.second, p)) {
+          metadata.append(field.first, value);
+          continue;
+        }
+        return false;
+      }
+
+      attrs.push_back(DictionaryAttr::get(context, metadata));
+    }
+  }
+
+  if (isOMIR) {
+    NamedAttrList omirAnnoFields;
+    omirAnnoFields.append("class", StringAttr::get(context, omirAnnoClass));
+    omirAnnoFields.append("nodes",
+                          convertJSONToAttribute(context, value, path));
+
+    attrs.push_back(DictionaryAttr::get(context, omirAnnoFields));
   }
 
   return true;

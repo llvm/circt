@@ -13,11 +13,13 @@ circuit test_mod : %[[{"a": "a", "class": "circt.test", "target": "~"}]]
 
 ; MLIR: firrtl.circuit "test_mod"
 
-; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"
-; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
-; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
-; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
+; ANNOTATIONS-LABEL: firrtl.circuit "test_mod" attributes {raw_annotations = 
 ; ANNOTATIONS-SAME: a = "a"
+; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
+; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation"
+; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
+; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
 
 ; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
 ; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)
@@ -95,10 +97,6 @@ circuit test_mod : %[[{"a": "a", "class": "circt.test", "target": "~"}]]
 ; MLIR-NEXT:    firrtl.connect %flipFlop_a_d, %a : !firrtl.uint<1>, !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.connect %c, %flipFlop_a_q : !firrtl.uint<1>, !firrtl.uint<1>
 ; MLIR-NEXT:  }
-
-; ANNOTATIONS-LABEL: firrtl.module @test_mod
-; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
-; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
 
 ; VERILOG-LABEL: module test_mod(
 ; VERILOG-NEXT:    input        clock, a,
