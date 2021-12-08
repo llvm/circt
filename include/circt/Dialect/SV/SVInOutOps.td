@@ -190,7 +190,7 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
   let results = (outs InOutType:$result);
 
   let assemblyFormat =
-    "$input `(` $field `)` attr-dict `:` type($input)";
+    "$input `[` $field `]` attr-dict `:` type($input)";
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.

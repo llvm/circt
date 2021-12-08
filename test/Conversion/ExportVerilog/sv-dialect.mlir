@@ -430,7 +430,7 @@ hw.module @struct_field_inout1(%a : !hw.inout<struct<b: i1>>) {
   // CHECK-EMPTY:
   // CHECK-NEXT: assign a.b = 1'h1;
   %true = hw.constant true
-  %0 = sv.struct_field_inout %a("b") : !hw.inout<struct<b: i1>>
+  %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: i1>>
   sv.assign %0, %true : i1
 }
 
@@ -440,8 +440,8 @@ hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
   // CHECK-EMPTY:
   // CHECK-NEXT: assign a.b.c = 1'h1;
   %true = hw.constant true
-  %0 = sv.struct_field_inout %a("b") : !hw.inout<struct<b: !hw.struct<c: i1>>>
-  %1 = sv.struct_field_inout %0("c") : !hw.inout<struct<c: i1>>
+  %0 = sv.struct_field_inout %a["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>
+  %1 = sv.struct_field_inout %0["c"] : !hw.inout<struct<c: i1>>
   sv.assign %1, %true : i1
 }
 
