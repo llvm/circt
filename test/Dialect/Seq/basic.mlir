@@ -38,7 +38,11 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   // SV:   sv.passign [[REG4]], %s : !hw.struct<foo: i32>
   // SV: }
 
-  seq.compreg sym @reg1 %i, %clk : i32
-  // CHECK: seq.compreg sym @reg1
-  // SV: sv.reg sym @reg1
+  %bar = seq.compreg sym @reg1 %i, %clk : i32
+  seq.compreg sym @reg2 %i, %clk : i32
+  // CHECK: %bar = seq.compreg sym @reg1
+  // CHECK: seq.compreg sym @reg2
+
+  // SV: %bar = sv.reg sym @reg1
+  // SV: sv.reg sym @reg2
 }
