@@ -1179,6 +1179,27 @@ static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
+// StructFieldInOutOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructFieldInOutOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto field = attrs.get("field");
+  if (!field)
+    return failure();
+  auto structType =
+      getInOutElementType(operands[0].getType()).cast<hw::StructType>();
+  auto resultType = structType.getFieldType(field.cast<StringAttr>());
+  if (!resultType)
+    return failure();
+
+  results.push_back(hw::InOutType::get(resultType));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Other ops.
 //===----------------------------------------------------------------------===//
 
