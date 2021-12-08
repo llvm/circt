@@ -210,7 +210,7 @@ void InnerRefAttr::print(AsmPrinter &p) const {
 InnerRefAttr InnerRefAttr::getFromOperation(mlir::Operation *op,
                                             mlir::StringAttr symName,
                                             mlir::StringAttr moduleName) {
-  auto attrName = "inner_sym";
+  char attrName[] = "inner_sym";
   auto attr = op->getAttrOfType<StringAttr>(attrName);
   if (!attr) {
     attr = symName;
