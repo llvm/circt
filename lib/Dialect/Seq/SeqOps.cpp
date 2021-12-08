@@ -22,6 +22,12 @@ using namespace seq;
 
 ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
+
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    StringAttr innerSym;
+    parser.parseSymbolName(innerSym, "innerSym", result.attributes);
+  }
+
   SmallVector<OpAsmParser::OperandType, 4> operands;
   if (parser.parseOperandList(operands))
     return failure();
@@ -68,11 +74,17 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
+  SmallVector<StringRef> elidedAttrs;
+  if (reg.innerSym().hasValue()) {
+    elidedAttrs.push_back("innerSym");
+    p << ' ' << "sym ";
+    p.printSymbolName(*reg.innerSym());
+  }
+
   p << ' ' << reg.input() << ", " << reg.clk();
   if (reg.reset())
     p << ", " << reg.reset() << ", " << reg.resetValue() << ' ';
 
-  SmallVector<StringRef> elidedAttrs;
   // Determine if 'name' can be elided.
   if (reg.name().empty()) {
     elidedAttrs.push_back("name");

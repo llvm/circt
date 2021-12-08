@@ -59,6 +59,11 @@ addressing, meaning that this operation sets / reads the entire value.
 - **reset**: Signal to set the state to 'resetValue'. Optional.
 - **resetValue**: A value which the state is set to upon reset. Required iff
 'reset' is present.
+- **name**: A name for the register, defaults to `""`. Inferred from the textual
+SSA value name, or passed explicitly in builder APIs. The name will be passed to
+the `sv.reg` during lowering.
+- **innerSym**: An optional symbol to refer to the register. The symbol will be
+passed to the `sv.reg` during lowering if present.
 
 ```mlir
 %q = seq.compreg %input, %clk [, %reset, %resetValue ] : $type(input)
