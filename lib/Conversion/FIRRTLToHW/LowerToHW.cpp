@@ -1110,7 +1110,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
-  void initializeRegister(Value reg, Value resetSignal);
+  void initializeRegister(Value reg);
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
@@ -2106,7 +2106,7 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
   randomizePrologEmitted = true;
 }
 
-void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
+void FIRRTLLowering::initializeRegister(Value reg) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
   // VerbatimExprSEOp.
@@ -2185,13 +2185,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       circuitState.used_RANDOMIZE_REG_INIT = 1;
-      addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() {
-        if (resetSignal) {
-          addIfProceduralBlock(resetSignal, {}, [&]() { randomInit(); });
-        } else {
-          randomInit();
-        }
-      });
+      addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() { randomInit(); });
     });
   });
 }
@@ -2213,7 +2207,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
-  initializeRegister(regResult, Value());
+  initializeRegister(regResult);
 
   return success();
 }
@@ -2265,7 +2259,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
                      ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
                      resetSignal, std::function<void()>(), resetFn);
   }
-  initializeRegister(regResult, resetSignal);
+  initializeRegister(regResult);
   return success();
 }
 
