@@ -111,10 +111,6 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
 }
 
 static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
-  // get desired cycle time from test case
-  if (auto attr = func->getAttrOfType<FloatAttr>("cycletime"))
-    prob.setCycleTime(attr.getValueAsDouble());
-
   // patch the default operator type to have zero-delay
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setIncomingDelay(unitOpr, 0.0f);

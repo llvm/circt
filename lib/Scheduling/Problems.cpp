@@ -161,12 +161,6 @@ LogicalResult CyclicProblem::verify() {
 // ChainingProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult ChainingProblem::checkCycleTime() {
-  if (!getCycleTime() || *getCycleTime() <= 0.0f)
-    return getContainingOp()->emitError("Invalid cycle time");
-  return success();
-}
-
 LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
   auto incomingDelay = getIncomingDelay(opr);
   auto outgoingDelay = getOutgoingDelay(opr);
@@ -177,21 +171,10 @@ LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
 
   float iDel = *incomingDelay;
   float oDel = *outgoingDelay;
-  float ct = *getCycleTime();
 
   if (iDel < 0.0f || oDel < 0.0f)
     return getContainingOp()->emitError()
            << "Negative delays for operator type '" << opr << "'";
-
-  if (iDel > ct)
-    return getContainingOp()->emitError()
-           << "Incoming delay (" << iDel << ") for operator type '" << opr
-           << "' exceeds cycle time (" << ct << ")";
-
-  if (oDel > ct)
-    return getContainingOp()->emitError()
-           << "Outgoing delay (" << oDel << ") for operator type '" << opr
-           << "' exceeds cycle time (" << ct << ")";
 
   if (*getLatency(opr) == 0 && iDel != oDel)
     return getContainingOp()->emitError()
@@ -204,16 +187,8 @@ LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
 
 LogicalResult ChainingProblem::verifyStartTimeInCycle(Operation *op) {
   auto startTimeInCycle = getStartTimeInCycle(op);
-  if (!startTimeInCycle)
-    return op->emitError("Operation has no start time in cycle");
-
-  float stic = *startTimeInCycle;
-  float iDel = *getIncomingDelay(*getLinkedOperatorType(op));
-  float ct = *getCycleTime();
-
-  if (!(stic + iDel <= ct))
-    return op->emitError("Operation violates cycle time constraint");
-
+  if (!startTimeInCycle || *startTimeInCycle < 0.0f)
+    return op->emitError("Operation has no non-negative start time in cycle");
   return success();
 }
 
@@ -254,9 +229,6 @@ LogicalResult ChainingProblem::verifyPrecedenceInCycle(Dependence dep) {
 
 LogicalResult ChainingProblem::check() {
   if (failed(Problem::check()))
-    return failure();
-
-  if (failed(checkCycleTime()))
     return failure();
 
   for (auto opr : getOperatorTypes())

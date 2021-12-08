@@ -291,22 +291,15 @@ public:
 ///
 /// A solution to this problem comprises per-operation start times in a
 /// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
-/// determined by the underlying scheduling problem. The start times in the
-/// respective cycles must satisfy a given cycle time constraint.
+/// determined by the underlying scheduling problem.
 class ChainingProblem : public virtual Problem {
   DEFINE_FACTORY_METHOD(ChainingProblem)
 
 private:
-  ProblemProperty<float> cycleTime;
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
   OperationProperty<float> startTimeInCycle;
 
 public:
-  /// The cycle time constrains the accumulated delays along combinational paths
-  /// inside a time step.
-  Optional<float> getCycleTime() { return cycleTime; }
-  void setCycleTime(float time) { cycleTime = time; }
-
   /// The incoming delay denotes the propagation time from the operand inputs to
   /// either the result outputs (combinational operators) or the first internal
   /// register stage.
@@ -337,16 +330,11 @@ public:
   }
 
 protected:
-  /// A positive value for the desired cycle time is set.
-  virtual LogicalResult checkCycleTime();
-  /// Incoming/outgoing delays are set for \p opr, non-negative, and smaller
-  /// than the desired cycle time. The delays are equal if \p opr is a
-  /// zero-latency operator type.
+  /// Incoming/outgoing delays are set for \p opr and non-negative. The delays
+  /// are equal if \p opr is a zero-latency operator type.
   virtual LogicalResult checkDelays(OperatorType opr);
 
-  /// \p op has a non-negative start time in its cycle, which is also early
-  /// enough in the scheduled time step to accommodate the linked operator
-  /// type's incoming delay.
+  /// \p op has a non-negative start time in its cycle.
   virtual LogicalResult verifyStartTimeInCycle(Operation *op);
   /// If \p dep is an SSA edge and its source operation finishes in the same
   /// time step as the destination operation, the source's result is available

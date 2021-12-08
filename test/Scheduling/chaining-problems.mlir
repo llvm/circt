@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -test-chaining-problem -allow-unregistered-dialect
 
 func @adder_chain(%arg0 : i32, %arg1 : i32) -> i32 attributes {
-  cycletime = 10.0, operatortypes = [
+  operatortypes = [
    { name = "add", latency = 0, incdelay = 2.34, outdelay = 2.34}
   ] } {
   %0 = arith.addi %arg0, %arg1 { opr = "add", problemStartTime = 0, problemStartTimeInCycle = 0.0 } : i32
@@ -13,7 +13,7 @@ func @adder_chain(%arg0 : i32, %arg1 : i32) -> i32 attributes {
 }
 
 func @multi_cycle(%arg0 : i32, %arg1 : i32) -> i32 attributes {
-  cycletime = 10.0, operatortypes = [
+  operatortypes = [
    { name = "add", latency = 0, incdelay = 2.34, outdelay = 2.34},
    { name = "mul", latency = 3, incdelay = 2.5, outdelay = 3.75}
   ] } {
