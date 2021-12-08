@@ -1149,3 +1149,13 @@ sv.bind #hw.innerNameRef<@NastyPortParent::@foo>
 // CHECK-NEXT:    ._lots24of_dots (foo__lots24of_dots)
 // CHECK-NEXT:    ._more_dots     (foo__more_dots)
 // CHECK-NEXT:  );
+
+// CHECK-LABEL:  hw.module @issue595
+// CHECK-NEXT:    %0 = sv.wire  {hw.verilogName = "_T"} : !hw.inout<i32>
+
+// CHECK-LABEL: hw.module @extInst2
+// CHECK-SAME: (%signed: i1 {hw.verilogName = "signed_0"}
+
+// CHECK-LABEL:  hw.module @remoteInstDut
+// CHECK:    %signed = sv.wire  {hw.verilogName = "signed_0"} : !hw.inout<i1>
+// CHECK:    %output = sv.reg  {hw.verilogName = "output_1"} : !hw.inout<i1>
