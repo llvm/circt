@@ -2227,7 +2227,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
 
   // A callback that will scatter every source and sink target pair to the
   // corresponding two ends of the connection.
-  DenseSet<Operation*> annotatedModules;
+  llvm::StringSet  annotatedModules;
   auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
     auto targetId = state.newID();
     DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
@@ -2279,16 +2279,20 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
       fields.append("dir", StringAttr::get(state.circuit.getContext(),
                                            isSource ? "source" : "sink"));
 
-      state.applyAnno(canonTarget, fields);
+      auto NLATargets = expandNonLocal(canonTarget);
+      auto leafTarget =
+          splitTarget(std::get<0>(NLATargets.back()), context);
+
+      state.applyAnno(leafTarget.first, fields);
 
       // Add a don't touch annotation to whatever this annotation targets.
       state.setDontTouch(canonTarget);
 
       // Keep track of the enclosing module.
-//      annotatedModules.insert(
-//           (StringRef(std::get<0>(NLATargets.back())).split("|").first + "|" +
-//            std::get<1>(NLATargets.back()))
-//               .str());
+      annotatedModules.insert(
+           (StringRef(std::get<0>(NLATargets.back())).split("|").first + "|" +
+            std::get<1>(NLATargets.back()))
+               .str());
     }
 
     return true;
@@ -2310,11 +2314,11 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
       return failure();
 
   // Indicate which modules have embedded `SignalDriverAnnotation`s.
-  for (auto module : annotatedModules) {
+  for (auto& module : annotatedModules) {
     NamedAttrList fields;
     fields.append("class", classAttr);
     fields.append("id", id);
-    state.applyAnnoOp(module, fields);
+    state.applyAnno(module.getKey(), fields);
   }
 
   return success();
