@@ -645,7 +645,7 @@ void EmitterBase::emitTextWithSubstitutions(
         ++next;
       // We need at least one digit.
       if (start == next) {
-        next -= 1;
+        next--;
         continue;
       }
 
