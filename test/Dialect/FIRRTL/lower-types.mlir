@@ -978,12 +978,12 @@ firrtl.circuit "TopLevel" {
   }
 
 // CHECK-LABEL: firrtl.module @multidimRead(in %a_0_0: !firrtl.uint<2>, in %a_0_1: !firrtl.uint<2>, in %a_1_0: !firrtl.uint<2>, in %a_1_1: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
-// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:      %1 = firrtl.mux(%0, %a_1_0, %a_0_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:      %2 = firrtl.mux(%0, %a_1_1, %a_0_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui2_0 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %3 = firrtl.eq %sel, %c1_ui2_0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %c1_ui1_0 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:      %3 = firrtl.eq %sel, %c1_ui1_0 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:      %4 = firrtl.mux(%3, %2, %1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:      firrtl.connect %b, %4 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
@@ -1005,13 +1005,13 @@ firrtl.circuit "TopLevel" {
 // CHECK-LABEL:    firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<1>, in %default_1: !firrtl.uint<1>, out %a_0: !firrtl.uint<1>, out %a_1: !firrtl.uint<1>) {
 // CHECK-NEXT:      firrtl.connect %a_0, %default_0 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.connect %a_1, %default_1 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT:      %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %0  {
 // CHECK-NEXT:        firrtl.connect %a_0, %b : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
-// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %1  {
 // CHECK-NEXT:        firrtl.connect %a_1, %b : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
@@ -1084,13 +1084,13 @@ firrtl.circuit "TopLevel" {
 // CHECK-NEXT:      firrtl.connect %b_0_valid, %def_0_valid : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:      firrtl.connect %b_1_wo, %def_1_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.connect %b_1_valid, %def_1_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK-NEXT:      %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %0  {
 // CHECK-NEXT:        firrtl.connect %b_0_wo, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
-// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.when %1  {
 // CHECK-NEXT:        firrtl.connect %b_1_wo, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
@@ -1363,4 +1363,25 @@ firrtl.module @is1436_FOO() {
    // FLATTEN:   %[[v11:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_qos:.+]], %[[v10]] : (!firrtl.uint<4>, !firrtl.uint<56>) -> !firrtl.uint<60>
    // FLATTEN:   firrtl.connect %[[v3]], %[[v11]] : !firrtl.uint<60>, !firrtl.uint<60>
   }
+
+// Issue #2315: Narrow index constants overflow when subaccessing long vectors.
+// https://github.com/llvm/circt/issues/2315
+// CHECK-LABEL: firrtl.module @Issue2315
+firrtl.module @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl.uint<2>, out %z: !firrtl.uint<10>) {
+  %0 = firrtl.subaccess %x[%source] : !firrtl.vector<uint<10>, 5>, !firrtl.uint<2>
+  firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
+  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 1
+  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
+  // CHECK-NEXT: firrtl.mux([[EQ]], %x_1, %x_0)
+  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 2
+  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
+  // CHECK-NEXT: firrtl.mux([[EQ]], %x_2,
+  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 3
+  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
+  // CHECK-NEXT: firrtl.mux([[EQ]], %x_3,
+  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 4
+  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
+  // CHECK-NEXT: firrtl.mux([[EQ]], %x_4,
+}
+
 } // CIRCUIT

@@ -502,8 +502,7 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
   auto saoType = sao.input().getType().cast<FVectorType>();
-  auto selectWidth =
-      sao.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+  auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
     auto cond = builder->create<EQPrimOp>(
@@ -1207,8 +1206,7 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   }
 
   // Reads.  All writes have been eliminated before now
-  auto selectWidth =
-      op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+  auto selectWidth = llvm::Log2_64_Ceil(vType.getNumElements());
 
   // We have at least one element
   Value mux = builder->create<SubindexOp>(input, 0);
