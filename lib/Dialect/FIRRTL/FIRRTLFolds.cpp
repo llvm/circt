@@ -1429,10 +1429,14 @@ static LogicalResult canonicalizeSingleSetConnect(ConnectOp op,
   if (srcValueOp) {
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
-      auto constant =
-          rewriter.create<ConstantOp>(op.dest().getLoc(), op.dest().getType(),
-                                      getIntZerosAttr(op.dest().getType()));
-      replacement = constant;
+      if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
+        replacement = rewriter.create<SpecialConstantOp>(
+            op.src().getLoc(), op.dest().getType(),
+            rewriter.getBoolAttr(false));
+      else
+        replacement =
+            rewriter.create<ConstantOp>(op.src().getLoc(), op.dest().getType(),
+                                        getIntZerosAttr(op.dest().getType()));
     }
     // This will be replaced with the constant source.  First, make sure the
     // constant dominates all users.

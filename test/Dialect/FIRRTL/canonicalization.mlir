@@ -2249,4 +2249,29 @@ firrtl.module @Issue2291(out %out: !firrtl.uint<1>) {
   firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// Check that canonicalizing connects to zero works for clock, reset, and async
+// reset.  All these types require special constants as opposed to constants.
+//
+// CHECK-LABEL: @Issue2314
+firrtl.module @Issue2314(out %clock: !firrtl.clock, out %reset: !firrtl.reset, out %asyncReset: !firrtl.asyncreset) {
+  // CHECK-DAG: %[[zero_clock:.+]] = firrtl.specialconstant 0 : !firrtl.clock
+  // CHECK-DAG: %[[zero_reset:.+]] = firrtl.specialconstant 0 : !firrtl.reset
+  // CHECK-DAG: %[[zero_asyncReset:.+]] = firrtl.specialconstant 0 : !firrtl.asyncreset
+  %inv_clock = firrtl.wire  : !firrtl.clock
+  %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+  firrtl.connect %inv_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
+  firrtl.connect %clock, %inv_clock : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %clock, %[[zero_clock]]
+  %inv_reset = firrtl.wire  : !firrtl.reset
+  %invalid_reset = firrtl.invalidvalue : !firrtl.reset
+  firrtl.connect %inv_reset, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %reset, %inv_reset : !firrtl.reset, !firrtl.reset
+  // CHECK: firrtl.connect %reset, %[[zero_reset]]
+  %inv_asyncReset = firrtl.wire  : !firrtl.asyncreset
+  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+  firrtl.connect %inv_asyncReset, %invalid_asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
+  firrtl.connect %asyncReset, %inv_asyncReset : !firrtl.asyncreset, !firrtl.asyncreset
+  // CHECK: firrtl.connect %asyncReset, %[[zero_asyncReset]]
+}
+
 }
