@@ -47,6 +47,10 @@ with ir.Context() as ctx, ir.Location.unknown():
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
   print(physAttr)
 
+  # CHECK: #msft.physloc<FF, 0, 0, 0>
+  regAttr = msft.PhysLocationAttr.get(msft.FF, x=0, y=0, num=0)
+  print(regAttr)
+
   path = msft.RootedInstancePathAttr.get(
       ir.Attribute.parse("@top"),
       [ir.StringAttr.get("inst1"),
