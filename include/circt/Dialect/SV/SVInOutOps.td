@@ -176,3 +176,30 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
   let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
                         " attr-dict `:` type($input) `,` type($base)";
 }
+
+def InOutStructType
+  : Type<CPred<"getInOutElementType($_self).isa<hw::StructType>()">,
+         "an inout type with struct field", "::circt::hw::InOutType">;
+
+def StructFieldInOutOp : SVOp<"struct_field_inout",
+                              [NoSideEffect, InferTypeOpInterface]> {
+  let summary = "Create an subfield inout memory to produce an inout element.";
+  let description = "See SV Spec 7.2.";
+
+  let arguments = (ins InOutStructType:$input, StrAttr:$field);
+  let results = (outs InOutType:$result);
+
+  let assemblyFormat =
+    "$input `[` $field `]` attr-dict `:` type($input)";
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+
+}
