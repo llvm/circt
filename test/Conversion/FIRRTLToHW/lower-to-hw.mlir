@@ -1439,7 +1439,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %a, %c0_ui0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 
-  // CHECK-LABEL: @subfield_write(
+  // CHECK-LABEL: @subfield_write1(
   firrtl.module @subfield_write1(out %a: !firrtl.bundle<a: uint<1>>) {
     %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
@@ -1452,6 +1452,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: i1>
   }
 
+  // CHECK-LABEL: @subfield_write2(
   firrtl.module @subfield_write2(in %in: !firrtl.uint<1>, out %sink: !firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) {
     %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) -> !firrtl.bundle<b: bundle<c: uint<1>>>
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: bundle<c: uint<1>>>) -> !firrtl.bundle<c: uint<1>>
