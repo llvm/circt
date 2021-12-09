@@ -68,9 +68,32 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
+/// Return true if we can preserve the type when `preserve-aggregate` flag is
+/// true. Currently, we only allow vector types.
+/// TODO: In the end, it is sufficient to check whether the type is a passive
+/// type or not.
+static bool isPreservableAggregateType(Type type) {
+  auto firtype = type.cast<FIRRTLType>();
+  if (!firtype.isPassive())
+    return false;
+
+  if (firtype.isGround())
+    return true;
+
+  if (auto vector = firtype.dyn_cast<FVectorType>())
+    return isPreservableAggregateType(vector.getElementType());
+  return false;
+}
+
 /// Peel one layer of an aggregate type into its components.  Type may be
 /// complex, but empty, in which case fields is empty, but the return is true.
-static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
+static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
+                     bool allowedToPreserveAggregate = false) {
+  // If the aggregate preservation is enabled and the type is preservable,
+  // then just return.
+  if (allowedToPreserveAggregate && isPreservableAggregateType(type))
+    return false;
+
   return TypeSwitch<Type, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
@@ -262,8 +285,8 @@ namespace {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool f)
-      : context(context), flattenAggregateMemData(f) {}
+  TypeLoweringVisitor(MLIRContext *context, bool f, bool p)
+      : context(context), flattenAggregateMemData(f), preserveAggregate(p) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -313,6 +336,10 @@ private:
   /// Create a single memory from an aggregate type (instead of one per field)
   /// if this flag is enabled.
   bool flattenAggregateMemData;
+
+  /// Not to lower passive aggregate types as much as possible if this flag is
+  /// enabled.
+  bool preserveAggregate;
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -373,7 +400,15 @@ bool TypeLoweringVisitor::lowerProducer(
   // If this is not a bundle, there is nothing to do.
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  if (!peelType(srcType, fieldTypes))
+
+  bool allowedToPreserveAggregate = preserveAggregate;
+  // TODO: If any annotation, inner_sym or name appears in the operation, we
+  // give up to preserve for now.
+  if (op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>() ||
+      op->getAttrOfType<StringAttr>("inner_sym") || op->getAttr("name"))
+    allowedToPreserveAggregate = false;
+
+  if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate))
     return false;
 
   SmallVector<Value> lowered;
@@ -472,7 +507,9 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes))
+  // TODO: If an argument has annotation, we give up to preserve aggregate.
+  if (!peelType(srcType, fieldTypes,
+                preserveAggregate && newArgs[argIndex].annotations.empty()))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
@@ -531,7 +568,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
 
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (!peelType(op.dest().getType(), fields))
+  if (!peelType(op.dest().getType(), fields, preserveAggregate))
     return false;
 
   // Loop over the leaf aggregates.
@@ -553,8 +590,10 @@ bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
     return true;
 
   SmallVector<FlatBundleFieldEntry> srcFields, destFields;
-  peelType(op.src().getType(), srcFields);
-  bool dValid = peelType(op.dest().getType(), destFields);
+
+  // For partial connects, we give up to preserve aggregates.
+  peelType(op.src().getType(), srcFields, false);
+  bool dValid = peelType(op.dest().getType(), destFields, false);
 
   // Ground Type
   if (!dValid) {
@@ -681,7 +720,9 @@ static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
 bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (!peelType(op.getDataType(), fields))
+
+  // MemOp should have ground types so we can't preserve aggregates.
+  if (!peelType(op.getDataType(), fields, false))
     return false;
 
   SmallVector<MemOp> newMemories;
@@ -1067,7 +1108,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (peelType(op.input().getType(), fields)) {
+  if (peelType(op.input().getType(), fields, preserveAggregate)) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
@@ -1088,8 +1129,14 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       // Record the total bits already accumulated.
       uptoBits += fieldBitwidth;
     }
-  } else
+  } else {
+    // If input is a preservable aggregate, we don't have to lower the
+    // current operations.
+    if (op.input().getType().isa<BundleType, FVectorType>())
+      return false;
+
     srcLoweredVal = builder->createOrFold<AsUIntPrimOp>(srcLoweredVal);
+  }
   // Now the input has been cast to srcLoweredVal, which is of UInt type.
   // If the result is an aggregate type, then use lowerProducer.
   if (op.getResult().getType().isa<BundleType, FVectorType>()) {
@@ -1136,7 +1183,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes)) {
+    if (!peelType(srcType, fieldTypes, false)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
@@ -1231,7 +1278,10 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
-  LowerTypesPass(bool f) { flattenAggregateMemData = f; }
+  LowerTypesPass(bool f, bool p) {
+    flattenAggregateMemData = f;
+    preserveAggregate = p;
+  }
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -1243,13 +1293,15 @@ void LowerTypesPass::runOnOperation() {
                  [&](Operation &op) { ops.push_back(&op); });
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
-    TypeLoweringVisitor(&getContext(), flattenAggregateMemData)
+    TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
+                        preserveAggregate)
         .lowerModule(ops[index]);
   });
 }
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem) {
-  return std::make_unique<LowerTypesPass>(replSeqMem);
+circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem,
+                                          bool preserveAggregate) {
+  return std::make_unique<LowerTypesPass>(replSeqMem, preserveAggregate);
 }
