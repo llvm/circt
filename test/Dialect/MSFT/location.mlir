@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions | FileCheck %s --check-prefix=LOWER
-// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions --export-verilog | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv | FileCheck %s --check-prefix=LOWER
+// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv --export-verilog | FileCheck %s --check-prefix=TCL
 
 hw.module.extern @Foo()
 
@@ -52,5 +52,12 @@ msft.module @regions {} () -> () {
   // TCL: set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|module_0
   // TCL: set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|module_0
   // TCL: set_instance_assignment -name REGION_NAME region1 -to $parent|module_0
+  msft.output
+}
+
+// TCL-LABEL: proc reg_config
+msft.module @reg {} (%input : i8, %clk : i1) -> () {
+  %reg = seq.compreg sym @reg %input, %clk {"loc:" = #msft.switch.inst<@reg[]=#msft.physloc<FF, 0, 0, 0>>} : i8
+  // TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_1
   msft.output
 }

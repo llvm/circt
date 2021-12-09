@@ -125,6 +125,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   py::enum_<PrimitiveType>(m, "PrimitiveType")
       .value("M20K", PrimitiveType::M20K)
       .value("DSP", PrimitiveType::DSP)
+      .value("FF", PrimitiveType::FF)
       .export_values();
 
   mlir_attribute_subclass(m, "PhysLocationAttr",
