@@ -1438,4 +1438,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
     firrtl.connect %a, %c0_ui0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
+
+  // CHECK-LABEL: @subfield_write(
+  firrtl.module @subfield_write(out %a: !firrtl.bundle<a: uint<1>>) {
+    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:      %true = hw.constant true
+    // CHECK-NEXT: %.a.output = sv.wire  : !hw.inout<struct<a: i1>>
+    // CHECK-NEXT: %0 = sv.read_inout %.a.output : !hw.inout<struct<a: i1>>
+    // CHECK-NEXT: %1 = sv.struct_field_inout %.a.output["a"] : !hw.inout<struct<a: i1>>
+    // CHECK-NEXT: sv.assign %1, %true : i1
+    // CHECK-NEXT: hw.output %0 : !hw.struct<a: i1>
+  }
 }
