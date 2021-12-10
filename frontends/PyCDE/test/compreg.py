@@ -25,6 +25,7 @@ class CompReg:
     compreg = seq.CompRegOp(types.i8,
                             clk=ports.clk,
                             input=ports.input,
+                            name="reg",
                             inner_sym="reg")
     ports.output = compreg
 
@@ -40,8 +41,8 @@ mod.get_instance(CompReg).walk(appid.apply_attributes_visitor)
 mod.print()
 mod.emit_outputs()
 
-# CHECK: reg [7:0] [[NAME:.+]];
+# CHECK: reg [7:0] [[NAME:reg_.]];
 # CHECK: always_ff @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}
 
-# TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|{{.+}}
+# TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_{{.}}
