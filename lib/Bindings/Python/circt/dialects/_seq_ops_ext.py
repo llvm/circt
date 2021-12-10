@@ -29,6 +29,7 @@ class CompRegOp:
                reset=None,
                reset_value=None,
                name=None,
+               inner_sym=None,
                loc=None,
                ip=None):
     operands = []
@@ -45,6 +46,8 @@ class CompRegOp:
       attributes["name"] = StringAttr.get("")
     else:
       attributes["name"] = StringAttr.get(name)
+    if inner_sym is not None:
+      attributes["innerSym"] = StringAttr.get(inner_sym)
 
     OpView.__init__(
         self,
@@ -63,6 +66,7 @@ class CompRegOp:
              reset=None,
              reset_value=None,
              name=None,
+             inner_sym=None,
              **kwargs):
     return CompRegBuilder(cls,
                           result_type,
@@ -70,4 +74,5 @@ class CompRegOp:
                           reset=reset,
                           reset_value=reset_value,
                           name=name,
+                          inner_sym=inner_sym,
                           needs_result_type=True)

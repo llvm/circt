@@ -16,6 +16,7 @@ def PrimitiveType : I32EnumAttr<"PrimitiveType",
   "Type of device at physical location", [
     I32EnumAttrCase<"M20K", 1>,
     I32EnumAttrCase<"DSP", 2>,
+    I32EnumAttrCase<"FF", 3>,
   ]>;
 
 class MSFT_Attr<string name, list<Trait> traits = [],

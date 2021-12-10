@@ -2148,8 +2148,6 @@ firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in
   %_T_2 = firrtl.reg %clock : !firrtl.uint<1>
   %_T_3 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   %a = firrtl.mem Undefined {depth = 8 : i64, name = "_T_5", portNames = ["a"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<1>>
-  %_T_6 = firrtl.combmem : !firrtl.cmemory<uint<1>, 8>
-  %_T_7 = firrtl.seqmem Undefined: !firrtl.cmemory<uint<1>, 8>
   firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %out, %in
 }
@@ -2249,6 +2247,31 @@ firrtl.module @Issue2291(out %out: !firrtl.uint<1>) {
   %clock = firrtl.asClock %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
   %0 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
   firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+// Check that canonicalizing connects to zero works for clock, reset, and async
+// reset.  All these types require special constants as opposed to constants.
+//
+// CHECK-LABEL: @Issue2314
+firrtl.module @Issue2314(out %clock: !firrtl.clock, out %reset: !firrtl.reset, out %asyncReset: !firrtl.asyncreset) {
+  // CHECK-DAG: %[[zero_clock:.+]] = firrtl.specialconstant 0 : !firrtl.clock
+  // CHECK-DAG: %[[zero_reset:.+]] = firrtl.specialconstant 0 : !firrtl.reset
+  // CHECK-DAG: %[[zero_asyncReset:.+]] = firrtl.specialconstant 0 : !firrtl.asyncreset
+  %inv_clock = firrtl.wire  : !firrtl.clock
+  %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+  firrtl.connect %inv_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
+  firrtl.connect %clock, %inv_clock : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %clock, %[[zero_clock]]
+  %inv_reset = firrtl.wire  : !firrtl.reset
+  %invalid_reset = firrtl.invalidvalue : !firrtl.reset
+  firrtl.connect %inv_reset, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %reset, %inv_reset : !firrtl.reset, !firrtl.reset
+  // CHECK: firrtl.connect %reset, %[[zero_reset]]
+  %inv_asyncReset = firrtl.wire  : !firrtl.asyncreset
+  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+  firrtl.connect %inv_asyncReset, %invalid_asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
+  firrtl.connect %asyncReset, %inv_asyncReset : !firrtl.asyncreset, !firrtl.asyncreset
+  // CHECK: firrtl.connect %asyncReset, %[[zero_asyncReset]]
 }
 
 }

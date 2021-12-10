@@ -114,6 +114,10 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
     s.os << "MPDSP";
     numCharacter = 'N';
     break;
+  case PrimitiveType::FF:
+    s.os << "FF";
+    numCharacter = 'N';
+    break;
   }
 
   // Write out the rest of the location info.

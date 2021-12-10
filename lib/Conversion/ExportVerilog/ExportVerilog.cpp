@@ -152,7 +152,7 @@ static StringRef getSymOpName(Operation *symOp) {
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
-          IndexedPartSelectOp, ParamValueOp, XMROp>(op))
+          StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1375,6 +1375,7 @@ private:
   SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectOp op);
+  SubExprInfo visitSV(StructFieldInOutOp op);
 
   // Other
   using TypeOpVisitor::visitTypeOp;
@@ -1972,6 +1973,12 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
   os << op.width();
   os << ']';
   return info;
+}
+
+SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
+  auto prec = emitSubExpr(op.input(), Selection, OOLUnary);
+  os << '.' << op.field();
+  return {Selection, prec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {

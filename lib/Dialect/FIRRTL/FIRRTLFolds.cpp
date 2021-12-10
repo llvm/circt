@@ -1429,10 +1429,14 @@ static LogicalResult canonicalizeSingleSetConnect(ConnectOp op,
   if (srcValueOp) {
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
-      auto constant =
-          rewriter.create<ConstantOp>(op.dest().getLoc(), op.dest().getType(),
-                                      getIntZerosAttr(op.dest().getType()));
-      replacement = constant;
+      if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
+        replacement = rewriter.create<SpecialConstantOp>(
+            op.src().getLoc(), op.dest().getType(),
+            rewriter.getBoolAttr(false));
+      else
+        replacement =
+            rewriter.create<ConstantOp>(op.src().getLoc(), op.dest().getType(),
+                                        getIntZerosAttr(op.dest().getType()));
     }
     // This will be replaced with the constant source.  First, make sure the
     // constant dominates all users.
@@ -1564,21 +1568,6 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<patterns::DropNameWire>(context);
-}
-
-void CombMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  results.insert<patterns::DropNameCombMem>(context);
-}
-
-void SeqMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                           MLIRContext *context) {
-  results.insert<patterns::DropNameSeqMem>(context);
-}
-
-void MemoryPortOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                               MLIRContext *context) {
-  results.insert<patterns::DropNameMemoryPort>(context);
 }
 
 // A register with constant reset and all connection to either itself or the

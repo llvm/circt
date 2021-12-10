@@ -57,11 +57,11 @@ circuit Qux:
 ; READ-LABEL:  hw.module @FIRRTLMem_1_1_1_8_16_1_1_1_0_1_a
 ; READ:    %[[vtrue:.+]] = hw.constant true
 ; READ:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
-; READ-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
 ; READ-NEXT:    %[[v2:.+]] = sv.reg  : !hw.inout<i4>
 ; READ-NEXT:    sv.always posedge %R0_clk {
-; READ-NEXT:      sv.passign %[[v0]], %R0_en : i1
-; READ-NEXT:      sv.passign %[[v2]], %R0_addr : i4
+; READ-NEXT:      sv.if %R0_en {
+; READ-NEXT:        sv.passign %[[v2]], %R0_addr : i4
+; READ-NEXT:      }
 ; READ-NEXT:    }
 ; READ-NEXT:    %[[v3:.+]] = sv.read_inout %[[v2]] : !hw.inout<i4>
 ; READ-NEXT:    %[[v4:.+]] = sv.array_index_inout %[[vMemory]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4

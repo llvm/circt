@@ -487,8 +487,8 @@ abused by the Chisel standard library. Due to the way clock and enable
 inference works, we couldn't just hoist the declaration into the outer scope.
 
 To support escaping memory port definitions, we decided to split the memory
-port operation into two operations.  We created a `firrtl.memoryport` operation
-to declare the memory port, and a `firrtl.memoryport.access` operation to
+port operation into two operations.  We created a `chirrtl.memoryport` operation
+to declare the memory port, and a `chirrtl.memoryport.access` operation to
 enable the memory port. The following is an example of how FIRRTL translates
 into the CIRCT dialect:
 
@@ -500,13 +500,20 @@ out <= myport
 ```
 
 ```mlir
-%mymem = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<1>, 8>
-%myport_data, %myport_port = firrtl.memoryport Infer %mymem {name = "myport"}  : (!firrtl.cmemory<uint<1>, 8>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+%mymem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 8>
+%myport_data, %myport_port = chirrtl.memoryport Infer %mymem {name = "myport"}  : (!chirrtl.cmemory<uint<1>, 8>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 firrtl.when %cond  {
-  firrtl.memoryport.access %myport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+  chirrtl.memoryport.access %myport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
 }
 firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
 ```
+
+The CHIRRTL operations and types are contained in the CHIRRTL dialect.  The is
+primary reason to move them into their own dialect was to keep the CHIRRTL
+types out of the FIRRTL dialect type hiearchy. We tried to have the CHIRRTL
+dialect depend on the FIRRTL dialect, but the flow checking in FIRRTL had to
+know about CHIRRTL operations, which created a circular dependency.  To
+simplify how this is handled, both dialects are contained in the same library.
 
 For a historical discussion of this issue and its development see
 [`llvm/circt#1561`](https://github.com/llvm/circt/issues/1561).

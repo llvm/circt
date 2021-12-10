@@ -35,11 +35,9 @@ using mlir::TypeStorageAllocator;
 // Type Printing
 //===----------------------------------------------------------------------===//
 
-static void printType(Type type, AsmPrinter &os);
-
 /// Print a type with a custom printer implementation.
 ///
-/// This only prints a subset of all types in the dialect. Use `printType`
+/// This only prints a subset of all types in the dialect. Use `printNestedType`
 /// instead, which will call this function in turn, as appropriate.
 static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
   auto printWidthQualifier = [&](Optional<int32_t> width) {
@@ -71,13 +69,13 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
                                 if (element.isFlip)
                                   os << " flip";
                                 os << ": ";
-                                printType(element.type, os);
+                                printNestedType(element.type, os);
                               });
         os << '>';
       })
       .Case<FVectorType>([&](auto vectorType) {
         os << "vector<";
-        printType(vectorType.getElementType(), os);
+        printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
       .Default([&](auto) { anyFailed = true; });
@@ -85,11 +83,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
 }
 
 /// Print a type defined by this dialect.
-static void printType(Type type, AsmPrinter &os) {
-  // Try the generated type printer.
-  if (succeeded(generatedTypePrinter(type, os)))
-    return;
-
+void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
   // Try the custom type printer.
   if (succeeded(customTypePrinter(type, os)))
     return;
@@ -101,8 +95,6 @@ static void printType(Type type, AsmPrinter &os) {
 //===----------------------------------------------------------------------===//
 // Type Parsing
 //===----------------------------------------------------------------------===//
-
-static ParseResult parseFIRRTLType(FIRRTLType &result, AsmParser &parser);
 
 /// Parse a type with a custom parser implementation.
 ///
@@ -182,7 +174,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       }
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
-      if (parser.parseColon() || parseFIRRTLType(type, parser))
+      if (parser.parseColon() || parseNestedType(type, parser))
         return failure();
 
       elements.push_back({StringAttr::get(context, name), isFlip, type});
@@ -200,7 +192,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     FIRRTLType elementType;
     unsigned width = 0;
 
-    if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
+    if (parser.parseLess() || parseNestedType(elementType, parser) ||
         parser.parseComma() || parser.parseInteger(width) ||
         parser.parseGreater())
       return failure();
@@ -217,15 +209,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 /// parser implementation. Emits an error and returns failure if `name` does not
 /// refer to a type defined in this dialect.
 static ParseResult parseType(Type &result, StringRef name, AsmParser &parser) {
-  OptionalParseResult parseResult;
-
-  // Try the generated type parser.
-  parseResult = generatedTypeParser(parser, name, result);
-  if (parseResult.hasValue())
-    return parseResult.getValue();
-
   // Try the custom type parser.
-  parseResult = customTypeParser(parser, name, result);
+  OptionalParseResult parseResult = customTypeParser(parser, name, result);
   if (parseResult.hasValue())
     return parseResult.getValue();
 
@@ -256,20 +241,21 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
 ///
 /// Note that only a subset of types defined in the FIRRTL dialect inherit from
 /// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
-static ParseResult parseFIRRTLType(FIRRTLType &result, AsmParser &parser) {
+ParseResult circt::firrtl::parseNestedType(FIRRTLType &result,
+                                           AsmParser &parser) {
   StringRef name;
   if (parser.parseKeyword(&name))
     return failure();
   return parseFIRRTLType(result, name, parser);
 }
 
-//===----------------------------------------------------------------------===//
+//===---------------------------------------------------------------------===//
 // Dialect Type Parsing and Printing
 //===----------------------------------------------------------------------===//
 
 /// Print a type registered to this dialect.
 void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  ::printType(type, os);
+  printNestedType(type, os);
 }
 
 /// Parse a type registered to this dialect.
@@ -959,45 +945,13 @@ std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
 }
 
 //===----------------------------------------------------------------------===//
-// CMemory Type
-//===----------------------------------------------------------------------===//
-
-void CMemoryType::print(AsmPrinter &printer) const {
-  printer << "<";
-  // Don't print element types with "!firrtl.".
-  printType(getElementType(), printer);
-  printer << ", " << getNumElements() << ">";
-}
-
-Type CMemoryType::parse(AsmParser &parser) {
-  FIRRTLType elementType;
-  unsigned numElements;
-  if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
-      parser.parseComma() || parser.parseInteger(numElements) ||
-      parser.parseGreater())
-    return {};
-  return parser.getChecked<CMemoryType>(elementType, numElements);
-}
-
-LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                  FIRRTLType elementType,
-                                  unsigned numElements) {
-  if (!elementType.isPassive()) {
-    return emitError() << "behavioral memory element type must be passive";
-  }
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType,
-           // CHIRRTL Types
-           CMemoryType, CMemoryPortType>();
+           BundleType, FVectorType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike

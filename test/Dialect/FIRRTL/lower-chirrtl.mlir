@@ -4,20 +4,20 @@ firrtl.circuit "Empty" {
 
 // Memories with no ports should be deleted.
 firrtl.module @Empty(in %clock: !firrtl.clock) {
-  %ram = firrtl.combmem : !firrtl.cmemory<uint<1>, 2>
+  %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 2>
 }
 // CHECK:      firrtl.module @Empty(in %clock: !firrtl.clock) {
 // CHECK-NEXT: }
 
 // Unused ports should be deleted.
 firrtl.module @UnusedMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1>) {
-  %ram = firrtl.combmem : !firrtl.cmemory<vector<uint<1>, 2>, 2>
+  %ram = chirrtl.combmem : !chirrtl.cmemory<vector<uint<1>, 2>, 2>
   // This port should be deleted.
-  %port0_data, %port0_port = firrtl.memoryport Infer %ram {name = "port0"} : (!firrtl.cmemory<vector<uint<1>, 2>, 2>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %port0_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
+  %port0_data, %port0_port = chirrtl.memoryport Infer %ram {name = "port0"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 2>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %port0_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
   // Subindexing a port should not count as a "use".
-  %port1_data, %port1_port = firrtl.memoryport Infer %ram {name = "port1"} : (!firrtl.cmemory<vector<uint<1>, 2>, 2>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %port1_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
+  %port1_data, %port1_port = chirrtl.memoryport Infer %ram {name = "port1"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 2>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %port1_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
   %0 = firrtl.subindex %port1_data[1] : !firrtl.vector<uint<1>, 2>
 }
 // CHECK:      firrtl.module @UnusedMemPort(in %clock: !firrtl.clock, in %addr: !firrtl.uint<1>) {
@@ -32,8 +32,8 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
   // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport(2)
   // CHECK: firrtl.connect [[CLOCK]], %invalid_clock
   // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  %ram = firrtl.combmem : !firrtl.cmemory<uint<1>, 256>
-  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+  %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
+  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
   // CHECK: firrtl.when %cond {
   // CHECK:   firrtl.connect [[ADDR]], %addr
@@ -41,7 +41,7 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
   // CHECK:   firrtl.connect [[CLOCK]], %clock
   // CHECK: }
   firrtl.when %cond {
-    firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   }
 
   // CHECK: %node = firrtl.node [[DATA]]
@@ -70,8 +70,8 @@ firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, i
   // CHECK: firrtl.connect [[DATA]], %invalid_ui1
   // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
   // CHECK: firrtl.connect [[MASK]], %invalid_ui1
-  %ram = firrtl.combmem : !firrtl.cmemory<uint<1>, 256>
-  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+  %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
+  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
   // CHECK: firrtl.when %cond {
   // CHECK:   firrtl.connect [[ADDR]], %addr
@@ -80,7 +80,7 @@ firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, i
   // CHECK:   firrtl.connect [[MASK]], %c0_ui1
   // CHECK: }
   firrtl.when %cond {
-    firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   }
 
   // CHECK: firrtl.connect [[MASK]], %c1_ui1
@@ -107,14 +107,14 @@ firrtl.module @InferReadWrite(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8
   // CHECK: firrtl.connect [[WDATA]], %invalid_ui1
   // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport(6)
   // CHECK: firrtl.connect [[WMASK]], %invalid_ui1
-  %ram = firrtl.combmem : !firrtl.cmemory<uint<1>, 256>
+  %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
 
   // CHECK: firrtl.connect [[ADDR]], %addr : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK: firrtl.connect [[EN]], %c1_ui1
   // CHECK: firrtl.connect [[CLOCK]], %clock
   // CHECK: firrtl.connect [[WMASK]], %c0_ui1
-  %ramport_data, %ramport_port = firrtl.memoryport Read %ram {name = "ramport"} : (!firrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
   // CHECK: firrtl.connect [[WMASK]], %c1_ui1
   // CHECK: firrtl.connect [[WMODE]], %c1_ui1
@@ -132,7 +132,7 @@ firrtl.module @PartialConnectWriteMask(in %clock: !firrtl.clock, in %addr: !firr
   // CHECK: firrtl.connect [[DATA]], %invalid
   // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
   // CHECK: firrtl.connect [[MASK]], %invalid
-  %ram = firrtl.combmem : !firrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>
+  %ram = chirrtl.combmem : !chirrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>
 
   // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0)
   // CHECK: firrtl.connect [[A]], %c0_ui1 
@@ -145,8 +145,8 @@ firrtl.module @PartialConnectWriteMask(in %clock: !firrtl.clock, in %addr: !firr
   // CHECK: firrtl.connect [[C_1]], %c0_ui1 
   // CHECK: [[C_2:%.*]] = firrtl.subindex [[C]][2] : !firrtl.vector<uint<1>, 3>
   // CHECK: firrtl.connect [[C_2]], %c0_ui1 
-  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
   // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0) : (!firrtl.bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>) -> !firrtl.uint<1>
   // CHECK: firrtl.connect [[A]], %c1_ui1 
@@ -160,9 +160,9 @@ firrtl.module @PartialConnectWriteMask(in %clock: !firrtl.clock, in %addr: !firr
 }
 
 firrtl.module @WriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %value: !firrtl.uint<1>) {
-  %ram = firrtl.combmem : !firrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>
-  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ram = chirrtl.combmem : !chirrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>
+  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
   %ramport_b = firrtl.subfield %ramport_data(1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
   // Check that only the subfield of the mask is written to.
@@ -178,9 +178,9 @@ firrtl.module @WriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<
 // Read and write from different subfields of the memory.  The memory as a
 // whole should be inferred to read+write.
 firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  %ram = firrtl.combmem : !firrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>
-  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<bundle<a: uint<1>, b:uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ram = chirrtl.combmem : !chirrtl.cmemory<bundle<a: uint<1>, b: uint<1>>, 256>
+  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b:uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
   // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
   // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
@@ -203,9 +203,9 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
 // Read and write from different subindex and subaccess of the memory.  The
 // memory as a whole should be inferred to read+write.
 firrtl.module @ReadAndWriteToSubindex(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  %ram = firrtl.combmem : !firrtl.cmemory<vector<uint<1>, 10>, 256>
-  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<vector<uint<1>, 10>, 256>) -> (!firrtl.vector<uint<1>, 10>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ram = chirrtl.combmem : !chirrtl.cmemory<vector<uint<1>, 10>, 256>
+  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<vector<uint<1>, 10>, 256>) -> (!firrtl.vector<uint<1>, 10>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
   // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
   // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
@@ -228,13 +228,13 @@ firrtl.module @ReadAndWriteToSubindex(in %clock: !firrtl.clock, in %addr: !firrt
 // Check that ports are sorted in alphabetical order.
 firrtl.module @SortedPorts(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>) {
   // CHECK: portNames = ["a", "b", "c"]
-  %ram = firrtl.combmem : !firrtl.cmemory<vector<uint<1>, 2>, 256>
-  %c_data, %c_port = firrtl.memoryport Read %ram {name = "c"} : (!firrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %c_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
-  %a_data, %a_port = firrtl.memoryport Write %ram {name = "a"} : (!firrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %a_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
-  %b_data, %b_port = firrtl.memoryport ReadWrite %ram {name = "b"} : (!firrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %b_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ram = chirrtl.combmem : !chirrtl.cmemory<vector<uint<1>, 2>, 256>
+  %c_data, %c_port = chirrtl.memoryport Read %ram {name = "c"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %c_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %a_data, %a_port = chirrtl.memoryport Write %ram {name = "a"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %a_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %b_data, %b_port = chirrtl.memoryport ReadWrite %ram {name = "b"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %b_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 }
 
 // Check that annotations are preserved.
@@ -246,11 +246,11 @@ firrtl.module @Annotations(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>)
   // CHECK-SAME:   [{c = "c"}]
   // CHECK-SAME: ]
   // CHECK-SAME: portNames = ["port0", "port1"]
-  %ram = firrtl.combmem {annotations = [{a = "a"}]} : !firrtl.cmemory<vector<uint<1>, 2>, 256>
-  %port0_data, %port0_port = firrtl.memoryport Read %ram  {annotations = [{b = "b"}], name = "port0"} : (!firrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %port0_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
-  %port1_data, %port1_port = firrtl.memoryport Read %ram {annotations = [{c = "c"}], name = "port1"} : (!firrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %port1_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %ram = chirrtl.combmem {annotations = [{a = "a"}]} : !chirrtl.cmemory<vector<uint<1>, 2>, 256>
+  %port0_data, %port0_port = chirrtl.memoryport Read %ram  {annotations = [{b = "b"}], name = "port0"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %port0_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+  %port1_data, %port1_port = chirrtl.memoryport Read %ram {annotations = [{c = "c"}], name = "port1"} : (!chirrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %port1_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 }
 
 // When the address is a wire, the enable should be inferred where the address
@@ -265,9 +265,9 @@ firrtl.module @EnableInference0(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
-  %ram = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<32>, 16>
-  %ramport_data, %ramport_port = firrtl.memoryport Read %ram  {name = "ramport"}: (!firrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !firrtl.cmemoryport)
-  firrtl.memoryport.access %ramport_port[%w], %clock : !firrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
+  %ram = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<32>, 16>
+  %ramport_data, %ramport_port = chirrtl.memoryport Read %ram  {name = "ramport"}: (!chirrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %ramport_port[%w], %clock : !chirrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
 
   // CHECK: firrtl.when %p {
   firrtl.when %p  {
@@ -280,7 +280,7 @@ firrtl.module @EnableInference0(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 
 // When the address is a node, the enable should be inferred where the address is declared.
 firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %clock: !firrtl.clock, out %v: !firrtl.uint<32>) {
-  %ram = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<32>, 16>
+  %ram = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<32>, 16>
   %invalid_ui32 = firrtl.invalidvalue : !firrtl.uint<32>
   firrtl.connect %v, %invalid_ui32 : !firrtl.uint<32>, !firrtl.uint<32>
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
@@ -293,8 +293,8 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
    // CHECK-NEXT: firrtl.connect %2, %clock
    // CHECK-NEXT: firrtl.connect %v, %3
     %n = firrtl.node %addr : !firrtl.uint<4>
-    %ramport_data, %ramport_port = firrtl.memoryport Read %ram {name = "ramport"} : (!firrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !firrtl.cmemoryport)
-    firrtl.memoryport.access %ramport_port[%n], %clock : !firrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
+    %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !chirrtl.cmemoryport)
+    chirrtl.memoryport.access %ramport_port[%n], %clock : !chirrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
     firrtl.connect %v, %ramport_data : !firrtl.uint<32>, !firrtl.uint<32>
   }
 }
@@ -303,12 +303,12 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 // connection should be made using a partial connect.
 firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl.uint<3>, out %out: !firrtl.uint<1>) {
   // CHECK-LABEL: @AddressLargerThanPort
-  %mem = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<1>, 4>
-  %r_data, %r_port = firrtl.memoryport Infer %mem  {name = "r"} : (!firrtl.cmemory<uint<1>, 4>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+  %mem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 4>
+  %r_data, %r_port = chirrtl.memoryport Infer %mem  {name = "r"} : (!chirrtl.cmemory<uint<1>, 4>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
   // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r(0)
   %addr_node = firrtl.node %addr  : !firrtl.uint<3>
   // CHECK: firrtl.partialconnect [[ADDR]], %addr_node
-  firrtl.memoryport.access %r_port[%addr_node], %clock : !firrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+  chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
