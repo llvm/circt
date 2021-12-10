@@ -512,4 +512,22 @@ firrtl.module @vector_of_bundle(in %p : !firrtl.uint<1>, out %ret: !firrtl.vecto
   // CHECK-NOT: firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:     firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
+
+// CHECK-LABEL: @aggregate_register
+firrtl.module @aggregate_register(in %clock: !firrtl.clock) {
+  %0 = firrtl.reg %clock : !firrtl.bundle<a : uint<1>, b : uint<1>>
+  // CHECK:      %1 = firrtl.subfield %0(0)
+  // CHECK-NEXT: firrtl.connect %1, %1
+  // CHECK-NEXT: %2 = firrtl.subfield %0(1)
+  // CHECK-NEXT: firrtl.connect %2, %2
+}
+
+// CHECK-LABEL: @aggregate_regreset
+firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %resetval: !firrtl.vector<uint<1>, 2>) {
+  %0 = firrtl.regreset %clock, %reset, %resetval : !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // CHECK:      %1 = firrtl.subindex %0[0]
+  // CHECK-NEXT: firrtl.connect %1, %1
+  // CHECK-NEXT: %2 = firrtl.subindex %0[1]
+  // CHECK-NEXT: firrtl.connect %2, %2
+}
 }

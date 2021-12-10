@@ -129,12 +129,3 @@ firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.ve
   // expected-error @-1 {{sink "out[0].a" not fully initialized}}
 }
 }
-
-// -----
-
-firrtl.circuit "CheckInitialization" {
-firrtl.module @CheckInitialization(in %clock: !firrtl.clock) {
-  // expected-error @+1 {{aggegate type register is not supported}}
-  %reg0 = firrtl.reg %clock : !firrtl.vector<uint<1>, 1>
-}
-}
