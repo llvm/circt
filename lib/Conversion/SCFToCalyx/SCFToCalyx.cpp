@@ -55,6 +55,8 @@ struct WhileOpInterface {
   Block::BlockArgListType getBodyArgs() {
     if (auto *op = std::get_if<scf::WhileOp>(&impl))
       return op->getAfterArguments();
+    if (auto *op = std::get_if<staticlogic::PipelineWhileOp>(&impl))
+      return op->getStagesBlock().getArguments();
 
     llvm_unreachable("unsupported while op");
   }
@@ -62,6 +64,8 @@ struct WhileOpInterface {
   Block *getBodyBlock() {
     if (auto *op = std::get_if<scf::WhileOp>(&impl))
       return &op->after().front();
+    if (auto *op = std::get_if<staticlogic::PipelineWhileOp>(&impl))
+      return &op->getStagesBlock();
 
     llvm_unreachable("unsupported while op");
   }
@@ -69,6 +73,8 @@ struct WhileOpInterface {
   Block *getConditionBlock() {
     if (auto *op = std::get_if<scf::WhileOp>(&impl))
       return &op->before().front();
+    if (auto *op = std::get_if<staticlogic::PipelineWhileOp>(&impl))
+      return &op->getCondBlock();
 
     llvm_unreachable("unsupported while op");
   }
@@ -76,12 +82,16 @@ struct WhileOpInterface {
   Value getConditionValue() {
     if (auto *op = std::get_if<scf::WhileOp>(&impl))
       return op->getConditionOp().getOperand(0);
+    if (auto *op = std::get_if<staticlogic::PipelineWhileOp>(&impl))
+      return op->getCondBlock().getTerminator()->getOperand(0);
 
     llvm_unreachable("unsupported while op");
   }
 
   Operation *getOperation() {
     if (auto *op = std::get_if<scf::WhileOp>(&impl))
+      return *op;
+    if (auto *op = std::get_if<staticlogic::PipelineWhileOp>(&impl))
       return *op;
 
     llvm_unreachable("unsupported while op");
