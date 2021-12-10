@@ -1891,10 +1891,12 @@ private:
       ///   return values have at the current point of conversion not yet
       ///   been rewritten to their register outputs, see comment in
       ///   LateSSAReplacement)
+      /// - Pipeline stage return values, which are handled in
+      ///   LateSSAReplacement.
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
               arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp,
-              staticlogic::PipelineWhileOp>(src.getDefiningOp()))
+              staticlogic::PipelineStageOp>(src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -2255,7 +2257,7 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pass recursively inlines use-def chains of combinational logic (from
   /// non-stateful groups) into groups referenced in the control schedule.
-  // addOncePattern<InlineCombGroups>(loweringPatterns, *loweringState);
+  addOncePattern<InlineCombGroups>(loweringPatterns, *loweringState);
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
