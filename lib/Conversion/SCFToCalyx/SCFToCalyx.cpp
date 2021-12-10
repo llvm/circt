@@ -735,13 +735,14 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
-                             IndexCastOp>(
+                             IndexCastOp,
+                             /// static logic
+                             staticlogic::PipelineTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp,
                              staticlogic::PipelineWhileOp,
                              staticlogic::PipelineStageOp,
-                             staticlogic::PipelineRegisterOp,
-                             staticlogic::PipelineTerminatorOp>([&](auto) {
+                             staticlogic::PipelineRegisterOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
               })
@@ -782,6 +783,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        staticlogic::PipelineTerminatorOp op) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -1012,6 +1015,22 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
       getComponentState().getUniqueName(whileOp) + "_latch",
       yieldOp.getOperands());
+  getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
+  return success();
+}
+
+LogicalResult
+BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                       staticlogic::PipelineTerminatorOp term) const {
+  if (term.getOperands().size() == 0)
+    return success();
+  auto whileOp = dyn_cast<staticlogic::PipelineWhileOp>(term->getParentOp());
+  assert(whileOp);
+  WhileOpInterface whileOpInterface(whileOp);
+  auto assignGroup = buildWhileIterArgAssignments(
+      rewriter, getComponentState(), term.getLoc(), whileOpInterface,
+      getComponentState().getUniqueName(whileOp) + "_latch",
+      term.getOperands());
   getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
   return success();
 }
@@ -2204,7 +2223,8 @@ void SCFToCalyxPass::runOnOperation() {
   addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern creates registers for all pipeline stages.
-  addOncePattern<BuildPipelineRegs>(loweringPatterns, funcMap, *loweringState);
+  // addOncePattern<BuildPipelineRegs>(loweringPatterns, funcMap,
+  // *loweringState);
 
   /// This pattern creates registers for the function return values.
   addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
