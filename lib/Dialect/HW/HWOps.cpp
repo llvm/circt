@@ -1224,7 +1224,7 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 
 LogicalResult GlobalRefOp::verifyGlobalRef() {
   // TODO: Cannot verify GlobalRef on ports yet.
-  Operation* parent = (*this)->getParentOp();
+  Operation *parent = (*this)->getParentOp();
   StringAttr symNameAttr = (*this).sym_nameAttr();
   static const char globalRefStr[] = "circt.globalRef";
   SymbolTable symTable(parent);
@@ -1233,7 +1233,7 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
   for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
     StringAttr modName = innerRef.getModule();
     StringAttr innerSym = innerRef.getName();
-    Operation* mod = symTable.lookup(modName);
+    Operation *mod = symTable.lookup(modName);
     if (!mod) {
       (*this)->emitOpError("module:'" + modName.str() + "' not found");
       return failure();
