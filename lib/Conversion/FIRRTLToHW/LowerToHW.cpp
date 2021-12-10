@@ -2006,8 +2006,15 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
     return setLowering(op, Value());
 
   auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getLoweredValue(op.input());
+  Value value = getPossiblyInoutLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
+
+  // If the value has an inout type, we need to lower to StructFieldInOutOp.
+  if (value.getType().isa<sv::InOutType>()) {
+    auto field =
+        op.input().getType().cast<BundleType>().getElementName(op.fieldIndex());
+    return setLoweringTo<sv::StructFieldInOutOp>(op, value, field);
+  }
 
   return setLoweringTo<hw::StructExtractOp>(
       op, resultType, value,
