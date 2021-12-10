@@ -737,11 +737,11 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
                              IndexCastOp,
                              /// static logic
-                             staticlogic::PipelineTerminatorOp>(
+                             staticlogic::PipelineTerminatorOp,
+                             staticlogic::PipelineStageOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp,
                              staticlogic::PipelineWhileOp,
-                             staticlogic::PipelineStageOp,
                              staticlogic::PipelineRegisterOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
                 return true;
@@ -785,6 +785,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
                         staticlogic::PipelineTerminatorOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        staticlogic::PipelineStageOp op) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -1065,6 +1067,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     getComponentState().addBlockArgGroup(srcBlock, succBlock.value(), groupOp);
   }
   return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     staticlogic::PipelineStageOp stage) const {
+  return failure();
 }
 
 /// For each return statement, we create a new group for assigning to the
