@@ -2250,11 +2250,12 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pass recursively inlines use-def chains of combinational logic (from
   /// non-stateful groups) into groups referenced in the control schedule.
-  addOncePattern<InlineCombGroups>(loweringPatterns, *loweringState);
+  // addOncePattern<InlineCombGroups>(loweringPatterns, *loweringState);
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
-  addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap, *loweringState);
+  // addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap,
+  // *loweringState);
 
   /// Eliminate any unused combinational groups. This is done before
   /// RewriteMemoryAccesses to avoid inferring slice components for groups that
@@ -2267,7 +2268,7 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pattern removes the source FuncOp which has now been converted into
   /// a Calyx component.
-  addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
+  // addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
