@@ -2274,7 +2274,7 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pattern removes the source FuncOp which has now been converted into
   /// a Calyx component.
-  // addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
+  addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
