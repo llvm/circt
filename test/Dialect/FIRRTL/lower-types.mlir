@@ -1,22 +1,24 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types)' %s | FileCheck --check-prefixes=CHECK,COMMON %s
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types{flatten-mem=true})' %s | FileCheck --check-prefix=FLATTEN %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types{preserve-aggregate=true})' %s | FileCheck --check-prefixes=AGGREGATE,COMMON %s
+
 
 firrtl.circuit "TopLevel" {
 
-  // CHECK-LABEL: firrtl.module @Simple
-  // CHECK-SAME: in %[[SOURCE_VALID_NAME:source_valid]]: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: out %[[SOURCE_READY_NAME:source_ready]]: [[SOURCE_READY_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: in %[[SOURCE_DATA_NAME:source_data]]: [[SOURCE_DATA_TYPE:!firrtl.uint<64>]]
-  // CHECK-SAME: out %[[SINK_VALID_NAME:sink_valid]]: [[SINK_VALID_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: in %[[SINK_READY_NAME:sink_ready]]: [[SINK_READY_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: out %[[SINK_DATA_NAME:sink_data]]: [[SINK_DATA_TYPE:!firrtl.uint<64>]]
+  // COMMON-LABEL: firrtl.module @Simple
+  // COMMON-SAME: in %[[SOURCE_VALID_NAME:source_valid]]: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: out %[[SOURCE_READY_NAME:source_ready]]: [[SOURCE_READY_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: in %[[SOURCE_DATA_NAME:source_data]]: [[SOURCE_DATA_TYPE:!firrtl.uint<64>]]
+  // COMMON-SAME: out %[[SINK_VALID_NAME:sink_valid]]: [[SINK_VALID_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: in %[[SINK_READY_NAME:sink_ready]]: [[SINK_READY_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: out %[[SINK_DATA_NAME:sink_data]]: [[SINK_DATA_TYPE:!firrtl.uint<64>]]
   firrtl.module @Simple(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
                         out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
 
-    // CHECK-NEXT: firrtl.when %[[SOURCE_VALID_NAME]]
-    // CHECK-NEXT:   firrtl.connect %[[SINK_DATA_NAME]], %[[SOURCE_DATA_NAME]] : [[SINK_DATA_TYPE]], [[SOURCE_DATA_TYPE]]
-    // CHECK-NEXT:   firrtl.connect %[[SINK_VALID_NAME]], %[[SOURCE_VALID_NAME]] : [[SINK_VALID_TYPE]], [[SOURCE_VALID_TYPE]]
-    // CHECK-NEXT:   firrtl.connect %[[SOURCE_READY_NAME]], %[[SINK_READY_NAME]] : [[SOURCE_READY_TYPE]], [[SINK_READY_TYPE]]
+    // COMMON-NEXT: firrtl.when %[[SOURCE_VALID_NAME]]
+    // COMMON-NEXT:   firrtl.connect %[[SINK_DATA_NAME]], %[[SOURCE_DATA_NAME]] : [[SINK_DATA_TYPE]], [[SOURCE_DATA_TYPE]]
+    // COMMON-NEXT:   firrtl.connect %[[SINK_VALID_NAME]], %[[SOURCE_VALID_NAME]] : [[SINK_VALID_TYPE]], [[SOURCE_VALID_TYPE]]
+    // COMMON-NEXT:   firrtl.connect %[[SOURCE_READY_NAME]], %[[SINK_READY_NAME]] : [[SOURCE_READY_TYPE]], [[SINK_READY_TYPE]]
 
     %0 = firrtl.subfield %source(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
     %1 = firrtl.subfield %source(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
@@ -31,43 +33,52 @@ firrtl.circuit "TopLevel" {
     }
   }
 
-  // CHECK-LABEL: firrtl.module @TopLevel
-  // CHECK-SAME: in %source_valid: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: out %source_ready: [[SOURCE_READY_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: in %source_data: [[SOURCE_DATA_TYPE:!firrtl.uint<64>]]
-  // CHECK-SAME: out %sink_valid: [[SINK_VALID_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: in %sink_ready: [[SINK_READY_TYPE:!firrtl.uint<1>]]
-  // CHECK-SAME: out %sink_data: [[SINK_DATA_TYPE:!firrtl.uint<64>]]
+  // COMMON-LABEL: firrtl.module @TopLevel
+  // COMMON-SAME: in %source_valid: [[SOURCE_VALID_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: out %source_ready: [[SOURCE_READY_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: in %source_data: [[SOURCE_DATA_TYPE:!firrtl.uint<64>]]
+  // COMMON-SAME: out %sink_valid: [[SINK_VALID_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: in %sink_ready: [[SINK_READY_TYPE:!firrtl.uint<1>]]
+  // COMMON-SAME: out %sink_data: [[SINK_DATA_TYPE:!firrtl.uint<64>]]
   firrtl.module @TopLevel(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
                           out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
 
-    // CHECK-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
-    // CHECK-SAME: = firrtl.instance "" @Simple(
-    // CHECK-SAME: in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>, out sink_valid: !firrtl.uint<1>, in sink_ready: !firrtl.uint<1>, out sink_data: !firrtl.uint<64>
+    // COMMON-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
+    // COMMON-SAME: = firrtl.instance "" @Simple(
+    // COMMON-SAME: in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>, out sink_valid: !firrtl.uint<1>, in sink_ready: !firrtl.uint<1>, out sink_data: !firrtl.uint<64>
     %sourceV, %sinkV = firrtl.instance "" @Simple(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
                         out sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 
-    // CHECK-NEXT: firrtl.connect %inst_source_valid, %source_valid
-    // CHECK-NEXT: firrtl.connect %source_ready, %inst_source_ready
-    // CHECK-NEXT: firrtl.connect %inst_source_data, %source_data
-    // CHECK-NEXT: firrtl.connect %sink_valid, %inst_sink_valid
-    // CHECK-NEXT: firrtl.connect %inst_sink_ready, %sink_ready
-    // CHECK-NEXT: firrtl.connect %sink_data, %inst_sink_data
+    // COMMON-NEXT: firrtl.connect %inst_source_valid, %source_valid
+    // COMMON-NEXT: firrtl.connect %source_ready, %inst_source_ready
+    // COMMON-NEXT: firrtl.connect %inst_source_data, %source_data
+    // COMMON-NEXT: firrtl.connect %sink_valid, %inst_sink_valid
+    // COMMON-NEXT: firrtl.connect %inst_sink_ready, %sink_ready
+    // COMMON-NEXT: firrtl.connect %sink_data, %inst_sink_data
     firrtl.connect %sourceV, %source : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 
     firrtl.connect %sink, %sinkV : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   }
 
-  // CHECK-LABEL: firrtl.module @Recursive
+  // COMMON-LABEL: firrtl.module @Recursive
   // CHECK-SAME: in %[[FLAT_ARG_1_NAME:arg_foo_bar_baz]]: [[FLAT_ARG_1_TYPE:!firrtl.uint<1>]]
   // CHECK-SAME: in %[[FLAT_ARG_2_NAME:arg_foo_qux]]: [[FLAT_ARG_2_TYPE:!firrtl.sint<64>]]
   // CHECK-SAME: out %[[OUT_1_NAME:out1]]: [[OUT_1_TYPE:!firrtl.uint<1>]]
   // CHECK-SAME: out %[[OUT_2_NAME:out2]]: [[OUT_2_TYPE:!firrtl.sint<64>]]
+  // AGGREGATE-SAME: in %[[ARG_NAME:arg]]: [[ARG_TYPE:!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>]]
+  // AGGREGATE-SAME: out %[[OUT_1_NAME:out1]]: [[OUT_1_TYPE:!firrtl.uint<1>]]
+  // AGGREGATE-SAME: out %[[OUT_2_NAME:out2]]: [[OUT_2_TYPE:!firrtl.sint<64>]]
   firrtl.module @Recursive(in %arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
                            out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>) {
 
     // CHECK-NEXT: firrtl.connect %[[OUT_1_NAME]], %[[FLAT_ARG_1_NAME]] : [[OUT_1_TYPE]], [[FLAT_ARG_1_TYPE]]
     // CHECK-NEXT: firrtl.connect %[[OUT_2_NAME]], %[[FLAT_ARG_2_NAME]] : [[OUT_2_TYPE]], [[FLAT_ARG_2_TYPE]]
+    // AGGREGATE-NEXT:  %0 = firrtl.subfield %[[ARG_NAME]](0)
+    // AGGREGATE-NEXT:  %1 = firrtl.subfield %0(0)
+    // AGGREGATE-NEXT:  %2 = firrtl.subfield %1(0)
+    // AGGREGATE-NEXT:  %3 = firrtl.subfield %0(1)
+    // AGGREGATE-NEXT:  firrtl.connect %[[OUT_1_NAME]], %2
+    // AGGREGATE-NEXT:  firrtl.connect %[[OUT_2_NAME]], %3
 
     %0 = firrtl.subfield %arg(0) : (!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>) -> !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.bundle<baz: uint<1>>
@@ -374,10 +385,19 @@ firrtl.circuit "TopLevel" {
 //CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
 //CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %invalid_ui14 : !firrtl.uint<14>, !firrtl.uint<14>
 
+//AGGREGATE-LABEL: firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a: !firrtl.bundle<inp_d: uint<14>>)
+//AGGREGATE:    firrtl.module @top_mod(in %clock: !firrtl.clock)
+//AGGREGATE-NEXT:  %U0_clock, %U0_inp_a = firrtl.instance U0  @mod_2(in clock: !firrtl.clock, in inp_a: !firrtl.bundle<inp_d: uint<14>>)
+//AGGREGATE-NEXT:  %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+//AGGREGATE-NEXT:  firrtl.connect %U0_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
+//AGGREGATE-NEXT:  %invalid = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
+//AGGREGATE-NEXT:  %0 = firrtl.subfield %invalid(0) : (!firrtl.bundle<inp_d: uint<14>>) -> !firrtl.uint<14>
+//AGGREGATE-NEXT:  %1 = firrtl.subfield %U0_inp_a(0) : (!firrtl.bundle<inp_d: uint<14>>) -> !firrtl.uint<14>
+//AGGREGATE-NEXT:  firrtl.connect %1, %0 : !firrtl.uint<14>, !firrtl.uint<14>
 // https://github.com/llvm/circt/issues/661
 
 // This test is just checking that the following doesn't error.
-    // CHECK-LABEL: firrtl.module @Issue661
+    // COMMON-LABEL: firrtl.module @Issue661
     firrtl.module @Issue661(in %clock: !firrtl.clock) {
       %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32}
       : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>,
@@ -472,22 +492,29 @@ firrtl.circuit "TopLevel" {
   // CHECK-LABEL: firrtl.module @LowerVectors(in %a_0: !firrtl.uint<1>, in %a_1: !firrtl.uint<1>, out %b_0: !firrtl.uint<1>, out %b_1: !firrtl.uint<1>)
   // CHECK: firrtl.connect %b_0, %a_0
   // CHECK: firrtl.connect %b_1, %a_1
+  // AGGREGATE-LABEL: firrtl.module @LowerVectors(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>)
+  // AGGREGATE-NEXT: %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT: %1 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT: firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE-NEXT: %2 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT: %3 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT: firrtl.connect %3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Test vector of bundles lowering
-  // CHECK-LABEL: firrtl.module @LowerVectorsOfBundles(in %in_0_a: !firrtl.uint<1>, out %in_0_b: !firrtl.uint<1>, in %in_1_a: !firrtl.uint<1>, out %in_1_b: !firrtl.uint<1>, out %out_0_a: !firrtl.uint<1>, in %out_0_b: !firrtl.uint<1>, out %out_1_a: !firrtl.uint<1>, in %out_1_b: !firrtl.uint<1>)
+  // COMMON-LABEL: firrtl.module @LowerVectorsOfBundles(in %in_0_a: !firrtl.uint<1>, out %in_0_b: !firrtl.uint<1>, in %in_1_a: !firrtl.uint<1>, out %in_1_b: !firrtl.uint<1>, out %out_0_a: !firrtl.uint<1>, in %out_0_b: !firrtl.uint<1>, out %out_1_a: !firrtl.uint<1>, in %out_1_b: !firrtl.uint<1>)
   firrtl.module @LowerVectorsOfBundles(in %in: !firrtl.vector<bundle<a : uint<1>, b  flip: uint<1>>, 2>,
                                        out %out: !firrtl.vector<bundle<a : uint<1>, b  flip: uint<1>>, 2>) {
-    // CHECK: firrtl.connect %out_0_a, %in_0_a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %in_0_b, %out_0_b : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %out_1_a, %in_1_a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %in_1_b, %out_1_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // COMMON:      firrtl.connect %out_0_a, %in_0_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // COMMON-NEXT: firrtl.connect %in_0_b, %out_0_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // COMMON-NEXT: firrtl.connect %out_1_a, %in_1_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // COMMON-NEXT: firrtl.connect %in_1_b, %out_1_b : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %in: !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>, !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>
   }
 
-  // CHECK-LABEL: firrtl.extmodule @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+  // COMMON-LABEL: firrtl.extmodule @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
   firrtl.extmodule @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   firrtl.module @Test() {
-    // CHECK: %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance "" @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+    // COMMON: %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance "" @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
     %inst_source = firrtl.instance "" @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   }
 
@@ -515,6 +542,25 @@ firrtl.circuit "TopLevel" {
   // CHECK:   firrtl.connect %r_1, %a_d_1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %a_q_0, %r_0 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %a_q_1, %r_1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE:       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // AGGREGATE-NEXT:  %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE-NEXT:  %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %2 = firrtl.subindex %a_d[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %3 = firrtl.subindex %r[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  firrtl.connect %3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE-NEXT:  %4 = firrtl.subindex %a_d[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %5 = firrtl.subindex %r[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  firrtl.connect %5, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE-NEXT:  %6 = firrtl.subindex %r[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %7 = firrtl.subindex %a_q[0] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  firrtl.connect %7, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+  // AGGREGATE-NEXT:  %8 = firrtl.subindex %r[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %9 = firrtl.subindex %a_q[1] : !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  firrtl.connect %9, %8 : !firrtl.uint<1>, !firrtl.uint<1>
 
 // Test RegResetOp lowering without name attribute
 // https://github.com/llvm/circt/issues/795
@@ -569,14 +615,14 @@ firrtl.circuit "TopLevel" {
   // CHECK-SAME: annotations = [{a = "a"}]
 
 // Test that MemOp Annotations are copied to lowered MemOps.
-  // CHECK-LABEL: firrtl.module @AnnotationsMemOp
+  // COMMON-LABEL: firrtl.module @AnnotationsMemOp
   firrtl.module @AnnotationsMemOp() {
     %bar_r, %bar_w = firrtl.mem Undefined  {annotations = [{a = "a"}], depth = 16 : i64, name = "bar", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 2>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
   }
-  // CHECK: firrtl.mem
-  // CHECK-SAME: annotations = [{a = "a"}]
-  // CHECK: firrtl.mem
-  // CHECK-SAME: annotations = [{a = "a"}]
+  // COMMON: firrtl.mem
+  // COMMON-SAME: annotations = [{a = "a"}]
+  // COMMON: firrtl.mem
+  // COMMON-SAME: annotations = [{a = "a"}]
 
 // Test that WireOp Annotations are copied to lowered WireOps.
   // CHECK-LABEL: firrtl.module @AnnotationsWireOp
@@ -590,7 +636,7 @@ firrtl.circuit "TopLevel" {
 
 // Test that WireOp annotations which are sensitive to field IDs are annotated
 // with the lowered field IDs.
-  // CHECK-LABEL: firrtl.module @AnnotationsWithFieldIdWireOp
+  // COMMON-LABEL: firrtl.module @AnnotationsWithFieldIdWireOp
   firrtl.module @AnnotationsWithFieldIdWireOp() {
     %foo = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.uint<1>
     %bar = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
@@ -610,6 +656,8 @@ firrtl.circuit "TopLevel" {
   // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 1 : i64}
   // CHECK: %baz_b_1 = firrtl.wire
   // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 2 : i64}
+  // AGGREGATE:  %baz = firrtl.wire
+  // AGGREGATE-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}>]}
 
 // Test that Reg/RegResetOp Annotations are copied to lowered registers.
   // CHECK-LABEL: firrtl.module @AnnotationsRegOp
