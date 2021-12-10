@@ -1469,6 +1469,13 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
   build(builder, odsState, field.type, input, field.name);
 }
 
+void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
+                            Value input, StringRef field) {
+  auto structType = input.getType().cast<StructType>();
+  auto resultType = structType.getFieldType(field);
+  build(builder, odsState, resultType, input, field);
+}
+
 //===----------------------------------------------------------------------===//
 // StructInjectOp
 //===----------------------------------------------------------------------===//
