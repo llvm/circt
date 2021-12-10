@@ -1060,7 +1060,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      staticlogic::PipelineStageOp stage) const {
-  return failure();
+  // TODO: find pipeline registers, create assignments, and add group.
+  return success();
 }
 
 /// For each return statement, we create a new group for assigning to the
@@ -1916,7 +1917,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
 
   LogicalResult PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                                          PatternRewriter &) const override {
-    auto whileReplacement = [&](Operation *op) {
+    funcOp.walk([&](scf::WhileOp op) {
       /// The yielded values returned from the while op will be present in the
       /// iterargs registers post execution of the loop.
       /// This is done now, as opposed to during BuildWhileGroups since if the
@@ -1925,12 +1926,22 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
       /// eliminated.
       WhileOpInterface whileOp(op);
       for (auto res : getComponentState().getWhileIterRegs(whileOp))
-        whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
-            res.second.out());
-    };
+        op->getResults()[res.first].replaceAllUsesWith(res.second.out());
+    });
 
-    funcOp.walk([&](scf::WhileOp op) { whileReplacement(op); });
-    funcOp.walk([&](staticlogic::PipelineWhileOp op) { whileReplacement(op); });
+    funcOp.walk([&](staticlogic::PipelineWhileOp op) {
+      // For each iter arg, get the stage result, find the value that becomes
+      // that result, and replace all uses.
+      auto *term = op.getStagesBlock().getTerminator();
+      for (auto &operand : term->getOpOperands()) {
+        auto stage =
+            operand.get().getDefiningOp<staticlogic::PipelineStageOp>();
+        auto index = operand.getOperandNumber();
+        auto oldValue = stage->getResult(index);
+        auto newValue = stage.getBodyBlock().getTerminator()->getOperand(index);
+        oldValue.replaceAllUsesWith(newValue);
+      }
+    });
 
     funcOp.walk([&](memref::LoadOp loadOp) {
       if (singleLoadFromMemory(loadOp)) {
@@ -2248,8 +2259,7 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
-  // addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap,
-  // *loweringState);
+  addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap, *loweringState);
 
   /// Eliminate any unused combinational groups. This is done before
   /// RewriteMemoryAccesses to avoid inferring slice components for groups that
