@@ -68,21 +68,11 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
-/// Return true if we can preserve the type when `preserve-aggregate` flag is
-/// true. Currently, we only allow vector types.
-/// TODO: In the end, it is sufficient to check whether the type is a passive
-/// type or not.
+/// Return true if we can preserve the aggregate type. We can a preserve the
+/// type iff type is not passive and don't contain analog.
 static bool isPreservableAggregateType(Type type) {
-  auto firtype = type.cast<FIRRTLType>();
-  if (!firtype.isPassive())
-    return false;
-
-  if (firtype.isGround())
-    return true;
-
-  if (auto vector = firtype.dyn_cast<FVectorType>())
-    return isPreservableAggregateType(vector.getElementType());
-  return false;
+  auto firrtlType = type.cast<FIRRTLType>();
+  return firrtlType.isPassive() && !firrtlType.containsAnalog();
 }
 
 /// Peel one layer of an aggregate type into its components.  Type may be
@@ -401,14 +391,7 @@ bool TypeLoweringVisitor::lowerProducer(
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  bool allowedToPreserveAggregate = preserveAggregate;
-  // TODO: If any annotation, inner_sym or name appears in the operation, we
-  // give up to preserve for now.
-  if (op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>() ||
-      op->getAttrOfType<StringAttr>("inner_sym") || op->getAttr("name"))
-    allowedToPreserveAggregate = false;
-
-  if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate))
+  if (!peelType(srcType, fieldTypes, preserveAggregate))
     return false;
 
   SmallVector<Value> lowered;
@@ -507,9 +490,7 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  // TODO: If an argument has annotation, we give up to preserve aggregate.
-  if (!peelType(srcType, fieldTypes,
-                preserveAggregate && newArgs[argIndex].annotations.empty()))
+  if (!peelType(srcType, fieldTypes, preserveAggregate))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
@@ -568,7 +549,10 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
 
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (!peelType(op.dest().getType(), fields, preserveAggregate))
+
+  // We have to expand connections even if the aggregate preservation is true.
+  if (!peelType(op.dest().getType(), fields,
+                /* allowedToPreserveAggregate */ false))
     return false;
 
   // Loop over the leaf aggregates.
@@ -592,8 +576,10 @@ bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   SmallVector<FlatBundleFieldEntry> srcFields, destFields;
 
   // For partial connects, we give up to preserve aggregates.
-  peelType(op.src().getType(), srcFields, false);
-  bool dValid = peelType(op.dest().getType(), destFields, false);
+  peelType(op.src().getType(), srcFields,
+           /* allowedToPreserveAggregate */ false);
+  bool dValid = peelType(op.dest().getType(), destFields,
+                         /* allowedToPreserveAggregate */ false);
 
   // Ground Type
   if (!dValid) {
@@ -1183,7 +1169,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes, false)) {
+    if (!peelType(srcType, fieldTypes, preserveAggregate)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
