@@ -1484,9 +1484,8 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
-/// Return the lowered array value whose type is converted into `destType`.
+/// Return the lowered aggregate value whose type is converted into `destType`.
 /// We have to care about the extension/truncation/signedness of each element.
-/// If returns a null value for complex arrays such as arrays with bundles.
 Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
                                                   FIRRTLType sourceType,
                                                   FIRRTLType destType,
