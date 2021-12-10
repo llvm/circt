@@ -1222,9 +1222,10 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult GlobalRef::verifyGlobalRef() {
-  auto parent = (*this)->getParentOp();
-  auto symNameAttr = (*this).sym_nameAttr();
+LogicalResult GlobalRefOp::verifyGlobalRef() {
+  // TODO: Cannot verify GlobalRef on ports yet.
+  Operation* parent = (*this)->getParentOp();
+  StringAttr symNameAttr = (*this).sym_nameAttr();
   static const char globalRefStr[] = "circt.globalRef";
   SymbolTable symTable(parent);
   // For all inner refs in the namepath, ensure they have a corresponding
@@ -1232,14 +1233,14 @@ LogicalResult GlobalRef::verifyGlobalRef() {
   for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
     StringAttr modName = innerRef.getModule();
     StringAttr innerSym = innerRef.getName();
-    auto mod = symTable.lookup(modName);
+    Operation* mod = symTable.lookup(modName);
     if (!mod) {
       (*this)->emitOpError("module:'" + modName.str() + "' not found");
       return failure();
     }
     bool glblSymNotFound = true;
     mod->walk([&](Operation *op) -> WalkResult {
-      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+      StringAttr attr = op->getAttrOfType<StringAttr>("inner_sym");
       // If this is one of the ops in the instance path for the GlobalRefOp.
       if (attr && attr == innerSym) {
         // Each op can have an array of GlobalRefAttr, check if this op is one

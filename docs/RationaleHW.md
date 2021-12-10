@@ -142,8 +142,8 @@ notable differences: for example:
    on the other hand, do support both of these.  Zero width ports are omitted (printed as
    comments) when generating verilog.
 
-### GlobalRef
-The GlobalRef operation (`hw.globalRef`) can be used to identify the unique
+### GlobalRefOp
+The GlobalRefOp operation (`hw.globalRef`) can be used to identify the unique
  instance path of an operation globally.
 `hw.globalRef` can be used to attach nonlocal annotations in FIRRTL dialect
 and also for metadata emission.

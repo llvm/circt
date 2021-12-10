@@ -438,7 +438,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
   let verifier = "return ::verifyOutputOp(this);";
 }
 
-def GlobalRef : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
+def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
   let summary = "A global reference to uniquely identify each"
                                     "instance of an operation";
   let description = [{
