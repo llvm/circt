@@ -1222,6 +1222,49 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
+LogicalResult GlobalRef::verifyGlobalRef() {
+  auto parent = (*this)->getParentOp();
+  auto symNameAttr = (*this).sym_nameAttr();
+  static const char globalRefStr[] = "circt.globalRef";
+  SymbolTable symTable(parent);
+  // For all inner refs in the namepath, ensure they have a corresponding
+  // GlobalRefAttr to this GlobalRefOp.
+  for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
+    StringAttr modName = innerRef.getModule();
+    StringAttr innerSym = innerRef.getName();
+    auto mod = symTable.lookup(modName);
+    if (!mod) {
+      (*this)->emitOpError("module:'" + modName.str() + "' not found");
+      return failure();
+    }
+    bool glblSymNotFound = true;
+    mod->walk([&](Operation *op) -> WalkResult {
+      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+      // If this is one of the ops in the instance path for the GlobalRefOp.
+      if (attr && attr == innerSym) {
+        // Each op can have an array of GlobalRefAttr, check if this op is one
+        // of them.
+        for (auto ref : op->getAttr(globalRefStr)
+                            .cast<ArrayAttr>()
+                            .getAsRange<GlobalRefAttr>())
+          if (ref.getGlblSym().getAttr() == symNameAttr) {
+            glblSymNotFound = false;
+            return WalkResult::interrupt();
+          }
+        // If cannot find the ref, then its an error.
+        return failure();
+      }
+      return WalkResult::advance();
+    });
+    if (glblSymNotFound) {
+      return (*this)->emitOpError(
+          "operation:'" + innerSym.str() + "' in module:'" + modName.str() +
+          "' does not contain a reference to '" + symNameAttr.str() + "'");
+    }
+  }
+  return success();
+}
+
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
   Type type;

@@ -152,3 +152,29 @@ hw.module @fileListTest(%arg1: i32) attributes {output_filelist = #hw.output_fil
 // CHECK-LABEL: hw.module @commentModule
 // CHECK-SAME: attributes {comment = "hello world"}
 hw.module @commentModule() attributes {comment = "hello world"} {}
+
+module {
+// CHECK-LABEL: module {
+  hw.globalRef @glbl_B_M1 [#hw.innerNameRef<@A::@inst_1>, #hw.innerNameRef<@B::@memInst>]
+  hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@memInst>]
+
+  // CHECK:  hw.globalRef @glbl_B_M1 [#hw.innerNameRef<@A::@inst_1>, #hw.innerNameRef<@B::@memInst>]
+  // CHECK:  hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@memInst>]
+
+
+  hw.module @FIRRTLMem() -> () {
+  }
+  hw.module @D() -> () {
+    hw.instance "M1" sym @memInst @FIRRTLMem() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+  }
+  hw.module @B() -> () {
+     hw.instance "M1" sym @memInst @FIRRTLMem() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_B_M1>]}
+  }
+  hw.module @C() -> () {
+    hw.instance "m" sym @inst @D() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+  }
+  hw.module @A() -> () {
+    hw.instance "h1" sym @inst_1 @B() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_B_M1>]}
+    hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+  }
+}

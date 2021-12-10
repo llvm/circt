@@ -448,7 +448,13 @@ def GlobalRef : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
     This also lets components of the path point to a common entity.
   }];
 
+  let extraClassDeclaration = [{
+    LogicalResult verifyGlobalRef();
+  }];
+
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
 
   let assemblyFormat = [{ $sym_name $namepath attr-dict}];
+
+  let verifier = "return this->verifyGlobalRef();";
 }
