@@ -644,8 +644,10 @@ void EmitterBase::emitTextWithSubstitutions(
       while (next < string.size() && isdigit(string[next]))
         ++next;
       // We need at least one digit.
-      if (start == next)
+      if (start == next) {
+        next--;
         continue;
+      }
 
       // We must have a }} right after the digits.
       if (!string.substr(next).startswith("}}"))
