@@ -11,6 +11,7 @@ methodology to the domain of hardware design tools.
 Take a look at the following diagram, which gives a brief overview of the 
 current [dialects and how they interact](includes/img/dialects.svg):
 
+<p align="center"><img src="includes/img/dialectlegend.svg"/></p>
 <p align="center"><img src="includes/img/dialects.svg"/></p>
 
 ## Setting this up

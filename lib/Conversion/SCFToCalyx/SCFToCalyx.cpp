@@ -45,11 +45,15 @@ using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 /// consistent interface.
 struct WhileOpInterface {
   WhileOpInterface(Operation *op) {
-    assert(isa<scf::WhileOp>(op) || isa<staticlogic::PipelineWhileOp>(op));
+    assert(isSupported(op));
     if (auto scfWhile = dyn_cast<scf::WhileOp>(op))
       impl = scfWhile;
     if (auto staticLogicWhile = dyn_cast<staticlogic::PipelineWhileOp>(op))
       impl = staticLogicWhile;
+  }
+
+  static bool isSupported(Operation *op) {
+    return isa<scf::WhileOp, staticlogic::PipelineWhileOp>(op);
   }
 
   Block::BlockArgListType getBodyArgs() {
@@ -1470,7 +1474,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
       // Only work on ops that support the WhileOpInterface.
-      if (!isa<scf::WhileOp, staticlogic::PipelineWhileOp>(op))
+      if (!WhileOpInterface::isSupported(op))
         return WalkResult::advance();
 
       WhileOpInterface whileOp(op);
@@ -1928,7 +1932,8 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
       /// eliminated.
       WhileOpInterface whileOp(op);
       for (auto res : getComponentState().getWhileIterRegs(whileOp))
-        op->getResults()[res.first].replaceAllUsesWith(res.second.out());
+        whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
+            res.second.out());
     });
 
     funcOp.walk([&](staticlogic::PipelineWhileOp op) {
