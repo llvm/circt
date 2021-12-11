@@ -3,6 +3,24 @@
 
 include "mlir/IR/OpBase.td"
 
+def ScheduledOp : OpInterface<"ScheduledOp"> {
+let cppNamespace = "circt::hir"; 
+  let description = [{
+    This is an interface for all hir ops that have a schedule.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Get the timevar for this operation.",
+      "Value", "getTimeVar"
+    >,
+    InterfaceMethod<
+      "Get the offset for this operation.",
+      "int64_t", "getTimeOffset"
+    >,
+  ];
+}
+
 def FuncLike : OpInterface<"FuncLike"> {
 let cppNamespace = "circt::hir"; 
   let description = [{

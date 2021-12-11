@@ -57,7 +57,8 @@ class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
 
-def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments, ParentOneOf<["ForOp","WhileOp"]>,Terminator] > {
+def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments,
+ParentOneOf<["ForOp","WhileOp"]>,Terminator,ScheduledOp] > {
   let summary = "specifies the time at which the next iteration of the loop starts.";
   let description = [{
     This op specifies when the next iteration of the loop starts.
@@ -80,11 +81,17 @@ def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments, ParentOneOf<["Fo
   let hasCanonicalizeMethod = true;
   let assemblyFormat = [{ (`condition` $condition^)? (`iter_args` `(`$iter_args^ `)`)? `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict (`:` `(` type($iter_args)^ `)`)? }];
   let verifier =[{return verify$cppClass(*this);}];
+
+  let extraClassDeclaration = [{
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
+  }];
 }
 
 //isFirstIter has a side-effect otherwise cse will merge is_first_iter from
 //different loops in a loop nest.
-def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>]>{
+def IsFirstIterOp:HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>]>{
   let summary = "Returns true if this is the first iteration.";
   let results = (outs I1:$res);
 
@@ -240,7 +247,7 @@ def CommentOp : HIR_Op<"comment", []> {
   let assemblyFormat = [{$comment attr-dict}];
 }
 
-def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
+def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects, ScheduledOp]> {
   let summary = "if operation";
   let description = [{
     This op implements an if statement.
@@ -257,6 +264,9 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
       Value getRegionTimeVar(){
         return if_region().getArguments().back();
       }
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
@@ -264,7 +274,8 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   let hasCanonicalizeMethod =true;
 }
 
-def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {
+def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects,
+DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments,ScheduledOp]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -310,12 +321,16 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
     SmallVector<Value> getCapturedValues();
     StringRef getInductionVarName(){return (*this)->getAttr("argNames").dyn_cast<ArrayAttr>()[0].dyn_cast<StringAttr>().getValue();}
     StringRef getIterTimeVarName(){return (*this)->getAttr("argNames").dyn_cast<ArrayAttr>()[1].dyn_cast<StringAttr>().getValue();}
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
   let hasCanonicalizeMethod = true; 
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects, AttrSizedOperandSegments]> {
+def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects,
+AttrSizedOperandSegments,ScheduledOp]> {
   let summary = "for operation";
 
   let arguments = (ins I1:$condition,
@@ -329,6 +344,9 @@ def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects, AttrSizedOpera
     Value getIterTimeVar() { return body().getArguments().back(); }
     SmallVector<Value> getCapturedValues();
     Block* addEntryBlock();
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
 
   let hasCanonicalizeMethod =true;
@@ -350,7 +368,7 @@ def AllocaOp :HIR_Op<"alloca",[]> {
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments]> {
+def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments,ScheduledOp]> {
   let summary = "read from a memory.";
   let description = [{
     This Op reads from a memory interface. 
@@ -378,10 +396,12 @@ def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments]> {
   let extraClassDeclaration = [{
     public:
       SmallVector<Value> filterIndices(hir::DimKind);
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
 }
 
-def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
+def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments,ScheduledOp]> {
   let summary = "Write to a memory.";
   let description = [{
     This Op writes to memory. 
@@ -408,10 +428,13 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let extraClassDeclaration = [{
     public:
       SmallVector<Value> filterIndices(hir::DimKind);
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
 }
 
-def CallOp : HIR_Op<"call", [CallOpInterface,AttrSizedOperandSegments] > {
+def CallOp : HIR_Op<"call",
+[CallOpInterface,AttrSizedOperandSegments,ScheduledOp] > {
   let summary = "Function call";
   let description = [{
     This Op calls a function/module. 
@@ -462,10 +485,15 @@ def CallOp : HIR_Op<"call", [CallOpInterface,AttrSizedOperandSegments] > {
 
     /// Lookup the FuncOp/ExternalFuncOp for the callee. This returns null on invalid IR.
     Operation* getCalleeDecl() ;
+
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
 }
 
-def CallInstanceOp : HIR_Op<"call.instance",[AttrSizedOperandSegments] > {
+def CallInstanceOp :
+HIR_Op<"call.instance",[AttrSizedOperandSegments,ScheduledOp] > {
   let summary = "Call a previously instantiated function.";
   let description = [{
     This Op calls a previously instantiated function. It is used to fuse multiple instances of same function. 
@@ -490,9 +518,12 @@ def CallInstanceOp : HIR_Op<"call.instance",[AttrSizedOperandSegments] > {
     public:
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
   }];
 }
-def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
+
+def DelayOp: HIR_Op<"delay",[NoSideEffect,ScheduledOp]>{
   let summary = "Delay operation";
   let description = [{
     This op delays the input value by a fixed amount of time.
@@ -506,6 +537,11 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
   let assemblyFormat = [{$input `by` $delay `at` custom<TimeAndOffset> 
     ($tstart, $offset) custom<WithSSANames>(attr-dict) `:` type($res) custom<CopyType>(type($input),ref(type($res)))}];
   let verifier =[{return verify$cppClass(*this);}];
+  let extraClassDeclaration=[{
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
+  }];
 }
 
 def TimeOp: HIR_Op<"time",[NoSideEffect]>{
@@ -535,7 +571,7 @@ def TimeMaxOp: HIR_Op<"time.max",[NoSideEffect]>{
   let assemblyFormat = [{`(` $input_timevars `)` custom<WithSSANames>(attr-dict) `:` type($res)}];
 }
 
-def LatchOp: HIR_Op<"latch",[NoSideEffect]>{
+def LatchOp: HIR_Op<"latch",[NoSideEffect,ScheduledOp]>{
   let summary = "Latch a value for certain time.";
   let description = [{
       This op latches the input value until the next input value is latched at a later instant. 
@@ -553,6 +589,11 @@ def LatchOp: HIR_Op<"latch",[NoSideEffect]>{
       attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))
   }];
   let hasFolder = true;
+  let extraClassDeclaration=[{
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
+  }];
 }
 
 def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
@@ -634,7 +675,7 @@ def BusOp :HIR_Op<"bus",[]> {
   let assemblyFormat = [{custom<WithSSANames>(attr-dict) `:` type($res) }];
 }
 
-def BusSendOp : HIR_Op<"bus.send", []> {
+def BusSendOp : HIR_Op<"bus.send", [ScheduledOp]> {
   let summary = "write to a bus.";
   let description = [{
     This Op writes to a bus. 
@@ -649,9 +690,14 @@ def BusSendOp : HIR_Op<"bus.send", []> {
     $value `to` $bus `at` custom<TimeAndOffset> ($tstart, $offset) attr-dict `:` type($value) `to` type($bus)  
   }];
   let hasCanonicalizeMethod = true;
+  let extraClassDeclaration = [{
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
+  }];
 }
 
-def BusRecvOp : HIR_Op<"bus.recv", [NoSideEffect]> {
+def BusRecvOp : HIR_Op<"bus.recv", [NoSideEffect,ScheduledOp]> {
   let summary = "Read from a bus.";
   let description = [{
     This Op Reads from a bus. 
@@ -666,6 +712,11 @@ def BusRecvOp : HIR_Op<"bus.recv", [NoSideEffect]> {
     $bus `at` custom<TimeAndOffset>($tstart, $offset) custom<WithSSANames>(attr-dict)  `:` type($bus) `->` type($res)  
   }];
   let hasCanonicalizeMethod = true;
+  let extraClassDeclaration = [{
+    public:
+      Value getTimeVar(){return tstart();}
+      int64_t getTimeOffset(){return offset().getValue();}
+  }];
 }
 
 def BusAssignOp: HIR_Op<"bus.assign",[]>{

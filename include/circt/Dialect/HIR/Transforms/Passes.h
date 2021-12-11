@@ -16,7 +16,7 @@ namespace hir {
 
 std::unique_ptr<OperationPass<hir::FuncOp>> createSimplifyCtrlPass();
 std::unique_ptr<OperationPass<mlir::ModuleOp>> createMemrefLoweringPass();
-std::unique_ptr<OperationPass<hir::FuncOp>> createScheduleVerificationPass();
+std::unique_ptr<OperationPass<hir::FuncOp>> createVerifySchedulePass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createLoopUnrollPass();
 
 void registerHIRLoweringPassPipeline();

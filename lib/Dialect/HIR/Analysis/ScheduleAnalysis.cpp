@@ -1,40 +1,28 @@
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HIR/Analysis/ScheduleAnalysis.h"
-//#include "mlir/IR/BuiltinTypes.h"
-//#include "mlir/IR/Region.h"
-//#include "mlir/IR/Types.h"
-//#include "mlir/IR/Value.h"
-//#include "mlir/Support/LogicalResult.h"
-
-//#include "mlir/Analysis/Utils.h"
-//#include "mlir/Dialect/StandardOps/IR/Ops.h"
-//#include "llvm/ADT/TypeSwitch.h"
-//#include "llvm/Support/Debug.h"
+#include "circt/Dialect/HW/HWOps.h"
 
 using namespace circt;
 using namespace hir;
-
-// TODO:
-// - For fixed II calc how long LatchOp output is valid.
-// - Track happens-before relations between root time-vars (using POSET).
 
 namespace {
 class ScheduleInfoImpl {
 public:
   ScheduleInfoImpl(ScheduleInfo &scheduleInfo) : scheduleInfo(scheduleInfo) {}
-  LogicalResult dispatch(Operation *);
-  LogicalResult visitRegion(Region &);
+  LogicalResult visitOperation(Operation *);
 
 private:
   LogicalResult visitOp(FuncOp);
   LogicalResult visitOp(ForOp);
+  LogicalResult visitOp(WhileOp);
   LogicalResult visitOp(TimeOp);
   LogicalResult visitOp(CallOp);
-  LogicalResult visitOp(LatchOp);
+  LogicalResult visitOp(LoadOp);
   LogicalResult visitOp(BusRecvOp);
   LogicalResult visitOp(DelayOp);
+  LogicalResult visitCombOperation(Operation *);
   LogicalResult visitOp(mlir::arith::ConstantOp);
-  template <typename T>
-  LogicalResult visitSingleResultOpWithOptionalDelay(T);
+  LogicalResult visitOp(hw::ConstantOp);
 
 private:
   ScheduleInfo &scheduleInfo;
@@ -49,49 +37,79 @@ llvm::Optional<ScheduleInfo> ScheduleInfo::createScheduleInfo(FuncOp op) {
   ScheduleInfo scheduleInfo(op);
   ScheduleInfoImpl scheduleInfoImpl(scheduleInfo);
 
-  if (failed(scheduleInfoImpl.dispatch(op)))
-    return llvm::None;
+  auto walkResult = op.body().walk<mlir::WalkOrder::PreOrder>(
+      [&scheduleInfoImpl](Operation *operation) {
+        if (failed(scheduleInfoImpl.visitOperation(operation)))
+          return WalkResult::interrupt();
+        return WalkResult::advance();
+      });
 
-  if (failed(scheduleInfoImpl.visitRegion(op.getFuncBody())))
+  if (walkResult.wasInterrupted())
     return llvm::None;
-
   return std::move(scheduleInfo);
 }
 
-bool ScheduleInfo::isAlwaysValid(Value v) {
-  return setOfAlwaysValidValues.contains(v);
-}
 Value ScheduleInfo::getRootTimeVar(Value v) { return mapValueToRootTimeVar[v]; }
-uint64_t ScheduleInfo::getRootTimeOffset(Value v) {
+int64_t ScheduleInfo::getRootTimeOffset(Value v) {
   assert(getRootTimeVar(v));
-  return (uint64_t)mapValueToOffset[v];
+  return mapValueToOffset[v];
 }
+void ScheduleInfo::mapValueToTime(Value v, Value tstart, int64_t offset) {
+  mapValueToRootTimeVar[v] = tstart;
+  mapValueToOffset[v] = offset;
+}
+
+void ScheduleInfo::mapValueToAlwaysValid(Value v) {
+  setOfAlwaysValidValues.insert(v);
+}
+
+void ScheduleInfo::setAsRootTimeVar(Value tstart) {
+  mapValueToRootTimeVar[tstart] = tstart;
+  mapValueToOffset[tstart] = 0;
+  setOfRootTimeVars.insert(tstart);
+}
+
+void ScheduleInfo::setAsAlwaysValidValue(Value v) {
+  setOfAlwaysValidValues.insert(v);
+}
+
+bool ScheduleInfo::isValidAtTime(Value v, Value tstart, int64_t offset) {
+  if (setOfAlwaysValidValues.contains(v))
+    return true;
+  // We can't check relation between two time-domains, so we assume that value
+  // is valid (optimisitic analysis).
+  if (getRootTimeVar(v) != tstart)
+    return true;
+  if (getRootTimeOffset(v) == offset)
+    return true;
+  // v.getDefiningOp()->emitError("offset=")
+  //    << offset << "rootTimeOffset=" << getRootTimeOffset(v);
+  return false;
+}
+
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
 // ScheduleInfoImpl class methods.
 //-----------------------------------------------------------------------------
-LogicalResult ScheduleInfoImpl::dispatch(Operation *operation) {
+LogicalResult ScheduleInfoImpl::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<FuncOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (auto op = dyn_cast<ForOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (auto op = dyn_cast<TimeOp>(operation)) {
+  } else if (auto op = dyn_cast<WhileOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (auto op = dyn_cast<CallOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (auto op = dyn_cast<LatchOp>(operation)) {
-    if (failed(visitOp(op)))
-      return failure();
-  } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
+  } else if (auto op = dyn_cast<TimeOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (auto op = dyn_cast<LoadOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
+    if (failed(visitOp(op)))
       return failure();
   } else if (auto op = dyn_cast<BusRecvOp>(operation)) {
     if (failed(visitOp(op)))
@@ -99,69 +117,94 @@ LogicalResult ScheduleInfoImpl::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<DelayOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (operation->getNumResults() > 0) {
-    return operation->emitError(
-        " Failed to create ScheduleInfo. Unknown op has results.");
-  }
-  return success();
-}
-
-LogicalResult ScheduleInfoImpl::visitRegion(Region &region) {
-  for (Operation &operation : region.front()) {
-    if (failed(dispatch(&operation)))
+  } else if (isa<comb::CombDialect>(operation->getDialect())) {
+    if (failed(visitCombOperation(operation)))
+      return failure();
+  } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
+    if (failed(visitOp(op)))
+      return failure();
+  } else if (auto op = dyn_cast<hw::ConstantOp>(operation)) {
+    if (failed(visitOp(op)))
       return failure();
   }
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(FuncOp op) {
-  scheduleInfo.setOfRootTimeVars.insert(op.getRegionTimeVar());
-  scheduleInfo.mapValueToRootTimeVar[op.getRegionTimeVar()] =
-      op.getRegionTimeVar();
-  scheduleInfo.mapValueToOffset[op.getRegionTimeVar()] = 0;
+  scheduleInfo.setAsRootTimeVar(op.getRegionTimeVar());
+  scheduleInfo.mapValueToTime(op.getRegionTimeVar(), op.getRegionTimeVar(), 0);
   auto operands = op.getFuncBody().front().getArguments();
   auto inputAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();
   for (size_t i = 0; i < operands.size(); i++) {
     Value operand = operands[i];
     if (helper::isBuiltinSizedType(operand.getType())) {
-      scheduleInfo.mapValueToRootTimeVar[operand] = op.getRegionTimeVar();
-      scheduleInfo.mapValueToOffset[operand] =
-          helper::extractDelayFromDict(inputAttrs[i]);
+      scheduleInfo.mapValueToTime(operand, op.getRegionTimeVar(),
+                                  helper::extractDelayFromDict(inputAttrs[i]));
     } else if (operand.getType().isa<TimeType>()) {
-      scheduleInfo.setOfRootTimeVars.insert(operand);
-      scheduleInfo.mapValueToRootTimeVar[operand] = op.getRegionTimeVar();
-      scheduleInfo.mapValueToOffset[operand] = 0;
+      scheduleInfo.setAsRootTimeVar(operand);
+      scheduleInfo.mapValueToTime(operand, op.getRegionTimeVar(), 0);
     }
   }
-
   return success();
 }
+
 LogicalResult ScheduleInfoImpl::visitOp(ForOp op) {
   if (!op.tstart())
     return op.emitError("Failed to create ScheduleInfo. Operation is not "
                         "scheduled yet.");
-  scheduleInfo.setOfRootTimeVars.insert(op.t_end());
-  scheduleInfo.mapValueToRootTimeVar[op.t_end()] = op.t_end();
-  scheduleInfo.mapValueToOffset[op.t_end()] = 0;
 
-  // Register all the region operands with the root time var.
-  scheduleInfo.mapValueToOffset[op.getInductionVar()] = 0;
-  for (Value operand : op.getBody()->getArguments()) {
-    scheduleInfo.mapValueToRootTimeVar[operand] = op.getIterTimeVar();
-    scheduleInfo.mapValueToOffset[operand] = 0;
+  // register induction var.
+  scheduleInfo.mapValueToTime(op.getInductionVar(), op.getIterTimeVar(), 0);
+
+  // Register the region time var as a new root time var.
+  scheduleInfo.setAsRootTimeVar(op.getIterTimeVar());
+  scheduleInfo.mapValueToTime(op.getIterTimeVar(), op.getIterTimeVar(), 0);
+
+  // Register the t_end time var as a new root time var.
+  scheduleInfo.setAsRootTimeVar(op.t_end());
+  scheduleInfo.mapValueToTime(op.t_end(), op.t_end(), 0);
+
+  // Register the iter args and corresponding ForOp results.
+  if (op.iter_arg_delays()) {
+    auto iterArgDelays = op.iter_arg_delays().getValue();
+    for (size_t i = 0; i < iterArgDelays.size(); i++) {
+      auto delay = iterArgDelays[i].dyn_cast<mlir::IntegerAttr>().getInt();
+      auto iterArg = op.body().getArgument(i);
+      scheduleInfo.mapValueToTime(iterArg, op.getIterTimeVar(), delay);
+      scheduleInfo.mapValueToTime(op.getResult(i), op.t_end(), delay);
+    }
   }
-  for (Value capturedValue : op.getCapturedValues()) {
-    scheduleInfo.setOfAlwaysValidValues.insert(capturedValue);
-  }
-  return visitRegion(op.getLoopBody());
+  return success();
+}
+
+LogicalResult ScheduleInfoImpl::visitOp(WhileOp op) {
+  if (!op.tstart())
+    return op.emitError("Failed to create ScheduleInfo. Operation is not "
+                        "scheduled yet.");
+
+  // Register the region time var as a new root time var.
+  scheduleInfo.setAsRootTimeVar(op.getIterTimeVar());
+  scheduleInfo.mapValueToTime(op.getIterTimeVar(), op.getIterTimeVar(), 0);
+
+  // Register the t_end time var as a new root time var.
+  scheduleInfo.setAsRootTimeVar(op.t_end());
+  scheduleInfo.mapValueToTime(op.t_end(), op.t_end(), 0);
+
+  // Register the iter args and corresponding WhileOp results.
+  if (auto iterArgDelays = op.iter_arg_delays().getValue())
+    for (size_t i = 0; i < iterArgDelays.size(); i++) {
+      auto delay = iterArgDelays[i].dyn_cast<mlir::IntegerAttr>().getInt();
+      auto iterArg = op.body().getArgument(i);
+      scheduleInfo.mapValueToTime(iterArg, op.getIterTimeVar(), delay);
+      scheduleInfo.mapValueToTime(op.getResult(i), op.t_end(), delay);
+    }
+  return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(TimeOp op) {
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.timevar()];
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      op.delay() + scheduleInfo.mapValueToOffset[op.timevar()];
-
+  scheduleInfo.mapValueToTime(
+      op.getResult(), scheduleInfo.getRootTimeVar(op.timevar()),
+      op.delay() + scheduleInfo.getRootTimeOffset(op.timevar()));
   return success();
 }
 
@@ -176,12 +219,11 @@ LogicalResult ScheduleInfoImpl::visitOp(CallOp op) {
     DictionaryAttr attrDict = funcTy.getResultAttrs()[i];
     if (helper::isBuiltinSizedType(resTy)) {
       uint64_t delay = helper::extractDelayFromDict(attrDict);
-      scheduleInfo.mapValueToRootTimeVar[res] =
-          scheduleInfo.mapValueToRootTimeVar[op.tstart()];
-      scheduleInfo.mapValueToOffset[res] =
-          delay + scheduleInfo.mapValueToOffset[op.tstart()];
+      scheduleInfo.mapValueToTime(
+          res, scheduleInfo.getRootTimeVar(op.tstart()),
+          delay + scheduleInfo.getRootTimeOffset(op.tstart()));
     } else if (resTy.isa<TimeType>()) {
-      scheduleInfo.setOfRootTimeVars.insert(res);
+      scheduleInfo.setAsRootTimeVar(res);
     } else {
       op.emitError()
           << "Failed to create ScheduleInfo. Could not handle return type "
@@ -191,51 +233,57 @@ LogicalResult ScheduleInfoImpl::visitOp(CallOp op) {
   return success();
 }
 
-LogicalResult ScheduleInfoImpl::visitOp(LatchOp op) {
+LogicalResult ScheduleInfoImpl::visitOp(LoadOp op) {
   if (!op.tstart())
     return op.emitError("Failed to create ScheduleInfo. Operation is not "
                         "scheduled yet.");
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.tstart()];
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      op.offset().getValue() + scheduleInfo.mapValueToOffset[op.tstart()];
-  scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
+  scheduleInfo.mapValueToTime(
+      op.getResult(), scheduleInfo.getRootTimeVar(op.tstart()),
+      op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()) +
+          op.delay().getValue());
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(BusRecvOp op) {
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.tstart()];
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      op.offset().getValue() + scheduleInfo.mapValueToOffset[op.tstart()];
+  scheduleInfo.mapValueToTime(
+      op.getResult(), scheduleInfo.getRootTimeVar(op.tstart()),
+      op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()));
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(DelayOp op) {
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.tstart()];
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      op.delay() + op.offset().getValue() +
-      scheduleInfo.mapValueToOffset[op.tstart()];
+  scheduleInfo.mapValueToTime(op.getResult(),
+                              scheduleInfo.getRootTimeVar(op.tstart()),
+                              op.delay() + op.offset().getValue() +
+                                  scheduleInfo.getRootTimeOffset(op.tstart()));
+  return success();
+}
+
+LogicalResult ScheduleInfoImpl::visitCombOperation(Operation *operation) {
+  Value tstart;
+  int64_t offset;
+  for (auto operand : operation->getOperands())
+    if (scheduleInfo.getRootTimeVar(operand)) {
+      tstart = scheduleInfo.getRootTimeVar(operand);
+      offset = scheduleInfo.getRootTimeOffset(operand);
+      break;
+    }
+
+  for (auto result : operation->getResults()) {
+    if (tstart) {
+      scheduleInfo.mapValueToTime(result, tstart, offset);
+    } else {
+      scheduleInfo.setAsAlwaysValidValue(result);
+    }
+  }
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::ConstantOp op) {
-  scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
+  scheduleInfo.setAsAlwaysValidValue(op.result());
   return success();
 }
-
-template <typename T>
-LogicalResult ScheduleInfoImpl::visitSingleResultOpWithOptionalDelay(T op) {
-  if (!op.tstart())
-    return op.emitError("Failed to create ScheduleInfo. Operation is not "
-                        "scheduled yet.");
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.tstart()];
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      scheduleInfo.mapValueToOffset[op.tstart()] + op.offset().getValue() +
-      op.delay().getValue();
+LogicalResult ScheduleInfoImpl::visitOp(hw::ConstantOp op) {
+  scheduleInfo.setAsAlwaysValidValue(op.result());
   return success();
 }
-//-----------------------------------------------------------------------------
-//

@@ -13,11 +13,6 @@
 
 namespace circt {
 namespace hir {
-/// This struct represents a time-instant at timeVar+offset.
-struct TimeInstant {
-  Value timeVar;
-  uint64_t offset;
-};
 
 /// This class builds the scheduling info for each operation.
 /// The schedule-info contains
@@ -30,16 +25,19 @@ public:
   static llvm::Optional<ScheduleInfo> createScheduleInfo(FuncOp);
 
 public:
-  bool isAlwaysValid(Value);
+  bool isValidAtTime(Value v, Value tstart, int64_t offset);
   Value getRootTimeVar(Value);
-  uint64_t getRootTimeOffset(Value);
+  int64_t getRootTimeOffset(Value);
+  void mapValueToTime(Value, Value, int64_t);
+  void mapValueToAlwaysValid(Value);
+  void setAsRootTimeVar(Value);
+  void setAsAlwaysValidValue(Value);
 
 private:
   ScheduleInfo(FuncOp op) : funcOp(op) {}
 
-public:
   llvm::DenseMap<Value, Value> mapValueToRootTimeVar;
-  llvm::DenseMap<Value, uint64_t> mapValueToOffset;
+  llvm::DenseMap<Value, int64_t> mapValueToOffset;
   llvm::SetVector<Value> setOfAlwaysValidValues;
   llvm::SetVector<Value> setOfRootTimeVars;
   hir::FuncOp funcOp;

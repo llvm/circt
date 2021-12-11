@@ -5,7 +5,7 @@ add_circt_dialect_library(CIRCTHIRTransforms
   Passes/PassPipelines.cpp
   Passes/SimplifyCtrl.cpp
   Passes/SimplifyCtrlUtils.cpp
-  Passes/ScheduleVerifier.cpp
+  Passes/VerifySchedulePass.cpp
   PassRegistration.cpp
 
   DEPENDS

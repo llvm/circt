@@ -17,11 +17,11 @@ def MemrefLowering : Pass<"hir-lower-memref", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::arith::ArithmeticDialect","circt::hw::HWDialect","circt::comb::CombDialect","hir::HIRDialect"];
 }
 
-def ScheduleVerifier : Pass<"hir-schedule-verifier", "hir::FuncOp"> {
+def VerifySchedule : Pass<"hir-verify-schedule", "hir::FuncOp"> {
   let summary = "Verify that the schedule is correct";
   let description = [{This pass finds anomalies in HIR schedules.}];
 
-  let constructor = "circt::hir::createScheduleVerificationPass()";
+  let constructor = "circt::hir::createVerifySchedulePass()";
 }
 
 def LoopUnroll : Pass<"hir-loop-unroll", "hir::FuncOp"> {
