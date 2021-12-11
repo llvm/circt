@@ -998,7 +998,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims, /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
-          os << ' ' << element.name;
+          os << ' ' << element.name.getValue();
           emitter.printUnpackedTypePostfix(element.type, os);
           os << "; ";
         }
@@ -2005,7 +2005,7 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
   size_t i = 0;
   llvm::interleaveComma(stype.getElements(), os,
                         [&](const StructType::FieldInfo &field) {
-                          os << field.name << ": ";
+                          os << field.name.getValue() << ": ";
                           emitSubExpr(op.getOperand(i++), Selection, OOLBinary);
                         });
   os << '}';
@@ -2023,12 +2023,12 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
   os << "'{";
   llvm::interleaveComma(stype.getElements(), os,
                         [&](const StructType::FieldInfo &field) {
-                          os << field.name << ": ";
+                          os << field.name.getValue() << ": ";
                           if (field.name == op.field()) {
                             emitSubExpr(op.newValue(), Selection, OOLBinary);
                           } else {
                             emitSubExpr(op.input(), Selection, OOLBinary);
-                            os << '.' << field.name;
+                            os << '.' << field.name.getValue();
                           }
                         });
   os << '}';

@@ -54,7 +54,7 @@ uint32_t llvmIndexOfStructField(hw::StructType type, StringRef fieldName) {
   size_t index = 0;
 
   for (const auto *iter = fieldIter.begin(); iter != fieldIter.end(); ++iter) {
-    if (iter->name.equals(fieldName)) {
+    if (iter->name == fieldName) {
       return convertToLLVMEndianess(type, index);
     }
     ++index;
