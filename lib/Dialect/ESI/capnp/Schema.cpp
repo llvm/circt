@@ -195,10 +195,12 @@ static bool isPointerType(::capnp::schema::Type::Reader type) {
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   TypeSwitch<Type>(type)
       .Case([this](IntegerType t) {
-        fieldTypes.push_back(FieldInfo{"i", t});
+        fieldTypes.push_back(
+            FieldInfo{StringAttr::get(t.getContext(), "i"), t});
       })
       .Case([this](hw::ArrayType t) {
-        fieldTypes.push_back(FieldInfo{"l", t});
+        fieldTypes.push_back(
+            FieldInfo{StringAttr::get(t.getContext(), "l"), t});
       })
       .Case([this](hw::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
@@ -433,7 +435,7 @@ LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
 
   for (auto field : fieldTypes) {
     // Specify the actual type, followed by the capnp field.
-    os.indent() << field.name;
+    os.indent() << field.name.getValue();
     os.pad(maxNameLength - field.name.size()) << " @" << counter++ << " :";
     emitCapnpType(field.type, os);
     os << ";  # Actual type is " << field.type << ".\n";
