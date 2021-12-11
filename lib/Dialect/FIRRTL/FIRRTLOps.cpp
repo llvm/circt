@@ -2719,8 +2719,8 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
     int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
     if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
       return cast.emitError("size of field '")
-             << hwFields[findex].name.getValue() << "' don't match " << firWidth << ", "
-             << hwWidth;
+             << hwFields[findex].name.getValue() << "' don't match " << firWidth
+             << ", " << hwWidth;
   }
 
   return success();
