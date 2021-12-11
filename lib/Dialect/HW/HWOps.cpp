@@ -1470,10 +1470,10 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
-                            Value input, StringRef field) {
+                            Value input, StringAttr fieldAttr) {
   auto structType = input.getType().cast<StructType>();
-  auto resultType = structType.getFieldType(field);
-  build(builder, odsState, resultType, input, field);
+  auto resultType = structType.getFieldType(fieldAttr);
+  build(builder, odsState, resultType, input, fieldAttr);
 }
 
 //===----------------------------------------------------------------------===//

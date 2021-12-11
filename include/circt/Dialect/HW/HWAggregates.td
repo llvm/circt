@@ -174,7 +174,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
-    OpBuilder<(ins "Value":$input, "StringRef":$field)>
+    OpBuilder<(ins "Value":$input, "StringAttr":$field)>
   ];
 }
 

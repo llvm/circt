@@ -1549,8 +1549,8 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
             return failure();
 
           for (auto elem : enumerate(destStructType.getElements())) {
-            auto structExtract = builder.create<hw::StructExtractOp>(
-                src, elem.value().name.getValue());
+            auto structExtract =
+                builder.create<hw::StructExtractOp>(src, elem.value().name);
             if (failed(recurse(structExtract,
                                srcStructType.getElementType(elem.index()),
                                destStructType.getElementType(elem.index()))))
