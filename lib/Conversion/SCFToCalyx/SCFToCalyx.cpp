@@ -15,6 +15,7 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -40,9 +41,50 @@ namespace circt {
 /// Calyx component.
 using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
+/// A structure that abstracts a WhileOp or PipelineWhileOp to provide a
+/// consistent interface.
+struct WhileOpInterface {
+  WhileOpInterface(Operation *op) {
+    assert(isSupported(op));
+    if (auto scfWhile = dyn_cast<scf::WhileOp>(op))
+      impl = scfWhile;
+    if (auto staticLogicWhile = dyn_cast<staticlogic::PipelineWhileOp>(op))
+      impl = staticLogicWhile;
+  }
+
+  static bool isSupported(Operation *op) {
+    return isa<scf::WhileOp, staticlogic::PipelineWhileOp>(op);
+  }
+
+  Block::BlockArgListType getBodyArgs() {
+    return TypeSwitch<Operation *, Block::BlockArgListType>(impl).Case(
+        [](scf::WhileOp op) { return op.getAfterArguments(); });
+  }
+
+  Block *getBodyBlock() {
+    return TypeSwitch<Operation *, Block *>(impl).Case(
+        [](scf::WhileOp op) { return &op.after().front(); });
+  }
+
+  Block *getConditionBlock() {
+    return TypeSwitch<Operation *, Block *>(impl).Case(
+        [](scf::WhileOp op) { return &op.before().front(); });
+  }
+
+  Value getConditionValue() {
+    return TypeSwitch<Operation *, Value>(impl).Case(
+        [](scf::WhileOp op) { return op.getConditionOp().getOperand(0); });
+  }
+
+  Operation *getOperation() { return impl; }
+
+private:
+  Operation *impl;
+};
+
 struct WhileScheduleable {
   /// While operation to schedule.
-  scf::WhileOp whileOp;
+  WhileOpInterface whileOp;
   /// The group to schedule before the while operation This group should set the
   /// initial values of the loop init_args registers.
   calyx::GroupOp initGroup;
@@ -315,17 +357,17 @@ public:
   }
 
   /// Register reg as being the idx'th iter_args register for 'whileOp'.
-  void addWhileIterReg(scf::WhileOp whileOp, calyx::RegisterOp reg,
+  void addWhileIterReg(WhileOpInterface whileOp, calyx::RegisterOp reg,
                        unsigned idx) {
-    assert(whileIterRegs[whileOp].count(idx) == 0 &&
+    assert(whileIterRegs[whileOp.getOperation()].count(idx) == 0 &&
            "A register was already registered for the given while iter_arg "
            "index");
-    assert(idx < whileOp.getAfterArguments().size());
-    whileIterRegs[whileOp][idx] = reg;
+    assert(idx < whileOp.getBodyArgs().size());
+    whileIterRegs[whileOp.getOperation()][idx] = reg;
   }
 
   /// Return a mapping of block argument indices to block argument registers.
-  calyx::RegisterOp getWhileIterReg(scf::WhileOp whileOp, unsigned idx) {
+  calyx::RegisterOp getWhileIterReg(WhileOpInterface whileOp, unsigned idx) {
     auto iterRegs = getWhileIterRegs(whileOp);
     auto it = iterRegs.find(idx);
     assert(it != iterRegs.end() &&
@@ -335,20 +377,20 @@ public:
 
   /// Return a mapping of block argument indices to block argument registers.
   const DenseMap<unsigned, calyx::RegisterOp> &
-  getWhileIterRegs(scf::WhileOp whileOp) {
-    return whileIterRegs[whileOp];
+  getWhileIterRegs(WhileOpInterface whileOp) {
+    return whileIterRegs[whileOp.getOperation()];
   }
 
   /// Registers grp to be the while latch group of whileOp.
-  void setWhileLatchGroup(scf::WhileOp whileOp, calyx::GroupOp grp) {
-    assert(whileLatchGroups.count(whileOp) == 0 &&
+  void setWhileLatchGroup(WhileOpInterface whileOp, calyx::GroupOp grp) {
+    assert(whileLatchGroups.count(whileOp.getOperation()) == 0 &&
            "A latch group was already set for this whileOp");
-    whileLatchGroups[whileOp] = grp;
+    whileLatchGroups[whileOp.getOperation()] = grp;
   }
 
   /// Retrieve the while latch group registered for whileOp.
-  calyx::GroupOp getWhileLatchGroup(scf::WhileOp whileOp) {
-    auto it = whileLatchGroups.find(whileOp);
+  calyx::GroupOp getWhileLatchGroup(WhileOpInterface whileOp) {
+    auto it = whileLatchGroups.find(whileOp.getOperation());
     assert(it != whileLatchGroups.end() &&
            "No while latch group was set for this whileOp");
     return it->second;
@@ -526,8 +568,8 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
 
 static calyx::GroupOp buildWhileIterArgAssignments(
     PatternRewriter &rewriter, ComponentLoweringState &state, Location loc,
-    scf::WhileOp whileOp, Twine uniqueSuffix, ValueRange ops) {
-  assert(whileOp);
+    WhileOpInterface whileOp, Twine uniqueSuffix, ValueRange ops) {
+  assert(whileOp.getOperation());
   /// Pass iteration arguments through registers. This follows closely
   /// to what is done for branch ops.
   auto groupName = "assign_" + uniqueSuffix;
@@ -942,12 +984,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     return success();
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
   assert(whileOp);
+  WhileOpInterface whileOpInterface(whileOp);
   yieldOp.getOperands();
   auto assignGroup = buildWhileIterArgAssignments(
-      rewriter, getComponentState(), yieldOp.getLoc(), whileOp,
+      rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
       getComponentState().getUniqueName(whileOp) + "_latch",
       yieldOp.getOperands());
-  getComponentState().setWhileLatchGroup(whileOp, assignGroup);
+  getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
   return success();
 }
 
@@ -1387,7 +1430,13 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
-    funcOp.walk([&](scf::WhileOp whileOp) {
+    funcOp.walk([&](Operation *op) {
+      // Only work on ops that support the WhileOpInterface.
+      if (!WhileOpInterface::isSupported(op))
+        return WalkResult::advance();
+
+      WhileOpInterface whileOp(op);
+
       getComponentState().setUniqueName(whileOp.getOperation(), "while");
 
       /// Check for do-while loops.
@@ -1396,16 +1445,19 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       /// has support for different types of iter_args and return args which we
       /// also do not support; iter_args and while return values are placed in
       /// the same registers.
-      for (auto barg : enumerate(whileOp.before().front().getArguments())) {
-        auto condOp = whileOp.getConditionOp().args()[barg.index()];
-        if (barg.value() != condOp) {
-          res = whileOp.emitError()
-                << progState().irName(barg.value())
-                << " != " << progState().irName(condOp)
-                << "do-while loops not supported; expected iter-args to "
-                   "remain untransformed in the 'before' region of the "
-                   "scf.while op.";
-          return WalkResult::interrupt();
+      if (auto scfWhileOp = dyn_cast<scf::WhileOp>(op)) {
+        for (auto barg :
+             enumerate(scfWhileOp.before().front().getArguments())) {
+          auto condOp = scfWhileOp.getConditionOp().args()[barg.index()];
+          if (barg.value() != condOp) {
+            res = whileOp.getOperation()->emitError()
+                  << progState().irName(barg.value())
+                  << " != " << progState().irName(condOp)
+                  << "do-while loops not supported; expected iter-args to "
+                     "remain untransformed in the 'before' region of the "
+                     "scf.while op.";
+            return WalkResult::interrupt();
+          }
         }
       }
 
@@ -1414,9 +1466,10 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       /// - In the "before" part of the while loop, calculating the conditional,
       /// - In the "after" part of the while loop,
       /// - Outside the while loop, rewriting the while loop return values.
-      for (auto arg : enumerate(whileOp.getAfterArguments())) {
-        std::string name = getComponentState().getUniqueName(whileOp).str() +
-                           "_arg" + std::to_string(arg.index());
+      for (auto arg : enumerate(whileOp.getBodyArgs())) {
+        std::string name =
+            getComponentState().getUniqueName(whileOp.getOperation()).str() +
+            "_arg" + std::to_string(arg.index());
         auto reg =
             createReg(getComponentState(), rewriter, arg.value().getLoc(), name,
                       arg.value().getType().getIntOrFloatBitWidth());
@@ -1424,22 +1477,23 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
         arg.value().replaceAllUsesWith(reg.out());
 
         /// Also replace uses in the "before" region of the while loop
-        whileOp.before()
-            .front()
-            .getArgument(arg.index())
+        whileOp.getConditionBlock()
+            ->getArgument(arg.index())
             .replaceAllUsesWith(reg.out());
       }
 
       /// Create iter args initial value assignment group
       auto initGroupOp = buildWhileIterArgAssignments(
-          rewriter, getComponentState(), whileOp.getLoc(), whileOp,
-          getComponentState().getUniqueName(whileOp) + "_init",
-          whileOp.getOperands());
+          rewriter, getComponentState(), whileOp.getOperation()->getLoc(),
+          whileOp,
+          getComponentState().getUniqueName(whileOp.getOperation()) + "_init",
+          whileOp.getOperation()->getOperands());
 
       /// Add the while op to the list of scheduleable things in the current
       /// block.
       getComponentState().addBlockScheduleable(
-          whileOp->getBlock(), WhileScheduleable{whileOp, initGroupOp});
+          whileOp.getOperation()->getBlock(),
+          WhileScheduleable{whileOp, initGroupOp});
       return WalkResult::advance();
     });
     return res;
@@ -1591,7 +1645,7 @@ private:
         rewriter.create<calyx::EnableOp>(loc,
                                          whileSchedPtr->initGroup.getName());
 
-        auto cond = whileOp.getConditionOp().getOperand(0);
+        auto cond = whileOp.getConditionValue();
         auto condGroup =
             getComponentState().getEvaluatingGroup<calyx::CombGroupOp>(cond);
         auto symbolAttr = FlatSymbolRefAttr::get(
@@ -1599,13 +1653,14 @@ private:
         auto whileCtrlOp =
             rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
-        auto whileSeqOp = rewriter.create<calyx::SeqOp>(whileOp.getLoc());
+        auto whileSeqOp =
+            rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
 
         /// Only schedule the after block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
         LogicalResult res =
             buildCFGControl(path, rewriter, whileSeqOp.getBody(), block,
-                            &whileOp.after().front());
+                            whileOp.getBodyBlock());
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileSeqOp.getBody());
         rewriter.create<calyx::EnableOp>(
@@ -1766,8 +1821,8 @@ private:
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
-              src.getDefiningOp()))
+              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp,
+              staticlogic::PipelineWhileOp>(src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -1790,15 +1845,17 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
 
   LogicalResult PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                                          PatternRewriter &) const override {
-    funcOp.walk([&](scf::WhileOp whileOp) {
+    funcOp.walk([&](scf::WhileOp op) {
       /// The yielded values returned from the while op will be present in the
       /// iterargs registers post execution of the loop.
       /// This is done now, as opposed to during BuildWhileGroups since if the
       /// results of the whileOp were replaced before
       /// BuildOpGroups/BuildControl, the whileOp would get dead-code
       /// eliminated.
+      WhileOpInterface whileOp(op);
       for (auto res : getComponentState().getWhileIterRegs(whileOp))
-        whileOp.getResults()[res.first].replaceAllUsesWith(res.second.out());
+        whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
+            res.second.out());
     });
 
     funcOp.walk([&](memref::LoadOp loadOp) {

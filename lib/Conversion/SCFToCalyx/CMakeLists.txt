@@ -9,6 +9,7 @@ add_circt_conversion_library(CIRCTSCFToCalyx
 
   LINK_LIBS PUBLIC
   CIRCTCalyx
+  CIRCTStaticLogicOps
   MLIRIR
   MLIRPass
   MLIRArithmetic
