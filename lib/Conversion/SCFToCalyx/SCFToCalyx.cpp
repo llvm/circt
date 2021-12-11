@@ -45,11 +45,15 @@ using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 /// consistent interface.
 struct WhileOpInterface {
   WhileOpInterface(Operation *op) {
-    assert(isa<scf::WhileOp>(op) || isa<staticlogic::PipelineWhileOp>(op));
+    assert(isSupported(op));
     if (auto scfWhile = dyn_cast<scf::WhileOp>(op))
       impl = scfWhile;
     if (auto staticLogicWhile = dyn_cast<staticlogic::PipelineWhileOp>(op))
       impl = staticLogicWhile;
+  }
+
+  static bool isSupported(Operation *op) {
+    return isa<scf::WhileOp, staticlogic::PipelineWhileOp>(op);
   }
 
   Block::BlockArgListType getBodyArgs() {
@@ -1428,7 +1432,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
       // Only work on ops that support the WhileOpInterface.
-      if (!isa<scf::WhileOp, staticlogic::PipelineWhileOp>(op))
+      if (!WhileOpInterface::isSupported(op))
         return WalkResult::advance();
 
       WhileOpInterface whileOp(op);
@@ -1841,7 +1845,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
 
   LogicalResult PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                                          PatternRewriter &) const override {
-    auto whileReplacement = [&](Operation *op) {
+    funcOp.walk([&](scf::WhileOp op) {
       /// The yielded values returned from the while op will be present in the
       /// iterargs registers post execution of the loop.
       /// This is done now, as opposed to during BuildWhileGroups since if the
@@ -1852,10 +1856,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
       for (auto res : getComponentState().getWhileIterRegs(whileOp))
         whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
             res.second.out());
-    };
-
-    funcOp.walk([&](scf::WhileOp op) { whileReplacement(op); });
-    funcOp.walk([&](staticlogic::PipelineWhileOp op) { whileReplacement(op); });
+    });
 
     funcOp.walk([&](memref::LoadOp loadOp) {
       if (singleLoadFromMemory(loadOp)) {
