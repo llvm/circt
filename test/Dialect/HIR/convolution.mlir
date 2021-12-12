@@ -1,4 +1,4 @@
-// RUN: circt-opt %s
+// RUN: circt-opt -hir-simplify -hir-to-hw %s
 #bram_r = {"rd_latency"=1}
 #reg_r = {"rd_latency"=0}
 #bram_w = {"wr_latency"=1}
