@@ -32,7 +32,7 @@ hir.func @convolution_hir at %t(
     %tj_end=hir.for %j : i4 =%c0_i4  to %c7_i4  step %c1_i4 iter_time(%tj = %ti + 1 ){
 
       hir.store %c0_i32 to %val[port 1][%0] at %tj + 3
-      : !hir.memref<(bank 1)xi32>
+      : !hir.memref<(bank 1)xi32> delay 1
 
       %ti1_end=hir.for %i1 : i2 = %c0_i2 to %c2_i2 step %c1_i2 iter_time(%ti1 = %tj + 1 ){
         hir.probe %i1 name "i1":i2
@@ -48,22 +48,22 @@ hir.func @convolution_hir at %t(
           hir.probe %idx2_i4 name "idx2_i4":i4
           hir.probe %tj1 name "tj1":!hir.time
           %v1 = hir.load %img[port 0][%idx1,%idx2] at %tj1  
-          : !hir.memref<8x8xi32>
+          : !hir.memref<8x8xi32> delay 1
           %i1_i1 = comb.extract %i1 from 0:(i2)->(i1)
           %j1_i1 = comb.extract %j1 from 0:(i2)->(i1)
           %v2 = hir.load %kernel[port 0][%i1_i1,%j1_i1] at %tj1  
-          : !hir.memref<2x2xi32>
+          : !hir.memref<2x2xi32> delay 1
 
           %mul = hir.call "i32mult_dsp48_inst" @i32mult_dsp48(%v1,%v2) at %tj1+1:
           !hir.func<(i32,i32) -> (i32 delay 2)>
 
           %v3 = hir.load %val[port 0][%0] at %tj1 + 3
-          : !hir.memref<(bank 1)xi32>
+          : !hir.memref<(bank 1)xi32> delay 0
 
           %res = comb.add %mul,%v3 :i32
 
           hir.store %res to %val[port 1][%0] at %tj1+3
-          : !hir.memref<(bank 1)xi32>
+          : !hir.memref<(bank 1)xi32> delay 1
 
           hir.next_iter at %tj1 + 1
         }
@@ -71,13 +71,13 @@ hir.func @convolution_hir at %t(
       }
 
       %v = hir.load %val[port 0][%0] at %ti1_end + 3
-      : !hir.memref<(bank 1)xi32>
+      : !hir.memref<(bank 1)xi32> delay 0
       %i3 = hir.delay %i by 3 at %ti1_end : i4 
       %j3 = hir.delay %j by 3 at %ti1_end : i4 
       %i3_i3 = comb.extract %i3 from 0:(i4)->(i3)
       %j3_i3 = comb.extract %j3 from 0:(i4)->(i3)
       hir.store %v to %output[port 0][%i3_i3,%j3_i3] at %ti1_end+3
-      : !hir.memref<8x8xi32>
+      : !hir.memref<8x8xi32> delay 1
       hir.next_iter at %ti1_end + 1
     }
     hir.next_iter at %tj_end + 1

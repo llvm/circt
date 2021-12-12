@@ -15,10 +15,10 @@ hir.func @transpose_hir at %t(
           %i_i4 = comb.extract %i from 0:(i5)->(i4)
           %j_i4 = comb.extract %j from 0:(i5)->(i4)
           %v =  hir.load %Ai[port 0][%i_i4, %j_i4] at %tj 
-          : !hir.memref<16x16xi32>
+          : !hir.memref<16x16xi32> delay 1
           %j1 = hir.delay %j_i4 by 1 at %tj: i4
           hir.store %v to %Co[port 0][%j1, %i_i4] at %tj + 1 
-          : !hir.memref<16x16xi32>
+          : !hir.memref<16x16xi32> delay 1
           hir.next_iter at %tj + 1
       }
 

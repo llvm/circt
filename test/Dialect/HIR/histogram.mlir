@@ -27,7 +27,7 @@ hir.func @histogram_hir at %t(
   %t2 = hir.for %i : i9 = %c0_i9  to %c256_i9  step %c1_i9 iter_time(%ti = %t + 1 ){
       %i_i8 = comb.extract %i from 0 :(i9)->(i8)
       hir.store %c0_i32 to %buff[port 1][%i_i8] at %ti
-        : !hir.memref<256xi32>
+        : !hir.memref<256xi32> delay 1
       hir.next_iter at %ti + 1
   }
 
@@ -37,12 +37,12 @@ hir.func @histogram_hir at %t(
       %i_last,%t_next=hir.for %j : i5 = %c0_i5  to %c16_i5 step %c1_i5 iter_args(%i_j=%i_i4:i4) iter_time(%tj = %ti + 1 ){
           %j_i4 = comb.extract %j from 0 : (i5)->(i4)
           %v = hir.load %A[port 0][%i_j,%j_i4] at %tj
-              : !hir.memref<16x16xi8>
+              : !hir.memref<16x16xi8> delay 1
           %count = hir.load %buff[port 0][%v] at %tj + 1
-              : !hir.memref<256xi32> 
+              : !hir.memref<256xi32>  delay 1
           %new_count = comb.add %count,%c1_i32  :i32
           hir.store %new_count to %buff[port 1][%v] at %tj + 1
-              : !hir.memref<256xi32>
+              : !hir.memref<256xi32> delay 1
           %i_j_delayed = hir.delay %i_j by 1 at %tj : i4
           hir.probe %i name "i" :i5
           hir.probe %j name "j" :i5
@@ -55,9 +55,9 @@ hir.func @histogram_hir at %t(
   hir.for %i : i9 = %c0_i9  to %c256_i9 step %c1_i9 iter_time(%ti = %t3 + 4 ){
       %i_i8 = comb.extract %i from 0 :(i9)->(i8)
       %count = hir.load %buff[port 0][%i_i8] at %ti
-            : !hir.memref<256xi32> 
+            : !hir.memref<256xi32>  delay 1
       hir.store %count to %B[port 0][%i_i8] at %ti
-        : !hir.memref<256xi32>
+        : !hir.memref<256xi32> delay 1
       hir.next_iter at %ti + 1
   }
   hir.return

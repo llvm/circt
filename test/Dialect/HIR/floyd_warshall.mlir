@@ -34,17 +34,17 @@ hir.func @floyd_warshall_hir at %t(
 
         //load path[i][j]
         %p_i_j = hir.load %path[port 0][%i_i3,%j_i3] at %tj
-        : !hir.memref<8x8xi32> 
+        : !hir.memref<8x8xi32>  delay 1
 
         %p_i_j1 = hir.delay %p_i_j by 1 at %tj+1 : i32 
 
         //load path[i][k]
         %p_i_k = hir.load %path[port 1][%i_i3,%k_i3] at %tj + 1
-        : !hir.memref<8x8xi32> 
+        : !hir.memref<8x8xi32>  delay 1
 
         //load path[k][j]
         %p_k_j = hir.load %path[port 0][%k_i3,%j_i3] at %tj + 1
-        : !hir.memref<8x8xi32>
+        : !hir.memref<8x8xi32> delay 1
 
         //sum = add path[i][k]+path[k][j]
         %sum = comb.add %p_i_k,%p_k_j  : i32
@@ -58,7 +58,7 @@ hir.func @floyd_warshall_hir at %t(
         //store out to p_reg_r
         %j_i3_delayed = hir.delay %j_i3 by 1 at %tj+1 : i3
         hir.store %out to %path[port 1][%i_i3,%j_i3_delayed] at %tj + 2
-        : !hir.memref<8x8xi32>
+        : !hir.memref<8x8xi32> delay 1
 
         hir.next_iter at %tj + 2
       }
