@@ -107,9 +107,7 @@ def StructTypeImpl : HWType<"Struct"> {
   let mnemonic = "struct";
 
   let parameters = (
-    ins
-    // An ArrayRef in the storage constructor.
-    ArrayRefParameter<
+    ins ArrayRefParameter<
       "::circt::hw::StructType::FieldInfo", "struct fields">: $elements
   );
 
@@ -124,9 +122,7 @@ def StructTypeImpl : HWType<"Struct"> {
 def UnionTypeImpl : HWType<"Union"> {
   let summary = "An untagged union of types";
   let parameters = (
-    ins
-    // An ArrayRef in the storage constructor.
-    ArrayRefParameter<
+    ins ArrayRefParameter<
       "::circt::hw::UnionType::FieldInfo", "union fields">: $elements
   );
   let mnemonic = "union";
