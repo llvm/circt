@@ -108,11 +108,9 @@ def StructTypeImpl : HWType<"Struct"> {
 
   let parameters = (
     ins
-    // An ArrayRef of something which requires allocation in the storage
-    // constructor.
-    ArrayRefOfSelfAllocationParameter<
-      "::circt::hw::StructType::FieldInfo",
-      "struct fields">: $elements
+    // An ArrayRef in the storage constructor.
+    ArrayRefParameter<
+      "::circt::hw::StructType::FieldInfo", "struct fields">: $elements
   );
 
   let extraClassDeclaration = [{
@@ -127,11 +125,9 @@ def UnionTypeImpl : HWType<"Union"> {
   let summary = "An untagged union of types";
   let parameters = (
     ins
-    // An ArrayRef of something which requires allocation in the storage
-    // constructor.
-    ArrayRefOfSelfAllocationParameter<
-      "::circt::hw::UnionType::FieldInfo",
-      "union fields">: $elements
+    // An ArrayRef in the storage constructor.
+    ArrayRefParameter<
+      "::circt::hw::UnionType::FieldInfo", "union fields">: $elements
   );
   let mnemonic = "union";
 

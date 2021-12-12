@@ -29,7 +29,6 @@ namespace detail {
 struct FieldInfo {
   mlir::StringAttr name;
   mlir::Type type;
-  FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const;
 };
 } // namespace detail
 } // namespace hw

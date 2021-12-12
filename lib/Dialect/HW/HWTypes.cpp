@@ -31,10 +31,6 @@ using namespace circt::hw::detail;
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.cpp.inc"
 
-FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
-  return FieldInfo{name, type};
-}
-
 //===----------------------------------------------------------------------===//
 // Type Helpers
 //===----------------------------------------------------------------------===/
