@@ -229,10 +229,9 @@ static bool isZeroBitType(Type type) {
     return isZeroBitType(uarray.getElementType());
   if (auto array = type.dyn_cast<hw::ArrayType>())
     return isZeroBitType(array.getElementType());
-  if (auto structType = type.dyn_cast<hw::StructType>()) {
+  if (auto structType = type.dyn_cast<hw::StructType>())
     return llvm::all_of(structType.getElements(),
                         [](auto elem) { return isZeroBitType(elem.type); });
-  }
 
   // We have an open type system, so assume it is ok.
   return false;
