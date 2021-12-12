@@ -44,6 +44,7 @@ private:
   LogicalResult verifyOp(ForOp op);
   LogicalResult verifyOp(WhileOp op);
   LogicalResult verifyOp(NextIterOp op);
+  LogicalResult verifyCombOp(Operation *);
   LogicalResult verifyOpWithAllOperandsValidAtStartTime(ScheduledOp);
   LogicalResult verifyOperation(Operation *);
 
@@ -71,6 +72,8 @@ LogicalResult VerifySchedulePass::verifyOperation(Operation *operation) {
     return verifyOp(op);
   if (auto op = dyn_cast<NextIterOp>(operation))
     return verifyOp(op);
+  if (isa<comb::CombDialect>(operation->getDialect()))
+    return verifyCombOp(operation);
   if (auto op = dyn_cast<hir::ScheduledOp>(operation))
     return verifyOpWithAllOperandsValidAtStartTime(operation);
   return success();
@@ -84,7 +87,9 @@ LogicalResult VerifySchedulePass::verifyOp(CallOp op) {
     if (helper::isBuiltinSizedType(ty)) {
       auto offset = helper::extractDelayFromDict(attr) + op.offset().getValue();
       if (!scheduleInfo->isValidAtTime(operand, op.tstart(), offset))
-        return op.emitError("Error in scheduling of operand.");
+        return op.emitError("Error in scheduling of operand.")
+                   .attachNote(operand.getLoc())
+               << "Operand defined here.";
     }
   }
   return success();
@@ -97,7 +102,9 @@ LogicalResult VerifySchedulePass::verifyOp(ForOp op) {
           op.iter_arg_delays().getValue()[i].dyn_cast<IntegerAttr>().getInt() +
           op.offset().getValue();
       if (!scheduleInfo->isValidAtTime(op.iter_args()[i], op.tstart(), offset))
-        return op.emitError("Error in scheduling of operand.");
+        return op.emitError("Error in scheduling of iter_arg.")
+                   .attachNote(op.iter_args()[i].getLoc())
+               << "iter_arg defined here.";
     }
   return success();
 }
@@ -109,7 +116,9 @@ LogicalResult VerifySchedulePass::verifyOp(WhileOp op) {
           op.iter_arg_delays().getValue()[i].dyn_cast<IntegerAttr>().getInt() +
           op.offset().getValue();
       if (!scheduleInfo->isValidAtTime(op.iter_args()[i], op.tstart(), offset))
-        return op.emitError("Error in scheduling of operand.");
+        return op.emitError("Error in scheduling of iter_arg.")
+                   .attachNote(op.iter_args()[i].getLoc())
+               << "iter_arg defined here.";
     }
   return success();
 }
@@ -119,13 +128,38 @@ LogicalResult VerifySchedulePass::verifyOp(NextIterOp op) {
   return success();
 }
 
+LogicalResult VerifySchedulePass::verifyCombOp(Operation *operation) {
+  Value tstart;
+  int64_t offset;
+  for (auto operand : operation->getOperands()) {
+    if (scheduleInfo->isAlwaysValid(operand))
+      continue;
+    if (tstart) {
+      if (scheduleInfo->isValidAtTime(operand, tstart, offset))
+        continue;
+      operation->emitError("Error in scheduling of operand.")
+              .attachNote(operand.getLoc())
+          << "Operand defined here.";
+    }
+    tstart = scheduleInfo->getRootTimeVar(operand);
+    if (!tstart) {
+      return operation->emitError(
+          "Could not find root time var for this ssa var.");
+    }
+    offset = scheduleInfo->getRootTimeOffset(operand);
+  }
+  return success();
+}
+
 LogicalResult
 VerifySchedulePass::verifyOpWithAllOperandsValidAtStartTime(ScheduledOp op) {
   for (auto operand : op->getOperands()) {
     if (helper::isBuiltinSizedType(operand.getType())) {
       if (!scheduleInfo->isValidAtTime(operand, op.getTimeVar(),
                                        op.getTimeOffset()))
-        return op.emitError("Error in scheduling of operand.");
+        return op.emitError("Error in scheduling of operand.")
+                   .attachNote(operand.getLoc())
+               << "Operand defined here. ";
     }
   }
   return success();

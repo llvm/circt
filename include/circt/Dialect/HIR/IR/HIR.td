@@ -381,14 +381,14 @@ def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments,ScheduledOp]> {
   }];
 
   let arguments = (ins HIR_MemrefType:$mem, 
-      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, OptionalAttr<I64Attr>: $delay, Optional<HIR_TimeType> : $tstart,
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, I64Attr: $delay, Optional<HIR_TimeType> : $tstart,
       OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
     $mem (`[` `port` $port^ `]`)? `[`  $indices `]` `at` custom<TimeAndOffset>($tstart ,$offset) 
       custom<WithSSANames>(attr-dict)
       `:`custom<MemrefAndElementType>
-      (type($mem),type($indices),type($res)) (`delay` $delay^)?
+      (type($mem),type($indices),type($res)) `delay` $delay
   }];
 
   let hasCanonicalizeMethod = true;
@@ -415,12 +415,12 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments,ScheduledOp]> {
 
   let arguments = (ins AnyType:$value, HIR_MemrefType:$mem,
       Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, 
-      OptionalAttr<I64Attr>:$delay, Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+      I64Attr:$delay, Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs );
   let assemblyFormat = [{
     $value `to` $mem  (`[` `port` $port^ `]`)? `[` $indices `]` `at` custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
       custom<MemrefAndElementType>
-      (type($mem),type($indices), type($value)) (`delay` $delay^)?
+      (type($mem),type($indices), type($value)) `delay` $delay
   }];
 
   let hasCanonicalizeMethod = true;

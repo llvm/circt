@@ -25,6 +25,7 @@ public:
   static llvm::Optional<ScheduleInfo> createScheduleInfo(FuncOp);
 
 public:
+  bool isAlwaysValid(Value);
   bool isValidAtTime(Value v, Value tstart, int64_t offset);
   Value getRootTimeVar(Value);
   int64_t getRootTimeOffset(Value);

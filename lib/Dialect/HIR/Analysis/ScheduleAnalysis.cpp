@@ -37,7 +37,7 @@ llvm::Optional<ScheduleInfo> ScheduleInfo::createScheduleInfo(FuncOp op) {
   ScheduleInfo scheduleInfo(op);
   ScheduleInfoImpl scheduleInfoImpl(scheduleInfo);
 
-  auto walkResult = op.body().walk<mlir::WalkOrder::PreOrder>(
+  auto walkResult = op.walk<mlir::WalkOrder::PreOrder>(
       [&scheduleInfoImpl](Operation *operation) {
         if (failed(scheduleInfoImpl.visitOperation(operation)))
           return WalkResult::interrupt();
@@ -87,6 +87,9 @@ bool ScheduleInfo::isValidAtTime(Value v, Value tstart, int64_t offset) {
   return false;
 }
 
+bool ScheduleInfo::isAlwaysValid(Value v) {
+  return setOfAlwaysValidValues.contains(v);
+}
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
@@ -126,13 +129,16 @@ LogicalResult ScheduleInfoImpl::visitOperation(Operation *operation) {
   } else if (auto op = dyn_cast<hw::ConstantOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
+  } else if (operation->getNumResults() > 0) {
+    for (auto result : operation->getResults())
+      if (helper::isBuiltinSizedType(result.getType()))
+        return operation->emitError("Unsupported op for schedule analysis");
   }
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(FuncOp op) {
   scheduleInfo.setAsRootTimeVar(op.getRegionTimeVar());
-  scheduleInfo.mapValueToTime(op.getRegionTimeVar(), op.getRegionTimeVar(), 0);
   auto operands = op.getFuncBody().front().getArguments();
   auto inputAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();
   for (size_t i = 0; i < operands.size(); i++) {
@@ -142,9 +148,10 @@ LogicalResult ScheduleInfoImpl::visitOp(FuncOp op) {
                                   helper::extractDelayFromDict(inputAttrs[i]));
     } else if (operand.getType().isa<TimeType>()) {
       scheduleInfo.setAsRootTimeVar(operand);
-      scheduleInfo.mapValueToTime(operand, op.getRegionTimeVar(), 0);
     }
   }
+  printf("funcOp visited.");
+  fflush(stdout);
   return success();
 }
 
@@ -158,11 +165,9 @@ LogicalResult ScheduleInfoImpl::visitOp(ForOp op) {
 
   // Register the region time var as a new root time var.
   scheduleInfo.setAsRootTimeVar(op.getIterTimeVar());
-  scheduleInfo.mapValueToTime(op.getIterTimeVar(), op.getIterTimeVar(), 0);
 
   // Register the t_end time var as a new root time var.
   scheduleInfo.setAsRootTimeVar(op.t_end());
-  scheduleInfo.mapValueToTime(op.t_end(), op.t_end(), 0);
 
   // Register the iter args and corresponding ForOp results.
   if (op.iter_arg_delays()) {
@@ -184,11 +189,9 @@ LogicalResult ScheduleInfoImpl::visitOp(WhileOp op) {
 
   // Register the region time var as a new root time var.
   scheduleInfo.setAsRootTimeVar(op.getIterTimeVar());
-  scheduleInfo.mapValueToTime(op.getIterTimeVar(), op.getIterTimeVar(), 0);
 
   // Register the t_end time var as a new root time var.
   scheduleInfo.setAsRootTimeVar(op.t_end());
-  scheduleInfo.mapValueToTime(op.t_end(), op.t_end(), 0);
 
   // Register the iter args and corresponding WhileOp results.
   if (auto iterArgDelays = op.iter_arg_delays().getValue())
@@ -221,7 +224,8 @@ LogicalResult ScheduleInfoImpl::visitOp(CallOp op) {
       uint64_t delay = helper::extractDelayFromDict(attrDict);
       scheduleInfo.mapValueToTime(
           res, scheduleInfo.getRootTimeVar(op.tstart()),
-          delay + scheduleInfo.getRootTimeOffset(op.tstart()));
+          op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()) +
+              delay);
     } else if (resTy.isa<TimeType>()) {
       scheduleInfo.setAsRootTimeVar(res);
     } else {
@@ -237,10 +241,14 @@ LogicalResult ScheduleInfoImpl::visitOp(LoadOp op) {
   if (!op.tstart())
     return op.emitError("Failed to create ScheduleInfo. Operation is not "
                         "scheduled yet.");
+
+  if (!scheduleInfo.getRootTimeVar(op.tstart()))
+    return op.emitError("Could not find root time var for tstart.");
+
   scheduleInfo.mapValueToTime(
       op.getResult(), scheduleInfo.getRootTimeVar(op.tstart()),
       op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()) +
-          op.delay().getValue());
+          op.delay());
   return success();
 }
 
