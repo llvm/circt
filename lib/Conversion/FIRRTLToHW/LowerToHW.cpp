@@ -1136,8 +1136,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
-  Value getExtOrTruncArrayValue(Value array, FIRRTLType sourceType,
-                                FIRRTLType destType, bool allowTruncate);
+  Value getExtOrTruncAggregateValue(Value array, FIRRTLType sourceType,
+                                    FIRRTLType destType, bool allowTruncate);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1484,13 +1484,12 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
-/// Return the lowered array value whose type is converted into `destType`.
+/// Return the lowered aggregate value whose type is converted into `destType`.
 /// We have to care about the extension/truncation/signedness of each element.
-/// If returns a null value for complex arrays such as arrays with bundles.
-Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
-                                              FIRRTLType sourceType,
-                                              FIRRTLType destType,
-                                              bool allowTruncate) {
+Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
+                                                  FIRRTLType sourceType,
+                                                  FIRRTLType destType,
+                                                  bool allowTruncate) {
   SmallVector<Value> resultBuffer;
 
   // Helper function to cast each element of array to dest type.
@@ -1541,6 +1540,30 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
           resultBuffer.push_back(array);
           return success();
         })
+        .Case<BundleType>([&](BundleType srcStructType) {
+          auto destStructType = destType.cast<BundleType>();
+          unsigned size = resultBuffer.size();
+
+          // TODO: We don't support partial connects for bundles for now.
+          if (destStructType.getNumElements() != srcStructType.getNumElements())
+            return failure();
+
+          for (auto elem : enumerate(destStructType.getElements())) {
+            auto structExtract =
+                builder.create<hw::StructExtractOp>(src, elem.value().name);
+            if (failed(recurse(structExtract,
+                               srcStructType.getElementType(elem.index()),
+                               destStructType.getElementType(elem.index()))))
+              return failure();
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto newStruct = builder.createOrFold<hw::StructCreateOp>(
+              lowerType(destStructType), temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(newStruct);
+          return success();
+        })
         .Case<IntType>([&](auto) {
           if (auto result = cast(src, srcType, destType)) {
             resultBuffer.push_back(result);
@@ -1588,14 +1611,15 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
-  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+  // Aggregates values
+  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
     // Types already match.
     if (destType == value.getType())
       return result;
 
-    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
-                                   destType.cast<FIRRTLType>(),
-                                   /* allowTruncate */ false);
+    return getExtOrTruncAggregateValue(
+        result, value.getType().cast<FIRRTLType>(), destType.cast<FIRRTLType>(),
+        /* allowTruncate */ false);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1647,14 +1671,15 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
-  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+  // Aggregates values
+  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
     // Types already match.
     if (destType == value.getType())
       return result;
 
-    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
-                                   destType.cast<FIRRTLType>(),
-                                   /* allowTruncate */ true);
+    return getExtOrTruncAggregateValue(
+        result, value.getType().cast<FIRRTLType>(), destType.cast<FIRRTLType>(),
+        /* allowTruncate */ true);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -2179,6 +2204,13 @@ void FIRRTLLowering::initializeRegister(Value reg) {
               auto arrayIndex =
                   builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
               recurse(arrayIndex, a.getElementType());
+            }
+          })
+          .Case<hw::StructType>([&](hw::StructType s) {
+            for (auto elem : s.getElements()) {
+              auto field =
+                  builder.create<sv::StructFieldInOutOp>(reg, elem.name);
+              recurse(field, elem.type);
             }
           })
           .Default([&](auto type) { emitRandomInit(reg, type); });
