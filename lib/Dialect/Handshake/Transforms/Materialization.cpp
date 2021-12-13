@@ -131,9 +131,32 @@ struct HandshakeMaterializeForksSinksPass
   };
 };
 
+struct HandshakeDematerializeForksSinksPass
+    : public HandshakeDematerializeForksSinksBase<
+          HandshakeDematerializeForksSinksPass> {
+  void runOnOperation() override {
+    handshake::FuncOp op = getOperation();
+    for (auto sinkOp :
+         llvm::make_early_inc_range(op.getOps<handshake::SinkOp>()))
+      sinkOp.erase();
+
+    for (auto forkOp :
+         llvm::make_early_inc_range(op.getOps<handshake::ForkOp>())) {
+      for (auto res : forkOp->getResults())
+        res.replaceAllUsesWith(forkOp.getOperand());
+      forkOp.erase();
+    }
+  };
+};
+
 } // namespace
 
 std::unique_ptr<mlir::Pass>
 circt::handshake::createHandshakeMaterializeForksSinksPass() {
   return std::make_unique<HandshakeMaterializeForksSinksPass>();
+}
+
+std::unique_ptr<mlir::Pass>
+circt::handshake::createHandshakeDematerializeForksSinksPass() {
+  return std::make_unique<HandshakeDematerializeForksSinksPass>();
 }

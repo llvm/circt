@@ -44,6 +44,15 @@ def HandshakeMaterializeForksSinks : Pass<"handshake-materialize-forks-sinks", "
   let constructor = "circt::handshake::createHandshakeMaterializeForksSinksPass()";
 }
 
+def HandshakeDematerializeForksSinks : Pass<"handshake-dematerialize-forks-sinks", "handshake::FuncOp"> {
+  let summary = "Dematerialize fork and sink operations.";
+  let description = [{
+    This pass analyses a handshake.func operation and removes all fork and sink
+    operations.
+  }];
+  let constructor = "circt::handshake::createHandshakeDematerializeForksSinksPass()";
+}
+
 def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp"> {
   let summary = "Remove buffers from handshake functions.";
   let description = [{
