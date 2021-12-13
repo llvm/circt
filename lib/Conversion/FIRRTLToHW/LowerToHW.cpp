@@ -2853,14 +2853,22 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
     // not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
+  // We don't allow aggregate values which contain values of analog types.
+  if (op.getType().cast<FIRRTLType>().containsAnalog())
+    return failure();
+
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  if (auto intType = resultTy.dyn_cast<IntegerType>()) {
-    if (intType.getWidth() == 0) // Let the caller handle zero width values.
+  if (auto bitwidth = firrtl::getBitWidth(op.getType().cast<FIRRTLType>())) {
+    if (bitwidth.getValue() == 0) // Let the caller handle zero width values.
       return failure();
-    return setLowering(
-        op, getOrCreateIntConstant(resultTy.getIntOrFloatBitWidth(), 0));
+
+    auto constant = getOrCreateIntConstant(bitwidth.getValue(), 0);
+    // If the result is an aggregate value, we have to bitcast the constant.
+    if (!resultTy.isa<IntegerType>())
+      constant = builder.create<hw::BitcastOp>(resultTy, constant);
+    return setLowering(op, constant);
   }
 
   // Invalid for bundles isn't supported.

@@ -1505,4 +1505,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assign %1, %2 : !hw.struct<b: i1>
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: i1>>
   }
+
+  // CHECK_LABEL: hw.module @AggregateInvalidValue
+  firrtl.module @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    // CHECK:      %c0_i101 = hw.constant 0 : i101
+    // CHECK-NEXT: %0 = hw.bitcast %c0_i101 : (i101) -> !hw.struct<a: i1, b: !hw.array<10xi10>>
+    // CHECK-NEXT: %reg = sv.reg  : !hw.inout<struct<a: i1, b: !hw.array<10xi10>>>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg, %0 : !hw.struct<a: i1, b: !hw.array<10xi10>>
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+  }
 }
