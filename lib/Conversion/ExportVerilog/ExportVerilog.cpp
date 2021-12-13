@@ -251,6 +251,16 @@ static Type stripUnpackedTypes(Type type) {
       .Default([](Type type) { return type; });
 }
 
+/// Return true if type has a struct type as a subtype.
+static bool hasStructType(Type type) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<InOutType, UnpackedArrayType, ArrayType>([](auto parentType) {
+        return hasStructType(parentType.getElementType());
+      })
+      .Case<StructType>([](auto) { return true; })
+      .Default([](auto) { return false; });
+}
+
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op,
                                     const LoweringOptions &options) {
@@ -290,7 +300,14 @@ static StringRef getVerilogDeclWord(Operation *op,
   // "automatic logic" values aren't allowed in disallowLocalVariables mode.
   assert((!isProcedural || !options.disallowLocalVariables) &&
          "automatic variables not allowed");
-  return isProcedural ? "automatic logic" : "wire";
+
+  if (!isProcedural)
+    return "wire";
+
+  // If the type contains a struct type, we have to use only "automatic" because
+  // "automatic struct" is syntactically correct.
+  return hasStructType(op->getResult(0).getType()) ? "automatic"
+                                                   : "automatic logic";
 }
 
 /// Pull any FileLineCol locs out of the specified location and add it to the

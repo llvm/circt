@@ -1075,6 +1075,23 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   }
 }
 
+// Issue #2335: https://github.com/llvm/circt/issues/2335
+// CHECK-LABEL: module AggregateTemporay(
+hw.module @AggregateTemporay(%clock: i1, %foo: i1, %bar: i25) {
+  %temp1 = sv.reg  : !hw.inout<!hw.struct<b: i1>>
+  %temp2 = sv.reg  : !hw.inout<!hw.array<5x!hw.array<5x!hw.struct<b: i1>>>>
+  sv.always posedge %clock  {
+    // CHECK: automatic struct packed {logic b; } [[T0:.+]] = foo;
+    // CHECK: automatic struct packed {logic b; }[4:0][4:0] [[T1:.+]] = /*cast(bit[4:0][4:0])*/bar;
+    %0 = hw.bitcast %foo : (i1) -> !hw.struct<b: i1>
+    sv.passign %temp1, %0 : !hw.struct<b: i1>
+    sv.passign %temp1, %0 : !hw.struct<b: i1>
+    %1 = hw.bitcast %bar : (i25) -> !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
+    sv.passign %temp2, %1 : !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
+    sv.passign %temp2, %1 : !hw.array<5x!hw.array<5x!hw.struct<b: i1>>>
+  }
+}
+
 //CHECK-LABEL: module XMR_src
 //CHECK: assign $root.a.b.c = a;
 //CHECK-NEXT: assign aa = d.e.f;
