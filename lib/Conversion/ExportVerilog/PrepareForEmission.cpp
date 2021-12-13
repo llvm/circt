@@ -254,6 +254,9 @@ static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
 
 /// Given an operation in a procedural region, scan up the region tree to find
 /// the first operation in a graph region (typically an always or initial op).
+///
+/// By looking for a graph region, we will stop at graph-region #ifdef's that
+/// may enclose this operation.
 static Operation *findParentInNonProceduralRegion(Operation *op) {
   Operation *parentOp = op->getParentOp();
   assert(parentOp->hasTrait<ProceduralRegion>() &&

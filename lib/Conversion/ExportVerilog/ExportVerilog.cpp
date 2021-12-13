@@ -2419,6 +2419,7 @@ private:
   /// This is the index of the end of the declaration region of the current
   /// 'begin' block, used to emit variable declarations.
   RearrangableOStream::Cursor blockDeclarationInsertPoint;
+  unsigned blockDeclarationIndentLevel = 0;
 
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
@@ -2985,6 +2986,9 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   // block, and restore it back when we move on to code after the block.
   llvm::SaveAndRestore<RearrangableOStream::Cursor> X(
       blockDeclarationInsertPoint, rearrangableStream.getCursor());
+  llvm::SaveAndRestore<unsigned> X2(blockDeclarationIndentLevel,
+                                    state.currentIndent + INDENT_AMOUNT);
+
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
 
@@ -3489,18 +3493,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   StringRef declWord = getVerilogDeclWord(op, state.options);
 
-  // If we're emitting a declaration inside of an ifdef region, we'll insert
-  // the declaration outside of it.  This means we need to unindent a bit due
-  // to the indent level.
-  unsigned ifdefDepth = 0;
-  Operation *parentOp = op->getParentOp();
-  while (isa<IfDefProceduralOp>(parentOp) || isa<IfDefOp>(parentOp)) {
-    ++ifdefDepth;
-    parentOp = parentOp->getParentOp();
-  }
-
-  os.indent(state.currentIndent - ifdefDepth * INDENT_AMOUNT);
-  os << declWord;
+  os.indent(blockDeclarationIndentLevel) << declWord;
   if (!declWord.empty())
     os << ' ';
   if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
@@ -3601,6 +3594,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // This is important to maintain incrementally after each statement, because
     // each statement can generate spills when they are overly-long.
     blockDeclarationInsertPoint = rearrangableStream.getCursor();
+    blockDeclarationIndentLevel = state.currentIndent;
   }
 
   os << '\n';
