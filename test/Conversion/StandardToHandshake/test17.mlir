@@ -13,11 +13,11 @@
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi slt, %[[VAL_3]]#2, %[[VAL_6]] : index
 // CHECK:           %[[VAL_10:.*]]:2 = fork [2] %[[VAL_9]] : i1
 // CHECK:           %[[VAL_11:.*]] = arith.subi %[[VAL_8]]#0, %[[VAL_3]]#1 : index
-// CHECK:           %[[VAL_12:.*]] = std.select %[[VAL_10]]#1, %[[VAL_11]], %[[VAL_3]]#0 : index
+// CHECK:           %[[VAL_12:.*]] = mux %[[VAL_10]]#1 {{\[}}%[[VAL_3]]#0, %[[VAL_11]]] : i1, index
 // CHECK:           %[[VAL_13:.*]] = arith.divsi %[[VAL_12]], %[[VAL_5]] : index
 // CHECK:           %[[VAL_14:.*]]:2 = fork [2] %[[VAL_13]] : index
 // CHECK:           %[[VAL_15:.*]] = arith.subi %[[VAL_8]]#1, %[[VAL_14]]#1 : index
-// CHECK:           %[[VAL_16:.*]] = std.select %[[VAL_10]]#0, %[[VAL_15]], %[[VAL_14]]#0 : index
+// CHECK:           %[[VAL_16:.*]] = mux %[[VAL_10]]#0 {{\[}}%[[VAL_14]]#0, %[[VAL_15]]] : i1, index
 // CHECK:           return %[[VAL_16]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
 func @affine_apply_floordiv(%arg0: index) -> index {

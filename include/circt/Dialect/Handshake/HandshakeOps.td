@@ -354,7 +354,13 @@ def MuxOp : Handshake_Op<"mux", [
 		Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand, "int":$inputs)>];
+  let builders = [
+    // Note/warning: This builder should only be used by StandardToHandshake
+    // since it contains some hardcoded assumptions that the conversion pass
+    // will manually adjust its operand later.
+    OpBuilder<(ins "Value":$anyInput, "int":$inputs)>,
+    // Use this builder for any other use case.
+    OpBuilder<(ins "Value":$selectOperand, "ValueRange":$inputs)>];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verify(*this);";

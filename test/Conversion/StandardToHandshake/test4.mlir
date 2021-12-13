@@ -20,7 +20,7 @@
 // CHECK:           sink %[[VAL_18]] : i32
 // CHECK:           %[[VAL_19:.*]] = arith.remui %[[VAL_10]]#4, %[[VAL_12]]#4 : i32
 // CHECK:           sink %[[VAL_19]] : i32
-// CHECK:           %[[VAL_20:.*]] = std.select %[[VAL_15]], %[[VAL_10]]#3, %[[VAL_12]]#3 : i32
+// CHECK:           %[[VAL_20:.*]] = mux %[[VAL_15]] {{\[}}%[[VAL_12]]#3, %[[VAL_10]]#3] : i1, i32
 // CHECK:           sink %[[VAL_20]] : i32
 // CHECK:           %[[VAL_21:.*]] = arith.divf %[[VAL_6]]#1, %[[VAL_8]]#1 : f32
 // CHECK:           sink %[[VAL_21]] : f32

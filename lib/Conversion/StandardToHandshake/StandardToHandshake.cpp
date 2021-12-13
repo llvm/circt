@@ -1524,6 +1524,18 @@ struct HandshakeInsertBufferPass
   }
 };
 
+struct ConvertSelectOps : public OpConversionPattern<mlir::SelectOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(mlir::SelectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<handshake::MuxOp>(
+        op, adaptor.getCondition(),
+        SmallVector<Value>{adaptor.getFalseValue(), adaptor.getTrueValue()});
+    return success();
+  };
+};
+
 struct HandshakeRemoveBlockPass
     : HandshakeRemoveBlockBase<HandshakeRemoveBlockPass> {
   void runOnOperation() override { removeBasicBlocks(getOperation()); }
@@ -1541,9 +1553,22 @@ struct HandshakeDataflowPass
       }
     }
 
-    // Legalize the resulting regions, which can have no basic blocks.
-    for (auto func : m.getOps<handshake::FuncOp>())
+    // Legalize the resulting regions, removing basic blocks and performing any
+    // simple conversions.
+    for (auto func : m.getOps<handshake::FuncOp>()) {
       removeBasicBlocks(func);
+      if (failed(postDataflowConvert(func)))
+        return signalPassFailure();
+    }
+  }
+
+  LogicalResult postDataflowConvert(handshake::FuncOp op) {
+    ConversionTarget target(getContext());
+    target.addLegalDialect<handshake::HandshakeDialect>();
+    target.addIllegalOp<mlir::SelectOp>();
+    RewritePatternSet patterns(&getContext());
+    patterns.insert<ConvertSelectOps>(&getContext());
+    return applyPartialConversion(op, target, std::move(patterns));
   }
 };
 

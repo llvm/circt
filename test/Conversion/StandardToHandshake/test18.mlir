@@ -12,7 +12,7 @@
 // CHECK:           %[[VAL_8:.*]] = constant %[[VAL_3]]#0 {value = 0 : index} : index
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi slt, %[[VAL_7]]#2, %[[VAL_8]] : index
 // CHECK:           %[[VAL_10:.*]] = arith.addi %[[VAL_7]]#1, %[[VAL_5]]#1 : index
-// CHECK:           %[[VAL_11:.*]] = std.select %[[VAL_9]], %[[VAL_10]], %[[VAL_7]]#0 : index
+// CHECK:           %[[VAL_11:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_7]]#0, %[[VAL_10]]] : i1, index
 // CHECK:           return %[[VAL_11]], %[[VAL_3]]#2 : index, none
 // CHECK:         }
 func @affine_apply_mod(%arg0: index) -> index {

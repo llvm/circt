@@ -241,18 +241,28 @@ void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
 
-void MuxOp::build(OpBuilder &builder, OperationState &result, Value operand,
+void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
                   int inputs) {
-  auto type = operand.getType();
+  // Output type
+  auto type = anyInput.getType();
   result.types.push_back(type);
 
-  // Operand connected to ControlMerge from same block
-  result.addOperands(operand);
+  // Select operand
+  result.addOperands(anyInput);
 
-  // Operands from predecessor blocks
+  // Data operands
   for (int i = 0, e = inputs; i < e; ++i)
-    result.addOperands(operand);
+    result.addOperands(anyInput);
   sost::addAttributes(result, inputs, type);
+}
+
+void MuxOp::build(OpBuilder &builder, OperationState &result,
+                  Value _selectOperand, ValueRange _dataOperands) {
+  Type dataType = _dataOperands[0].getType();
+  result.addTypes({dataType});
+  result.addOperands({_selectOperand});
+  result.addOperands(_dataOperands);
+  sost::addAttributes(result, _dataOperands.size(), dataType);
 }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
