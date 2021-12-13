@@ -21,6 +21,8 @@
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include <optional>
+
 using namespace circt;
 using namespace handshake;
 using namespace mlir;
@@ -56,6 +58,7 @@ struct HandshakeDotPrintPass
     os << "Digraph G {\n";
     os.indent();
     os << "splines=spline;\n";
+    os << "rankdir=LR;\n";
     os << "compound=true; // Allow edges between clusters\n";
     dotPrint(os, "TOP", topLevelOp, /*isTop=*/true);
     os.unindent();
