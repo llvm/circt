@@ -68,11 +68,34 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
+/// Return true if the type has more than zero bitwidth.
+static bool hasNonZeroBitWidth(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([&](auto bundle) {
+        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+          auto elt = bundle.getElement(i);
+          if (hasNonZeroBitWidth(elt.type))
+            return true;
+        }
+        return false;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        if (vector.getNumElements() == 0)
+          return false;
+        return hasNonZeroBitWidth(vector.getElementType());
+      })
+      .Default([](auto groundType) {
+        return firrtl::getBitWidth(groundType).getValueOr(0) > 0;
+      });
+}
+
 /// Return true if we can preserve the aggregate type. We can a preserve the
-/// type iff type is not passive and don't contain analog.
+/// type iff (i) the type is not passive, (ii) the type don't contain analog and
+/// (iii) type has non-zero bitwidth.
 static bool isPreservableAggregateType(Type type) {
   auto firrtlType = type.cast<FIRRTLType>();
-  return firrtlType.isPassive() && !firrtlType.containsAnalog();
+  return firrtlType.isPassive() && !firrtlType.containsAnalog() &&
+         hasNonZeroBitWidth(firrtlType);
 }
 
 /// Peel one layer of an aggregate type into its components.  Type may be
