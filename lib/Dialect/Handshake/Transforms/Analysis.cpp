@@ -547,11 +547,11 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
 
   /// Print edges from arguments cluster to ops cluster and ops cluster to
   /// results cluser, to coerce a nice layout.
-  if (anyArg.has_value() and anyBody.has_value())
+  if (anyArg.has_value() && anyBody.has_value())
     os << "\"" << anyArg.value() << "\" -> \"" << anyBody.value()
        << "\" [lhead=\"" << opsCluster << "\" ltail=\"" << argsCluster
        << "\" style=invis]\n";
-  if (anyBody.has_value() and anyRes.has_value())
+  if (anyBody.has_value() && anyRes.has_value())
     os << "\"" << anyBody.value() << "\" -> \"" << anyRes.value()
        << "\" [lhead=\"" << resCluster << "\" ltail=\"" << opsCluster
        << "\" style=invis]\n";
