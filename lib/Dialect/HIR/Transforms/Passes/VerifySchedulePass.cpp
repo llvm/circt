@@ -85,7 +85,7 @@ LogicalResult VerifySchedulePass::verifyOp(CallOp op) {
     auto operand = op.operands()[i];
     auto attr = op.getFuncType().getInputAttrs()[i];
     if (helper::isBuiltinSizedType(ty)) {
-      auto offset = helper::extractDelayFromDict(attr) + op.offset().getValue();
+      auto offset = helper::extractDelayFromDict(attr) + op.offset();
       if (!scheduleInfo->isValidAtTime(operand, op.tstart(), offset))
         return op.emitError("Error in scheduling of operand.")
                    .attachNote(operand.getLoc())
@@ -100,7 +100,7 @@ LogicalResult VerifySchedulePass::verifyOp(ForOp op) {
     for (size_t i = 0; i < op.iter_arg_delays()->size(); i++) {
       auto offset =
           op.iter_arg_delays().getValue()[i].dyn_cast<IntegerAttr>().getInt() +
-          op.offset().getValue();
+          op.offset();
       if (!scheduleInfo->isValidAtTime(op.iter_args()[i], op.tstart(), offset))
         return op.emitError("Error in scheduling of iter_arg.")
                    .attachNote(op.iter_args()[i].getLoc())
@@ -114,7 +114,7 @@ LogicalResult VerifySchedulePass::verifyOp(WhileOp op) {
     for (size_t i = 0; i < op.iter_arg_delays()->size(); i++) {
       auto offset =
           op.iter_arg_delays().getValue()[i].dyn_cast<IntegerAttr>().getInt() +
-          op.offset().getValue();
+          op.offset();
       if (!scheduleInfo->isValidAtTime(op.iter_args()[i], op.tstart(), offset))
         return op.emitError("Error in scheduling of iter_arg.")
                    .attachNote(op.iter_args()[i].getLoc())

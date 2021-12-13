@@ -156,9 +156,6 @@ LogicalResult ScheduleInfoImpl::visitOp(FuncOp op) {
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(ForOp op) {
-  if (!op.tstart())
-    return op.emitError("Failed to create ScheduleInfo. Operation is not "
-                        "scheduled yet.");
 
   // register induction var.
   scheduleInfo.mapValueToTime(op.getInductionVar(), op.getIterTimeVar(), 0);
@@ -183,9 +180,6 @@ LogicalResult ScheduleInfoImpl::visitOp(ForOp op) {
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(WhileOp op) {
-  if (!op.tstart())
-    return op.emitError("Failed to create ScheduleInfo. Operation is not "
-                        "scheduled yet.");
 
   // Register the region time var as a new root time var.
   scheduleInfo.setAsRootTimeVar(op.getIterTimeVar());
@@ -212,9 +206,6 @@ LogicalResult ScheduleInfoImpl::visitOp(TimeOp op) {
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(CallOp op) {
-  if (!op.tstart())
-    return op.emitError("Failed to create ScheduleInfo. Operation is not "
-                        "scheduled yet.");
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   for (size_t i = 0; i < op.getNumResults(); i++) {
     Value res = op.getResult(i);
@@ -224,8 +215,7 @@ LogicalResult ScheduleInfoImpl::visitOp(CallOp op) {
       uint64_t delay = helper::extractDelayFromDict(attrDict);
       scheduleInfo.mapValueToTime(
           res, scheduleInfo.getRootTimeVar(op.tstart()),
-          op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()) +
-              delay);
+          op.offset() + scheduleInfo.getRootTimeOffset(op.tstart()) + delay);
     } else if (resTy.isa<TimeType>()) {
       scheduleInfo.setAsRootTimeVar(res);
     } else {
@@ -238,32 +228,27 @@ LogicalResult ScheduleInfoImpl::visitOp(CallOp op) {
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(LoadOp op) {
-  if (!op.tstart())
-    return op.emitError("Failed to create ScheduleInfo. Operation is not "
-                        "scheduled yet.");
 
   if (!scheduleInfo.getRootTimeVar(op.tstart()))
     return op.emitError("Could not find root time var for tstart.");
 
   scheduleInfo.mapValueToTime(
       op.getResult(), scheduleInfo.getRootTimeVar(op.tstart()),
-      op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()) +
-          op.delay());
+      op.offset() + scheduleInfo.getRootTimeOffset(op.tstart()) + op.delay());
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(BusRecvOp op) {
   scheduleInfo.mapValueToTime(
       op.getResult(), scheduleInfo.getRootTimeVar(op.tstart()),
-      op.offset().getValue() + scheduleInfo.getRootTimeOffset(op.tstart()));
+      op.offset() + scheduleInfo.getRootTimeOffset(op.tstart()));
   return success();
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(DelayOp op) {
-  scheduleInfo.mapValueToTime(op.getResult(),
-                              scheduleInfo.getRootTimeVar(op.tstart()),
-                              op.delay() + op.offset().getValue() +
-                                  scheduleInfo.getRootTimeOffset(op.tstart()));
+  scheduleInfo.mapValueToTime(
+      op.getResult(), scheduleInfo.getRootTimeVar(op.tstart()),
+      op.delay() + op.offset() + scheduleInfo.getRootTimeOffset(op.tstart()));
   return success();
 }
 

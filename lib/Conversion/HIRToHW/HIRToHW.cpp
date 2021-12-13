@@ -167,7 +167,7 @@ LogicalResult HIRToHWPass::visitOp(mlir::arith::ConstantOp op) {
   return success();
 }
 LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
-  assert(op.offset().getValue() == 0);
+  assert(op.offset() == 0);
   auto filteredOperands = filterCallOpArgs(op.getFuncType(), op.operands());
 
   // Get the mapped inputs and create the input types for instance op.
@@ -176,7 +176,7 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
     auto hwInput = mapHIRToHWValue.lookup(input);
     hwInputs.push_back(hwInput);
   }
-  assert(!op.offset() || op.offset().getValue() == 0);
+  assert(op.offset() == 0);
 
   hwInputs.push_back(mapHIRToHWValue.lookup(op.tstart()));
   hwInputs.push_back(this->clk);
@@ -262,9 +262,9 @@ LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
 
 LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
   auto uLoc = builder->getUnknownLoc();
-  assert(op.offset().getValue() == 0);
+  assert(op.offset() == 0);
   auto &bb = op.body().front();
-  assert(!op.offset() || op.offset().getValue() == 0);
+  assert(op.offset() == 0);
 
   auto conditionBegin = mapHIRToHWValue.lookup(op.condition());
   auto tstartBegin = mapHIRToHWValue.lookup(op.tstart());
@@ -366,7 +366,7 @@ LogicalResult HIRToHWPass::visitOp(hir::LatchOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::NextIterOp op) {
-  assert(op.offset().getValue() == 0);
+  assert(op.offset() == 0);
   return success();
 }
 
@@ -385,7 +385,7 @@ LogicalResult HIRToHWPass::visitOp(hir::ProbeOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusRecvOp op) {
-  assert(op.offset().getValue() == 0);
+  assert(op.offset() == 0);
   mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.bus()));
   return success();
 }
@@ -423,7 +423,7 @@ LogicalResult HIRToHWPass::visitOp(hir::ReturnOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusSendOp op) {
-  assert(op.offset().getValue() == 0);
+  assert(op.offset() == 0);
   auto value = mapHIRToHWValue.lookup(op.value());
   if (!value)
     return op.emitError() << "Could not find mapped value.";

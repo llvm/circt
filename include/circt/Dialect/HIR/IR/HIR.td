@@ -74,8 +74,8 @@ ParentOneOf<["ForOp","WhileOp"]>,Terminator,ScheduledOp] > {
       ```mlir hir.next_iter at %t```
   }];
 
-  let arguments = (ins Optional<I1> :$condition, Variadic<AnyType>:$iter_args, Optional<HIR_TimeType> : $tstart, 
-    OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins Optional<I1> :$condition, Variadic<AnyType>:$iter_args, HIR_TimeType : $tstart, 
+    I64Attr: $offset);
 
   let results = (outs );
   let hasCanonicalizeMethod = true;
@@ -85,7 +85,7 @@ ParentOneOf<["ForOp","WhileOp"]>,Terminator,ScheduledOp] > {
   let extraClassDeclaration = [{
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
@@ -256,7 +256,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects, ScheduledOp]> {
       hir.if(%b) at %t {...}        ```
   }];
 
-  let arguments = (ins AnyType : $condition, Optional<HIR_TimeType> : $tstart, OptionalAttr<I64Attr>: $offset, OptionalAttr<ArrayAttr>:$result_attrs);
+  let arguments = (ins AnyType : $condition, HIR_TimeType : $tstart, I64Attr: $offset, OptionalAttr<ArrayAttr>:$result_attrs);
   let regions = (region SizedRegion<1>:$if_region, SizedRegion<1>:$else_region);
   let results = (outs Variadic<AnyType>:$results);
 
@@ -266,7 +266,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects, ScheduledOp]> {
       }
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
@@ -275,7 +275,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects, ScheduledOp]> {
 }
 
 def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects,
-DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments,ScheduledOp]> {
+DeclareOpInterfaceMethods<LoopLikeOpInterface>,ScheduledOp]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -293,7 +293,7 @@ DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments,Schedule
 
   let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType:
   $step,Variadic<AnyType>:$iter_args, OptionalAttr<ArrayAttr>: $iter_arg_delays,
-      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      HIR_TimeType :$tstart, I64Attr : $offset);
   let regions = (region SizedRegion<1>:$body);
   let results = (outs Variadic<AnyType>:$iterResults, HIR_TimeType:$t_end);
 
@@ -323,18 +323,17 @@ DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments,Schedule
     StringRef getIterTimeVarName(){return (*this)->getAttr("argNames").dyn_cast<ArrayAttr>()[1].dyn_cast<StringAttr>().getValue();}
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
   let hasCanonicalizeMethod = true; 
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects,
-AttrSizedOperandSegments,ScheduledOp]> {
+def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects,ScheduledOp]> {
   let summary = "for operation";
 
   let arguments = (ins I1:$condition,
-  Variadic<AnyType>:$iter_args,OptionalAttr<ArrayAttr>:$iter_arg_delays, Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+  Variadic<AnyType>:$iter_args,OptionalAttr<ArrayAttr>:$iter_arg_delays, HIR_TimeType:$tstart, I64Attr: $offset);
   let results = (outs Variadic<AnyType>:$iterResults, HIR_TimeType:$t_end);
   let regions = (region SizedRegion<1>:$body);
   let parser = [{return parse$cppClass(parser,result);}];
@@ -346,7 +345,7 @@ AttrSizedOperandSegments,ScheduledOp]> {
     Block* addEntryBlock();
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 
   let hasCanonicalizeMethod =true;
@@ -368,7 +367,7 @@ def AllocaOp :HIR_Op<"alloca",[]> {
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments,ScheduledOp]> {
+def LoadOp : HIR_Op<"load", [ScheduledOp]> {
   let summary = "read from a memory.";
   let description = [{
     This Op reads from a memory interface. 
@@ -381,8 +380,8 @@ def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments,ScheduledOp]> {
   }];
 
   let arguments = (ins HIR_MemrefType:$mem, 
-      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, I64Attr: $delay, Optional<HIR_TimeType> : $tstart,
-      OptionalAttr<I64Attr>: $offset);
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, I64Attr: $delay, HIR_TimeType : $tstart,
+      I64Attr: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
     $mem (`[` `port` $port^ `]`)? `[`  $indices `]` `at` custom<TimeAndOffset>($tstart ,$offset) 
@@ -397,11 +396,11 @@ def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments,ScheduledOp]> {
     public:
       SmallVector<Value> filterIndices(hir::DimKind);
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
-def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments,ScheduledOp]> {
+def StoreOp : HIR_Op<"store", [ScheduledOp]> {
   let summary = "Write to a memory.";
   let description = [{
     This Op writes to memory. 
@@ -415,7 +414,7 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments,ScheduledOp]> {
 
   let arguments = (ins AnyType:$value, HIR_MemrefType:$mem,
       Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, 
-      I64Attr:$delay, Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+      I64Attr:$delay, HIR_TimeType :$tstart, I64Attr: $offset);
   let results = (outs );
   let assemblyFormat = [{
     $value `to` $mem  (`[` `port` $port^ `]`)? `[` $indices `]` `at` custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
@@ -429,12 +428,12 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments,ScheduledOp]> {
     public:
       SmallVector<Value> filterIndices(hir::DimKind);
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
 def CallOp : HIR_Op<"call",
-[CallOpInterface,AttrSizedOperandSegments,ScheduledOp] > {
+[CallOpInterface,ScheduledOp] > {
   let summary = "Function call";
   let description = [{
     This Op calls a function/module. 
@@ -450,8 +449,8 @@ def CallOp : HIR_Op<"call",
       FlatSymbolRefAttr:$callee, 
       TypeAttr : $funcTy,
       Variadic<AnyType>:$operands, 
-      Optional<HIR_TimeType>:$tstart,
-      OptionalAttr<I64Attr>: $offset
+      HIR_TimeType:$tstart,
+      I64Attr: $offset
       );
   let results = (outs Variadic<AnyType> : $results);
 
@@ -488,12 +487,12 @@ def CallOp : HIR_Op<"call",
 
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
 def CallInstanceOp :
-HIR_Op<"call.instance",[AttrSizedOperandSegments,ScheduledOp] > {
+HIR_Op<"call.instance",[ScheduledOp] > {
   let summary = "Call a previously instantiated function.";
   let description = [{
     This Op calls a previously instantiated function. It is used to fuse multiple instances of same function. 
@@ -506,8 +505,8 @@ HIR_Op<"call.instance",[AttrSizedOperandSegments,ScheduledOp] > {
 
   let arguments = (ins HIR_FuncType:$callee, 
       Variadic<AnyType>:$operands, 
-      Optional<HIR_TimeType>:$tstart, 
-      OptionalAttr<I64Attr>: $offset
+      HIR_TimeType:$tstart, 
+      I64Attr: $offset
       );
   let results = (outs Variadic<AnyType> : $res);
 
@@ -519,7 +518,7 @@ HIR_Op<"call.instance",[AttrSizedOperandSegments,ScheduledOp] > {
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
@@ -532,7 +531,7 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect,ScheduledOp]>{
   }];
 
   let arguments = (ins AnyType : $input, I64Attr:$delay, 
-      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      HIR_TimeType:$tstart, I64Attr: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `by` $delay `at` custom<TimeAndOffset> 
     ($tstart, $offset) custom<WithSSANames>(attr-dict) `:` type($res) custom<CopyType>(type($input),ref(type($res)))}];
@@ -540,7 +539,7 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect,ScheduledOp]>{
   let extraClassDeclaration=[{
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
@@ -583,7 +582,7 @@ def LatchOp: HIR_Op<"latch",[NoSideEffect,ScheduledOp]>{
   }];
 
   let arguments = (ins AnyType : $input,
-      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      HIR_TimeType:$tstart, I64Attr: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `at` custom<TimeAndOffset> ($tstart, $offset)  
       attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))
@@ -592,7 +591,7 @@ def LatchOp: HIR_Op<"latch",[NoSideEffect,ScheduledOp]>{
   let extraClassDeclaration=[{
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
@@ -684,7 +683,7 @@ def BusSendOp : HIR_Op<"bus.send", [ScheduledOp]> {
   }];
 
   let arguments = (ins AnyType:$value, HIR_BusType:$bus,
-      Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+      HIR_TimeType :$tstart, I64Attr: $offset);
   let results = (outs );
   let assemblyFormat = [{
     $value `to` $bus `at` custom<TimeAndOffset> ($tstart, $offset) attr-dict `:` type($value) `to` type($bus)  
@@ -693,7 +692,7 @@ def BusSendOp : HIR_Op<"bus.send", [ScheduledOp]> {
   let extraClassDeclaration = [{
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 
@@ -705,7 +704,7 @@ def BusRecvOp : HIR_Op<"bus.recv", [NoSideEffect,ScheduledOp]> {
   }];
 
   let arguments = (ins HIR_BusType:$bus,
-      Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+      HIR_TimeType :$tstart, I64Attr: $offset);
   let results = (outs AnyType:$res);
 
   let assemblyFormat = [{
@@ -715,7 +714,7 @@ def BusRecvOp : HIR_Op<"bus.recv", [NoSideEffect,ScheduledOp]> {
   let extraClassDeclaration = [{
     public:
       Value getTimeVar(){return tstart();}
-      int64_t getTimeOffset(){return offset().getValue();}
+      int64_t getTimeOffset(){return offset();}
   }];
 }
 

@@ -38,7 +38,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   int64_t step = helper::getConstantIntValue(forOp.step()).getValue();
 
   auto *context = builder.getContext();
-  assert(forOp.offset().getValue() == 0);
+  assert(forOp.offset() == 0);
 
   Value mappedIterTimeVar = forOp.tstart();
   SmallVector<Value> mappedIterArgs;
@@ -64,7 +64,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
     // Copy the loop body.
     for (auto &operation : loopBodyBlock) {
       if (auto nextIterOp = dyn_cast<hir::NextIterOp>(operation)) {
-        assert(nextIterOp.offset().getValue() == 0);
+        assert(nextIterOp.offset() == 0);
         mappedIterArgs.clear();
         for (auto iterArg : nextIterOp.iter_args())
           mappedIterArgs.push_back(operandMap.lookup(iterArg));

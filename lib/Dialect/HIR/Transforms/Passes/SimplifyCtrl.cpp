@@ -133,7 +133,7 @@ SmallVector<Value> inlineRegion(OpBuilder &builder,
 }
 
 LogicalResult SimplifyCtrlPass::visitOp(IfOp op) {
-  assert(op.offset().getValue() == 0);
+  assert(op.offset() == 0);
   OpBuilder builder(op);
   builder.setInsertionPoint(op);
   BlockAndValueMapping ifRegionOperandMap;

@@ -22,7 +22,7 @@ static LogicalResult splitOffsetIntoSeparateOp(OPTYPE op,
   auto *context = rewriter.getContext();
   if (!op.offset())
     return failure();
-  if (op.offset().getValue() == 0)
+  if (op.offset() == 0)
     return failure();
 
   Value tstart = rewriter.create<hir::TimeOp>(
