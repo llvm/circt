@@ -175,8 +175,7 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
 
   LogicalResult matchAndRewrite(ForkOp op,
                                 PatternRewriter &rewriter) const override {
-    auto parentForkOp =
-        dyn_cast_or_null<ForkOp>(op.getOperand().getDefiningOp());
+    auto parentForkOp = op.getOperand().getDefiningOp<ForkOp>();
     if (!parentForkOp)
       return failure();
 
