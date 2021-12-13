@@ -1187,14 +1187,21 @@ hw.module @unintializedWire(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42)
   hw.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
 }
 
-// CHECK-LABEL: hw.module @unintializedWireStruct
-hw.module @unintializedWireStruct() -> (result: !hw.struct<a: i1, b: i1>) {
+// CHECK-LABEL: hw.module @uninitializedWireAggregate
+hw.module @uninitializedWireAggregate() -> (result1: !hw.struct<a: i1, b: i1>,
+                                            result2: !hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>)
+{
   %0 = sv.wire : !hw.inout<!hw.struct<a: i1, b: i1>>
   %1 = sv.read_inout %0 : !hw.inout<!hw.struct<a: i1, b: i1>>
-  hw.output %1 : !hw.struct<a: i1, b: i1>
+  %2 = sv.wire : !hw.inout<!hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>>
+  %3 = sv.read_inout %2 :  !hw.inout<!hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>>
+
+  hw.output %1, %3 : !hw.struct<a: i1, b: i1>, !hw.struct<a: i1, b: !hw.array<10x!hw.struct<a: i1, b: i1>>>
   // CHECK-NEXT: %x_i2 = sv.constantX : i2
   // CHECK-NEXT: %0 = hw.bitcast %x_i2 : (i2) -> !hw.struct<a: i1, b: i1>
-  // CHECK-NEXT: hw.output %0
+  // CHECK-NEXT:  %x_i21 = sv.constantX : i21
+  // CHECK-NEXT: %1 = hw.bitcast %x_i21 : (i21) -> !hw.struct<a: i1, b: !hw.array<10xstruct<a: i1, b: i1>>>
+  // CHECK-NEXT: hw.output %0, %1
 }
 
 // CHECK-LABEL:  hw.module @IncompleteRead(%clock1: i1) {
