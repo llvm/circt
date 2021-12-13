@@ -297,12 +297,11 @@ static StringRef getVerilogDeclWord(Operation *op,
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
 
-  // "automatic logic" values aren't allowed in disallowLocalVariables mode.
-  assert((!isProcedural || !options.disallowLocalVariables) &&
-         "automatic variables not allowed");
-
   if (!isProcedural)
     return "wire";
+
+  // "automatic" values aren't allowed in disallowLocalVariables mode.
+  assert(!options.disallowLocalVariables && "automatic variables not allowed");
 
   // If the type contains a struct type, we have to use only "automatic" because
   // "automatic struct" is syntactically correct.
