@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -1084,11 +1085,31 @@ void FIRRTLModuleLowering::lowerModuleBody(
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+struct MixedModuleNamespace : Namespace {
+  MixedModuleNamespace() {}
+  MixedModuleNamespace(hw::HWModuleOp module) { add(module); }
+
+  /// Populate the namespace from a module-like operation. This namespace will
+  /// be composed of the `inner_sym`s of the module's ports and declarations.
+  void add(hw::HWModuleOp module) {
+    for (auto port : module.getAllPorts())
+      if (port.sym && !port.sym.getValue().empty())
+        internal.insert(port.sym.getValue());
+    module.walk([&](Operation *op) {
+      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+      if (attr)
+        internal.insert(attr.getValue());
+    });
+  }
+};
+
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()) {}
+        builder(module.getLoc(), module.getContext()),
+        moduleNamespace(MixedModuleNamespace(module)) {}
 
   void run();
 
@@ -1325,6 +1346,10 @@ private:
   /// This is a map from block to a pair of a random value and its unused bits.
   /// It is used to reduce the number of random value.
   DenseMap<Block *, std::pair<Value, unsigned>> blockRandomValueAndRemain;
+
+  /// A namespace that can be used to generte new symbol names that are unique
+  /// within this module.
+  MixedModuleNamespace moduleNamespace;
 };
 } // end anonymous namespace
 
