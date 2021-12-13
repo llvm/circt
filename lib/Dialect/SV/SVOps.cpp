@@ -1033,10 +1033,18 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   Value connected;
   if (!write) {
+    auto resultTy =
+        wire.getResult().getType().cast<InOutType>().getElementType();
     // If no write and only reads, then replace with XOp.
-    connected = rewriter.create<ConstantXOp>(
-        wire.getLoc(),
-        wire.getResult().getType().cast<InOutType>().getElementType());
+    if (resultTy.isa<IntegerType>())
+      connected = rewriter.create<ConstantXOp>(wire.getLoc(), resultTy);
+    else {
+      auto bitwidth = hw::getBitWidth(resultTy);
+      connected = rewriter.create<ConstantXOp>(
+          wire.getLoc(), rewriter.getIntegerType(bitwidth));
+      connected =
+          rewriter.create<hw::BitcastOp>(wire.getLoc(), resultTy, connected);
+    }
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.src();
   else
