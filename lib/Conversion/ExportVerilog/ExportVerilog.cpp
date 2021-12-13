@@ -229,6 +229,9 @@ static bool isZeroBitType(Type type) {
     return isZeroBitType(uarray.getElementType());
   if (auto array = type.dyn_cast<hw::ArrayType>())
     return isZeroBitType(array.getElementType());
+  if (auto structType = type.dyn_cast<hw::StructType>())
+    return llvm::all_of(structType.getElements(),
+                        [](auto elem) { return isZeroBitType(elem.type); });
 
   // We have an open type system, so assume it is ok.
   return false;
@@ -992,6 +995,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitter);
       })
       .Case<StructType>([&](StructType structType) {
+        if (structType.getElements().empty()) {
+          if (!implicitIntType)
+            os << "logic ";
+          os << "/*Zero Width*/";
+          return true;
+        }
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
           SmallVector<Attribute, 8> structDims;

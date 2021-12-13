@@ -448,6 +448,38 @@ hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
   hw.output %o1, %o2, %o3 : i4, i0, !hw.array<3xi0>
 }
 
+// CHECK: module TestZeroStruct(
+// CHECK-NEXT:  // input  /*Zero Width*/                           structZero,
+// CHECK-NEXT:  // input  struct packed {logic /*Zero Width*/ a; } structZeroNest,
+// CHECK-NEXT:  // output /*Zero Width*/                           structZero_0,
+// CHECK-NEXT:  // output struct packed {logic /*Zero Width*/ a; } structZeroNest_0
+// CHECK-NEXT: );
+hw.module @TestZeroStruct(%structZero: !hw.struct<>, %structZeroNest: !hw.struct<a: !hw.struct<>>)
+  -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
+
+  hw.output %structZero, %structZeroNest : !hw.struct<>, !hw.struct<a: !hw.struct<>>
+  // CHECK:      // Zero width: assign structZero_0 = structZero;
+  // CHECK-NEXT: // Zero width: assign structZeroNest_0 = structZeroNest;
+  // CHECK-NEXT: endmodule
+}
+
+// CHECK-LABEL: TestZeroStructInstance
+hw.module @TestZeroStructInstance(%structZero: !hw.struct<>, %structZeroNest: !hw.struct<a: !hw.struct<>>)
+  -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
+
+// CHECK: TestZeroStruct iii (
+// CHECK-NEXT:  //.structZero       (structZero)
+// CHECK-NEXT:  //.structZeroNest   (structZeroNest)
+// CHECK-NEXT:  //.structZero_0     (structZero_0)
+// CHECK-NEXT:  //.structZeroNest_0 (structZeroNest_0)
+// CHECK-NEXT:  );
+
+  %o1, %o2 = hw.instance "iii" @TestZeroStruct(structZero: %structZero: !hw.struct<>, structZeroNest: %structZeroNest: !hw.struct<a: !hw.struct<>>)
+                                -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>)
+
+  hw.output %o1, %o2 : !hw.struct<>, !hw.struct<a: !hw.struct<>>
+}
+
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 hw.module @cyclic(%a: i1) -> (b: i1) {
