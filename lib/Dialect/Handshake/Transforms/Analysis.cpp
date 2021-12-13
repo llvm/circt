@@ -409,7 +409,7 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   // diagram.
   os << "label=\"\"\n";
   os << "peripheries=0\n";
-  for (auto barg : enumerate(bodyBlock->getArguments())) {
+  for (const auto &barg : enumerate(bodyBlock->getArguments())) {
     auto argName = getArgName(f, barg.index());
     auto localArgName = getLocalName(instanceName, argName);
     os << "\"" << localArgName << "\" [shape=diamond";
@@ -434,7 +434,7 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   // Get the return op; a handshake.func always has a terminator, making this
   // safe.
   auto returnOp = *f.getBody().getOps<handshake::ReturnOp>().begin();
-  for (auto res : llvm::enumerate(returnOp.getOperands())) {
+  for (const auto &res : llvm::enumerate(returnOp.getOperands())) {
     auto resName = getResName(f, res.index());
     auto uniqueResName = getUniqueResName(instanceName, f, res.index());
     os << "\"" << uniqueResName << "\" [shape=diamond";
@@ -478,14 +478,14 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
 
       // Create a mapping between the instance arguments and the arguments to
       // the module which it instantiated.
-      for (auto arg : llvm::enumerate(instOp.getOperands())) {
+      for (const auto &arg : llvm::enumerate(instOp.getOperands())) {
         setUsedByMapping(
             arg.value(), instOp,
             getUniqueArgName(subInstanceName, calledFuncOp, arg.index()));
       }
       // Create a  mapping between the instance results and the results from the
       // module which it instantiated.
-      for (auto res : llvm::enumerate(instOp.getResults())) {
+      for (const auto &res : llvm::enumerate(instOp.getResults())) {
         setProducedByMapping(
             res.value(), instOp,
             getUniqueResName(subInstanceName, calledFuncOp, res.index()));
@@ -525,7 +525,7 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
 
   /// Print edges for function argument uses.
   os << "// Function argument edges\n";
-  for (auto barg : enumerate(bodyBlock->getArguments())) {
+  for (const auto &barg : enumerate(bodyBlock->getArguments())) {
     auto argName = getArgName(f, barg.index());
     os << "\"" << getLocalName(instanceName, argName) << "\" [shape=diamond";
     if (barg.index() == bodyBlock->getNumArguments() - 1)
