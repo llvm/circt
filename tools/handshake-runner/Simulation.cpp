@@ -211,6 +211,8 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(mlir::arith::AddIOp, std::vector<Any> &,
                         std::vector<Any> &);
+  LogicalResult execute(mlir::arith::XOrIOp, std::vector<Any> &,
+                        std::vector<Any> &);
   LogicalResult execute(mlir::arith::AddFOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(mlir::arith::CmpIOp, std::vector<Any> &,
@@ -284,6 +286,13 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::ConstantIntOp op,
                                          std::vector<Any> &out) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
+  return success();
+}
+
+LogicalResult HandshakeExecuter::execute(mlir::arith::XOrIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]) ^ any_cast<APInt>(in[1]);
   return success();
 }
 
@@ -822,7 +831,7 @@ HandshakeExecuter::HandshakeExecuter(
                   mlir::arith::DivSIOp, mlir::arith::DivUIOp,
                   mlir::arith::DivFOp, mlir::arith::IndexCastOp,
                   mlir::arith::ExtSIOp, mlir::arith::ExtUIOp,
-                  handshake::InstanceOp>([&](auto op) {
+                  mlir::arith::XOrIOp, handshake::InstanceOp>([&](auto op) {
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);
             })
