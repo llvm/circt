@@ -256,13 +256,13 @@ void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
   sost::addAttributes(result, inputs, type);
 }
 
-void MuxOp::build(OpBuilder &builder, OperationState &result,
-                  Value _selectOperand, ValueRange _dataOperands) {
-  Type dataType = _dataOperands[0].getType();
+void MuxOp::build(OpBuilder &builder, OperationState &result, Value selOperand,
+                  ValueRange dataOprnds) {
+  Type dataType = dataOprnds[0].getType();
   result.addTypes({dataType});
-  result.addOperands({_selectOperand});
-  result.addOperands(_dataOperands);
-  sost::addAttributes(result, _dataOperands.size(), dataType);
+  result.addOperands({selOperand});
+  result.addOperands(dataOprnds);
+  sost::addAttributes(result, dataOprnds.size(), dataType);
 }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
