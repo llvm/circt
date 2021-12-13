@@ -56,6 +56,7 @@ struct HandshakeDotPrintPass
     os << "Digraph G {\n";
     os.indent();
     os << "splines=spline;\n";
+    os << "compound=true; // Allow edges between clusters\n";
     dotPrint(os, "TOP", topLevelOp, /*isTop=*/true);
     os.unindent();
     os << "}\n";
@@ -372,6 +373,11 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   if (!isTop)
     instanceName += std::to_string(thisId);
 
+  /// Maintain a reference to any node in the args, body and result. These are
+  /// used to generate cluster edges at the end of this function, to facilitate
+  /// a  nice layout.
+  std::optional<std::string> anyArg, anyBody, anyRes;
+
   unsigned i = 0;
 
   // Sequentially scan across the operations in the function and assign instance
@@ -382,19 +388,22 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
       opIDs[&op] = opTypeCntrs[op.getName().getStringRef().str()]++;
   }
 
-  os << "// Subgraph for instance of " << name << "\n";
-  os << "subgraph \"cluster_" << instanceName << "\" {\n";
-  os.indent();
-  os << "label = \"" << name << "\"\n";
-  os << "labeljust=\"l\"\n";
+  if (!isTop) {
+    os << "// Subgraph for instance of " << name << "\n";
+    os << "subgraph \"cluster_" << instanceName << "\" {\n";
+    os.indent();
+    os << "label = \"" << name << "\"\n";
+    os << "labeljust=\"l\"\n";
+    os << "color = \"darkgreen\"\n";
+  }
   os << "node [shape=box style=filled fillcolor=\"white\"]\n";
-  os << "color = \"darkgreen\"\n";
 
   Block *bodyBlock = &f.getBody().front();
 
   /// Print function arg and res nodes.
   os << "// Function argument nodes\n";
-  os << "subgraph \"cluster_" << instanceName << "_args\" {\n";
+  std::string argsCluster = "cluster_" + instanceName + "_args";
+  os << "subgraph \"" << argsCluster << "\" {\n";
   os.indent();
   // No label or border; the subgraph just forces args to stay together in the
   // diagram.
@@ -402,17 +411,21 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   os << "peripheries=0\n";
   for (auto barg : enumerate(bodyBlock->getArguments())) {
     auto argName = getArgName(f, barg.index());
-    os << "\"" << getLocalName(instanceName, argName) << "\" [shape=diamond";
+    auto localArgName = getLocalName(instanceName, argName);
+    os << "\"" << localArgName << "\" [shape=diamond";
     if (barg.index() == bodyBlock->getNumArguments() - 1) // ctrl
       os << ", style=dashed";
     os << " label=\"" << argName << "\"";
     os << "]\n";
+    if (!anyArg.has_value())
+      anyArg = localArgName;
   }
   os.unindent();
   os << "}\n";
 
   os << "// Function return nodes\n";
-  os << "subgraph \"cluster_" << instanceName << "_res\" {\n";
+  std::string resCluster = "cluster_" + instanceName + "_res";
+  os << "subgraph \"" << resCluster << "\" {\n";
   os.indent();
   // No label or border; the subgraph just forces args to stay together in the
   // diagram.
@@ -433,12 +446,21 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
     // Create a mapping between the return op argument uses and the return
     // nodes.
     setUsedByMapping(res.value(), returnOp, uniqueResName);
+
+    if (!anyRes.has_value())
+      anyRes = uniqueResName;
   }
   os.unindent();
   os << "}\n";
 
   /// Print operation nodes.
-  os << "// Function operation nodes\n";
+  std::string opsCluster = "cluster_" + instanceName + "_ops";
+  os << "subgraph \"" << opsCluster << "\" {\n";
+  os.indent();
+  // No label or border; the subgraph just forces args to stay together in the
+  // diagram.
+  os << "label=\"\"\n";
+  os << "peripheries=0\n";
   for (Operation &op : *bodyBlock) {
     if (!isa<handshake::InstanceOp, handshake::ReturnOp>(op)) {
       // Regular node in the diagram.
@@ -470,6 +492,11 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
       }
     }
   }
+  if (!opNameMap.empty())
+    anyBody = opNameMap.begin()->second;
+
+  os.unindent();
+  os << "}\n";
 
   /// Print operation result edges.
   os << "// Operation result edges\n";
@@ -493,7 +520,8 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
     }
   }
 
-  os << "}\n";
+  if (!isTop)
+    os << "}\n";
 
   /// Print edges for function argument uses.
   os << "// Function argument edges\n";
@@ -513,6 +541,17 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
       os << "\n";
     }
   }
+
+  /// Print edges from arguments cluster to ops cluster and ops cluster to
+  /// results cluser, to coerce a nice layout.
+  if (anyArg.has_value() and anyBody.has_value())
+    os << "\"" << anyArg.value() << "\" -> \"" << anyBody.value()
+       << "\" [lhead=\"" << opsCluster << "\" ltail=\"" << argsCluster
+       << "\" style=invis]\n";
+  if (anyBody.has_value() and anyRes.has_value())
+    os << "\"" << anyBody.value() << "\" -> \"" << anyRes.value()
+       << "\" [lhead=\"" << resCluster << "\" ltail=\"" << opsCluster
+       << "\" style=invis]\n";
 
   os.unindent();
   return instanceName;
