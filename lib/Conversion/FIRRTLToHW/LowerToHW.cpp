@@ -2865,7 +2865,7 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
       return failure();
 
     auto constant = getOrCreateIntConstant(bitwidth.getValue(), 0);
-    // If the result type is an aggregate value, we bitcast the constant.
+    // If the result is an aggregate value, we have to bitcast the constant.
     if (!resultTy.isa<IntegerType>())
       constant = builder.create<hw::BitcastOp>(resultTy, constant);
     return setLowering(op, constant);
