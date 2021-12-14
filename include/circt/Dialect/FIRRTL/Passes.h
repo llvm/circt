@@ -43,7 +43,8 @@ std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
                                StringRef replSeqMemCircuit = "",
-                               StringRef replSeqMemFile = "");
+                               StringRef replSeqMemFile = "",
+                               StringRef moduleSwappingConfigOutputDir = "");
 
 std::unique_ptr<mlir::Pass> createEmitOMIRPass(StringRef outputFilename = "");
 
@@ -66,9 +67,6 @@ std::unique_ptr<mlir::Pass> createGrandCentralPass();
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralSignalMappingsPass();
-
-std::unique_ptr<mlir::Pass>
-createEmitModuleSwappingConfigPass(StringRef outputDirectory = "");
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 

@@ -405,8 +405,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
     circuitPM.nest<firrtl::FModuleOp>().addPass(
         firrtl::createGrandCentralSignalMappingsPass());
-    circuitPM.addPass(
-        firrtl::createEmitModuleSwappingConfigPass(moduleSwappingOutDir));
   }
 
   // The above passes, IMConstProp in particular, introduce additional
@@ -418,7 +416,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
-        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+        replSeqMem, replSeqMemCircuit, replSeqMemFile, moduleSwappingOutDir));
 
   if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(

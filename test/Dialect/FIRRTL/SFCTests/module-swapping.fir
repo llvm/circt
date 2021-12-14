@@ -1,4 +1,4 @@
-; RUN: firtool %s --firrtl-grand-central --verilog | FileCheck %s
+; RUN: firtool %s --emit-metadata --verilog | FileCheck %s
 
 circuit Top : %[[{
   "class": "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",

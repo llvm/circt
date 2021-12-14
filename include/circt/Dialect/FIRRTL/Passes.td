@@ -110,7 +110,9 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
     Option<"replSeqMemCircuit", "repl-seq-mem-circuit", "std::string", "",
       "Circuit root for seq mem metadata">,
     Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
-      "File to which emit seq meme metadata">
+      "File to which emit seq meme metadata">,
+    Option<"moduleSwappingConfigOutputDir", "module-swapping-config-output-dir", "std::string", "",
+      "Output directory emit module swapping configuration files">
   ];
 }
 
@@ -321,14 +323,6 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
                                       "FModuleOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
-}
-
-def EmitModuleSwappingConfig : Pass<"firrtl-emit-module-swapping-config",
-                                      "CircuitOp"> {
-  let summary = "Generate VCS and Verilator config files for replaced modules";
-  let constructor = "circt::firrtl::createEmitModuleSwappingConfigPass()";
-  let options = [Option<"outputDirectory", "output-directory", "std::string", "",
-      "Output directory for configuration files">];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
