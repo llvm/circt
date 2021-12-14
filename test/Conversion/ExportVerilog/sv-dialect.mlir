@@ -445,7 +445,7 @@ hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
   sv.assign %1, %true : i1
 }
 
-// CHECK-LABEL: moodule AggregateConstantXZ
+// CHECK-LABEL: module AggregateConstantXZ(
 hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3xi4>>,
                                      res2: !hw.struct<foo: i2, bar: !hw.array<3xi4>>) {
   %0 = sv.constantX : !hw.struct<foo: i2, bar: !hw.array<3xi4>>
