@@ -26,6 +26,7 @@
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include <set>
 
@@ -168,12 +169,47 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     return success();
   }
 };
+
+struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
+  using mlir::OpRewritePattern<ForkOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ForkOp op,
+                                PatternRewriter &rewriter) const override {
+    auto parentForkOp = op.getOperand().getDefiningOp<ForkOp>();
+    if (!parentForkOp)
+      return failure();
+
+    /// Create the fork with as many outputs as the two source forks.
+    /// Keeping the op.operand() output may or may not be redundant (dependning
+    /// on if op is the single user of the value), but we'll let
+    /// EliminateUnusedForkResultsPattern apply in that case.
+    unsigned totalNumOuts = op.size() + parentForkOp.size();
+    rewriter.updateRootInPlace(parentForkOp, [&] {
+      /// Create a new parent fork op which produces all of the fork outputs and
+      /// replace all of the uses of the old results.
+      auto newParentForkOp = rewriter.create<ForkOp>(
+          parentForkOp.getLoc(), parentForkOp.getOperand(), totalNumOuts);
+
+      for (auto it :
+           llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
+        std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
+      rewriter.eraseOp(parentForkOp);
+
+      /// Replace the results of the matches fork op with the corresponding
+      /// results of the new parent fork op.
+      rewriter.replaceOp(op, newParentForkOp.getResults().take_back(op.size()));
+    });
+    return success();
+  }
+};
+
 } // namespace
 
 void handshake::ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                     MLIRContext *context) {
-  results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
-  results.insert<EliminateUnusedForkResultsPattern>(context);
+  results.insert<circt::handshake::EliminateSimpleForksPattern,
+                 EliminateForkToForkPattern, EliminateUnusedForkResultsPattern>(
+      context);
 }
 
 void LazyForkOp::build(OpBuilder &builder, OperationState &result,
@@ -239,6 +275,47 @@ void printMergeOp(OpAsmPrinter &p, MergeOp op) { sost::printOp(p, op, false); }
 void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
+}
+
+/// Returns a dematerialized version of the value 'v', defined as the source of
+/// the value before passing through a buffer or fork operation.
+static Value getDematerialized(Value v) {
+  Operation *parentOp = v.getDefiningOp();
+  if (!parentOp)
+    return v;
+
+  return llvm::TypeSwitch<Operation *, Value>(parentOp)
+      .Case<ForkOp>(
+          [&](ForkOp op) { return getDematerialized(op.getOperand()); })
+      .Case<BufferOp>(
+          [&](BufferOp op) { return getDematerialized(op.getOperand()); })
+      .Default([&](auto) { return v; });
+}
+
+namespace {
+
+/// Eliminates muxes with identical data inputs. Data inputs are inspected as
+/// their dematerialized versions. This has the side effect of any subsequently
+/// unused buffers are DCE'd and forks are optimized to be narrower.
+struct EliminateSimpleMuxesPattern : mlir::OpRewritePattern<MuxOp> {
+  using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(MuxOp op,
+                                PatternRewriter &rewriter) const override {
+    Value firstDataOperand = getDematerialized(op.dataOperands()[0]);
+    if (!llvm::all_of(op.dataOperands(), [&](Value operand) {
+          return getDematerialized(operand) == firstDataOperand;
+        }))
+      return failure();
+    rewriter.replaceOp(op, firstDataOperand);
+    return success();
+  }
+};
+
+} // namespace
+
+void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                        MLIRContext *context) {
+  results.insert<EliminateSimpleMuxesPattern>(context);
 }
 
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,

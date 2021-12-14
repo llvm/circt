@@ -364,6 +364,7 @@ def MuxOp : Handshake_Op<"mux", [
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verify(*this);";
+  let hasCanonicalizer = 1;
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
