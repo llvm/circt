@@ -2984,9 +2984,9 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
 
   // Change the blockDeclarationInsertPointIndex for the statements in this
   // block, and restore it back when we move on to code after the block.
-  llvm::SaveAndRestore<RearrangableOStream::Cursor> X(
+  llvm::SaveAndRestore<RearrangableOStream::Cursor> x(
       blockDeclarationInsertPoint, rearrangableStream.getCursor());
-  llvm::SaveAndRestore<unsigned> X2(blockDeclarationIndentLevel,
+  llvm::SaveAndRestore<unsigned> x2(blockDeclarationIndentLevel,
                                     state.currentIndent + INDENT_AMOUNT);
 
   auto numEmittedBefore = getNumStatementsEmitted();
