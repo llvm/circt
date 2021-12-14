@@ -1868,14 +1868,12 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
-  auto bitWidth = op.getWidth();
-  os << bitWidth << "'bx";
+  os << op.getWidth() << "'bx";
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
-  auto bitWidth = op.getWidth();
-  os << bitWidth << "'bz";
+  os << op.getWidth() << "'bz";
   return {Unary, IsUnsigned};
 }
 
