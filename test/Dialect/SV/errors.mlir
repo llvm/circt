@@ -203,7 +203,6 @@ hw.module @part_select1() {
 // -----
 
 hw.module @ZeroWidthConstantX() {
-
   // expected-error @+1 {{unsupported type}}
   %0 = sv.constantX : !hw.struct<>
 }
