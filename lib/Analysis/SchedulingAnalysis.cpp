@@ -43,7 +43,7 @@ circt::analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
 void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
     AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis) {
   // Create a cyclic scheduling problem.
-  CyclicProblem problem(forOp);
+  CyclicProblem problem = CyclicProblem::get(forOp);
 
   // Insert memory dependences into the problem.
   forOp.getBody()->walk([&](Operation *op) {
@@ -134,7 +134,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   problems.insert(std::pair<Operation *, CyclicProblem>(forOp, problem));
 }
 
-CyclicProblem
+CyclicProblem &
 circt::analysis::CyclicSchedulingAnalysis::getProblem(AffineForOp forOp) {
   auto problem = problems.find(forOp);
   assert(problem != problems.end() && "expected problem to exist");

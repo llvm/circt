@@ -20,16 +20,21 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HIR/Transforms/Passes.h"
+#include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Transforms/Passes.h"
 
 namespace circt {
 
 inline void registerAllPasses() {
   // Conversion Passes
   registerConversionPasses();
+
+  // Transformation passes
+  registerTransformsPasses();
 
   // Standard Passes
   calyx::registerPasses();
@@ -40,6 +45,7 @@ inline void registerAllPasses() {
   seq::registerSeqPasses();
   sv::registerPasses();
   hir::initHIRTransformationPasses();
+  handshake::registerPasses();
 }
 
 } // namespace circt

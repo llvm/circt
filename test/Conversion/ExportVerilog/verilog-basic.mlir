@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT: input a, b);
@@ -38,10 +38,8 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   %10 = comb.shru %in4, %in4 : i4
 
-  // CHECK: wire [1:0] _T_0 = in4[1:0];
-  // CHECK: wire [1:0] _T_1 = in4[3:2];
-  // CHECK: wire [8:0] _T_2 = {1'h0, in4, in4};
-  // CHECK: wire [4:0] _T_3 = 5'h0 - {in4[3], in4};
+  // CHECK: wire [1:0] _in4_1to0 = in4[1:0];
+  // CHECK: wire [1:0] _in4_3to2 = in4[3:2];
 
   // CHECK: assign w1 = ~in4;
   %3 = comb.xor %in4, %c-1_i4 : i4
@@ -49,10 +47,10 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   // CHECK: assign w1 = in4 % 4'h1;
   %4 = comb.modu %in4, %c1_i4 : i4
 
-  // CHECK: assign w1 = {2'h0, _T_0};
+  // CHECK: assign w1 = {2'h0, _in4_1to0};
   %5 = comb.extract %in4 from 0 : (i4) -> i2
 
-  // CHECK: assign w1 = {2'h0, _T_1 | {in4[2], 1'h0}};
+  // CHECK: assign w1 = {2'h0, _in4_3to2 | {in4[2], 1'h0}};
   %6 = comb.extract %in4 from 2 : (i4) -> i2
   %8 = comb.concat %7, %false : i1, i1
   %9 = comb.or %6, %8 : i2
@@ -67,16 +65,19 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %15 = comb.mux %clock, %c2_i4, %c3_i4 : i4
   %16 = comb.mux %clock, %c1_i4, %15 : i4
 
-  // CHECK: assign w1 = {2'h0, _T_1 | _T_0};
+  // CHECK: assign w1 = {2'h0, _in4_3to2 | _in4_1to0};
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : i2, i4
 
   // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
   // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
-  %19 = comb.sext %in4 : (i4) -> i6
-  %20 = comb.sext %clock : (i1) -> i6
+  %tmp = comb.extract %in4 from 3 : (i4) -> i1
+  %tmp2 = comb.replicate %tmp : (i1) -> i2
+  %19 = comb.concat %tmp2, %in4 : i2, i4
+  %20 = comb.replicate %clock : (i1) -> i6
   %21 = comb.xor %18, %19, %20 : i6
-  %22 = comb.sext %in4 : (i4) -> i5
+  %tmp3 = comb.extract %in4 from 3 : (i4) -> i1
+  %22 = comb.concat %tmp3, %in4 : i1, i4
   %23 = comb.sub %c0_i5, %22 : i5
   %25 = comb.concat %c0_i2, %5 : i2, i2
   %26 = comb.concat %c0_i2, %9 : i2, i2
@@ -103,15 +104,8 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   sv.assign %w2, %29 : i16
   sv.assign %w2, %30 : i16
 
-  // CHECK: assign w3 = {{..}}7{_T_2[8]}}, _T_2};
-  // CHECK: assign w3 = {{..}}11{_T_3[4]}}, _T_3};
-  %32 = comb.sext %12 : (i9) -> i16
-  %33 = comb.sext %23 : (i5) -> i16
-
   %w3 = sv.wire : !hw.inout<i16>
   %w3_use = sv.read_inout %w3 : !hw.inout<i16>
-  sv.assign %w3, %32 : i16
-  sv.assign %w3, %33 : i16
 
 
  // CHECK: assign out1a = ^in4;
@@ -123,7 +117,8 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   // CHECK: assign out4s = $signed($signed(in4) >>> in4);
   // CHECK: assign sext17 = {w3[15], w3};
-  %35 = comb.sext %w3_use : (i16) -> i17
+  %36 = comb.extract %w3_use from 15 : (i16) -> i1
+  %35 = comb.concat %36, %w3_use : i1, i16
   hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35 : i1, i1, i1, i4, i4, i16, i16, i17
 }
 
@@ -308,7 +303,7 @@ hw.module @ExternMods(%a_in: i8) {
   hw.instance "xyz3" @AParameterizedExtModule<CFG: none = #hw.param.verbatim<"\"STRING\"">>(in: %a_in: i8) -> (out: i1)
 }
 
-hw.module.extern @MyParameterizedExtModule<DEFAULT: i64, DEPTH: f64, FORMAT: none,
+hw.module.extern @MyParameterizedExtModule<DEFAULT: i32, DEPTH: f64, FORMAT: none,
      WIDTH: i8>(%in: i8) -> (out: i1)
 
 // CHECK-LABEL: module UseInstances
@@ -318,7 +313,7 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK:   .out (a_out1)
   // CHECK: );
   // CHECK: MyParameterizedExtModule #(
-  // CHECK:   .DEFAULT(64'd0),
+  // CHECK:   .DEFAULT(0),
   // CHECK:   .DEPTH(3.500000e+00),
   // CHECK:   .FORMAT("xyz_timeout=%d\n"),
   // CHECK:   .WIDTH(32)
@@ -328,7 +323,7 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK: );
   %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
   %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule<
-     DEFAULT: i64 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
+     DEFAULT: i32 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
      WIDTH: i8 = 32
   >(in: %a_in: i8) -> (out: i1)
   hw.output %xyz.out, %xyz2.out : i1, i1
@@ -388,13 +383,24 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 
   %0 = sv.read_inout %count : !hw.inout<i2>
   %1 = comb.mux %cond, %value, %0 : i2
-  %2 = comb.sext %reset : (i1) -> i2
+  %2 = comb.replicate %reset : (i1) -> i2
   %3 = comb.xor %2, %c-1_i2 : i2
   %4 = comb.and %3, %1 : i2
   sv.alwaysff(posedge %clock)  {
     sv.passign %count, %4 : i2
   }
   hw.output
+}
+
+// https://github.com/llvm/circt/issues/2168
+// CHECK-LABEL: module shrs_parens(
+hw.module @shrs_parens(%a: i18, %b: i18, %c: i1) -> (o: i18) {
+  // CHECK: assign o = a + $signed($signed(b) >>> c);
+  %c0_i17 = hw.constant 0 : i17
+  %0 = comb.concat %c0_i17, %c : i17, i1
+  %1 = comb.shrs %b, %0 : i18
+  %2 = comb.add %a, %1 : i18
+  hw.output %2 : i18
 }
 
 // https://github.com/llvm/circt/issues/755
@@ -408,6 +414,44 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   hw.output %1 : i1
 }
 
+// Inner name references to ports which are renamed to avoid collisions with
+// reserved Verilog keywords.
+hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar: i1 {hw.exportPort = @symB})
+// CHECK-LABEL: module VerbatimModule(
+// CHECK-NEXT:    input  signed_0
+// CHECK-NEXT:    output unsigned_1
+hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
+  %parameter = sv.wire sym @symC : !hw.inout<i4>
+  %localparam = sv.reg sym @symD : !hw.inout<i4>
+  %shortint = sv.interface.instance sym @symE : !sv.interface<@Interface>
+  // CHECK: wire [3:0] parameter_2;
+  // CHECK: reg  [3:0] localparam_3;
+  // CHECK: Interface shortint();
+  hw.output %signed : i1
+}
+sv.verbatim "VERB: module symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symA>]}
+sv.verbatim "VERB: module symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symB>]}
+sv.verbatim "VERB: module symC `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symC>]}
+sv.verbatim "VERB: module symD `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symD>]}
+sv.verbatim "VERB: module symE `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symE>]}
+sv.verbatim "VERB: module.extern symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symA>]}
+sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symB>]}
+// CHECK: VERB: module symA `signed_0`
+// CHECK: VERB: module symB `unsigned_1`
+// CHECK: VERB: module symC `parameter_2`
+// CHECK: VERB: module symD `localparam_3`
+// CHECK: VERB: module symE `shortint_4`
+// CHECK: VERB: module.extern symA `foo`
+// CHECK: VERB: module.extern symB `bar`
+
+
+// Should be able to nest interpolated symbols in extra braces
+hw.module @CheckNestedBracesSymbol() { hw.output }
+sv.verbatim "{{0}} {{{0}}}" {symbols = [@CheckNestedBracesSymbol]}
+// CHECK-LABEL: module CheckNestedBracesSymbol();
+// CHECK: CheckNestedBracesSymbol {CheckNestedBracesSymbol}
+
+
 sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
 // CHECK-LABL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
@@ -415,10 +459,23 @@ hw.module @BindEmissionInstance() {
 }
 // CHECK-LABEL: module BindEmission()
 hw.module @BindEmission() -> () {
-  // CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-  // CHECK-NEXT: // BindEmissionInstance BindEmissionInstance ();
+  // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+  // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
+  // CHECK-NEXT: */
   hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint = true}
   hw.output
+}
+
+hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
+  // CHECK-LABEL: module bind_rename_port
+  // CHECK-NEXT: input _io_req_ready_output, reset, clock
+  hw.output
+}
+
+hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
+  %false = hw.constant false
+  hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
+  hw.output %false : i1
 }
 
 sv.bind.interface @__Interface__ {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
@@ -437,3 +494,9 @@ hw.module @BindInterface() -> () {
 
 // CHECK-LABEL: FILE "BindTest{{.}}BindInterface.sv"
 // CHECK: bind BindInterface Interface bar (.*);
+
+sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
+// CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert
+// CHECK-NEXT:  ._io_req_ready_output (InvisibleBind_assert__io_req_ready_output)
+// CHECK-NEXT:  .reset                (reset),
+// CHECK-NEXT:  .clock                (clock)

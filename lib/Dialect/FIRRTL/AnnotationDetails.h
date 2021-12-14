@@ -49,6 +49,8 @@ constexpr const char *referenceKeyClass =
     "sifive.enterprise.grandcentral.ReferenceDataTapKey";
 constexpr const char *internalKeyClass =
     "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
+constexpr const char *extractGrandCentralClass =
+    "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 
 } // namespace firrtl
 } // namespace circt

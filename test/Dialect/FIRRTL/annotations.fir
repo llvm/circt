@@ -115,7 +115,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
     cmem bar: UInt<1>[8]
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.combmem
+    ; CHECK: chirrtl.combmem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
@@ -212,7 +212,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
     smem bar: UInt<1>[8]
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.seqmem
+    ; CHECK: chirrtl.seqmem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
@@ -350,11 +350,11 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
+    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_5 = chirrtl.combmem  {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
+    ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
     inst _T_7 of Bar
@@ -399,13 +399,13 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = firrtl.seqmem Undefined  {annotations =
+    ; CHECK: %_T_4 = chirrtl.seqmem Undefined  {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [
+    ; CHECK: %_T_5 = chirrtl.combmem  {annotations = [
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: firrtl.memoryport Infer %_T_5 {annotations =
+    ; CHECK: chirrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance _T_7 {annotations =
@@ -707,7 +707,7 @@ circuit GCTMemTap : %[
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:      id = [[ID]] : i64, word = 1 : i64}>
     ; CHECK: firrtl.module @GCTMemTap
-    ; CHECK: %mem = firrtl.combmem
+    ; CHECK: %mem = chirrtl.combmem
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:    id = [[ID]] : i64}]
@@ -1108,3 +1108,53 @@ circuit Sub : %[[{
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 1, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.a.b.c\22, side = \22local\22, targetId = 6 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 2, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.d\22, side = \22local\22, targetId = 7 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 3, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.e\22, side = \22local\22, targetId = 8 : i64}>">
+
+; // -----
+
+; Grand Central's ModuleReplacementAnnotation is properly scattered to the circuit
+; and the targeted operations.
+
+circuit Top : %[[{
+  "class": "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
+  "targets": [
+    "~Top|Top/child:Child",
+    "~Top|Top/childWrapper:ChildWrapper/child:Child"
+  ],
+  "circuit": "",
+  "annotations": ["foo", "bar"],
+  "circuitPackage": "other",
+  "dontTouches":[
+    "~Top|Child>in",
+    "~Top|Child>out"
+  ]
+}]]
+  module ChildWrapper :
+    input in : UInt<123>
+    output out : UInt<456>
+
+    inst child of Child
+    child.in <= in
+    out <= child.out
+
+  extmodule Child :
+    input in : UInt<123>
+    output out : UInt<456>
+
+  module Top :
+    inst child of Child
+    inst childWrapper of ChildWrapper
+
+; CHECK-LABEL: firrtl.circuit "Top"
+; CHECK-SAME: {annotations = ["foo", "bar"], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
+
+; CHECK: %child_in, %child_out = firrtl.instance child
+; CHECK-SAME: {annotations = [{circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", class = "circt.nonlocal"}]}
+
+; CHECK: firrtl.extmodule @Child(
+; CHECK-SAME:   in in: !firrtl.uint<123> [{class = "firrtl.transforms.DontTouchAnnotation"}],
+; CHECK-SAME:   out out: !firrtl.uint<456> [{class = "firrtl.transforms.DontTouchAnnotation"}]
+; CHECK-SAME: )
+; CHECK-SAME: attributes {annotations = [
+; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/child:Child", id = [[ID]] : i64},
+; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", id = [[ID]] : i64}
+; CHECK-SAME: ]}

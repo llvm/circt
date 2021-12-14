@@ -33,7 +33,7 @@ using namespace sv;
 // Reimplemented from SliceAnalysis to use a worklist rather than recursion and
 // non-insert ordered set.
 static void getBackwardSliceSimple(Operation *rootOp,
-                                   SmallPtrSetImpl<Operation *> &backwardSlice,
+                                   SetVector<Operation *> &backwardSlice,
                                    std::function<bool(Operation *)> filter) {
   SmallVector<Operation *> worklist;
   worklist.push_back(rootOp);
@@ -54,7 +54,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
     for (auto en : llvm::enumerate(op->getOperands())) {
       auto operand = en.value();
       if (auto *definingOp = operand.getDefiningOp()) {
-        if (backwardSlice.count(definingOp) == 0)
+        if (!backwardSlice.contains(definingOp))
           worklist.push_back(definingOp);
       } else if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
         Block *block = blockArg.getOwner();
@@ -64,7 +64,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
         // flow into us. For now, just bail.
         assert(parentOp->getNumRegions() == 1 &&
                parentOp->getRegion(0).getBlocks().size() == 1);
-        if (backwardSlice.count(parentOp) == 0)
+        if (!backwardSlice.contains(parentOp))
           worklist.push_back(parentOp);
       } else {
         llvm_unreachable("No definingOp and not a block argument.");
@@ -76,12 +76,12 @@ static void getBackwardSliceSimple(Operation *rootOp,
 
   // Don't insert the top level operation, we just queried on it and don't
   // want it in the results.
-  backwardSlice.erase(rootOp);
+  backwardSlice.remove(rootOp);
 }
 
 // Compute the dataflow for a set of ops.
-static void dataflowSlice(SmallPtrSetImpl<Operation *> &ops,
-                          SmallPtrSetImpl<Operation *> &results) {
+static void dataflowSlice(SetVector<Operation *> &ops,
+                          SetVector<Operation *> &results) {
   for (auto op : ops) {
     getBackwardSliceSimple(op, results, [](Operation *testOp) -> bool {
       return !isa<sv::ReadInOutOp>(testOp) && !isa<hw::InstanceOp>(testOp) &&
@@ -91,8 +91,8 @@ static void dataflowSlice(SmallPtrSetImpl<Operation *> &ops,
 }
 
 // Compute the ops defining the blocks a set of ops are in.
-static void blockSlice(SmallPtrSetImpl<Operation *> &ops,
-                       SmallPtrSetImpl<Operation *> &blocks) {
+static void blockSlice(SetVector<Operation *> &ops,
+                       SetVector<Operation *> &blocks) {
   for (auto op : ops) {
     while (!isa<hw::HWModuleOp>(op->getParentOp())) {
       op = op->getParentOp();
@@ -104,14 +104,13 @@ static void blockSlice(SmallPtrSetImpl<Operation *> &ops,
 // Aggressively mark operations to be moved to the new module.  This leaves
 // maximum flexibility for optimization after removal of the nodes from the
 // old module.
-static SmallPtrSet<Operation *, 16>
-computeCloneSet(SmallPtrSetImpl<Operation *> &roots) {
-  SmallPtrSet<Operation *, 16> results;
+static SetVector<Operation *> computeCloneSet(SetVector<Operation *> &roots) {
+  SetVector<Operation *> results;
   // Get Dataflow for roots
   dataflowSlice(roots, results);
 
   // Get Blocks
-  SmallPtrSet<Operation *, 8> blocks;
+  SetVector<Operation *> blocks;
   blockSlice(roots, blocks);
   blockSlice(results, blocks);
 
@@ -225,7 +224,7 @@ static bool hasOoOArgs(hw::HWModuleOp newMod, Operation *op) {
 // Do the cloning, which is just a pre-order traversal over the module looking
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
-                       SmallPtrSetImpl<Operation *> &depOps,
+                       SetVector<Operation *> &depOps,
                        BlockAndValueMapping &cutMap) {
   SmallVector<Operation *, 16> lateBoundOps;
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
@@ -262,7 +261,7 @@ private:
                 StringRef suffix, Attribute path, Attribute bindFile) {
     bool hasError = false;
     // Find Operations of interest.
-    SmallPtrSet<Operation *, 8> roots;
+    SetVector<Operation *> roots;
     module->walk([&fn, &roots, &hasError](Operation *op) {
       if (fn(op)) {
         roots.insert(op);

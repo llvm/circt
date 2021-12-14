@@ -13,6 +13,7 @@
 #ifndef CIRCT_CONVERSION_PASSES_H
 #define CIRCT_CONVERSION_PASSES_H
 
+#include "circt/Conversion/AffineToStaticLogic.h"
 #include "circt/Conversion/CalyxToHW.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"
@@ -20,12 +21,19 @@
 #include "circt/Conversion/HWToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM.h"
+#include "circt/Conversion/MooreToCore.h"
 #include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Conversion/StandardToHIR/StandardToHIR.h"
 #include "circt/Conversion/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
+
+namespace mlir {
+namespace arith {
+class ArithmeticDialect;
+} // namespace arith
+} // namespace mlir
 
 namespace circt {
 

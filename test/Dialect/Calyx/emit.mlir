@@ -16,12 +16,31 @@ calyx.program "main" {
   // CHECK-LABEL: component B(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
+    %s.in, %s.write_en, %s.clk, %s.reset, %s.out, %s.done = calyx.register @s : i32, i1, i1, i1, i32, i1
+    // CHECK: mu = std_mult_pipe(32);
+    %mu.left, %mu.right, %mu.go, %mu.clk, %mu.reset, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i32, i32, i1, i1, i1, i32, i1
     %c1_1 = hw.constant 1 : i1
+    %c4_32 = hw.constant 4 : i32
     calyx.wires {
       calyx.group @RegisterWrite {
         calyx.assign %r.in = %c1_1 : i1
         calyx.assign %r.write_en = %c1_1 : i1
         calyx.group_done %r.done : i1
+      }
+      // CHECK-LABEL: group MultWrite
+      // CHECK-NEXT: mu.left = 32'd4;
+      // CHECK-NEXT: mu.right = 32'd4;
+      // CHECK-NEXT: mu.go = 1'd1;
+      // CHECK-NEXT: s.write_en = mu.done;
+      // CHECK-NEXT: s.in = mu.out;
+      // CHECK-NEXT: MultWrite[done] = s.done;
+      calyx.group @MultWrite {
+        calyx.assign %mu.left = %c4_32 : i32
+        calyx.assign %mu.right = %c4_32 : i32
+        calyx.assign %mu.go = %c1_1 : i1
+        calyx.assign %s.write_en = %mu.done : i1
+        calyx.assign %s.in = %mu.out : i32
+        calyx.group_done %s.done : i1
       }
     }
 
@@ -31,11 +50,11 @@ calyx.program "main" {
         // CHECK-NEXT:    RegisterWrite;
         // CHECK-NEXT:  }
         // CHECK-NEXT:  else {
-        // CHECK-NEXT:    RegisterWrite;
+        // CHECK-NEXT:    MultWrite;
         calyx.if %r.out {
           calyx.enable @RegisterWrite
         } else {
-          calyx.enable @RegisterWrite
+          calyx.enable @MultWrite
         }
       }
     }

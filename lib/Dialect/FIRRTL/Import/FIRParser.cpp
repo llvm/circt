@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "FIRAnnotations.h"
 #include "FIRLexer.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
@@ -35,6 +36,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 using llvm::SMLoc;
 using llvm::SourceMgr;
@@ -54,7 +56,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
 } // namespace circt
 
 std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
-    StringRef spelling, bool skipParsing, Identifier &locatorFilenameCache,
+    StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
   if (!spelling.startswith("@[") || !spelling.endswith("]"))
@@ -111,10 +113,10 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
   auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
                                unsigned columnNo) -> FileLineColLoc {
     // Check our single-entry cache for this filename.
-    Identifier filenameId = locatorFilenameCache;
+    StringAttr filenameId = locatorFilenameCache;
     if (filenameId.str() != filename) {
       // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId = Identifier::get(filename, context);
+      locatorFilenameCache = filenameId = StringAttr::get(filename, context);
 
       // If we miss in the filename cache, we also miss in the FileLineColLoc
       // cache.
@@ -188,11 +190,11 @@ struct SharedParserConstants {
   SharedParserConstants(MLIRContext *context, FIRParserOptions options)
       : context(context), options(options),
         emptyArrayAttr(ArrayAttr::get(context, {})),
-        loIdentifier(Identifier::get("lo", context)),
-        hiIdentifier(Identifier::get("hi", context)),
-        amountIdentifier(Identifier::get("amount", context)),
-        fieldIndexIdentifier(Identifier::get("fieldIndex", context)),
-        indexIdentifier(Identifier::get("index", context)) {}
+        loIdentifier(StringAttr::get("lo", context)),
+        hiIdentifier(StringAttr::get("hi", context)),
+        amountIdentifier(StringAttr::get("amount", context)),
+        fieldIndexIdentifier(StringAttr::get("fieldIndex", context)),
+        indexIdentifier(StringAttr::get("index", context)) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -215,8 +217,8 @@ struct SharedParserConstants {
   const ArrayAttr emptyArrayAttr;
 
   /// Cached identifiers used in primitives.
-  const Identifier loIdentifier, hiIdentifier, amountIdentifier;
-  const Identifier fieldIndexIdentifier, indexIdentifier;
+  const StringAttr loIdentifier, hiIdentifier, amountIdentifier;
+  const StringAttr fieldIndexIdentifier, indexIdentifier;
 
 private:
   SharedParserConstants(const SharedParserConstants &) = delete;
@@ -413,7 +415,7 @@ private:
   FIRLexer &lexer;
 
   /// This is a single-entry cache for filenames in locators.
-  Identifier locatorFilenameCache;
+  StringAttr locatorFilenameCache;
   /// This is a single-entry cache for FileLineCol locations.
   FileLineColLoc fileLineColLocCache;
 };
@@ -597,7 +599,13 @@ ParseResult FIRParser::parseOptionalAnnotations(SMLoc &loc, StringRef &result) {
 ///
 ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   auto spelling = getTokenSpelling();
+  bool isNegative = false;
   switch (getToken().getKind()) {
+  case FIRToken::signed_integer:
+    isNegative = spelling[0] == '-';
+    assert(spelling[0] == '+' || spelling[0] == '-');
+    spelling = spelling.drop_front();
+    LLVM_FALLTHROUGH;
   case FIRToken::integer:
     if (spelling.getAsInteger(10, result))
       return emitError(message), failure();
@@ -607,22 +615,17 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
     if (result.isNegative())
       result = result.zext(result.getBitWidth() + 1);
 
-    consumeToken(FIRToken::integer);
-    return success();
-
-  case FIRToken::signed_integer:
-    assert(spelling[0] == '+' || spelling[0] == '-');
-    if (spelling.drop_front().getAsInteger(10, result))
-      return emitError(message), failure();
-
-    // Make sure that the returned APInt has a zero at the top so clients don't
-    // confuse it with a negative number.
-    if (result.isNegative())
-      result = result.zext(result.getBitWidth() + 1);
-
-    if (spelling[0] == '-')
+    if (isNegative)
       result = -result;
-    consumeToken(FIRToken::signed_integer);
+
+    // If this was parsed as >32 bits, but can be represented in 32 bits,
+    // truncate off the extra width.  This is important for extmodules which
+    // like parameters to be 32-bits, and insulates us from some arbitraryness
+    // in StringRef::getAsInteger.
+    if (result.getBitWidth() > 32 && result.getMinSignedBits() <= 32)
+      result = result.trunc(32);
+
+    consumeToken();
     return success();
   case FIRToken::string: {
     // Drop the quotes.
@@ -1007,7 +1010,7 @@ ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
     NamedAttrList modAttr;
     for (auto attr : dict.getValue()) {
       // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
+      if (attr.getName() == "target")
         continue;
       modAttr.push_back(attr);
     }
@@ -1057,11 +1060,11 @@ FIRParser::splitAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
     // into the annotation as a "target" field.
     NamedAttrList modAttr;
     for (auto attr : dict.getValue()) {
-      if (attr.first.str() == "target") {
+      if (attr.getName().str() == "target") {
         if (targetTokens.size() > 1) {
           auto newTargetAttr =
               ArrayAttr::get(constants.context, targetTokens.drop_front());
-          modAttr.push_back(NamedAttribute(attr.first, newTargetAttr));
+          modAttr.push_back(NamedAttribute(attr.getName(), newTargetAttr));
         }
         continue;
       }
@@ -1842,7 +1845,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
   unsigned numOperandsExpected;
-  SmallVector<Identifier, 2> attrNames;
+  SmallVector<StringAttr, 2> attrNames;
 
   // Get information about the primitive in question.
   switch (kind) {
@@ -1912,9 +1915,10 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   }
 #include "FIRTokenKinds.def"
 
-  // Expand `validif(a, b)` expressions to `mux(a, b, invalidvalue)`, since we
-  // do not provide an operation for `validif`. See docs/RationaleFIRRTL.md for
-  // more details on this.
+  // Expand `validif(a, b)` expressions to simply `b`.  A `validif` expression
+  // is converted to a direct connect by the Scala FIRRTL Compiler's
+  // `RemoveValidIfs` pass.  We circumvent that and just squash these during
+  // parsing.
   case FIRToken::lp_validif: {
     if (opTypes.size() != 2 || !integers.empty()) {
       emitError(loc, "operation requires two operands and no constants");
@@ -1931,8 +1935,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
       return failure();
     }
 
-    // We always skip emitting the validif mux because it always folds to the
-    // non-invalid operand.
+    // Skip the `validif` and emit the second, non-condition operand.
     result = operands[1];
     return success();
   }
@@ -2659,8 +2662,6 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto vectorType = type.dyn_cast<FVectorType>();
   if (!vectorType)
     return emitError("cmem requires vector type");
-  auto memType = CMemoryType::get(vectorType.getElementType(),
-                                  vectorType.getNumElements());
 
   auto annotations = getConstants().emptyArrayAttr;
   if (!getConstants().options.rawAnnotations)
@@ -2668,7 +2669,9 @@ ParseResult FIRStmtParser::parseCombMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<CombMemOp>(memType, id, annotations);
+  auto result =
+      builder.create<CombMemOp>(vectorType.getElementType(),
+                                vectorType.getNumElements(), id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2698,8 +2701,6 @@ ParseResult FIRStmtParser::parseSeqMem() {
   auto vectorType = type.dyn_cast<FVectorType>();
   if (!vectorType)
     return emitError("smem requires vector type");
-  auto memType = CMemoryType::get(getContext(), vectorType.getElementType(),
-                                  vectorType.getNumElements());
 
   auto annotations = getConstants().emptyArrayAttr;
   if (!getConstants().options.rawAnnotations)
@@ -2707,7 +2708,9 @@ ParseResult FIRStmtParser::parseSeqMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<SeqMemOp>(memType, ruw, id, annotations);
+  auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
+                                         vectorType.getNumElements(), ruw, id,
+                                         annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2838,16 +2841,16 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     result = builder.create<MemOp>(
         resultTypes, readLatency, writeLatency, depth, ruw,
         builder.getArrayAttr(resultNames), id, getConstants().emptyArrayAttr,
-        builder.getArrayAttr(portAnnotations));
+        builder.getArrayAttr(portAnnotations), StringAttr{});
   } else {
     auto annotations =
         getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                             ports, moduleContext.targetsInModule);
 
-    result =
-        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
-                              ruw, builder.getArrayAttr(resultNames), id,
-                              annotations.first, annotations.second);
+    result = builder.create<MemOp>(
+        resultTypes, readLatency, writeLatency, depth, ruw,
+        builder.getArrayAttr(resultNames), id, annotations.first,
+        annotations.second, StringAttr{});
   }
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2904,7 +2907,7 @@ ParseResult FIRStmtParser::parseNode() {
                        moduleContext.targetsInModule, initializerType);
 
   Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                        annotations);
+                                        annotations, StringAttr{});
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2932,7 +2935,7 @@ ParseResult FIRStmtParser::parseWire() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<WireOp>(type, id, annotations);
+  auto result = builder.create<WireOp>(type, id, annotations, StringAttr{});
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3027,9 +3030,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations);
+                                        id, annotations, StringAttr{});
   else
-    result = builder.create<RegOp>(type, clock, id, annotations);
+    result = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3275,8 +3278,8 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
       annotations = AnnotationSet(
           getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
                          getConstants().targetSet, type));
-    resultPorts.push_back(
-        {name, type, direction::get(isOutput), info.getLoc(), annotations});
+    resultPorts.push_back({name, type, direction::get(isOutput), StringAttr{},
+                           info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
   }
 
@@ -3382,7 +3385,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   }
 
   NamedAttrList parameters;
-  SmallPtrSet<Identifier, 8> seenNames;
+  SmallPtrSet<StringAttr, 8> seenNames;
 
   // Parse the parameter list.
   while (consumeIf(FIRToken::kw_parameter)) {
@@ -3403,8 +3406,14 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       if (parseIntLit(result, "invalid integer parameter"))
         return failure();
 
+      // If the integer parameter is less than 32-bits, sign extend this to a
+      // 32-bit value.  This needs to eventually emit as a 32-bit value in
+      // Verilog and we want to get the size correct immediately.
+      result = result.sextOrSelf(32);
+
       value = builder.getIntegerAttr(
-          builder.getIntegerType(result.getBitWidth()), result);
+          builder.getIntegerType(result.getBitWidth(), result.isSignBitSet()),
+          result);
       break;
     }
     case FIRToken::string: {
@@ -3677,6 +3686,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
     omirBufs.push_back(
         sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
 
+  context->loadDialect<CHIRRTLDialect>();
   context->loadDialect<FIRRTLDialect>();
 
   // This is the result module we are parsing into.

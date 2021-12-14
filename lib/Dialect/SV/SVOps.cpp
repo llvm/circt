@@ -20,6 +20,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace sv;
@@ -54,7 +55,7 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
     return nullptr;
 
   // Look for a symbol with the given name.
-  Identifier symbolNameId = Identifier::get(SymbolTable::getSymbolAttrName(),
+  StringAttr symbolNameId = StringAttr::get(SymbolTable::getSymbolAttrName(),
                                             symbolTableOp->getContext());
   for (Block &block : region)
     for (Operation &nestedOp : block) {
@@ -82,8 +83,9 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
 
   // If the attribute dictionary contains no 'name' attribute, infer it from
   // the SSA name (if specified).
-  bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
+  bool hadName = llvm::any_of(resultAttrs, [](NamedAttribute attr) {
+    return attr.getName() == "name";
+  });
 
   // If there was no name specified, check to see if there was a useful name
   // specified in the asm file.
@@ -97,7 +99,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
   return success();
 }
 
@@ -1080,6 +1082,121 @@ void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
   resultType = getAnyHWArrayElementType(resultType);
   assert(resultType && "input should have 'inout of an array' type");
   build(builder, result, InOutType::get(resultType), input, index);
+}
+
+//===----------------------------------------------------------------------===//
+// IndexedPartSelectInOutOp
+//===----------------------------------------------------------------------===//
+
+void IndexedPartSelectInOutOp::build(OpBuilder &builder, OperationState &result,
+                                     Value input, Value base, int32_t width,
+                                     bool decrement) {
+  auto resultType =
+      hw::InOutType::get(IntegerType::get(builder.getContext(), width));
+  build(builder, result, resultType, input, base, width, decrement);
+}
+
+LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto width = attrs.get("width");
+  if (!width)
+    return failure();
+
+  results.push_back(hw::InOutType::get(
+      IntegerType::get(context, width.cast<IntegerAttr>().getInt())));
+  return success();
+}
+
+OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
+  if (getType() == input().getType())
+    return input();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// IndexedPartSelectOp
+//===----------------------------------------------------------------------===//
+
+void IndexedPartSelectOp::build(OpBuilder &builder, OperationState &result,
+                                Value input, Value base, int32_t width,
+                                bool decrement) {
+  auto resultType = (IntegerType::get(builder.getContext(), width));
+  build(builder, result, resultType, input, base, width, decrement);
+}
+
+LogicalResult IndexedPartSelectOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto width = attrs.get("width");
+  if (!width)
+    return failure();
+
+  results.push_back(
+      IntegerType::get(context, width.cast<IntegerAttr>().getInt()));
+  return success();
+}
+
+static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
+  return TypeSwitch<Operation *, LogicalResult>(op)
+      .Case<IndexedPartSelectOp, IndexedPartSelectInOutOp>(
+          [&](auto p) -> LogicalResult {
+            unsigned inputWidth = 0, resultWidth = 0;
+            auto width = p.width();
+            if (isa<IndexedPartSelectInOutOp>(p)) {
+              if (auto i = p.input()
+                               .getType()
+                               .template cast<InOutType>()
+                               .getElementType()
+                               .template dyn_cast<IntegerType>())
+                inputWidth = i.getWidth();
+              else
+                return op->emitError("input element type must be Integer");
+              if (auto resType = p.getType()
+                                     .template cast<InOutType>()
+                                     .getElementType()
+                                     .template dyn_cast<IntegerType>())
+                resultWidth = resType.getWidth();
+              else
+                return op->emitError("result element type must be Integer");
+            } else {
+              resultWidth = p.getType().template cast<IntegerType>().getWidth();
+              inputWidth =
+                  p.input().getType().template cast<IntegerType>().getWidth();
+            }
+            if (width > inputWidth)
+              return op->emitError(
+                  "slice width should not be greater than input width");
+            if (width != resultWidth)
+              return op->emitError("result width must be equal to slice width");
+            return success();
+          })
+      .Default([&](auto) { return failure(); });
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StructFieldInOutOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructFieldInOutOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  auto field = attrs.get("field");
+  if (!field)
+    return failure();
+  auto structType =
+      getInOutElementType(operands[0].getType()).cast<hw::StructType>();
+  auto resultType = structType.getFieldType(field.cast<StringAttr>());
+  if (!resultType)
+    return failure();
+
+  results.push_back(hw::InOutType::get(resultType));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

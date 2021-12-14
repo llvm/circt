@@ -11,6 +11,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/APInt.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -25,7 +26,7 @@ static bool isWireOrReg(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
-  return isWireOrReg(op) && !AnnotationSet(op).hasDontTouch();
+  return isWireOrReg(op) && !hasDontTouch(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -180,7 +181,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push(value);
     }
   }
 
@@ -189,10 +190,10 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
-    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+    if (!source.isOverdefined() && hasDontTouch(value))
       source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push(value);
   }
   void mergeLatticeValue(Value value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
@@ -219,12 +220,12 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
-    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+    if (!source.isOverdefined() && hasDontTouch(value))
       source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push(value);
       valueEntry = source;
     }
   }
@@ -239,7 +240,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markBlockExecutable(Block *block);
   void markWireOrUnresetableRegOp(Operation *wireOrReg);
   void markRegResetOp(RegResetOp regReset);
-  void markRegOp(RegOp reg);
   void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
@@ -266,7 +266,7 @@ private:
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  SmallVector<Value, 64> changedLatticeValueWorklist;
+  std::queue<Value> changedLatticeValueWorklist;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -300,7 +300,8 @@ void IMConstPropPass::runOnOperation() {
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    Value changedVal = changedLatticeValueWorklist.pop_back_val();
+    Value changedVal = changedLatticeValueWorklist.front();
+    changedLatticeValueWorklist.pop();
     for (Operation *user : changedVal.getUsers()) {
       if (isBlockExecutable(user->getBlock()))
         visitOperation(user);
@@ -355,7 +356,7 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
     return result; // Already the right width, we're done.
 
   // Otherwise, extend the constant using the signedness of the source.
-  resultConstant = resultConstant.extOrTrunc(destWidth);
+  resultConstant = extOrTruncZeroWidth(resultConstant, destWidth);
   return LatticeValue(IntegerAttr::get(destType.getContext(), resultConstant));
 }
 
@@ -476,7 +477,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     BlockArgument modulePortVal = fModule.getArgument(resultNo);
 
     // Mark don't touch results as overdefined
-    if (AnnotationSet::get(modulePortVal).hasDontTouch())
+    if (hasDontTouch(modulePortVal))
       markOverdefined(modulePortVal);
 
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
@@ -585,15 +586,9 @@ void IMConstPropPass::visitOperation(Operation *op) {
 
     // If the operand is an unknown value, then we generally don't want to
     // process it - we want to wait until the value is resolved to by the SCCP
-    // algorithm.  However, some operations are defined on partial operations,
-    // including firrtl.mux in particular.  We resolve these eagerly because the
-    // fold hooks know how to deal with them, and they often form cycles.
-    if (operandLattice.isUnknown()) {
-      if (!isa<MuxPrimOp>(op))
-        return;
-      operandConstants.push_back(InvalidValueAttr::get(operand.getType()));
-      continue;
-    }
+    // algorithm.
+    if (operandLattice.isUnknown())
+      return;
 
     // Otherwise, it must be constant, invalid, or overdefined.  Translate them
     // into attributes that the fold hook can look at.
@@ -689,8 +684,10 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest()))
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest())) {
           connect.erase();
+          ++numErasedOp;
+        }
       }
       continue;
     }
@@ -717,10 +714,14 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     for (auto result : op.getResults())
       foldedAny |= replaceValueIfPossible(result);
 
+    if (foldedAny)
+      ++numFoldedOp;
+
     // If the operation folded to a constant then we can probably nuke it.
     if (foldedAny && op.use_empty() &&
         (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
       op.erase();
+      ++numErasedOp;
       continue;
     }
   }

@@ -71,15 +71,15 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return nullptr;
 }
 
-static hw::InstanceOp getInstance(hw::HWModuleOp root,
-                                  ArrayRef<StringRef> path) {
+static msft::InstanceOp getInstance(MSFTModuleOp root,
+                                    ArrayRef<StringRef> path) {
   assert(!path.empty());
 
   // Unfortunately, instance names are not symbols and modules are not symbol
   // tables, so we have to do a full walk.
   StringRef searchName = path[0];
-  hw::InstanceOp match = nullptr;
-  root.walk([&](hw::InstanceOp inst) {
+  msft::InstanceOp match = nullptr;
+  root.walk([&](msft::InstanceOp inst) {
     if (inst.instanceName() != searchName)
       return WalkResult::advance();
     match = inst;
@@ -93,14 +93,14 @@ static hw::InstanceOp getInstance(hw::HWModuleOp root,
   // We're not the leaf, so recurse.
   auto subPath = path.slice(1);
   Operation *submoduleOp = match.getReferencedModule();
-  auto submodule = dyn_cast<hw::HWModuleOp>(submoduleOp);
+  auto submodule = dyn_cast<msft::MSFTModuleOp>(submoduleOp);
   if (!submodule)
     return nullptr;
   return getInstance(submodule, subPath);
 }
 
-hw::InstanceOp circt::msft::getInstance(hw::HWModuleOp root,
-                                        SymbolRefAttr pathAttr) {
+msft::InstanceOp circt::msft::getInstance(MSFTModuleOp root,
+                                          SymbolRefAttr pathAttr) {
   SmallVector<StringRef, 16> path;
   path.push_back(pathAttr.getRootReference().getValue());
   for (auto sym : pathAttr.getNestedReferences())

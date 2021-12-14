@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
@@ -30,6 +31,7 @@ using namespace circt::firrtl;
 
 using ValueVector = llvm::SmallVector<Value, 3>;
 using ValueVectorList = std::vector<ValueVector>;
+using NameUniquer = std::function<std::string(Operation *)>;
 
 //===----------------------------------------------------------------------===//
 // Utils
@@ -40,6 +42,11 @@ static void legalizeFModule(FModuleOp moduleOp) {
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
     op->moveBefore(&moduleOp.getBody()->back());
+}
+
+/// Return the number of bits needed to index the given number of values.
+static size_t getNumIndexBits(uint64_t numValues) {
+  return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
 }
 
 /// Get the corresponding FIRRTL type given the built-in data type. Current
@@ -71,6 +78,18 @@ static FIRRTLType getFIRRTLType(Type type) {
       .Default([&](Type) { return FIRRTLType(); });
 }
 
+/// Creates a new FIRRTL bundle type based on an array of port infos.
+static FIRRTLType portInfosToBundleType(MLIRContext *ctx,
+                                        ArrayRef<PortInfo> ports) {
+  using BundleElement = BundleType::BundleElement;
+  llvm::SmallVector<BundleElement, 4> elements;
+  for (auto &port : ports) {
+    elements.push_back(
+        BundleElement(port.name, port.direction == Direction::Out, port.type));
+  }
+  return BundleType::get(elements, ctx);
+}
+
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
 /// standard data type.
 static FIRRTLType getBundleType(Type type) {
@@ -99,6 +118,127 @@ static FIRRTLType getBundleType(Type type) {
 
   auto bundleType = BundleType::get(elements, context);
   return bundleType;
+}
+
+/// A class to be used with getPortInfoForOp. Provides an opaque interface for
+/// generating the port names of an operation; handshake operations generate
+/// names by the Handshake NamedIOInterface;  and other operations, such as
+/// arith ops, are assigned default names.
+class PortNameGenerator {
+public:
+  explicit PortNameGenerator(Operation *op) : builder(op->getContext()) {
+    auto namedOpInterface = dyn_cast<handshake::NamedIOInterface>(op);
+    if (namedOpInterface)
+      inferFromNamedOpInterface(namedOpInterface);
+    else
+      inferDefault(op);
+  }
+
+  StringAttr inputName(unsigned idx) { return inputs[idx]; }
+  StringAttr outputName(unsigned idx) { return outputs[idx]; }
+
+private:
+  using IdxToStrF = const std::function<std::string(unsigned)> &;
+  void infer(Operation *op, IdxToStrF &inF, IdxToStrF &outF) {
+    llvm::transform(
+        llvm::enumerate(op->getOperandTypes()), std::back_inserter(inputs),
+        [&](auto it) { return builder.getStringAttr(inF(it.index())); });
+    llvm::transform(
+        llvm::enumerate(op->getResultTypes()), std::back_inserter(outputs),
+        [&](auto it) { return builder.getStringAttr(outF(it.index())); });
+  }
+
+  void inferDefault(Operation *op) {
+    infer(
+        op, [](unsigned idx) { return "in" + std::to_string(idx); },
+        [](unsigned idx) { return "out" + std::to_string(idx); });
+  }
+
+  void inferFromNamedOpInterface(handshake::NamedIOInterface op) {
+    infer(
+        op, [&](unsigned idx) { return op.getOperandName(idx); },
+        [&](unsigned idx) { return op.getResultName(idx); });
+  }
+
+  Builder builder;
+  llvm::SmallVector<StringAttr> inputs;
+  llvm::SmallVector<StringAttr> outputs;
+};
+
+/// Returns a vector of PortInfo's which defines the FIRRTL interface of the
+/// to-be-converted op.
+llvm::SmallVector<PortInfo>
+getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op) {
+  llvm::SmallVector<PortInfo> ports;
+  auto loc = op->getLoc();
+  bool hasClock = op->hasTrait<mlir::OpTrait::HasClock>();
+  PortNameGenerator portNames(op);
+
+  // Add all inputs of oldOp.
+  for (auto portType : llvm::enumerate(op->getOperandTypes())) {
+    auto bundlePortType = getBundleType(portType.value());
+
+    if (!bundlePortType)
+      op->emitError("Unsupported data type. Supported data types: integer "
+                    "(signed, unsigned, signless), index, none.");
+
+    ports.push_back({portNames.inputName(portType.index()), bundlePortType,
+                     Direction::In, StringAttr{}, loc});
+  }
+
+  // Add all outputs of oldOp.
+  for (auto portType : llvm::enumerate(op->getResultTypes())) {
+    auto bundlePortType = getBundleType(portType.value());
+
+    if (!bundlePortType)
+      op->emitError("Unsupported data type. Supported data types: integer "
+                    "(signed, unsigned, signless), index, none.");
+
+    ports.push_back({portNames.outputName(portType.index()), bundlePortType,
+                     Direction::Out, StringAttr{}, loc});
+  }
+
+  // Add clock and reset signals.
+  if (hasClock) {
+    ports.push_back({rewriter.getStringAttr("clock"),
+                     rewriter.getType<ClockType>(), Direction::In, StringAttr{},
+                     loc});
+    ports.push_back({rewriter.getStringAttr("reset"),
+                     rewriter.getType<UIntType>(1), Direction::In, StringAttr{},
+                     loc});
+  }
+
+  return ports;
+}
+
+/// Returns the bundle type associated with an external memory (memref
+/// input argument). The bundle type is deduced from the handshake.extmemory
+/// operator which references the memref input argument.
+static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
+                                      Value blockArg, bool flip) {
+  auto memrefType = blockArg.getType().dyn_cast<MemRefType>();
+  assert(memrefType && "expected blockArg to be a memref");
+
+  auto extmemUsers = blockArg.getUsers();
+  assert(std::distance(extmemUsers.begin(), extmemUsers.end()) == 1 &&
+         "Expected a single user of an external memory");
+  auto extmemOp = dyn_cast<ExternalMemoryOp>(*extmemUsers.begin());
+  assert(extmemOp &&
+         "Expected a handshake.extmemory to reference the memref argument");
+  // Get a handle to the submodule which will wrap the external memory
+  auto extmemPortInfo = getPortInfoForOp(rewriter, extmemOp);
+
+  if (flip) {
+    for (auto &pi : extmemPortInfo)
+      pi.direction =
+          pi.direction == Direction::In ? Direction::Out : Direction::In;
+  }
+
+  // Drop the first port info; this one will be a handshake associated with the
+  // memref type.
+  extmemPortInfo.erase(extmemPortInfo.begin());
+
+  return portInfosToBundleType(rewriter.getContext(), extmemPortInfo);
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
@@ -148,8 +288,7 @@ using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
 static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
   return TypeSwitch<Operation *, DiscriminatingTypes>(op)
       .Case<MemoryOp>([&](auto memOp) {
-        return DiscriminatingTypes{{},
-                                   {memOp.getMemRefType().getElementType()}};
+        return DiscriminatingTypes{{}, {memOp.memRefType().getElementType()}};
       })
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
@@ -192,13 +331,23 @@ static std::string getTypeName(Operation *oldOp, Type type) {
   return typeName;
 }
 
-/// Construct a name for creating FIRRTL sub-module.
-static std::string getSubModuleName(Operation *oldOp) {
+/// Returns a submodule name resulting from an operation, without discriminating
+/// type information.
+static std::string getBareSubModuleName(Operation *oldOp) {
   // The dialect name is separated from the operation name by '.', which is not
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
   std::string subModuleName = oldOp->getName().getStringRef().str();
   std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
+  return subModuleName;
+}
+
+/// Construct a name for creating FIRRTL sub-module.
+static std::string getSubModuleName(Operation *oldOp) {
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
+    return instanceOp.getModule().str();
+
+  std::string subModuleName = getBareSubModuleName(oldOp);
 
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
@@ -237,7 +386,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
-    subModuleName += "_" + std::to_string(bufferOp.slots()) + "slots";
+    subModuleName += "_" + std::to_string(bufferOp.getNumSlots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
   }
@@ -257,9 +406,9 @@ static std::string getSubModuleName(Operation *oldOp) {
   return subModuleName;
 }
 
-/// Return the number of bits needed to index the given number of values.
-static size_t getNumIndexBits(uint64_t numValues) {
-  return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
+static std::pair<ArrayRef<Value>, ArrayRef<Value>>
+splitArrayRef(ArrayRef<Value> ref, unsigned pos) {
+  return {ref.take_front(pos), ref.drop_front(pos)};
 }
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
@@ -267,63 +416,40 @@ static size_t getNumIndexBits(uint64_t numValues) {
 static Value createMuxTree(ArrayRef<Value> inputs, Value select,
                            Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
-  // Variables used to control iteration and select the appropriate bit.
-  size_t numInputs = inputs.size();
-  size_t numLayers = getNumIndexBits(numInputs);
-  size_t selectIdx = 0;
-
-  // Keep a vector of ValueRanges to represent the mux tree. Each value in the
-  // range is the output of a mux.
-  SmallVector<SmallVector<Value, 4>, 2> muxes;
-
-  // Helpers for repetetive calls.
+  Type muxDataType = inputs[0].getType();
   auto createBits = [&](Value select, size_t idx) {
     return rewriter.create<BitsPrimOp>(insertLoc, select, idx, idx);
   };
 
-  auto createMux = [&](Value select, ArrayRef<Value> operands, size_t idx) {
-    return rewriter.create<MuxPrimOp>(insertLoc, operands[0].getType(), select,
-                                      operands[idx + 1], operands[idx]);
-  };
+  std::function<Value(ArrayRef<Value>)> buildTreeRec =
+      [&](ArrayRef<Value> operands) {
+        assert(!operands.empty());
+        Value retVal;
+        // Base case
+        if (operands.size() == 1)
+          retVal = operands.front();
+        else {
+          // Mux case. In each layer we take a look at the significant bit wrt.
+          // the # of operands provided, and split the operands at the log2
+          // boundary. By doing so, every subsequent layer can the ignore the
+          // MSBs considered by its preceding layer.
+          unsigned selectBit = llvm::Log2_64_Ceil(operands.size()) - 1;
+          // Split the operands at the selected index
+          unsigned splitIdx = 1 << selectBit;
 
-  // Create an op to extract the least significant select bit.
-  auto selectBit = createBits(select, selectIdx);
+          auto [front, back] = splitArrayRef(operands, splitIdx);
+          auto lowerTree = buildTreeRec(front);
+          auto upperTree = buildTreeRec(back);
+          auto layerSelect = createBits(select, selectBit);
+          retVal = rewriter
+                       .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect,
+                                          upperTree, lowerTree)
+                       .result();
+        }
+        return retVal;
+      };
 
-  // Create the first layer of muxes for the inputs.
-  auto &initialValues = muxes.emplace_back();
-  for (size_t i = 0; i < numInputs - 1; i += 2)
-    initialValues.push_back(createMux(selectBit, inputs, i));
-
-  // If the number of inputs is odd, we need to add the last input as well.
-  if (numInputs % 2)
-    initialValues.push_back(inputs[numInputs - 1]);
-
-  // Create any inner layers of muxes.
-  for (size_t layer = 1; layer < numLayers; ++layer, ++selectIdx) {
-    // Get the previous layer of muxes.
-    auto &prevLayer = muxes[layer - 1];
-    size_t prevSize = prevLayer.size();
-
-    // Create an op to extract the select bit.
-    selectBit = createBits(select, selectIdx);
-
-    // Create this layer of muxes.
-    auto &values = muxes.emplace_back();
-    for (size_t i = 0; i < prevSize - 1; i += 2)
-      values.push_back(createMux(selectBit, prevLayer, i));
-
-    // If the number of values in the previous layer is odd, we need to add the
-    // last value as well.
-    if (prevSize % 2)
-      values.push_back(prevLayer[prevSize - 1]);
-
-    muxes.push_back(values);
-  }
-
-  // Get the last layer of muxes, which has a single value, and return it.
-  auto &lastLayer = muxes.back();
-  assert(lastLayer.size() == 1 && "mux tree didn't result in a single value");
-  return lastLayer[0];
+  return buildTreeRec(inputs);
 }
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
@@ -448,52 +574,60 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   llvm::SmallVector<PortInfo, 8> ports;
 
   // Add all inputs of funcOp.
-  unsigned argIndex = 0;
-  for (auto &arg : funcOp.getArguments()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(arg.getType());
+  for (auto &arg : llvm::enumerate(funcOp.getArguments())) {
+    auto portName = funcOp.getArgName(arg.index());
+    FIRRTLType bundlePortType;
+    if (arg.value().getType().isa<MemRefType>())
+      bundlePortType =
+          getMemrefBundleType(rewriter, arg.value(), /*flip=*/true);
+    else
+      bundlePortType = getBundleType(arg.value().getType());
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::In, arg.getLoc()});
-    ++argIndex;
+    ports.push_back({portName, bundlePortType, Direction::In, StringAttr{},
+                     arg.value().getLoc()});
   }
 
   auto funcLoc = funcOp.getLoc();
 
   // Add all outputs of funcOp.
-  for (auto portType : funcOp.getType().getResults()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType);
+  for (auto portType : llvm::enumerate(funcOp.getType().getResults())) {
+    auto portName = funcOp.getResName(portType.index());
+    auto bundlePortType = getBundleType(portType.value());
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Out, funcLoc});
-    ++argIndex;
+    ports.push_back(
+        {portName, bundlePortType, Direction::Out, StringAttr{}, funcLoc});
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
     ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::In, funcLoc});
+                     rewriter.getType<ClockType>(), Direction::In, StringAttr{},
+                     funcLoc});
     ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::In, funcLoc});
+                     rewriter.getType<UIntType>(1), Direction::In, StringAttr{},
+                     funcLoc});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
       ports.push_back({rewriter.getStringAttr(clockName),
-                       rewriter.getType<ClockType>(), Direction::In, funcLoc});
+                       rewriter.getType<ClockType>(), Direction::In,
+                       StringAttr{}, funcLoc});
       ports.push_back({rewriter.getStringAttr(resetName),
-                       rewriter.getType<UIntType>(1), Direction::In, funcLoc});
+                       rewriter.getType<UIntType>(1), Direction::In,
+                       StringAttr{}, funcLoc});
     }
   }
 
-  // Create a FIRRTL module, and inline the funcOp into it.
+  // Create a FIRRTL module and inline the funcOp into the FIRRTL module.
   auto topModuleOp = rewriter.create<FModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
 
@@ -527,64 +661,25 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 // FIRRTL Sub-module Related Functions
 //===----------------------------------------------------------------------===//
 
-/// Check whether a submodule with the same name has been created elsewhere.
-/// Return the matched submodule if true, otherwise return nullptr.
-static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
-  for (auto &op : topModuleOp->getParentRegion()->front()) {
-    if (auto subModuleOp = dyn_cast<FModuleOp>(op)) {
-      if (getSubModuleName(oldOp) == subModuleOp.getName()) {
-        return subModuleOp;
-      }
-    }
-  }
-  return FModuleOp(nullptr);
+/// Check whether a submodule with the same name has been created elsewhere in
+/// the FIRRTL circt. Return the matched submodule if true, otherwise return
+/// nullptr.
+static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
+  auto moduleOp = circuitOp.lookupSymbol<FModuleOp>(getSubModuleName(oldOp));
+
+  if (isa<handshake::InstanceOp>(oldOp))
+    assert(moduleOp &&
+           "handshake.instance target modules should always have been lowered "
+           "before the modules that reference them!");
+  return moduleOp;
 }
 
 /// All standard expressions and handshake elastic components will be converted
 /// to a FIRRTL sub-module and be instantiated in the top-module.
 static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
-                                   bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
-  llvm::SmallVector<PortInfo, 8> ports;
-
-  auto loc = oldOp->getLoc();
-
-  // Add all inputs of oldOp.
-  unsigned argIndex = 0;
-  for (auto portType : oldOp->getOperands().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType);
-
-    if (!bundlePortType)
-      oldOp->emitError("Unsupported data type. Supported data types: integer "
-                       "(signed, unsigned, signless), index, none.");
-
-    ports.push_back({portName, bundlePortType, Direction::In, loc});
-    ++argIndex;
-  }
-
-  // Add all outputs of oldOp.
-  for (auto portType : oldOp->getResults().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType);
-
-    if (!bundlePortType)
-      oldOp->emitError("Unsupported data type. Supported data types: integer "
-                       "(signed, unsigned, signless), index, none.");
-
-    ports.push_back({portName, bundlePortType, Direction::Out, loc});
-    ++argIndex;
-  }
-
-  // Add clock and reset signals.
-  if (hasClock) {
-    ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::In, loc});
-    ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::In, loc});
-  }
-
+  auto ports = getPortInfoForOp(rewriter, oldOp);
   return rewriter.create<FModuleOp>(
       topModuleOp.getLoc(), rewriter.getStringAttr(getSubModuleName(oldOp)),
       ports);
@@ -827,6 +922,7 @@ public:
   bool visitHandshake(LazyForkOp op);
   bool visitHandshake(handshake::LoadOp op);
   bool visitHandshake(MemoryOp op);
+  bool visitHandshake(ExternalMemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
@@ -870,7 +966,6 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
-  Value argData = argSubfields[2];
 
   // A Sink operation is always ready to accept tokens.
   auto signalType = argValid.getType().cast<FIRRTLType>();
@@ -879,6 +974,15 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
 
   rewriter.eraseOp(argValid.getDefiningOp());
+
+  if (auto ctrlAttr = op->getAttrOfType<BoolAttr>("control");
+      ctrlAttr && ctrlAttr.getValue())
+    return true;
+
+  // Non-control sink; must also have a data operand.
+  assert(argSubfields.size() >= 3 &&
+         "expected a data operand to a non-control sink op");
+  Value argData = argSubfields[2];
   rewriter.eraseOp(argData.getDefiningOp());
   return true;
 }
@@ -1527,7 +1631,7 @@ bool HandshakeBuilder::visitHandshake(ForkOp op) {
   auto clock = portList[portNum - 2][0];
   auto reset = portList[portNum - 1][0];
 
-  return buildForkLogic(input, outputs, clock, reset, op.control());
+  return buildForkLogic(input, outputs, clock, reset, op.isControl());
 }
 
 /// Please refer to test_constant.mlir test case.
@@ -1760,15 +1864,65 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
 
   // For now, we only support sequential buffers.
   if (op.sequential())
-    return buildSeqBufferLogic(op.slots(), &input, &output, clock, reset,
-                               op.control());
+    return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
+                               op.isControl());
   else
     return false;
 }
 
+bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
+
+  // The external memory input is a bundle containing equivalent bundles to the
+  // remainder of inputs to this component. Due to this, we simply need to
+  // connect everything.
+
+  // Port list format:
+  // [0]: external memory bundle { like everything below, but inside a bundle }
+  // [...]: [{store data, store address}, ...]
+  // [...]: [load address, ...]
+  // [...]: [load data, ...]
+  // [...]: [control output, ...]
+  auto inBundle = op.getOperand(0).getType().cast<BundleType>();
+  unsigned numElements = inBundle.getNumElements();
+  auto loc = op.getLoc();
+
+  auto &inPort = portList[0];
+  for (unsigned i = 0; i < numElements; ++i) {
+    // the inPortBundle will be a handshake bundle for all inputs apart from
+    // clock and reset - these are non-bundled.
+    auto inPortBundle = inPort[i];
+    const bool outerFlip = inBundle.getElement(i).isFlip;
+
+    for (auto field : enumerate(portList[1 + i])) {
+      Value extInputSubfield;
+      bool innerFlip;
+
+      // Extract the bundle field and flip state.
+      if (inPortBundle.getType().isa<BundleType>()) {
+        extInputSubfield =
+            rewriter.create<SubfieldOp>(insertLoc, inPortBundle, field.index());
+        innerFlip = inBundle.getElement(i)
+                        .type.cast<BundleType>()
+                        .getElement(field.index())
+                        .isFlip;
+      } else {
+        extInputSubfield = inPortBundle;
+        innerFlip = inBundle.getElement(i).isFlip;
+      }
+
+      if (outerFlip ^ innerFlip)
+        rewriter.create<ConnectOp>(loc, extInputSubfield, field.value());
+      else
+        rewriter.create<ConnectOp>(loc, field.value(), extInputSubfield);
+    }
+  }
+
+  return true;
+}
+
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Get the memory type and element type.
-  MemRefType type = op.type();
+  MemRefType type = op.memRefType();
   Type elementType = type.getElementType();
   if (!elementType.isSignlessInteger()) {
     op.emitError("only memrefs of signless ints are supported");
@@ -1794,9 +1948,9 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   };
 
   // Collect the port info for each port.
-  uint64_t numLoads = op.getLdCount().getLimitedValue();
-  uint64_t numStores = op.getStCount().getLimitedValue();
-  SmallVector<std::pair<Identifier, MemOp::PortKind>, 8> ports;
+  uint64_t numLoads = op.ldCount();
+  uint64_t numStores = op.stCount();
+  SmallVector<std::pair<StringAttr, MemOp::PortKind>, 8> ports;
   for (size_t i = 0; i < numLoads; ++i) {
     auto portName = loadIdentifier(i);
     auto portKind = MemOp::PortKind::Read;
@@ -2014,13 +2168,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 }
 
 bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
-  // Input data accepted from the predecessor.
-  ValueVector inputData = portList[0];
-  Value inputDataData = inputData[2];
-
   // Input address accepted from the predecessor.
-  ValueVector inputAddr = portList[1];
+  ValueVector inputAddr = portList[0];
   Value inputAddrData = inputAddr[2];
+
+  // Input data accepted from the predecessor.
+  ValueVector inputData = portList[1];
+  Value inputDataData = inputData[2];
 
   // Control channel.
   ValueVector control = portList[2];
@@ -2125,12 +2279,13 @@ bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
-                         ConversionPatternRewriter &rewriter) {
+                         ConversionPatternRewriter &rewriter,
+                         NameUniquer &instanceNameGen) {
   rewriter.setInsertionPointAfter(oldOp);
 
   // Create a instance operation.
-  auto instanceOp =
-      rewriter.create<firrtl::InstanceOp>(oldOp->getLoc(), subModuleOp, "");
+  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
+      oldOp->getLoc(), subModuleOp, instanceNameGen(oldOp));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
@@ -2186,6 +2341,11 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
   rewriter.eraseOp(oldOp);
 }
 
+static std::string getInstanceName(Operation *op) {
+  auto instOp = dyn_cast<handshake::InstanceOp>(op);
+  return instOp ? instOp.getModule().str() : getBareSubModuleName(op);
+}
+
 //===----------------------------------------------------------------------===//
 // HandshakeToFIRRTL lowering Pass
 //===----------------------------------------------------------------------===//
@@ -2220,10 +2380,26 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       : OpConversionPattern<handshake::FuncOp>(context), circuitOp(circuitOp) {}
 
   LogicalResult
-  matchAndRewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
+  matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPointToStart(circuitOp.getBody());
     auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
+
+    NameUniquer instanceUniquer = [&](Operation *op) {
+      std::string instName = getInstanceName(op);
+
+      if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id");
+          idAttr) {
+        // We use a special naming convention for operations which have a
+        // 'handshake_id' attribute.
+        instName += "_id" + std::to_string(idAttr.getValue().getZExtValue());
+      } else {
+        // Fallback to just prefixing with an integer.
+        instName += std::to_string(instanceNameCntr[instName]++);
+      }
+
+      return instName;
+    };
 
     // Traverse and convert each operation in funcOp.
     for (Operation &op : *topModuleOp.getBody()) {
@@ -2233,12 +2409,11 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
-        FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = op.hasTrait<mlir::OpTrait::HasClock>();
+        FModuleOp subModuleOp = checkSubModuleOp(circuitOp, &op);
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
-          subModuleOp = createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
+          subModuleOp = createSubModuleOp(topModuleOp, &op, rewriter);
 
           Location insertLoc = subModuleOp.getLoc();
           auto *bodyBlock = subModuleOp.getBody();
@@ -2256,8 +2431,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0,
-                     rewriter);
+        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0, rewriter,
+                     instanceUniquer);
       }
     }
     rewriter.eraseOp(funcOp);
@@ -2268,86 +2443,15 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   }
 
 private:
+  /// Maintain a map from module names to the # of times the module has been
+  /// instantiated inside this module. This is used to generate unique names for
+  /// each instance.
+  mutable std::map<std::string, unsigned> instanceNameCntr;
+
   /// Top level FIRRTL circuit operation, which we'll emit into. Marked as
   /// mutable due to circuitOp.getBody() being non-const.
   mutable CircuitOp circuitOp;
 };
-
-using InstanceGraph = std::map<std::string, std::set<std::string>>;
-
-/// Iterates over the handshake::FuncOp's in the program to build an instance
-/// graph. In doing so, we detect whether there are any cycles in this graph, as
-/// well as infer a top module for the design.
-static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
-                                          InstanceGraph &instanceGraph,
-                                          std::string &topLevel) {
-  // Create use graph
-  auto walkFuncOps = [&](handshake::FuncOp funcOp) {
-    auto &funcUses = instanceGraph[funcOp.getName().str()];
-    funcOp.walk([&](handshake::InstanceOp instanceOp) {
-      funcUses.insert(instanceOp.getModule().str());
-    });
-  };
-  moduleOp.walk(walkFuncOps);
-
-  // find top-level (and cycles) using a topological sort. Initialize all
-  // instances as candidate top level modules; these will be pruned whenever
-  // they are referenced by another module.
-  std::set<std::string> visited, marked, candidateTopLevel;
-  SmallVector<std::string> sorted, cycleTrace;
-  bool cyclic = false;
-  llvm::transform(instanceGraph,
-                  std::inserter(candidateTopLevel, candidateTopLevel.begin()),
-                  [](auto it) { return it.first; });
-  std::function<void(const std::string &, SmallVector<std::string>)> cycleUtil =
-      [&](const std::string &node, SmallVector<std::string> trace) {
-        if (cyclic || visited.count(node))
-          return;
-        trace.push_back(node);
-        if (marked.count(node)) {
-          cyclic = true;
-          cycleTrace = trace;
-          return;
-        }
-        marked.insert(node);
-        for (auto use : instanceGraph[node]) {
-          candidateTopLevel.erase(use);
-          cycleUtil(use, trace);
-        }
-        marked.erase(node);
-        visited.insert(node);
-        sorted.insert(sorted.begin(), node);
-      };
-  for (auto it : instanceGraph) {
-    if (visited.count(it.first) == 0)
-      cycleUtil(it.first, {});
-    if (cyclic)
-      break;
-  }
-
-  if (cyclic) {
-    auto err = moduleOp.emitOpError();
-    err << "cannot lower handshake program - cycle "
-           "detected in instance graph (";
-    llvm::interleave(
-        cycleTrace, err, [&](auto node) { err << node; }, "->");
-    err << ").";
-    return err;
-  }
-  assert(!candidateTopLevel.empty() &&
-         "if non-cyclic, there should be at least 1 candidate top level");
-
-  if (candidateTopLevel.size() > 1) {
-    auto err = moduleOp.emitOpError();
-    err << "multiple candidate top-level modules detected (";
-    llvm::interleaveComma(candidateTopLevel, err,
-                          [&](auto topLevel) { err << topLevel; });
-    err << "). Please remove one of these from the source program.";
-    return err;
-  }
-  topLevel = *candidateTopLevel.begin();
-  return success();
-}
 
 namespace {
 class HandshakeToFIRRTLPass
@@ -2359,8 +2463,9 @@ public:
 
     // Resolve the instance graph to get a top-level module.
     std::string topLevel;
-    InstanceGraph uses;
-    if (resolveInstanceGraph(op, uses, topLevel).failed()) {
+    handshake::InstanceGraph uses;
+    SmallVector<std::string> sortedFuncs;
+    if (resolveInstanceGraph(op, uses, topLevel, sortedFuncs).failed()) {
       signalPassFailure();
       return;
     }
@@ -2375,11 +2480,21 @@ public:
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
-    RewritePatternSet patterns(op.getContext());
-    patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
-
-    if (failed(applyPartialConversion(op, target, std::move(patterns))))
-      signalPassFailure();
+    // Convert the handshake.func operations in post-order wrt. the instance
+    // graph. This ensures that any referenced submodules (through
+    // handshake.instance) has already been lowered, and their FIRRTL module
+    // equivalents are available.
+    for (auto funcName : llvm::reverse(sortedFuncs)) {
+      RewritePatternSet patterns(op.getContext());
+      patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
+      auto funcOp = op.lookupSymbol(funcName);
+      assert(funcOp && "Symbol not found in module!");
+      if (failed(applyPartialConversion(funcOp, target, std::move(patterns)))) {
+        signalPassFailure();
+        funcOp->emitOpError() << "error during conversion";
+        return;
+      }
+    }
   }
 };
 } // end anonymous namespace

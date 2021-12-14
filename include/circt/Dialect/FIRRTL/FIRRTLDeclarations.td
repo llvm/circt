@@ -27,7 +27,8 @@ def InstanceOp : FIRRTLOp<"instance", [
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
-                       BoolAttr:$lowerToBind);
+                       BoolAttr:$lowerToBind,
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -43,14 +44,16 @@ def InstanceOp : FIRRTLOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind)>,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
                    "mlir::StringRef":$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind)>
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 
   let extraClassDeclaration = [{
@@ -75,98 +78,16 @@ def InstanceOp : FIRRTLOp<"instance", [
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
-  }];
-}
 
-def CombMemOp : FIRRTLOp<"combmem"> {
-  let summary = "Define a new combinational memory";
-  let description = [{
-    Define a new behavioral combinational memory. Combinational memories have a
-    write latency of 1 and a read latency of 0.
-  }];
-  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
-  let results = (outs CMemoryType:$result);
-  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
-}
+    /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
+    /// and updates any users of the remaining ports to point at the new
+    /// instance.
+    InstanceOp erasePorts(OpBuilder &builder, ArrayRef<unsigned> portIndices);
 
-def SeqMemOp : FIRRTLOp<"seqmem"> {
-  let summary = "Define a new sequential memory";
-  let description = [{
-    Define a new behavioral sequential memory.  Sequential memories have a
-    write latency and a read latency of 1.
-  }];
-  let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
-                       AnnotationArrayAttr:$annotations);
-  let results = (outs CMemoryType:$result);
-  let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
-}
-
-def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
-         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
-  let summary = "Declares a memory port on a memory";
-
-  let summary = "Defines a memory port on CHIRRTL memory";
-  let description = [{
-    This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
-    `data` is the data returned from the memory port.  
-
-    The memory port requires an access point, which sets the enable condition
-    of the port, the clock, and the address.  This is done by passing the the
-    `port` argument to a `firrtl.memoryport.access operation`.
-
-  }];
-
-  let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
-                    StrAttr:$name, AnnotationArrayAttr:$annotations);
-
-  let results = (outs FIRRTLType:$data, CMemoryPortType:$port);
-
-  let assemblyFormat = [{
-    $direction $memory custom<MemoryPortOp>(attr-dict) `:`
-       functional-type(operands, results)
-  }];
-  let hasCanonicalizer = true;
-
-  let builders = [
-    OpBuilder<(ins "::mlir::Type":$dataType, "::mlir::Value":$memory,
-                   "MemDirAttr":$direction, CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>","{}">:$annotations)>
-  ];
-
-  let verifier = "return ::verifyMemoryPortOp(*this);";
-
-  let extraClassDeclaration = [{
-    /// Get the assocated access op.
-    MemoryPortAccessOp getAccess();
-
-    /// Infer the return types of this operation.
-    static LogicalResult inferReturnTypes(MLIRContext *context,
-                                          Optional<Location> loc,
-                                          ValueRange operands,
-                                          DictionaryAttr attrs,
-                                          mlir::RegionRange regions,
-                                          SmallVectorImpl<Type> &results);
-  }];
-}
-
-def MemoryPortAccessOp : FIRRTLOp<"memoryport.access"> {
-  let summary = "Enables a memory port";
-
-  let description = [{
-    This operation is used to conditionally enable a memory port, and associate
-    it with a `clock` and `index`.  The memory port will be actuve on the
-    positive edge of the clock. The index is the address of the memory
-    accessed. See the FIRRTL rational for more information about why this
-    operation exists.
-  }];
-
-  let arguments = (ins CMemoryPortType:$port, IntType:$index,
-                   ClockType:$clock);
-
-  let assemblyFormat = [{
-    $port `[` $index `]` `,` $clock attr-dict `:` type(operands)
+    /// Clone the instance op and add ports.  This is usually used in
+    /// conjuction with adding ports to the referenced module. This will emit
+    /// the new InstanceOp to the same location.
+    InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
   }];
 }
 
@@ -178,10 +99,14 @@ def MemOp : FIRRTLOp<"mem"> {
          Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name,
          AnnotationArrayAttr:$annotations,
-         PortAnnotationsAttr:$portAnnotations);
+         PortAnnotationsAttr:$portAnnotations,
+         OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat = "$ruw custom<MemOp>(attr-dict) `:` type($results)";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)?
+    $ruw custom<MemOp>(attr-dict) `:` type($results)
+  }];
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
@@ -190,7 +115,8 @@ def MemOp : FIRRTLOp<"mem"> {
                    "ArrayRef<Attribute>":$portNames,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 
   let verifier = "return ::verifyMemOp(*this);";
@@ -264,20 +190,25 @@ def NodeOp : FIRRTLOp<"node",
     }];
 
   let arguments = (ins PassiveType:$input, StrAttr:$name,
-                       AnnotationArrayAttr:$annotations);
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                    "::mlir::Value":$input,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, input, name,
-                   $_builder.getArrayAttr(annotations));
+                   $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
 
-  let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)?
+    $input custom<ImplicitSSAName>(attr-dict) `:` type($input)
+  }];
 
   let hasCanonicalizer = true;
 
@@ -302,21 +233,26 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments =
-    (ins ClockType:$clockVal, StrAttr:$name, AnnotationArrayAttr:$annotations);
+  let arguments = (
+    ins ClockType:$clockVal, StrAttr:$name,
+        AnnotationArrayAttr:$annotations,
+        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs PassiveType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, name,
-                   $_builder.getArrayAttr(annotations));
+                   $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
 
-  let assemblyFormat =
-    "operands custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)?
+    operands custom<ImplicitSSAName>(attr-dict) `:` type($result)
+  }];
   let hasCanonicalizeMethod = true;
 }
 
@@ -331,22 +267,27 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
 
   let arguments = (
     ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
-        StrAttr:$name, AnnotationArrayAttr:$annotations);
+        StrAttr:$name, AnnotationArrayAttr:$annotations,
+        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs PassiveType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, name,
-                   $_builder.getArrayAttr(annotations));
+                   resetValue, name, $_builder.getArrayAttr(annotations),
+                   inner_sym);
     }]>
   ];
 
-  let assemblyFormat =
-     "operands custom<ImplicitSSAName>(attr-dict) `:` type($resetSignal) `,` type($resetValue) `,` type($result)";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)?
+    operands custom<ImplicitSSAName>(attr-dict)
+    `:` type($resetSignal) `,` type($resetValue) `,` type($result)
+  }];
 
   let hasCanonicalizer = true;
 }
@@ -360,18 +301,24 @@ def WireOp : FIRRTLOp<"wire", []> {
     ```
     }];
 
-  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
+  let arguments = (
+    ins StrAttr:$name, AnnotationArrayAttr:$annotations,
+        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
-                      CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
+                      CArg<"ArrayRef<Attribute>","{}">:$annotations,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym), [{
       return build($_builder, $_state, elementType, name,
-                   $_builder.getArrayAttr(annotations));
+                   $_builder.getArrayAttr(annotations), inner_sym);
     }]>
   ];
 
-  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)?
+    custom<ImplicitSSAName>(attr-dict) `:` type($result)
+  }];
   let hasCanonicalizer = true;
 }

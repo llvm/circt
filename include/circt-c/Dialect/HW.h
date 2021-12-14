@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 struct HWStructFieldInfo {
-  MlirStringRef name;
+  MlirIdentifier name;
   MlirType type;
 };
 typedef struct HWStructFieldInfo HWStructFieldInfo;

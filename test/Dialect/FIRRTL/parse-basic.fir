@@ -29,10 +29,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "name_thing",
-  ; CHECK: parameters = {DEFAULT = 0 : i64,
+  ; CHECK: parameters = {DEFAULT = 0 : ui32,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,
   ; CHECK:               FORMAT = "xyz_timeout=%d\0A",
-  ; CHECK:               WIDTH = 32 : i8}}
+  ; CHECK:               WIDTH = 32 : ui32}}
   ; CHECK-NOT: {
   extmodule MyParameterizedExtModule :
     input in: UInt
@@ -331,25 +331,25 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
-    ; CHECK: %myMem = firrtl.combmem : !firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
+    ; CHECK: %myMem = chirrtl.combmem : !chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue_data, %memValue_port = firrtl.memoryport Infer %myMem {name = "memValue"} : (!firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !firrtl.cmemoryport)
-    ; CHECK: firrtl.memoryport.access %memValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    ; CHECK: %memValue_data, %memValue_port = chirrtl.memoryport Infer %myMem {name = "memValue"} : (!chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !chirrtl.cmemoryport)
+    ; CHECK: chirrtl.memoryport.access %memValue_port[%i8], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
-    ; CHECK: %base_table_0 = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_0 = chirrtl.seqmem Undefined : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]
-    ; CHECK: %base_table_1 = firrtl.seqmem Old : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_1 = chirrtl.seqmem Old : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue_data, %tableValue_port = firrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
-    ; CHECK: firrtl.memoryport.access %tableValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    ; CHECK: %tableValue_data, %tableValue_port = chirrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
+    ; CHECK: chirrtl.memoryport.access %tableValue_port[%i8], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     read mport tableValue = base_table_1[i8], clock
 
     ; Check that we can handle large memory sizes.
-    ; CHECK: %testharness = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<8>, 16>, 2147483648>
+    ; CHECK: %testharness = chirrtl.seqmem Undefined : !chirrtl.cmemory<vector<uint<8>, 16>, 2147483648>
     smem testharness : UInt<8>[16][2147483648], undefined
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
@@ -475,12 +475,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; Memory ports should be declared in the scope of the cmemory, but should
     ; be enabled at the location of the mport.
 
-    ; CHECK: %memory = firrtl.seqmem Undefined  : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %memory = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
-    ; CHECK: %xyz0_data, %xyz0_port = firrtl.memoryport Read %memory {name = "xyz0"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
+    ; CHECK: %xyz0_data, %xyz0_port = chirrtl.memoryport Read %memory {name = "xyz0"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
     ; CHECK: firrtl.when %cond  {
-    ; CHECK:    firrtl.memoryport.access %xyz0_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint, !firrtl.clock
+    ; CHECK:    chirrtl.memoryport.access %xyz0_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint, !firrtl.clock
     ; CHECK: }
     when cond :
       read mport xyz0 = memory[addr], clock
@@ -576,7 +576,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.sint<4>
 
   ; CHECK-LABEL: firrtl.extmodule @issue183()
-  ; CHECK: attributes {parameters = {A = -1 : i4}}
+  ; CHECK: attributes {parameters = {A = -1 : si32}}
   extmodule issue183:
      parameter A = -1
 
@@ -907,10 +907,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; just set to 1; the actual check `^value !== 'x` is implicit.
     when cond:
       printf(clock, enable, "assertNotX:%d:value must not be X!", value)
-    ; CHECK: [[TMP1:%.+]] = firrtl.xorr %value
-    ; CHECK: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP1]])
-    ; CHECK: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
-    ; CHECK: firrtl.assert %clock, [[TMP3]], %enable, "value must not be X!"
+    ; CHECK: [[TMP1:%.+]] = firrtl.not %cond
+    ; CHECK: [[TMP2:%.+]] = firrtl.xorr %value
+    ; CHECK: [[TMP3:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP2]])
+    ; CHECK: [[TMP4:%.+]] = firrtl.or [[TMP1]], [[TMP3]]
+    ; CHECK: firrtl.assert %clock, [[TMP4]], %enable, "value must not be X!"
     ; CHECK-SAME: name = "notX"
 
     ; Chisel built-in assertions
@@ -992,8 +993,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       when not_cond2:
         printf(clock, enable, "Assertion failed: hello outside reset")
     ; CHECK: firrtl.when %not_reset {
-    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello"
+    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello outside reset"
     ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond2
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello outside reset"
     ; CHECK-SAME: name = "chisel3_builtin"
     ; CHECK: }
+
+    ; Check that the above doesn't error if the assert is a double user of the
+    ; condition.
+    when not_reset:
+      assert(clock, UInt<1>(1), UInt<1>(1), "double user assert")
+      node not_cond3 = eq(UInt<1>(1), UInt<1>(0))
+      when not_cond3:
+        printf(clock, UInt<1>(1), "Assertion failed: double user assert")
+    ; CHECK-NOT: firrtl.assert %clock, {{.+}} "double user assert"

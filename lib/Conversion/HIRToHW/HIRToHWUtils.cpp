@@ -163,9 +163,9 @@ ArrayAttr getHWParams(Attribute paramsAttr, bool ignoreValues) {
   Builder builder(params.getContext());
   SmallVector<Attribute> hwParams;
   for (const NamedAttribute &param : params) {
-    auto name = builder.getStringAttr(param.first.strref());
-    auto type = TypeAttr::get(param.second.getType());
-    auto value = ignoreValues ? Attribute() : param.second;
+    auto name = builder.getStringAttr(param.getName().strref());
+    auto type = TypeAttr::get(param.getValue().getType());
+    auto value = ignoreValues ? Attribute() : param.getValue();
     auto hwParam =
         hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
     hwParams.push_back(hwParam);

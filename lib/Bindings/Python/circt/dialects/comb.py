@@ -32,12 +32,15 @@ def CompareOp(predicate):
 
       @staticmethod
       def create(lhs=None, rhs=None):
-        result_type = IntegerType.get_signless(1)
         mapping = {}
         if lhs:
           mapping["lhs"] = lhs
         if rhs:
           mapping["rhs"] = rhs
+        if len(mapping) == 0:
+          result_type = IntegerType.get_signless(1)
+        else:
+          result_type = None
         return ICmpOpBuilder(predicate, result_type, mapping)
 
     return _Class

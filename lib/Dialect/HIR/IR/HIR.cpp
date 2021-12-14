@@ -32,7 +32,7 @@ using namespace llvm;
 //------------------------------------------------------------------------------
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (const auto &argAttr : attrs)
-    if (argAttr.first == name)
+    if (argAttr.getName() == name)
       return true;
   return false;
 }
@@ -209,7 +209,7 @@ verifyDelayAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
   auto delayNameAndAttr = attrDict.getNamed("hir.delay");
   if (!delayNameAndAttr.hasValue())
     return failure();
-  if (!delayNameAndAttr->second.dyn_cast<IntegerAttr>())
+  if (!delayNameAndAttr->getValue().dyn_cast<IntegerAttr>())
     return failure();
   return success();
 }
@@ -220,7 +220,7 @@ verifyMemrefPortsAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
   auto memrefPortsNameAndAttr = attrDict.getNamed("hir.memref.ports");
   if (!memrefPortsNameAndAttr.hasValue())
     return failure();
-  if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+  if (!memrefPortsNameAndAttr->getValue().dyn_cast<ArrayAttr>())
     return failure();
   return success();
 }
@@ -231,7 +231,7 @@ verifyBusPortsAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
   auto memrefPortsNameAndAttr = attrDict.getNamed("hir.bus.ports");
   if (!memrefPortsNameAndAttr.hasValue())
     return failure();
-  if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+  if (!memrefPortsNameAndAttr->getValue().dyn_cast<ArrayAttr>())
     return failure();
   return success();
 }

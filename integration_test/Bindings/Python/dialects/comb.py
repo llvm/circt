@@ -11,6 +11,7 @@ with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
 
   i1 = IntegerType.get_signless(1)
+  i14 = IntegerType.get_signless(14)
   i32 = IntegerType.get_signless(32)
 
   m = Module.create()
@@ -18,28 +19,22 @@ with Context() as ctx, Location.unknown():
 
     def build(module):
       # CHECK: %[[CONST:.+]] = hw.constant 1 : i32
-      const = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
+      const = hw.ConstantOp(IntegerAttr.get(i32, 1))
 
       # CHECK: %[[BIT:.+]] = hw.constant true
-      bit = hw.ConstantOp(i1, IntegerAttr.get(i1, 1))
+      bit = hw.ConstantOp(IntegerAttr.get(i1, 1))
 
       # CHECK: comb.extract %[[CONST]] from 14
-      comb.ExtractOp.create(14, i32, const.result)
+      comb.ExtractOp.create(14, i14, const.result)
       # CHECK: comb.extract %[[CONST]] from 14
-      extract = comb.ExtractOp.create(14, i32)
+      extract = comb.ExtractOp.create(14, i14)
       connect(extract.input, const.result)
 
       # CHECK: comb.parity %[[CONST]]
-      comb.ParityOp.create(const.result, result_type=i32)
+      comb.ParityOp.create(const.result)
       # CHECK: comb.parity %[[CONST]]
       parity = comb.ParityOp.create(result_type=i32)
       connect(parity.input, const.result)
-
-      # CHECK: comb.sext %[[CONST]]
-      comb.SExtOp.create(const.result, result_type=i32)
-      # CHECK: comb.sext %[[CONST]]
-      sext = comb.SExtOp.create(result_type=i32)
-      connect(sext.input, const.result)
 
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
       comb.DivSOp.create(const.result, const.result)
@@ -173,10 +168,10 @@ with Context() as ctx, Location.unknown():
       comb.XorOp.create(const.result, const.result)
 
       # CHECK: comb.concat %[[CONST]], %[[CONST]]
-      comb.ConcatOp.create(i32, const.result, const.result)
+      comb.ConcatOp.create(const.result, const.result)
 
       # CHECK: comb.mux %[[BIT]], %[[CONST]], %[[CONST]]
-      comb.MuxOp.create(i32, bit.result, const.result, const.result)
+      comb.MuxOp.create(bit.result, const.result, const.result)
 
     hw.HWModuleOp(name="test", body_builder=build)
 

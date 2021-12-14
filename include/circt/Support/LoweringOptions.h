@@ -58,10 +58,6 @@ struct LoweringOptions {
   /// the attribute, this will print an error using the ModuleOp.
   void parseFromAttribute(mlir::ModuleOp module);
 
-  /// If true, emit `sv.alwaysff` as Verilog `always_ff` statements.  Otherwise,
-  /// print them as `always` statements
-  bool useAlwaysFF = false;
-
   /// If true, emits `sv.alwayscomb` as Verilog `always @(*)` statements.
   /// Otherwise, print them as `always_comb`.
   bool noAlwaysComb = false;
@@ -84,6 +80,11 @@ struct LoweringOptions {
   /// generic one will be created. Some EDA tools require verification
   /// statements to be labeled.
   bool enforceVerifLabels = false;
+
+  /// This parameter limits the maximum number of tokes per one expression.
+  /// https://github.com/verilator/verilator/issues/2752
+  enum { DEFAULT_TOKEN_NUMBER = 40000 };
+  unsigned maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
 
   /// This is the target width of lines in an emitted Verilog source file in
   /// columns.

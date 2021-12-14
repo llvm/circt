@@ -147,13 +147,13 @@ std::string FIRToken::getRawStringValue(StringRef spelling) {
 // FIRLexer
 //===----------------------------------------------------------------------===//
 
-static Identifier getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
+static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
                                               MLIRContext *context) {
   auto mainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   StringRef bufferName = mainBuffer->getBufferIdentifier();
   if (bufferName.empty())
     bufferName = "<unknown>";
-  return Identifier::get(bufferName, context);
+  return StringAttr::get(bufferName, context);
 }
 
 FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)

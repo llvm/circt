@@ -155,6 +155,15 @@ public:
         return;
       }
 
+      // If this is a vector type, recurse to each of the elements.
+      if (auto vectorType = type.dyn_cast<FVectorType>()) {
+        for (unsigned i = 0; i < vectorType.getNumElements(); ++i) {
+          id++;
+          declare(vectorType.getElementType(), flow);
+        }
+        return;
+      }
+
       // If this is an analog type, it does not need to be tracked.
       if (auto analogType = type.dyn_cast<AnalogType>())
         return;
@@ -174,30 +183,69 @@ public:
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
     auto whenTrue = getConnectedValue(whenTrueConn);
+    auto trueIsInvalid =
+        isa_and_nonnull<InvalidValueOp>(whenTrue.getDefiningOp());
     auto whenFalse = getConnectedValue(whenFalseConn);
-    auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
-    auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
-    return newConnect;
+    auto falseIsInvalid =
+        isa_and_nonnull<InvalidValueOp>(whenFalse.getDefiningOp());
+    // If one of the branches of the mux is an invalid value, we optimize the
+    // mux to be the non-invalid value.  This optimization can only be
+    // performed while lowering when-ops into muxes, and would not be legal as
+    // a more general mux folder.
+    // mux(cond, invalid, x) -> x
+    // mux(cond, x, invalid) -> x
+    Value newValue = whenTrue;
+    if (trueIsInvalid == falseIsInvalid)
+      newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
+    else if (trueIsInvalid)
+      newValue = whenFalse;
+    return b.create<ConnectOp>(loc, dest, newValue);
   }
 
   void visitDecl(WireOp op) { declareSinks(op.result(), Flow::Duplex); }
 
+  /// Take an aggregate value and construct ground subelements recursively.
+  /// And then apply function `fn`.
+  void foreachSubelement(OpBuilder &builder, Value value,
+                         llvm::function_ref<void(Value)> fn) {
+    TypeSwitch<Type>(value.getType())
+        .template Case<BundleType>([&](BundleType bundle) {
+          for (auto i : llvm::seq(0u, (unsigned)bundle.getNumElements())) {
+            auto subfield =
+                builder.create<SubfieldOp>(value.getLoc(), value, i);
+            foreachSubelement(builder, subfield, fn);
+          }
+        })
+        .template Case<FVectorType>([&](FVectorType vector) {
+          for (auto i : llvm::seq(0u, vector.getNumElements())) {
+            auto subindex =
+                builder.create<SubindexOp>(value.getLoc(), value, i);
+            foreachSubelement(builder, subindex, fn);
+          }
+        })
+        .Default([&](auto) { fn(value); });
+  }
+
   void visitDecl(RegOp op) {
-    // Registers are initialized to themselves.
-    // TODO: register of bundle type are not supported.
-    auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
-                       .create<ConnectOp>(op.getLoc(), op, op);
-    driverMap[getFieldRefFromValue(op.result())] = connect;
+    // Registers are initialized to themselves. If the register has an
+    // aggergate type, connect each ground type element.
+    auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
+    auto fn = [&](Value value) {
+      auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      driverMap[getFieldRefFromValue(value)] = connect;
+    };
+    foreachSubelement(builder, op.result(), fn);
   }
 
   void visitDecl(RegResetOp op) {
-    // Registers are initialized to themselves.
-    // TODO: register of bundle type are not supported.
-    assert(!op.result().getType().isa<BundleType>() &&
-           "registers can't be bundle type");
-    auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
-                       .create<ConnectOp>(op.getLoc(), op, op);
-    driverMap[getFieldRefFromValue(op.result())] = connect;
+    // Registers are initialized to themselves. If the register has an
+    // aggergate type, connect each ground type element.
+    auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
+    auto fn = [&](Value value) {
+      auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      driverMap[getFieldRefFromValue(value)] = connect;
+    };
+    foreachSubelement(builder, op.result(), fn);
   }
 
   void visitDecl(InstanceOp op) {

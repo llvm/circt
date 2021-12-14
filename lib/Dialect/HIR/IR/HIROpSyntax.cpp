@@ -270,7 +270,7 @@ ParseResult parseWithSSANames(mlir::OpAsmParser &parser,
   // If the attribute dictionary contains no 'names' attribute, infer it from
   // the SSA name (if specified).
   bool hadNames = llvm::any_of(
-      attrDict, [](NamedAttribute attr) { return attr.first == "names"; });
+      attrDict, [](NamedAttribute attr) { return attr.getName() == "names"; });
 
   // If there was no name specified, check to see if there was a useful name
   // specified in the asm file.
@@ -290,7 +290,7 @@ ParseResult parseWithSSANames(mlir::OpAsmParser &parser,
   }
 
   auto namesAttr = parser.getBuilder().getStrArrayAttr(names);
-  attrDict.push_back({Identifier::get("names", context), namesAttr});
+  attrDict.push_back({mlir::Identifier::get("names", context), namesAttr});
   return success();
 }
 

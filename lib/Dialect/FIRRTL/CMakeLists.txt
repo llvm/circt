@@ -1,5 +1,6 @@
 include_directories(.)
 add_circt_dialect_library(CIRCTFIRRTL
+  CHIRRTLDialect.cpp
   FIRRTLAnnotations.cpp
   FIRRTLAttributes.cpp
   FIRRTLDialect.cpp
@@ -17,11 +18,13 @@ add_circt_dialect_library(CIRCTFIRRTL
   CIRCTFIRRTLEnumsIncGen
   CIRCTFIRRTLCanonicalizationIncGen
   CIRCTFIRRTLOpInterfacesIncGen
-  
+
   LINK_COMPONENTS
+
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTSupport
   CIRCTHW
   MLIRIR
   MLIRPass

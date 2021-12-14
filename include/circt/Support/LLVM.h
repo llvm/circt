@@ -84,6 +84,8 @@ using llvm::SmallDenseMap;
 // Forward declarations of classes to be imported in to the circt namespace.
 namespace mlir {
 class ArrayAttr;
+class AsmParser;
+class AsmPrinter;
 class Attribute;
 class Block;
 class BlockAndValueMapping;
@@ -106,7 +108,6 @@ class FlatSymbolRefAttr;
 class FloatAttr;
 class FunctionType;
 class FusedLoc;
-class Identifier;
 class ImplicitLocOpBuilder;
 class IndexType;
 class InFlightDiagnostic;
@@ -117,6 +118,7 @@ class MemRefType;
 class MLIRContext;
 class ModuleOp;
 class MutableOperandRange;
+class NamedAttribute;
 class NamedAttrList;
 class NoneType;
 class OpAsmDialectInterface;
@@ -167,7 +169,6 @@ struct OpRewritePattern;
 
 using DefaultTypeStorage = TypeStorage;
 using OpAsmSetValueNameFn = function_ref<void(Value, StringRef)>;
-using NamedAttribute = std::pair<Identifier, Attribute>;
 
 namespace OpTrait {}
 
@@ -175,89 +176,95 @@ namespace OpTrait {}
 
 // Import things we want into our namespace.
 namespace circt {
-using mlir::ArrayAttr;
-using mlir::Attribute;
-using mlir::Block;
-using mlir::BlockAndValueMapping;
-using mlir::BlockArgument;
-using mlir::BoolAttr;
-using mlir::Builder;
-using mlir::CallInterfaceCallable;
-using mlir::ConversionPattern;
-using mlir::ConversionPatternRewriter;
-using mlir::ConversionTarget;
-using mlir::DefaultTypeStorage;
-using mlir::DenseElementsAttr;
-using mlir::Diagnostic;
-using mlir::Dialect;
-using mlir::DialectAsmParser;
-using mlir::DialectAsmPrinter;
-using mlir::DictionaryAttr;
-using mlir::ElementsAttr;
-using mlir::failed;
-using mlir::failure;
-using mlir::FileLineColLoc;
-using mlir::FlatSymbolRefAttr;
-using mlir::FloatAttr;
-using mlir::FunctionType;
-using mlir::FusedLoc;
-using mlir::Identifier;
-using mlir::ImplicitLocOpBuilder;
-using mlir::IndexType;
-using mlir::InFlightDiagnostic;
-using mlir::IntegerAttr;
-using mlir::IntegerType;
-using mlir::Location;
-using mlir::LogicalResult;
-using mlir::MemRefAccess;
-using mlir::MemRefType;
-using mlir::MLIRContext;
-using mlir::ModuleOp;
-using mlir::MutableOperandRange;
-using mlir::NamedAttribute;
-using mlir::NamedAttrList;
-using mlir::NoneType;
-using mlir::OpAsmDialectInterface;
-using mlir::OpAsmParser;
-using mlir::OpAsmPrinter;
-using mlir::OpAsmSetValueNameFn;
-using mlir::OpBuilder;
-using mlir::OpConversionPattern;
-using mlir::OperandRange;
-using mlir::Operation;
-using mlir::OperationPass;
-using mlir::OperationState;
-using mlir::OpFoldResult;
-using mlir::OpOperand;
-using mlir::OpResult;
-using mlir::OpRewritePattern;
-using mlir::OwningModuleRef;
-using mlir::ParseResult;
-using mlir::Pass;
-using mlir::PatternRewriter;
-using mlir::Region;
-using mlir::RegionKind;
-using mlir::RewritePatternSet;
-using mlir::ShapedType;
-using mlir::SplatElementsAttr;
-using mlir::StringAttr;
-using mlir::succeeded;
-using mlir::success;
-using mlir::SymbolRefAttr;
-using mlir::SymbolTable;
-using mlir::SymbolTableCollection;
-using mlir::TupleType;
-using mlir::Type;
-using mlir::TypeAttr;
-using mlir::TypeConverter;
-using mlir::TypeID;
-using mlir::TypeRange;
-using mlir::TypeStorage;
-using mlir::UnknownLoc;
-using mlir::Value;
-using mlir::ValueRange;
-using mlir::VectorType;
-using mlir::WalkResult;
+// clang-tidy removes following using directives incorrectly. So force
+// clang-tidy to ignore them.
+// TODO: It is better to use `NOLINTBEGIN/END` comments to disable clang-tidy
+// than adding `NOLINT` to every line. `NOLINTBEGIN/END` will supported from
+// clang-tidy-14.
+using mlir::ArrayAttr;                 // NOLINT(misc-unused-using-decls)
+using mlir::AsmParser;                 // NOLINT(misc-unused-using-decls)
+using mlir::AsmPrinter;                // NOLINT(misc-unused-using-decls)
+using mlir::Attribute;                 // NOLINT(misc-unused-using-decls)
+using mlir::Block;                     // NOLINT(misc-unused-using-decls)
+using mlir::BlockAndValueMapping;      // NOLINT(misc-unused-using-decls)
+using mlir::BlockArgument;             // NOLINT(misc-unused-using-decls)
+using mlir::BoolAttr;                  // NOLINT(misc-unused-using-decls)
+using mlir::Builder;                   // NOLINT(misc-unused-using-decls)
+using mlir::CallInterfaceCallable;     // NOLINT(misc-unused-using-decls)
+using mlir::ConversionPattern;         // NOLINT(misc-unused-using-decls)
+using mlir::ConversionPatternRewriter; // NOLINT(misc-unused-using-decls)
+using mlir::ConversionTarget;          // NOLINT(misc-unused-using-decls)
+using mlir::DefaultTypeStorage;        // NOLINT(misc-unused-using-decls)
+using mlir::DenseElementsAttr;         // NOLINT(misc-unused-using-decls)
+using mlir::Diagnostic;                // NOLINT(misc-unused-using-decls)
+using mlir::Dialect;                   // NOLINT(misc-unused-using-decls)
+using mlir::DialectAsmParser;          // NOLINT(misc-unused-using-decls)
+using mlir::DialectAsmPrinter;         // NOLINT(misc-unused-using-decls)
+using mlir::DictionaryAttr;            // NOLINT(misc-unused-using-decls)
+using mlir::ElementsAttr;              // NOLINT(misc-unused-using-decls)
+using mlir::failed;                    // NOLINT(misc-unused-using-decls)
+using mlir::failure;                   // NOLINT(misc-unused-using-decls)
+using mlir::FileLineColLoc;            // NOLINT(misc-unused-using-decls)
+using mlir::FlatSymbolRefAttr;         // NOLINT(misc-unused-using-decls)
+using mlir::FloatAttr;                 // NOLINT(misc-unused-using-decls)
+using mlir::FunctionType;              // NOLINT(misc-unused-using-decls)
+using mlir::FusedLoc;                  // NOLINT(misc-unused-using-decls)
+using mlir::ImplicitLocOpBuilder;      // NOLINT(misc-unused-using-decls)
+using mlir::IndexType;                 // NOLINT(misc-unused-using-decls)
+using mlir::InFlightDiagnostic;        // NOLINT(misc-unused-using-decls)
+using mlir::IntegerAttr;               // NOLINT(misc-unused-using-decls)
+using mlir::IntegerType;               // NOLINT(misc-unused-using-decls)
+using mlir::Location;                  // NOLINT(misc-unused-using-decls)
+using mlir::LogicalResult;             // NOLINT(misc-unused-using-decls)
+using mlir::MemRefAccess;              // NOLINT(misc-unused-using-decls)
+using mlir::MemRefType;                // NOLINT(misc-unused-using-decls)
+using mlir::MLIRContext;               // NOLINT(misc-unused-using-decls)
+using mlir::ModuleOp;                  // NOLINT(misc-unused-using-decls)
+using mlir::MutableOperandRange;       // NOLINT(misc-unused-using-decls)
+using mlir::NamedAttribute;            // NOLINT(misc-unused-using-decls)
+using mlir::NamedAttrList;             // NOLINT(misc-unused-using-decls)
+using mlir::NoneType;                  // NOLINT(misc-unused-using-decls)
+using mlir::OpAsmDialectInterface;     // NOLINT(misc-unused-using-decls)
+using mlir::OpAsmParser;               // NOLINT(misc-unused-using-decls)
+using mlir::OpAsmPrinter;              // NOLINT(misc-unused-using-decls)
+using mlir::OpAsmSetValueNameFn;       // NOLINT(misc-unused-using-decls)
+using mlir::OpBuilder;                 // NOLINT(misc-unused-using-decls)
+using mlir::OpConversionPattern;       // NOLINT(misc-unused-using-decls)
+using mlir::OperandRange;              // NOLINT(misc-unused-using-decls)
+using mlir::Operation;                 // NOLINT(misc-unused-using-decls)
+using mlir::OperationPass;             // NOLINT(misc-unused-using-decls)
+using mlir::OperationState;            // NOLINT(misc-unused-using-decls)
+using mlir::OpFoldResult;              // NOLINT(misc-unused-using-decls)
+using mlir::OpOperand;                 // NOLINT(misc-unused-using-decls)
+using mlir::OpResult;                  // NOLINT(misc-unused-using-decls)
+using mlir::OpRewritePattern;          // NOLINT(misc-unused-using-decls)
+using mlir::OwningModuleRef;           // NOLINT(misc-unused-using-decls)
+using mlir::ParseResult;               // NOLINT(misc-unused-using-decls)
+using mlir::Pass;                      // NOLINT(misc-unused-using-decls)
+using mlir::PatternRewriter;           // NOLINT(misc-unused-using-decls)
+using mlir::Region;                    // NOLINT(misc-unused-using-decls)
+using mlir::RegionKind;                // NOLINT(misc-unused-using-decls)
+using mlir::RewritePatternSet;         // NOLINT(misc-unused-using-decls)
+using mlir::ShapedType;                // NOLINT(misc-unused-using-decls)
+using mlir::SplatElementsAttr;         // NOLINT(misc-unused-using-decls)
+using mlir::StringAttr;                // NOLINT(misc-unused-using-decls)
+using mlir::succeeded;                 // NOLINT(misc-unused-using-decls)
+using mlir::success;                   // NOLINT(misc-unused-using-decls)
+using mlir::SymbolRefAttr;             // NOLINT(misc-unused-using-decls)
+using mlir::SymbolTable;               // NOLINT(misc-unused-using-decls)
+using mlir::SymbolTableCollection;     // NOLINT(misc-unused-using-decls)
+using mlir::TupleType;                 // NOLINT(misc-unused-using-decls)
+using mlir::Type;                      // NOLINT(misc-unused-using-decls)
+using mlir::TypeAttr;                  // NOLINT(misc-unused-using-decls)
+using mlir::TypeConverter;             // NOLINT(misc-unused-using-decls)
+using mlir::TypeID;                    // NOLINT(misc-unused-using-decls)
+using mlir::TypeRange;                 // NOLINT(misc-unused-using-decls)
+using mlir::TypeStorage;               // NOLINT(misc-unused-using-decls)
+using mlir::UnknownLoc;                // NOLINT(misc-unused-using-decls)
+using mlir::Value;                     // NOLINT(misc-unused-using-decls)
+using mlir::ValueRange;                // NOLINT(misc-unused-using-decls)
+using mlir::VectorType;                // NOLINT(misc-unused-using-decls)
+using mlir::WalkResult;                // NOLINT(misc-unused-using-decls)
 namespace OpTrait = mlir::OpTrait;
 } // namespace circt
 

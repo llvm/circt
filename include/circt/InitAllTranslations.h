@@ -16,7 +16,6 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
@@ -33,8 +32,6 @@ inline void registerAllTranslations() {
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();
-    llhd::registerToVerilogTranslation();
-    msft::registerMSFTTclTranslation();
     return true;
   }();
   (void)initOnce;

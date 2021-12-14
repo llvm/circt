@@ -13,6 +13,7 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -22,7 +23,7 @@ using namespace msft;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
 
-static Attribute parseRootedInstancePath(DialectAsmParser &p) {
+static Attribute parseRootedInstancePath(AsmParser &p) {
   FlatSymbolRefAttr root;
   if (p.parseAttribute(root) || p.parseLSquare())
     return Attribute();
@@ -40,14 +41,13 @@ static Attribute parseRootedInstancePath(DialectAsmParser &p) {
   return RootedInstancePathAttr::get(p.getContext(), root, path);
 }
 
-static void printRootedInstancePath(RootedInstancePathAttr me,
-                                    DialectAsmPrinter &p) {
+static void printRootedInstancePath(RootedInstancePathAttr me, AsmPrinter &p) {
   p << me.getRootModule() << '[';
   llvm::interleave(me.getPath(), p, ",");
   p << ']';
 }
 
-Attribute SwitchInstanceAttr::parse(DialectAsmParser &p, Type type) {
+Attribute SwitchInstanceAttr::parse(AsmParser &p, Type type) {
   if (p.parseLess())
     return Attribute();
   if (!p.parseOptionalGreater())
@@ -72,8 +72,8 @@ Attribute SwitchInstanceAttr::parse(DialectAsmParser &p, Type type) {
   return SwitchInstanceAttr::get(p.getContext(), instPairs);
 }
 
-void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
-  p << "switch.inst<";
+void SwitchInstanceAttr::print(AsmPrinter &p) const {
+  p << "<";
   llvm::interleaveComma(getCases(), p, [&](auto instCase) {
     printRootedInstancePath(instCase.getInst(), p);
     p << '=';
@@ -90,7 +90,7 @@ Attribute SwitchInstanceAttr::lookup(RootedInstancePathAttr id) {
   return Attribute();
 }
 
-Attribute PhysLocationAttr::parse(DialectAsmParser &p, Type type) {
+Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
   uint64_t x, y, num;
@@ -110,9 +110,53 @@ Attribute PhysLocationAttr::parse(DialectAsmParser &p, Type type) {
   return phy;
 }
 
-void PhysLocationAttr::print(DialectAsmPrinter &p) const {
-  p << "physloc<" << stringifyPrimitiveType(getPrimitiveType().getValue())
-    << ", " << getX() << ", " << getY() << ", " << getNum() << '>';
+void PhysLocationAttr::print(AsmPrinter &p) const {
+  p << "<" << stringifyPrimitiveType(getPrimitiveType().getValue()) << ", "
+    << getX() << ", " << getY() << ", " << getNum() << '>';
+}
+
+Attribute PhysicalRegionRefAttr::parse(AsmParser &p, Type type) {
+  StringAttr physicalRegion;
+  NamedAttrList attrs;
+  if (p.parseLess() ||
+      p.parseSymbolName(physicalRegion, "physicalRegion", attrs) ||
+      p.parseGreater()) {
+    llvm::SMLoc loc = p.getCurrentLocation();
+    p.emitError(loc, "unable to parse PhysicalRegion reference");
+    return Attribute();
+  }
+
+  auto physicalRegionAttr =
+      FlatSymbolRefAttr::get(p.getContext(), physicalRegion.getValue());
+
+  return PhysicalRegionRefAttr::get(p.getContext(), physicalRegionAttr);
+}
+
+void PhysicalRegionRefAttr::print(AsmPrinter &p) const {
+  p << "<" << getPhysicalRegion() << '>';
+}
+
+Attribute PhysicalBoundsAttr::parse(AsmParser &p, Type type) {
+  uint64_t xMin, xMax, yMin, yMax;
+  if (p.parseLess() || p.parseKeyword("x") || p.parseColon() ||
+      p.parseLSquare() || p.parseInteger(xMin) || p.parseComma() ||
+      p.parseInteger(xMax) || p.parseRSquare() || p.parseComma() ||
+      p.parseKeyword("y") || p.parseColon() || p.parseLSquare() ||
+      p.parseInteger(yMin) || p.parseComma() || p.parseInteger(yMax) ||
+      p.parseRSquare() || p.parseGreater()) {
+    llvm::SMLoc loc = p.getCurrentLocation();
+    p.emitError(loc, "unable to parse PhysicalBounds");
+    return Attribute();
+  }
+
+  return PhysicalBoundsAttr::get(p.getContext(), xMin, xMax, yMin, yMax);
+}
+
+void PhysicalBoundsAttr::print(AsmPrinter &p) const {
+  p << "<";
+  p << "x: [" << getXMin() << ", " << getXMax() << "], ";
+  p << "y: [" << getYMin() << ", " << getYMax() << ']';
+  p << '>';
 }
 
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {

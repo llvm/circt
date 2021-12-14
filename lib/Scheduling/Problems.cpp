@@ -66,7 +66,7 @@ LogicalResult Problem::checkLinkedOperatorType(Operation *op) {
 LogicalResult Problem::checkLatency(OperatorType opr) {
   if (!getLatency(opr))
     return getContainingOp()->emitError()
-           << "Operator type '" << opr << "' has no latency";
+           << "Operator type '" << opr.getValue() << "' has no latency";
 
   return success();
 }
@@ -158,22 +158,22 @@ LogicalResult CyclicProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedPipelinedOperatorsProblem
+// SharedOperatorsProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult SharedPipelinedOperatorsProblem::checkLatency(OperatorType opr) {
+LogicalResult SharedOperatorsProblem::checkLatency(OperatorType opr) {
   if (failed(Problem::checkLatency(opr)))
     return failure();
 
   auto limit = getLimit(opr);
   if (limit && *limit > 0 && *getLatency(opr) == 0)
     return getContainingOp()->emitError()
-           << "Limited operator type '" << opr << "' has zero latency.";
+           << "Limited operator type '" << opr.getValue()
+           << "' has zero latency.";
   return success();
 }
 
-LogicalResult
-SharedPipelinedOperatorsProblem::verifyUtilization(OperatorType opr) {
+LogicalResult SharedOperatorsProblem::verifyUtilization(OperatorType opr) {
   auto limit = getLimit(opr);
   if (!limit)
     return success();
@@ -186,14 +186,14 @@ SharedPipelinedOperatorsProblem::verifyUtilization(OperatorType opr) {
   for (auto &kv : nOpsPerTimeStep)
     if (kv.second > *limit)
       return getContainingOp()->emitError()
-             << "Operator type '" << opr << "' is oversubscribed."
+             << "Operator type '" << opr.getValue() << "' is oversubscribed."
              << "\n  time step: " << kv.first
              << "\n  #operations: " << kv.second << "\n  limit: " << *limit;
 
   return success();
 }
 
-LogicalResult SharedPipelinedOperatorsProblem::verify() {
+LogicalResult SharedOperatorsProblem::verify() {
   if (failed(Problem::verify()))
     return failure();
 
@@ -222,7 +222,7 @@ LogicalResult ModuloProblem::verifyUtilization(OperatorType opr) {
   for (auto &kv : nOpsPerCongruenceClass)
     if (kv.second > *limit)
       return getContainingOp()->emitError()
-             << "Operator type '" << opr << "' is oversubscribed."
+             << "Operator type '" << opr.getValue() << "' is oversubscribed."
              << "\n  congruence class: " << kv.first
              << "\n  #operations: " << kv.second << "\n  limit: " << *limit;
 
@@ -233,8 +233,8 @@ LogicalResult ModuloProblem::verify() {
   if (failed(CyclicProblem::verify()))
     return failure();
 
-  // Don't call SharedPipelinedOperatorsProblem::verify() here to prevent
-  // redundant verification of the base problem.
+  // Don't call SharedOperatorsProblem::verify() here to prevent redundant
+  // verification of the base problem.
   for (auto opr : getOperatorTypes())
     if (failed(verifyUtilization(opr)))
       return failure();

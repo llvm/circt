@@ -56,6 +56,10 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
     Use optimistic constant propagation to delete ports and unreachable IR.
   }];
   let constructor = "circt::firrtl::createIMConstPropPass()";
+  let statistics = [
+    Statistic<"numFoldedOp", "num-folded-op", "Number of operations folded">,
+    Statistic<"numErasedOp", "num-erased-op", "Number of operations erased">
+  ];
 }
 
 def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
@@ -149,7 +153,7 @@ def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
-def LowerCHIRRTL : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
+def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
   let summary = "Infer the memory ports of SeqMem and CombMem";
   let description = [{
       This pass finds the CHIRRTL behavioral memories and their ports, and
@@ -310,7 +314,7 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
 def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
   let summary = "Generate code for grand central data and memory taps";
   let constructor = "circt::firrtl::createGrandCentralTapsPass()";
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
 def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
@@ -325,6 +329,11 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
     This pass checks combinational cycles in the IR and emit errors.
   }];
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
+}
+
+def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
+  let summary = "Remove module-scoped invalidated resets";
+  let constructor = "circt::firrtl::createRemoveResetsPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

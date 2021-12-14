@@ -138,7 +138,7 @@ private:
 
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *const context;
-  const mlir::Identifier bufferNameIdentifier;
+  const mlir::StringAttr bufferNameIdentifier;
 
   StringRef curBuffer;
   const char *curPtr;

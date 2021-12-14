@@ -170,6 +170,7 @@ def InterfaceType : SVType<"Interface"> {
 
   let mnemonic = "interface";
   let parameters = (ins "::mlir::FlatSymbolRefAttr":$interface);
+  let assemblyFormat = "`<` $interface `>`";
 }
 
 def ModportType : SVType<"Modport"> {
@@ -182,6 +183,7 @@ def ModportType : SVType<"Modport"> {
 
   let mnemonic = "modport";
   let parameters = (ins "::mlir::SymbolRefAttr":$modport);
+  let assemblyFormat = "`<` $modport `>`";
 }
 
 //===----------------------------------------------------------------------===//

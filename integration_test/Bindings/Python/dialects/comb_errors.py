@@ -1,5 +1,5 @@
 # REQUIRES: bindings_python
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: %PYTHON% %s 2>&1 | FileCheck %s
 
 import circt
 from circt.dialects import comb, hw
@@ -16,19 +16,17 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
 
     def build(module):
-      const1 = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
-      const2 = hw.ConstantOp(i31, IntegerAttr.get(i31, 1))
+      const1 = hw.ConstantOp(IntegerAttr.get(i32, 1))
+      const2 = hw.ConstantOp(IntegerAttr.get(i31, 1))
 
-      # CHECK: expected same input port types, but received [Type(i32), Type(i31)]
-      try:
-        comb.DivSOp.create(const1.result, const2.result)
-      except TypeError as e:
-        print(e)
+      # CHECK: op requires all operands to have the same type
+      div = comb.DivSOp.create(const1.result, const2.result)
+      div.opview.verify()
 
-      # CHECK: result type must be specified
+      # CHECK: result type cannot be None
       try:
         comb.DivSOp.create()
-      except TypeError as e:
+      except ValueError as e:
         print(e)
 
     hw.HWModuleOp(name="test", body_builder=build)

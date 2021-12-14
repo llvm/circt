@@ -101,9 +101,9 @@ splitTarget(StringRef target, MLIRContext *context) {
 /// each named entity along the path.
 /// c|c:ai/Am:bi/Bm>d.agg[3] ->
 /// c|c>ai, c|Am>bi, c|Bm>d.agg[2]
-static SmallVector<std::tuple<std::string, std::string, std::string>>
+static SmallVector<std::tuple<std::string, StringRef, StringRef>>
 expandNonLocal(StringRef target) {
-  SmallVector<std::tuple<std::string, std::string, std::string>> retval;
+  SmallVector<std::tuple<std::string, StringRef, StringRef>> retval;
   StringRef circuit;
   std::tie(circuit, target) = target.split('|');
   while (target.count(':')) {
@@ -111,8 +111,7 @@ expandNonLocal(StringRef target) {
     std::tie(nla, target) = target.split(':');
     StringRef inst, mod;
     std::tie(mod, inst) = nla.split('/');
-    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod.str(),
-                        inst.str());
+    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod, inst);
   }
   if (target.empty()) {
     retval.emplace_back(circuit.str(), "", "");
@@ -132,9 +131,9 @@ expandNonLocal(StringRef target) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(
-    CircuitOp circuit, size_t nlaSuffix,
-    SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
+static FlatSymbolRefAttr
+buildNLA(CircuitOp circuit, size_t nlaSuffix,
+         SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
@@ -1012,11 +1011,11 @@ scatterOMIR(Attribute original, unsigned &annotationID,
       .Case<DictionaryAttr>([&](DictionaryAttr dict) -> Optional<Attribute> {
         NamedAttrList newAttrs;
         for (auto pairs : dict) {
-          auto maybeValue = scatterOMIR(pairs.second, annotationID,
+          auto maybeValue = scatterOMIR(pairs.getValue(), annotationID,
                                         newAnnotations, circuit, nlaNumber);
           if (!maybeValue)
             return None;
-          newAttrs.append(pairs.first, maybeValue.getValue());
+          newAttrs.append(pairs.getName(), maybeValue.getValue());
         }
         return DictionaryAttr::get(ctx, newAttrs);
       })
@@ -1071,7 +1070,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
   FileLineColLoc fileLineColLocCache;
 
   // Convert location from a string to a location attribute.
@@ -1140,7 +1139,7 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
   FileLineColLoc fileLineColLocCache;
 
   // Convert the location from a string to a location attribute.
@@ -1692,6 +1691,90 @@ bool circt::firrtl::scatterCustomAnnotations(
       }
 
       continue;
+    }
+
+    if (clazz == "sifive.enterprise.grandcentral.ModuleReplacementAnnotation") {
+      auto id = newID();
+      NamedAttrList fields;
+      auto annotationsAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
+      auto circuitAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
+      auto circuitPackageAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
+      auto dontTouchesAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "dontTouches", loc, clazz);
+      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr ||
+          !dontTouchesAttr)
+        return false;
+      fields.append("class", classAttr);
+      fields.append("id", id);
+      fields.append("annotations", annotationsAttr);
+      fields.append("circuit", circuitAttr);
+      fields.append("circuitPackage", circuitPackageAttr);
+      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
+
+      // Add a don't touches for each target in "dontTouches" list
+      for (auto dontTouch : dontTouchesAttr) {
+        StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
+        if (!targetString) {
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation dontTouches entries must be strings")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        if (!canonTarget)
+          return false;
+        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto leafTarget = splitAndAppendTarget(
+            fields, std::get<0>(nlaTargets.back()), context);
+
+        // Add a don't touch annotation to whatever this annotation targets.
+        addDontTouch(leafTarget.first, leafTarget.second);
+      }
+
+      auto targets = tryGetAs<ArrayAttr>(dict, dict, "targets", loc, clazz);
+      if (!targets)
+        return false;
+      for (auto targetAttr : targets) {
+        NamedAttrList fields;
+        fields.append("id", id);
+        StringAttr targetString = targetAttr.dyn_cast<StringAttr>();
+        if (!targetString) {
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation targets entries must be strings")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        if (!canonTarget)
+          return false;
+        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto leafTarget = splitAndAppendTarget(
+            fields, std::get<0>(nlaTargets.back()), context);
+        if (nlaTargets.size() > 1) {
+          buildNLA(circuit, ++nlaNumber, nlaTargets);
+          fields.append("circt.nonlocal",
+                        FlatSymbolRefAttr::get(context, *canonTarget));
+        }
+        newAnnotations[leafTarget.first].push_back(
+            DictionaryAttr::get(context, fields));
+
+        // Annotate instances along the NLA path.
+        for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+          NamedAttrList fields;
+          fields.append("circt.nonlocal",
+                        FlatSymbolRefAttr::get(context, *canonTarget));
+          fields.append("class", StringAttr::get(context, "circt.nonlocal"));
+          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
+              DictionaryAttr::get(context, fields));
+        }
+      }
     }
 
     // Scatter trackers out from OMIR JSON.

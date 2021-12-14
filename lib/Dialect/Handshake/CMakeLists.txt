@@ -1,4 +1,5 @@
 set(HANDSHAKE_SRCS
+  HandshakeExecutableOps.cpp
   HandshakeOps.cpp
   HandshakeDialect.cpp
   )
@@ -20,3 +21,5 @@ add_circt_dialect_library(CIRCTHandshake
   MLIRHandshakeEnumsIncGen
   MLIRHandshakeAttrsIncGen
   )
+
+add_subdirectory(Transforms)

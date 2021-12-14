@@ -5,7 +5,7 @@ firrtl.circuit "Top" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
   nodes = [{info = #loc, id = "OMID:0", fields = {
     omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-    instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+    finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
   }}]
 }]} {
   firrtl.extmodule @MySRAM()
@@ -23,7 +23,7 @@ firrtl.circuit "Top" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
   nodes = [{info = #loc, id = "OMID:0", fields = {
     omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-    instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+    finalPath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
   }}]
 }]} {
   firrtl.extmodule @MySRAM()

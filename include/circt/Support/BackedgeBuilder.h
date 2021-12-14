@@ -78,6 +78,7 @@ public:
 
 private:
   mlir::Value value;
+  bool set = false;
 };
 
 } // namespace circt

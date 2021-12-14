@@ -54,7 +54,7 @@ uint32_t llvmIndexOfStructField(hw::StructType type, StringRef fieldName) {
   size_t index = 0;
 
   for (const auto *iter = fieldIter.begin(); iter != fieldIter.end(); ++iter) {
-    if (iter->name.equals(fieldName)) {
+    if (iter->name == fieldName) {
       return convertToLLVMEndianess(type, index);
     }
     ++index;
@@ -697,7 +697,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
         {i8PtrTy, entityStatePtrTy, LLVM::LLVMPointerType::get(sigTy)}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate);
+    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate,
+                                      typeConverter);
 
     OpBuilder bodyBuilder =
         OpBuilder::atBlockBegin(&entityOp.getBlocks().front());
@@ -721,7 +722,8 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       final.remapInput(i + 3, gep.getResult());
     }
 
-    rewriter.applySignatureConversion(&entityOp.getBody(), final);
+    rewriter.applySignatureConversion(&entityOp.getBody(), final,
+                                      typeConverter);
 
     // Get the converted entity signature.
     auto funcTy = LLVM::LLVMFunctionType::get(
@@ -730,6 +732,10 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
     // Create the a new llvm function to house the lowered entity.
     auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(
         op->getLoc(), entityOp.getName(), funcTy);
+
+    // Add a return to the entity for later inclusion into the LLVM function.
+    rewriter.setInsertionPointToEnd(&entityOp.getBlocks().front());
+    rewriter.create<LLVM::ReturnOp>(op->getLoc(), ValueRange{});
 
     // Inline the entity region in the new llvm function.
     rewriter.inlineRegionBefore(entityOp.getBody(), llvmFunc.getBody(),
@@ -744,25 +750,6 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 private:
   size_t &sigCounter;
   size_t &regCounter;
-};
-} // namespace
-
-namespace {
-/// Convert an `"llhd.terminator" operation to `llvm.return`.
-struct TerminatorOpConversion : public ConvertToLLVMPattern {
-  explicit TerminatorOpConversion(MLIRContext *ctx,
-                                  LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::TerminatorOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Just replace the original op with return void.
-    rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, ValueRange());
-
-    return success();
-  }
 };
 } // namespace
 
@@ -811,7 +798,8 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     intermediate.addInputs(procArgTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&procOp.getBody(), intermediate);
+    rewriter.applySignatureConversion(&procOp.getBody(), intermediate,
+                                      typeConverter);
 
     // Get the final signature conversion.
     OpBuilder bodyBuilder =
@@ -1888,11 +1876,12 @@ namespace {
 template <typename SourceOp, typename TargetOp>
 class VariadicOpConversion : public ConvertOpToLLVMPattern<SourceOp> {
 public:
+  using OpAdaptor = typename SourceOp::Adaptor;
   using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
   using Super = VariadicOpConversion<SourceOp, TargetOp>;
 
   LogicalResult
-  matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     size_t numOperands = op.getOperands().size();
@@ -1933,7 +1922,7 @@ struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
   using ConvertOpToLLVMPattern<hw::BitcastOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::BitcastOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Type resultTy = typeConverter->convertType(op.result().getType());
@@ -1983,9 +1972,6 @@ using CombModSOpConversion =
 
 using CombICmpOpConversion =
     OneToOneConvertToLLVMPattern<comb::ICmpOp, LLVM::ICmpOp>;
-
-using CombSExtOpConversion =
-    OneToOneConvertToLLVMPattern<comb::SExtOp, LLVM::SExtOp>;
 
 // comb.mux supports any type thus this conversion relies on the type converter
 // to be able to convert the type of the operands and result to an LLVM_Type
@@ -2093,7 +2079,7 @@ struct HWArrayCreateOpConversion
   using ConvertOpToLLVMPattern<hw::ArrayCreateOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::ArrayCreateOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::ArrayCreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
@@ -2124,7 +2110,7 @@ struct HWStructCreateOpConversion
   using ConvertOpToLLVMPattern<hw::StructCreateOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::StructCreateOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::StructCreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto resTy = typeConverter->convertType(op.result().getType());
@@ -2158,7 +2144,7 @@ struct SigArraySliceOpConversion
   using ConvertOpToLLVMPattern<llhd::SigArraySliceOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(llhd::SigArraySliceOp op, ArrayRef<Value> operands,
+  matchAndRewrite(llhd::SigArraySliceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Type llvmArrTy = typeConverter->convertType(op.getInputArrayType());
@@ -2188,7 +2174,7 @@ struct SigExtractOpConversion
   using ConvertOpToLLVMPattern<llhd::SigExtractOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(llhd::SigExtractOp op, ArrayRef<Value> operands,
+  matchAndRewrite(llhd::SigExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Type inputTy = typeConverter->convertType(op.input().getType());
@@ -2226,7 +2212,7 @@ struct SigStructExtractOpConversion
       llhd::SigStructExtractOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(llhd::SigStructExtractOp op, ArrayRef<Value> operands,
+  matchAndRewrite(llhd::SigStructExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Type llvmStructTy = typeConverter->convertType(op.getStructType());
@@ -2263,7 +2249,7 @@ struct SigArrayGetOpConversion
   using ConvertOpToLLVMPattern<llhd::SigArrayGetOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(llhd::SigArrayGetOp op, ArrayRef<Value> operands,
+  matchAndRewrite(llhd::SigArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto llvmArrTy = typeConverter->convertType(op.getArrayType());
@@ -2325,7 +2311,7 @@ struct StructExtractOpConversion
   using ConvertOpToLLVMPattern<hw::StructExtractOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::StructExtractOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::StructExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Type inputTy = typeConverter->convertType(op.input().getType());
@@ -2354,7 +2340,7 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
   using ConvertOpToLLVMPattern<hw::ArrayGetOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::ArrayGetOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto elemTy = typeConverter->convertType(op.result().getType());
@@ -2393,7 +2379,7 @@ struct ArraySliceOpConversion
   using ConvertOpToLLVMPattern<hw::ArraySliceOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::ArraySliceOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::ArraySliceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     auto dstTy = typeConverter->convertType(op.dst().getType());
@@ -2443,7 +2429,7 @@ struct StructInjectOpConversion
   using ConvertOpToLLVMPattern<hw::StructInjectOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::StructInjectOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::StructInjectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     Type inputTy = typeConverter->convertType(op.input().getType());
@@ -2476,7 +2462,7 @@ struct ArrayConcatOpConversion
   using ConvertOpToLLVMPattern<hw::ArrayConcatOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(hw::ArrayConcatOp op, ArrayRef<Value> operands,
+  matchAndRewrite(hw::ArrayConcatOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     hw::ArrayType arrTy = op.result().getType().cast<hw::ArrayType>();
@@ -2647,12 +2633,12 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Arithmetic conversion patterns.
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion, CombSExtOpConversion,
-               CombMuxOpConversion>(converter);
+               CombModSOpConversion, CombICmpOpConversion, CombMuxOpConversion>(
+      converter);
 
   // Unit conversion patterns.
-  patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
-               HaltOpConversion>(ctx, converter);
+  patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
+                                                                     converter);
   patterns.add<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.

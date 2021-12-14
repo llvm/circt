@@ -74,3 +74,20 @@ module {
     return %a0, %a1 : i32, i32
   }
 }
+
+// -----
+
+module {
+  func @main(%a0 : i32, %a1 : i32) -> i32 {
+// CHECK:       calyx.group @bb0_0  {
+// CHECK-DAG:    calyx.assign %mult_reg_0_reg.in = %std_mult_pipe_0.out : i32
+// CHECK-DAG:    calyx.assign %mult_reg_0_reg.write_en = %std_mult_pipe_0.done : i1
+// CHECK-DAG:    calyx.assign %std_mult_pipe_0.left = %in0 : i32
+// CHECK-DAG:    calyx.assign %std_mult_pipe_0.right = %in1 : i32
+// CHECK-DAG:    calyx.assign %std_mult_pipe_0.go = %true : i1
+// CHECK-DAG:    calyx.group_done %mult_reg_0_reg.done : i1
+// CHECK-NEXT:  }
+    %0 = arith.muli %a0, %a1 : i32
+    return %0 : i32
+  }
+}

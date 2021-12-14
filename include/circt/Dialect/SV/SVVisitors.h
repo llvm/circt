@@ -29,6 +29,7 @@ public:
         .template Case<
             // Expressions
             ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
+            IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp,
             // Declarations.
             RegOp, WireOp, LocalParamOp, XMROp,
@@ -86,6 +87,9 @@ public:
   HANDLE(ArrayIndexInOutOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(VerbatimExprSEOp, Unhandled);
+  HANDLE(IndexedPartSelectInOutOp, Unhandled);
+  HANDLE(IndexedPartSelectOp, Unhandled);
+  HANDLE(StructFieldInOutOp, Unhandled);
   HANDLE(ConstantXOp, Unhandled);
   HANDLE(ConstantZOp, Unhandled);
 

@@ -27,6 +27,24 @@ firrtl.circuit "Foo" {
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
   }
 
+  // CHECK-LABEL: @InferInvalidValue
+  firrtl.module @InferInvalidValue(out %out: !firrtl.uint) {
+    // CHECK: %invalid_ui6 = firrtl.invalidvalue : !firrtl.uint<6>
+    %invalid_ui = firrtl.invalidvalue : !firrtl.uint
+    %c42_ui = firrtl.constant 42 : !firrtl.uint
+    firrtl.connect %out, %invalid_ui : !firrtl.uint, !firrtl.uint
+    firrtl.connect %out, %c42_ui : !firrtl.uint, !firrtl.uint
+
+    // Check that the invalid values are duplicated, and a corner case where the
+    // wire won't be updated with a width until after updating the invalid value
+    // above.
+    // CHECK: %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+    %w = firrtl.wire : !firrtl.uint
+    %c2_ui = firrtl.constant 2 : !firrtl.uint
+    firrtl.connect %w, %invalid_ui : !firrtl.uint, !firrtl.uint
+    firrtl.connect %w, %c2_ui : !firrtl.uint, !firrtl.uint
+  }
+
   // CHECK-LABEL: @InferOutput
   // CHECK-SAME: out %out: !firrtl.uint<2>
   firrtl.module @InferOutput(in %in: !firrtl.uint<2>, out %out: !firrtl.uint) {
@@ -507,17 +525,6 @@ firrtl.circuit "Foo" {
     firrtl.connect %2, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %3, %5 : !firrtl.uint, !firrtl.uint
     firrtl.connect %4, %x : !firrtl.uint, !firrtl.uint<6>
-  }
-
-  // Don't infer a width for `firrtl.invalidvalue`, and don't complain about the
-  // op not having a type inferred.
-  // CHECK-LABEL: @IgnoreInvalidValue
-  firrtl.module @IgnoreInvalidValue(out %out: !firrtl.uint) {
-    // CHECK: %invalid_ui = firrtl.invalidvalue : !firrtl.uint
-    %invalid_ui = firrtl.invalidvalue : !firrtl.uint
-    %c42_ui = firrtl.constant 42 : !firrtl.uint
-    firrtl.connect %out, %invalid_ui : !firrtl.uint, !firrtl.uint
-    firrtl.connect %out, %c42_ui : !firrtl.uint, !firrtl.uint
   }
 
   // Inter-module width inference for one-to-one module-instance correspondence.

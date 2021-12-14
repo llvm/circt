@@ -5,7 +5,7 @@
 from collections import OrderedDict
 
 import mlir.ir
-from circt.dialects import hw
+from circt.dialects import hw, sv
 import circt.support
 
 
@@ -60,15 +60,32 @@ class _Types:
     if not self.registered_aliases:
       return
 
-    type_scopes = [
-        op for op in mod.body.operations if isinstance(op, hw.TypeScopeOp)
-    ]
-    if len(type_scopes) == 0:
-      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
-        type_scopes.append(hw.TypeScopeOp.create(self.TYPE_SCOPE))
+    type_scopes = list()
+    for op in mod.body.operations:
+      if isinstance(op, hw.TypeScopeOp):
+        type_scopes.append(op)
+        continue
+      if isinstance(op, sv.IfDefOp):
+        if len(op.elseRegion.blocks) == 0:
+          continue
+        for ifdef_op in op.elseRegion.blocks[0]:
+          if isinstance(ifdef_op, hw.TypeScopeOp):
+            type_scopes.append(ifdef_op)
 
-    assert len(type_scopes) == 1
-    type_scope = type_scopes[0]
+    assert len(type_scopes) <= 1
+    if len(type_scopes) == 1:
+      type_scope = type_scopes[0]
+    else:
+      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
+        guard_name = "__PYCDE_TYPES__"
+        sv.VerbatimOp(mlir.ir.StringAttr.get("`ifndef " + guard_name), [],
+                      mlir.ir.ArrayAttr.get([]))
+        sv.VerbatimOp(mlir.ir.StringAttr.get("`define " + guard_name), [],
+                      mlir.ir.ArrayAttr.get([]))
+        type_scope = hw.TypeScopeOp.create(self.TYPE_SCOPE)
+        sv.VerbatimOp(mlir.ir.StringAttr.get("`endif // " + guard_name), [],
+                      mlir.ir.ArrayAttr.get([]))
+
     with mlir.ir.InsertionPoint(type_scope.body):
       for (name, type) in self.registered_aliases.items():
         declared_aliases = [
@@ -111,10 +128,10 @@ def PyCDEType(type):
       else:
         return self
 
-    def create(self, obj, name: str = None):
+    def __call__(self, value_obj, name: str = None):
       """Create a Value of this type from a python object."""
-      from .support import obj_to_value
-      v = obj_to_value(obj, self, self)
+      from .support import _obj_to_value
+      v = _obj_to_value(value_obj, self, self)
       if name is not None:
         v.name = name
       return v

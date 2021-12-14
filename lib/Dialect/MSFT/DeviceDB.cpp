@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/DeviceDB.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -92,14 +93,28 @@ LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
   return success();
 }
 
+/// Assign an operation to a physical region. Return false on failure.
+LogicalResult PlacementDB::addPlacement(PhysicalRegionRefAttr regionRef,
+                                        PlacedInstance inst) {
+  auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
+  auto physicalRegion =
+      topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
+  if (!physicalRegion)
+    return inst.op->emitOpError("referenced non-existant PhysicalRegion named ")
+           << regionRef.getPhysicalRegion().getValue();
+
+  regionPlacements.emplace_back(regionRef, inst);
+  return success();
+}
+
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
 size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
                                   mlir::Operation *op) {
   size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
-    StringRef attrName = attr.first;
-    llvm::TypeSwitch<Attribute>(attr.second)
+    StringRef attrName = attr.getName();
+    llvm::TypeSwitch<Attribute>(attr.getValue())
 
         // Handle switch instance.
         .Case([&](SwitchInstanceAttr instSwitch) {
@@ -120,6 +135,12 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
               }
               LogicalResult added = addPlacement(
                   loc, PlacedInstance{instPath, attrName.substr(4), op});
+              if (failed(added))
+                ++numFailed;
+            } else if (auto loc = caseAttr.getAttr()
+                                      .dyn_cast<PhysicalRegionRefAttr>()) {
+              LogicalResult added =
+                  addPlacement(loc, PlacedInstance{instPath, StringRef(), op});
               if (failed(added))
                 ++numFailed;
             }
@@ -165,7 +186,7 @@ PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
   // Simplest possible algorithm.
   PhysLocationAttr nearest = {};
   walkPlacements(
-      [&nearest, columnNum](PhysLocationAttr loc, PlacedInstance inst) {
+      [&nearest, nearestToY](PhysLocationAttr loc, PlacedInstance inst) {
         if (inst.op)
           return;
         if (!nearest) {
@@ -173,8 +194,8 @@ PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
           return;
         }
         int64_t curDist =
-            std::abs((int64_t)columnNum - (int64_t)nearest.getY());
-        int64_t replDist = std::abs((int64_t)columnNum - (int64_t)loc.getY());
+            std::abs((int64_t)nearestToY - (int64_t)nearest.getY());
+        int64_t replDist = std::abs((int64_t)nearestToY - (int64_t)loc.getY());
         if (replDist < curDist)
           nearest = loc;
       },
@@ -251,4 +272,12 @@ void PlacementDB::walkPlacements(
       }
     }
   }
+}
+
+/// Walk the region placement information.
+void PlacementDB::walkRegionPlacements(
+    function_ref<void(PhysicalRegionRefAttr, PlacedInstance)> callback) {
+  for (auto iter = regionPlacements.begin(), end = regionPlacements.end();
+       iter != end; ++iter)
+    callback(iter->first, iter->second);
 }

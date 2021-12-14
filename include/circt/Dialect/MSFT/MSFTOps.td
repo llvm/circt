@@ -20,7 +20,8 @@ def InstanceOp : MSFTOp<"instance", [
 
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnyType>:$inputs);
+                       Variadic<AnyType>:$inputs,
+                       OptionalAttr<ParamDeclArrayAttr>:$parameters);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -44,7 +45,7 @@ def InstanceOp : MSFTOp<"instance", [
 
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $sym_name $moduleName `(` $inputs `)` attr-dict
+    $sym_name $moduleName `(` $inputs `)` custom<ParameterList>($parameters) attr-dict
       `:` functional-type($inputs, results)
   }];
 }
@@ -65,7 +66,8 @@ def MSFTModuleOp : MSFTOp<"module",
   }];
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-      DictionaryAttr:$parameters);
+      DictionaryAttr:$parameters,
+      OptionalAttr<StrAttr>:$fileName);
   let results = (outs);
   let regions = (region OneOrNoBlocksRegion:$body);
 
@@ -125,6 +127,36 @@ def MSFTModuleOp : MSFTOp<"module",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
+def MSFTModuleExternOp : MSFTOp<"module.extern",
+      [Symbol, HasParent<"mlir::ModuleOp">]> {
+  let summary = "MSFT external Module";
+  let description = [{
+    Identical to `hw.module.extern`, and trivially lowers to that. This op
+    exists so that we can use `msft.instance` to refer to both `msft.module` and
+    `msft.module.extern`, rather than mixing `hw.instance` with `msft.instance`.
+  }];
+  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<StrAttr>:$verilogName);
+  let regions = (region SizedRegion<0>:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "const hw::ModulePortInfo &":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayAttr", "{}">:$parameters,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
+  ];
+
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
+
+  let extraClassDeclaration = [{
+    /// Decode information about the input and output ports on this module.
+    hw::ModulePortInfo getPorts();
+  }];
+}
 
 def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
                                 NoSideEffect, ReturnLike]> {
@@ -133,4 +165,16 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
   let arguments = (ins Variadic<AnyType>:$operands);
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+}
+
+def PhysicalRegionOp : MSFTOp<"physical_region",
+    [Symbol, HasParent<"mlir::ModuleOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    PhysicalBoundsArray:$bounds
+  );
+
+  let assemblyFormat = [{
+    $sym_name `,` $bounds attr-dict
+  }];
 }

@@ -6,6 +6,7 @@ add_circt_library(CIRCTStandardToHandshake
 
   LINK_LIBS PUBLIC
   CIRCTHandshake
+  CIRCTHandshakeTransforms
   MLIRIR
   MLIRPass
   MLIRArithmetic

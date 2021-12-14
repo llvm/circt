@@ -23,7 +23,7 @@
   },
   {
     "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
-    "source": "~Top|Child>M",
+    "source": "~Top|Child>always",
     "taps":["~Top|MemTap_2>_0", "~Top|MemTap_2>_1"]
   }
 ]

@@ -39,8 +39,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
     text = split.second;
     if (option == "") {
       // Empty options are fine.
-    } else if (option == "alwaysFF") {
-      useAlwaysFF = true;
     } else if (option == "noAlwaysComb") {
       noAlwaysComb = true;
     } else if (option == "exprInEventControl") {
@@ -57,18 +55,25 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
       }
+    } else if (option.startswith("maximumNumberOfTokensPerExpression=")) {
+      option = option.drop_front(strlen("maximumNumberOfTokensPerExpression="));
+      if (option.getAsInteger(10, maximumNumberOfTokensPerExpression)) {
+        errorHandler("expected integer source width");
+        maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
     }
   }
+  if (maximumNumberOfTokensPerExpression < emittedLineLength)
+    errorHandler("maximumNumberOfTokensPerExpression must be equal or larger "
+                 "than emittedLineLength");
 }
 
 std::string LoweringOptions::toString() const {
   std::string options = "";
   // All options should add a trailing comma to simplify the code.
-  if (useAlwaysFF)
-    options += "alwaysFF,";
   if (noAlwaysComb)
     options += "noAlwaysComb,";
   if (allowExprInEventControl)
@@ -82,6 +87,9 @@ std::string LoweringOptions::toString() const {
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
+  if (maximumNumberOfTokensPerExpression != DEFAULT_TOKEN_NUMBER)
+    options += "maximumNumberOfTokensPerExpression=" +
+               std::to_string(maximumNumberOfTokensPerExpression) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -133,7 +141,8 @@ struct LoweringCLOptions {
       llvm::cl::desc(
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
-          "disallowLocalVariables, verifLabels, emittedLineLength=<n>"),
+          "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
+          "maximumNumberOfTokensPerExpression=<n>"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

@@ -211,6 +211,8 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(mlir::arith::AddIOp, std::vector<Any> &,
                         std::vector<Any> &);
+  LogicalResult execute(mlir::arith::XOrIOp, std::vector<Any> &,
+                        std::vector<Any> &);
   LogicalResult execute(mlir::arith::AddFOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(mlir::arith::CmpIOp, std::vector<Any> &,
@@ -287,6 +289,13 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::ConstantIntOp op,
   return success();
 }
 
+LogicalResult HandshakeExecuter::execute(mlir::arith::XOrIOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  out[0] = any_cast<APInt>(in[0]) ^ any_cast<APInt>(in[1]);
+  return success();
+}
+
 LogicalResult HandshakeExecuter::execute(mlir::arith::AddIOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
@@ -353,7 +362,7 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::DivSIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   if (!any_cast<APInt>(in[1]).getZExtValue())
-    return op.emitError() << "Division By Zero!";
+    return op.emitOpError() << "Division By Zero!";
 
   out[0] = any_cast<APInt>(in[0]).sdiv(any_cast<APInt>(in[1]));
   return success();
@@ -363,7 +372,7 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::DivUIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   if (!any_cast<APInt>(in[1]).getZExtValue())
-    return op.emitError() << "Division By Zero!";
+    return op.emitOpError() << "Division By Zero!";
   out[0] = any_cast<APInt>(in[0]).udiv(any_cast<APInt>(in[1]));
   return success();
 }
@@ -375,10 +384,22 @@ LogicalResult HandshakeExecuter::execute(mlir::arith::DivFOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::arith::IndexCastOp,
+LogicalResult HandshakeExecuter::execute(mlir::arith::IndexCastOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
-  out[0] = in[0];
+  Type outType = op.getOut().getType();
+  APInt inValue = any_cast<APInt>(in[0]);
+  APInt outValue;
+  if (outType.isIndex())
+    outValue =
+        APInt(IndexType::kInternalStorageBitWidth, inValue.getZExtValue());
+  else if (outType.isIntOrFloat())
+    outValue = APInt(outType.getIntOrFloatBitWidth(), inValue.getZExtValue());
+  else {
+    return op.emitOpError() << "unhandled output type";
+  }
+
+  out[0] = outValue;
   return success();
 }
 
@@ -408,14 +429,14 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::LoadOp op,
   }
   unsigned ptr = any_cast<unsigned>(in[0]);
   if (ptr >= store.size())
-    return op.emitError() << "Unknown memory identified by pointer '" << ptr
-                          << "'";
+    return op.emitOpError()
+           << "Unknown memory identified by pointer '" << ptr << "'";
 
   auto &ref = store[ptr];
   if (address >= ref.size())
-    return op.emitError() << "Out-of-bounds access to memory '" << ptr
-                          << "'. Memory has " << ref.size()
-                          << " elements but requested element " << address;
+    return op.emitOpError()
+           << "Out-of-bounds access to memory '" << ptr << "'. Memory has "
+           << ref.size() << " elements but requested element " << address;
 
   Any result = ref[address];
   out[0] = result;
@@ -437,13 +458,13 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::StoreOp op,
   }
   unsigned ptr = any_cast<unsigned>(in[1]);
   if (ptr >= store.size())
-    return op.emitError() << "Unknown memory identified by pointer '" << ptr
-                          << "'";
+    return op.emitOpError()
+           << "Unknown memory identified by pointer '" << ptr << "'";
   auto &ref = store[ptr];
   if (address >= ref.size())
-    return op.emitError() << "Out-of-bounds access to memory '" << ptr
-                          << "'. Memory has " << ref.size()
-                          << " elements but requested element " << address;
+    return op.emitOpError()
+           << "Out-of-bounds access to memory '" << ptr << "'. Memory has "
+           << ref.size() << " elements but requested element " << address;
   ref[address] = in[0];
 
   double storeTime = storeTimes[ptr];
@@ -561,7 +582,7 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
     }
     ++instIter;
   } else
-    return op->emitError() << "Callable was not a function";
+    return op->emitOpError() << "Callable was not a function";
 
   return success();
 }
@@ -625,11 +646,11 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
 
       return success();
     } else {
-      return instanceOp.emitError()
+      return instanceOp.emitOpError()
              << "Function '" << funcSym << "' not found in module";
     }
   } else
-    return instanceOp.emitError()
+    return instanceOp.emitOpError()
            << "Missing 'module' attribute for InstanceOp";
 
   llvm_unreachable("Fatal error reached before this point");
@@ -687,7 +708,7 @@ HandshakeExecuter::HandshakeExecuter(
               return execute(op, inValues, outValues);
             })
             .Default([](auto op) {
-              return op->emitError() << "Unknown operation!";
+              return op->emitOpError() << "Unknown operation!";
             });
 
     if (res.failed()) {
@@ -759,6 +780,16 @@ HandshakeExecuter::HandshakeExecuter(
       if (!handshakeOp.tryExecute(valueMap, memoryMap, timeMap, store,
                                   scheduleList))
         readyList.push_back(&op);
+      else {
+        LLVM_DEBUG({
+          dbgs() << "EXECUTED: " << op << "\n";
+          for (auto out : op.getResults()) {
+            auto valueIt = valueMap.find(out);
+            if (valueIt != valueMap.end())
+              debugArg("OUT", out, valueMap[out], time);
+          }
+        });
+      }
       for (mlir::Value out : scheduleList)
         scheduleUses(readyList, valueMap, out);
       continue;
@@ -800,7 +831,7 @@ HandshakeExecuter::HandshakeExecuter(
                   mlir::arith::DivSIOp, mlir::arith::DivUIOp,
                   mlir::arith::DivFOp, mlir::arith::IndexCastOp,
                   mlir::arith::ExtSIOp, mlir::arith::ExtUIOp,
-                  handshake::InstanceOp>([&](auto op) {
+                  mlir::arith::XOrIOp, handshake::InstanceOp>([&](auto op) {
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);
             })
@@ -808,8 +839,10 @@ HandshakeExecuter::HandshakeExecuter(
               strat = ExecuteStrategy::Return;
               return execute(op, inValues, outValues);
             })
-            .Default(
-                [](auto op) { return op->emitError() << "Unknown operation"; });
+            .Default([](auto op) {
+              return op->emitOpError() << "Unknown operation";
+            });
+    LLVM_DEBUG(dbgs() << "EXECUTED: " << op << "\n");
 
     if (res.failed()) {
       successFlag = false;

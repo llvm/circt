@@ -115,11 +115,11 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   ArrayRef<NamedAttribute>::iterator it;
   if (sorted) {
     it = llvm::lower_bound(attrs, key);
-    if (it != attrs.end() && it->first != key)
+    if (it != attrs.end() && it->getName() != key)
       it = attrs.end();
   } else {
     it = llvm::find_if(
-        attrs, [key](NamedAttribute attr) { return attr.first == key; });
+        attrs, [key](NamedAttribute attr) { return attr.getName() == key; });
   }
 
   // Fast path in case there are no annotations in the dictionary and we are not
@@ -130,7 +130,7 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   // Fast path in case there already is an entry in the dictionary, it matches
   // the set, and, in the case we're supposed to remove empty sets, we're not
   // leaving an empty entry in the dictionary.
-  if (it != attrs.end() && it->second == annoSet.getArrayAttr() &&
+  if (it != attrs.end() && it->getValue() == annoSet.getArrayAttr() &&
       !annoSet.empty())
     return originalDict;
 
@@ -140,7 +140,7 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   newAttrs.append(attrs.begin(), it);
   if (!annoSet.empty())
     newAttrs.push_back(
-        {Identifier::get(key, annoSet.getContext()), annoSet.getArrayAttr()});
+        {StringAttr::get(key, annoSet.getContext()), annoSet.getArrayAttr()});
   if (it != attrs.end())
     newAttrs.append(it + 1, attrs.end());
   return sorted ? DictionaryAttr::getWithSorted(annoSet.getContext(), newAttrs)
@@ -174,41 +174,28 @@ AnnotationSet::applyToPortDictionaryAttr(ArrayRef<NamedAttribute> attrs) const {
                                    false, {});
 }
 
-DictionaryAttr AnnotationSet::getAnnotationImpl(StringAttr className) const {
-  for (auto annotation : annotations) {
-    DictionaryAttr annotDict;
-    if (auto dict = annotation.dyn_cast<DictionaryAttr>())
-      annotDict = dict;
-    else
-      annotDict = annotation.cast<SubAnnotationAttr>().getAnnotations();
-    if (auto annotClass = annotDict.get("class"))
-      if (annotClass == className)
-        return annotDict;
+Annotation AnnotationSet::getAnnotationImpl(StringAttr className) const {
+  for (auto annotation : *this) {
+    if (annotation.getClassAttr() == className)
+      return annotation;
   }
   return {};
 }
 
-DictionaryAttr AnnotationSet::getAnnotationImpl(StringRef className) const {
-  for (auto annotation : annotations) {
-    DictionaryAttr annotDict;
-    if (auto dict = annotation.dyn_cast<DictionaryAttr>())
-      annotDict = dict;
-    else
-      annotDict = annotation.cast<SubAnnotationAttr>().getAnnotations();
-    if (auto annotClass = annotDict.get("class"))
-      if (auto annotClassString = annotClass.dyn_cast<StringAttr>())
-        if (annotClassString.getValue() == className)
-          return annotDict;
+Annotation AnnotationSet::getAnnotationImpl(StringRef className) const {
+  for (auto annotation : *this) {
+    if (annotation.getClass() == className)
+      return annotation;
   }
   return {};
 }
 
 bool AnnotationSet::hasAnnotationImpl(StringAttr className) const {
-  return getAnnotationImpl(className) != DictionaryAttr();
+  return getAnnotationImpl(className) != Annotation();
 }
 
 bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
-  return getAnnotationImpl(className) != DictionaryAttr();
+  return getAnnotationImpl(className) != Annotation();
 }
 
 bool AnnotationSet::hasDontTouch() const {
@@ -226,7 +213,7 @@ bool AnnotationSet::addDontTouch() {
   if (hasDontTouch())
     return false;
   addAnnotations(DictionaryAttr::get(
-      getContext(), {{Identifier::get("class", getContext()),
+      getContext(), {{StringAttr::get("class", getContext()),
                       StringAttr::get(getContext(), dontTouchAnnoClass)}}));
   return true;
 }
@@ -336,19 +323,10 @@ bool AnnotationSet::removeAnnotations(
   if (!attr)
     return false;
 
-  // Return an Annotation built from an attribute which may be either a
-  // DictionaryAttr or a SubAnnotationAttr.
-  auto buildAnnotation = [](const Attribute *a) -> Annotation {
-    if (auto b = a->dyn_cast<DictionaryAttr>())
-      return Annotation(b);
-    else
-      return Annotation(a->cast<SubAnnotationAttr>().getAnnotations());
-  };
-
   // Search for the first match.
   ArrayRef<Attribute> annos = getArrayAttr().getValue();
   auto it = annos.begin();
-  while (it != annos.end() && !predicate(buildAnnotation(it)))
+  while (it != annos.end() && !predicate(Annotation(*it)))
     ++it;
 
   // Fast path for sets where the predicate never matched.
@@ -361,7 +339,7 @@ bool AnnotationSet::removeAnnotations(
   filteredAnnos.append(annos.begin(), it);
   ++it;
   while (it != annos.end()) {
-    if (!predicate(buildAnnotation(it)))
+    if (!predicate(Annotation(*it)))
       filteredAnnos.push_back(*it);
     ++it;
   }
@@ -423,9 +401,21 @@ bool AnnotationSet::removePortAnnotations(
 // Annotation
 //===----------------------------------------------------------------------===//
 
+DictionaryAttr Annotation::getDict() const {
+  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
+    return subAnno.getAnnotations();
+  return attr.cast<DictionaryAttr>();
+}
+
+unsigned Annotation::getFieldID() const {
+  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
+    return subAnno.getFieldID();
+  return 0;
+}
+
 /// Return the 'class' that this annotation is representing.
 StringAttr Annotation::getClassAttr() const {
-  return ((DictionaryAttr)attrDict).getAs<StringAttr>("class");
+  return getDict().getAs<StringAttr>("class");
 }
 
 /// Return the 'class' that this annotation is representing.
@@ -440,11 +430,7 @@ StringRef Annotation::getClass() const {
 //===----------------------------------------------------------------------===//
 
 Annotation AnnotationSetIterator::operator*() const {
-  auto attr = this->getBase().getArray()[this->getIndex()];
-  if (auto dictAttr = attr.dyn_cast<DictionaryAttr>())
-    return Annotation(dictAttr);
-  else
-    return Annotation(attr.cast<SubAnnotationAttr>().getAnnotations());
+  return Annotation(this->getBase().getArray()[this->getIndex()]);
 }
 
 //===----------------------------------------------------------------------===//

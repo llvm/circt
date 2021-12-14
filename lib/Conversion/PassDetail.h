@@ -15,6 +15,10 @@
 namespace mlir {
 class StandardOpsDialect;
 
+namespace arith {
+class ArithmeticDialect;
+} // namespace arith
+
 namespace scf {
 class SCFDialect;
 } // namespace scf
@@ -43,6 +47,10 @@ namespace handshake {
 class HandshakeDialect;
 class FuncOp;
 } // namespace handshake
+
+namespace moore {
+class MooreDialect;
+} // namespace moore
 
 namespace llhd {
 class LLHDDialect;

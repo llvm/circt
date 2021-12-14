@@ -69,8 +69,8 @@ MlirType hwStructTypeGet(MlirContext ctx, intptr_t numElements,
   SmallVector<StructType::FieldInfo> fieldInfos;
   fieldInfos.reserve(numElements);
   for (intptr_t i = 0; i < numElements; ++i) {
-    fieldInfos.push_back(StructType::FieldInfo{unwrap(elements[i].name),
-                                               unwrap(elements[i].type)});
+    fieldInfos.push_back(StructType::FieldInfo{
+        unwrap(elements[i].name).cast<StringAttr>(), unwrap(elements[i].type)});
   }
   return wrap(StructType::get(unwrap(ctx), fieldInfos));
 }

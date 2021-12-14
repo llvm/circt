@@ -261,14 +261,14 @@ bool isEqual(mlir::DictionaryAttr d1, mlir::DictionaryAttr d2) {
     return false;
 
   for (auto param : d1) {
-    auto value = d2.get(param.first);
-    if (!value || (value.getType() != param.second.getType()))
+    auto value = d2.get(param.getName());
+    if (!value || (value.getType() != param.getValue().getType()))
       return false;
   }
 
   for (auto param : d2) {
-    auto value = d1.get(param.first);
-    if (!value || (value.getType() != param.second.getType()))
+    auto value = d1.get(param.getName());
+    if (!value || (value.getType() != param.getValue().getType()))
       return false;
   }
 

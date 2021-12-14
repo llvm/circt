@@ -57,5 +57,15 @@ def UnionType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
+/// A flat symbol reference or a reference to a name within a module.
+def NameRefAttr : Attr<
+  CPred<"$_self.isa<::mlir::FlatSymbolRefAttr, ::hw::InnerRefAttr>()">,
+  "name reference attribute">;
+
+// Like a FlatSymbolRefArrayAttr, but can also refer to names inside modules.
+def NameRefArrayAttr : TypedArrayAttrBase<NameRefAttr,
+  "name reference array attribute"> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
 
 #endif // CIRCT_DIALECT_HW_HWTYPES

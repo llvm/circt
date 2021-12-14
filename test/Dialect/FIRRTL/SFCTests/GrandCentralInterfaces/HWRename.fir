@@ -1,5 +1,4 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/HWRename.anno.json %s | FileCheck %s --check-prefixes CHECK
-; XFAIL: true
 
 circuit Top:
   module Companion :
@@ -36,7 +35,7 @@ circuit Top:
     ; CHECK:      endmodule
 
     ; CHECK:      module MyView_mapping();
-    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = [[dutName]].[[wireName]]
+    ; CHECK-NEXT:   assign MyView.[[elementName:.+]] = Top.[[dutName]].[[wireName]]
     ; CHECK-NEXT: endmodule
 
     ; CHECK: interface MyInterface

@@ -1,5 +1,5 @@
 // RUN: circt-opt --export-verilog %s | FileCheck %s
-// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW
+// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
 
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.
@@ -8,31 +8,36 @@
 // DISALLOW-LABEL: module side_effect_expr
 hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 
-  // DISALLOW: reg [[SE_REG:[_A-Za-z0-9]+]];
+  // CHECK: `ifdef FOO_MACRO
+  // DISALLOW: `ifdef FOO_MACRO
+  sv.ifdef "FOO_MACRO" {
+    // DISALLOW: {{^    }}reg [[SE_REG:[_A-Za-z0-9]+]];
+    // DISALLOW: {{^    }}wire [[COND:[_A-Za-z0-9]+]] = INLINE_OK;
 
-  // DISALLOW: wire [[COND:[_A-Za-z0-9]+]] = INLINE_OK;
+    // CHECK:    always @(posedge clock)
+    // DISALLOW: always @(posedge clock)
+    sv.always posedge %clock  {
+      %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
 
-  // CHECK:    always @(posedge clock)
-  // DISALLOW: always @(posedge clock)
-  sv.always posedge %clock  {
-    %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
+      // This shouldn't be pushed into a reg.
+      // CHECK: if (INLINE_OK)
+      // DISALLOW: if ([[COND]])
+      sv.if %0  {
+        sv.fatal 1
+      }
 
-    // This shouldn't be pushed into a reg.
-    // CHECK: if (INLINE_OK)
-    // DISALLOW: if ([[COND]])
-    sv.if %0  {
-      sv.fatal 1
-    }
-
-    // This should go through a reg when in "disallow" mode.
-    // CHECK: if (SIDE_EFFECT)
-    // DISALLOW: [[SE_REG]] = SIDE_EFFECT;
-    // DISALLOW: if ([[SE_REG]])
-    %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
-    sv.if %1  {
-      sv.fatal 1
+      // This should go through a reg when in "disallow" mode.
+      // CHECK: if (SIDE_EFFECT)
+      // DISALLOW: [[SE_REG]] = SIDE_EFFECT;
+      // DISALLOW: if ([[SE_REG]])
+      %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
+      sv.if %1  {
+        sv.fatal 1
+      }
     }
   }
+  // CHECK: `endif
+  // DISALLOW: `endif
 
   // Top level things should go unmodified.
   %2 = sv.verbatim.expr "NO_SE" : () -> i1
@@ -116,3 +121,36 @@ hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo
   }
   hw.output %2 : i5
 }
+
+// CHECK-LABEL: module EmittedDespiteDisallowed
+// DISALLOW-LABEL: module EmittedDespiteDisallowed
+// https://github.com/llvm/circt/issues/2216
+hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
+  %tick_value_2 = sv.reg  : !hw.inout<i1>
+  %counter_value = sv.reg  : !hw.inout<i1>
+
+  // Temporary reg gets introduced.
+  // DISALLOW: reg [1:0] _T;
+
+  // DISALLOW: wire _T_0 = _T[0];
+  // DISALLOW: wire _T_1 = _T[1];
+  // DISALLOW: initial begin
+  sv.initial {
+    // CHECK: automatic logic [1:0] _magic = magic;
+    // DISALLOW: _T = magic;
+    %RANDOM = sv.verbatim.expr.se "magic" : () -> i2 {symbols = []}
+
+    // CHECK: tick_value_2 = _magic[0];
+    // DISALLOW-NEXT: tick_value_2 = _T_0;
+    %1 = comb.extract %RANDOM from 0 : (i2) -> i1
+    sv.bpassign %tick_value_2, %1 : i1
+
+    // CHECK: counter_value = _magic[1];
+    // DISALLOW-NEXT: counter_value = _T_1;
+    %2 = comb.extract %RANDOM from 1 : (i2) -> i1
+    sv.bpassign %counter_value, %2 : i1
+  }
+  hw.output
+}
+
+

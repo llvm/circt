@@ -19,7 +19,7 @@ hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef "SOMEMACRO" {
-    // CHECK: localparam local_0 = wire_1;
+    // CHECK: localparam local_2 = wire_1;
     %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
 
     // CHECK: assign myWire = wire_1;
@@ -144,7 +144,7 @@ hw.module @verif_renames(%cond: i1) {
 }
 
 // CHECK-LABEL: module verbatim_renames(
-hw.module @verbatim_renames(%a: i1 {hw.exportPort = @asym }) {
+hw.module @verbatim_renames(%a: i1 {hw.exportPort = @asym}) {
   // CHECK: wire wire_0;
 
   // CHECK: // VERB Module : reg_1 inout_0
@@ -156,7 +156,7 @@ hw.module @verbatim_renames(%a: i1 {hw.exportPort = @asym }) {
   // CHECK: inout_0 module_1 (
   %0 = hw.instance "module" sym @struct @inout (inout: %a: i1) -> (output: i1)
 
-  // CHECK: // VERB Instance : module_1 wire_0
+  // CHECK: // VERB Instance : module_1 wire_0 a
   sv.verbatim "// VERB Instance : {{0}} {{1}} {{2}}" {symbols = [#hw.innerNameRef<@verbatim_renames::@struct>, #hw.innerNameRef<@verbatim_renames::@wire1>, #hw.innerNameRef<@verbatim_renames::@asym>]}
 }
 

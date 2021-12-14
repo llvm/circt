@@ -15,16 +15,26 @@
 
 include "mlir/Pass/PassBase.td"
 
-def HIRToHW : Pass<"hir-to-hw", "mlir::ModuleOp"> {
-  let summary = "Convert HIR to HW + Comb + SV dialect";
-  let description = [{
-    Convert an HIR module to HW, Comb and SV dialect.
-  }];
 
-  let constructor = "circt::createHIRToHWPass()";
-  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "sv::SVDialect"];
+//===----------------------------------------------------------------------===//
+// AffineToStaticLogic
+//===----------------------------------------------------------------------===//
+
+def AffineToStaticLogic : FunctionPass<"convert-affine-to-staticlogic"> {
+  let summary = "Convert Affine dialect to StaticLogic pipelines";
+  let description = [{
+    This pass analyzes Affine loops and control flow, creates a Scheduling
+    problem using the Calyx operator library, solves the problem, and lowers
+    the loops to a StaticLogic pipeline.
+  }];
+  let constructor = "circt::createAffineToStaticLogic()";
+  let dependentDialects = [
+    "circt::staticlogic::StaticLogicDialect",
+    "mlir::arith::ArithmeticDialect"
+  ];
 }
+
+//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
@@ -57,6 +67,20 @@ def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
     Option<"directoryName", "dir-name", "std::string",
             "", "Directory to emit into">
    ];
+}
+
+//===----------------------------------------------------------------------===//
+// HIRToHW
+//===----------------------------------------------------------------------===//
+def HIRToHW : Pass<"hir-to-hw", "mlir::ModuleOp"> {
+  let summary = "Convert HIR to HW + Comb + SV dialect";
+  let description = [{
+    Convert an HIR module to HW, Comb and SV dialect.
+  }];
+
+  let constructor = "circt::createHIRToHWPass()";
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
+                           "sv::SVDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -103,7 +127,10 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
-    "Emit warnings on unprocessed annotations during lower-to-hw pass">
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">,
+    Option<"nonConstAsyncResetValueIsError",
+           "error-on-non-const-async-reset-values", "bool", "false",
+    "Emit errors instead of warnings on non-constant async reset values">
   ];
 }
 
@@ -116,6 +143,20 @@ def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
   let description = "Lower Handshake to FIRRTL.";
   let constructor = "circt::createHandshakeToFIRRTLPass()";
   let dependentDialects = ["firrtl::FIRRTLDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// Moore to Comb/HW/LLHD
+//===----------------------------------------------------------------------===//
+
+def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
+  let summary = "Convert Moore to Core";
+  let description = [{
+    This pass translates Moore to the core dialects (Comb/HW/LLHD).
+  }];
+  let constructor = "circt::createConvertMooreToCorePass()";
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
+                           "llhd::LLHDDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -147,20 +188,10 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def HandshakeAnalysis : Pass<"handshake-analyze", "mlir::ModuleOp"> {
-  let summary = "Print resource (operation) statistics";
-  let constructor = "circt::createHandshakeAnalysisPass()";
-}
-
 def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createHandshakeDataflowPass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
-}
-
-def HandshakeCanonicalize : Pass<"handshake-canonicalize", "handshake::FuncOp"> {
-  let summary = "Canonicalize Handshake IR";
-  let constructor = "circt::createHandshakeCanonicalizePass()";
 }
 
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
@@ -175,7 +206,9 @@ def HandshakeInsertBuffer
   let options = [
     ListOption<"strategies", "strategies", "std::string",
                "List of strategies to apply. Possible values are: cycles, all (default)",
-               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
+               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
+    Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
+           "Number of slots in each buffer">,
   ];
 }
 

@@ -7,6 +7,7 @@
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -21,17 +22,6 @@ using namespace circt;
 using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() { circt::msft::registerMSFTPasses(); }
-
-MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
-                                    MlirStringCallback callback,
-                                    void *userData) {
-  Operation *op = unwrap(module);
-  hw::HWModuleOp hwmod = dyn_cast<hw::HWModuleOp>(op);
-  if (!hwmod)
-    return wrap(op->emitOpError("Export TCL can only be run on HWModules"));
-  mlir::detail::CallbackOstream stream(callback, userData);
-  return wrap(exportQuartusTcl(hwmod, stream));
-}
 
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
@@ -77,15 +67,20 @@ size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
 MlirLogicalResult
 circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
                                  CirctMSFTPlacedInstance cInst) {
-  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  Attribute attr = unwrap(cLoc);
   RootedInstancePathAttr path =
       unwrap(cInst.path).cast<RootedInstancePathAttr>();
   StringAttr subpath = StringAttr::get(
-      loc.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
+      attr.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
   auto inst =
       PlacementDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
 
-  return wrap(unwrap(self)->addPlacement(loc, inst));
+  if (auto loc = attr.dyn_cast<PhysLocationAttr>())
+    return wrap(unwrap(self)->addPlacement(loc, inst));
+  if (auto regionRef = attr.dyn_cast<PhysicalRegionRefAttr>())
+    return wrap(unwrap(self)->addPlacement(regionRef, inst));
+
+  return wrap(failure());
 }
 bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
                                           MlirAttribute cLoc,
@@ -225,8 +220,31 @@ void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
   }
 }
 
+bool circtMSFTAttributeIsAPhysicalBoundsAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<PhysicalBoundsAttr>();
+}
+
+MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext cContext,
+                                             uint64_t xMin, uint64_t xMax,
+                                             uint64_t yMin, uint64_t yMax) {
+  auto *context = unwrap(cContext);
+  return wrap(PhysicalBoundsAttr::get(context, xMin, xMax, yMin, yMax));
+}
+
+bool circtMSFTAttributeIsAPhysicalRegionRefAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<PhysicalRegionRefAttr>();
+}
+
+MlirAttribute circtMSFTPhysicalRegionRefAttrGet(MlirContext cContext,
+                                                MlirStringRef cName) {
+  auto *context = unwrap(cContext);
+  auto name = unwrap(cName);
+  auto ref = FlatSymbolRefAttr::get(context, name);
+  return wrap(PhysicalRegionRefAttr::get(context, ref));
+}
+
 MlirOperation circtMSFTGetInstance(MlirOperation cRoot, MlirAttribute cPath) {
-  auto root = cast<circt::hw::HWModuleOp>(unwrap(cRoot));
+  auto root = cast<circt::msft::MSFTModuleOp>(unwrap(cRoot));
   auto path = unwrap(cPath).cast<SymbolRefAttr>();
   return wrap(getInstance(root, path));
 }

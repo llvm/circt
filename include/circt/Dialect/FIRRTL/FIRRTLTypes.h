@@ -192,6 +192,12 @@ public:
 
   /// Return true if this type has a known width.
   bool hasWidth() { return getWidth().hasValue(); }
+
+  /// Return a new type with the width changed to a different value.
+  ConcreteType changeWidth(int32_t width) {
+    return ConcreteType::get(static_cast<ConcreteType *>(this)->getContext(),
+                             width);
+  }
 };
 
 class SIntType;
@@ -391,6 +397,12 @@ public:
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
 llvm::Optional<int32_t> getBitWidth(FIRRTLType type);
+
+// Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
+ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
+
+// Print a FIRRTL type without a leading `!firrtl.` dialect tag.
+void printNestedType(Type type, AsmPrinter &os);
 
 } // namespace firrtl
 } // namespace circt

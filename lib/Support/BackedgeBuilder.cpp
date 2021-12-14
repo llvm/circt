@@ -20,9 +20,9 @@ Backedge::Backedge(mlir::Operation *op) : value(op->getResult(0)) {}
 
 void Backedge::setValue(mlir::Value newValue) {
   assert(value.getType() == newValue.getType());
-  for (auto &use : value.getUses())
-    use.set(newValue);
-  value = newValue;
+  assert(!set && "backedge already set to a value!");
+  value.replaceAllUsesWith(newValue);
+  set = true;
 }
 
 BackedgeBuilder::~BackedgeBuilder() {

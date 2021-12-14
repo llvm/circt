@@ -167,7 +167,8 @@ llvm::Optional<int64_t> calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
 int64_t extractDelayFromDict(mlir::DictionaryAttr dict) {
   return dict.getNamed("hir.delay")
       .getValue()
-      .second.dyn_cast<IntegerAttr>()
+      .getValue()
+      .dyn_cast<IntegerAttr>()
       .getInt();
 }
 
@@ -177,14 +178,15 @@ extractMemrefPortsFromDict(mlir::DictionaryAttr dict) {
     return llvm::None;
   return dict.getNamed("hir.memref.ports")
       .getValue()
-      .second.dyn_cast<ArrayAttr>();
+      .getValue()
+      .dyn_cast<ArrayAttr>();
 }
 
 llvm::Optional<int64_t> getRdLatency(Attribute port) {
   auto portDict = port.dyn_cast<DictionaryAttr>();
   auto rdLatencyAttr = portDict.getNamed("rd_latency");
   if (rdLatencyAttr)
-    return rdLatencyAttr.getValue().second.dyn_cast<IntegerAttr>().getInt();
+    return rdLatencyAttr.getValue().getValue().dyn_cast<IntegerAttr>().getInt();
   return llvm::None;
 }
 
@@ -192,7 +194,7 @@ llvm::Optional<int64_t> getWrLatency(Attribute port) {
   auto portDict = port.dyn_cast<DictionaryAttr>();
   auto wrLatencyAttr = portDict.getNamed("wr_latency");
   if (wrLatencyAttr)
-    return wrLatencyAttr.getValue().second.dyn_cast<IntegerAttr>().getInt();
+    return wrLatencyAttr.getValue().getValue().dyn_cast<IntegerAttr>().getInt();
   return llvm::None;
 }
 
@@ -213,8 +215,10 @@ bool isRead(Attribute port) {
 }
 
 StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {
-  auto ports =
-      dict.getNamed("hir.bus.ports").getValue().second.dyn_cast<ArrayAttr>();
+  auto ports = dict.getNamed("hir.bus.ports")
+                   .getValue()
+                   .getValue()
+                   .dyn_cast<ArrayAttr>();
   // Bus port should be either send or recv.
   assert(ports.size() == 1);
   return ports[0].dyn_cast<StringAttr>().getValue();

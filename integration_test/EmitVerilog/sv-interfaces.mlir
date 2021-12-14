@@ -1,5 +1,5 @@
-// REQUIRES: hw-sim
-// RUN: circt-opt %s -export-verilog -verify-diagnostics > %t1.sv
+// REQUIRES: verilator
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
 // RUN: verilator --lint-only --top-module top %t1.sv
 // RUN: circt-rtl-sim.py %t1.sv --cycles 2 2>&1 | FileCheck %s
 
@@ -23,9 +23,9 @@ module {
     %ifaceInPort = sv.modport.get %iface @data_in :
       !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
 
-    hw.instance "rcvr1" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    hw.instance "rcvr1" @Rcvr(m: %ifaceInPort: !sv.modport<@data_vr::@data_in>) -> ()
 
-    hw.instance "rcvr2" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    hw.instance "rcvr2" @Rcvr(m: %ifaceInPort: !sv.modport<@data_vr::@data_in>) -> ()
 
     %c1 = hw.constant 1 : i1
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1

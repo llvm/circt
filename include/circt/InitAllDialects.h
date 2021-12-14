@@ -17,6 +17,7 @@
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
@@ -24,6 +25,7 @@
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
@@ -37,6 +39,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
   // clang-format off
   registry.insert<
     calyx::CalyxDialect,
+    chirrtl::CHIRRTLDialect,
     comb::CombDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
@@ -45,6 +48,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     hir::HIRDialect,
     llhd::LLHDDialect,
     msft::MSFTDialect,
+    moore::MooreDialect,
     hw::HWDialect,
     mlir::scf::SCFDialect,
     seq::SeqDialect,

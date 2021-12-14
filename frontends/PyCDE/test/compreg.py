@@ -1,10 +1,17 @@
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: rm -rf %t
+# RUN: %PYTHON% %s %t
+# RUN: FileCheck %s --input-file %t/CompReg.sv
+# RUN: FileCheck %s --input-file %t/CompReg.tcl --check-prefix TCL
 
 import pycde
 from pycde import types, module, Input, Output
 
-from circt.dialects import seq
+from pycde.attributes import placement
+from pycde.devicedb import PrimitiveType
+from pycde.dialects import seq
 from pycde.module import generator
+
+import sys
 
 
 @module
@@ -15,16 +22,27 @@ class CompReg:
 
   @generator
   def build(ports):
-    compreg = seq.CompRegOp.create(types.i8, clk=ports.clk, input=ports.input)
-    ports.output = compreg.data
+    compreg = seq.CompRegOp(types.i8,
+                            clk=ports.clk,
+                            input=ports.input,
+                            name="reg",
+                            inner_sym="reg")
+    ports.output = compreg
 
 
-mod = pycde.System([CompReg])
+appid = pycde.AppIDIndex()
+loc = placement([], PrimitiveType.FF, 0, 0, 0)
+appid.lookup(pycde.AppID("reg")).add_attribute(loc)
+
+mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])
 mod.print()
 mod.generate()
+mod.get_instance(CompReg).walk(appid.apply_attributes_visitor)
 mod.print()
-mod.print_verilog()
+mod.emit_outputs()
 
-# CHECK: reg [7:0] [[NAME:.+]];
-# CHECK: always @(posedge clk)
+# CHECK: reg [7:0] [[NAME:reg_.]];
+# CHECK: always_ff @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}
+
+# TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_{{.}}

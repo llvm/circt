@@ -114,8 +114,8 @@ module {
     sv.interface.signal @data : !hw.struct<foo: !hw.array<384xi1>>
   }
   // CHECK-LABEL: module structs(
-  // CHECK: wire [383:0] _tmp = {
   // CHECK-NOT: wire [383:0] _tmp =
+  // CHECK: wire struct packed {logic [383:0] foo; } _T_2
   // CHECK: endmodule
   hw.module @structs(%clk: i1, %rstn: i1) {
     %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>

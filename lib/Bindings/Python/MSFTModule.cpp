@@ -9,6 +9,7 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -24,6 +25,12 @@ namespace py = pybind11;
 using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
+
+static py::handle getPhysLocationAttr(MlirAttribute attr) {
+  return py::module::import("circt.dialects.msft")
+      .attr("PhysLocationAttr")(attr)
+      .release();
+}
 
 class PrimitiveDB {
 public:
@@ -63,13 +70,13 @@ public:
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
-  py::object getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+  py::handle getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
                                     uint64_t column, uint64_t nearestToY) {
     MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
         db, prim, column, nearestToY);
     if (!nearest.ptr)
       return py::none();
-    return py::cast(nearest);
+    return getPhysLocationAttr(nearest);
   }
   void walkPlacements(
       py::function pycb,
@@ -93,10 +100,11 @@ public:
           std::string subpath(p.subpath, p.subpathLength);
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
+          auto physLoc = getPhysLocationAttr(loc);
           if (!p.op.ptr) {
-            pycb(loc, py::none());
+            pycb(physLoc, py::none());
           } else {
-            pycb(loc, std::make_tuple(p.path, subpath, p.op));
+            pycb(physLoc, std::make_tuple(p.path, subpath, p.op));
           }
         },
         cBounds, cPrim, &pycb);
@@ -117,13 +125,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   py::enum_<PrimitiveType>(m, "PrimitiveType")
       .value("M20K", PrimitiveType::M20K)
       .value("DSP", PrimitiveType::DSP)
+      .value("FF", PrimitiveType::FF)
       .export_values();
-
-  m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
-    circt::python::PyFileAccumulator accum(fileObject, false);
-    py::gil_scoped_release();
-    mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
-  });
 
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)
@@ -198,6 +201,32 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num_cases", [](MlirAttribute self) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
+
+  mlir_attribute_subclass(m, "PhysicalBoundsAttr",
+                          circtMSFTAttributeIsAPhysicalBoundsAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, uint64_t xMin, uint64_t xMax, uint64_t yMin,
+             uint64_t yMax, MlirContext ctxt) {
+            auto physicalBounds =
+                circtMSFTPhysicalBoundsAttrGet(ctxt, xMin, xMax, yMin, yMax);
+            return cls(physicalBounds);
+          },
+          "Create a PhysicalBounds attribute", py::arg("cls"), py::arg("xMin"),
+          py::arg("xMax"), py::arg("yMin"), py::arg("yMax"),
+          py::arg("context") = py::none());
+
+  mlir_attribute_subclass(m, "PhysicalRegionRefAttr",
+                          circtMSFTAttributeIsAPhysicalRegionRefAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, std::string name, MlirContext ctxt) {
+            auto physicalBounds = circtMSFTPhysicalRegionRefAttrGet(
+                ctxt, mlirStringRefCreateFromCString(name.c_str()));
+            return cls(physicalBounds);
+          },
+          "Create a PhysicalRegionRef attribute", py::arg("cls"),
+          py::arg("name"), py::arg("context") = py::none());
 
   py::class_<PrimitiveDB>(m, "PrimitiveDB")
       .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())

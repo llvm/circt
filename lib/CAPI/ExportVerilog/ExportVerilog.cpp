@@ -20,3 +20,8 @@ MlirLogicalResult mlirExportVerilog(MlirModule module,
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(exportVerilog(unwrap(module), stream));
 }
+
+MlirLogicalResult mlirExportSplitVerilog(MlirModule module,
+                                         MlirStringRef directory) {
+  return wrap(exportSplitVerilog(unwrap(module), unwrap(directory)));
+}

@@ -28,7 +28,9 @@ def Handshake_Dialect : Dialect {
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
-         traits #[HasParent<"handshake::FuncOp">]> {
+         traits #[HasParent<"handshake::FuncOp">,
+         DeclareOpInterfaceMethods<NamedIOInterface>,
+         DeclareOpInterfaceMethods<ControlInterface>]> {
 }
 
 include "circt/Dialect/Handshake/HandshakeOps.td"

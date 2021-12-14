@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
@@ -172,10 +172,12 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
   // are supposed to emit.
   SmallVector<PortInfo> ports;
   for (auto &mapping : mappings) {
-    ports.push_back(PortInfo{mapping.localName, mapping.type,
+    ports.push_back(PortInfo{mapping.localName,
+                             mapping.type,
                              mapping.dir == MappingDirection::DriveRemote
                                  ? Direction::In
                                  : Direction::Out,
+                             {},
                              module.getLoc()});
     LLVM_DEBUG(llvm::dbgs() << "  - Adding port " << mapping.localName << "\n");
   }

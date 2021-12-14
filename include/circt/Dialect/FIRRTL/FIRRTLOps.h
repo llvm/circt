@@ -13,7 +13,6 @@
 #ifndef CIRCT_DIALECT_FIRRTL_OPS_H
 #define CIRCT_DIALECT_FIRRTL_OPS_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -85,6 +84,15 @@ inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
   lhs = lhs | rhs;
   return lhs;
 }
+
+/// Check whether a block argument ("port") or the operation defining a value
+/// has a `DontTouch` annotation, or a symbol that should prevent certain types
+/// of canonicalizations.
+bool hasDontTouch(Value value);
+
+/// Check whether an operation has a `DontTouch` annotation, or a symbol that
+/// should prevent certain types of canonicalizations.
+bool hasDontTouch(Operation *op);
 
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.

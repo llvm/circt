@@ -7,16 +7,6 @@
 // CHECK:   sv.ifdef.procedural "RANDOMIZE_GARBAGE_ASSIGN"  {
 // CHECK-NEXT:   sv.verbatim "`define RANDOMIZE"
 // CHECK-NEXT:  }
-firrtl.circuit "InvalidBundle" {
-
-  // https://github.com/llvm/circt/issues/593
-  firrtl.module @InvalidBundle() {
-    // expected-error @+1 {{unsupported type}}
-    %0 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
-  }
-}
-
-// -----
 
 firrtl.circuit "OperandTypeIsFIRRTL" {
   firrtl.module @OperandTypeIsFIRRTL() { }
@@ -117,6 +107,11 @@ firrtl.circuit "Foo" attributes {annotations = [
         {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
         {class = "sifive.enterprise.firrtl.ScalaClassAnnotation"},
-        {class = "firrtl.transforms.BlackBox"}
+        {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
+    // Non-local annotations should not produce errors either.
+    firrtl.nla  @nla_1 [@Bar, @Foo] ["foo", "Foo"]
+    firrtl.module @Bar() {
+      firrtl.instance foo {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo()
+    }
 }

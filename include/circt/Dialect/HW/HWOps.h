@@ -45,6 +45,9 @@ struct PortInfo {
   /// first argument.
   size_t argNum = ~0U;
 
+  /// The optional symbol for this port.
+  StringAttr sym = {};
+
   StringRef getName() const { return name.getValue(); }
   bool isOutput() const { return direction == OUTPUT; }
 
@@ -98,8 +101,25 @@ PortInfo getModuleOutputPort(Operation *op, size_t idx);
 /// Return true if this is an hw.module, external module, generated module etc.
 bool isAnyModule(Operation *module);
 
+/// Return true if isAnyModule or instance.
+bool isAnyModuleOrInstance(Operation *module);
+
 /// Return the signature for the specified module as a function type.
 FunctionType getModuleType(Operation *module);
+
+/// Return the number of inputs for the specified module/instance.
+inline unsigned getModuleNumInputs(Operation *moduleOrInstance) {
+  assert(isAnyModuleOrInstance(moduleOrInstance) &&
+         "must be called on instance or module");
+  return moduleOrInstance->getAttrOfType<ArrayAttr>("argNames").size();
+}
+
+/// Return the number of outputs for the specified module/instance.
+inline unsigned getModuleNumOutputs(Operation *moduleOrInstance) {
+  assert(isAnyModuleOrInstance(moduleOrInstance) &&
+         "must be called on instance or module");
+  return moduleOrInstance->getAttrOfType<ArrayAttr>("resultNames").size();
+}
 
 /// Returns the verilog module name attribute or symbol name of any module-like
 /// operations.
@@ -165,12 +185,12 @@ public:
   /// In the building phase, add symbols.
   void addDefinition(StringAttr symbol, Operation *op) {
     assert(!isFrozen && "cannot mutate a frozen cache");
-    symbolCache.try_emplace(symbol.getValue(), op, ~0UL);
+    symbolCache.try_emplace(symbol.getValue(), op, ~0ULL);
   }
 
   // Add inner names, which might be ports
   void addDefinition(StringAttr symbol, StringRef name, Operation *op,
-                     size_t port = ~0UL) {
+                     size_t port = ~0ULL) {
     assert(!isFrozen && "cannot mutate a frozen cache");
     auto key = mkInnerKey(symbol.getValue(), name);
     symbolCache.try_emplace(StringRef(key.data(), key.size()), op, port);
@@ -200,7 +220,7 @@ public:
     assert(isFrozen && "cannot read from this cache until it is frozen");
     auto key = mkInnerKey(symbol, name);
     auto it = symbolCache.find(StringRef(key.data(), key.size()));
-    return it == symbolCache.end() ? Item{nullptr, ~0UL} : it->second;
+    return it == symbolCache.end() ? Item{nullptr, ~0ULL} : it->second;
   }
 
   Item getDefinition(StringAttr symbol, StringAttr name) const {

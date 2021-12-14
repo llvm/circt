@@ -1,8 +1,12 @@
-# Introduction
+# PyCDE
 
 PyCDE stands for Python circuit design entry. It is an experimental, opinionated, Python-based fronted for CIRCT's Python bindings. The goal is to make the definition of hardware modules using the bindings simple.
 
 # Installation
+
+## via Pip
+
+PyCDE is now being released on PyPI: https://pypi.org/project/pycde/
 
 ## Installing and Building with Wheels
 

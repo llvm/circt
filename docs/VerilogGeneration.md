@@ -62,11 +62,9 @@ control the output.
 
 The current set of "tool capability" Lowering Options is:
 
- * `useAlwaysFF` (default=`false`).  If true, emits `sv.alwaysff` as
-    Verilog `always_ff` statements.  Otherwise, print them as `always` statements.
  * `noAlwaysComb` (default=`false`).  If true, emits `sv.alwayscomb` as Verilog
    `always @(*)` statements.  Otherwise, print them as `always_comb`.
- * `allowExprInEventControl` (default=`false`).   If true, expressions are
+ * `exprInEventControl` (default=`false`).   If true, expressions are
    allowed in the sensitivity list of `always` statements, otherwise they are
    forced to be simple wires. Some EDA tools rely on these being simple wires.
  * `disallowPackedArrays` (default=`false`).  If true, eliminate packed arrays
@@ -74,7 +72,7 @@ The current set of "tool capability" Lowering Options is:
  * `disallowLocalVariables` (default=`false`).  If true, do not emit
    SystemVerilog locally scoped "automatic" or logic declarations - emit top
    level wire and reg's instead.
- * `enforceVerifLabels` (default=`false`).  If true, verification statements
+ * `verifLabels` (default=`false`).  If true, verification statements
    like `assert`, `assume`, and `cover` will always be emitted with a label. If
    the statement has no label in the IR, a generic one will be created. Some EDA
    tools require verification statements to be labeled.
@@ -146,6 +144,32 @@ of your pipeline should work well:
   // Actually export the module.
   exportVerilog(theModule, ...);
 ```
+
+## Signal naming
+
+ExportVerilog checks all signal (and instance) names for keyword conflicts and
+duplicated names. Whenever these conditions are encountered, ExportVerilog will
+change the name to avoid the conflict.
+
+### Ops with explicit names
+
+The `sv.reg` operation, `sv.wire` operation, and the various instance operations
+in the hw dialect have a `name` attribute which gets used.
+
+### Out-of-line expressions ("temporaries")
+
+Expressions are sometimes not emitted inlined (out-of-line) for a variety of
+reasons. These wire (or `automatic logic`) names or existence is **not
+guaranteed** to be stable. (Meaning they could change for *any* reason.) They,
+therefore, should not be relied upon for anything but local waveform debugging.
+In general, any name with prefixed with an underscore should not be relied upon.
+
+These names come from the following sources, listed here in proirity order:
+1. The `sv.namehint` dialect attribute (which can be attached to any operation).
+2. If ExportVerilog has a rule to derive a name based on the operation and
+operands, it will do so. (e.g. `hw.extract` operations get name
+`_<operandName>_<highBit>to<lowBit>` as of writing).
+3. `_T` or `_T_x` wherein `x` is a number.
 
 ## `exportVerilog` Internals
 

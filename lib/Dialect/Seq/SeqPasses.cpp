@@ -38,13 +38,18 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CompRegOp reg, ArrayRef<Value> operands,
+  matchAndRewrite(CompRegOp reg, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
     auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
                                             reg.nameAttr());
     svReg->setDialectAttrs(reg->getDialectAttrs());
+
+    // If the seq::CompRegOp has an inner_sym attribute, set this for the
+    // sv::RegOp inner_sym attribute.
+    if (reg.innerSym().hasValue())
+      svReg.inner_symAttr(reg.innerSymAttr());
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {

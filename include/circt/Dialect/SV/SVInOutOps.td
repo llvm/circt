@@ -11,6 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Types.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+
 // Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [NonProceduralOp, 
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
@@ -91,7 +94,7 @@ def XMROp : SVOp<"xmr", []> {
     generating this op should ensure that any instance or object in the intended
     path has public visibility so paths are not invalidated.
   }];
-  let arguments = (ins UnitAttr:$isRooted, StringArrayAttr:$path, StrAttr:$terminal);
+  let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
   let results = (outs InOutType:$result);
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` type($result)"; 
 }
@@ -136,4 +139,67 @@ def ArrayIndexInOutOp
 
   let assemblyFormat =
     "$input`[`$index`]` attr-dict `:` type($input) `,` type($index)";
+}
+
+def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
+                         [NoSideEffect, InferTypeOpInterface]> {
+  let summary = "Address several contiguous bits of an inout type (e.g. a wire"
+                " or inout port). This is an indexed part-select operator."
+                "The base is an integer expression and the width is an "
+                " integer constant. The bits start from base and the number "
+                "of bits selected is equal to width. If $decrement is true, "
+                " then part select decrements starting from $base."
+                "See SV Spec 11.5.1.";
+
+  let arguments = (ins InOutType:$input, HWIntegerType:$base, I32Attr:$width,
+                      UnitAttr:$decrement);
+  let results = (outs InOutType:$result);
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "Value":$base, "int32_t":$width,
+                                 CArg<"bool", "false">:$decrement)>
+  ];
+
+  let verifier = "return ::verifyIndexedPartSelectOp(*this);";
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+
+  let hasFolder = true;
+  let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
+                        " attr-dict `:` type($input) `,` type($base)";
+}
+
+def InOutStructType
+  : Type<CPred<"getInOutElementType($_self).isa<hw::StructType>()">,
+         "an inout type with struct field", "::circt::hw::InOutType">;
+
+def StructFieldInOutOp : SVOp<"struct_field_inout",
+                              [NoSideEffect, InferTypeOpInterface]> {
+  let summary = "Create an subfield inout memory to produce an inout element.";
+  let description = "See SV Spec 7.2.";
+
+  let arguments = (ins InOutStructType:$input, StrAttr:$field);
+  let results = (outs InOutType:$result);
+
+  let assemblyFormat =
+    "$input `[` $field `]` attr-dict `:` type($input)";
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+
 }

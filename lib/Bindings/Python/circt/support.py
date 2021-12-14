@@ -269,11 +269,20 @@ class NamedValueOpView:
 
   def __init__(self,
                cls,
-               data_type,
-               input_port_mapping={},
-               pre_args=[],
-               post_args=[],
+               data_type=None,
+               input_port_mapping=None,
+               pre_args=None,
+               post_args=None,
+               needs_result_type=False,
                **kwargs):
+    # Set defaults
+    if input_port_mapping is None:
+      input_port_mapping = {}
+    if pre_args is None:
+      pre_args = []
+    if post_args is None:
+      post_args = []
+
     # Set result_indices to name each result.
     result_names = self.result_names()
     result_indices = {}
@@ -302,8 +311,16 @@ class NamedValueOpView:
     if isinstance(data_type, list):
       operand_values = [operand_values]
 
-    self.opview = cls(data_type, *pre_args, *operand_values, *post_args,
-                      **kwargs)
+    # In many cases, result types are inferred, and we do not need to pass
+    # data_type to the underlying constructor. It must be provided to
+    # NamedValueOpView in cases where we need to build backedges, but should
+    # generally not be passed to the underlying constructor in this case. There
+    # are some oddball ops that must pass it, even when building backedges, and
+    # these set needs_result_type=True.
+    if data_type is not None and (needs_result_type or len(backedges) == 0):
+      pre_args.insert(0, data_type)
+
+    self.opview = cls(*pre_args, *operand_values, *post_args, **kwargs)
     self.operand_indices = operand_indices
     self.result_indices = result_indices
     self.backedges = backedges

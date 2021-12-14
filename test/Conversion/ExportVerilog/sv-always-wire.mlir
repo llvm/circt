@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --export-verilog --verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s --export-verilog --verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module AlwaysSpill(
 hw.module @AlwaysSpill(%port: i1) {

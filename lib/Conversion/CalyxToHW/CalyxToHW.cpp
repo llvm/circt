@@ -23,6 +23,27 @@ using namespace circt::calyx;
 using namespace circt::hw;
 using namespace circt::sv;
 
+hw::HWModuleExternOp circt::calyx::getExternHWModule(OpBuilder &builder,
+                                                     ComponentOp op) {
+  SmallVector<hw::PortInfo, 8> hwPortInfos;
+  auto addHWPortInfo = [&](auto portInfos, hw::PortDirection direction) {
+    for (auto portInfo : enumerate(portInfos)) {
+      hw::PortInfo hwPortInfo;
+      hwPortInfo.direction = direction;
+      hwPortInfo.type = portInfo.value().type;
+      hwPortInfo.argNum = portInfo.index();
+      hwPortInfo.name = portInfo.value().name;
+      hwPortInfos.push_back(hwPortInfo);
+    }
+  };
+
+  addHWPortInfo(op.getInputPortInfo(), hw::PortDirection::INPUT);
+  addHWPortInfo(op.getOutputPortInfo(), hw::PortDirection::OUTPUT);
+
+  return builder.create<hw::HWModuleExternOp>(
+      op->getLoc(), builder.getStringAttr(op.getName()), hwPortInfos);
+}
+
 namespace {
 class CalyxToHWPass : public CalyxToHWBase<CalyxToHWPass> {
 public:

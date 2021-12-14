@@ -37,7 +37,7 @@ namespace analysis {
 struct CyclicSchedulingAnalysis {
   CyclicSchedulingAnalysis(Operation *funcOp, AnalysisManager &am);
 
-  CyclicProblem getProblem(AffineForOp forOp);
+  CyclicProblem &getProblem(AffineForOp forOp);
 
 private:
   void analyzeForOp(AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis);

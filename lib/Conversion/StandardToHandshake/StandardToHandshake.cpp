@@ -12,6 +12,7 @@
 #include "circt/Conversion/StandardToHandshake.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Analysis/AffineStructures.h"
@@ -19,6 +20,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -73,213 +75,6 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
     }
     block.erase();
   }
-}
-
-static bool isControlOp(Operation *op) {
-  return op->hasAttr("control") &&
-         op->getAttrOfType<BoolAttr>("control").getValue();
-}
-
-static void dotPrintNode(llvm::raw_fd_ostream &outfile, Operation *op,
-                         DenseMap<Operation *, unsigned> &opIDs) {
-  outfile << "\t\t";
-  outfile << "\"" + op->getName().getStringRef().str() + "_" +
-                 to_string(opIDs[op]) + "\"";
-  outfile << " [";
-
-  /// Fill color
-  outfile << "fillcolor = ";
-  outfile
-      << llvm::TypeSwitch<Operation *, std::string>(op)
-             .Case<handshake::ForkOp, handshake::LazyForkOp, handshake::MuxOp,
-                   handshake::JoinOp>([&](auto) { return "lavender"; })
-             .Case<handshake::BufferOp>([&](auto) { return "lightgreen"; })
-             .Case<handshake::ReturnOp>([&](auto) { return "gold"; })
-             .Case<handshake::SinkOp, handshake::ConstantOp>(
-                 [&](auto) { return "gainsboro"; })
-             .Case<handshake::MemoryOp, handshake::LoadOp, handshake::StoreOp>(
-                 [&](auto) { return "coral"; })
-             .Case<handshake::MergeOp, handshake::ControlMergeOp,
-                   handshake::BranchOp, handshake::ConditionalBranchOp>(
-                 [&](auto) { return "lightblue"; })
-             .Default([&](auto) { return "moccasin"; });
-
-  /// Shape
-  outfile << ", shape=";
-  if (op->getDialect()->getNamespace() == "handshake")
-    outfile << "box";
-  else
-    outfile << "oval";
-
-  /// Label
-  outfile << ", label=\"";
-  outfile << llvm::TypeSwitch<Operation *, std::string>(op)
-                 .Case<handshake::ConstantOp>([&](auto op) {
-                   return std::to_string(
-                       op->template getAttrOfType<mlir::IntegerAttr>("value")
-                           .getValue()
-                           .getSExtValue());
-                 })
-                 .Case<handshake::ControlMergeOp>(
-                     [&](auto) { return "cmerge"; })
-                 .Case<handshake::ConditionalBranchOp>(
-                     [&](auto) { return "cbranch"; })
-                 .Case<arith::AddIOp>([&](auto) { return "+"; })
-                 .Case<arith::SubIOp>([&](auto) { return "-"; })
-                 .Case<arith::AndIOp>([&](auto) { return "&"; })
-                 .Case<arith::OrIOp>([&](auto) { return "|"; })
-                 .Case<arith::XOrIOp>([&](auto) { return "^"; })
-                 .Case<arith::MulIOp>([&](auto) { return "*"; })
-                 .Case<arith::ShRSIOp, arith::ShRUIOp>(
-                     [&](auto) { return ">>"; })
-                 .Case<arith::ShLIOp>([&](auto) { return "<<"; })
-                 .Case<arith::CmpIOp>([&](arith::CmpIOp op) {
-                   switch (op.predicate()) {
-                   case arith::CmpIPredicate::eq:
-                     return "==";
-                   case arith::CmpIPredicate::ne:
-                     return "!=";
-                   case arith::CmpIPredicate::uge:
-                   case arith::CmpIPredicate::sge:
-                     return ">=";
-                   case arith::CmpIPredicate::ugt:
-                   case arith::CmpIPredicate::sgt:
-                     return ">";
-                   case arith::CmpIPredicate::ule:
-                   case arith::CmpIPredicate::sle:
-                     return "<=";
-                   case arith::CmpIPredicate::ult:
-                   case arith::CmpIPredicate::slt:
-                     return "<";
-                   }
-                   llvm_unreachable("unhandled cmpi predicate");
-                 })
-                 .Default([&](auto op) {
-                   auto opDialect = op->getDialect()->getNamespace();
-                   std::string label = op->getName().getStringRef().str();
-                   if (opDialect == "handshake")
-                     label.erase(0, StringLiteral("handshake.").size());
-
-                   return label;
-                 });
-  outfile << "\"";
-
-  /// Style; add dashed border for control nodes
-  outfile << ", style=\"filled";
-  if (isControlOp(op))
-    outfile << ", dashed";
-
-  outfile << "\"";
-
-  outfile << "]\n";
-}
-
-/// Returns true if v is used as a control operand in op
-static bool isControlOperand(Operation *op, Value v) {
-  if (isControlOp(op))
-    return true;
-
-  return llvm::TypeSwitch<Operation *, bool>(op)
-      .Case<handshake::MuxOp, handshake::ConditionalBranchOp>(
-          [&](auto op) { return v == op.getOperand(0); })
-      .Case<handshake::ControlMergeOp>([&](auto) { return true; })
-      .Default([](auto) { return false; });
-}
-
-template <typename FuncOp>
-void dotPrint(FuncOp f, StringRef name) {
-  // Prints DOT representation of the dataflow graph, used for debugging.
-  DenseMap<Block *, unsigned> blockIDs;
-  DenseMap<Operation *, unsigned> opIDs;
-  unsigned i = 0;
-  unsigned j = 0;
-
-  for (Block &block : f) {
-    blockIDs[&block] = i++;
-    for (Operation &op : block)
-      opIDs[&op] = j++;
-  }
-
-  std::error_code ec;
-  llvm::raw_fd_ostream outfile(name.str() + ".dot", ec);
-
-  outfile << "Digraph G {\n\tsplines=spline;\n";
-
-  for (Block &block : f) {
-    outfile << "\tsubgraph cluster_" + to_string(blockIDs[&block]) + " {\n";
-    outfile << "\tnode [shape=box style=filled fillcolor=\"white\"]\n";
-    outfile << "\tcolor = \"darkgreen\"\n";
-    outfile << "\t\tlabel = \" block " + to_string(blockIDs[&block]) + "\"\n";
-
-    for (Operation &op : block)
-      dotPrintNode(outfile, &op, opIDs);
-
-    for (Operation &op : block) {
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults()) {
-        for (auto &u : result.getUses()) {
-          Operation *useOp = u.getOwner();
-          if (useOp->getBlock() == &block) {
-            outfile << "\t\t";
-            outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                           to_string(opIDs[&op]) + "\"";
-            outfile << " -> ";
-            outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
-                           to_string(opIDs[useOp]) + "\"";
-
-            if (isControlOp(&op) || isControlOperand(useOp, result))
-              outfile << " [style=\"dashed\"]\n";
-
-            outfile << "\n";
-          }
-        }
-      }
-    }
-
-    /// Annotate block argument uses
-    for (auto barg : enumerate(block.getArguments())) {
-      std::string argName = "arg" + std::to_string(barg.index());
-      outfile << "\t\"" << argName << "\" [shape=diamond";
-      if (barg.index() == block.getNumArguments() - 1)
-        outfile << ", style=dashed";
-      outfile << "]\n";
-      for (auto useOp : barg.value().getUsers()) {
-        outfile << argName << " -> \""
-                << useOp->getName().getStringRef().str() + "_" +
-                       to_string(opIDs[useOp]) + "\"";
-        if (isControlOperand(useOp, barg.value()))
-          outfile << " [style=\"dashed\"]";
-        outfile << "\n";
-      }
-    }
-
-    outfile << "\t}\n";
-
-    for (Operation &op : block) {
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults()) {
-        for (auto &u : result.getUses()) {
-          Operation *useOp = u.getOwner();
-          if (useOp->getBlock() != &block) {
-            outfile << "\t\t";
-            outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                           to_string(opIDs[&op]) + "\"";
-            outfile << " -> ";
-            outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
-                           to_string(opIDs[useOp]) + "\"";
-            outfile << " [minlen = 3]\n";
-          }
-        }
-      }
-    }
-  }
-
-  outfile << "\t}\n";
-  outfile.close();
 }
 
 LogicalResult setControlOnlyPath(handshake::FuncOp f,
@@ -448,10 +243,14 @@ Operation *insertMerge(Block *block, Value val,
     }
   }
 
-  // If there are no block predecessors (i.e., entry block), function argument
-  // is set as single operand
-  if (numPredecessors <= 1)
-    return rewriter.create<handshake::MergeOp>(block->front().getLoc(), val, 1);
+  // If there are no block predecessors (i.e., entry block)
+  if (numPredecessors <= 1) {
+    SmallVector<Value> mergeOperands;
+    mergeOperands.append(2, val); // 2 dummy values used here due to hard-coded
+                                  // logic of reconnectMergeOps.
+    return rewriter.create<handshake::MergeOp>(block->front().getLoc(),
+                                               mergeOperands);
+  }
 
   return rewriter.create<handshake::MuxOp>(block->front().getLoc(), val,
                                            numPredecessors);
@@ -474,6 +273,10 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
     // Block arguments are not in livein list as they are defined inside the
     // block
     for (auto &arg : block.getArguments()) {
+      // No merges on memref block arguments; these are handled separately.
+      if (arg.getType().isa<mlir::MemRefType>())
+        continue;
+
       Operation *newOp = insertMerge(&block, arg, rewriter);
       blockMerges[&block].push_back(newOp);
       mergePairs[arg] = newOp;
@@ -741,33 +544,6 @@ LogicalResult addBranchOps(handshake::FuncOp f,
   return success();
 }
 
-// Create sink for every unused result
-LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  BlockValues liveOuts;
-
-  for (Block &block : f) {
-    for (Operation &op : block) {
-      // Do not add sinks for unused MLIR operations which the rewriter will
-      // later remove We have already replaced these ops with their handshake
-      // equivalents
-      // TODO: should we use other indicator for op that has been erased?
-      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-              mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
-        continue;
-
-      if (op.getNumResults() == 0)
-        continue;
-
-      for (auto result : op.getResults())
-        if (result.use_empty()) {
-          rewriter.setInsertionPointAfter(&op);
-          rewriter.create<SinkOp>(op.getLoc(), result);
-        }
-    }
-  }
-  return success();
-}
-
 LogicalResult connectConstantsToControl(handshake::FuncOp f,
                                         ConversionPatternRewriter &rewriter) {
   // Create new constants which have a control-only input to trigger them
@@ -801,54 +577,7 @@ LogicalResult connectConstantsToControl(handshake::FuncOp f,
   return success();
 }
 
-void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
-  for (int i = 0, e = op->getNumOperands(); i < e; ++i)
-    if (op->getOperand(i) == oldVal) {
-      op->setOperand(i, newVal);
-      break;
-    }
-  return;
-}
-
-void insertFork(Operation *op, Value result, bool isLazy, OpBuilder &rewriter) {
-  // Get successor operations
-  std::vector<Operation *> opsToProcess;
-  for (auto &u : result.getUses())
-    opsToProcess.push_back(u.getOwner());
-
-  // Insert fork after op
-  rewriter.setInsertionPointAfter(op);
-  Operation *newOp;
-  if (isLazy)
-    newOp =
-        rewriter.create<LazyForkOp>(op->getLoc(), result, opsToProcess.size());
-  else
-    newOp = rewriter.create<ForkOp>(op->getLoc(), result, opsToProcess.size());
-
-  // Modify operands of successor
-  // opsToProcess may have multiple instances of same operand
-  // Replace uses one by one to assign different fork outputs to them
-  for (int i = 0, e = opsToProcess.size(); i < e; ++i)
-    replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
-}
-
-// Insert Fork Operation for every operation with more than one successor
-LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  for (Operation &op : f.getOps()) {
-    // Ignore terminators, and don't add Forks to Forks.
-    if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
-      for (auto result : op.getResults()) {
-        // If there is a result and it is used more than once
-        if (!result.use_empty() && !result.hasOneUse())
-          insertFork(&op, result, false, rewriter);
-      }
-    }
-  }
-
-  return success();
-}
-
-void checkUseCount(Operation *op, Value res) {
+LogicalResult checkUseCount(Operation *op, Value res) {
   // Checks if every result has single use
   if (!res.hasOneUse()) {
     int i = 0;
@@ -856,24 +585,25 @@ void checkUseCount(Operation *op, Value res) {
       user->emitWarning("user here");
       i++;
     }
-    op->emitError("every result must have exactly one user, but had ") << i;
+    return op->emitOpError("every result must have exactly one user, but had ")
+           << i;
   }
-  return;
+  return success();
 }
 
 // Checks if op successors are in appropriate blocks
-void checkSuccessorBlocks(Operation *op, Value res) {
+LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
   for (auto &u : res.getUses()) {
     Operation *succOp = u.getOwner();
     // Non-branch ops: succesors must be in same block
     if (!(isa<handshake::ConditionalBranchOp>(op) ||
           isa<handshake::BranchOp>(op))) {
       if (op->getBlock() != succOp->getBlock())
-        op->emitError("cannot be block live-out");
+        return op->emitOpError("cannot be block live-out");
     } else {
       // Branch ops: must have successor per successor block
       if (op->getBlock()->getNumSuccessors() != op->getNumResults())
-        op->emitError("incorrect successor count");
+        return op->emitOpError("incorrect successor count");
       bool found = false;
       for (int i = 0, e = op->getBlock()->getNumSuccessors(); i < e; ++i) {
         Block *succ = op->getBlock()->getSuccessor(i);
@@ -881,27 +611,28 @@ void checkSuccessorBlocks(Operation *op, Value res) {
           found = true;
       }
       if (!found)
-        op->emitError("branch successor in incorrect block");
+        return op->emitOpError("branch successor in incorrect block");
     }
   }
-  return;
+  return success();
 }
 
 // Checks if merge predecessors are in appropriate block
-void checkMergePredecessors(MergeLikeOpInterface mergeOp) {
+LogicalResult checkMergePredecessors(MergeLikeOpInterface mergeOp) {
   Block *block = mergeOp->getBlock();
   unsigned operand_count = mergeOp.dataOperands().size();
 
   // Merges in entry block have single predecessor (argument)
   if (block->isEntryBlock()) {
     if (operand_count != 1)
-      mergeOp->emitError("merge operations in entry block must have a ")
-          << "single predecessor";
+      return mergeOp->emitOpError(
+                 "merge operations in entry block must have a ")
+             << "single predecessor";
   } else {
     if (operand_count > getBlockPredecessorCount(block))
-      mergeOp->emitError("merge operation has ")
-          << operand_count << " data inputs, but only "
-          << getBlockPredecessorCount(block) << " predecessor blocks";
+      return mergeOp->emitOpError("merge operation has ")
+             << operand_count << " data inputs, but only "
+             << getBlockPredecessorCount(block) << " predecessor blocks";
   }
 
   // There must be a predecessor from each predecessor block
@@ -915,19 +646,19 @@ void checkMergePredecessors(MergeLikeOpInterface mergeOp) {
       }
     }
     if (!found)
-      mergeOp->emitError("missing predecessor from predecessor block");
+      return mergeOp->emitOpError("missing predecessor from predecessor block");
   }
 
   // Select operand must come from same block
   if (auto muxOp = dyn_cast<MuxOp>(mergeOp.getOperation())) {
     auto *operand = muxOp.selectOperand().getDefiningOp();
     if (operand->getBlock() != block)
-      mergeOp->emitError("mux select operand must be from same block");
+      return mergeOp->emitOpError("mux select operand must be from same block");
   }
-  return;
+  return success();
 }
 
-void checkDataflowConversion(handshake::FuncOp f) {
+LogicalResult checkDataflowConversion(handshake::FuncOp f) {
   for (Operation &op : f.getOps()) {
     if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
             arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
@@ -936,13 +667,16 @@ void checkDataflowConversion(handshake::FuncOp f) {
 
     if (op.getNumResults() > 0) {
       for (auto result : op.getResults()) {
-        checkUseCount(&op, result);
-        checkSuccessorBlocks(&op, result);
+        if (checkUseCount(&op, result).failed() ||
+            checkSuccessorBlocks(&op, result).failed())
+          return failure();
       }
     }
     if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
-      checkMergePredecessors(mergeOp);
+      if (checkMergePredecessors(mergeOp).failed())
+        return failure();
   }
+  return success();
 }
 
 Value getBlockControlValue(Block *block) {
@@ -960,17 +694,19 @@ Value getBlockControlValue(Block *block) {
   return nullptr;
 }
 
-Value getOpMemRef(Operation *op) {
+LogicalResult getOpMemRef(Operation *op, Value &out) {
+  out = Value();
   if (auto memOp = dyn_cast<memref::LoadOp>(op))
-    return memOp.getMemRef();
-  if (auto memOp = dyn_cast<memref::StoreOp>(op))
-    return memOp.getMemRef();
-  if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op)) {
+    out = memOp.getMemRef();
+  else if (auto memOp = dyn_cast<memref::StoreOp>(op))
+    out = memOp.getMemRef();
+  else if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op)) {
     MemRefAccess access(op);
-    return access.memref;
+    out = access.memref;
   }
-  op->emitError("Unknown Op type");
-  return Value();
+  if (out != Value())
+    return success();
+  return op->emitOpError("Unknown Op type");
 }
 
 bool isMemoryOp(Operation *op) {
@@ -984,21 +720,22 @@ typedef llvm::MapVector<Value, std::vector<Operation *>> MemRefToMemoryAccessOp;
 // ops which connect to memory/LSQ). Returns a map with an ordered
 // list of new ops corresponding to each memref. Later, we instantiate
 // a memory node for each memref and connect it to its load/store ops
-MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
-                                        ConversionPatternRewriter &rewriter) {
-  // Map from original memref to new load/store operations.
-  MemRefToMemoryAccessOp MemRefOps;
+LogicalResult replaceMemoryOps(handshake::FuncOp f,
+                               ConversionPatternRewriter &rewriter,
+                               MemRefToMemoryAccessOp &memRefOps) {
 
   std::vector<Operation *> opsToErase;
 
   // Replace load and store ops with the corresponding handshake ops
-  // Need to traverse ops in blocks to store them in MemRefOps in program order
+  // Need to traverse ops in blocks to store them in memRefOps in program order
   for (Operation &op : f.getOps()) {
     if (!isMemoryOp(&op))
       continue;
 
     rewriter.setInsertionPoint(&op);
-    Value memref = getOpMemRef(&op);
+    Value memref;
+    if (getOpMemRef(&op, memref).failed())
+      return failure();
     Operation *newOp = nullptr;
 
     llvm::TypeSwitch<Operation *>(&op)
@@ -1046,19 +783,20 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
                  "Address operands of affine memref access cannot be reduced.");
 
           if (isa<mlir::AffineReadOpInterface>(op)) {
-            newOp = rewriter.create<handshake::LoadOp>(
+            auto loadOp = rewriter.create<handshake::LoadOp>(
                 op.getLoc(), access.memref, *operands);
-            op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+            newOp = loadOp;
+            op.getResult(0).replaceAllUsesWith(loadOp.dataResult());
           } else {
             newOp = rewriter.create<handshake::StoreOp>(
                 op.getLoc(), op.getOperand(0), *operands);
           }
         })
         .Default([&](auto) {
-          op.emitError("Load/store operation cannot be handled.");
+          op.emitOpError("Load/store operation cannot be handled.");
         });
 
-    MemRefOps[memref].push_back(newOp);
+    memRefOps[memref].push_back(newOp);
     opsToErase.push_back(&op);
   }
 
@@ -1072,7 +810,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
     rewriter.eraseOp(op);
   }
 
-  return MemRefOps;
+  return success();
 }
 
 std::vector<Block *> getOperationBlocks(ArrayRef<Operation *> ops) {
@@ -1110,9 +848,8 @@ void addLazyForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     Value res = getBlockControlValue(&block);
-    Operation *op = res.getDefiningOp();
     if (!res.hasOneUse())
-      insertFork(op, res, true, rewriter);
+      insertFork(res, true, rewriter);
   }
 }
 
@@ -1120,11 +857,11 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (isa<MemoryOp, StartOp, ControlMergeOp>(op)) {
+      if (isa<MemoryOp, ExternalMemoryOp, StartOp, ControlMergeOp>(op)) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse())
-            insertFork(&op, result, false, rewriter);
+            insertFork(result, false, rewriter);
         }
       }
     }
@@ -1170,21 +907,6 @@ void removeRedundantSinks(handshake::FuncOp f,
     rewriter.eraseOp(op);
     // op->erase();
   }
-}
-
-Value getMemRefOperand(Value val) {
-  assert(val != nullptr);
-  // If memref is function argument, connect to memory through
-  // its successor merge (all other arguments are connected like that)
-  if (val.isa<BlockArgument>()) {
-    assert(val.hasOneUse());
-    for (auto &u : val.getUses()) {
-      Operation *useOp = u.getOwner();
-      if (isa<MergeOp>(useOp))
-        return useOp->getResult(0);
-    }
-  }
-  return val;
 }
 
 void addJoinOps(ConversionPatternRewriter &rewriter,
@@ -1236,8 +958,9 @@ void setLoadDataInputs(ArrayRef<Operation *> memOps, Operation *memOp) {
   }
 }
 
-void setJoinControlInputs(ArrayRef<Operation *> memOps, Operation *memOp,
-                          int offset, ArrayRef<int> cntrlInd) {
+LogicalResult setJoinControlInputs(ArrayRef<Operation *> memOps,
+                                   Operation *memOp, int offset,
+                                   ArrayRef<int> cntrlInd) {
   // Connect all memory ops to the join of that block (ensures that all mem
   // ops terminate before a new block starts)
   for (int i = 0, e = memOps.size(); i < e; ++i) {
@@ -1245,10 +968,11 @@ void setJoinControlInputs(ArrayRef<Operation *> memOps, Operation *memOp,
     Value val = getBlockControlValue(op->getBlock());
     auto srcOp = val.getDefiningOp();
     if (!isa<JoinOp, StartOp>(srcOp)) {
-      srcOp->emitError("Op expected to be a JoinOp or StartOp");
+      return srcOp->emitOpError("Op expected to be a JoinOp or StartOp");
     }
     addValueToOperands(srcOp, memOp->getResult(offset + cntrlInd[i]));
   }
+  return success();
 }
 
 void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
@@ -1289,17 +1013,28 @@ void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
   }
 }
 
-void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
-                     bool lsq, ConversionPatternRewriter &rewriter) {
+LogicalResult connectToMemory(handshake::FuncOp f,
+                              MemRefToMemoryAccessOp memRefOps, bool lsq,
+                              ConversionPatternRewriter &rewriter) {
   // Add MemoryOps which represent the memory interface
   // Connect memory operations and control appropriately
   int mem_count = 0;
-  for (auto memory : MemRefOps) {
+  for (auto memory : memRefOps) {
     // First operand corresponds to memref (alloca or function argument)
-    Value memrefOperand = getMemRefOperand(memory.first);
+    Value memrefOperand = memory.first;
+
+    // A memory is external if the memref that defines it is provided as a
+    // function (block) argument.
+    bool isExternalMemory = memrefOperand.isa<BlockArgument>();
+
+    mlir::MemRefType memrefType =
+        memrefOperand.getType().cast<mlir::MemRefType>();
+    if (memrefType.getNumDynamicDims() != 0 ||
+        memrefType.getShape().size() != 1)
+      return emitError(memrefOperand.getLoc())
+             << "memref's must be both statically sized and unidimensional.";
 
     std::vector<Value> operands;
-    // operands.push_back(memrefOperand);
 
     // Get control values which need to connect to memory
     std::vector<Value> controlVals = getControlValues(memory.second);
@@ -1350,9 +1085,15 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
     rewriter.setInsertionPointToStart(entryBlock);
 
     // Place memory op next to the alloc op
-    Operation *newOp = rewriter.create<MemoryOp>(
-        entryBlock->front().getLoc(), operands, ld_count, cntrl_count, lsq,
-        mem_count++, memrefOperand);
+    Operation *newOp = nullptr;
+    if (isExternalMemory)
+      newOp = rewriter.create<ExternalMemoryOp>(
+          entryBlock->front().getLoc(), memrefOperand, operands, ld_count,
+          cntrl_count - ld_count, mem_count++);
+    else
+      newOp = rewriter.create<MemoryOp>(entryBlock->front().getLoc(), operands,
+                                        ld_count, cntrl_count, lsq, mem_count++,
+                                        memrefOperand);
 
     setLoadDataInputs(memory.second, newOp);
 
@@ -1368,9 +1109,12 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
       // user-determined)
       bool control = true;
 
-      if (control)
-        setJoinControlInputs(memory.second, newOp, ld_count, newInd);
-      else {
+      if (control) {
+        if (setJoinControlInputs(memory.second, newOp, ld_count, newInd)
+                .failed())
+          return failure();
+
+      } else {
         for (int i = 0, e = cntrl_count; i < e; ++i) {
           rewriter.setInsertionPointAfter(newOp);
           rewriter.create<SinkOp>(newOp->getLoc(),
@@ -1396,6 +1140,7 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
   // Loads and stores have some sinks which are no longer needed now that they
   // connect to MemoryOp
   removeRedundantSinks(f, rewriter);
+  return success();
 }
 
 // A handshake::StartOp should have been created in the first block of the
@@ -1416,6 +1161,8 @@ public:
     addLegalDialect<HandshakeDialect>();
     addLegalDialect<StandardOpsDialect>();
     addLegalDialect<arith::ArithmeticDialect>();
+    addIllegalDialect<scf::SCFDialect>();
+    addIllegalDialect<mlir::AffineDialect>();
     /// The root function operation to be replaced is marked dynamically legal
     /// based on the lowering status of the given function, see
     /// PartialLowerFuncOp.
@@ -1501,110 +1248,6 @@ LogicalResult partiallyLowerFuncOp(
                                                        loweringFunc);
 }
 
-/// Rewrite affine.for operations in a handshake.func into its representations
-/// as a CFG in the standard dialect. Affine expressions in loop bounds will be
-/// expanded to code in the standard dialect that actually computes them. We
-/// combine the lowering of affine loops in the following two conversions:
-/// [AffineToStandard](https://mlir.llvm.org/doxygen/AffineToStandard_8cpp.html),
-/// [SCFToStandard](https://mlir.llvm.org/doxygen/SCFToStandard_8cpp_source.html)
-/// into this function.
-/// The affine memory operations will be preserved until other rewrite
-/// functions, e.g.,`replaceMemoryOps`, are called. Any affine analysis, e.g.,
-/// getting dependence information, should be carried out before calling this
-/// function; otherwise, the affine for loops will be destructed and key
-/// information will be missing.
-LogicalResult rewriteAffineFor(handshake::FuncOp f,
-                               ConversionPatternRewriter &rewriter) {
-  // Get all affine.for operations in the function body.
-  SmallVector<mlir::AffineForOp, 8> forOps;
-  f.walk([&](mlir::AffineForOp op) { forOps.push_back(op); });
-
-  // TODO: how to deal with nested loops?
-  for (unsigned i = 0, e = forOps.size(); i < e; i++) {
-    auto forOp = forOps[i];
-
-    // Insert lower and upper bounds right at the position of the original
-    // affine.for operation.
-    rewriter.setInsertionPoint(forOp);
-    auto loc = forOp.getLoc();
-    auto lowerBound = expandAffineMap(rewriter, loc, forOp.getLowerBoundMap(),
-                                      forOp.getLowerBoundOperands());
-    auto upperBound = expandAffineMap(rewriter, loc, forOp.getUpperBoundMap(),
-                                      forOp.getUpperBoundOperands());
-    if (!lowerBound || !upperBound)
-      return failure();
-    auto step = rewriter.create<arith::ConstantIndexOp>(loc, forOp.getStep());
-
-    // Build blocks for a common for loop. initBlock and initPosition are the
-    // block that contains the current forOp, and the position of the forOp.
-    auto *initBlock = rewriter.getInsertionBlock();
-    auto initPosition = rewriter.getInsertionPoint();
-
-    // Split the current block into several parts. `endBlock` contains the code
-    // starting from forOp. `conditionBlock` will have the condition branch.
-    // `firstBodyBlock` is the loop body, and `lastBodyBlock` is about the loop
-    // iterator stepping. Here we move the body region of the AffineForOp here
-    // and split it into `conditionBlock`, `firstBodyBlock`, and
-    // `lastBodyBlock`.
-    // TODO: is there a simpler API for doing so?
-    auto *endBlock = rewriter.splitBlock(initBlock, initPosition);
-    // Split and get the references to different parts (blocks) of the original
-    // loop body.
-    auto *conditionBlock = &forOp.region().front();
-    auto *firstBodyBlock =
-        rewriter.splitBlock(conditionBlock, conditionBlock->begin());
-    auto *lastBodyBlock =
-        rewriter.splitBlock(firstBodyBlock, firstBodyBlock->end());
-    rewriter.inlineRegionBefore(forOp.region(), endBlock);
-
-    // The loop IV is the first argument of the conditionBlock.
-    auto iv = conditionBlock->getArgument(0);
-
-    // Get the loop terminator, which should be the last operation of the
-    // original loop body. And `firstBodyBlock` points to that loop body.
-    auto terminator = dyn_cast<mlir::AffineYieldOp>(firstBodyBlock->back());
-    if (!terminator)
-      return failure();
-
-    // First, we fill the content of the lastBodyBlock with how the loop
-    // iterator steps.
-    rewriter.setInsertionPointToEnd(lastBodyBlock);
-    auto stepped = rewriter.create<arith::AddIOp>(loc, iv, step).getResult();
-
-    // Next, we get the loop carried values, which are terminator operands.
-    SmallVector<Value, 8> loopCarried;
-    loopCarried.push_back(stepped);
-    loopCarried.append(terminator.operand_begin(), terminator.operand_end());
-    rewriter.create<mlir::BranchOp>(loc, conditionBlock, loopCarried);
-
-    // Then we fill in the condition block.
-    rewriter.setInsertionPointToEnd(conditionBlock);
-    auto comparison = rewriter.create<arith::CmpIOp>(
-        loc, arith::CmpIPredicate::slt, iv, upperBound.getValue()[0]);
-
-    rewriter.create<mlir::CondBranchOp>(loc, comparison, firstBodyBlock,
-                                        ArrayRef<Value>(), endBlock,
-                                        ArrayRef<Value>());
-
-    // We also insert the branch operation at the end of the initBlock.
-    rewriter.setInsertionPointToEnd(initBlock);
-    // TODO: should we add more operands here?
-    rewriter.create<mlir::BranchOp>(loc, conditionBlock,
-                                    lowerBound.getValue()[0]);
-
-    // Finally, setup the firstBodyBlock.
-    rewriter.setInsertionPointToEnd(firstBodyBlock);
-    // TODO: is it necessary to add this explicit branch operation?
-    rewriter.create<mlir::BranchOp>(loc, lastBodyBlock);
-
-    // Remove the original forOp and the terminator in the loop body.
-    rewriter.eraseOp(terminator);
-    rewriter.eraseOp(forOp);
-  }
-
-  return success();
-}
-
 struct HandshakeCanonicalizePattern : public ConversionPattern {
   using ConversionPattern::ConversionPattern;
   LogicalResult match(Operation *op) const override {
@@ -1628,7 +1271,7 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
     for (auto result : op->getResults()) {
       // If there is a result and it is used more than once
       if (!result.use_empty() && !result.hasOneUse())
-        insertFork(op, result, false, rewriter);
+        insertFork(result, false, rewriter);
     }
   }
 };
@@ -1660,12 +1303,16 @@ LogicalResult replaceCallOps(handshake::FuncOp f,
   return success();
 }
 
+#define returnOnError(logicalResult)                                           \
+  if (failed(logicalResult))                                                   \
+    return logicalResult;
+
 LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
-    if (attr.first == SymbolTable::getSymbolAttrName() ||
-        attr.first == function_like_impl::getTypeAttrName())
+    if (attr.getName() == SymbolTable::getSymbolAttrName() ||
+        attr.getName() == function_like_impl::getTypeAttrName())
       continue;
     attributes.push_back(attr);
   }
@@ -1686,7 +1333,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  (void)partiallyLowerFuncOp<mlir::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<mlir::FuncOp>(
       [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         resTypes.push_back(noneType);
@@ -1697,57 +1344,62 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
                                     newFuncOp.end());
         return success();
       },
-      ctx, funcOp);
-
-  // Rewrite affine.for operations.
-  if (failed(partiallyLowerFuncOp<handshake::FuncOp>(rewriteAffineFor, ctx,
-                                                     newFuncOp)))
-    return newFuncOp.emitOpError("failed to rewrite Affine loops");
+      ctx, funcOp));
 
   // Perform dataflow conversion
-  MemRefToMemoryAccessOp MemOps;
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  MemRefToMemoryAccessOp memOps;
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
-        MemOps = replaceMemoryOps(nfo, rewriter);
-        return success();
+        // Map from original memref to new load/store operations.
+        return replaceMemoryOps(nfo, rewriter, memOps);
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
-                                                newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(connectConstantsToControl, ctx,
-                                                newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp);
-  checkDataflowConversion(newFuncOp);
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
+                                                        newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
+      connectConstantsToControl, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
+  returnOnError(checkDataflowConversion(newFuncOp));
 
   bool lsq = false;
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
-        connectToMemory(nfo, MemOps, lsq, rewriter);
-        return success();
+        return connectToMemory(nfo, memOps, lsq, rewriter);
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
   // Add  control argument to entry block, replace references to the
   // temporary handshake::StartOp operation, and finally remove the start
   // op.
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, PatternRewriter &rewriter) {
         argTypes.push_back(rewriter.getNoneType());
         auto funcType = rewriter.getFunctionType(argTypes, resTypes);
         nfo.setType(funcType);
         auto ctrlArg = nfo.front().addArgument(rewriter.getNoneType());
+
+        // We've now added all types to the handshake.funcOp; resolve arg- and
+        // res names to ensure they are up to date with the final type
+        // signature.
+        nfo.resolveArgAndResNames();
+
         Operation *startOp = findStartOp(&nfo.getRegion());
         startOp->getResult(0).replaceAllUsesWith(ctrlArg);
         rewriter.eraseOp(startOp);
         rewriter.eraseOp(funcOp);
         return success();
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
   return success();
 }
@@ -1756,6 +1408,12 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
+  // Returns true if a block argument should have buffers added to its uses.
+  static bool shouldBufferArgument(BlockArgument arg) {
+    // At the moment, buffers only make sense on arguments which we know
+    // will lower down to a handshake bundle.
+    return arg.getType().isIntOrFloat() || arg.getType().isa<NoneType>();
+  }
   // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy() {
     auto f = getOperation();
@@ -1765,9 +1423,12 @@ struct HandshakeInsertBufferPass
     // Traverse each use of each argument of the entry block.
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getBody().front().getArguments()) {
+      if (!shouldBufferArgument(arg))
+        continue;
       for (auto &operand : arg.getUses()) {
         if (opVisited.count(operand.getOwner()) == 0)
-          insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
+          insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
+                          opInFlight);
       }
     }
   }
@@ -1776,18 +1437,21 @@ struct HandshakeInsertBufferPass
   void bufferAllStrategy() {
     auto f = getOperation();
     auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getArguments())
+    for (auto &arg : f.getArguments()) {
+      if (!shouldBufferArgument(arg))
+        continue;
       for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, /*numSlots=*/2,
+        insertBufferRecursive(use, builder, bufferSize,
                               [](Operation *definingOp, Operation *usingOp) {
                                 return !isa_and_nonnull<BufferOp>(definingOp) &&
                                        !isa<BufferOp>(usingOp);
                               });
+    }
   }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferDFS(Operation *op, OpBuilder &builder,
+  void insertBufferDFS(Operation *op, OpBuilder &builder, unsigned numSlots,
                        DenseSet<Operation *> &opVisited,
                        DenseSet<Operation *> &opInFlight) {
     // Mark operation as visited and push into the stack.
@@ -1804,10 +1468,10 @@ struct HandshakeInsertBufferPass
         auto value = operand.get();
 
         builder.setInsertionPointAfter(op);
-        auto bufferOp = builder.create<handshake::BufferOp>(
-            op->getLoc(), value.getType(), value, /*sequential=*/true,
-            /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/2);
+        auto bufferOp =
+            builder.create<handshake::BufferOp>(op->getLoc(), value.getType(),
+                                                /*slots=*/numSlots, value,
+                                                /*sequential=*/true);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1816,7 +1480,7 @@ struct HandshakeInsertBufferPass
       }
       // For unvisited operations, recursively call insertBufferDFS() method.
       else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, opVisited, opInFlight);
+        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight);
     }
     // Pop operation out of the stack.
     opInFlight.erase(op);
@@ -1831,10 +1495,9 @@ struct HandshakeInsertBufferPass
     if (callback(definingOp, usingOp)) {
       builder.setInsertionPoint(usingOp);
       auto buffer = builder.create<handshake::BufferOp>(
-          oldValue.getLoc(), oldValue.getType(), oldValue,
-          /*sequential=*/true,
-          /*control=*/oldValue.getType().isa<NoneType>(),
-          /*slots=*/numSlots);
+          oldValue.getLoc(), oldValue.getType(),
+          /*slots=*/numSlots, oldValue,
+          /*sequential=*/true);
       use.getOwner()->setOperand(use.getOperandNumber(), buffer);
     }
 
@@ -1853,13 +1516,24 @@ struct HandshakeInsertBufferPass
       else if (strategy == "all")
         bufferAllStrategy();
       else {
-        emitError(getOperation().getLoc())
-            << "Unknown buffer strategy: " << strategy;
+        getOperation().emitOpError() << "Unknown buffer strategy: " << strategy;
         signalPassFailure();
         return;
       }
     }
   }
+};
+
+struct ConvertSelectOps : public OpConversionPattern<mlir::SelectOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(mlir::SelectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<handshake::MuxOp>(
+        op, adaptor.getCondition(),
+        SmallVector<Value>{adaptor.getFalseValue(), adaptor.getTrueValue()});
+    return success();
+  };
 };
 
 struct HandshakeRemoveBlockPass
@@ -1873,92 +1547,36 @@ struct HandshakeDataflowPass
     ModuleOp m = getOperation();
 
     for (auto funcOp : llvm::make_early_inc_range(m.getOps<mlir::FuncOp>())) {
-      if (failed(lowerFuncOp(funcOp, &getContext())))
+      if (failed(lowerFuncOp(funcOp, &getContext()))) {
         signalPassFailure();
-    }
-
-    // Legalize the resulting regions, which can have no basic blocks.
-    for (auto func : m.getOps<handshake::FuncOp>())
-      removeBasicBlocks(func);
-  }
-};
-
-struct HandshakeCanonicalizePass
-    : public HandshakeCanonicalizeBase<HandshakeCanonicalizePass> {
-  void runOnOperation() override {
-    auto Op = getOperation();
-    OpBuilder builder(Op);
-    (void)addForkOps(Op, builder);
-    (void)addSinkOps(Op, builder);
-
-    for (auto &block : Op)
-      for (auto &nestedOp : block)
-        for (mlir::Value out : nestedOp.getResults())
-          if (!out.hasOneUse()) {
-            nestedOp.emitError("does not have exactly one use");
-            signalPassFailure();
-          }
-  }
-};
-} // namespace
-
-// Temporary: print resources (operation counts)
-namespace {
-
-struct HandshakeAnalysisPass
-    : public HandshakeAnalysisBase<HandshakeAnalysisPass> {
-  void runOnOperation() override {
-    ModuleOp m = getOperation();
-
-    for (auto func : m.getOps<handshake::FuncOp>()) {
-      dotPrint(func, func.getName());
-
-      int count = 0;
-      int fork_count = 0;
-      int merge_count = 0;
-      int branch_count = 0;
-      int join_count = 0;
-
-      for (Operation &op : func.getOps()) {
-
-        if (isa<ForkOp>(op))
-          fork_count++;
-        else if (isa<MergeLikeOpInterface>(op))
-          merge_count++;
-        else if (isa<ConditionalBranchOp>(op))
-          branch_count++;
-        else if (isa<JoinOp>(op))
-          join_count++;
-        else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
-                 !isa<TerminatorOp>(op))
-          count++;
+        return;
       }
+    }
 
-      llvm::outs() << "// Fork count: " << fork_count << "\n";
-      llvm::outs() << "// Merge count: " << merge_count << "\n";
-      llvm::outs() << "// Branch count: " << branch_count << "\n";
-      llvm::outs() << "// Join count: " << join_count << "\n";
-      int total = count + fork_count + merge_count + branch_count;
-
-      llvm::outs() << "// Total op count: " << total << "\n";
+    // Legalize the resulting regions, removing basic blocks and performing any
+    // simple conversions.
+    for (auto func : m.getOps<handshake::FuncOp>()) {
+      removeBasicBlocks(func);
+      if (failed(postDataflowConvert(func)))
+        return signalPassFailure();
     }
   }
-};
-} // namespace
 
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-circt::createHandshakeAnalysisPass() {
-  return std::make_unique<HandshakeAnalysisPass>();
-}
+  LogicalResult postDataflowConvert(handshake::FuncOp op) {
+    ConversionTarget target(getContext());
+    target.addLegalDialect<handshake::HandshakeDialect>();
+    target.addIllegalOp<mlir::SelectOp>();
+    RewritePatternSet patterns(&getContext());
+    patterns.insert<ConvertSelectOps>(&getContext());
+    return applyPartialConversion(op, target, std::move(patterns));
+  }
+};
+
+} // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::createHandshakeDataflowPass() {
   return std::make_unique<HandshakeDataflowPass>();
-}
-
-std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-circt::createHandshakeCanonicalizePass() {
-  return std::make_unique<HandshakeCanonicalizePass>();
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>

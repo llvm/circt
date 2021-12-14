@@ -56,6 +56,12 @@ with Context() as ctx, Location.unknown():
       connect(reg2.input, reg_input)
       connect(reg2.clk, module.clk)
 
+      # CHECK: seq.compreg sym @reg1
+      seq.CompRegOp.create(i32,
+                           input=reg_input,
+                           clk=module.clk,
+                           inner_sym="reg1")
+
       # CHECK: hw.output %[[DATA_VAL]]
       hw.OutputOp([reg.data])
 
@@ -72,6 +78,6 @@ with Context() as ctx, Location.unknown():
 
   pm = PassManager.parse("lower-seq-to-sv")
   pm.run(m)
-  # CHECK: always @(posedge clk)
+  # CHECK: always_ff @(posedge clk)
   # CHECK: my_reg <= {{.+}}
   circt.export_verilog(m, sys.stdout)

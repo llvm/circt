@@ -20,6 +20,17 @@ using namespace sv;
 using namespace hw;
 using namespace ExportVerilog;
 
+StringAttr ExportVerilog::getDeclarationName(Operation *op) {
+  if (auto attr = op->getAttrOfType<StringAttr>("name"))
+    return attr;
+  if (auto attr = op->getAttrOfType<StringAttr>("instanceName"))
+    return attr;
+  if (auto attr =
+          op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+    return attr;
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
 //===----------------------------------------------------------------------===//
@@ -108,22 +119,30 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 /// keywords or themselves.  If so, add the replacement names to
 /// globalNameTable.
 void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
+  MLIRContext *ctxt = module.getContext();
   // If the module's symbol itself conflicts, then set a "verilogName" attribute
   // on the module to reflect the name we need to use.
   StringRef oldName = module.getName();
   auto newName = globalNameResolver.getLegalName(oldName);
   if (newName != oldName)
-    module->setAttr("verilogName",
-                    StringAttr::get(module.getContext(), newName));
+    module->setAttr("verilogName", StringAttr::get(ctxt, newName));
 
   NameCollisionResolver nameResolver;
-
+  auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
   // Legalize the port names.
   size_t portIdx = 0;
+  SmallVector<Attribute, 4> argNames, resultNames;
   for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
-    if (newName != port.name.getValue())
+    if (newName != port.name.getValue()) {
       globalNameTable.addRenamedPort(module, port, newName);
+      if (port.isOutput())
+        module.setResultAttr(port.argNum, verilogNameAttr,
+                             StringAttr::get(ctxt, newName));
+      else
+        module.setArgAttr(port.argNum, verilogNameAttr,
+                          StringAttr::get(ctxt, newName));
+    }
     ++portIdx;
   }
 
@@ -134,6 +153,17 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
     if (newName != paramAttr.getName().getValue())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
+
+  // Legalize the value names.
+  module.walk([&](Operation *op) {
+    if (auto nameAttr = getDeclarationName(op)) {
+      auto newName = nameResolver.getLegalName(nameAttr);
+      if (newName != nameAttr.getValue()) {
+        globalNameTable.addRenamedDeclaration(op, newName);
+        op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
+      }
+    }
+  });
 }
 
 void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {

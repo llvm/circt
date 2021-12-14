@@ -8,6 +8,7 @@
 // DIALECT-NEXT: arith
 // DIALECT-NEXT: builtin
 // DIALECT-NEXT: calyx
+// DIALECT-NEXT: chirrtl
 // DIALECT-NEXT: comb
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl
@@ -18,6 +19,7 @@
 // DIALECT-NEXT: llhd
 // DIALECT-NEXT: llvm
 // DIALECT-NEXT: memref
+// DIALECT-NEXT: moore
 // DIALECT-NEXT: msft
 // DIALECT-NEXT: scf
 // DIALECT-NEXT: seq

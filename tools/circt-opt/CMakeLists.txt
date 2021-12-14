@@ -8,6 +8,7 @@ add_llvm_tool(circt-opt
 llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
+  CIRCTAffineToStaticLogic
   CIRCTAnalysisTestPasses
   CIRCTCalyx
   CIRCTCalyxToHW
@@ -20,12 +21,15 @@ target_link_libraries(circt-opt
   CIRCTFSM
   CIRCTHandshake
   CIRCTHandshakeToFIRRTL
+  CIRCTHandshakeTransforms
   CIRCTHIR
   CIRCTHIRToHW
   CIRCTHIRTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
+  CIRCTMoore
+  CIRCTMooreToCore
   CIRCTMSFT
   CIRCTHW
   CIRCTHWToLLHD
@@ -38,6 +42,8 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicOps
   CIRCTSV
   CIRCTSVTransforms
+  CIRCTTransforms
+
   
   MLIRIR
   MLIRLLVMIR

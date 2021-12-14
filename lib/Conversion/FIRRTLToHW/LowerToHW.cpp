@@ -73,7 +73,7 @@ static Type lowerType(Type type) {
       if (!etype)
         return {};
       // TODO: make hw::StructType contain StringAttrs.
-      auto name = Identifier::get(element.name.getValue(), type.getContext());
+      auto name = StringAttr::get(element.name.getValue(), type.getContext());
       hwfields.push_back(hw::StructType::FieldInfo{name, etype});
     }
     return hw::StructType::get(type.getContext(), hwfields);
@@ -186,19 +186,19 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   auto ctx = top.getContext();
   if (!anno)
     return;
-  if (auto dir = anno.getAs<StringAttr>("directory")) {
+  if (auto dir = anno.getMember<StringAttr>("directory")) {
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(Identifier::get(attrBase, ctx),
+    old.emplace_back(StringAttr::get(attrBase, ctx),
                      hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
     top->setAttrs(old);
   }
-  if (auto file = anno.getAs<StringAttr>("filename")) {
+  if (auto file = anno.getMember<StringAttr>("filename")) {
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);
@@ -226,6 +226,10 @@ mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
   return retval;
 }
 
+static unsigned getBitWidthFromVectorSize(unsigned size) {
+  return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -243,8 +247,10 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
-  CircuitLoweringState(CircuitOp circuitOp, bool warn)
-      : circuitOp(circuitOp), enableAnnotationWarning(warn) {}
+  CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
+                       bool nonConstAsyncResetValueIsError)
+      : circuitOp(circuitOp), enableAnnotationWarning(enableAnnotationWarning),
+        nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {}
 
   Operation *getNewModule(Operation *oldModule) {
     auto it = oldToNewModuleMap.find(oldModule);
@@ -266,6 +272,7 @@ struct CircuitLoweringState {
 
 private:
   friend struct FIRRTLModuleLowering;
+  friend struct FIRRTLLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
   void operator=(const CircuitLoweringState &) = delete;
 
@@ -283,6 +290,10 @@ private:
 
   // Control access to binds.
   std::mutex bindsMutex;
+
+  /// If true, non-constant reset values of async reset registers are printed as
+  /// errors and cause the pass to abort. Otherwise they are warnings.
+  const bool nonConstAsyncResetValueIsError = true;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -300,6 +311,11 @@ void CircuitLoweringState::processRemainingAnnotations(
     // This can occur for example if an annotation marks something in the IR as
     // not to be processed by a pass, but that pass hasn't run anyway.
     if (a.isClass(
+            // If the class is `circt.nonlocal`, it's not really an annotation,
+            // but part of a path specifier for another annotation which is
+            // non-local.  We can ignore these path specifiers since there will
+            // be a warning produced for the real annotation.
+            "circt.nonlocal",
             // The following are either consumed by a pass running before
             // LowerToHW, or they have no effect if the pass doesn't run at all.
             // If the accompanying pass runs on the HW dialect, then LowerToHW
@@ -340,6 +356,9 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
+  void setNonConstAsyncResetValueIsError() {
+    nonConstAsyncResetValueIsError = true;
+  }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -366,10 +385,13 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
+                                 bool nonConstAsyncResetValueIsError) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
+  if (nonConstAsyncResetValueIsError)
+    pass->setNonConstAsyncResetValueIsError();
   return pass;
 }
 
@@ -394,7 +416,8 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(circuit, enableAnnotationWarning);
+  CircuitLoweringState state(circuit, enableAnnotationWarning,
+                             nonConstAsyncResetValueIsError);
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
@@ -421,6 +444,9 @@ void FIRRTLModuleLowering::runOnOperation() {
         .Case<FExtModuleOp>([&](auto extModule) {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
+        })
+        .Case<NonLocalAnchor>([&](auto nla) {
+          // Just drop it.
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -698,6 +724,7 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
+    hwPort.sym = firrtlPort.sym;
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
@@ -745,9 +772,9 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   // in sorted order which is nicely stable.
   SmallVector<Attribute> newParams;
   for (const NamedAttribute &entry : paramsOptional.getValue()) {
-    auto name = builder.getStringAttr(entry.first.strref());
-    auto type = TypeAttr::get(entry.second.getType());
-    auto value = ignoreValues ? Attribute() : entry.second;
+    auto name = entry.getName();
+    auto type = TypeAttr::get(entry.getValue().getType());
+    auto value = ignoreValues ? Attribute() : entry.getValue();
     auto paramAttr =
         hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
     newParams.push_back(paramAttr);
@@ -814,7 +841,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
           moduleHierarchyFileAttrName,
           hw::OutputFileAttr::getFromFilename(
               &getContext(),
-              hierAnno.get("filename").cast<StringAttr>().getValue(),
+              hierAnno.getMember<StringAttr>("filename").getValue(),
               /*excludeFromFileList=*/true));
   };
   if (annos.removeAnnotation(dutAnnoClass))
@@ -915,8 +942,13 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We know it must be the destination operand due to the types, but the
   // source may not match the destination width.
   auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-  if (destTy.getBitWidthOrSentinel() !=
-      connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+
+  if (!destTy.isGround()) {
+    // If types are not ground type and they don't match, we give up.
+    if (destTy != connectSrc.getType().cast<FIRRTLType>())
+      return {};
+  } else if (destTy.getBitWidthOrSentinel() !=
+             connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
     // The only type mismatchs we care about is due to integer width
     // differences.
     auto destWidth = destTy.getBitWidthOrSentinel();
@@ -1078,7 +1110,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
-  void initializeRegister(Value reg, Value resetSignal);
+  void initializeRegister(Value reg);
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
@@ -1086,16 +1118,16 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   /// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
   Value getReadInOutOp(Value v);
 
-  void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
-  void addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
-                          ::ResetType resetStyle, sv::EventControl resetEdge,
-                          Value reset, std::function<void(void)> body = {},
-                          std::function<void(void)> resetBody = {});
-  void addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
-                          std::function<void(void)> body = {}) {
-    addToAlwaysFFBlock(clockEdge, clock, ::ResetType(), sv::EventControl(),
-                       Value(), body, std::function<void(void)>());
+  void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
+                        ::ResetType resetStyle, sv::EventControl resetEdge,
+                        Value reset, std::function<void(void)> body = {},
+                        std::function<void(void)> resetBody = {});
+  void addToAlwaysBlock(Value clock, std::function<void(void)> body = {}) {
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clock, ::ResetType(),
+                     sv::EventControl(), Value(), body,
+                     std::function<void(void)>());
   }
+
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
@@ -1104,6 +1136,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
+  Value getExtOrTruncAggregateValue(Value array, FIRRTLType sourceType,
+                                    FIRRTLType destType, bool allowTruncate);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1124,6 +1158,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SpecialConstantOp op);
+  LogicalResult visitExpr(SubindexOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -1272,11 +1307,10 @@ private:
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
-  llvm::SmallDenseMap<std::pair<Value, Region *>, sv::AlwaysOp> alwaysBlocks;
-
-  using AlwaysFFKeyType = std::tuple<Block *, sv::EventControl, Value,
-                                     ::ResetType, sv::EventControl, Value>;
-  llvm::SmallDenseMap<AlwaysFFKeyType, sv::AlwaysFFOp> alwaysFFBlocks;
+  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
+                                   ::ResetType, sv::EventControl, Value>;
+  llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
+      alwaysBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
@@ -1288,6 +1322,10 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
+
+  /// This is a map from block to a pair of a random value and its unused bits.
+  /// It is used to reduce the number of random value.
+  DenseMap<Block *, std::pair<Value, unsigned>> blockRandomValueAndRemain;
 };
 } // end anonymous namespace
 
@@ -1446,6 +1484,104 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
+/// Return the lowered aggregate value whose type is converted into `destType`.
+/// We have to care about the extension/truncation/signedness of each element.
+Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
+                                                  FIRRTLType sourceType,
+                                                  FIRRTLType destType,
+                                                  bool allowTruncate) {
+  SmallVector<Value> resultBuffer;
+
+  // Helper function to cast each element of array to dest type.
+  auto cast = [&](Value value, FIRRTLType sourceType, FIRRTLType destType) {
+    auto srcWidth = sourceType.cast<IntType>().getWidthOrSentinel();
+    auto destWidth = destType.cast<IntType>().getWidthOrSentinel();
+    auto resultType = builder.getIntegerType(destWidth);
+
+    if (srcWidth == destWidth)
+      return value;
+
+    if (srcWidth > destWidth) {
+      if (allowTruncate)
+        return builder.createOrFold<comb::ExtractOp>(resultType, value, 0);
+
+      builder.emitError("operand should not be a truncation");
+      return Value();
+    }
+
+    if (sourceType.cast<IntType>().isSigned())
+      return comb::createOrFoldSExt(value, resultType, builder);
+    auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
+    return builder.createOrFold<comb::ConcatOp>(zero, value);
+  };
+
+  // This recursive function constructs the output array.
+  std::function<LogicalResult(Value, FIRRTLType, FIRRTLType)> recurse =
+      [&](Value src, FIRRTLType srcType, FIRRTLType destType) -> LogicalResult {
+    return TypeSwitch<FIRRTLType, LogicalResult>(srcType)
+        .Case<FVectorType>([&](auto srcVectorType) {
+          auto destVectorType = destType.cast<FVectorType>();
+          unsigned size = resultBuffer.size();
+          unsigned indexWidth =
+              getBitWidthFromVectorSize(srcVectorType.getNumElements());
+          for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
+                                          destVectorType.getNumElements());
+               i != e; ++i) {
+            auto iIdx = getOrCreateIntConstant(indexWidth, i);
+            auto arrayIndex = builder.create<hw::ArrayGetOp>(src, iIdx);
+            if (failed(recurse(arrayIndex, srcVectorType.getElementType(),
+                               destVectorType.getElementType())))
+              return failure();
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(array);
+          return success();
+        })
+        .Case<BundleType>([&](BundleType srcStructType) {
+          auto destStructType = destType.cast<BundleType>();
+          unsigned size = resultBuffer.size();
+
+          // TODO: We don't support partial connects for bundles for now.
+          if (destStructType.getNumElements() != srcStructType.getNumElements())
+            return failure();
+
+          for (auto elem : enumerate(destStructType.getElements())) {
+            auto structExtract =
+                builder.create<hw::StructExtractOp>(src, elem.value().name);
+            if (failed(recurse(structExtract,
+                               srcStructType.getElementType(elem.index()),
+                               destStructType.getElementType(elem.index()))))
+              return failure();
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto newStruct = builder.createOrFold<hw::StructCreateOp>(
+              lowerType(destStructType), temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(newStruct);
+          return success();
+        })
+        .Case<IntType>([&](auto) {
+          if (auto result = cast(src, srcType, destType)) {
+            resultBuffer.push_back(result);
+            return success();
+          }
+          return failure();
+        })
+        .Default([&](auto) { return failure(); });
+  };
+
+  if (failed(recurse(array, sourceType, destType)))
+    return Value();
+
+  assert(resultBuffer.size() == 1 &&
+         "resultBuffer must only contain a result array if `success` is true");
+  return resultBuffer[0];
+}
+
 /// Return the lowered value corresponding to the specified original value and
 /// then extend it to match the width of destType if needed.
 ///
@@ -1475,6 +1611,17 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
+  // Aggregates values
+  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
+    // Types already match.
+    if (destType == value.getType())
+      return result;
+
+    return getExtOrTruncAggregateValue(
+        result, value.getType().cast<FIRRTLType>(), destType.cast<FIRRTLType>(),
+        /* allowTruncate */ false);
+  }
+
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
   if (srcWidth == unsigned(destWidth))
     return result;
@@ -1489,7 +1636,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder.createOrFold<comb::SExtOp>(resultType, result);
+    return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -1524,6 +1671,17 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
+  // Aggregates values
+  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
+    // Types already match.
+    if (destType == value.getType())
+      return result;
+
+    return getExtOrTruncAggregateValue(
+        result, value.getType().cast<FIRRTLType>(), destType.cast<FIRRTLType>(),
+        /* allowTruncate */ true);
+  }
+
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
   if (srcWidth == unsigned(destWidth))
     return result;
@@ -1541,7 +1699,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   // Extension follows the sign of the source value, not the destination.
   auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
   if (valueFIRType.cast<IntType>().isSigned())
-    return builder.createOrFold<comb::SExtOp>(resultType, result);
+    return comb::createOrFoldSExt(result, resultType, builder);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -1650,44 +1808,69 @@ Value FIRRTLLowering::getReadInOutOp(Value v) {
   return result;
 }
 
-void FIRRTLLowering::addToAlwaysBlock(Value clock,
-                                      std::function<void(void)> fn) {
-  auto &op = alwaysBlocks[{clock, builder.getBlock()->getParent()}];
-  if (op) {
-    runWithInsertionPointAtEndOfBlock(fn, op.body());
-    // Move the earlier always block(s) down to where the last would have been
-    // inserted.  This ensures that any values used by the always blocks are
-    // defined ahead of the uses, which leads to better generated Verilog.
-    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
-  } else {
-    op = builder.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, fn);
-  }
-}
+void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
+                                      ::ResetType resetStyle,
+                                      sv::EventControl resetEdge, Value reset,
+                                      std::function<void(void)> body,
+                                      std::function<void(void)> resetBody) {
+  auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
+                           resetEdge, reset}];
+  auto &alwaysOp = op.first;
+  auto &insideIfOp = op.second;
 
-void FIRRTLLowering::addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
-                                        ::ResetType resetStyle,
-                                        sv::EventControl resetEdge, Value reset,
-                                        std::function<void(void)> body,
-                                        std::function<void(void)> resetBody) {
-  auto &op = alwaysFFBlocks[std::make_tuple(
-      builder.getBlock(), clockEdge, clock, resetStyle, resetEdge, reset)];
-  if (op) {
-    runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
-    runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
-
-    // Move the earlier always block(s) down to where the last would have been
-    // inserted.  This ensures that any values used by the always blocks are
-    // defined ahead of the uses, which leads to better generated Verilog.
-    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
-  } else {
+  if (!alwaysOp) {
     if (reset) {
-      op = builder.create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
-                                          resetEdge, reset, body, resetBody);
+      assert(resetStyle != ::ResetType::NoReset);
+      // Here, we want to create the folloing structure with sv.always and
+      // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
+      // list.
+      //
+      // sv.always @(clockEdge or reset) {
+      //   sv.if (reset) {
+      //     resetBody
+      //   } else {
+      //     body
+      //   }
+      // }
+
+      auto createIfOp = [&]() {
+        // It is weird but intended. Here we want to create an empty sv.if with
+        // an else block.
+        insideIfOp = builder.create<sv::IfOp>(
+            reset, []() {}, []() {});
+      };
+      if (resetStyle == ::ResetType::AsyncReset) {
+        sv::EventControl events[] = {clockEdge, resetEdge};
+        Value clocks[] = {clock, reset};
+
+        alwaysOp = builder.create<sv::AlwaysOp>(events, clocks, [&]() {
+          if (resetEdge == sv::EventControl::AtNegEdge)
+            llvm_unreachable("negative edge for reset is not expected");
+          createIfOp();
+        });
+      } else {
+        alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, createIfOp);
+      }
     } else {
       assert(!resetBody);
-      op = builder.create<sv::AlwaysFFOp>(clockEdge, clock, body);
+      alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock);
+      insideIfOp = nullptr;
     }
   }
+
+  if (reset) {
+    assert(insideIfOp && "reset body must be initialized before");
+    runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.thenRegion());
+    runWithInsertionPointAtEndOfBlock(body, insideIfOp.elseRegion());
+  } else {
+    runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
+  }
+
+  // Move the earlier always block(s) down to where the last would have been
+  // inserted.  This ensures that any values used by the always blocks are
+  // defined ahead of the uses, which leads to better generated Verilog.
+  alwaysOp->moveBefore(builder.getInsertionBlock(),
+                       builder.getInsertionPoint());
 }
 
 void FIRRTLLowering::addToIfDefBlock(StringRef cond,
@@ -1801,12 +1984,39 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
+  // Zero width values must be lowered to nothing.
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
   return setLowering(op, getOrCreateIntConstant(op.value()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   return setLowering(op,
                      getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
+  Value value = getPossiblyInoutLoweredValue(op.input());
+  if (!resultType || !value) {
+    op.emitError() << "input lowering failed";
+    return failure();
+  }
+
+  auto iIdx = getOrCreateIntConstant(
+      getBitWidthFromVectorSize(
+          op.input().getType().cast<FVectorType>().getNumElements()),
+      op.index());
+
+  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
+  if (value.getType().isa<sv::InOutType>())
+    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
+  // Otherwise, hw::ArrayGetOp
+  return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -1821,8 +2031,15 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
     return setLowering(op, Value());
 
   auto resultType = lowerType(op->getResult(0).getType());
-  Value value = getLoweredValue(op.input());
+  Value value = getPossiblyInoutLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
+
+  // If the value has an inout type, we need to lower to StructFieldInOutOp.
+  if (value.getType().isa<sv::InOutType>()) {
+    auto field =
+        op.input().getType().cast<BundleType>().getElementName(op.fieldIndex());
+    return setLoweringTo<sv::StructFieldInOutOp>(op, value, field);
+  }
 
   return setLoweringTo<hw::StructExtractOp>(
       op, resultType, value,
@@ -1842,27 +2059,22 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return setLowering(op, Value());
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
-  auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
-
-  if (!AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation"))
-    return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
-  auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-  auto symName = op.nameAttr();
-  // Prepend the name of the module to make the symbol name unique in the symbol
-  // table, it is already unique in the module. Checking if the name is unique
-  // in the SymbolTable is non-trivial.
-  if (symName && !symName.getValue().empty())
+  auto symName = op.inner_symAttr();
+  auto name = op.nameAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    // Prepend the name of the module to make the symbol name unique in the
+    // symbol table, it is already unique in the module. Checking if the name is
+    // unique in the SymbolTable is non-trivial.
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    symName.getValue());
-  else
-    // If marked with DontTouch but does not have a name, then add a symbol
-    // name. Note: Same symbol name for all such wires in the module.
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__"));
+                                    name.getValue());
+  }
 
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
+  return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -1880,8 +2092,12 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
     operands.push_back(lowered);
   }
 
+  ArrayAttr symbols = op.symbolsAttr();
+  if (!symbols)
+    symbols = ArrayAttr::get(op.getContext(), {});
+
   return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
-                                           operands);
+                                           operands, symbols);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -1890,16 +2106,21 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
 
-  // Node operations are logical noops, but may carry annotations.  Don't touch
-  // indicates we should keep it as a wire.
+  // Node operations are logical noops, but may carry annotations or be referred
+  // to through an inner name. If a don't touch is present, ensure that we have
+  // a symbol name so we can keep the node as a wire.
+  auto symName = op.inner_symAttr();
+  auto name = op.nameAttr();
   if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation")) {
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName) {
     // name may be empty
-    auto name = op->getAttrOfType<StringAttr>("name");
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    auto symName = builder.getStringAttr(Twine("__") + moduleName +
-                                         Twine("__") + name.getValue());
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
 
+  if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
   }
@@ -1917,13 +2138,14 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
   randomizePrologEmitted = true;
 }
 
-void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
+void FIRRTLLowering::initializeRegister(Value reg) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
   // VerbatimExprSEOp.
+  constexpr unsigned randomWidth = 32;
   auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprSEOp>(builder.getIntegerType(32),
-                                                "`RANDOM");
+    return builder.create<sv::VerbatimExprSEOp>(
+        builder.getIntegerType(randomWidth), "`RANDOM");
   };
 
   // Return an expression containing random bits of the specified width.
@@ -1931,13 +2153,32 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   std::function<Value(IntegerType)> getRandomValue =
       [&](IntegerType type) -> Value {
     assert(type.getWidth() != 0 && "zero bit width's not supported");
-    auto rand32 = getRandom32Val();
-    if (type.getWidth() <= 32)
-      return builder.createOrFold<comb::ExtractOp>(type, rand32, 0);
+    auto &randomValueAndRemain = blockRandomValueAndRemain[builder.getBlock()];
+    if (randomValueAndRemain.second >= type.getWidth()) {
+      auto value = builder.createOrFold<comb::ExtractOp>(
+          type, randomValueAndRemain.first,
+          randomWidth - randomValueAndRemain.second);
 
-    // Get the top part.
-    auto rest = getRandomValue(builder.getIntegerType(type.getWidth() - 32));
-    return builder.createOrFold<comb::ConcatOp>(rand32, rest);
+      randomValueAndRemain.second -= type.getWidth();
+      return value;
+    }
+
+    // If nothing remains, produce new 32 bit random value and call it
+    // recursively.
+    if (randomValueAndRemain.second == 0) {
+      randomValueAndRemain = {getRandom32Val(), randomWidth};
+      return getRandomValue(type);
+    }
+
+    // Consume all the bits we have now, and then concat the rest.
+    auto currentWidth = builder.getIntegerType(randomValueAndRemain.second);
+    auto value = builder.createOrFold<comb::ExtractOp>(
+        currentWidth, randomValueAndRemain.first,
+        randomWidth - randomValueAndRemain.second);
+    randomValueAndRemain = {getRandom32Val(), randomWidth};
+    auto rest = getRandomValue(
+        builder.getIntegerType(type.getWidth() - currentWidth.getWidth()));
+    return builder.createOrFold<comb::ConcatOp>(value, rest);
   };
 
   // Get a random value with the specified width, combining or truncating
@@ -1952,18 +2193,29 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Randomly initialize everything in the register. If the register
   // is an aggregate type, then assign random values to all its
   // constituent ground types.
-  // TODO: Extend this so it recursively initializes everything.
   auto randomInit = [&]() {
     auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-    TypeSwitch<Type>(type)
-        .Case<hw::UnpackedArrayType>([&](auto a) {
-          for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-            auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
-            auto arrayIndex = builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-            emitRandomInit(arrayIndex, a.getElementType());
-          }
-        })
-        .Default([&](auto type) { emitRandomInit(reg, type); });
+    std::function<void(Value, Type)> recurse = [&](Value reg, Type type) {
+      TypeSwitch<Type>(type)
+          .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
+            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
+              auto iIdx =
+                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
+              auto arrayIndex =
+                  builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
+              recurse(arrayIndex, a.getElementType());
+            }
+          })
+          .Case<hw::StructType>([&](hw::StructType s) {
+            for (auto elem : s.getElements()) {
+              auto field =
+                  builder.create<sv::StructFieldInOutOp>(reg, elem.name);
+              recurse(field, elem.type);
+            }
+          })
+          .Default([&](auto type) { emitRandomInit(reg, type); });
+    };
+    recurse(reg, type);
   };
 
   // Emit the initializer expression for simulation that fills it with random
@@ -1972,13 +2224,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       circuitState.used_RANDOMIZE_REG_INIT = 1;
-      addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() {
-        if (resetSignal) {
-          addIfProceduralBlock(resetSignal, {}, [&]() { randomInit(); });
-        } else {
-          randomInit();
-        }
-      });
+      addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() { randomInit(); });
     });
   });
 }
@@ -1991,14 +2237,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   // Add symbol if DontTouch annotation present.
+  auto symName = op.inner_symAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName)
+    symName = op.nameAttr();
   auto regResult =
-      AnnotationSet::removeAnnotations(op,
-                                       "firrtl.transforms.DontTouchAnnotation")
-          ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
-          : builder.create<sv::RegOp>(resultType, op.nameAttr());
+      builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
-  initializeRegister(regResult, Value());
+  initializeRegister(regResult);
 
   return success();
 }
@@ -2019,7 +2267,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  auto symName = op.inner_symAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName)
+    symName = op.nameAttr();
+  auto regResult =
+      builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
@@ -2027,21 +2281,24 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
-    if (!firrtl::isConstant(op.resetValue()))
-      return op.emitError(
-                   "register with async reset requires constant reset value")
-                 .attachNote(op.resetValue().getLoc())
-             << "reset value defined here:";
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
-                       ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
-                       resetSignal, std::function<void()>(), resetFn);
+    if (!firrtl::isConstant(op.resetValue())) {
+      auto diag = circuitState.nonConstAsyncResetValueIsError
+                      ? op.emitError()
+                      : op.emitWarning();
+      diag << "register with async reset requires constant reset value";
+      diag.attachNote(op.resetValue().getLoc()) << "reset value defined here:";
+      if (circuitState.nonConstAsyncResetValueIsError)
+        return failure();
+    }
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
+                     resetSignal, std::function<void()>(), resetFn);
   } else { // sync reset
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
-                       ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
-                       resetSignal, std::function<void()>(), resetFn);
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
+                     resetSignal, std::function<void()>(), resetFn);
   }
-
-  initializeRegister(regResult, resetSignal);
+  initializeRegister(regResult);
   return success();
 }
 
@@ -2178,7 +2435,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
-      /*sym_name=*/StringAttr());
+      /*sym_name=*/op.inner_symAttr());
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
@@ -2254,9 +2511,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
   // a parallel context.
-  StringAttr symbol;
-  if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
-    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+  StringAttr symbol = oldInstance.inner_symAttr();
+  if (oldInstance.lowerToBind()) {
+    if (!symbol)
+      symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
     auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
@@ -2271,7 +2529,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto newInstance = builder.create<hw::InstanceOp>(
       newModule, oldInstance.nameAttr(), operands, parameters, symbol);
 
-  if (symbol)
+  if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users
@@ -2595,14 +2853,22 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
     // not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
+  // We don't allow aggregate values which contain values of analog types.
+  if (op.getType().cast<FIRRTLType>().containsAnalog())
+    return failure();
+
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  if (auto intType = resultTy.dyn_cast<IntegerType>()) {
-    if (intType.getWidth() == 0) // Let the caller handle zero width values.
+  if (auto bitwidth = firrtl::getBitWidth(op.getType().cast<FIRRTLType>())) {
+    if (bitwidth.getValue() == 0) // Let the caller handle zero width values.
       return failure();
-    return setLowering(
-        op, getOrCreateIntConstant(resultTy.getIntOrFloatBitWidth(), 0));
+
+    auto constant = getOrCreateIntConstant(bitwidth.getValue(), 0);
+    // If the result is an aggregate value, we have to bitcast the constant.
+    if (!resultTy.isa<IntegerType>())
+      constant = builder.create<hw::BitcastOp>(resultTy, constant);
+    return setLowering(op, constant);
   }
 
   // Invalid for bundles isn't supported.
@@ -2698,8 +2964,12 @@ LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
     operands.push_back(lowered);
   }
 
+  ArrayAttr symbols = op.symbolsAttr();
+  if (!symbols)
+    symbols = ArrayAttr::get(op.getContext(), {});
+
   return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
-                                           operands);
+                                           operands, symbols);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2734,9 +3004,8 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal)
       return failure();
 
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal, [&]() {
-      builder.create<sv::PAssignOp>(destVal, srcVal);
-    });
+    addToAlwaysBlock(clockVal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2748,13 +3017,12 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
-                       regResetOp.resetSignal().getType().isa<AsyncResetType>()
-                           ? ::ResetType::AsyncReset
-                           : ::ResetType::SyncReset,
-                       sv::EventControl::AtPosEdge, resetSignal, [&]() {
-                         builder.create<sv::PAssignOp>(destVal, srcVal);
-                       });
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     regResetOp.resetSignal().getType().isa<AsyncResetType>()
+                         ? ::ResetType::AsyncReset
+                         : ::ResetType::SyncReset,
+                     sv::EventControl::AtPosEdge, resetSignal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2787,9 +3055,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal)
       return failure();
 
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal, [&]() {
-      builder.create<sv::PAssignOp>(destVal, srcVal);
-    });
+    addToAlwaysBlock(clockVal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 
@@ -2804,10 +3071,42 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
                           ? ::ResetType::AsyncReset
                           : ::ResetType::SyncReset;
-    addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
-                       sv::EventControl::AtPosEdge, resetSignal, [&]() {
-                         builder.create<sv::PAssignOp>(destVal, srcVal);
-                       });
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
+                     sv::EventControl::AtPosEdge, resetSignal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+    return success();
+  }
+
+  if (srcVal.getType().isa<hw::ArrayType>() && destType != op.src().getType()) {
+    // If the connection is about array and types do not match, it might be a
+    // connection between vectors with different lengths. For such cases, we can
+    // not use usual assignments. It is necessary to assign each elements
+    // recursively.
+    std::function<void(Value, Value, Type, Type)> recurse = [&](Value dest,
+                                                                Value src,
+                                                                Type dstType,
+                                                                Type srcType) {
+      TypeSwitch<Type>(srcType)
+          .Case<FVectorType>([&](auto srcVectorType) {
+            auto destVectorType = destType.cast<FVectorType>();
+            for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
+                                            destVectorType.getNumElements());
+                 i != e; ++i) {
+              auto idx =
+                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
+              auto destInOutOp =
+                  builder.create<sv::ArrayIndexInOutOp>(dest, idx);
+              auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
+
+              recurse(destInOutOp, srcGetOp, destVectorType.getElementType(),
+                      srcVectorType.getElementType());
+            }
+          })
+          .Case<IntType>([&](auto) { builder.create<sv::AssignOp>(dest, src); })
+          .Default([&](auto) { llvm_unreachable("must fail before"); });
+    };
+    recurse(destVal, srcVal, destType, op.src().getType());
+
     return success();
   }
 

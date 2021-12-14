@@ -6,6 +6,8 @@
 ; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
+; RUN: firtool %s --format=fir -verilog-ir | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
+
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -41,6 +43,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; OMIROUT-NEXT:         "value": "OMString:hello"
 ; OMIROUT-NEXT:       }
 
+; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros to our needs
+; VERILOG-IR: sv.verbatim "`define INIT_RANDOM_PROLOG_
 
   module test_mod :
     input clock : Clock
@@ -107,7 +111,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out2;
 ; VERILOG-NEXT:    wire [5:0] cat_d;
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:    wire [4:0] _T = cat_d[4:0];
+; VERILOG-NEXT:    wire [4:0] _cat_d_4to0 = cat_d[4:0];
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
@@ -116,14 +120,14 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    ImplicitTrunc implicitTrunc (
 ; VERILOG-NEXT:      .inp_1 (a),
-; VERILOG-NEXT:      .inp_2 (_T),
+; VERILOG-NEXT:      .inp_2 (_cat_d_4to0),
 ; VERILOG-NEXT:      .out1  (implicitTrunc_out1),
 ; VERILOG-NEXT:      .out2  (implicitTrunc_out2)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    PrettifyExample prettifyExample (
-; VERILOG-NEXT:      .inp_1 (_T),
-; VERILOG-NEXT:      .inp_2 (_T),
-; VERILOG-NEXT:      .inp_3 (_T),
+; VERILOG-NEXT:      .inp_1 (_cat_d_4to0),
+; VERILOG-NEXT:      .inp_2 (_cat_d_4to0),
+; VERILOG-NEXT:      .inp_3 (_cat_d_4to0),
 ; VERILOG-NEXT:      .out1  (prettifyExample_out1),
 ; VERILOG-NEXT:      .out2  (prettifyExample_out2)
 ; VERILOG-NEXT:    );
@@ -161,12 +165,13 @@ circuit test_mod : %[[{"a": "a"}]]
 
 ; MLIRLOWER-LABEL: hw.module @ImplicitTrunc(%inp_1: i1, %inp_2: i5) -> (out1: i3, out2: i3) {
 ; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
-; MLIRLOWER-NEXT:    %0 = comb.sext %inp_2 : (i5) -> i6
-; MLIRLOWER-NEXT:    %1 = comb.concat %c0_i5, %inp_1 : i5, i1
-; MLIRLOWER-NEXT:    %2 = comb.shl %0, %1 : i6
-; MLIRLOWER-NEXT:    %3 = comb.extract %2 from 0 : (i6) -> i3
-; MLIRLOWER-NEXT:    %4 = comb.extract %inp_2 from 0 : (i5) -> i3
-; MLIRLOWER-NEXT:    hw.output %3, %4 : i3, i3
+; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1 
+; MLIRLOWER-NEXT:    %1 = comb.concat %0, %inp_2 : i1, i5
+; MLIRLOWER-NEXT:    %2 = comb.concat %c0_i5, %inp_1 : i5, i1
+; MLIRLOWER-NEXT:    %3 = comb.shl %1, %2 : i6
+; MLIRLOWER-NEXT:    %4 = comb.extract %3 from 0 : (i6) -> i3
+; MLIRLOWER-NEXT:    %5 = comb.extract %inp_2 from 0 : (i5) -> i3
+; MLIRLOWER-NEXT:    hw.output %4, %5 : i3, i3
 ; MLIRLOWER-NEXT:  }
 
 ; VERILOG-LABEL: module ImplicitTrunc(
