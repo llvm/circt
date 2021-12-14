@@ -421,11 +421,11 @@ class ArrayCreateOp:
 class ArrayConcatOp:
 
   @staticmethod
-  def create(*args):
+  def create(*sub_arrays):
     vals = []
     types = []
     element_type = None
-    for array in args:
+    for array in sub_arrays:
       array_value = support.get_value(array)
       array_type = support.type_to_pytype(array_value.type)
       if array_value is None or not isinstance(array_type, hw.ArrayType):
