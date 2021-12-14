@@ -170,16 +170,30 @@ void ConstantXOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   SmallVector<char, 32> specialNameBuffer;
   llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << "x_" << getType();
+  specialName << "x_i" << getWidth();
   setNameFn(getResult(), specialName.str());
+}
+
+static LogicalResult verifyConstantXOp(ConstantXOp op) {
+  // We don't allow zero width constant or unknown width.
+  if (op.getWidth() <= 0)
+    return op.emitError("unsupported type");
+  return success();
 }
 
 void ConstantZOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   SmallVector<char, 32> specialNameBuffer;
   llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << "z_" << getType();
+  specialName << "z_i" << getWidth();
   setNameFn(getResult(), specialName.str());
+}
+
+static LogicalResult verifyConstantZOp(ConstantZOp op) {
+  // We don't allow zero width constant or unknown type.
+  if (op.getWidth() <= 0)
+    return op.emitError("unsupported type");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

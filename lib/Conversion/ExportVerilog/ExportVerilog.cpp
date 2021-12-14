@@ -1868,12 +1868,14 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
-  os << op.getType().getWidth() << "'bx";
+  auto bitWidth = hw::getBitWidth(op.getType());
+  os << bitWidth << "'bx";
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
-  os << op.getType().getWidth() << "'bz";
+  auto bitWidth = hw::getBitWidth(op.getType());
+  os << bitWidth << "'bz";
   return {Unary, IsUnsigned};
 }
 
@@ -1888,7 +1890,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     isNegated = true;
   }
 
-  os << op.getType().getWidth() << '\'';
+  os << op.getWidth() << '\'';
 
   // Emit this as a signed constant if the caller would prefer that.
   if (signPreference == RequireSigned)
