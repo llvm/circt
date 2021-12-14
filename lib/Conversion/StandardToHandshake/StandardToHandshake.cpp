@@ -1414,38 +1414,48 @@ struct HandshakeInsertBufferPass
     // will lower down to a handshake bundle.
     return arg.getType().isIntOrFloat() || arg.getType().isa<NoneType>();
   }
+
+  static bool isUnbufferedChannel(Operation *definingOp, Operation *usingOp) {
+    return !isa_and_nonnull<BufferOp>(definingOp) && !isa<BufferOp>(usingOp);
+  }
+
+  // Perform a depth first search and add a buffer to any un-buffered channel.
+  void bufferAllStrategy(handshake::FuncOp f, OpBuilder &builder,
+                         bool sequential = true) {
+    for (auto &arg : f.getArguments()) {
+      if (!shouldBufferArgument(arg))
+        continue;
+      for (auto &use : arg.getUses())
+        insertBufferRecursive(use, builder, bufferSize, isUnbufferedChannel,
+                              /*sequential=*/sequential);
+    }
+  }
+
+  // Combination of insertBufferDFS and bufferAllStrategy, where we add a
+  // sequential buffer on graph cycles, and add FIFO buffers on all other
+  // connections.
+  void bufferAllFIFOStrategy(handshake::FuncOp f, OpBuilder &builder) {
+    // First, buffer cycles with sequential buffers
+    bufferCyclesStrategy(f, builder, /*sequential=*/true);
+    // Then, buffer remaining channels with transparent FIFO buffers
+    bufferAllStrategy(f, builder, /*sequential=*/false);
+  }
+
   // Perform a depth first search and insert buffers when cycles are detected.
-  void bufferCyclesStrategy() {
-    auto f = getOperation();
+  void bufferCyclesStrategy(handshake::FuncOp f, OpBuilder &builder,
+                            bool sequential = true) {
     DenseSet<Operation *> opVisited;
     DenseSet<Operation *> opInFlight;
 
     // Traverse each use of each argument of the entry block.
-    auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getBody().front().getArguments()) {
       if (!shouldBufferArgument(arg))
         continue;
       for (auto &operand : arg.getUses()) {
         if (opVisited.count(operand.getOwner()) == 0)
           insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
-                          opInFlight);
+                          opInFlight, sequential);
       }
-    }
-  }
-
-  // Perform a depth first search and add a buffer to any un-buffered channel.
-  void bufferAllStrategy() {
-    auto f = getOperation();
-    auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getArguments()) {
-      if (!shouldBufferArgument(arg))
-        continue;
-      for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, bufferSize,
-                              [](Operation *definingOp, Operation *usingOp) {
-                                return !isa_and_nonnull<BufferOp>(definingOp) &&
-                                       !isa<BufferOp>(usingOp);
-                              });
     }
   }
 
@@ -1453,7 +1463,7 @@ struct HandshakeInsertBufferPass
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
   void insertBufferDFS(Operation *op, OpBuilder &builder, unsigned numSlots,
                        DenseSet<Operation *> &opVisited,
-                       DenseSet<Operation *> &opInFlight) {
+                       DenseSet<Operation *> &opInFlight, bool sequential) {
     // Mark operation as visited and push into the stack.
     opVisited.insert(op);
     opInFlight.insert(op);
@@ -1468,10 +1478,9 @@ struct HandshakeInsertBufferPass
         auto value = operand.get();
 
         builder.setInsertionPointAfter(op);
-        auto bufferOp =
-            builder.create<handshake::BufferOp>(op->getLoc(), value.getType(),
-                                                /*slots=*/numSlots, value,
-                                                /*sequential=*/true);
+        auto bufferOp = builder.create<handshake::BufferOp>(
+            op->getLoc(), value.getType(),
+            /*slots=*/numSlots, value, sequential);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1480,7 +1489,8 @@ struct HandshakeInsertBufferPass
       }
       // For unvisited operations, recursively call insertBufferDFS() method.
       else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight);
+        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight,
+                        sequential);
     }
     // Pop operation out of the stack.
     opInFlight.erase(op);
@@ -1488,7 +1498,8 @@ struct HandshakeInsertBufferPass
 
   void
   insertBufferRecursive(OpOperand &use, OpBuilder builder, size_t numSlots,
-                        function_ref<bool(Operation *, Operation *)> callback) {
+                        function_ref<bool(Operation *, Operation *)> callback,
+                        bool sequential) {
     auto oldValue = use.get();
     auto *definingOp = oldValue.getDefiningOp();
     auto *usingOp = use.getOwner();
@@ -1497,24 +1508,30 @@ struct HandshakeInsertBufferPass
       auto buffer = builder.create<handshake::BufferOp>(
           oldValue.getLoc(), oldValue.getType(),
           /*slots=*/numSlots, oldValue,
-          /*sequential=*/true);
+          /*sequential=*/sequential);
       use.getOwner()->setOperand(use.getOperandNumber(), buffer);
     }
 
     for (auto &childUse : usingOp->getUses())
       if (!isa<handshake::BufferOp>(childUse.getOwner()))
-        insertBufferRecursive(childUse, builder, numSlots, callback);
+        insertBufferRecursive(childUse, builder, numSlots, callback,
+                              sequential);
   }
 
   void runOnOperation() override {
     if (strategies.empty())
       strategies = {"all"};
 
+    auto f = getOperation();
+    auto builder = OpBuilder(f.getContext());
+
     for (auto strategy : strategies) {
       if (strategy == "cycles")
-        bufferCyclesStrategy();
+        bufferCyclesStrategy(f, builder);
       else if (strategy == "all")
-        bufferAllStrategy();
+        bufferAllStrategy(f, builder);
+      else if (strategy == "allFIFO")
+        bufferAllFIFOStrategy(f, builder);
       else {
         getOperation().emitOpError() << "Unknown buffer strategy: " << strategy;
         signalPassFailure();
