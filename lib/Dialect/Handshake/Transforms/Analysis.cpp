@@ -197,6 +197,11 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
                      [&](auto) { return "cmerge"; })
                  .Case<handshake::ConditionalBranchOp>(
                      [&](auto) { return "cbranch"; })
+                 .Case<handshake::BufferOp>([&](auto op) {
+                   std::string n = "buffer";
+                   n += op.sequential() ? " seq" : " FIFO";
+                   return n;
+                 })
                  .Case<arith::AddIOp>([&](auto) { return "+"; })
                  .Case<arith::SubIOp>([&](auto) { return "-"; })
                  .Case<arith::AndIOp>([&](auto) { return "&"; })
