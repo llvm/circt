@@ -126,7 +126,7 @@ def _obj_to_value(x, type, result_type=None):
     with get_user_loc():
       return hw.StructCreateOp(elem_name_values, result_type=result_type)
 
-  raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
+  raise ValueError(f"Unable to map object '{x}' to MLIR Value")
 
 
 def create_type_string(ty):
