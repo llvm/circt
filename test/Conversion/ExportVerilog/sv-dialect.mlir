@@ -445,6 +445,16 @@ hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
   sv.assign %1, %true : i1
 }
 
+// CHECK-LABEL: module AggregateConstantXZ(
+hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3xi4>>,
+                                     res2: !hw.struct<foo: i2, bar: !hw.array<3xi4>>) {
+  %0 = sv.constantX : !hw.struct<foo: i2, bar: !hw.array<3xi4>>
+  %1 = sv.constantZ : !hw.struct<foo: i2, bar: !hw.array<3xi4>>
+  // CHECK: assign res1 = 14'bx
+  // CHECK: assign res2 = 14'bz
+  hw.output %0, %1 : !hw.struct<foo: i2, bar: !hw.array<3xi4>>, !hw.struct<foo: i2, bar: !hw.array<3xi4>>
+}
+
 // CHECK-LABEL: issue508
 // https://github.com/llvm/circt/issues/508
 hw.module @issue508(%in1: i1, %in2: i1) {

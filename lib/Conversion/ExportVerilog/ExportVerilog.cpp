@@ -1884,12 +1884,12 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
-  os << op.getType().getWidth() << "'bx";
+  os << op.getWidth() << "'bx";
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {
-  os << op.getType().getWidth() << "'bz";
+  os << op.getWidth() << "'bz";
   return {Unary, IsUnsigned};
 }
 

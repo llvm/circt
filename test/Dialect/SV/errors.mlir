@@ -199,3 +199,17 @@ hw.module @part_select1() {
   // expected-error @+1 {{slice width should not be greater than input width}}
   %c = sv.indexed_part_select %r1[%c2 : 20] : i10,i3
 }
+
+// -----
+
+hw.module @ZeroWidthConstantX() {
+  // expected-error @+1 {{unsupported type}}
+  %0 = sv.constantX : !hw.struct<>
+}
+
+// -----
+
+hw.module @ZeroWidthConstantZ() {
+  // expected-error @+1 {{unsupported type}}
+  %0 = sv.constantZ : !hw.struct<>
+}
