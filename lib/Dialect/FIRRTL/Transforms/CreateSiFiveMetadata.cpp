@@ -175,12 +175,12 @@ class CreateSiFiveMetadataPass
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
-                           StringRef _replSeqMemFile,
-                           StringRef _moduleSwappingConfigOutputDir) {
+                           StringRef replSeqMemFileArg,
+                           StringRef moduleSwappingConfigOutputDirArg) {
     replSeqMem = _replSeqMem;
     replSeqMemCircuit = _replSeqMemCircuit.str();
-    replSeqMemFile = _replSeqMemFile.str();
-    moduleSwappingConfigOutputDir = _moduleSwappingConfigOutputDir.str();
+    replSeqMemFile = replSeqMemFileArg.str();
+    moduleSwappingConfigOutputDir = moduleSwappingConfigOutputDirArg.str();
   }
 };
 } // end anonymous namespace
