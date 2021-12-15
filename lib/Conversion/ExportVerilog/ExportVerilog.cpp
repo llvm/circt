@@ -2085,6 +2085,14 @@ static bool isOkToBitSelectFrom(Value v) {
       return true;
   }
 
+  // Aggregate access can be inlined.
+  if (v.getDefiningOp<ArrayGetOp>() || v.getDefiningOp<StructExtractOp>())
+    return true;
+
+  // Interface signal can be inlined.
+  if (v.getDefiningOp<ReadInterfaceSignalOp>())
+    return true;
+
   // TODO: We could handle concat and other operators here.
   return false;
 }
@@ -2123,7 +2131,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     //     assign bar = {{a}, {b}, {c}, {d}}[idx];
     //
     // To handle these, we push the subexpression into a temporary.
-    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp>(user))
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp>(user))
       if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
