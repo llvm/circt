@@ -123,7 +123,6 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:_array2d_idx_0_name]] = array2d[a];
 // CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
@@ -158,7 +157,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r34 = ~a;
 // CHECK-NEXT:   assign r35 = cond ? [[WIRE0]][a +: 3] : [[WIRE0]][b +: 3];
 // CHECK-NEXT:   assign r36 = {3{a}};
-// CHECK-NEXT:   assign r37 = [[WIRE2]][b];
+// CHECK-NEXT:   assign r37 = array2d[a][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
@@ -830,6 +829,23 @@ hw.module @SignedShiftRightPrecendence(%p: i1, %x: i45) -> (o: i45) {
   %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
   %1 = comb.shrs %x, %0 : i45
   hw.output %1 : i45
+}
+
+// CHECK-LABEL: structExtractChain
+hw.module @structExtractChain(%cond: i1, %a: !hw.struct<c: !hw.struct<d:i1>>) -> (out: i1) {
+    %1 = hw.struct_extract %a["c"] : !hw.struct<c: !hw.struct<d:i1>>
+    %2 = hw.struct_extract %1["d"] : !hw.struct<d:i1>
+    // CHECK: assign out = a.c.d;
+    hw.output %2 : i1
+}
+
+// CHECK-LABEL: structExtractFromTemporary
+hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.struct<c: i1>) -> (out: i1) {
+    %0 = comb.mux %cond, %a, %b : !hw.struct<c: i1>
+    %1 = hw.struct_extract %0["c"] : !hw.struct<c: i1>
+    // CHECK: wire struct packed {logic c; } _T = cond ? a : b;
+    // CHECK-NEXT: assign out = _T.c;
+    hw.output %1 : i1
 }
 
 // CHECK-LABEL: module replicate
