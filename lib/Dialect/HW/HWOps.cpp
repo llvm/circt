@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
@@ -1223,7 +1224,6 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult GlobalRefOp::verifyGlobalRef() {
-  // TODO: Cannot verify GlobalRef on ports yet.
   Operation *parent = (*this)->getParentOp();
   StringAttr symNameAttr = (*this).sym_nameAttr();
   static const char globalRefStr[] = "circt.globalRef";
@@ -1232,12 +1232,14 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
   // GlobalRefAttr to this GlobalRefOp.
   for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
     StringAttr modName = innerRef.getModule();
+    llvm::errs() << "\n mod::"<< modName;
     StringAttr innerSym = innerRef.getName();
     Operation *mod = symTable.lookup(modName);
     if (!mod) {
       (*this)->emitOpError("module:'" + modName.str() + "' not found");
       return failure();
     }
+    llvm::errs() << "\n mod::"<< *mod;
     bool glblSymNotFound = true;
     mod->walk([&](Operation *op) -> WalkResult {
       StringAttr attr = op->getAttrOfType<StringAttr>("inner_sym");
@@ -1257,6 +1259,37 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
       }
       return WalkResult::advance();
     });
+    if (glblSymNotFound) {
+    // TODO: Doesn't yet work for symbls on FIRRTL module. Need to implement an interface.
+    if (isa<HWModuleOp, HWModuleExternOp>(mod)){
+      auto exports = mod->getAttr(mlir::function_like_impl::getArgDictAttrName());
+      auto gRef = mod->getAttr(globalRefStr).cast<ArrayAttr>();
+      for (auto a: mod->getAttrs()){
+        llvm::errs() << "\n attr:"<< a.getName() <<"=="<<a.getValue();
+      }
+      auto hwMod = dyn_cast<HWModuleOp>(mod);
+      SmallVector<PortInfo> inputs, outputs;
+      if (hwMod) {
+        ModulePortInfo ports = hwMod.getPorts();
+        inputs = ports.inputs;
+        outputs = ports.outputs;
+      } else if (auto ext = dyn_cast<HWModuleExternOp>(mod)){
+        ModulePortInfo ports = ext.getPorts();
+        inputs = ports.inputs;
+        outputs = ports.outputs;
+      }
+      for (auto in : inputs) {
+        llvm::errs() << " in sym:" << in.sym << "::" << in.getName();
+        if (in.sym == symNameAttr)
+          glblSymNotFound = false;
+      }
+      for (auto out : outputs) {
+        llvm::errs() << " in sym:" << out.sym <<"::"<< out.getName();
+        if (out.sym == symNameAttr)
+          glblSymNotFound = false;
+      }
+    }
+    }
     if (glblSymNotFound) {
       return (*this)->emitOpError(
           "operation:'" + innerSym.str() + "' in module:'" + modName.str() +
