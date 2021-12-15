@@ -843,8 +843,8 @@ hw.module @structExtractChain(%cond: i1, %a: !hw.struct<c: !hw.struct<d:i1>>) ->
 hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.struct<c: i1>) -> (out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.struct<c: i1>
     %1 = hw.struct_extract %0["c"] : !hw.struct<c: i1>
-    // CHECK-NEXT: wire struct packed {logic c; } _T = cond ? a : b;
-    // CHECK: assign out = _T.c;
+    // CHECK: wire struct packed {logic c; } _T = cond ? a : b;
+    // CHECK-NEXT: assign out = _T.c;
     hw.output %1 : i1
 }
 
