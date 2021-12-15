@@ -2997,7 +2997,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  auto definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+  auto* definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
 
   // If this is an assignment to a register, then the connect implicitly
   // happens under the clock that gates the register.
@@ -3050,7 +3050,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  auto definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+  auto* definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
 
   // If this is an assignment to a register, then the connect implicitly
   // happens under the clock that gates the register.
