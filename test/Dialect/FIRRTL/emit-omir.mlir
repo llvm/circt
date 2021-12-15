@@ -374,15 +374,15 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
     }
   ]
 }]} {
-  firrtl.module @AddPorts(in %x: !firrtl.uint<17>, out %y: !firrtl.uint<19>) attributes {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
-    %w = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}]} : !firrtl.uint<17>
-    firrtl.connect %y, %x : !firrtl.uint<19>, !firrtl.uint<17>
+  firrtl.module @AddPorts(in %x: !firrtl.uint<29>, out %y: !firrtl.uint<31>) attributes {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
+    %w = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}]} : !firrtl.uint<29>
+    firrtl.connect %y, %x : !firrtl.uint<31>, !firrtl.uint<29>
   }
 }
 // CHECK-LABEL: firrtl.circuit "AddPorts"
 // CHECK:       firrtl.module @AddPorts
-// CHECK-SAME:    in %x: !firrtl.uint<17> sym [[SYMX:@[a-zA-Z0-9_]+]]
-// CHECK-SAME:    out %y: !firrtl.uint<19> sym [[SYMY:@[a-zA-Z0-9_]+]]
+// CHECK-SAME:    in %x: !firrtl.uint<29> sym [[SYMX:@[a-zA-Z0-9_]+]]
+// CHECK-SAME:    out %y: !firrtl.uint<31> sym [[SYMY:@[a-zA-Z0-9_]+]]
 // CHECK:       %w = firrtl.wire sym [[SYMW:@[a-zA-Z0-9_]+]]
 // CHECK:       sv.verbatim
 
@@ -394,12 +394,12 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
 // CHECK-SAME:      {
 // CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
 // CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:17\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:1d\22
 // CHECK-SAME:      }
 // CHECK-SAME:      {
 // CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
 // CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:19\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:1f\22
 // CHECK-SAME:      }
 // CHECK-SAME:    ]
 
@@ -411,12 +411,12 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
 // CHECK-SAME:      {
 // CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]1[}][}]}}\22
 // CHECK-SAME:        \22direction\22: \22OMString:Input\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:17\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:1d\22
 // CHECK-SAME:      }
 // CHECK-SAME:      {
 // CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>{{[{][{]2[}][}]}}\22
 // CHECK-SAME:        \22direction\22: \22OMString:Output\22
-// CHECK-SAME:        \22width\22: \22OMBigInt:19\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:1f\22
 // CHECK-SAME:      }
 // CHECK-SAME:    ]
 

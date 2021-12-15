@@ -548,7 +548,8 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
 
           // Emit the `width` field.
           buf.assign("OMBigInt:");
-          Twine(port.value().type.getBitWidthOrSentinel()).toVector(buf);
+          Twine::utohexstr(port.value().type.getBitWidthOrSentinel())
+              .toVector(buf);
           jsonStream.attribute("width", buf);
         });
       }
