@@ -58,7 +58,6 @@ struct HandshakeDotPrintPass
     os << "Digraph G {\n";
     os.indent();
     os << "splines=spline;\n";
-    os << "rankdir=LR;\n";
     os << "compound=true; // Allow edges between clusters\n";
     dotPrint(os, "TOP", topLevelOp, /*isTop=*/true);
     os.unindent();
@@ -244,7 +243,7 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
   /// This helps crossprobing the diagram with the Handshake IR and waveform
   /// diagrams.
   if (idAttr)
-    outfile << " " << std::to_string(idAttr.getValue().getZExtValue());
+    outfile << " [" << std::to_string(idAttr.getValue().getZExtValue()) << "]";
 
   outfile << "\"";
 
