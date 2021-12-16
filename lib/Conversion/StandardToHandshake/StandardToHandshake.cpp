@@ -1419,81 +1419,129 @@ struct HandshakeInsertBufferPass
     return !isa_and_nonnull<BufferOp>(definingOp) && !isa<BufferOp>(usingOp);
   }
 
-  // Perform a depth first search and add a buffer to any un-buffered channel.
+  void insertBuffer(Location loc, Value operand, OpBuilder &builder,
+                    unsigned numSlots, bool sequential) {
+    auto ip = builder.saveInsertionPoint();
+    builder.setInsertionPointAfterValue(operand);
+    auto bufferOp = builder.create<handshake::BufferOp>(
+        loc, operand.getType(), numSlots, operand, sequential);
+    operand.replaceUsesWithIf(
+        bufferOp,
+        function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
+          return !isa<handshake::BufferOp>(operand.getOwner());
+        }));
+    builder.restoreInsertionPoint(ip);
+  }
+
+  // Inserts a buffer at a specific operand use.
+  void bufferOperand(OpOperand &use, OpBuilder &builder, size_t numSlots,
+                     bool sequential) {
+    auto usingOp = use.getOwner();
+    Value usingValue = use.get();
+
+    builder.setInsertionPoint(usingOp);
+    auto buffer = builder.create<handshake::BufferOp>(
+        usingValue.getLoc(), usingValue.getType(),
+        /*slots=*/numSlots, usingValue,
+        /*sequential=*/sequential);
+    usingOp->setOperand(use.getOperandNumber(), buffer);
+  }
+
+  // Inserts buffers at all operands of an operation.
+  void bufferOperands(Operation *op, OpBuilder builder, size_t numSlots,
+                      bool sequential) {
+    for (auto &use : op->getOpOperands()) {
+      auto *srcOp = use.get().getDefiningOp();
+      if (srcOp && isa<handshake::BufferOp>(srcOp))
+        continue;
+      bufferOperand(use, builder, numSlots, sequential);
+    }
+  }
+
+  // Inserts buffers at all results of an operation
+  void bufferResults(OpBuilder &builder, Operation *op, unsigned numSlots,
+                     bool sequential) {
+    for (auto res : op->getResults()) {
+      Operation *user = *res.getUsers().begin();
+      if (isa<handshake::BufferOp>(user))
+        continue;
+      insertBuffer(op->getLoc(), res, builder, numSlots, sequential);
+    }
+  };
+
+  // Perform a depth first search and add a buffer to any un-buffered channel
+  // where it makes reasonable sense.
   void bufferAllStrategy(handshake::FuncOp f, OpBuilder &builder,
-                         bool sequential = true) {
+                         unsigned numSlots, bool sequential = true) {
+
     for (auto &arg : f.getArguments()) {
       if (!shouldBufferArgument(arg))
         continue;
       for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, bufferSize, isUnbufferedChannel,
+        insertBufferRecursive(use, builder, numSlots, isUnbufferedChannel,
                               /*sequential=*/sequential);
     }
   }
 
-  // Combination of insertBufferDFS and bufferAllStrategy, where we add a
+  // Combination of bufferCyclesStrategy and bufferAllStrategy, where we add a
   // sequential buffer on graph cycles, and add FIFO buffers on all other
   // connections.
   void bufferAllFIFOStrategy(handshake::FuncOp f, OpBuilder &builder) {
     // First, buffer cycles with sequential buffers
-    bufferCyclesStrategy(f, builder, /*sequential=*/true);
+    bufferCyclesStrategy(f, builder, /*numSlots=*/2, /*sequential=*/true);
     // Then, buffer remaining channels with transparent FIFO buffers
-    bufferAllStrategy(f, builder, /*sequential=*/false);
+    bufferAllStrategy(f, builder, bufferSize, /*sequential=*/false);
   }
 
   // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy(handshake::FuncOp f, OpBuilder &builder,
-                            bool sequential = true) {
-    DenseSet<Operation *> opVisited;
-    DenseSet<Operation *> opInFlight;
+                            unsigned numSlots, bool sequential = true) {
+    // Cycles can only occur at merge-like operations. We insert a buffer at the
+    // output of a merge-like operation whenever the op is determined to be
+    // within a cycle. Placing the buffer at the output of the merge-like op, as
+    // opposed to naivly placing buffers *whenever* cycles are detected ensures
+    // that we don't place a bunch of buffers on each input of the merge-like
+    // op.
+    auto isSeqBuffer = [](auto op) {
+      auto bufferOp = dyn_cast<handshake::BufferOp>(op);
+      return bufferOp && bufferOp.isSequential();
+    };
 
-    // Traverse each use of each argument of the entry block.
-    for (auto &arg : f.getBody().front().getArguments()) {
-      if (!shouldBufferArgument(arg))
-        continue;
-      for (auto &operand : arg.getUses()) {
-        if (opVisited.count(operand.getOwner()) == 0)
-          insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
-                          opInFlight, sequential);
+    for (auto mergeOp : f.getOps<MergeLikeOpInterface>()) {
+      if (inCycle(mergeOp, isSeqBuffer)) {
+        bufferResults(builder, mergeOp, numSlots, sequential);
       }
     }
   }
 
-  /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
-  /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferDFS(Operation *op, OpBuilder &builder, unsigned numSlots,
-                       DenseSet<Operation *> &opVisited,
-                       DenseSet<Operation *> &opInFlight, bool sequential) {
-    // Mark operation as visited and push into the stack.
-    opVisited.insert(op);
-    opInFlight.insert(op);
+  // Returns true if 'src' is within a cycle. 'breaksCycle' is a function which
+  // determines whether an operation breaks a cycle.
+  bool inCycle(Operation *src,
+               llvm::function_ref<bool(Operation *)> breaksCycle,
+               Operation *curr = nullptr, SetVector<Operation *> path = {}) {
+    // If visiting the source node, then we're in a cycle.
+    if (curr == src)
+      return true;
 
-    // Traverse all uses of the current operation.
-    for (auto &operand : op->getUses()) {
+    // Initial case; set current node to source node
+    if (curr == nullptr) {
+      curr = src;
+    }
+
+    path.insert(curr);
+    for (auto &operand : curr->getUses()) {
       auto *user = operand.getOwner();
 
-      // If graph cycle detected, insert a BufferOp into the edge.
-      if (opInFlight.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
-          !isa<handshake::BufferOp>(user)) {
-        auto value = operand.get();
-
-        builder.setInsertionPointAfter(op);
-        auto bufferOp = builder.create<handshake::BufferOp>(
-            op->getLoc(), value.getType(),
-            /*slots=*/numSlots, value, sequential);
-        value.replaceUsesWithIf(
-            bufferOp,
-            function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
-              return !isa<handshake::BufferOp>(operand.getOwner());
-            }));
-      }
-      // For unvisited operations, recursively call insertBufferDFS() method.
-      else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight,
-                        sequential);
+      // We might encounter a cycle, but we only care about the case when such
+      // cycles include 'src'.
+      if (path.count(user) && user != src)
+        continue;
+      if (breaksCycle(curr))
+        continue;
+      if (inCycle(src, breaksCycle, user, path))
+        return true;
     }
-    // Pop operation out of the stack.
-    opInFlight.erase(op);
+    return false;
   }
 
   void
@@ -1504,12 +1552,7 @@ struct HandshakeInsertBufferPass
     auto *definingOp = oldValue.getDefiningOp();
     auto *usingOp = use.getOwner();
     if (callback(definingOp, usingOp)) {
-      builder.setInsertionPoint(usingOp);
-      auto buffer = builder.create<handshake::BufferOp>(
-          oldValue.getLoc(), oldValue.getType(),
-          /*slots=*/numSlots, oldValue,
-          /*sequential=*/sequential);
-      use.getOwner()->setOperand(use.getOperandNumber(), buffer);
+      bufferOperand(use, builder, numSlots, sequential);
     }
 
     for (auto &childUse : usingOp->getUses())
@@ -1527,9 +1570,9 @@ struct HandshakeInsertBufferPass
 
     for (auto strategy : strategies) {
       if (strategy == "cycles")
-        bufferCyclesStrategy(f, builder);
+        bufferCyclesStrategy(f, builder, bufferSize);
       else if (strategy == "all")
-        bufferAllStrategy(f, builder);
+        bufferAllStrategy(f, builder, bufferSize);
       else if (strategy == "allFIFO")
         bufferAllFIFOStrategy(f, builder);
       else {
@@ -1570,8 +1613,8 @@ struct HandshakeDataflowPass
       }
     }
 
-    // Legalize the resulting regions, removing basic blocks and performing any
-    // simple conversions.
+    // Legalize the resulting regions, removing basic blocks and performing
+    // any simple conversions.
     for (auto func : m.getOps<handshake::FuncOp>()) {
       removeBasicBlocks(func);
       if (failed(postDataflowConvert(func)))
