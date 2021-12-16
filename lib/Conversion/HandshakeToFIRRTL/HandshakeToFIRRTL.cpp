@@ -17,6 +17,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -242,13 +243,12 @@ static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
-                              Location insertLoc,
-                              ConversionPatternRewriter &rewriter) {
+                              Location insertLoc, OpBuilder &builder) {
   if (auto intOpType = opType.dyn_cast<firrtl::IntType>()) {
-    auto type = rewriter.getIntegerType(intOpType.getWidthOrSentinel(),
-                                        intOpType.isSigned());
-    return rewriter.create<firrtl::ConstantOp>(
-        insertLoc, opType, rewriter.getIntegerAttr(type, value));
+    auto type = builder.getIntegerType(intOpType.getWidthOrSentinel(),
+                                       intOpType.isSigned());
+    return builder.create<firrtl::ConstantOp>(
+        insertLoc, opType, builder.getIntegerAttr(type, value));
   }
 
   return Value();
@@ -306,7 +306,7 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
 /// Get type name. Currently we only support integer or index types.
 /// The emitted type aligns with the getFIRRTLType() method. Thus all integers
 /// other than signed integers will be emitted as unsigned.
-static std::string getTypeName(Operation *oldOp, Type type) {
+static std::string getTypeName(Location loc, Type type) {
   std::string typeName;
   // Builtin types
   if (type.isIntOrIndex()) {
@@ -326,7 +326,7 @@ static std::string getTypeName(Operation *oldOp, Type type) {
       typeName += "_ui" + std::to_string(uintType.getWidthOrSentinel());
     }
   } else
-    oldOp->emitError() << "unsupported data type '" << type << "'";
+    emitError(loc) << "unsupported data type '" << type << "'";
 
   return typeName;
 }
@@ -369,12 +369,12 @@ static std::string getSubModuleName(Operation *oldOp) {
   if (!inTypes.empty())
     subModuleName += "_in";
   for (auto inType : inTypes)
-    subModuleName += getTypeName(oldOp, inType);
+    subModuleName += getTypeName(oldOp->getLoc(), inType);
 
   if (!outTypes.empty())
     subModuleName += "_out";
   for (auto outType : outTypes)
-    subModuleName += getTypeName(oldOp, outType);
+    subModuleName += getTypeName(oldOp->getLoc(), outType);
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
@@ -389,6 +389,8 @@ static std::string getSubModuleName(Operation *oldOp) {
     subModuleName += "_" + std::to_string(bufferOp.getNumSlots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
+    else
+      subModuleName += "_fifo";
   }
 
   // Add control information.
@@ -414,11 +416,10 @@ splitArrayRef(ArrayRef<Value> ref, unsigned pos) {
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
 /// using a binary-encoded select value.
 static Value createMuxTree(ArrayRef<Value> inputs, Value select,
-                           Location insertLoc,
-                           ConversionPatternRewriter &rewriter) {
+                           Location insertLoc, OpBuilder &builder) {
   Type muxDataType = inputs[0].getType();
   auto createBits = [&](Value select, size_t idx) {
-    return rewriter.create<BitsPrimOp>(insertLoc, select, idx, idx);
+    return builder.create<BitsPrimOp>(insertLoc, select, idx, idx);
   };
 
   std::function<Value(ArrayRef<Value>)> buildTreeRec =
@@ -441,7 +442,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
           auto lowerTree = buildTreeRec(front);
           auto upperTree = buildTreeRec(back);
           auto layerSelect = createBits(select, selectBit);
-          retVal = rewriter
+          retVal = builder
                        .create<MuxPrimOp>(insertLoc, muxDataType, layerSelect,
                                           upperTree, lowerTree)
                        .result();
@@ -664,8 +665,13 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 /// Check whether a submodule with the same name has been created elsewhere in
 /// the FIRRTL circt. Return the matched submodule if true, otherwise return
 /// nullptr.
+///
+static FModuleOp checkSubModuleOp(CircuitOp circuitOp, StringRef modName) {
+  return circuitOp.lookupSymbol<FModuleOp>(modName);
+}
+
 static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
-  auto moduleOp = circuitOp.lookupSymbol<FModuleOp>(getSubModuleName(oldOp));
+  auto moduleOp = checkSubModuleOp(circuitOp, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
     assert(moduleOp &&
@@ -905,9 +911,10 @@ void StdExprBuilder::buildBinaryLogic() {
 namespace {
 class HandshakeBuilder : public HandshakeVisitor<HandshakeBuilder, bool> {
 public:
-  HandshakeBuilder(ValueVectorList portList, Location insertLoc,
-                   ConversionPatternRewriter &rewriter)
-      : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
+  HandshakeBuilder(CircuitOp circuit, ValueVectorList portList,
+                   Location insertLoc, ConversionPatternRewriter &rewriter)
+      : circuit(circuit), portList(portList), insertLoc(insertLoc),
+        rewriter(rewriter) {}
   using HandshakeVisitor::visitHandshake;
 
   bool visitInvalidOp(Operation *op) { return false; }
@@ -953,8 +960,12 @@ public:
   bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                            ValueVector *output, Value clock, Value reset,
                            bool isControl);
+  bool buildFIFOBufferLogic(int64_t numStage, ValueVector *input,
+                            ValueVector *output, Value clock, Value reset,
+                            bool isControl);
 
 private:
+  CircuitOp circuit;
   ValueVectorList portList;
   Location insertLoc;
   ConversionPatternRewriter &rewriter;
@@ -1761,6 +1772,341 @@ void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
   }
 }
 
+FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
+                         unsigned depth, bool isControl,
+                         FIRRTLType dataType = FIRRTLType()) {
+  ImplicitLocOpBuilder builder(circuit.getLoc(), circuit.getContext());
+  SmallVector<PortInfo> ports;
+  auto bitType = UIntType::get(builder.getContext(), 1);
+  auto loc = circuit.getLoc();
+  auto strAttr = [&](StringRef str) { return builder.getStringAttr(str); };
+
+  if (!isControl)
+    ports.push_back(PortInfo{strAttr("dataIn"), dataType, Direction::In,
+                             StringAttr{}, loc});
+
+  ports.push_back(
+      PortInfo{strAttr("readyIn"), bitType, Direction::In, StringAttr{}, loc});
+  ports.push_back(
+      PortInfo{strAttr("validIn"), bitType, Direction::In, StringAttr{}, loc});
+
+  if (!isControl)
+    ports.push_back(PortInfo{strAttr("dataOut"), dataType, Direction::Out,
+                             StringAttr{}, loc});
+  ports.push_back(PortInfo{strAttr("readyOut"), bitType, Direction::Out,
+                           StringAttr{}, loc});
+
+  ports.push_back(PortInfo{strAttr("validOut"), bitType, Direction::Out,
+                           StringAttr{}, loc});
+
+  // Add clock and reset signals.
+  ports.push_back({strAttr("clock"), builder.getType<ClockType>(),
+                   Direction::In, StringAttr{}, loc});
+  ports.push_back({strAttr("reset"), builder.getType<UIntType>(1),
+                   Direction::In, StringAttr{}, loc});
+
+  builder.setInsertionPointToStart(circuit.getBody());
+  auto moduleOp = builder.create<FModuleOp>(strAttr(moduleName), ports);
+  builder.setInsertionPointToStart(moduleOp.getBody());
+
+  // Unpack module arguments.
+  int portIdx = 0;
+  Value dataIn = nullptr;
+  Value dataOut = nullptr;
+  if (!isControl)
+    dataIn = moduleOp.getArgument(portIdx++);
+  auto readyIn = moduleOp.getArgument(portIdx++);
+  auto validIn = moduleOp.getArgument(portIdx++);
+
+  if (!isControl)
+    dataOut = moduleOp.getArgument(portIdx++);
+  auto readyOut = moduleOp.getArgument(portIdx++);
+  auto validOut = moduleOp.getArgument(portIdx++);
+
+  auto clk = moduleOp.getArgument(portIdx++);
+  auto rst = moduleOp.getArgument(portIdx++);
+
+  auto depthPtrType =
+      UIntType::get(builder.getContext(), llvm::Log2_64_Ceil(depth));
+  // Depth bit width. Defined as log2ceil(depth+1) to be able to represent the
+  // actual depth count. I.e. if depth=2 , we need at least 2 bits, to count up
+  // to 2, from 0.
+  auto depthType =
+      UIntType::get(builder.getContext(), llvm::Log2_64_Ceil(depth + 1));
+
+  /// Returns a constant value 'value' width a width equal to that of
+  /// 'refValue'.
+  auto getConstantOfEqWidth = [&](uint64_t value, Value refValue) {
+    FIRRTLType type = refValue.getType().cast<FIRRTLType>();
+    return createConstantOp(type, APInt(type.getBitWidthOrSentinel(), value),
+                            loc, builder);
+  };
+
+  // Signal declarations
+  auto zeroConst =
+      createConstantOp(bitType, APInt(1, 0), builder.getLoc(), builder);
+  auto oneConst =
+      createConstantOp(bitType, APInt(1, 1), builder.getLoc(), builder);
+
+  auto readEn = builder.create<WireOp>(bitType, "read_en");
+  auto writeEn = builder.create<WireOp>(bitType, "write_en");
+  auto tail =
+      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "tail_reg");
+  auto head =
+      builder.create<RegResetOp>(depthPtrType, clk, rst, zeroConst, "head_reg");
+  auto full = builder.create<WireOp>(bitType, "full");
+  auto empty = builder.create<WireOp>(bitType, "empty");
+  auto notEmpty = builder.create<NotPrimOp>(empty);
+  auto count =
+      builder.create<RegResetOp>(depthType, clk, rst, zeroConst, "count_reg");
+
+  // Function for truncating results to a given types' width.
+  auto trunc = [&](Value v, FIRRTLType toType) {
+    unsigned truncBits =
+        v.getType().cast<FIRRTLType>().getBitWidthOrSentinel() -
+        toType.getBitWidthOrSentinel();
+    return builder.create<TailPrimOp>(v, truncBits);
+  };
+
+  // Full when number of elements in fifo is == depth
+  builder.create<ConnectOp>(
+      full,
+      builder.create<EQPrimOp>(count, getConstantOfEqWidth(depth, count)));
+
+  // Empty when number of elements in fifo is == 0
+  builder.create<ConnectOp>(
+      empty, builder.create<EQPrimOp>(count, getConstantOfEqWidth(0, count)));
+
+  // Ready if there is space in the FIFO.
+  builder.create<ConnectOp>(
+      readyOut,
+      builder.create<OrPrimOp>(builder.create<NotPrimOp>(full), readyIn));
+
+  // Ready if next can accept and there is something in the FIFO to read.
+  builder.create<ConnectOp>(readEn,
+                            builder.create<AndPrimOp>(notEmpty, readyIn));
+
+  // Valid when not empty
+  builder.create<ConnectOp>(validOut, notEmpty);
+
+  // Writing when input is valid and is not full or input ready.
+  builder.create<ConnectOp>(
+      writeEn, builder.create<AndPrimOp>(
+                   validIn, builder.create<OrPrimOp>(
+                                builder.create<NotPrimOp>(full), readyIn)));
+
+  // Memory declaration, data writing and reading.
+  if (!isControl) {
+    SmallVector<std::pair<StringAttr, MemOp::PortKind>, 8> memPorts;
+    memPorts.push_back({strAttr("read"), MemOp::PortKind::Read});
+    memPorts.push_back({strAttr("write"), MemOp::PortKind::Write});
+    llvm::SmallVector<Type> memTypes;
+    llvm::SmallVector<Attribute> memNames;
+    for (auto p : memPorts) {
+      memTypes.push_back(MemOp::getTypeForPort(depth, dataType, p.second));
+      memNames.push_back(strAttr(p.first.str()));
+    }
+
+    // Build a combinational read, synchronous write memory. We set the read
+    // under write attribute to new for transparency.
+    auto memOp =
+        builder.create<MemOp>(memTypes, /*readLatency=*/0, /*writeLatency=*/1,
+                              depth, RUWAttr::New, memNames, "mem");
+
+    // Extract the port bundles.
+    auto readBundle = memOp.getPortNamed("read");
+    auto readType = readBundle.getType().cast<FIRRTLType>().cast<BundleType>();
+    auto writeBundle = memOp.getPortNamed("write");
+    auto writeType =
+        writeBundle.getType().cast<FIRRTLType>().cast<BundleType>();
+
+    // Get the clock out of the bundle and connect them.
+    auto readClock = builder.create<SubfieldOp>(
+        readBundle, readType.getElementIndex("clk").getValue());
+    builder.create<ConnectOp>(readClock, clk);
+    auto writeClock = builder.create<SubfieldOp>(
+        writeBundle, writeType.getElementIndex("clk").getValue());
+    builder.create<ConnectOp>(writeClock, clk);
+
+    // Get the addresses out of the bundle
+    auto readAddr = builder.create<SubfieldOp>(
+        readBundle, readType.getElementIndex("addr").getValue());
+    auto writeAddr = builder.create<SubfieldOp>(
+        writeBundle, readType.getElementIndex("addr").getValue());
+
+    // Connect read and write to head and tail registers.
+    builder.create<ConnectOp>(readAddr, head);
+    builder.create<ConnectOp>(writeAddr, tail);
+
+    // Get the memory enable out of the bundles.
+    auto memReadEn = builder.create<SubfieldOp>(
+        readBundle, readType.getElementIndex("en").getValue());
+    auto memWriteEn = builder.create<SubfieldOp>(
+        writeBundle, writeType.getElementIndex("en").getValue());
+    // Always read
+    builder.create<ConnectOp>(memReadEn, oneConst);
+    // Write on writeEn
+    builder.create<ConnectOp>(memWriteEn, writeEn);
+
+    // Connect read and write data.
+    auto readData = builder.create<SubfieldOp>(
+        readBundle, readType.getElementIndex("data").getValue());
+    auto writeData = builder.create<SubfieldOp>(
+        writeBundle, writeType.getElementIndex("data").getValue());
+    builder.create<ConnectOp>(dataOut, readData);
+    builder.create<ConnectOp>(writeData, dataIn);
+
+    // Get the store mask out of the bundle.
+    auto writeMask = builder.create<SubfieldOp>(
+        writeBundle, writeType.getElementIndex("mask").getValue());
+
+    // Since we are not storing bundles in the memory, we can assume the mask is
+    // a single bit.
+    builder.create<ConnectOp>(writeMask, writeEn);
+  }
+
+  // Next-state tail register; tail <- writeEn ? tail + 1 % depth : tail
+  // (tail + 1 % depth) may be wider than tail, so also add truncation.
+  auto tail1 = builder.create<AddPrimOp>(tail, oneConst);
+  builder.create<ConnectOp>(
+      tail, builder.create<MuxPrimOp>(
+                writeEn,
+                trunc(builder.create<RemPrimOp>(
+                          tail1, getConstantOfEqWidth(depth, tail1)),
+                      depthPtrType),
+                tail));
+
+  // Next-state head register; head <- readEn ? head + 1 % depth : head
+  // (head + 1 % depth) may be wider than tail, so also add truncation.
+  auto head1 = builder.create<AddPrimOp>(head, oneConst);
+  builder.create<ConnectOp>(
+      head, builder.create<MuxPrimOp>(
+                readEn,
+                trunc(builder.create<RemPrimOp>(
+                          head1, getConstantOfEqWidth(depth, head1)),
+                      depthPtrType),
+                head));
+
+  // Next-state count. Update whenever filling xor emptying. In other cases,
+  // nothing happens to the total number of elements in the fifo.
+  auto countp1 =
+      builder.create<AddPrimOp>(count, getConstantOfEqWidth(1, count));
+  auto countn1 =
+      builder.create<SubPrimOp>(count, getConstantOfEqWidth(1, count));
+  auto readXorWrite = builder.create<XorPrimOp>(readEn, writeEn);
+  auto nsCountMux = builder.create<MuxPrimOp>(
+      readXorWrite,
+      trunc(builder.create<MuxPrimOp>(writeEn, countp1, countn1), depthType),
+      count);
+  builder.create<ConnectOp>(count, nsCountMux);
+  return moduleOp;
+}
+
+bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
+                                            ValueVector *input,
+                                            ValueVector *output, Value clock,
+                                            Value reset, bool isControl) {
+  ImplicitLocOpBuilder builder(insertLoc, rewriter.getContext());
+  builder.setInsertionPoint(rewriter.getInsertionBlock(),
+                            rewriter.getInsertionPoint());
+  auto inputSubfields = *input;
+  auto inputValid = inputSubfields[0];
+  auto inputReady = inputSubfields[1];
+  Value inputData = nullptr;
+  FIRRTLType dataType = nullptr;
+  if (!isControl) {
+    inputData = inputSubfields[2];
+    dataType = inputData.getType().cast<FIRRTLType>();
+  }
+
+  auto outputSubfields = *output;
+  auto outputValid = outputSubfields[0];
+  auto outputReady = outputSubfields[1];
+
+  auto bitType = UIntType::get(builder.getContext(), 1);
+  auto muxSelWire = builder.create<WireOp>(insertLoc, bitType, "muxSelWire");
+  auto fifoValid = builder.create<WireOp>(insertLoc, bitType, "fifoValid");
+  auto fifoPValid = builder.create<WireOp>(insertLoc, bitType, "fifoPValid");
+  auto fifoReady = builder.create<WireOp>(insertLoc, bitType, "fifoReady");
+  auto fifoNReady = builder.create<WireOp>(insertLoc, bitType, "fifoNReady");
+  Value fifoIn = nullptr;
+  Value fifoOut = nullptr;
+  if (!isControl) {
+    fifoIn = builder.create<WireOp>(insertLoc, dataType, "fifoIn");
+    fifoOut = builder.create<WireOp>(insertLoc, dataType, "fifoOut");
+  }
+
+  // Connect output valid and ready signals.
+  builder.create<ConnectOp>(outputValid,
+                            builder.create<OrPrimOp>(inputValid, fifoValid));
+  builder.create<ConnectOp>(inputReady,
+                            builder.create<OrPrimOp>(fifoReady, outputReady));
+
+  builder.create<ConnectOp>(
+      fifoPValid,
+      builder.create<AndPrimOp>(
+          inputValid, builder.create<OrPrimOp>(
+                          builder.create<NotPrimOp>(outputReady), fifoValid)));
+
+  builder.create<ConnectOp>(muxSelWire, fifoValid);
+  builder.create<ConnectOp>(fifoNReady, outputReady);
+  if (!isControl)
+    builder.create<ConnectOp>(fifoIn, inputData);
+
+  std::string innerFifoModName = "innerFIFO_" + std::to_string(numStage);
+  if (!isControl)
+    innerFifoModName += getTypeName(insertLoc, inputData.getType());
+  else
+    innerFifoModName += "_ctrl";
+
+  // Instantiate the inner FIFO. Check if we already have one of the
+  // appropriate type, else, generate it.
+  FModuleOp innerFifoModule = checkSubModuleOp(circuit, innerFifoModName);
+  if (!innerFifoModule)
+    innerFifoModule = buildInnerFIFO(circuit, innerFifoModName, numStage,
+                                     isControl, dataType);
+
+  auto innerFIFOInst =
+      builder.create<firrtl::InstanceOp>(innerFifoModule, "innerFIFO");
+
+  // Unpack inner fifo ports
+  int portIdx = 0;
+  Value fifoDataIn = nullptr;
+  Value fifoDataOut = nullptr;
+  if (!isControl)
+    fifoDataIn = innerFIFOInst.getResult(portIdx++);
+  auto fifoReadyIn = innerFIFOInst.getResult(portIdx++);
+  auto fifoValidIn = innerFIFOInst.getResult(portIdx++);
+
+  if (!isControl)
+    fifoDataOut = innerFIFOInst.getResult(portIdx++);
+  auto fifoReadyOut = innerFIFOInst.getResult(portIdx++);
+  auto fifoValidOut = innerFIFOInst.getResult(portIdx++);
+
+  auto fifoClk = innerFIFOInst.getResult(portIdx++);
+  auto fifoRst = innerFIFOInst.getResult(portIdx++);
+
+  builder.create<ConnectOp>(fifoClk, clock);
+  builder.create<ConnectOp>(fifoRst, reset);
+  builder.create<ConnectOp>(fifoValidIn, fifoPValid);
+  builder.create<ConnectOp>(fifoReadyIn, fifoNReady);
+  builder.create<ConnectOp>(fifoValid, fifoValidOut);
+  builder.create<ConnectOp>(fifoReady, fifoReadyOut);
+  if (!isControl) {
+    builder.create<ConnectOp>(fifoDataIn, fifoIn);
+    builder.create<ConnectOp>(fifoOut, fifoDataOut);
+  }
+
+  // Select fifo or bypass input based on mux selection.
+  if (!isControl) {
+    auto outputData = outputSubfields[2];
+    auto muxOut = builder.create<MuxPrimOp>(muxSelWire, fifoOut, inputData);
+    builder.create<ConnectOp>(outputData, muxOut);
+  }
+
+  return true;
+}
+
 bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                                            ValueVector *output, Value clock,
                                            Value reset, bool isControl) {
@@ -1867,7 +2213,8 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
                                op.isControl());
   else
-    return false;
+    return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
+                                op.isControl());
 }
 
 bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
@@ -2422,7 +2769,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           ValueVectorList portList =
               extractSubfields(subModuleOp, insertLoc, rewriter);
 
-          if (HandshakeBuilder(portList, insertLoc, rewriter)
+          if (HandshakeBuilder(circuitOp, portList, insertLoc, rewriter)
                   .dispatchHandshakeVisitor(&op)) {
           } else if (StdExprBuilder(portList, insertLoc, rewriter)
                          .dispatchStdExprVisitor(&op)) {
