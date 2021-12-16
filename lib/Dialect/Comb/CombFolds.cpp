@@ -1814,9 +1814,9 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     return false;
 
   // If the array is greater that 9 bits, it will take over 512 elements and
-  // it is too large for a regular expression.
+  // it will be too large for a single expression.
   auto indexWidth = indexValue.getType().cast<IntegerType>().getWidth();
-  if (9 <= indexWidth)
+  if (indexWidth <= 9)
     return false;
 
   // Next we need to see if the values are dense-ish.  We don't want to have
