@@ -1813,11 +1813,16 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
   if (valuesFound.size() < 3)
     return false;
 
+  // If the array is greater that 9 bits, it will take over 512 elements and
+  // it will be too large for a single expression.
+  auto indexWidth = indexValue.getType().cast<IntegerType>().getWidth();
+  if (indexWidth >= 9)
+    return false;
+
   // Next we need to see if the values are dense-ish.  We don't want to have
   // a tremendous number of replicated entries in the array.  Some sparsity is
   // ok though, so we require the table to be at least 5/8 utilized.
-  uint64_t tableSize = 1ULL
-                       << indexValue.getType().cast<IntegerType>().getWidth();
+  uint64_t tableSize = 1ULL << indexWidth;
   if (valuesFound.size() < (tableSize * 5) / 8)
     return false; // Not dense enough.
 
