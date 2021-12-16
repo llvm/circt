@@ -2053,7 +2053,7 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
   if (!isControl)
     builder.create<ConnectOp>(fifoIn, inputData);
 
-  std::string innerFifoModName = "innerFIFO_" + std::to_string(numStage) + "_";
+  std::string innerFifoModName = "innerFIFO_" + std::to_string(numStage);
   if (!isControl)
     innerFifoModName += getTypeName(insertLoc, inputData.getType());
   else
