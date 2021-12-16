@@ -27,7 +27,7 @@ namespace {
 template <typename JsonType>
 struct ExtractionSummaryCursor {
   Location loc;
-  const Twine &path;
+  Twine path;
   JsonType value;
 
   ExtractionSummaryCursor(const ExtractionSummaryCursor &) = delete;
