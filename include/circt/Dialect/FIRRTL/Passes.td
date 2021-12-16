@@ -45,8 +45,9 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
   let options = [
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
-           "Concat all elements of the aggregate data into a single element.">
-
+           "Concat all elements of the aggregate data into a single element.">,
+    Option<"preserveAggregate", "preserve-aggregate", "bool", "false",
+           "(Experimental) Preserve aggregate vectors/bundles if possible.">
   ];
 }
 

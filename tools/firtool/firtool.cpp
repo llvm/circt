@@ -121,6 +121,10 @@ static cl::opt<bool> replSeqMem(
     cl::desc(
         "replace the seq mem for macro replacement and emit relevant metadata"),
     cl::init(false));
+static cl::opt<bool>
+    preserveAggregate("experimental-preserve-aggregate",
+                      cl::desc("preserve aggregate types in lower types"),
+                      cl::init(false));
 static cl::opt<std::string>
     replSeqMemCircuit("repl-seq-mem-circuit",
                       cl::desc("circuit root for seq mem metadata"),
@@ -360,7 +364,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // things up.
   if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(
-        firrtl::createLowerFIRRTLTypesPass(replSeqMem));
+        firrtl::createLowerFIRRTLTypesPass(replSeqMem, preserveAggregate));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
