@@ -27,7 +27,7 @@ using namespace firrtl;
 /// When a module has multiple prefixes, it will be cloned for each one. Usually
 /// there is only a single prefix applied to each module, although there could
 /// be many.
-using PrefixMap = DenseMap<StringRef, llvm::SmallVector<std::string, 1>>;
+using PrefixMap = llvm::DenseMap<StringRef, std::vector<std::string>>;
 
 /// Insert a string into the end of vector if the string is not already present.
 static void recordPrefix(PrefixMap &prefixMap, StringRef moduleName,
@@ -217,7 +217,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   // once for each prefix but the first.
   OpBuilder builder(module);
   builder.setInsertionPointAfter(module);
-  for (auto &outerPrefix : drop_begin(prefixes)) {
+  for (auto &outerPrefix : llvm::drop_begin(prefixes)) {
     auto moduleClone = cast<FModuleOp>(builder.clone(*module));
     moduleClone.setName(outerPrefix + moduleName);
     renameModuleBody((outerPrefix + innerPrefix).str(), moduleClone);
@@ -295,7 +295,7 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
   };
 
   // Duplicate the external module if there is more than one prefix.
-  for (auto &prefix : drop_begin(prefixes)) {
+  for (auto &prefix : llvm::drop_begin(prefixes)) {
     auto duplicate = cast<FExtModuleOp>(builder.clone(*extModule));
     applyPrefixToNameAndDefName(duplicate, prefix);
   }
