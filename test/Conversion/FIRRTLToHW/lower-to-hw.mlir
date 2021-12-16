@@ -1506,7 +1506,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: i1>>
   }
 
-  // CHECK_LABEL: hw.module @AggregateInvalidValue
+  // CHECK-LABEL: hw.module @AggregateInvalidValue
   firrtl.module @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
     %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
