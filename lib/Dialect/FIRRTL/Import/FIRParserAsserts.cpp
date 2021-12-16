@@ -189,6 +189,12 @@ parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   return llvm::None;
 }
 
+static void removeOp(Operation *op) {
+  op->dropAllReferences();
+  op->dropAllDefinedValueUses();
+  op->remove();
+}
+
 namespace circt {
 namespace firrtl {
 
@@ -205,6 +211,11 @@ namespace firrtl {
 /// same condition as the printf.
 ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
                                    WhenOp whenStmt) {
+  // CAVEAT: Do *not* use `erase` on operations in this function, since the
+  // builder has an associated listener that keeps a list of inserted operations
+  // that doesn't get updated upon erasure. Rather, simply `removeOp(...)` the
+  // operation and rely on the `endStatement` post-processing step in
+  // `FIRParser` to properly destroy any unused operations.
   auto *context = builder.getContext();
 
   // The when blocks we're interested in don't have an else region.
@@ -230,7 +241,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     if (!stopOp || opIt != opEnd || stopOp.clock() != printOp.clock() ||
         stopOp.cond() != printOp.cond())
       return success();
-    stopOp.erase();
+    removeOp(stopOp);
   }
 
   // Detect if we're dealing with a verification statement, and what flavor of
@@ -283,25 +294,25 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     flippedCond = {};
   }
 
-  // If we have found such a condition, erase any verification ops that use it
+  // If we have found such a condition, remove any verification ops that use it
   // and that match the op we are about to assemble. This is necessary since the
   // `printf` op actually carries all the information we need for the assert,
   // while the actual `assert` has none of it. This makes me sad.
   if (flippedCond) {
     // Use a set to catch cases where a verification op is a double user of the
     // flipped condition.
-    SmallPtrSet<Operation *, 1> opsToErase;
+    SmallPtrSet<Operation *, 1> opsToRemove;
     for (const auto &user : flippedCond.getUsers()) {
       TypeSwitch<Operation *>(user).Case<AssertOp, AssumeOp, CoverOp>(
           [&](auto op) {
             if (op.clock() == printOp.clock() &&
                 op.enable() == printOp.cond() &&
                 op.predicate() == flippedCond && !op.isConcurrent())
-              opsToErase.insert(op);
+              opsToRemove.insert(op);
           });
     }
-    for (auto op : opsToErase)
-      op->erase();
+    for (auto *op : opsToRemove)
+      removeOp(op);
   }
 
   builder.setInsertionPointAfter(whenStmt);
@@ -377,7 +388,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     else // VerifFlavor::Cover
       builder.create<CoverOp>(printOp.clock(), predicate, printOp.cond(),
                               message, printOp.operands(), label, true);
-    printOp.erase();
+    removeOp(printOp);
     break;
   }
 
@@ -386,7 +397,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     builder.create<AssertOp>(
         printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
         printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
-    printOp.erase();
+    removeOp(printOp);
     break;
   }
 
@@ -525,7 +536,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     else // VerifFlavor::VerifLibAssume
       op = builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
                                     message, printOp.operands(), label, true);
-    printOp.erase();
+    removeOp(printOp);
 
     // Attach additional attributes extracted from the JSON object.
     op->setAttr("guards", ArrayAttr::get(context, guards));
@@ -538,7 +549,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
 
   // Clean up the `WhenOp` if it has become completely empty.
   if (thenBlock.empty())
-    whenStmt.erase();
+    removeOp(whenStmt);
   return success();
 }
 

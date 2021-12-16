@@ -1406,6 +1406,16 @@ struct LazyLocationListener : public OpBuilder::Listener {
         opAndSMLoc.first->setLoc(parser.translateLocation(opAndSMLoc.second));
     }
 
+    // Destroy any subOps that have been previously `remove`d. Some parts of the
+    // parser may create operations that are immediately removed by a subsequent
+    // folding/restructuring function (e.g. `foldWhenEncodedVerifOp`). Those
+    // pieces of code use `remove` to remove the operations from the parent
+    // block without already destroying them, allowing this `endStatement` call
+    // to properly process them and then do the necessary cleanup.
+    for (auto opAndSMLoc : subOps)
+      if (!opAndSMLoc.first->getBlock())
+        opAndSMLoc.first->destroy();
+
     // Reset our state.
     isActive = false;
     infoLoc = LocationAttr();
