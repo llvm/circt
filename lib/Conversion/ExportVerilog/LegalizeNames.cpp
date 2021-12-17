@@ -47,7 +47,7 @@ StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
 //===----------------------------------------------------------------------===//
 
 /// This constructs the legalized type for given `type` with cache.
-Type FieldNameResolver::getRenamedType(Type type) {
+Type FieldNameResolver::getLegalizedType(Type type) {
   auto it = legalizedTypes.find(type);
   if (it != legalizedTypes.end())
     return it->second;
@@ -71,14 +71,14 @@ Type FieldNameResolver::getRenamedType(Type type) {
           // Other than struct types, just recursively apply to
           // their subtypes.
           .Case<ArrayType, UnpackedArrayType>([&](auto parentType) -> Type {
-            auto elem = getRenamedType(parentType.getElementType());
+            auto elem = getLegalizedType(parentType.getElementType());
             if (elem == parentType.getElementType())
               return type;
 
             return decltype(parentType)::get(elem, parentType.getSize());
           })
           .Case<InOutType>([&](auto inoutType) -> Type {
-            auto elem = getRenamedType(inoutType.getElementType());
+            auto elem = getLegalizedType(inoutType.getElementType());
             if (elem == inoutType.getElementType())
               return type;
             return InOutType::get(elem);
@@ -92,7 +92,7 @@ Type FieldNameResolver::getRenamedType(Type type) {
               newInputs.reserve(types.size());
               llvm::transform(types, std::back_inserter(newInputs),
                               [&](Type type) {
-                                auto newType = getRenamedType(type);
+                                auto newType = getLegalizedType(type);
                                 changed |= newType != type;
                                 return newType;
                               });
@@ -105,7 +105,7 @@ Type FieldNameResolver::getRenamedType(Type type) {
                            : type;
           })
           .Case<TypeAliasType>([&](TypeAliasType aliasType) -> Type {
-            auto innerType = getRenamedType(aliasType.getInnerType());
+            auto innerType = getLegalizedType(aliasType.getInnerType());
             if (innerType == aliasType.getInnerType())
               return type;
             return TypeAliasType::get(aliasType.getRef(), innerType);
@@ -151,7 +151,7 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
 hw::detail::FieldInfo
 FieldNameResolver::getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo) {
   fieldInfo.name = getRenamedFieldName(fieldInfo.name);
-  fieldInfo.type = getRenamedType(fieldInfo.type);
+  fieldInfo.type = getLegalizedType(fieldInfo.type);
   return fieldInfo;
 }
 
@@ -163,7 +163,7 @@ void FieldNameResolver::legalizeToplevelOperation(Operation *op) {
 void FieldNameResolver::legalizeOperationTypes(Operation *op) {
   // Legalize result types.
   for (auto result : op->getResults()) {
-    auto newType = getRenamedType(result.getType());
+    auto newType = getLegalizedType(result.getType());
     if (result.getType() != newType)
       result.setType(newType);
   }
@@ -180,13 +180,13 @@ void FieldNameResolver::legalizeOperationTypes(Operation *op) {
 
   if (auto module = dyn_cast<HWModuleOp>(op)) {
     // Legalize module types.
-    auto type = getRenamedType(module.getType());
+    auto type = getLegalizedType(module.getType());
     if (type != module.getType())
       module.setType(type.cast<mlir::FunctionType>());
 
     // We have to replace argument types as well.
     for (auto arg : module.getBody().getArguments()) {
-      auto newType = getRenamedType(arg.getType());
+      auto newType = getLegalizedType(arg.getType());
       if (arg.getType() != newType)
         arg.setType(newType);
     }
@@ -195,7 +195,7 @@ void FieldNameResolver::legalizeOperationTypes(Operation *op) {
 
   // Legalize external module types.
   if (auto extmodule = dyn_cast<HWModuleExternOp>(op)) {
-    auto type = getRenamedType(extmodule.getType());
+    auto type = getLegalizedType(extmodule.getType());
     if (type != extmodule.getType())
       extmodule.setType(type.cast<mlir::FunctionType>());
     return;
@@ -203,7 +203,7 @@ void FieldNameResolver::legalizeOperationTypes(Operation *op) {
 
   // Legalize interface signal types.
   if (auto interfaceSignal = dyn_cast<InterfaceSignalOp>(op)) {
-    auto type = getRenamedType(interfaceSignal.type());
+    auto type = getLegalizedType(interfaceSignal.type());
     if (type != interfaceSignal.type())
       interfaceSignal.typeAttr(TypeAttr::get(type));
     return;

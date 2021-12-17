@@ -179,7 +179,7 @@ private:
 struct FieldNameResolver {
   FieldNameResolver() = default;
 
-  Type getRenamedType(Type type);
+  Type getLegalizedType(Type type);
   StringAttr getRenamedFieldName(StringAttr fieldName);
   hw::detail::FieldInfo getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo);
 
