@@ -1,5 +1,5 @@
-; RUN: firtool %s --format=fir  --lower-to-hw | FileCheck %s 
-; RUN: firtool %s --format=fir  --lower-to-hw --ignore-read-enable-mem | FileCheck --check-prefix=READ %s 
+; RUN: firtool %s --format=fir  --ir-hw | FileCheck %s 
+; RUN: firtool %s --format=fir  --ir-hw --ignore-read-enable-mem | FileCheck --check-prefix=READ %s 
 
 circuit Qux:
   module Qux:
