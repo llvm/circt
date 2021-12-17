@@ -538,6 +538,7 @@ def ConstantOp : Handshake_Op<"constant", [
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
   let assemblyFormat = [{ $ctrl attr-dict `:` type($result)}];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def EndOp

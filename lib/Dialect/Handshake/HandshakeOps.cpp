@@ -853,6 +853,15 @@ std::string handshake::ConstantOp::getOperandName(unsigned int idx) {
   return "ctrl";
 }
 
+static ParseResult verifyConstantOp(handshake::ConstantOp op) {
+  // Verify that the type of the provided value is equal to the result type.
+  if (op->getAttr("value").getType() != op.getResult().getType())
+    return op.emitOpError()
+           << "constant value type differs from operation result type.";
+
+  return success();
+}
+
 void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
                                   Attribute value, Value operand) {
   result.addOperands(operand);
