@@ -332,7 +332,7 @@ void EmitOMIRPass::runOnOperation() {
   auto verbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer);
   auto fileAttr = hw::OutputFileAttr::getFromFilename(
-      context, *outputFilename, /*excludeFromFilelist=*/true);
+      context, *outputFilename, /*excludeFromFilelist=*/true, false);
   verbatimOp->setAttr("output_file", fileAttr);
   verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
 }
