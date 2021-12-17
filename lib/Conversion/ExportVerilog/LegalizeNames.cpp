@@ -14,6 +14,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace sv;
@@ -39,6 +40,174 @@ StringAttr ExportVerilog::getDeclarationName(Operation *op) {
 /// replacement name to use, or null if the original name was ok.
 StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
   return legalizeName(originalName, usedNames, nextGeneratedNameID);
+}
+
+//===----------------------------------------------------------------------===//
+// FieldNameResolver
+//===----------------------------------------------------------------------===//
+
+/// This constructs the legalized type for given `type` with cache.
+Type FieldNameResolver::getRenamedType(Type type) {
+  auto it = legalizedTypes.find(type);
+  if (it != legalizedTypes.end())
+    return it->second;
+  Type legalizedType =
+      TypeSwitch<Type, Type>(type)
+          .Case<StructType>([&](auto fieldType) -> Type {
+            auto elements = fieldType.getElements();
+            bool changed = false;
+            SmallVector<hw::detail::FieldInfo> newFields;
+            newFields.reserve(elements.size());
+            for (auto fieldInfo : elements) {
+              auto newFieldInfo = getRenamedFieldInfo(fieldInfo);
+              changed |= newFieldInfo != fieldInfo;
+              newFields.push_back(newFieldInfo);
+            }
+
+            return changed ? decltype(fieldType)::get(fieldType.getContext(),
+                                                      newFields)
+                           : fieldType;
+          })
+          // Other than struct types, just recursively apply to
+          // their subtypes.
+          .Case<ArrayType, UnpackedArrayType>([&](auto parentType) -> Type {
+            auto elem = getRenamedType(parentType.getElementType());
+            if (elem == parentType.getElementType())
+              return type;
+
+            return decltype(parentType)::get(elem, parentType.getSize());
+          })
+          .Case<InOutType>([&](auto inoutType) -> Type {
+            auto elem = getRenamedType(inoutType.getElementType());
+            if (elem == inoutType.getElementType())
+              return type;
+            return InOutType::get(elem);
+          })
+          .Case<FunctionType>([&](FunctionType functionType) -> Type {
+            auto inputs = functionType.getInputs();
+            auto results = functionType.getResults();
+            bool changed = false;
+            auto renameTypes = [&](auto types) {
+              SmallVector<Type> newInputs;
+              newInputs.reserve(types.size());
+              llvm::transform(types, std::back_inserter(newInputs),
+                              [&](Type type) {
+                                auto newType = getRenamedType(type);
+                                changed |= newType != type;
+                                return newType;
+                              });
+              return newInputs;
+            };
+            auto newInputs = renameTypes(inputs);
+            auto newResults = renameTypes(results);
+            return changed ? FunctionType::get(functionType.getContext(),
+                                               newInputs, newResults)
+                           : type;
+          })
+          .Case<TypeAliasType>([&](TypeAliasType aliasType) -> Type {
+            auto innerType = getRenamedType(aliasType.getInnerType());
+            if (innerType == aliasType.getInnerType())
+              return type;
+            return TypeAliasType::get(aliasType.getRef(), innerType);
+          })
+          .Default([](auto baseType) { return baseType; });
+  setLegalizedType(type, legalizedType);
+  return legalizedType;
+}
+
+void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
+                                            StringAttr newFieldName) {
+  renamedFieldNames[fieldName] = newFieldName;
+  usedFieldNames.insert(newFieldName);
+}
+
+void FieldNameResolver::setLegalizedType(Type type, Type newType) {
+  legalizedTypes[type] = newType;
+}
+
+StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
+  auto it = renamedFieldNames.find(fieldName);
+  if (it != renamedFieldNames.end())
+    return it->second;
+
+  // If a field name is not verilog name or used already, we have to rename it.
+  bool hasToBeRenamed = !sv::isNameValid(fieldName.getValue()) ||
+                        usedFieldNames.count(fieldName.getValue());
+
+  if (!hasToBeRenamed) {
+    setRenamedFieldName(fieldName, fieldName);
+    return fieldName;
+  }
+
+  StringRef newFieldName = sv::legalizeName(
+      fieldName.getValue(), usedFieldNames, nextGeneratedNameID);
+
+  auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);
+
+  setRenamedFieldName(fieldName, newFieldNameAttr);
+  return newFieldNameAttr;
+}
+
+hw::detail::FieldInfo
+FieldNameResolver::getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo) {
+  fieldInfo.name = getRenamedFieldName(fieldInfo.name);
+  fieldInfo.type = getRenamedType(fieldInfo.type);
+  return fieldInfo;
+}
+
+void FieldNameResolver::legalizeToplevelOperation(Operation *op) {
+  // Legalize operations including `op` itself.
+  op->walk([&](Operation *op) { legalizeOperationTypes(op); });
+}
+
+void FieldNameResolver::legalizeOperationTypes(Operation *op) {
+  // Legalize result types.
+  for (auto result : op->getResults()) {
+    auto newType = getRenamedType(result.getType());
+    if (result.getType() != newType)
+      result.setType(newType);
+  }
+
+  // Rename field names referred in operations.
+  if (isa<sv::StructFieldInOutOp, hw::StructExtractOp, hw::StructInjectOp>(
+          op)) {
+    auto fieldNameAttr = op->getAttr("field").cast<StringAttr>();
+    auto newFieldNameAttr = getRenamedFieldName(fieldNameAttr);
+    if (fieldNameAttr != newFieldNameAttr)
+      op->setAttr("field", newFieldNameAttr);
+    return;
+  }
+
+  if (auto module = dyn_cast<HWModuleOp>(op)) {
+    // Legalize module types.
+    auto type = getRenamedType(module.getType());
+    if (type != module.getType())
+      module.setType(type.cast<mlir::FunctionType>());
+
+    // We have to replace argument types as well.
+    for (auto arg : module.getBody().getArguments()) {
+      auto newType = getRenamedType(arg.getType());
+      if (arg.getType() != newType)
+        arg.setType(newType);
+    }
+    return;
+  }
+
+  // Legalize external module types.
+  if (auto extmodule = dyn_cast<HWModuleExternOp>(op)) {
+    auto type = getRenamedType(extmodule.getType());
+    if (type != extmodule.getType())
+      extmodule.setType(type.cast<mlir::FunctionType>());
+    return;
+  }
+
+  // Legalize interface signal types.
+  if (auto interfaceSignal = dyn_cast<InterfaceSignalOp>(op)) {
+    auto type = getRenamedType(interfaceSignal.type());
+    if (type != interfaceSignal.type())
+      interfaceSignal.typeAttr(TypeAttr::get(type));
+    return;
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -74,6 +243,9 @@ private:
   /// This keeps track of globally visible names like module parameters.
   GlobalNameTable globalNameTable;
 
+  /// This keeps track of field names of struct types.
+  FieldNameResolver fieldNameResolver;
+
   GlobalNameResolver(const GlobalNameResolver &) = delete;
   void operator=(const GlobalNameResolver &) = delete;
 };
@@ -101,6 +273,8 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
+    // Legalize field names.
+    fieldNameResolver.legalizeToplevelOperation(&op);
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeModuleNames(module);
       continue;
