@@ -1,4 +1,4 @@
-// RUN: firtool --lower-to-hw --split-input-file --verify-diagnostics %s
+// RUN: firtool --hw --split-input-file --verify-diagnostics %s
 // These will be picked up by https://github.com/llvm/circt/pull/1444
 
 // Tests extracted from:

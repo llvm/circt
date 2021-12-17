@@ -1,5 +1,5 @@
 // RUN: rm -rf %t
-// RUN: firtool %s --blackbox-resource-path=%S/.. | firtool --format=mlir --split-verilog -o=%t --blackbox-path=%S --blackbox-resource-path=%S/..
+// RUN: firtool %s --ir-fir --blackbox-resource-path=%S/.. | firtool --format=mlir --split-verilog -o=%t --blackbox-path=%S --blackbox-resource-path=%S/..
 // RUN: FileCheck %s --check-prefix=VERILOG-TOP < %t/test_mod.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/magic/blackbox-inline.v
 // RUN: FileCheck %s --check-prefix=VERILOG-HDR < %t/magic/blackbox-inline.svh

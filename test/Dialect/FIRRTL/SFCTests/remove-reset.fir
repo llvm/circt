@@ -1,4 +1,4 @@
-; RUN: firtool --split-input-file %s | FileCheck %s
+; RUN: firtool --split-input-file %s --ir-fir | FileCheck %s
 ; Tests extracted from:
 ; - test/scala/firrtlTests/transforms/RemoveResetSpec.scala
 
