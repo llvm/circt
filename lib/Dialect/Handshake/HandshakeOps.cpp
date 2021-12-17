@@ -853,6 +853,25 @@ std::string handshake::ConstantOp::getOperandName(unsigned int idx) {
   return "ctrl";
 }
 
+static void setupSourceOp(OperationState &result) {
+  result.addTypes(NoneType::get(result.getContext()));
+  sost::addAttributes(result, 1, result.types[0], /*alwaysControl=*/true);
+}
+
+void SourceOp::build(OpBuilder &builder, OperationState &result) {
+  setupSourceOp(result);
+}
+
+static ParseResult parseSourceOp(OpAsmParser &, OperationState &result) {
+  // Nothin to do; source ops always generate a none-typed control token.
+  setupSourceOp(result);
+  return success();
+}
+
+static void printSourceOp(OpAsmPrinter &p, SourceOp op) {
+  sost::printOp(p, op, false);
+}
+
 static ParseResult verifyConstantOp(handshake::ConstantOp op) {
   // Verify that the type of the provided value is equal to the result type.
   if (op->getAttr("value").getType() != op.getResult().getType())

@@ -489,13 +489,16 @@ def SinkOp
 def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
   let summary = "source operation";
   let description = [{
-    The source operation represents continuous data
+    The source operation represents continuous token
     source.  The source continously sets a 'valid' signal which the
     successor can consume at any point in time.
   }];
 
+  let skipDefaultBuilders = 1;
   let results = (outs AnyType:$result);
-  let assemblyFormat = [{ attr-dict `:` type($result)}];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [OpBuilder<(ins)>];
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def NeverOp : Handshake_Op<"never", [NoSideEffect]> {

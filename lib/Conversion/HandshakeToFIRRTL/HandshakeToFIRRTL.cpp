@@ -394,8 +394,8 @@ static std::string getSubModuleName(Operation *oldOp) {
   }
 
   // Add control information.
-  if (auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
-      ctrlAttr && ctrlAttr.getValue()) {
+  if (auto ctrlInterface = dyn_cast<handshake::ControlInterface>(oldOp);
+      ctrlInterface && ctrlInterface.isControl()) {
     // Add some additional discriminating info for non-typed operations.
     subModuleName += "_" + std::to_string(oldOp->getNumOperands()) + "ins_" +
                      std::to_string(oldOp->getNumResults()) + "outs";
@@ -933,6 +933,7 @@ public:
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
+  bool visitHandshake(SourceOp op);
   bool visitHandshake(handshake::StoreOp op);
 
   bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
@@ -995,6 +996,23 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
          "expected a data operand to a non-control sink op");
   Value argData = argSubfields[2];
   rewriter.eraseOp(argData.getDefiningOp());
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(SourceOp op) {
+  ValueVector argSubfields = portList.front();
+  Value argValid = argSubfields[0];
+  Value argReady = argSubfields[1];
+
+  // A Source operation is always ready to provide tokens.
+  auto signalType = argValid.getType().cast<FIRRTLType>();
+  Value highSignal =
+      createConstantOp(signalType, APInt(1, 1), insertLoc, rewriter);
+  rewriter.create<ConnectOp>(insertLoc, argValid, highSignal);
+
+  rewriter.eraseOp(argReady.getDefiningOp());
+
+  assert(op.isControl() && "source op provide control-only tokens");
   return true;
 }
 
@@ -1166,7 +1184,10 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   ValueVector resultSubfields = portList[numInputs];
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
-  Value resultData = resultSubfields[2];
+  Value resultData;
+
+  if (!op.isControl())
+    resultData = resultSubfields[2];
 
   // Walk through each arg data to collect the subfields.
   SmallVector<Value, 4> argValid;
@@ -1176,7 +1197,8 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
-    argData.push_back(argSubfields[2]);
+    if (!op.isControl())
+      argData.push_back(argSubfields[2]);
   }
 
   // Define some common types and values that will be used.
@@ -1210,8 +1232,10 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
   // result outputs are gated on the win wire being non-zero.
   rewriter.create<ConnectOp>(insertLoc, resultValid, hasWinnerCondition);
 
-  auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
-  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+  if (!op.isControl()) {
+    auto resultDataMux = createOneHotMuxTree(argData, win, insertLoc, rewriter);
+    rewriter.create<ConnectOp>(insertLoc, resultData, resultDataMux);
+  }
 
   // Create the logic to set the done wires for the result. The done wire is
   // asserted when the output is valid and ready, or the emitted register is
