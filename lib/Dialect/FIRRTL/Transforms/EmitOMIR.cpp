@@ -124,6 +124,8 @@ private:
   /// Temporary `firrtl.nla` operations to be deleted at the end of the pass.
   SmallVector<NonLocalAnchor> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+  /// Lookup table of instances by name and parent module.
+  DenseMap<std::pair<Operation *, StringAttr>, InstanceOp> instancesByName;
 };
 } // namespace
 
@@ -173,6 +175,7 @@ void EmitOMIRPass::runOnOperation() {
   symbolIndices.clear();
   removeTempNLAs.clear();
   moduleNamespaces.clear();
+  instancesByName.clear();
   CircuitOp circuitOp = getOperation();
 
   // Gather the relevant annotations from the circuit. On the one hand these are
@@ -232,6 +235,9 @@ void EmitOMIRPass::runOnOperation() {
   // Traverse the IR and collect all tracker annotations that were previously
   // scattered into the circuit.
   circuitOp.walk([&](Operation *op) {
+    if (auto instOp = dyn_cast<InstanceOp>(op))
+      instancesByName.insert(
+          {{op->getParentOfType<FModuleOp>(), instOp.nameAttr()}, instOp});
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
         return false;
@@ -285,26 +291,39 @@ void EmitOMIRPass::runOnOperation() {
   // Delete the temporary NLAs. This requires us to visit all the nodes along
   // the NLA's path and remove `circt.nonlocal` annotations referring to the
   // NLA.
+  DenseSet<InstanceOp> instsToModify;
+  DenseSet<StringAttr> nlaSymNamesToDrop;
+
   for (auto nla : removeTempNLAs) {
     LLVM_DEBUG(llvm::dbgs() << "Removing " << nla << "\n");
-    for (auto modName : nla.modpath().getAsRange<FlatSymbolRefAttr>()) {
-      Operation *mod = symtbl->lookup(modName.getValue());
-      mod->walk([&](InstanceOp instOp) {
-        AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
-          auto match =
-              anno.isClass("circt.nonlocal") &&
-              anno.getMember<FlatSymbolRefAttr>("circt.nonlocal").getAttr() ==
-                  nla.sym_nameAttr();
-          if (match)
-            LLVM_DEBUG(llvm::dbgs()
-                       << "- Removing " << anno.getDict() << " from " << modName
-                       << "." << instOp.name() << "\n");
-          return match;
-        });
-      });
+    nlaSymNamesToDrop.insert(nla.sym_nameAttr());
+    for (auto modAndName :
+         llvm::zip(nla.modpath().getAsRange<FlatSymbolRefAttr>(),
+                   nla.namepath().getAsRange<StringAttr>())) {
+      Operation *mod = symtbl->lookup(std::get<0>(modAndName).getValue());
+      auto it = instancesByName.find({mod, std::get<1>(modAndName)});
+      if (it == instancesByName.end())
+        continue;
+      instsToModify.insert(it->second);
     }
     nla->erase();
   }
+
+  for (auto instOp : instsToModify) {
+    AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
+      auto match =
+          anno.isClass("circt.nonlocal") &&
+          nlaSymNamesToDrop.contains(
+              anno.getMember<FlatSymbolRefAttr>("circt.nonlocal").getAttr());
+      if (match)
+        LLVM_DEBUG(llvm::dbgs()
+                   << "Removing " << anno.getDict() << " from "
+                   << instOp->getParentOfType<FModuleOp>().getName() << "."
+                   << instOp.name() << "\n");
+      return match;
+    });
+  }
+
   removeTempNLAs.clear();
 
   // Emit the OMIR JSON as a verbatim op.
@@ -711,16 +730,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
       // Find an instance with the given name in this module. Ensure it has a
       // symbol that we can refer to.
-      instName = {};
-      module->walk([&](InstanceOp instOp) {
-        if (instOp.nameAttr() != nameAttr)
-          return;
-        LLVM_DEBUG(llvm::dbgs()
-                   << "Marking NLA-participating instance " << nameAttr
-                   << " in module " << symAttr << " as dont-touch\n");
-        AnnotationSet::addDontTouch(instOp);
-        instName = getInnerRefTo(instOp);
-      });
+      auto instOp = instancesByName.lookup({module, nameAttr});
+      if (!instOp)
+        continue;
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Marking NLA-participating instance " << nameAttr
+                 << " in module " << symAttr << " as dont-touch\n");
+      AnnotationSet::addDontTouch(instOp);
+      instName = getInnerRefTo(instOp);
     }
   } else {
     FModuleOp module = dyn_cast<FModuleOp>(tracker.op);
