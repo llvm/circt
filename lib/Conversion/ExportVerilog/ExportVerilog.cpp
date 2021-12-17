@@ -414,6 +414,33 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
+/// Most expressions are invalid to bit-select from in Verilog, but some
+/// things are ok.  Return true if it is ok to inline bitselect from the
+/// result of this expression.  It is conservatively correct to return false.
+static bool isOkToBitSelectFrom(Value v) {
+  // Module ports are always ok to bit select from.
+  if (v.isa<BlockArgument>())
+    return true;
+
+  // Uses of a wire or register can be done inline.
+  if (auto read = v.getDefiningOp<ReadInOutOp>()) {
+    if (read.input().getDefiningOp<WireOp>() ||
+        read.input().getDefiningOp<RegOp>())
+      return true;
+  }
+
+  // Aggregate access can be inlined.
+  if (v.getDefiningOp<StructExtractOp>())
+    return true;
+
+  // Interface signal can be inlined.
+  if (v.getDefiningOp<ReadInterfaceSignalOp>())
+    return true;
+
+  // TODO: We could handle concat and other operators here.
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // ModuleNameManager Implementation
 //===----------------------------------------------------------------------===//
@@ -1835,7 +1862,8 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
   auto x = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
-  assert(x.precedence == Symbol &&
+  assert((x.precedence == Symbol ||
+          (x.precedence == Selection && isOkToBitSelectFrom(op.input()))) &&
          "should be handled by isExpressionUnableToInline");
 
   // If we're extracting the whole input, just return it.  This is valid but
@@ -2069,33 +2097,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 //===----------------------------------------------------------------------===//
 // NameCollector
 //===----------------------------------------------------------------------===//
-
-/// Most expressions are invalid to bit-select from in Verilog, but some
-/// things are ok.  Return true if it is ok to inline bitselect from the
-/// result of this expression.  It is conservatively correct to return false.
-static bool isOkToBitSelectFrom(Value v) {
-  // Module ports are always ok to bit select from.
-  if (v.isa<BlockArgument>())
-    return true;
-
-  // Uses of a wire or register can be done inline.
-  if (auto read = v.getDefiningOp<ReadInOutOp>()) {
-    if (read.input().getDefiningOp<WireOp>() ||
-        read.input().getDefiningOp<RegOp>())
-      return true;
-  }
-
-  // Aggregate access can be inlined.
-  if (v.getDefiningOp<StructExtractOp>())
-    return true;
-
-  // Interface signal can be inlined.
-  if (v.getDefiningOp<ReadInterfaceSignalOp>())
-    return true;
-
-  // TODO: We could handle concat and other operators here.
-  return false;
-}
 
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you

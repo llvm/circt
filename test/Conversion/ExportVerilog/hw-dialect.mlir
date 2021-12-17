@@ -617,6 +617,13 @@ hw.module @largeConstant(%a: i100000, %b: i16) -> (x: i100000, y: i16) {
 
   hw.output %1, %2 : i100000, i16
 }
+// CHECK-LABEL: StructExtractExtract
+hw.module @StructExtractExtract(%a: !hw.struct<b: i4>) -> (r: i2) {
+  %0 = hw.struct_extract %a["b"] : !hw.struct<b: i4>
+  %1 = comb.extract %0 from 1 : (i4) -> i2
+  // CHECK: assign r = a.b[2:1];
+  hw.output %1 : i2
+}
 
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
 
