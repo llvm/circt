@@ -72,9 +72,7 @@ static Type lowerType(Type type) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
-      // TODO: make hw::StructType contain StringAttrs.
-      auto name = StringAttr::get(element.name.getValue(), type.getContext());
-      hwfields.push_back(hw::StructType::FieldInfo{name, etype});
+      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
