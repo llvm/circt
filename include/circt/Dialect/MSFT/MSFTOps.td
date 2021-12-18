@@ -160,7 +160,7 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
 }
 
 def DesignPartitionOp : MSFTOp<"partition",
-                             [Symbol, HasParent<"msft::MSFTModuleOp">]> {
+                               [Symbol, HasParent<"msft::MSFTModuleOp">]> {
   let summary = "A target \"module\" for moving entities";
   let description = [{
     Sometimes EDA tools require designs to have a module hierarchy which doesn't

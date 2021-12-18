@@ -20,3 +20,9 @@ def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
            "", "File to output Tcl into">
   ];
 }
+
+def Partition: Pass<"msft-partition", "mlir::ModuleOp"> {
+  let summary = "Move the entities targeted for a design partition";
+  let constructor = "circt::msft::createPartitionPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}

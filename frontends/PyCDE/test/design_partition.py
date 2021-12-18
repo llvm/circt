@@ -17,6 +17,7 @@ class TopLevel:
   @generator
   def construct(mod):
     TopLevel.part1 = DesignPartition("part1")
+    Plus(a=mod.x, b=mod.x, partition=TopLevel.part1)
     mod.y = PlusPipeline(a=mod.x).y
 
 
