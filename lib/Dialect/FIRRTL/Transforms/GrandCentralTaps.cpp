@@ -138,7 +138,7 @@ static T &operator<<(T &os, Key key) {
 /// Check if an annotation is a `ReferenceDataTapKey`, and that it has a `type`
 /// field with a given content.
 static bool isReferenceDataTapOfType(Annotation anno, StringRef type) {
-  if (!anno.isClass(referenceKeyClass))
+  if (!anno.isClass(anno::referenceKeyClass))
     return false;
   auto typeAttr = anno.getMember<StringAttr>("type");
   if (!typeAttr)
@@ -370,7 +370,7 @@ void GrandCentralTapsPass::runOnOperation() {
   // - Generate a body for the blackbox module with the signal mapping
 
   AnnotationSet circuitAnnotations(circuitOp);
-  if (auto dict = circuitAnnotations.getAnnotation(extractGrandCentralClass)) {
+  if (auto dict = circuitAnnotations.getAnnotation(anno::extractGrandCentralClass)) {
     auto directory = dict.getAs<StringAttr>("directory");
     if (!directory) {
       circuitOp->emitError()
@@ -399,8 +399,8 @@ void GrandCentralTapsPass::runOnOperation() {
       // mem tap ones to the list.
       auto annos = AnnotationSet::forPort(extModule, argNum);
       annos.removeAnnotations([&](Annotation anno) {
-        if (anno.isClass(memTapClass, deletedKeyClass, literalKeyClass,
-                         internalKeyClass) ||
+        if (anno.isClass(anno::memTapClass, anno::deletedKeyClass, anno::literalKeyClass,
+                         anno::internalKeyClass) ||
             isReferenceDataTapPortName(anno)) {
           result.portAnnos.push_back({argNum, anno});
           return true;
@@ -414,7 +414,7 @@ void GrandCentralTapsPass::runOnOperation() {
     // case, create a filtered array of annotations with them removed.
     AnnotationSet annos(extModule.getOperation());
     annos.removeAnnotations(
-        [&](Annotation anno) { return anno.isClass(dataTapsClass); });
+        [&](Annotation anno) { return anno.isClass(anno::dataTapsClass); });
     result.filteredModuleAnnos = annos.getArrayAttr();
 
     if (!result.portAnnos.empty())
@@ -629,7 +629,7 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
     // Handle internal data taps on extmodule ops.
     if (isa<FExtModuleOp>(op)) {
       auto gather = [&](Annotation anno) {
-        if (anno.isClass(internalKeyClass)) {
+        if (anno.isClass(anno::internalKeyClass)) {
           gatherTap(anno, op);
           return true;
         }
@@ -646,7 +646,7 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
   // targets, we should never see multiple values or memories annotated
   // with the exact same annotation (hence the asserts).
   AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-    if (anno.isClass(memTapClass) || isReferenceDataTapSource(anno)) {
+    if (anno.isClass(anno::memTapClass) || isReferenceDataTapSource(anno)) {
       gatherTap(anno, op);
       return true;
     }
@@ -672,7 +672,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
 
   // Handle data taps on signals and ports.
-  if (targetAnno.isClass(referenceKeyClass)) {
+  if (targetAnno.isClass(anno::referenceKeyClass)) {
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       wiring.prefices = instancePaths.getAbsolutePaths(port.first);
@@ -712,7 +712,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps on black boxes.
-  if (targetAnno.isClass(internalKeyClass)) {
+  if (targetAnno.isClass(anno::internalKeyClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
@@ -739,7 +739,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps with literals.
-  if (targetAnno.isClass(literalKeyClass)) {
+  if (targetAnno.isClass(anno::literalKeyClass)) {
     auto literal = portAnno.anno.getMember<StringAttr>("literal");
     if (!literal) {
       blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
@@ -766,7 +766,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle memory taps.
-  if (targetAnno.isClass(memTapClass)) {
+  if (targetAnno.isClass(anno::memTapClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(

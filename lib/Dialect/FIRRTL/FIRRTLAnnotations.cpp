@@ -212,7 +212,7 @@ bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
 }
 
 bool AnnotationSet::hasDontTouch() const {
-  return hasAnnotation(dontTouchAnnoClass);
+  return hasAnnotation(anno::dontTouchAnnoClass);
 }
 
 bool AnnotationSet::setDontTouch(bool dontTouch) {
@@ -227,12 +227,12 @@ bool AnnotationSet::addDontTouch() {
     return false;
   addAnnotations(DictionaryAttr::get(
       getContext(), {{StringAttr::get("class", getContext()),
-                      StringAttr::get(getContext(), dontTouchAnnoClass)}}));
+                      StringAttr::get(getContext(), anno::dontTouchAnnoClass)}}));
   return true;
 }
 
 bool AnnotationSet::removeDontTouch() {
-  return removeAnnotation(dontTouchAnnoClass);
+  return removeAnnotation(anno::dontTouchAnnoClass);
 }
 
 bool AnnotationSet::hasDontTouch(Operation *op) {
@@ -453,7 +453,7 @@ Annotation AnnotationSetIterator::operator*() const {
 
 /// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
 /// simply passes through as a string without any decoding.
-bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
+bool circt::firrtl::anno::isOMIRStringEncodedPassthrough(StringRef type) {
   return type == "OMID" || type == "OMReference" || type == "OMBigInt" ||
          type == "OMLong" || type == "OMString" || type == "OMDouble" ||
          type == "OMBigDecimal" || type == "OMDeleted" || type == "OMConstant";

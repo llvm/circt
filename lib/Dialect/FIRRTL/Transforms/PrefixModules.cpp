@@ -142,9 +142,9 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       //   - This is a Grand Central Data Tap
       //   - This is a Grand Central Mem Tap
       if (auto *extModule = dyn_cast_or_null<FExtModuleOp>(&target)) {
-        auto isDataTap = AnnotationSet(*extModule).hasAnnotation(dataTapsClass);
+        auto isDataTap = AnnotationSet(*extModule).hasAnnotation(anno::dataTapsClass);
         auto isMemTap =
-            AnnotationSet::forPort(*extModule, 0).hasAnnotation(memTapClass);
+            AnnotationSet::forPort(*extModule, 0).hasAnnotation(anno::memTapClass);
         if (!isDataTap && !isMemTap)
           return;
       }

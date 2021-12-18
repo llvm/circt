@@ -227,7 +227,7 @@ static bool fromJSON(json::Value &value,
 
   if (isOMIR) {
     NamedAttrList omirAnnoFields;
-    omirAnnoFields.append("class", StringAttr::get(context, omirAnnoClass));
+    omirAnnoFields.append("class", StringAttr::get(context, anno::omirAnnoClass));
     omirAnnoFields.append("nodes",
                           convertJSONToAttribute(context, value, path));
 

@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationLowering.h"
@@ -70,10 +71,6 @@ static inline void appendTarget(NamedAttrList &annotation, ArrayAttr target) {
 //===----------------------------------------------------------------------===//
 // Global Helpers 
 //===----------------------------------------------------------------------===//
-
-void AnnoApplyState::setDontTouch(StringRef target) {
-
-}
 
 /// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
 /// subfield/subindex information from a Target string.  Subfield/subindex
@@ -144,6 +141,55 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target,
                                       instAttr);
   symTbl.insert(nla);
   return FlatSymbolRefAttr::get(nla);
+}
+
+/// Return an input \p target string in canonical form.  This converts a Legacy
+/// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
+/// subfield/subindex references are preserved.
+SmallString<32> circt::firrtl::canonicalizeTarget(StringRef target) {
+
+  // If this is a normal Target (not a Named), erase that field in the JSON
+  // object and return that Target.
+  if (target[0] == '~')
+    return target;
+
+  // This is a legacy target using the firrtl.annotations.Named type.  This
+  // can be trivially canonicalized to a non-legacy target, so we do it with
+  // the following three mappings:
+  //   1. CircuitName => CircuitTarget, e.g., A -> ~A
+  //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
+  //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
+  SmallString<32> newTarget("~");
+  unsigned tokenIdx = 0;
+  for (auto a : target) {
+    if (a == '.') {
+      switch (tokenIdx) {
+      case 0:
+        newTarget += '|';
+        break;
+      case 1:
+        newTarget += '>';
+        break;
+      default:
+        newTarget += '\'';
+        break;
+      }
+      ++tokenIdx;
+    } else
+      newTarget += a;
+  }
+  return newTarget;
+}
+
+StringAttr circt::firrtl::canonicalizeTarget(StringAttr target) {
+
+  // If this is a normal Target (not a Named), erase that field in the JSON
+  // object and return that Target.
+  if (target.getValue()[0] == '~')
+    return target;
+
+  return StringAttr::get(target.getContext(),
+                         canonicalizeTarget(target.getValue()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -599,14 +645,14 @@ static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
 /// Always resolve to the circuit, ignoring the annotation.
 static Optional<AnnoPathValue> noResolve(DictionaryAttr anno,
                                          AnnoApplyState state) {
-  return AnnoPathValue(state.circuit);
+  return AnnoPathValue(state.getCircuit());
 }
 
 /// Implementation of standard resolution.  First parses the target path, then
 /// resolves it.
 static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
                                               CircuitOp circuit, SymbolTable& symTbl) {
-  auto pathStr = canonicalizeTarget(rawPath);
+  auto pathStr = circt::firrtl::canonicalizeTarget(rawPath);
   StringRef path{pathStr};
 
   auto tokens = tokenizePath(path);
@@ -625,17 +671,17 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
                                           AnnoApplyState state) {
   auto target = anno.getNamed("target");
   if (!target) {
-    state.circuit.emitError("No target field in annotation ") << anno;
+    state.getCircuit().emitError("No target field in annotation ") << anno;
     return {};
   }
   if (!target->getValue().isa<StringAttr>()) {
-    state.circuit.emitError(
+    state.getCircuit().emitError(
         "Target field in annotation doesn't contain string ")
         << anno;
     return {};
   }
   return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
-                        state.circuit, state.symTbl);
+                        state.getCircuit(), state.getSymbolTable());
 }
 
 /// Resolves with target, if it exists.  If not, resolves to the circuit.
@@ -644,15 +690,21 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
   auto target = anno.getNamed("target");
   if (target) {
     if (!target->getValue().isa<StringAttr>()) {
-      state.circuit.emitError(
+      state.getCircuit().emitError(
           "Target field in annotation doesn't contain string ")
           << anno;
       return {};
     }
+    if (!target->getValue().cast<StringAttr>().getValue().size()) {
+      state.getCircuit().emitError(
+          "Target field in annotation is empty ")
+          << anno;
+      return {};
+    }
     return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
-                          state.circuit, state.symTbl);
+                          state.getCircuit(), state.getSymbolTable());
   }
-  return AnnoPathValue(state.circuit);
+  return AnnoPathValue(state.getCircuit());
 }
 
 //===----------------------------------------------------------------------===//
@@ -692,7 +744,8 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
                                         AnnoApplyState state) {
   if (!target.isOpOfType<T, Tr...>())
     return failure();
-  return applyWithoutTargetImpl(target, anno, state.circuit, state.symTbl, allowNonLocal);
+  return applyWithoutTargetImpl(target, anno, state.getCircuit(),
+                                state.getSymbolTable(), allowNonLocal);
 }
 
 /// An applier which puts the annotation on the target and drops the 'target'
@@ -701,7 +754,7 @@ template <bool allowNonLocal = false>
 static LogicalResult applyWithoutTarget(AnnoPathValue target,
                                         DictionaryAttr anno,
                                         AnnoApplyState state) {
-  return applyWithoutTargetImpl(target, anno, state.circuit, state.symTbl, allowNonLocal);
+  return applyWithoutTargetImpl(target, anno, state.getCircuit(), state.getSymbolTable(), allowNonLocal);
 }
 
 static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
@@ -738,10 +791,8 @@ if (isa<FModuleLike, MemoryPortOp, CombMemOp, SeqMemOp>(target.getOp())) {
 static const llvm::StringMap<AnnoRecord> annotationRecords{
     {"sifive.enterprise.firrtl.MarkDUTAnnotation",
      {stdResolve, applyWithoutTarget<>}},
-    {"sifive.enterprise.grandcentral.DataTapsAnnotation",
-     {tryResolve, applyGCDataTap}},
-    {"sifive.enterprise.grandcentral.MemTapAnnotation",
-     {tryResolve, applyGCMemTap}},
+    {anno::dataTapsClass, {tryResolve, applyGCDataTap}},
+    {anno::memTapClass, {tryResolve, applyGCMemTap}},
     {"sifive.enterprise.grandcentral.SignalDriverAnnotation",
      {tryResolve, applyGCSigDriver}},
     //    {"sifive.enterprise.grandcentral.GrandCentralView",
@@ -756,19 +807,17 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
         {stdResolve, applyModRep},
     },
 
-    {"freechips.rocketchip.objectmodel.OMIRAnnotation",
-     {noResolve, applyWithoutTarget<>}},
-    {"freechips.rocketchip.objectmodel.OMIRFileAnnotation",
-     {noResolve, applyWithoutTarget<>}},
+    {anno::omirFileAnnoClass, {noResolve, applyWithoutTarget<>}},
     {"firrtl.transforms.BlackBoxInlineAnno",
      {stdResolve, applyWithoutTarget<>}},
     {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
      {noResolve, applyWithoutTarget<>}},
     {"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      {noResolve, applyWithoutTarget<>}},
-    {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
+    {anno::dontTouchAnnoClass, {stdResolve, applyDontTouch}},
     {"firrtl.transforms.NoDedupAnnotation", {stdResolve, applyWithoutTarget<>}},
-
+    {anno::omirAnnoClass, {noResolve, applyOMIR}},
+    
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
@@ -814,20 +863,20 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   else if (ignoreAnnotationClassless)
     annoClassVal = "circt.missing";
   else
-    return state.circuit.emitError("Annotation without a class: ") << anno;
+    return state.getCircuit().emitError("Annotation without a class: ") << anno;
 
   // See if we handle the class
   auto record = getAnnotationHandler(annoClassVal, ignoreAnnotationUnknown);
   if (!record)
-    return state.circuit.emitWarning("Unhandled annotation: ") << annoClassVal;
+    return state.getCircuit().emitWarning("Unhandled annotation: ") << annoClassVal;
 
   // Try to apply the annotation
   auto target = record->resolver(anno, state);
   if (!target)
-    return state.circuit.emitError("Unable to resolve target of annotation: ")
+    return state.getCircuit().emitError("Unable to resolve target of annotation: ")
            << annoClassVal;
   if (record->applier(*target, anno, state).failed())
-    return state.circuit.emitError("Unable to apply annotation: ")
+    return state.getCircuit().emitError("Unable to apply annotation: ")
            << anno;
   return success();
 }
@@ -842,25 +891,8 @@ void LowerAnnotationsPass::runOnOperation() {
       worklistAttrs.push_back(anno.cast<DictionaryAttr>());
     // Clear the raw annotations.
     circuit->removeAttr("raw_annotations");
-    AnnoApplyState state{
-        circuit, modules,
-        [&](DictionaryAttr anno) { worklistAttrs.push_back(anno); },
-        [&](StringRef target, NamedAttrList anno) {
-          auto context = circuit.getContext();
-          auto foo = stdResolveImpl(target, circuit, modules);
-          if (!foo) {
-            state.circuit.emitError(
-                       "Unable to resolve target of annotation");
-            return failure();
-          }
-          return applyWithoutTargetImpl(*foo, DictionaryAttr::get(context, anno), circuit, modules, true);
-        },
-        [&](Operation* target, NamedAttrList anno) {
-          auto context = circuit.getContext();
-          return applyWithoutTargetImpl(
-              AnnoPathValue(target), DictionaryAttr::get(context, anno), circuit, modules, true);
-        }
-  };
+    AnnoApplyState state(0,
+        circuit, modules);
     size_t numFailures = 0;
     while (!worklistAttrs.empty()) {
       auto attr = worklistAttrs.pop_back_val();
@@ -878,4 +910,35 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
   auto pass = std::make_unique<LowerAnnotationsPass>(
       ignoreUnhandledAnnotations, ignoreClasslessAnnotations);
   return pass;
+}
+
+//===----------------------------------------------------------------------===//
+// Infrastructure helpers
+//===----------------------------------------------------------------------===//
+
+IntegerAttr AnnoApplyState::newID() {
+  return IntegerAttr::get(IntegerType::get(circuit.getContext(), 64), ++id);
+}
+
+LogicalResult AnnoApplyState::applyAnnoToTarget(StringRef target, NamedAttrList anno) {
+  auto context = circuit.getContext();
+  auto foo = stdResolveImpl(target, circuit, symTbl);
+  if (!foo) {
+    circuit.emitError("Unable to resolve target of annotation");
+    return failure();
+  }
+  return applyWithoutTargetImpl(*foo, DictionaryAttr::get(context, anno),
+                                circuit, symTbl, true);
+}
+
+LogicalResult AnnoApplyState::applyAnnoToOp(Operation *target , NamedAttrList anno) {
+  auto context = circuit.getContext();
+  return applyWithoutTargetImpl(AnnoPathValue(target),
+                                DictionaryAttr::get(context, anno), circuit,
+                                symTbl, true);
+}
+
+LogicalResult AnnoApplyState::setDontTouch(StringRef target) {
+  assert(0);
+  return failure();
 }

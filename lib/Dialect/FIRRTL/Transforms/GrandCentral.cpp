@@ -1031,7 +1031,7 @@ void GrandCentralPass::runOnOperation() {
       worklist.push_back(anno);
       return true;
     }
-    if (anno.isClass(extractGrandCentralClass)) {
+    if (anno.isClass(anno::extractGrandCentralClass)) {
       if (maybeExtractInfo.hasValue()) {
         emitCircuitError("more than one 'ExtractGrandCentralAnnotation' was "
                          "found, but exactly one must be provided");
@@ -1655,55 +1655,6 @@ static A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
   return valueA;
 }
 
-/// Return an input \p target string in canonical form.  This converts a Legacy
-/// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
-/// subfield/subindex references are preserved.
-static SmallString<32> canonicalizeTarget(StringRef target) {
-
-  // If this is a normal Target (not a Named), erase that field in the JSON
-  // object and return that Target.
-  if (target[0] == '~')
-    return target;
-
-  // This is a legacy target using the firrtl.annotations.Named type.  This
-  // can be trivially canonicalized to a non-legacy target, so we do it with
-  // the following three mappings:
-  //   1. CircuitName => CircuitTarget, e.g., A -> ~A
-  //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
-  //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
-  SmallString<32> newTarget("~");
-  unsigned tokenIdx = 0;
-  for (auto a : target) {
-    if (a == '.') {
-      switch (tokenIdx) {
-      case 0:
-        newTarget += '|';
-        break;
-      case 1:
-        newTarget += '>';
-        break;
-      default:
-        newTarget += '\'';
-        break;
-      }
-      ++tokenIdx;
-    } else
-      newTarget += a;
-  }
-  return newTarget;
-}
-
-static StringAttr canonicalizeTarget(StringAttr target) {
-
-  // If this is a normal Target (not a Named), erase that field in the JSON
-  // object and return that Target.
-  if (target.getValue()[0] == '~')
-    return target;
-
-  return StringAttr::get(target.getContext(),
-                         canonicalizeTarget(target.getValue()));
-}
-
 //===----------------------------------------------------------------------===//
 // Specific annotation implementations
 //===----------------------------------------------------------------------===//
@@ -1960,8 +1911,8 @@ parseAugmentedType(MLIRContext *context, DictionaryAttr augmentedType,
       elementScattered.append("target", subTargets);
       dontTouch.append("target", subTargets);
     }
-    state.applyAnno(localTarget, elementScattered);
-    state.applyAnno(localTarget, dontTouch);
+    state.applyAnnoToTarget(localTarget, elementScattered);
+    state.applyAnnoToTarget(localTarget, dontTouch);
 
     return elementIface;
   }
@@ -2016,10 +1967,10 @@ parseAugmentedType(MLIRContext *context, DictionaryAttr augmentedType,
 
 LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
                             AnnoApplyState state) {
-  auto context = state.circuit.getContext();
+  auto context = state.getContext();
   auto clazz = "sifive.enterprise.grandcentral.MemTapAnnotation";
   auto classAttr = StringAttr::get(context, clazz);
-  auto loc = state.circuit.getLoc();
+  auto loc = state.getLoc();
   auto id = state.newID();
 
   NamedAttrList attrs;
@@ -2028,10 +1979,10 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
   auto sourceAttr = tryGetAs<StringAttr>(anno, anno, "source", loc, clazz);
   if (!sourceAttr)
     return failure();
-  state.applyAnno(canonicalizeTarget(sourceAttr.getValue()) , attrs);
+  state.applyAnnoToTarget(canonicalizeTarget(sourceAttr.getValue()) , attrs);
 
   auto tapsAttr =
-      tryGetAs<ArrayAttr>(anno, anno, "taps", state.circuit.getLoc(), clazz);
+      tryGetAs<ArrayAttr>(anno, anno, "taps", state.getLoc(), clazz);
   if (!tapsAttr)
     return failure();
   for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
@@ -2049,7 +2000,7 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
     foo.append("class", classAttr);
     foo.append("id", id);
     foo.append("word", IntegerAttr::get(IntegerType::get(context, 64), i));
-    state.applyAnno(canonicalizeTarget(tap), foo);
+    state.applyAnnoToTarget(canonicalizeTarget(tap), foo);
   }
   return success();
 }
@@ -2076,10 +2027,10 @@ LogicalResult circt::firrtl::applyGCMemTap(AnnoPathValue target, DictionaryAttr 
 // TODO: Parse the literal string into a UInt or SInt literal.
 LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
                              AnnoApplyState state) {
-  auto context = state.circuit.getContext();
+  auto context = state.getContext();
   auto clazz = "sifive.enterprise.grandcentral.DataTapsAnnotation";
   auto classAttr = StringAttr::get(context, clazz);
-  auto loc = state.circuit.getLoc();
+  auto loc = state.getLoc();
   auto id = state.newID();
 
   NamedAttrList attrs;
@@ -2088,7 +2039,7 @@ LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr
   if (!blackBoxAttr)
     return failure();
   auto ctarget = canonicalizeTarget(blackBoxAttr.getValue());
-  state.applyAnno(ctarget, attrs);
+  state.applyAnnoToTarget(ctarget, attrs);
   state.setDontTouch(ctarget);
 
   // Process all the taps.
@@ -2129,13 +2080,13 @@ LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr
       if (!sourceAttr)
         return failure();
       auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
-      state.applyAnno(maybeSourceTarget, source);
+      state.applyAnnoToTarget(maybeSourceTarget, source);
       state.setDontTouch(maybeSourceTarget);
 
       // Port Annotations generation.
       port.append("portID", portID);
       port.append("type", StringAttr::get(context, "portName"));
-      state.applyAnno(portPair.first, port);
+      state.applyAnnoToTarget(portPair.first, port);
       state.setDontTouch(portPair.first);
       continue;
     }
@@ -2155,19 +2106,19 @@ LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr
       module.append("internalPath", internalPathAttr);
       module.append("portID", portID);
       auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
-      state.applyAnno(moduleTarget, module);
+      state.applyAnnoToTarget(moduleTarget, module);
       state.setDontTouch(moduleTarget);
 
       // Port Annotations generation.
       port.append("portID", portID);
-      state.applyAnno(portPair.first, port);
+      state.applyAnnoToTarget(portPair.first, port);
       continue;
     }
 
     if (classAttr.getValue() ==
         "sifive.enterprise.grandcentral.DeletedDataTapKey") {
       // Port Annotations generation.
-      state.applyAnno(portPair.first, port);
+      state.applyAnnoToTarget(portPair.first, port);
       continue;
     }
 
@@ -2182,7 +2133,7 @@ LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr
       literal.append("literal", literalAttr);
 
       // Port Annotaiton generation.
-      state.applyAnno(portPair.first, literal);
+      state.applyAnnoToTarget(portPair.first, literal);
       continue;
     }
 
@@ -2201,21 +2152,21 @@ LogicalResult circt::firrtl::applyGCDataTap(AnnoPathValue target, DictionaryAttr
 // drives.
 LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
                                AnnoApplyState state) {
-  auto context = state.circuit.getContext();
+  auto context = state.getContext();
   auto clazz = "sifive.enterprise.grandcentral.SignalDriverAnnotation";
   auto classAttr = StringAttr::get(context, clazz);
-  auto loc = state.circuit.getLoc();
+  auto loc = state.getLoc();
   auto id = state.newID();
 
   // Rework the circuit-level annotation to no longer include the
   // information we are scattering away anyway.
   NamedAttrList fields;
   auto annotationsAttr = tryGetAs<ArrayAttr>(anno, anno, "annotations",
-                                             state.circuit.getLoc(), clazz);
+                                             state.getLoc(), clazz);
   auto circuitAttr = tryGetAs<StringAttr>(anno, anno, "circuit",
-                                          state.circuit.getLoc(), clazz);
+                                          state.getLoc(), clazz);
   auto circuitPackageAttr = tryGetAs<StringAttr>(anno, anno, "circuitPackage",
-                                                 state.circuit.getLoc(), clazz);
+                                                 state.getLoc(), clazz);
   if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
     return failure();
   fields.append("class", classAttr);
@@ -2223,7 +2174,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
   fields.append("annotations", annotationsAttr);
   fields.append("circuit", circuitAttr);
   fields.append("circuitPackage", circuitPackageAttr);
-  state.applyAnno(canonicalizeTarget("~"), fields);
+  state.applyAnnoToTarget(canonicalizeTarget("~"), fields);
 
   // A callback that will scatter every source and sink target pair to the
   // corresponding two ends of the connection.
@@ -2232,7 +2183,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
     auto targetId = state.newID();
     DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
     if (!targetDict) {
-      mlir::emitError(state.circuit.getLoc(),
+      mlir::emitError(state.getLoc(),
                       "SignalDriverAnnotation source and sink target "
                       "entries must be dictionaries")
               .attachNote()
@@ -2245,9 +2196,9 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
                  "Targets[" + Twine(i) + "]")
                     .str();
     auto remoteAttr = tryGetAs<StringAttr>(targetDict, anno, "_1",
-                                           state.circuit.getLoc(), path);
+                                           state.getLoc(), path);
     auto localAttr = tryGetAs<StringAttr>(targetDict, anno, "_2",
-                                          state.circuit.getLoc(), path);
+                                          state.getLoc(), path);
     if (!localAttr || !remoteAttr)
       return false;
 
@@ -2263,7 +2214,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
       // the annotation can scatter properly.
       StringRef prefix(canonTarget);
       if (!(prefix.consume_front("~") &&
-            prefix.consume_front(state.circuit.name()) &&
+            prefix.consume_front(state.getCircuit().name()) &&
             prefix.consume_front("|"))) {
         return true;
       }
@@ -2274,16 +2225,16 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
       fields.append("id", id);
       fields.append("targetId", targetId);
       fields.append("peer", pair.second ? remoteAttr : localAttr);
-      fields.append("side", StringAttr::get(state.circuit.getContext(),
+      fields.append("side", StringAttr::get(state.getContext(),
                                             pair.second ? "local" : "remote"));
-      fields.append("dir", StringAttr::get(state.circuit.getContext(),
+      fields.append("dir", StringAttr::get(state.getContext(),
                                            isSource ? "source" : "sink"));
 
       auto NLATargets = expandNonLocal(canonTarget);
       auto leafTarget =
           splitTarget(std::get<0>(NLATargets.back()), context);
 
-      state.applyAnno(leafTarget.first, fields);
+      state.applyAnnoToTarget(leafTarget.first, fields);
 
       // Add a don't touch annotation to whatever this annotation targets.
       state.setDontTouch(canonTarget);
@@ -2318,7 +2269,7 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
     NamedAttrList fields;
     fields.append("class", classAttr);
     fields.append("id", id);
-    state.applyAnno(module.getKey(), fields);
+    state.applyAnnoToTarget(module.getKey(), fields);
   }
 
   return success();
@@ -2326,10 +2277,10 @@ LogicalResult circt::firrtl::applyGCSigDriver(AnnoPathValue target, DictionaryAt
 
 LogicalResult circt::firrtl::applyGCView(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state) {
-  auto context = state.circuit.getContext();
+  auto context = state.getContext();
   auto clazz = "sifive.enterprise.grandcentral.ViewAnnotation";
   auto classAttr = StringAttr::get(context, clazz);
-  auto loc = state.circuit.getLoc();
+  auto loc = state.getLoc();
   auto id = state.newID();
   
   NamedAttrList companionAttrs, parentAttrs;
@@ -2337,59 +2288,59 @@ LogicalResult circt::firrtl::applyGCView(AnnoPathValue target, DictionaryAttr an
   companionAttrs.append("id", id);
   companionAttrs.append("type", StringAttr::get(context, "companion"));
   auto viewAttr = tryGetAs<DictionaryAttr>(anno, anno, "view",
-                                           state.circuit.getLoc(), clazz);
+                                           state.getLoc(), clazz);
   if (!viewAttr)
     return failure();
   auto name =
-      tryGetAs<StringAttr>(anno, anno, "name", state.circuit.getLoc(), clazz);
+      tryGetAs<StringAttr>(anno, anno, "name", state.getLoc(), clazz);
   if (!name)
     return failure();
   companionAttrs.append("name", name);
   auto companionAttr = tryGetAs<StringAttr>(anno, anno, "companion",
-                                            state.circuit.getLoc(), clazz);
+                                            state.getLoc(), clazz);
   if (!companionAttr)
     return failure();
-  state.applyAnno(companionAttr.getValue(), companionAttrs);
+  state.applyAnnoToTarget(companionAttr.getValue(), companionAttrs);
 
   auto parentAttr =
-      tryGetAs<StringAttr>(anno, anno, "parent", state.circuit.getLoc(), clazz);
+      tryGetAs<StringAttr>(anno, anno, "parent", state.getLoc(), clazz);
   if (!parentAttr)
     return failure();
   parentAttrs.append("class", classAttr);
   parentAttrs.append("id", id);
   parentAttrs.append("name", name);
   parentAttrs.append("type", StringAttr::get(context, "parent"));
-  state.applyAnno(parentAttr, parentAttrs);
+  state.applyAnnoToTarget(parentAttr, parentAttrs);
 
   // TODO:
   auto prunedAttr = parseAugmentedType(
       context, viewAttr, anno, state, companionAttr.getValue(),
       name,
-      {}, id, {}, state.circuit.getLoc(), clazz, "view");
+      {}, id, {}, state.getLoc(), clazz, "view");
   if (!prunedAttr)
     return failure();
-  state.applyAnno(canonicalizeTarget("~"), *prunedAttr);
+  state.applyAnnoToTarget(canonicalizeTarget("~"), *prunedAttr);
   return success();
 }
 
 
 LogicalResult circt::firrtl::applyModRep(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state) {
-  auto context = state.circuit.getContext();
+  auto context = state.getContext();
   auto clazz = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation";
 auto classAttr = StringAttr::get(context, clazz);
-auto loc = state.circuit.getLoc();
+auto loc = state.getLoc();
 auto id = state.newID();
 
 NamedAttrList fields;
 auto annotationsAttr = tryGetAs<ArrayAttr>(anno, anno, "annotations",
-                                           state.circuit.getLoc(), clazz);
+                                           state.getLoc(), clazz);
 auto circuitAttr =
-    tryGetAs<StringAttr>(anno, anno, "circuit", state.circuit.getLoc(), clazz);
+    tryGetAs<StringAttr>(anno, anno, "circuit", state.getLoc(), clazz);
 auto circuitPackageAttr = tryGetAs<StringAttr>(anno, anno, "circuitPackage",
-                                               state.circuit.getLoc(), clazz);
+                                               state.getLoc(), clazz);
 auto dontTouchesAttr = tryGetAs<ArrayAttr>(anno, anno, "dontTouches",
-                                           state.circuit.getLoc(), clazz);
+                                           state.getLoc(), clazz);
 if (!annotationsAttr || !circuitAttr || !circuitPackageAttr || !dontTouchesAttr)
   return failure();
 fields.append("class", classAttr);
@@ -2397,13 +2348,13 @@ fields.append("id", id);
 fields.append("annotations", annotationsAttr);
 fields.append("circuit", circuitAttr);
 fields.append("circuitPackage", circuitPackageAttr);
-state.applyAnno(canonicalizeTarget("~"), fields);
+state.applyAnnoToTarget(canonicalizeTarget("~"), fields);
 
 // Add a don't touches for each target in "dontTouches" list
 for (auto dontTouch : dontTouchesAttr) {
   StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
   if (!targetString) {
-    mlir::emitError(state.circuit.getLoc(),
+    mlir::emitError(state.getLoc(),
                     "ModuleReplacementAnnotation dontTouches "
                     "entries must be strings")
             .attachNote()
@@ -2417,7 +2368,7 @@ for (auto dontTouch : dontTouchesAttr) {
   }
 
   auto targets =
-      tryGetAs<ArrayAttr>(anno, anno, "targets", state.circuit.getLoc(), clazz);
+      tryGetAs<ArrayAttr>(anno, anno, "targets", state.getLoc(), clazz);
   if (!targets)
     return failure();
   for (auto targetAttr : targets) {
@@ -2426,14 +2377,14 @@ for (auto dontTouch : dontTouchesAttr) {
     StringAttr targetString = targetAttr.dyn_cast<StringAttr>();
     if (!targetString) {
       mlir::emitError(
-          state.circuit.getLoc(),
+          state.getLoc(),
           "ModuleReplacementAnnotation targets entries must be strings")
               .attachNote()
           << "annotation:" << anno << "\n";
       return failure();
     }
-    auto canonTarget = canonicalizeTarget(targetString.getValue());
-    state.applyAnno(canonTarget, fields);
+    state.applyAnnoToTarget(canonicalizeTarget(targetString.getValue()),
+                            fields);
   }
   return success();
 }

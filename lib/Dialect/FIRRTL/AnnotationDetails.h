@@ -17,7 +17,7 @@
 
 namespace circt {
 namespace firrtl {
-
+namespace anno {
 /// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
 /// simply passes through as a string without any decoding.
 bool isOMIRStringEncodedPassthrough(StringRef type);
@@ -52,6 +52,7 @@ constexpr const char *internalKeyClass =
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 
+} // namespace anno
 } // namespace firrtl
 } // namespace circt
 

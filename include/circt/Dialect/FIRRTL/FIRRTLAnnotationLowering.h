@@ -99,27 +99,26 @@ private:
 };
 
 /// State threaded through functions for resolving and applying annotations.
-struct AnnoApplyState {
-  AnnoApplyState(
-      CircuitOp circuit, SymbolTable &symTbl,
-      llvm::function_ref<void(DictionaryAttr)> addFn,
-      llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyFn,
-      llvm::function_ref<LogicalResult(Operation *, NamedAttrList)> applyOpFn)
-      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addFn),
-        applyAnno(applyFn), applyAnnoOp(applyOpFn) {}
-  CircuitOp circuit;
-  SymbolTable &symTbl;
-  llvm::function_ref<void(DictionaryAttr)> addToWorklistFn;
-  llvm::function_ref<LogicalResult(StringRef, NamedAttrList)> applyAnno;
-  llvm::function_ref<LogicalResult(Operation*, NamedAttrList)> applyAnnoOp;
-  void setDontTouch(StringRef target);
+class AnnoApplyState {
+public:
+  AnnoApplyState(size_t id, CircuitOp circuit, SymbolTable& symTbl)
+  :id(id), circuit(circuit), symTbl(symTbl) {}
 
-  IntegerAttr newID() {
-    return IntegerAttr::get(IntegerType::get(circuit.getContext(), 64), ++id);
-  }
+  LogicalResult applyAnnoToTarget(StringRef, NamedAttrList);
+  LogicalResult applyAnnoToOp(Operation*, NamedAttrList);
+  LogicalResult setDontTouch(StringRef target);
+
+  IntegerAttr newID();
+
+  MLIRContext* getContext() { return circuit.getContext(); }
+  CircuitOp getCircuit() const { return circuit;}
+  SymbolTable& getSymbolTable() const { return symTbl; }
+  Location getLoc() { return circuit.getLoc(); }
 
 private:
   size_t id;
+  CircuitOp circuit;
+  SymbolTable &symTbl;
 };
 
 //===----------------------------------------------------------------------===//
@@ -155,12 +154,15 @@ splitTarget(StringRef target, MLIRContext *context);
 
 StringRef getAnnoClass(DictionaryAttr anno);
 
-//===----------------------------------------------------------------------===//
-// Pass Specific Annotation lowering
-//===----------------------------------------------------------------------===//
+SmallString<32> canonicalizeTarget(StringRef target);
+StringAttr canonicalizeTarget(StringAttr target);
 
-LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
-                          AnnoApplyState state);
+    //===----------------------------------------------------------------------===//
+    // Pass Specific Annotation lowering
+    //===----------------------------------------------------------------------===//
+
+    LogicalResult applyModRep(AnnoPathValue target, DictionaryAttr anno,
+                              AnnoApplyState state);
 LogicalResult applyGCView(AnnoPathValue target, DictionaryAttr anno,
                           AnnoApplyState state);
 LogicalResult applyGCSigDriver(AnnoPathValue target, DictionaryAttr anno,
@@ -169,6 +171,9 @@ LogicalResult applyGCDataTap(AnnoPathValue target, DictionaryAttr anno,
                              AnnoApplyState state);
 LogicalResult applyGCMemTap(AnnoPathValue target, DictionaryAttr anno,
                              AnnoApplyState state);
+
+LogicalResult applyOMIR(AnnoPathValue target, DictionaryAttr anno,
+                         AnnoApplyState state);
 
 } // namespace firrtl
 } // namespace circt

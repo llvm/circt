@@ -38,6 +38,8 @@ module  {
 // -----
 
 module  {
+// expected-error @+2 {{Target field in annotation is empty}}
+// expected-error @+1 {{Unable to resolve target of annotation: circt.missing}}
   firrtl.circuit "Foo"  attributes {raw_annotations = [{target = ""}]}  {
     firrtl.module @Foo() {
       firrtl.skip
@@ -123,16 +125,6 @@ module  {
 // -----
 
 module  {
-  firrtl.circuit "Foo"  attributes {raw_annotations = [{a, target = "~Foo|Foo>x"}]}  {
-    firrtl.module @Foo() {
-      firrtl.skip
-    }
-  }
-}
-
-// -----
-
-module  {
   // expected-error @+2 {{Unable to resolve target of annotation}}
   // expected-error @+1 {{cannot find instance 'baz' in 'Foo'}}
   firrtl.circuit "Foo"  attributes {raw_annotations = [{a, target = "~Foo|Foo/baz:Bar"}]}  {
@@ -144,18 +136,3 @@ module  {
     }
   }
 }
-
-// -----
-
-//module  {
-//  firrtl.circuit "NLAParse"  attributes {raw_annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", companion = "~NLAParse|A_companion", name = "A", parent = "~NLAParse|DUT", view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "B", elements = [{name = "C", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "D", elements = [{name = "clock", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "NLAParse", component = [], module = "NLAParse", path = [{_1 = {value = "dut"}, _2 = {value = "DUT"}}, {_1 = {value = "foobar"}, _2 = {value = "FooBar"}}], ref = "clock"}}}]}}]}}]}  {
-    //firrtl.module @FooBar() {
-    //}
-    //firrtl.module @DUT() {
-//      firrtl.instance foobar  @FooBar()
-//    }
-//    firrtl.module @NLAParse() {
-//      firrtl.instance dut  @DUT()
-//    }
-//  }
-//}
