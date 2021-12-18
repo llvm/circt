@@ -26,6 +26,7 @@
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -1178,6 +1179,8 @@ using ModuleSymbolTableEntry =
 using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
 
+using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
+
 namespace {
 /// This struct provides context information that is global to the module we're
 /// currently parsing into.
@@ -1194,6 +1197,21 @@ struct FIRModuleContext : public FIRParser {
   // in the parser, do an implicit CSE to reduce parse time and silliness in the
   // resulting IR.
   llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+
+  //===--------------------------------------------------------------------===//
+  // SubaccessCache
+
+  /// This returns a reference with the assumption that the caller will
+  /// fill in the cached value.
+  Value &getOrConstructCachedSubaccess(Value aggregate, unsigned index) {
+    auto &value = subaccessCache[{aggregate, index}];
+    if (!value && currentScope)
+      currentScope->scopedSubaccesses.push_back({aggregate, index});
+    return value;
+  }
+
+  //===--------------------------------------------------------------------===//
+  // SymbolTable
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
@@ -1232,17 +1250,21 @@ struct FIRModuleContext : public FIRParser {
   /// Provide a symbol table scope that automatically pops all the entries off
   /// the symbol table when the scope is exited.
   struct SymbolTableScope {
+    friend struct FIRModuleContext;
     SymbolTableScope(FIRModuleContext &moduleContext)
         : moduleContext(moduleContext),
-          prevScopedDecls(moduleContext.currentScopeCollector) {
-      moduleContext.currentScopeCollector = &scopedDecls;
+          previousScope(moduleContext.currentScope) {
+      moduleContext.currentScope = this;
     }
     ~SymbolTableScope() {
       // Mark all entries in this scope as being invalid.  We track validity
       // through the SMLoc field instead of deleting entries.
       for (auto *entryPtr : scopedDecls)
         entryPtr->second.first = SMLoc();
-      moduleContext.currentScopeCollector = prevScopedDecls;
+      // Erase the scoped subacceses from the cache.
+      for (auto subaccess : scopedSubaccesses)
+        moduleContext.subaccessCache.erase(subaccess);
+      moduleContext.currentScope = previousScope;
     }
 
   private:
@@ -1250,8 +1272,9 @@ struct FIRModuleContext : public FIRParser {
     SymbolTableScope(const SymbolTableScope &) = delete;
 
     FIRModuleContext &moduleContext;
-    std::vector<ModuleSymbolTableEntry *> *prevScopedDecls;
+    SymbolTableScope *previousScope;
     std::vector<ModuleSymbolTableEntry *> scopedDecls;
+    std::vector<std::pair<Value, unsigned>> scopedSubaccesses;
   };
 
   /// A set of all Annotation Targets found in this module.  This is used to
@@ -1264,10 +1287,15 @@ private:
   /// This is scoped because conditional statements introduce subscopes.
   ModuleSymbolTable symbolTable;
 
+  /// This is a cache of subindex and subfield operations so we don't constantly
+  /// recreate large chains of them.  This maps a bundle value + index to the
+  /// subaccess result.
+  SubaccessCache subaccessCache;
+
   /// If non-null, all new entries added to the symbol table are added to this
   /// list.  This allows us to "pop" the entries by resetting them to null when
   /// scope is exited.
-  std::vector<ModuleSymbolTableEntry *> *currentScopeCollector = nullptr;
+  SymbolTableScope *currentScope = nullptr;
 };
 
 } // end anonymous namespace
@@ -1295,8 +1323,8 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
   // If we didn't have a hit, then record the location, and remember that this
   // was new to this scope.
   entryIt->second = {loc, entry};
-  if (currentScopeCollector && !insertNameIntoGlobalScope)
-    currentScopeCollector->push_back(&*entryIt);
+  if (currentScope && !insertNameIntoGlobalScope)
+    currentScope->scopedDecls.push_back(&*entryIt);
 
   return success();
 }
@@ -1556,15 +1584,21 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   TypeSwitch<FIRRTLType>(tpe)
       .Case<BundleType>([&](auto tpe) {
         for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
-          auto subfield = builder.create<SubfieldOp>(val, i);
+          auto subfield = moduleContext.getOrConstructCachedSubaccess(val, i);
+          if (!subfield)
+            subfield = builder.create<SubfieldOp>(val, i);
           emitInvalidate(subfield,
-                         subfield.isFieldFlipped() ? swapFlow(flow) : flow);
+                         tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
         }
       })
       .Case<FVectorType>([&](auto tpe) {
         auto tpex = tpe.getElementType();
-        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i)
-          emitInvalidate(builder.create<SubindexOp>(tpex, val, i), flow);
+        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i) {
+          auto subindex = moduleContext.getOrConstructCachedSubaccess(val, i);
+          if (!subindex)
+            subindex = builder.create<SubindexOp>(tpex, val, i);
+          emitInvalidate(subindex, flow);
+        }
       })
       // Drop invalidation of analog.
       .Case<AnalogType>([](auto) {})
@@ -1718,13 +1752,20 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   auto indexV = bundle.getElementIndex(fieldName);
   if (!indexV)
     return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
-               << result.getType(),
-           failure();
-  auto index = indexV.getValue();
+           << result.getType();
+  auto indexNo = indexV.getValue();
+
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getOrConstructCachedSubaccess(result, indexNo);
+  if (value) {
+    result = value;
+    return success();
+  }
+
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                          builder.getUI32IntegerAttr(index)};
+                          builder.getI32IntegerAttr(indexNo)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
@@ -1734,8 +1775,12 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
 
   // Create the result operation.
   locationProcessor.setLoc(loc);
-  auto op = builder.create<SubfieldOp>(resultType, result, index);
-  result = op.getResult();
+  auto op = builder.create<SubfieldOp>(resultType, result, attrs);
+
+  // Insert the newly creatd operation into the cache.
+  value = op.getResult();
+
+  result = value;
   return success();
 }
 
@@ -1753,6 +1798,13 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   if (indexNo < 0)
     return emitError(loc, "invalid index specifier"), failure();
 
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getOrConstructCachedSubaccess(result, indexNo);
+  if (value) {
+    result = value;
+    return success();
+  }
+
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   // TODO: This should ideally be folded into a `tryCreate` method on the
@@ -1769,7 +1821,11 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // Create the result operation.
   locationProcessor.setLoc(loc);
   auto op = builder.create<SubindexOp>(resultType, result, attrs);
-  result = op.getResult();
+
+  // Insert the newly creatd operation into the cache.
+  value = op.getResult();
+
+  result = value;
   return success();
 }
 
@@ -1967,7 +2023,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
   IntegerType::SignednessSemantics signedness;
-  if (type.isSigned()) {
+  if (isSigned) {
     signedness = IntegerType::Signed;
     if (width != -1) {
       // Check for overlow if we are truncating bits.

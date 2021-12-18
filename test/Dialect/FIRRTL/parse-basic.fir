@@ -524,6 +524,36 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node f = UInt<4>(15)
     node g = UInt<4>(7)
 
+  ; CHECK-LABEL: firrtl.module @subaccess_implicit_cse
+  module subaccess_implicit_cse :
+    input i: {x: UInt<1>}
+    input cond: UInt<1>
+    output o: UInt<1>
+    
+    ; CHECK: firrtl.when %cond {
+    when cond:
+      ; CHECK: [[SUB:%.+]] = firrtl.subfield %i(0)
+      ; CHECK: %n0 = firrtl.node [[SUB]]
+      ; CHECK: %n1 = firrtl.node [[SUB]]
+      node n0 = i.x
+      node n1 = i.x
+    ; CHECK: }
+      
+    ; CHECK: [[SUB:%.+]] = firrtl.subfield %i(0)
+    ; CHECK: %n3 = firrtl.node [[SUB]]
+    node n3 = i.x
+
+    ; CHECK: firrtl.when %cond {
+    when cond:
+      ; CHECK: %n4 = firrtl.node [[SUB]]
+      node n4 = i.x
+    ; CHECK: }
+    
+
+    ; TODO invalid tests
+    
+    
+
   ; CHECK-LABEL: firrtl.module @flip_one
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
