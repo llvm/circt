@@ -4300,9 +4300,14 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
       },
       [&](StringOrOpToEmit &stringOrOp) -> unsigned {
         auto *op = stringOrOp.getOperation();
-        if (!op)
-          return 0; // Ignore things that are already strings.
-        return moduleSizeTable[op];
+        // See above.
+        if (!op || isa<BindOp>(op) || modulesContainingBinds.count(op))
+          return 0;
+
+        auto it = moduleSizeTable.find(op);
+        // `moudleSizeTable` only contains sizes of module op.
+        // If op is not module op, we don't care the size.
+        return it == moduleSizeTable.end() ? 0 : it->second;
       });
 
   // Finally emit each entry now that we know it is a string.
