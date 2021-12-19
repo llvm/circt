@@ -13,23 +13,29 @@
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/LoopUtils.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include <mlir/IR/BuiltinDialect.h>
 
 #define DEBUG_TYPE "affine-to-staticlogic"
 
 using namespace mlir;
 using namespace mlir::arith;
+using namespace mlir::memref;
+using namespace mlir::scf;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
@@ -44,6 +50,7 @@ struct AffineToStaticLogic
 private:
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult
   createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
 
@@ -76,6 +83,10 @@ void AffineToStaticLogic::runOnFunction() {
 
     // Convert the IR.
     if (failed(createStaticLogicPipeline(nestedLoops)))
+      return signalPassFailure();
+
+    // Convert remaining affine operations to memref and combinational logic.
+    if (failed(convertAffineOps(nestedLoops)))
       return signalPassFailure();
   }
 }
@@ -334,6 +345,27 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     op->dropAllReferences();
     op->erase();
   });
+
+  return success();
+}
+
+/// Convert remaining affine operations to memref and combinational logic.
+LogicalResult
+AffineToStaticLogic::convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest) {
+  auto *context = &getContext();
+
+  // Use the upstream AffineToStandard conversion.
+  ConversionTarget target(*context);
+  target.addLegalDialect<ArithmeticDialect, MemRefDialect, SCFDialect,
+                         StandardOpsDialect>();
+  target.addIllegalDialect<AffineDialect>();
+  target.addLegalOp<AffineForOp>();
+
+  RewritePatternSet patterns(context);
+  populateAffineToStdConversionPatterns(patterns);
+  if (failed(
+          applyPartialConversion(getOperation(), target, std::move(patterns))))
+    return failure();
 
   return success();
 }
