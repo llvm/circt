@@ -5,6 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+
+#ifndef CIRCT_SUPPORT_PARALLEL_H
+#define CIRCT_SUPPORT_PARALLEL_H
+
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -33,3 +37,5 @@ void parallelForEach(mlir::MLIRContext *context, RandomAccessRangeT &&range,
   mlir::parallelForEach(context, indexes, [&](size_t i) { func(range[i]); });
 }
 } // namespace circt
+
+#endif
