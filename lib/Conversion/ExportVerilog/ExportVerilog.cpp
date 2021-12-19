@@ -4024,27 +4024,33 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// IRCache.  Declarations (named things) only exist at the top level of the
   /// module.  Also keep track of any modules that contain bind operations.
   /// These are non-hierarchical references which we need to be careful about
-  /// during emission.
-  auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
-    unsigned numOperations = 0;
-    moduleOp.walk([&](Operation *op) {
-      ++numOperations;
-      // Populate the symbolCache with all operations that can define a symbol.
-      if (auto name = op->getAttrOfType<StringAttr>(
-              hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
-      // HACK: This is to make interface-related operations work as they are at
-      // the moment, with names being stored in `sym_name` instead of
-      // `inner_sym`.
-      if (auto instOp = dyn_cast<InterfaceInstanceOp>(op))
-        if (auto attr = instOp.sym_nameAttr())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), attr.getValue(),
-                                    op);
-      if (isa<BindOp>(op))
-        modulesContainingBinds.insert(moduleOp);
-    });
-    moduleSizeTable[moduleOp] = numOperations;
-  };
+  /// during emission. And also count the number of oprations in the module to
+  /// determine the order of the emission later.
+  auto collectInstanceSymbolsAndBindsAndCountNumOperations =
+      [&](HWModuleOp moduleOp) {
+        unsigned numOperations = 0;
+        moduleOp.walk([&](Operation *op) {
+          ++numOperations;
+          // Populate the symbolCache with all operations that can define a
+          // symbol.
+          if (auto name = op->getAttrOfType<StringAttr>(
+                  hw::InnerName::getInnerNameAttrName()))
+            symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(),
+                                      op);
+          // HACK: This is to make interface-related operations work as they are
+          // at the moment, with names being stored in `sym_name` instead of
+          // `inner_sym`.
+          if (auto instOp = dyn_cast<InterfaceInstanceOp>(op))
+            if (auto attr = instOp.sym_nameAttr())
+              symbolCache.addDefinition(moduleOp.getNameAttr(), attr.getValue(),
+                                        op);
+          if (isa<BindOp>(op))
+            modulesContainingBinds.insert(moduleOp);
+        });
+
+        // Record `numOperations` onto `moduleSizeTable`.
+        moduleSizeTable[moduleOp] = numOperations;
+      };
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
     auto numArgs = moduleOp.getNumArguments();
@@ -4121,7 +4127,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
           collectPorts(mod);
-          collectInstanceSymbolsAndBinds(mod);
+          collectInstanceSymbolsAndBindsAndCountNumOperations(mod);
 
           // Emit into a separate file named after the module.
           if (attr || separateModules)
