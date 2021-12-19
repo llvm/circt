@@ -207,13 +207,13 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   // Create constants for the loop's lower and upper bounds.
   int64_t lbValue = innerLoop.getConstantLowerBound();
   auto lowerBound = builder.create<arith::ConstantOp>(
-      IntegerAttr::get(builder.getI64Type(), lbValue));
+      IntegerAttr::get(builder.getIndexType(), lbValue));
   int64_t ubValue = innerLoop.getConstantUpperBound();
   auto upperBound = builder.create<arith::ConstantOp>(
-      IntegerAttr::get(builder.getI64Type(), ubValue));
+      IntegerAttr::get(builder.getIndexType(), ubValue));
   int64_t stepValue = innerLoop.getStep();
   auto step = builder.create<arith::ConstantOp>(
-      IntegerAttr::get(builder.getI64Type(), stepValue));
+      IntegerAttr::get(builder.getIndexType(), stepValue));
 
   // Create the pipeline op, with the same result types as the inner loop. An
   // iter arg is created for the induction variable.
@@ -252,7 +252,6 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   // Maintain mappings of values in the loop body and results of stages,
   // initially populated with the iter args.
   BlockAndValueMapping valueMap;
-  BlockAndValueMapping resultMap;
   for (size_t i = 0; i < iterArgs.size(); ++i)
     valueMap.map(forOp.getBody()->getArgument(i),
                  pipeline.getStagesBlock().getArgument(i));
@@ -292,18 +291,24 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     llvm::sort(group,
                [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
 
-    // Move over the operations.
+    // Move over the operations and add their results to the terminator.
+    SmallVector<std::tuple<Operation *, Operation *, unsigned>> movedOps;
     for (auto *op : group) {
       unsigned resultIndex = stageTerminator->getNumOperands();
       auto *newOp = builder.clone(*op, valueMap);
-
       stageTerminator->insertOperands(resultIndex, newOp->getResults());
+      movedOps.emplace_back(op, newOp, resultIndex);
+    }
 
-      // Add the stage results to the value map for the original op.
+    // Add the stage results to the value map for the original op.
+    for (auto tuple : movedOps) {
+      Operation *op = std::get<0>(tuple);
+      Operation *newOp = std::get<1>(tuple);
+      unsigned resultIndex = std::get<2>(tuple);
       for (size_t i = 0; i < newOp->getNumResults(); ++i) {
         auto newValue = stage->getResult(resultIndex + i);
         auto oldValue = op->getResult(i);
-        resultMap.map(oldValue, newValue);
+        valueMap.map(oldValue, newValue);
       }
     }
 
@@ -327,8 +332,8 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   termIterArgs.push_back(
       stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
   for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
-    termIterArgs.push_back(resultMap.lookup(value));
-    termResults.push_back(resultMap.lookup(value));
+    termIterArgs.push_back(valueMap.lookup(value));
+    termResults.push_back(valueMap.lookup(value));
   }
 
   stagesTerminator.iter_argsMutable().append(termIterArgs);
