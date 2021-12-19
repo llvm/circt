@@ -18,6 +18,8 @@
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/LoopUtils.h"
 #include "llvm/ADT/STLExtras.h"
@@ -225,26 +227,113 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
       upperBound);
   condBlock.getTerminator()->insertOperands(0, {cmpResult});
 
-  // Create the first stage.
+  // Add the non-yield operations to their start time groups.
+  DenseMap<unsigned, SmallVector<Operation *>> startGroups;
+  for (auto *op : problem.getOperations()) {
+    auto startTime = problem.getStartTime(op);
+    if (!startTime.hasValue())
+      return op->emitOpError("didn't have scheduled start time");
+    if (isa<AffineYieldOp>(op))
+      continue;
+    startGroups[*startTime].push_back(op);
+  }
+
+  // Maintain mappings of values in the loop body and results of stages,
+  // initially populated with the iter args.
+  BlockAndValueMapping valueMap;
+  BlockAndValueMapping resultMap;
+  for (size_t i = 0; i < iterArgs.size(); ++i)
+    valueMap.map(forOp.getBody()->getArgument(i),
+                 pipeline.getStagesBlock().getArgument(i));
+
+  // Create the stages.
   Block &stagesBlock = pipeline.getStagesBlock();
   builder.setInsertionPointToStart(&stagesBlock);
-  auto stage = builder.create<PipelineStageOp>(lowerBound.getType());
-  auto &stageBlock = stage.getBodyBlock();
-  builder.setInsertionPointToStart(&stageBlock);
 
-  // Add the induction variable increment to the first stage.
-  auto incResult =
-      builder.create<arith::AddIOp>(stagesBlock.getArgument(0), step);
-  stageBlock.getTerminator()->insertOperands(0, {incResult});
+  // Iterate in order of the start times.
+  SmallVector<unsigned> startTimes;
+  for (auto group : startGroups)
+    startTimes.push_back(group.first);
+  llvm::sort(startTimes);
 
-  // Add the induction variable result to the terminator iter args.
+  DominanceInfo dom(getOperation());
+  for (auto startTime : startTimes) {
+    auto group = startGroups[startTime];
+    OpBuilder::InsertionGuard g(builder);
+
+    // Collect the return types for this stage.
+    SmallVector<Type> stageTypes;
+    for (auto *op : group)
+      stageTypes.append(op->getResultTypes().begin(),
+                        op->getResultTypes().end());
+
+    // Add the induction variable increment in the first stage.
+    if (startTime == 0)
+      stageTypes.push_back(lowerBound.getType());
+
+    // Create the stage itself.
+    auto stage = builder.create<PipelineStageOp>(stageTypes);
+    auto &stageBlock = stage.getBodyBlock();
+    auto *stageTerminator = stageBlock.getTerminator();
+    builder.setInsertionPointToStart(&stageBlock);
+
+    // Sort the group according to original dominance.
+    llvm::sort(group,
+               [&](Operation *a, Operation *b) { return dom.dominates(a, b); });
+
+    // Move over the operations.
+    for (auto *op : group) {
+      unsigned resultIndex = stageTerminator->getNumOperands();
+      auto *newOp = builder.clone(*op, valueMap);
+
+      stageTerminator->insertOperands(resultIndex, newOp->getResults());
+
+      // Add the stage results to the value map for the original op.
+      for (size_t i = 0; i < newOp->getNumResults(); ++i) {
+        auto newValue = stage->getResult(resultIndex + i);
+        auto oldValue = op->getResult(i);
+        resultMap.map(oldValue, newValue);
+      }
+    }
+
+    // Add the induction variable increment to the first stage.
+    if (startTime == 0) {
+      auto incResult =
+          builder.create<arith::AddIOp>(stagesBlock.getArgument(0), step);
+      stageTerminator->insertOperands(stageTerminator->getNumOperands(),
+                                      incResult->getResults());
+    }
+  }
+
+  // Add the iter args and results to the terminator.
   auto stagesTerminator =
       cast<PipelineTerminatorOp>(stagesBlock.getTerminator());
-  stagesTerminator.iter_argsMutable().append({stage.getResult(0)});
+
+  // Collect iter args and results from the induction variable increment and any
+  // mapped values that were originally yielded.
+  SmallVector<Value> termIterArgs;
+  SmallVector<Value> termResults;
+  termIterArgs.push_back(
+      stagesBlock.front().getResult(stagesBlock.front().getNumResults() - 1));
+  for (auto value : forOp.getBody()->getTerminator()->getOperands()) {
+    termIterArgs.push_back(resultMap.lookup(value));
+    termResults.push_back(resultMap.lookup(value));
+  }
+
+  stagesTerminator.iter_argsMutable().append(termIterArgs);
+  stagesTerminator.resultsMutable().append(termResults);
+
+  // Replace loop results with pipeline results.
+  for (size_t i = 0; i < forOp.getNumResults(); ++i)
+    forOp.getResult(i).replaceAllUsesWith(pipeline.getResult(i));
 
   // Remove the loop nest from the IR.
-  for (auto loop : llvm::reverse(loopNest))
-    loop.erase();
+  loopNest.front().walk([](Operation *op) {
+    op->dropAllUses();
+    op->dropAllDefinedValueUses();
+    op->dropAllReferences();
+    op->erase();
+  });
 
   return success();
 }
