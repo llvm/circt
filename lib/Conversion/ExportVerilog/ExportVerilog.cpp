@@ -27,6 +27,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/Parallel.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -4025,7 +4026,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// These are non-hierarchical references which we need to be careful about
   /// during emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
+    unsigned numOperations = 0;
     moduleOp.walk([&](Operation *op) {
+      ++numOperations;
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
@@ -4040,6 +4043,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
+    moduleSizeTable[moduleOp] = numOperations;
   };
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
@@ -4268,24 +4272,32 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
   // If we are parallelizing emission, we emit each independent operation to a
   // string buffer in parallel, then concat at the end.
-  parallelForEach(context, thingsToEmit, [&](StringOrOpToEmit &stringOrOp) {
-    auto *op = stringOrOp.getOperation();
-    if (!op)
-      return; // Ignore things that are already strings.
+  parallelForEach(
+      context, thingsToEmit,
+      [&](StringOrOpToEmit &stringOrOp) {
+        auto *op = stringOrOp.getOperation();
+        if (!op)
+          return; // Ignore things that are already strings.
 
-    // BindOp emission reaches into the hw.module of the instance, and that
-    // body may be being transformed by its own emission.  Defer their
-    // emission to the serial phase.  They are speedy to emit anyway.
-    if (isa<BindOp>(op) || modulesContainingBinds.count(op))
-      return;
+        // BindOp emission reaches into the hw.module of the instance, and that
+        // body may be being transformed by its own emission.  Defer their
+        // emission to the serial phase.  They are speedy to emit anyway.
+        if (isa<BindOp>(op) || modulesContainingBinds.count(op))
+          return;
 
-    SmallString<256> buffer;
-    llvm::raw_svector_ostream tmpStream(buffer);
-    VerilogEmitterState state(designOp, *this, options, symbolCache,
-                              globalNames, tmpStream);
-    emitOperation(state, op);
-    stringOrOp.setString(buffer);
-  });
+        SmallString<256> buffer;
+        llvm::raw_svector_ostream tmpStream(buffer);
+        VerilogEmitterState state(designOp, *this, options, symbolCache,
+                                  globalNames, tmpStream);
+        emitOperation(state, op);
+        stringOrOp.setString(buffer);
+      },
+      [&](StringOrOpToEmit &stringOrOp) -> unsigned {
+        auto *op = stringOrOp.getOperation();
+        if (!op)
+          return 0; // Ignore things that are already strings.
+        return moduleSizeTable[op];
+      });
 
   // Finally emit each entry now that we know it is a string.
   for (auto &entry : thingsToEmit) {

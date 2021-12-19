@@ -283,6 +283,9 @@ struct SharedEmitterState {
   /// operations that have a sv.bind in them.
   SmallPtrSet<Operation *, 8> modulesContainingBinds;
 
+  /// This trakcs the numeber of operations in each module op.
+  DenseMap<Operation *, unsigned> moduleSizeTable;
+
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
 
