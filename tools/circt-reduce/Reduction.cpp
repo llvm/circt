@@ -630,14 +630,14 @@ struct ConnectSourceOperandForwarder : public Reduction {
     if (!connect)
       return false;
     auto dest = connect.dest();
-    auto destOp = connect.dest().getDefiningOp();
+    auto *destOp = dest.getDefiningOp();
 
     // Ensure that the destination is used only once.
     if (!destOp || !destOp->hasOneUse() ||
         !isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(destOp))
       return false;
 
-    auto srcOp = connect.src().getDefiningOp();
+    auto *srcOp = connect.src().getDefiningOp();
     if (!srcOp || OpNum >= srcOp->getNumOperands())
       return false;
 
@@ -654,8 +654,8 @@ struct ConnectSourceOperandForwarder : public Reduction {
 
   LogicalResult rewrite(Operation *op) override {
     auto connect = cast<firrtl::ConnectOp>(op);
-    auto destOp = connect.dest().getDefiningOp();
-    auto srcOp = connect.src().getDefiningOp();
+    auto *destOp = connect.dest().getDefiningOp();
+    auto *srcOp = connect.src().getDefiningOp();
     auto forwardedOperand = srcOp->getOperand(OpNum);
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
