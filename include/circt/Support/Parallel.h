@@ -26,12 +26,15 @@ void parallelForEach(mlir::MLIRContext *context, RandomAccessRangeT &&range,
   // Set indexes to {0, 1, ..., size - 1}.
   std::iota(indexes.begin(), indexes.end(), 0);
 
+  llvm::SmallVector<int64_t> estimatedTime;
+  estimatedTime.reserve(indexes.size());
+  for (auto i : indexes)
+    estimatedTime.push_back(estimate(range[i]));
+
   // Sort indexes in descending order of the estimated execution time.
-  // TODO: Consider whether to cache the estimate time using extra
-  // memory.
   llvm::sort(std::begin(indexes), std::end(indexes),
              [&](size_t lhs, size_t rhs) {
-               return estimate(range[lhs]) > estimate(range[rhs]);
+               return estimatedTime[lhs] > estimatedTime[rhs];
              });
 
   mlir::parallelForEach(context, indexes, [&](size_t i) { func(range[i]); });
