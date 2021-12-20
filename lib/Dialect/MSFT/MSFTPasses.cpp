@@ -288,7 +288,8 @@ void PartitionPass::partition(MSFTModuleOp mod) {
       partMembers[part].push_back(op);
   });
 
-  mod.walk<mlir::WalkOrder::PostOrder>([&](DesignPartitionOp part) {
+  SmallVector<DesignPartitionOp, 2> parts(mod.getOps<DesignPartitionOp>());
+  for (auto part : parts) {
     SymbolRefAttr partSym = SymbolRefAttr::get(SymbolTable::getSymbolName(mod),
                                                {SymbolRefAttr::get(part)});
 
@@ -298,7 +299,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
       partMembers.erase(usersIter);
     }
     part.erase();
-  });
+  }
 
   // TODO: For operations which target partitions not in the same module, bubble
   // them up.
