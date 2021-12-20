@@ -26,7 +26,7 @@ class Plus:
   b = Input(types.i32)
   y = Output(types.i32)
 
-  def __init__(self, name:str=None) -> None:
+  def __init__(self, name: str = None) -> None:
     if name is not None:
       self.instance_name = name
 
