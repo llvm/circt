@@ -1,6 +1,7 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
+; RUN: firtool --firrtl-grand-central --split-verilog --annotation-file %S/Wire.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
 
 circuit Top :
   module Submodule :
@@ -41,8 +42,25 @@ circuit Top :
     out.multivec[1][2] <= w.multivec[1][2]
     out.uint <= w.uint
 
+  extmodule Tap:
+    output clock: Clock
+    output a: UInt<1>
+    input b: UInt<1>
+
+
+  ; This checks that macro definitions (e.g. "define RANDOM") are included
+  ; in MyView_companion.sv. There was a bug that macro definitions were not
+  ; included in output files. Here, only "RANDOM" macro is checked.
+  ; MYVIEW_COMPANION: define RANDOM
   module MyView_companion :
     output io : { }
+
+    inst tap of Tap
+    wire clock: Clock
+    clock <= tap.clock
+    reg r: UInt<1>, clock
+    r <= tap.a
+    tap.b <= r
 
     wire _WIRE : UInt<1>
     _WIRE <= UInt<1>("h0")
@@ -145,6 +163,11 @@ circuit Top :
     out.uint <= dut.out.uint
 
     ; NOEXTRACT:      module MyView_companion();
+    ; NOEXTRACT:        Tap tap (
+    ; NOEXTRACT-NEXT:     .b     (r),
+    ; NOEXTRACT-NEXT:     .clock (tap_clock),
+    ; NOEXTRACT-NEXT:     .a     (tap_a)
+    ; NOEXTRACT-NEXT:   );
     ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
     ; NOEXTRACT-NEXT: endmodule
 
@@ -166,6 +189,11 @@ circuit Top :
     ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
     ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
     ; EXTRACT:        module MyView_companion();
+    ; EXTRACT:          Tap tap (
+    ; EXTRACT-NEXT:       .b     (r),
+    ; EXTRACT-NEXT:       .clock (tap_clock),
+    ; EXTRACT-NEXT:       .a     (tap_a)
+    ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule
 

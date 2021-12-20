@@ -1336,7 +1336,8 @@ void GrandCentralPass::runOnOperation() {
                               &getContext(),
                               maybeExtractInfo.getValue().directory.getValue(),
                               op.getName() + ".sv",
-                              /*excludeFromFileList=*/true));
+                              /*excludeFromFileList=*/true,
+                              /*includeReplicatedOps=*/true));
               return true;
             }
 
