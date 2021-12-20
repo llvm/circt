@@ -48,6 +48,9 @@ circuit Top :
     input b: UInt<1>
 
 
+  ; This checks that macro definitions (e.g. "define RANDOM") are included
+  ; in MyView_companion.sv. There was a bug that macro definitions were not
+  ; included in output files. Here, only "RANDOM" macro is checked.
   ; MYVIEW_COMPANION: define RANDOM
   module MyView_companion :
     output io : { }
