@@ -281,6 +281,71 @@ public:
   virtual LogicalResult verify() override;
 };
 
+/// This class models the accumulation of physical propagation delays on
+/// combinational paths along SSA dependences.
+///
+/// Each operator type is annotated with estimated values for incoming and
+/// outgoing delays. Combinational operators (zero-latency, no internal
+/// registers) have only a single delay; this important special case is modeled
+/// by setting the incoming and outgoing delays to the same value.
+///
+/// A solution to this problem comprises per-operation start times in a
+/// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
+/// determined by the underlying scheduling problem.
+class ChainingProblem : public virtual Problem {
+  DEFINE_FACTORY_METHOD(ChainingProblem)
+
+private:
+  OperatorTypeProperty<float> incomingDelay, outgoingDelay;
+  OperationProperty<float> startTimeInCycle;
+
+public:
+  /// The incoming delay denotes the propagation time from the operand inputs to
+  /// either the result outputs (combinational operators) or the first internal
+  /// register stage.
+  Optional<float> getIncomingDelay(OperatorType opr) {
+    return incomingDelay.lookup(opr);
+  }
+  void setIncomingDelay(OperatorType opr, float delay) {
+    incomingDelay[opr] = delay;
+  }
+
+  /// The outgoing delay denotes the propagation time from either the operand
+  /// inputs (combinational operators) or the last internal register stage to
+  /// the result outputs.
+  Optional<float> getOutgoingDelay(OperatorType opr) {
+    return outgoingDelay.lookup(opr);
+  }
+  void setOutgoingDelay(OperatorType opr, float delay) {
+    outgoingDelay[opr] = delay;
+  }
+
+  /// Computed by the scheduler, this start time is relative to the beginning of
+  /// the cycle that \p op starts in.
+  Optional<float> getStartTimeInCycle(Operation *op) {
+    return startTimeInCycle.lookup(op);
+  }
+  void setStartTimeInCycle(Operation *op, float time) {
+    startTimeInCycle[op] = time;
+  }
+
+protected:
+  /// Incoming/outgoing delays are set for \p opr and non-negative. The delays
+  /// are equal if \p opr is a zero-latency operator type.
+  virtual LogicalResult checkDelays(OperatorType opr);
+
+  /// \p op has a non-negative start time in its cycle.
+  virtual LogicalResult verifyStartTimeInCycle(Operation *op);
+  /// If \p dep is an SSA edge and its source operation finishes in the same
+  /// time step as the destination operation, the source's result is available
+  /// before the destination starts in that cycle.
+  virtual LogicalResult verifyPrecedenceInCycle(Dependence dep);
+
+public:
+  virtual LogicalResult check() override;
+  virtual LogicalResult verify() override;
+};
+
 /// This class models a resource-constrained scheduling problem. An optional,
 /// non-zero *limit* marks operator types to be *shared* by the operations using
 /// them. In an HLS setting, this corresponds to multiplexing multiple

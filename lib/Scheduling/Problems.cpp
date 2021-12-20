@@ -158,6 +158,103 @@ LogicalResult CyclicProblem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ChainingProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
+  auto incomingDelay = getIncomingDelay(opr);
+  auto outgoingDelay = getOutgoingDelay(opr);
+
+  if (!incomingDelay || !outgoingDelay)
+    return getContainingOp()->emitError()
+           << "Missing delays for operator type '" << opr << "'";
+
+  float iDel = *incomingDelay;
+  float oDel = *outgoingDelay;
+
+  if (iDel < 0.0f || oDel < 0.0f)
+    return getContainingOp()->emitError()
+           << "Negative delays for operator type '" << opr << "'";
+
+  if (*getLatency(opr) == 0 && iDel != oDel)
+    return getContainingOp()->emitError()
+           << "Incoming & outgoing delay must be equal for zero-latency "
+              "operator type '"
+           << opr << "'";
+
+  return success();
+}
+
+LogicalResult ChainingProblem::verifyStartTimeInCycle(Operation *op) {
+  auto startTimeInCycle = getStartTimeInCycle(op);
+  if (!startTimeInCycle || *startTimeInCycle < 0.0f)
+    return op->emitError("Operation has no non-negative start time in cycle");
+  return success();
+}
+
+LogicalResult ChainingProblem::verifyPrecedenceInCycle(Dependence dep) {
+  // Auxiliary edges don't transport values.
+  if (dep.isAuxiliary())
+    return success();
+
+  Operation *i = dep.getSource();
+  Operation *j = dep.getDestination();
+
+  unsigned stI = *getStartTime(i);
+  unsigned latI = *getLatency(*getLinkedOperatorType(i));
+  unsigned stJ = *getStartTime(j);
+
+  // If `i` finishes a full time step earlier than `j`, its value is registered
+  // and thereby available at physical time 0.0 in `j`'s start cycle.
+  if (stI + latI < stJ)
+    return success();
+
+  // We have stI + latI == stJ, i.e. `i` ends in the same cycle as `j` starts.
+  // If `i` is combinational, both ops also start in the same cycle, and we must
+  // include `i`'s start time in that cycle in the path delay. Otherwise, `i`
+  // started in an earlier cycle and just contributes its outgoing delay to the
+  // path.
+  float sticI = latI == 0 ? *getStartTimeInCycle(i) : 0.0f;
+  float oDelI = *getOutgoingDelay(*getLinkedOperatorType(i));
+  float sticJ = *getStartTimeInCycle(j);
+
+  if (!(sticI + oDelI <= sticJ))
+    return getContainingOp()->emitError()
+           << "Precedence violated in cycle " << stJ << " for dependence:"
+           << "\n  from: " << *i << ", result after z=" << (sticI + oDelI)
+           << "\n  to:   " << *j << ", starts in z=" << sticJ;
+
+  return success();
+}
+
+LogicalResult ChainingProblem::check() {
+  if (failed(Problem::check()))
+    return failure();
+
+  for (auto opr : getOperatorTypes())
+    if (failed(checkDelays(opr)))
+      return failure();
+
+  return success();
+}
+
+LogicalResult ChainingProblem::verify() {
+  if (failed(Problem::verify()))
+    return failure();
+
+  for (auto *op : getOperations())
+    if (failed(verifyStartTimeInCycle(op)))
+      return failure();
+
+  for (auto *op : getOperations())
+    for (auto dep : getDependences(op))
+      if (failed(verifyPrecedenceInCycle(dep)))
+        return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // SharedOperatorsProblem
 //===----------------------------------------------------------------------===//
 
