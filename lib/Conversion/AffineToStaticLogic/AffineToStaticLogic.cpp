@@ -340,11 +340,19 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     auto group = startGroups[startTime];
     OpBuilder::InsertionGuard g(builder);
 
-    // Collect the return types for this stage.
+    // Collect the return types for this stage. Operations whose results are not
+    // used within this stage are returned.
     SmallVector<Type> stageTypes;
-    for (auto *op : group)
-      stageTypes.append(op->getResultTypes().begin(),
-                        op->getResultTypes().end());
+    DenseSet<Operation *> opsWithReturns;
+    for (auto *op : group) {
+      for (auto *user : op->getUsers()) {
+        if (*problem.getStartTime(user) != startTime) {
+          opsWithReturns.insert(op);
+          stageTypes.append(op->getResultTypes().begin(),
+                            op->getResultTypes().end());
+        }
+      }
+    }
 
     // Add the induction variable increment in the first stage.
     if (startTime == 0)
@@ -365,8 +373,10 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     for (auto *op : group) {
       unsigned resultIndex = stageTerminator->getNumOperands();
       auto *newOp = builder.clone(*op, valueMap);
-      stageTerminator->insertOperands(resultIndex, newOp->getResults());
-      movedOps.emplace_back(op, newOp, resultIndex);
+      if (opsWithReturns.contains(op)) {
+        stageTerminator->insertOperands(resultIndex, newOp->getResults());
+        movedOps.emplace_back(op, newOp, resultIndex);
+      }
     }
 
     // Add the stage results to the value map for the original op.
