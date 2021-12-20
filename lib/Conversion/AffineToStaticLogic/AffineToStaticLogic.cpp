@@ -8,6 +8,7 @@
 
 #include "circt/Conversion/AffineToStaticLogic.h"
 #include "../PassDetail.h"
+#include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Scheduling/Algorithms.h"
@@ -48,11 +49,12 @@ struct AffineToStaticLogic
   void runOnFunction() override;
 
 private:
+  LogicalResult convertIfOps();
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
-  LogicalResult convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult
   createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
@@ -60,6 +62,13 @@ private:
 } // namespace
 
 void AffineToStaticLogic::runOnFunction() {
+  // Get dependence analysis for the whole function.
+  getAnalysis<MemoryDependenceAnalysis>();
+
+  // After dependence analysis, materialize AffineIfOps as scf::IfOps.
+  if (failed(convertIfOps()))
+    return signalPassFailure();
+
   // Get scheduling analysis for the whole function.
   schedulingAnalysis = &getAnalysis<CyclicSchedulingAnalysis>();
 
@@ -91,6 +100,66 @@ void AffineToStaticLogic::runOnFunction() {
   }
 }
 
+/// Helper to hoist computation out of scf::IfOp branches.
+struct IfOpHoisting : OpConversionPattern<IfOp> {
+  using OpConversionPattern<IfOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(IfOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.updateRootInPlace(op, [&]() {
+      if (!op.thenBlock()->without_terminator().empty()) {
+        rewriter.splitBlock(op.thenBlock(), --op.thenBlock()->end());
+        rewriter.mergeBlockBefore(&op.thenRegion().front(), op);
+      }
+      if (op.elseBlock() && !op.elseBlock()->without_terminator().empty()) {
+        rewriter.splitBlock(op.elseBlock(), --op.elseBlock()->end());
+        rewriter.mergeBlockBefore(&op.elseRegion().front(), op);
+      }
+    });
+
+    return success();
+  }
+};
+
+/// Helper to determine if an scf::IfOp is essentially a mux.
+static bool ifOpLegalityCallback(IfOp op) {
+  return op.thenBlock()->without_terminator().empty() &&
+         (!op.elseBlock() || op.elseBlock()->without_terminator().empty());
+}
+
+/// Helper to mark AffineYieldOp legal, unless it is inside a partially
+/// converted scf::IfOp.
+static bool yieldOpLegalityCallback(AffineYieldOp op) {
+  return !op->getParentOfType<IfOp>();
+}
+
+/// After analyzing memory dependences, and before creating the schedule, we
+/// want to materialize AffineIfOps as scf::IfOps, which make the condition
+/// computation explicit in the arithmetic dialect. This is important so the
+/// schedule can consider potentially complex computations in the condition.
+/// Furthermore, we want to ensure that each scf::IfOp is essentially a mux, so
+/// we hoist computation out of the branches.
+LogicalResult AffineToStaticLogic::convertIfOps() {
+  auto *context = &getContext();
+  auto op = getOperation();
+
+  ConversionTarget target(*context);
+  target.addLegalDialect<AffineDialect, ArithmeticDialect, SCFDialect>();
+  target.addIllegalOp<AffineIfOp>();
+  target.addDynamicallyLegalOp<IfOp>(ifOpLegalityCallback);
+  target.addDynamicallyLegalOp<AffineYieldOp>(yieldOpLegalityCallback);
+
+  RewritePatternSet patterns(context);
+  populateAffineToStdConversionPatterns(patterns);
+  patterns.add<IfOpHoisting>(context);
+
+  if (failed(applyPartialConversion(op, target, std::move(patterns))))
+    return failure();
+
+  return success();
+}
+
 /// Populate the schedling problem operator types for the dialect we are
 /// targetting. Right now, we assume Calyx, which has a standard library with
 /// well-defined operator latencies. Ultimately, we should move this to a
@@ -116,8 +185,8 @@ LogicalResult AffineToStaticLogic::populateOperatorTypes(
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     return TypeSwitch<Operation *, WalkResult>(op)
-        .Case<AddIOp, AffineIfOp, AffineYieldOp, mlir::ConstantOp, IndexCastOp,
-              memref::AllocaOp>([&](Operation *combOp) {
+        .Case<AddIOp, IfOp, AffineYieldOp, arith::ConstantOp, CmpIOp,
+              IndexCastOp, memref::AllocaOp, YieldOp>([&](Operation *combOp) {
           // Some known combinational ops.
           problem.setLinkedOperatorType(combOp, combOpr);
           return WalkResult::advance();
@@ -244,7 +313,7 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     auto startTime = problem.getStartTime(op);
     if (!startTime.hasValue())
       return op->emitOpError("didn't have scheduled start time");
-    if (isa<AffineYieldOp>(op))
+    if (isa<AffineYieldOp, YieldOp>(op))
       continue;
     startGroups[*startTime].push_back(op);
   }
@@ -359,17 +428,16 @@ LogicalResult
 AffineToStaticLogic::convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest) {
   auto *context = &getContext();
 
-  // Use the upstream AffineToStandard conversion.
+  // Use the upstream AffineToStandard conversion patterns to do a full
+  // conversion away from the Affine dialect.
   ConversionTarget target(*context);
-  target.addLegalDialect<ArithmeticDialect, MemRefDialect, SCFDialect,
-                         StandardOpsDialect>();
+  target.addLegalDialect<ArithmeticDialect, BuiltinDialect, MemRefDialect,
+                         SCFDialect, StandardOpsDialect, StaticLogicDialect>();
   target.addIllegalDialect<AffineDialect>();
-  target.addLegalOp<AffineForOp>();
 
   RewritePatternSet patterns(context);
   populateAffineToStdConversionPatterns(patterns);
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
     return failure();
 
   return success();

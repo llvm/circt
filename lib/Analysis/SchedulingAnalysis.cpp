@@ -14,6 +14,7 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/AnalysisManager.h"
 #include "mlir/Transforms/LoopUtils.h"
@@ -76,19 +77,19 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   });
 
   // Insert conditional dependences into the problem.
-  forOp.getBody()->walk([&](AffineIfOp op) {
+  forOp.getBody()->walk([&](scf::IfOp op) {
     // No special handling required for control-only `if`s.
     if (op.getNumResults() == 0)
       return WalkResult::skip();
 
     // Model the implicit value flow from the `yield` to the `if`'s result(s).
-    Problem::Dependence depThen(op.getThenBlock()->getTerminator(), op);
+    Problem::Dependence depThen(op.thenBlock()->getTerminator(), op);
     auto depInserted = problem.insertDependence(depThen);
     assert(succeeded(depInserted));
     (void)depInserted;
 
-    if (op.hasElse()) {
-      Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
+    if (op.elseBlock()) {
+      Problem::Dependence depElse(op.elseBlock()->getTerminator(), op);
       depInserted = problem.insertDependence(depElse);
       assert(succeeded(depInserted));
       (void)depInserted;
