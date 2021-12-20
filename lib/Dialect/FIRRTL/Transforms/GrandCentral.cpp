@@ -1306,7 +1306,8 @@ void GrandCentralPass::runOnOperation() {
                     hw::OutputFileAttr::getFromDirectoryAndFilename(
                         &getContext(), getOutputDirectory().getValue(),
                         mapping.getName() + ".sv",
-                        /*excludeFromFilelist=*/true));
+                        /*excludeFromFilelist=*/true,
+                        /*includeReplicatedOps=*/true));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
@@ -1336,7 +1337,8 @@ void GrandCentralPass::runOnOperation() {
                               &getContext(),
                               maybeExtractInfo.getValue().directory.getValue(),
                               op.getName() + ".sv",
-                              /*excludeFromFileList=*/true));
+                              /*excludeFromFileList=*/true,
+                              /*includeReplicatedOps=*/true));
               return true;
             }
 
