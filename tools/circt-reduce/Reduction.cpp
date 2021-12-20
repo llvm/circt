@@ -622,7 +622,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
-/// with an operand of the source value of the connection.
+/// an operand of the source value of the connection.
 template <unsigned OpNum>
 struct ConnectSourceOperandForwarder : public Reduction {
   bool match(Operation *op) override {
