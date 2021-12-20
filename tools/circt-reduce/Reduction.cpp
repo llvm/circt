@@ -621,6 +621,71 @@ struct ExtmoduleInstanceRemover : public Reduction {
   SymbolCache symbols;
 };
 
+/// A sample reduction pattern that replaces a single-use wire and register with
+/// an operand of the source value of the connection.
+template <unsigned OpNum>
+struct ConnectSourceOperandForwarder : public Reduction {
+  bool match(Operation *op) override {
+    auto connect = dyn_cast<firrtl::ConnectOp>(op);
+    if (!connect)
+      return false;
+    auto dest = connect.dest();
+    auto *destOp = dest.getDefiningOp();
+
+    // Ensure that the destination is used only once.
+    if (!destOp || !destOp->hasOneUse() ||
+        !isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(destOp))
+      return false;
+
+    auto *srcOp = connect.src().getDefiningOp();
+    if (!srcOp || OpNum >= srcOp->getNumOperands())
+      return false;
+
+    auto resultTy = dest.getType().dyn_cast<firrtl::FIRRTLType>();
+    auto opTy =
+        srcOp->getOperand(OpNum).getType().dyn_cast<firrtl::FIRRTLType>();
+
+    return resultTy && opTy &&
+           resultTy.getWidthlessType() == opTy.getWidthlessType() &&
+           ((resultTy.getBitWidthOrSentinel() == -1) ==
+            (opTy.getBitWidthOrSentinel() == -1)) &&
+           resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto connect = cast<firrtl::ConnectOp>(op);
+    auto *destOp = connect.dest().getDefiningOp();
+    auto *srcOp = connect.src().getDefiningOp();
+    auto forwardedOperand = srcOp->getOperand(OpNum);
+    ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
+    Value newDest;
+    if (isa<firrtl::WireOp>(destOp))
+      newDest = builder.create<firrtl::WireOp>(forwardedOperand.getType());
+    else {
+      // We can promote the register into a wire but we wouldn't do here because
+      // the error might be caused by the register.
+      auto clock = destOp->getOperand(0);
+      newDest =
+          builder.create<firrtl::RegOp>(forwardedOperand.getType(), clock);
+    }
+
+    // Create new connection between a new wire and the forwarded operand.
+    builder.setInsertionPointAfter(op);
+    builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
+
+    // Remove the old connection and destination. We don't have to replace them
+    // because destination has only one use.
+    op->erase();
+    destOp->erase();
+    pruneUnusedOps(srcOp);
+
+    return success();
+  }
+  std::string getName() const override {
+    return ("connect-source-operand-" + Twine(OpNum) + "-forwarder").str();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -666,4 +731,7 @@ void circt::createAllReductions(
   add(std::make_unique<AnnotationRemover>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
+  add(std::make_unique<ConnectSourceOperandForwarder<0>>());
+  add(std::make_unique<ConnectSourceOperandForwarder<1>>());
+  add(std::make_unique<ConnectSourceOperandForwarder<2>>());
 }
