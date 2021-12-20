@@ -1495,22 +1495,23 @@ struct HandshakeInsertBufferPass
 
   // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy(handshake::FuncOp f, OpBuilder &builder,
-                            unsigned numSlots, bool sequential = true) {
-    // Cycles can only occur at merge-like operations. We insert a buffer at the
-    // output of a merge-like operation whenever the op is determined to be
-    // within a cycle. Placing the buffer at the output of the merge-like op, as
-    // opposed to naivly placing buffers *whenever* cycles are detected ensures
-    // that we don't place a bunch of buffers on each input of the merge-like
-    // op.
+                            unsigned numSlots, bool /*sequential*/ = true) {
+    // Cycles can only occur at merge-like operations so those are our buffering
+    // targets. Placing the buffer at the output of the merge-like op,
+    // as opposed to naivly placing buffers *whenever* cycles are detected
+    // ensures that we don't place a bunch of buffers on each input of the
+    // merge-like op.
     auto isSeqBuffer = [](auto op) {
       auto bufferOp = dyn_cast<handshake::BufferOp>(op);
       return bufferOp && bufferOp.isSequential();
     };
 
     for (auto mergeOp : f.getOps<MergeLikeOpInterface>()) {
-      if (inCycle(mergeOp, isSeqBuffer)) {
-        bufferResults(builder, mergeOp, numSlots, sequential);
-      }
+      // We insert a sequential buffer whenever the op is determined to be
+      // within a cycle (to break combinational cycles). Else, place a FIFO
+      // buffer.
+      bool sequential = inCycle(mergeOp, isSeqBuffer);
+      bufferResults(builder, mergeOp, numSlots, sequential);
     }
   }
 

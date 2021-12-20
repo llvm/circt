@@ -2,46 +2,54 @@
 
 
 // CHECK-LABEL:   handshake.func @simple_loop(
-// CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none
+// CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]] = br %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = control_merge %[[VAL_1]] : none
-// CHECK:           %[[VAL_4:.*]]:3 = fork [3] %[[VAL_2]] : none
-// CHECK:           sink %[[VAL_3]] : index
-// CHECK:           %[[VAL_5:.*]] = constant %[[VAL_4]]#1 {value = 1 : index} : index
-// CHECK:           %[[VAL_6:.*]] = constant %[[VAL_4]]#0 {value = 42 : index} : index
-// CHECK:           %[[VAL_7:.*]] = br %[[VAL_4]]#2 : none
-// CHECK:           %[[VAL_8:.*]] = br %[[VAL_5]] : index
-// CHECK:           %[[VAL_9:.*]] = br %[[VAL_6]] : index
-// CHECK:           %[[VAL_10:.*]] = mux %[[VAL_11:.*]]#1 {{\[}}%[[VAL_12:.*]], %[[VAL_9]]] : index, index
-// CHECK:           %[[VAL_13:.*]] = buffer [2] %[[VAL_10]] {sequential = true} : index
-// CHECK:           %[[VAL_14:.*]]:2 = fork [2] %[[VAL_13]] : index
-// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]] = control_merge %[[VAL_17:.*]], %[[VAL_7]] : none
-// CHECK:           %[[VAL_18:.*]] = buffer [2] %[[VAL_16]] {sequential = true} : index
-// CHECK:           %[[VAL_19:.*]] = buffer [2] %[[VAL_15]] {sequential = true} : none
-// CHECK:           %[[VAL_11]]:2 = fork [2] %[[VAL_18]] : index
-// CHECK:           %[[VAL_20:.*]] = mux %[[VAL_14]]#0 {{\[}}%[[VAL_21:.*]], %[[VAL_8]]] : index, index
-// CHECK:           %[[VAL_22:.*]] = buffer [2] %[[VAL_20]] {sequential = true} : index
-// CHECK:           %[[VAL_23:.*]]:2 = fork [2] %[[VAL_22]] : index
-// CHECK:           %[[VAL_24:.*]] = arith.cmpi slt, %[[VAL_23]]#1, %[[VAL_14]]#1 : index
-// CHECK:           %[[VAL_25:.*]]:3 = fork [3] %[[VAL_24]] : i1
-// CHECK:           %[[VAL_26:.*]], %[[VAL_27:.*]] = cond_br %[[VAL_25]]#2, %[[VAL_14]]#0 : index
-// CHECK:           sink %[[VAL_27]] : index
-// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_25]]#1, %[[VAL_19]] : none
-// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_25]]#0, %[[VAL_23]]#0 : index
-// CHECK:           sink %[[VAL_31]] : index
-// CHECK:           %[[VAL_32:.*]] = merge %[[VAL_30]] : index
-// CHECK:           %[[VAL_33:.*]] = merge %[[VAL_26]] : index
-// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]] = control_merge %[[VAL_28]] : none
-// CHECK:           %[[VAL_36:.*]]:2 = fork [2] %[[VAL_34]] : none
-// CHECK:           sink %[[VAL_35]] : index
-// CHECK:           %[[VAL_37:.*]] = constant %[[VAL_36]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_38:.*]] = arith.addi %[[VAL_32]], %[[VAL_37]] : index
-// CHECK:           %[[VAL_12]] = br %[[VAL_33]] : index
-// CHECK:           %[[VAL_17]] = br %[[VAL_36]]#1 : none
-// CHECK:           %[[VAL_21]] = br %[[VAL_38]] : index
-// CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = control_merge %[[VAL_29]] : none
+// CHECK:           %[[VAL_4:.*]] = buffer [2] %[[VAL_3]] {sequential = false} : index
+// CHECK:           %[[VAL_5:.*]] = buffer [2] %[[VAL_2]] {sequential = false} : none
+// CHECK:           %[[VAL_6:.*]]:3 = fork [3] %[[VAL_5]] : none
+// CHECK:           sink %[[VAL_4]] : index
+// CHECK:           %[[VAL_7:.*]] = constant %[[VAL_6]]#1 {value = 1 : index} : index
+// CHECK:           %[[VAL_8:.*]] = constant %[[VAL_6]]#0 {value = 42 : index} : index
+// CHECK:           %[[VAL_9:.*]] = br %[[VAL_6]]#2 : none
+// CHECK:           %[[VAL_10:.*]] = br %[[VAL_7]] : index
+// CHECK:           %[[VAL_11:.*]] = br %[[VAL_8]] : index
+// CHECK:           %[[VAL_12:.*]] = mux %[[VAL_13:.*]]#1 {{\[}}%[[VAL_14:.*]], %[[VAL_11]]] : index, index
+// CHECK:           %[[VAL_15:.*]] = buffer [2] %[[VAL_12]] {sequential = true} : index
+// CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : index
+// CHECK:           %[[VAL_17:.*]], %[[VAL_18:.*]] = control_merge %[[VAL_19:.*]], %[[VAL_9]] : none
+// CHECK:           %[[VAL_20:.*]] = buffer [2] %[[VAL_18]] {sequential = true} : index
+// CHECK:           %[[VAL_21:.*]] = buffer [2] %[[VAL_17]] {sequential = true} : none
+// CHECK:           %[[VAL_13]]:2 = fork [2] %[[VAL_20]] : index
+// CHECK:           %[[VAL_22:.*]] = mux %[[VAL_16]]#0 {{\[}}%[[VAL_23:.*]], %[[VAL_10]]] : index, index
+// CHECK:           %[[VAL_24:.*]] = buffer [2] %[[VAL_22]] {sequential = true} : index
+// CHECK:           %[[VAL_25:.*]]:2 = fork [2] %[[VAL_24]] : index
+// CHECK:           %[[VAL_26:.*]] = arith.cmpi slt, %[[VAL_25]]#1, %[[VAL_16]]#1 : index
+// CHECK:           %[[VAL_27:.*]]:3 = fork [3] %[[VAL_26]] : i1
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_27]]#2, %[[VAL_16]]#0 : index
+// CHECK:           sink %[[VAL_29]] : index
+// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_27]]#1, %[[VAL_21]] : none
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_27]]#0, %[[VAL_25]]#0 : index
+// CHECK:           sink %[[VAL_33]] : index
+// CHECK:           %[[VAL_34:.*]] = merge %[[VAL_32]] : index
+// CHECK:           %[[VAL_35:.*]] = buffer [2] %[[VAL_34]] {sequential = false} : index
+// CHECK:           %[[VAL_36:.*]] = merge %[[VAL_28]] : index
+// CHECK:           %[[VAL_37:.*]] = buffer [2] %[[VAL_36]] {sequential = false} : index
+// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = control_merge %[[VAL_30]] : none
+// CHECK:           %[[VAL_40:.*]] = buffer [2] %[[VAL_39]] {sequential = false} : index
+// CHECK:           %[[VAL_41:.*]] = buffer [2] %[[VAL_38]] {sequential = false} : none
+// CHECK:           %[[VAL_42:.*]]:2 = fork [2] %[[VAL_41]] : none
 // CHECK:           sink %[[VAL_40]] : index
-// CHECK:           return %[[VAL_39]] : none
+// CHECK:           %[[VAL_43:.*]] = constant %[[VAL_42]]#0 {value = 1 : index} : index
+// CHECK:           %[[VAL_44:.*]] = arith.addi %[[VAL_35]], %[[VAL_43]] : index
+// CHECK:           %[[VAL_14]] = br %[[VAL_37]] : index
+// CHECK:           %[[VAL_19]] = br %[[VAL_42]]#1 : none
+// CHECK:           %[[VAL_23]] = br %[[VAL_44]] : index
+// CHECK:           %[[VAL_45:.*]], %[[VAL_46:.*]] = control_merge %[[VAL_31]] : none
+// CHECK:           %[[VAL_47:.*]] = buffer [2] %[[VAL_46]] {sequential = false} : index
+// CHECK:           %[[VAL_48:.*]] = buffer [2] %[[VAL_45]] {sequential = false} : none
+// CHECK:           sink %[[VAL_47]] : index
+// CHECK:           return %[[VAL_48]] : none
 // CHECK:         }
 module {
   handshake.func @simple_loop(%arg0: none, ...) -> none {
