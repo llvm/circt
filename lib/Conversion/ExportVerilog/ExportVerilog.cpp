@@ -4465,13 +4465,28 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
 
-  // Emit each file in parallel if context enables it.
-  parallelForEach(module->getContext(), emitter.files.begin(),
-                  emitter.files.end(), [&](auto &it) {
-                    createSplitOutputFile(it.first, it.second, dirname,
-                                          emitter);
-                  });
+  // Change the container of `emitter.files` from map to vector so that we can
+  // access by random index. Make sure that `emitter.files` is moved here.
+  SmallVector<std::pair<StringAttr, FileInfo>> files(
+      std::move_iterator(emitter.files.begin()),
+      std::move_iterator(emitter.files.end()));
 
+  // Emit each file in parallel if context enables it.
+  parallelForEach(
+      module->getContext(), files,
+      [&](auto &it) {
+        createSplitOutputFile(it.first, it.second, dirname, emitter);
+      },
+      // We estimate the execution time by calculating the number of
+      // operations in module ops.
+      [&](auto &it) -> unsigned {
+        unsigned totalSize = 0;
+        for (auto &opFileInfo : it.second.ops) {
+          auto it = emitter.moduleSizeTable.find(opFileInfo.op);
+          totalSize += it == emitter.moduleSizeTable.end() ? 0 : it->second;
+        }
+        return totalSize;
+      });
   // Write the file list.
   SmallString<128> filelistPath(dirname);
   llvm::sys::path::append(filelistPath, "filelist.f");
@@ -4483,7 +4498,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
     return failure();
   }
 
-  for (const auto &it : emitter.files) {
+  for (const auto &it : files) {
     if (it.second.addToFilelist)
       output->os() << it.first << "\n";
   }
