@@ -75,4 +75,16 @@ def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
   let constructor = "circt::handshake::createHandshakeAddIDsPass()";
 }
 
+def HandshakeInsertBuffers
+  : Pass<"handshake-insert-buffers", "handshake::FuncOp"> {
+  let summary = "Insert buffers to break graph cycles";
+  let constructor = "circt::handshake::createHandshakeInsertBuffersPass()";
+  let options = [
+    Option<"strategy", "strategy", "std::string", "\"all\"",
+           "Strategy to apply. Possible values are: cycles, allFIFO, all (default)">,
+    Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
+           "Number of slots in each buffer">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

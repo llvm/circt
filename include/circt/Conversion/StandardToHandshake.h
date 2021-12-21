@@ -40,8 +40,6 @@ createHandshakeCanonicalizePass();
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeRemoveBlockPass();
 
-std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-createHandshakeInsertBufferPass();
 
 } // namespace circt
 

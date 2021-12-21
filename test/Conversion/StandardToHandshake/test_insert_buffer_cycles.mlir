@@ -1,4 +1,4 @@
-// RUN: circt-opt -handshake-insert-buffer=strategies=cycles %s | circt-opt -handshake-insert-buffer=strategies=cycles | FileCheck %s -check-prefix=CHECK
+// RUN: circt-opt -handshake-insert-buffers=strategy=cycles %s | circt-opt -handshake-insert-buffers=strategy=cycles | FileCheck %s -check-prefix=CHECK
 
 
 // CHECK-LABEL:   handshake.func @simple_loop(
