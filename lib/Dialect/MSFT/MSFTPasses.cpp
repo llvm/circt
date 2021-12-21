@@ -252,13 +252,48 @@ namespace {
 struct PartitionPass : public PartitionBase<PartitionPass> {
   void runOnOperation() override;
 
+private:
+  hw::SymbolCache topLevelSyms;
+
   void partition(MSFTModuleOp mod);
   void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
 
-private:
-  hw::SymbolCache topLevelSyms;
+  // Find all the modules and use the partial order of the instantiation DAG to
+  // sort them. If we use this order when "bubbling" up operations, we guarantee
+  // one-pass completeness.
+  // Assumption (unchecked): there is not a cycle in the instantiation graph.
+  void getAndSortModules(SmallVectorImpl<MSFTModuleOp> &mods);
+  void getAndSortModulesVisitor(MSFTModuleOp mod,
+                                SmallVectorImpl<MSFTModuleOp> &mods,
+                                DenseSet<MSFTModuleOp> &modsSeen);
 };
 } // anonymous namespace
+
+// Run a post-order DFS.
+void PartitionPass::getAndSortModulesVisitor(
+    MSFTModuleOp mod, SmallVectorImpl<MSFTModuleOp> &mods,
+    DenseSet<MSFTModuleOp> &modsSeen) {
+  if (modsSeen.contains(mod))
+    return;
+  modsSeen.insert(mod);
+
+  mod.walk([&](InstanceOp inst) {
+    Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
+    auto mod = dyn_cast_or_null<MSFTModuleOp>(modOp);
+    if (!mod)
+      return;
+    getAndSortModulesVisitor(mod, mods, modsSeen);
+  });
+
+  mods.push_back(mod);
+}
+
+void PartitionPass::getAndSortModules(SmallVectorImpl<MSFTModuleOp> &mods) {
+  // Add here _before_ we go deeper to prevent infinite recursion.
+  DenseSet<MSFTModuleOp> modsSeen;
+  getOperation().walk(
+      [&](MSFTModuleOp mod) { getAndSortModulesVisitor(mod, mods, modsSeen); });
+}
 
 /// Fill a symbol cache with all the top level symbols.
 static void populateSymbolCache(mlir::ModuleOp mod, hw::SymbolCache &cache) {
@@ -276,9 +311,11 @@ void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   ::populateSymbolCache(outerMod, topLevelSyms);
 
-  // TODO: sort modules by number of instantiations so we only have to run one
-  // "bubbling" pass.
-  outerMod.walk([this](MSFTModuleOp mod) { partition(mod); });
+  // Get a properly sorted list, then partition the mods in order.
+  SmallVector<MSFTModuleOp, 64> sortedMods;
+  getAndSortModules(sortedMods);
+  for (auto mod : sortedMods)
+    partition(mod);
 }
 
 void PartitionPass::partition(MSFTModuleOp mod) {
