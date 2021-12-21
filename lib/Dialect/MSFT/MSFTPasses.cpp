@@ -282,14 +282,14 @@ void PartitionPass::runOnOperation() {
 }
 
 void PartitionPass::partition(MSFTModuleOp mod) {
-  DenseMap<SymbolRefAttr, SmallVector<Operation *, 4>> partMembers;
+  DenseMap<SymbolRefAttr, SmallVector<Operation *, 1>> partMembers;
   mod.walk([&partMembers](Operation *op) {
     if (auto part = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition"))
       partMembers[part].push_back(op);
   });
 
-  SmallVector<DesignPartitionOp, 2> parts(mod.getOps<DesignPartitionOp>());
-  for (auto part : parts) {
+  for (auto part :
+       llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
     SymbolRefAttr partSym = SymbolRefAttr::get(SymbolTable::getSymbolName(mod),
                                                {SymbolRefAttr::get(part)});
 
