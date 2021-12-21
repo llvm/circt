@@ -135,7 +135,6 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
     if (newName != port.name.getValue()) {
-      globalNameTable.addRenamedPort(module, port, newName);
       if (port.isOutput())
         module.setResultAttr(port.argNum, verilogNameAttr,
                              StringAttr::get(ctxt, newName));
@@ -159,7 +158,6 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
     if (auto nameAttr = getDeclarationName(op)) {
       auto newName = nameResolver.getLegalName(nameAttr);
       if (newName != nameAttr.getValue()) {
-        globalNameTable.addRenamedDeclaration(op, newName);
         op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
       }
     }

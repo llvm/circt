@@ -142,7 +142,58 @@ static StringRef getSymOpName(Operation *symOp) {
           [&](InterfaceSignalOp op) { return op.sym_name(); })
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.sym_name(); })
-      .Default([&](Operation *op) { return ""; });
+      .Default([&](Operation *op) {
+        // If legalizeNames has renamed it, then the attribute must be set.
+        if (auto attr = op->getAttrOfType<StringAttr>("hw.verilogName"))
+          return attr.getValue();
+        if (auto attr = op->getAttrOfType<StringAttr>("name"))
+          return attr.getValue();
+        if (auto attr = op->getAttrOfType<StringAttr>("instanceName"))
+          return attr.getValue();
+        if (auto attr =
+                op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+          return attr.getValue();
+        return StringRef("");
+      });
+}
+
+/// Return the verilog name of the port for the module.
+StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
+  auto numInputs = hw::getModuleNumInputs(module);
+  // portArgNum is the index into the result of getAllModulePortInfos.
+  // Also ensure the correct index into the input/output list is computed.
+  ssize_t portId = portArgNum;
+  auto verilogNameAttr = "hw.verilogName";
+  // Check for input ports.
+  if (portArgNum < numInputs) {
+    if (auto argAttr = module->getAttrOfType<ArrayAttr>(
+            mlir::function_like_impl::getArgDictAttrName()))
+      if (auto argDict = argAttr[portArgNum].cast<DictionaryAttr>())
+        if (auto updatedName = argDict.get(verilogNameAttr))
+          return updatedName.cast<StringAttr>().getValue();
+    // Get the original name of input port if no renaming.
+    return module->getAttrOfType<ArrayAttr>("argNames")[portArgNum]
+        .cast<StringAttr>()
+        .getValue();
+  }
+
+  // If its an output port, get the index into the output port array.
+  portId = portArgNum - numInputs;
+  if (auto argAttr = module->getAttrOfType<ArrayAttr>(
+          mlir::function_like_impl::getResultDictAttrName()))
+    if (auto argDict = argAttr[portId].cast<DictionaryAttr>())
+      if (auto updatedName = argDict.get(verilogNameAttr))
+        return updatedName.cast<StringAttr>().getValue();
+  // Get the original name of output port if no renaming.
+  return module->getAttrOfType<ArrayAttr>("resultNames")[portId]
+      .cast<StringAttr>()
+      .getValue();
+}
+
+StringRef getPortVerilogName(Operation *module, PortInfo port) {
+  return getPortVerilogName(
+      module, port.isOutput() ? port.argNum + hw::getModuleNumInputs(module)
+                              : port.argNum);
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -657,11 +708,8 @@ void EmitterBase::emitTextWithSubstitutions(
     // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
-        return state.globalNames.getPortVerilogName(itemOp, item.getPort());
+        return getPortVerilogName(itemOp, item.getPort());
       }
-      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp, InterfaceInstanceOp>(
-              itemOp))
-        return state.globalNames.getDeclarationVerilogName(itemOp);
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
@@ -819,14 +867,13 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
   // Module ports carry names!
   if (auto blockArg = expr.dyn_cast<BlockArgument>()) {
     auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
-    StringRef name =
-        state.globalNames.getPortVerilogName(moduleOp, blockArg.getArgNumber());
+    StringRef name = getPortVerilogName(moduleOp, blockArg.getArgNumber());
     result = StringAttr::get(expr.getContext(), name);
 
   } else if (auto *op = expr.getDefiningOp()) {
     // Uses of a wire or register can be done inline.
     if (isa<WireOp, RegOp>(op)) {
-      StringRef name = state.globalNames.getDeclarationVerilogName(op);
+      StringRef name = getSymOpName(op);
       result = StringAttr::get(expr.getContext(), name);
 
     } else if (auto nameHint = op->getAttrOfType<StringAttr>("sv.namehint")) {
@@ -2212,15 +2259,11 @@ void NameCollector::collectNames(Block &block) {
     // Instances have a instance name to recognize but we don't need to look
     // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
-      names.addName(
-          &op,
-          moduleEmitter.state.globalNames.getDeclarationVerilogName(instance));
+      names.addName(&op, getSymOpName(instance));
       continue;
     }
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
-      names.addName(
-          interface.getResult(),
-          moduleEmitter.state.globalNames.getDeclarationVerilogName(interface));
+      names.addName(interface.getResult(), getSymOpName(interface));
       continue;
     }
 
@@ -2269,9 +2312,7 @@ void NameCollector::collectNames(Block &block) {
 
     // Notice and renamify named declarations.
     if (isa<WireOp, RegOp, LocalParamOp>(op))
-      names.addName(
-          op.getResult(0),
-          moduleEmitter.state.globalNames.getDeclarationVerilogName(&op));
+      names.addName(op.getResult(0), getSymOpName(&op));
 
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
@@ -2674,8 +2715,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
-    os << "assign " << state.globalNames.getPortVerilogName(parent, port)
-       << " = ";
+    os << "assign " << getPortVerilogName(parent, port) << " = ";
     emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -3319,7 +3359,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       os << "//";
     }
 
-    os << '.' << state.globalNames.getPortVerilogName(moduleOp, elt);
+    os << '.' << getPortVerilogName(moduleOp, elt);
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
@@ -3337,8 +3377,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       // just specify that directly so we avoid a temporary wire.
       size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
       auto containingModule = emitter.currentModuleOp;
-      os << state.globalNames.getPortVerilogName(
-          containingModule, containingModule.getOutputPort(outputPortNo));
+      os << getPortVerilogName(containingModule,
+                               containingModule.getOutputPort(outputPortNo));
     } else {
       portVal = getWireForValue(portVal);
       emitExpression(portVal, ops);
@@ -3663,8 +3703,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
-           << childVerilogName.getValue() << ' '
-           << state.globalNames.getDeclarationVerilogName(inst) << " (";
+           << childVerilogName.getValue() << ' ' << getSymOpName(inst) << " (";
 
   ModulePortInfo parentPortInfo = parentMod.getPorts();
   SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
@@ -3672,7 +3711,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : childPortInfo) {
-    auto portName = state.globalNames.getPortVerilogName(childMod, elt);
+    auto portName = getPortVerilogName(childMod, elt);
     elt.name = Builder(inst.getContext()).getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
@@ -3743,8 +3782,8 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
                                          const ModulePortInfo &modulePorts,
                                          HWModuleOp remoteModule) {
   if (auto barg = value.dyn_cast<BlockArgument>())
-    return state.globalNames.getPortVerilogName(
-        remoteModule, modulePorts.inputs[barg.getArgNumber()]);
+    return getPortVerilogName(remoteModule,
+                              modulePorts.inputs[barg.getArgNumber()]);
 
   Operation *valueOp = value.getDefiningOp();
 
@@ -3754,7 +3793,7 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
     if (!wireInput)
       return {};
     if (isa<WireOp, RegOp>(wireInput))
-      return state.globalNames.getDeclarationVerilogName(wireInput);
+      return getSymOpName(wireInput);
   }
 
   // Handle values being driven onto wires, likely as instance outputs.
@@ -3766,13 +3805,13 @@ StringRef ModuleEmitter::getNameRemotely(Value value,
       Value drivenOnto = user->getOperand(0);
       Operation *drivenOntoOp = drivenOnto.getDefiningOp();
       if (isa<WireOp, RegOp>(drivenOntoOp))
-        return state.globalNames.getDeclarationVerilogName(drivenOntoOp);
+        return getSymOpName(drivenOntoOp);
     }
   }
 
   // Handle local parameters.
   if (isa<LocalParamOp>(valueOp))
-    return state.globalNames.getDeclarationVerilogName(valueOp);
+    return getSymOpName(valueOp);
   return {};
 }
 
@@ -3783,7 +3822,7 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
       instance.getInterfaceType().getInterface());
   os << "bind " << instantiator << " "
      << cast<InterfaceOp>(*interface).sym_name() << " "
-     << state.globalNames.getDeclarationVerilogName(instance) << " (.*);\n\n";
+     << getSymOpName(instance) << " (.*);\n\n";
 }
 
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
@@ -3794,7 +3833,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Add all the ports to the name table so wires etc don't reuse the name.
   SmallVector<PortInfo> portInfo = module.getAllPorts();
   for (auto &port : portInfo) {
-    StringRef name = state.globalNames.getPortVerilogName(module, port);
+    StringRef name = getPortVerilogName(module, port);
     Value value;
     if (!port.isOutput())
       value = module.getArgument(port.argNum);
@@ -3958,7 +3997,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       os.indent(maxTypeWidth - portTypeStrings[portIdx].size());
 
     // Emit the name.
-    os << state.globalNames.getPortVerilogName(module, portInfo[portIdx]);
+    os << getPortVerilogName(module, portInfo[portIdx]);
     printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
@@ -3970,8 +4009,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
            stripUnpackedTypes(portType) ==
                stripUnpackedTypes(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name =
-          state.globalNames.getPortVerilogName(module, portInfo[portIdx]);
+      StringRef name = getPortVerilogName(module, portInfo[portIdx]);
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
