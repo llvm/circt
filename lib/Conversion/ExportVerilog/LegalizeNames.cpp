@@ -151,12 +151,15 @@ FieldNameResolver::getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo) {
   return fieldInfo;
 }
 
-void FieldNameResolver::legalizeToplevelOperation(Operation *op) {
-  // Legalize operations including `op` itself.
-  op->walk([&](Operation *op) { legalizeOperationTypes(op); });
+LogicalResult FieldNameResolver::legalizeToplevelOperation(Operation *op) {
+  // Legalize operations including `op` itself. `legalizeOperationTypes` returns
+  // a failure if there is an invalid field name in external modules.
+  return failure(op->walk([&](Operation *op) -> WalkResult {
+                     return legalizeOperationTypes(op);
+                   }).wasInterrupted());
 }
 
-void FieldNameResolver::legalizeOperationTypes(Operation *op) {
+LogicalResult FieldNameResolver::legalizeOperationTypes(Operation *op) {
   // Legalize result types.
   for (auto result : op->getResults()) {
     auto newType = getLegalizedType(result.getType());
@@ -271,7 +274,10 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
     // Legalize field names.
-    fieldNameResolver.legalizeToplevelOperation(&op);
+    if (failed(fieldNameResolver.legalizeToplevelOperation(&op)))
+      // TODO: Propagate the failure.
+      return;
+
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeModuleNames(module);
       continue;

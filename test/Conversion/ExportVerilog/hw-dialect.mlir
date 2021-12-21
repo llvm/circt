@@ -857,23 +857,17 @@ hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.s
   hw.output %a : !hw.struct<repeat: i1, repeat_0: i1>
 }
 
-// CHECK-LABEL: externalRenameKeyword
-hw.module.extern @externalRenameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r:i1)
-
 // CHECK-LABEL: useRenamedStruct(
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_1; } a,
 // CHECK-NEXT:  output                                                    r1, r2,
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
 hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
   // CHECK-EMPTY:
-  // CHECK-NEXT: wire                                                    inst2_r;
   // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } inst1_r1;
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
   // CHECK: renameKeyword inst1
-  %i1 = hw.instance "inst2" @externalRenameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r:i1)
-  // CHECK: externalRenameKeyword inst2
 
   // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } [[WIREA:.+]] = a;
   %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>

@@ -23,3 +23,8 @@ hw.module @B() {
 
 // expected-error @+1 {{name "parameter" is not allowed in Verilog output}}
 hw.module.extern @parameter ()
+
+// -----
+
+// expected-error @+1 {{external module has an invalid field name}}
+hw.module.extern @invalidFieldName(%a: !hw.struct<repeat: i1>) -> (r:i1)

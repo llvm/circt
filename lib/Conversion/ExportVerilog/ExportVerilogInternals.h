@@ -183,8 +183,8 @@ struct FieldNameResolver {
   StringAttr getRenamedFieldName(StringAttr fieldName);
   hw::detail::FieldInfo getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo);
 
-  void legalizeOperationTypes(Operation *op);
-  void legalizeToplevelOperation(Operation *module);
+  LogicalResult legalizeOperationTypes(Operation *op);
+  LogicalResult legalizeToplevelOperation(Operation *module);
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
 
 private:
