@@ -111,7 +111,7 @@ Type FieldNameResolver::getLegalizedType(Type type) {
             return TypeAliasType::get(aliasType.getRef(), innerType);
           })
           .Default([](auto baseType) { return baseType; });
-  setLegalizedType(type, legalizedType);
+  legalizedTypes[type] = legalizedType;
   return legalizedType;
 }
 
@@ -119,10 +119,6 @@ void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
                                             StringAttr newFieldName) {
   renamedFieldNames[fieldName] = newFieldName;
   usedFieldNames.insert(newFieldName);
-}
-
-void FieldNameResolver::setLegalizedType(Type type, Type newType) {
-  legalizedTypes[type] = newType;
 }
 
 StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
@@ -168,46 +164,47 @@ void FieldNameResolver::legalizeOperationTypes(Operation *op) {
       result.setType(newType);
   }
 
-  // Rename field names referred in operations.
-  if (isa<sv::StructFieldInOutOp, hw::StructExtractOp, hw::StructInjectOp>(
-          op)) {
-    auto fieldNameAttr = op->getAttr("field").cast<StringAttr>();
-    auto newFieldNameAttr = getRenamedFieldName(fieldNameAttr);
-    if (fieldNameAttr != newFieldNameAttr)
-      op->setAttr("field", newFieldNameAttr);
-    return;
-  }
+  return TypeSwitch<Operation *, LogicalResult>(op)
+      .Case<sv::StructFieldInOutOp, hw::StructExtractOp, hw::StructInjectOp>(
+          [&](auto fieldOp) {
+            // Rename field names referred in operations.
+            auto fieldNameAttr = fieldOp.fieldAttr();
+            auto newFieldNameAttr = getRenamedFieldName(fieldNameAttr);
+            if (fieldNameAttr != newFieldNameAttr)
+              op->setAttr("field", newFieldNameAttr);
+            return success();
+          })
+      .Case<HWModuleOp>([&](HWModuleOp module) {
+        // Legalize module types.
+        auto type = getLegalizedType(module.getType());
+        if (type != module.getType())
+          module.setType(type.cast<mlir::FunctionType>());
 
-  if (auto module = dyn_cast<HWModuleOp>(op)) {
-    // Legalize module types.
-    auto type = getLegalizedType(module.getType());
-    if (type != module.getType())
-      module.setType(type.cast<mlir::FunctionType>());
-
-    // We have to replace argument types as well.
-    for (auto arg : module.getBody().getArguments()) {
-      auto newType = getLegalizedType(arg.getType());
-      if (arg.getType() != newType)
-        arg.setType(newType);
-    }
-    return;
-  }
-
-  // Legalize external module types.
-  if (auto extmodule = dyn_cast<HWModuleExternOp>(op)) {
-    auto type = getLegalizedType(extmodule.getType());
-    if (type != extmodule.getType())
-      extmodule.setType(type.cast<mlir::FunctionType>());
-    return;
-  }
-
-  // Legalize interface signal types.
-  if (auto interfaceSignal = dyn_cast<InterfaceSignalOp>(op)) {
-    auto type = getLegalizedType(interfaceSignal.type());
-    if (type != interfaceSignal.type())
-      interfaceSignal.typeAttr(TypeAttr::get(type));
-    return;
-  }
+        // We have to replace argument types as well.
+        for (auto arg : module.getBody().getArguments()) {
+          auto newType = getLegalizedType(arg.getType());
+          if (arg.getType() != newType)
+            arg.setType(newType);
+        }
+        return success();
+      })
+      .Case<HWModuleExternOp>([&](HWModuleExternOp extmodule) {
+        auto type = getLegalizedType(extmodule.getType());
+        if (type != extmodule.getType()) {
+          extmodule.emitError() << "external module has an invalid field name";
+          return failure();
+        }
+        return success();
+      })
+      .Case<InterfaceSignalOp>([&](InterfaceSignalOp interfaceSignal) {
+        auto type = getLegalizedType(interfaceSignal.type());
+        if (type != interfaceSignal.type())
+          interfaceSignal.typeAttr(TypeAttr::get(type));
+        return success();
+      })
+      .Default([](auto) { // Otherwise assume that they don't have types.
+        return success();
+      });
 }
 
 //===----------------------------------------------------------------------===//

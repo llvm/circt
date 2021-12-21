@@ -186,7 +186,6 @@ struct FieldNameResolver {
   void legalizeOperationTypes(Operation *op);
   void legalizeToplevelOperation(Operation *module);
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
-  void setLegalizedType(Type type, Type legalizedType);
 
 private:
   /// Those contain entries for field names and types respectively. Struct types
