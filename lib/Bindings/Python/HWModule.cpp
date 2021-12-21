@@ -138,4 +138,10 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def_classmethod("get", [](py::object cls, MlirAttribute text) {
         return cls(hwParamVerbatimAttrGet(text));
       });
+
+  mlir_attribute_subclass(m, "InnerRefAttr", hwAttrIsAInnerRefAttr)
+      .def_classmethod("get", [](py::object cls, MlirAttribute moduleName,
+                                 MlirAttribute innerSym) {
+        return cls(hwInnerRefAttrGet(moduleName, innerSym));
+      });
 }

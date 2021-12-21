@@ -79,3 +79,8 @@ with Context() as ctx, Location.unknown():
   pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
   # CHECK: #hw.param.verbatim<"this is verbatim">
   print(pverbatim)
+
+  inner_ref = hw.InnerRefAttr.get(StringAttr.get("some_module"),
+                                  StringAttr.get("some_instance"))
+  # CHECK: #hw.innerNameRef<@some_module::@some_instance>
+  print(inner_ref)
