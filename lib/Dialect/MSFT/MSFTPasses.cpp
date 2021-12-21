@@ -258,10 +258,12 @@ private:
   void partition(MSFTModuleOp mod);
   void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
 
-  // Find all the modules and use the partial order of the instantiation DAG to
-  // sort them. If we use this order when "bubbling" up operations, we guarantee
-  // one-pass completeness.
-  // Assumption (unchecked): there is not a cycle in the instantiation graph.
+  void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+
+  // Find all the modules and use the partial order of the instantiation DAG
+  // to sort them. If we use this order when "bubbling" up operations, we
+  // guarantee one-pass completeness. Assumption (unchecked): there is not a
+  // cycle in the instantiation graph.
   void getAndSortModules(SmallVectorImpl<MSFTModuleOp> &mods);
   void getAndSortModulesVisitor(MSFTModuleOp mod,
                                 SmallVectorImpl<MSFTModuleOp> &mods,
@@ -319,27 +321,71 @@ void PartitionPass::runOnOperation() {
 }
 
 void PartitionPass::partition(MSFTModuleOp mod) {
-  DenseMap<SymbolRefAttr, SmallVector<Operation *, 1>> partMembers;
-  mod.walk([&partMembers](Operation *op) {
-    if (auto part = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition"))
-      partMembers[part].push_back(op);
+  DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
+  SmallVector<Operation *, 64> nonLocalTaggedOps;
+  mod.walk([&](Operation *op) {
+    auto part = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    if (!part)
+      return;
+
+    if (part.getRootReference() == SymbolTable::getSymbolName(mod))
+      localPartMembers[part.getLeafReference()].push_back(op);
+    else
+      nonLocalTaggedOps.push_back(op);
   });
+
+  bubbleUp(mod, nonLocalTaggedOps);
 
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
-    SymbolRefAttr partSym = SymbolRefAttr::get(SymbolTable::getSymbolName(mod),
-                                               {SymbolRefAttr::get(part)});
-
-    auto usersIter = partMembers.find(partSym);
-    if (usersIter != partMembers.end()) {
+    auto usersIter = localPartMembers.find(part.sym_nameAttr());
+    if (usersIter != localPartMembers.end())
       this->partition(part, usersIter->second);
-      partMembers.erase(usersIter);
-    }
     part.erase();
   }
+}
 
-  // TODO: For operations which target partitions not in the same module, bubble
-  // them up.
+static bool isAnyMsftModule(Operation *module) {
+  return isa<MSFTModuleOp>(module) || isa<MSFTModuleExternOp>(module);
+}
+
+hw::ModulePortInfo getModulePortInfo(Operation *op) {
+  if (auto mod = dyn_cast<MSFTModuleOp>(op)) {
+    return mod.getPorts();
+  } else if (auto mod = dyn_cast<MSFTModuleExternOp>(op)) {
+    return mod.getPorts();
+  }
+  assert(false);
+}
+
+static StringRef getOpName(Operation *op) { return ""; }
+static StringRef getResultName(OpResult res) { return ""; }
+static StringRef getOperandName(OpOperand &oper) { return ""; }
+
+void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
+  BlockAndValueMapping instantiationMapping;
+  SmallVector<std::pair<Twine, Type>, 64> newInputs;
+  SmallVector<std::pair<Twine, Value>, 64> newOutputs;
+
+  for (auto op : ops) {
+    StringRef opName = ::getOpName(op);
+    for (auto res : op->getResults()) {
+      StringRef name = getResultName(res);
+      newInputs.push_back(std::make_pair(opName + "_" + name, res.getType()));
+    }
+    for (auto &oper : op->getOpOperands()) {
+      StringRef name = getOperandName(oper);
+      newOutputs.push_back(std::make_pair(opName + "_" + name, oper.get()));
+    }
+  }
+
+  auto newBlockArgs = mod.addPorts(newInputs, newOutputs);
+  size_t blockArgNum = 0;
+  for (auto op : ops) {
+    for (auto res : op->getResults())
+      res.replaceAllUsesWith(newBlockArgs[blockArgNum++]);
+    op->erase();
+  }
 }
 
 void PartitionPass::partition(DesignPartitionOp partOp,
@@ -357,7 +403,8 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   // Handle module-like operations. Not strictly necessary, but we can base the
   // new portnames on the portnames of the instance being moved and the instance
   // name.
-  auto addModuleLike = [&](Operation *inst, hw::ModulePortInfo modPorts) {
+  auto addModuleLike = [&](Operation *inst, Operation *modOp) {
+    hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
     StringAttr name = SymbolTable::getSymbolName(inst);
 
     for (auto port :
@@ -384,11 +431,8 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       assert(modOp && "Module instantiated should exist. Verifier should have "
                       "caught this.");
 
-      if (auto mod = dyn_cast<MSFTModuleOp>(modOp)) {
-        addModuleLike(inst, mod.getPorts());
-      } else if (auto mod = dyn_cast<MSFTModuleExternOp>(modOp)) {
-        addModuleLike(inst, mod.getPorts());
-      }
+      if (isAnyMsftModule(modOp))
+        addModuleLike(inst, modOp);
     } else {
       addOther(op);
     }

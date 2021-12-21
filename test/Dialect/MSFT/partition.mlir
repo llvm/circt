@@ -16,6 +16,7 @@ msft.module.extern @Extern (%in: i1) -> (out: i1)
 msft.module @B {} () -> (x: i1)  {
   %c1 = hw.constant 1 : i1
   %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1 }: (i1) -> (i1)
+  // %1 = msft.instance @unit1 @Extern(%0) { targetDesignPartition = @top::@part1 }: (i1) -> (i1)
 
   msft.output %0: i1
 }
