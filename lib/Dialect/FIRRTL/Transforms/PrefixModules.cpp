@@ -213,6 +213,8 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   if (prefixes.empty())
     prefixes.push_back("");
 
+  auto &firstPrefix = prefixes.front();
+
   // Rename the module for each required prefix. This will clone the module
   // once for each prefix but the first.
   OpBuilder builder(module);
@@ -220,24 +222,22 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   for (auto &outerPrefix : llvm::drop_begin(prefixes)) {
     auto moduleClone = cast<FModuleOp>(builder.clone(*module));
     moduleClone.setName(outerPrefix + moduleName);
+    // Each call to this function could invalidate the `prefixes` reference.
     renameModuleBody((outerPrefix + innerPrefix).str(), moduleClone);
   }
 
   // The first prefix renames the module in place. There is always at least 1
   // prefix.
-  auto &outerPrefix = prefixes.front();
-  module.setName(outerPrefix + moduleName);
-  renameModuleBody((outerPrefix + innerPrefix).str(), module);
+  module.setName(firstPrefix + moduleName);
+  auto prefixFull = (firstPrefix + innerPrefix).str();
+  renameModuleBody(prefixFull, module);
 
   // If this module contains a Grand Central interface, then also apply renames
   // to that, but only if there are prefixes to apply.
-  if (prefixes.empty())
-    return;
   AnnotationSet annotations(module);
   if (!annotations.hasAnnotation(
           "sifive.enterprise.grandcentral.ViewAnnotation"))
     return;
-  auto prefixFull = (outerPrefix + innerPrefix).str();
   SmallVector<Attribute> newAnnotations;
   for (auto anno : annotations) {
     if (!anno.isClass("sifive.enterprise.grandcentral.ViewAnnotation")) {
