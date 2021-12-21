@@ -21,7 +21,8 @@ def InstanceOp : MSFTOp<"instance", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
-                       OptionalAttr<ParamDeclArrayAttr>:$parameters);
+                       OptionalAttr<ParamDeclArrayAttr>:$parameters,
+                       OptionalAttr<SymbolRefAttr>:$targetDesignPartition);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -156,6 +157,22 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
   }];
+}
+
+def DesignPartitionOp : MSFTOp<"partition",
+                               [Symbol, HasParent<"msft::MSFTModuleOp">]> {
+  let summary = "A target \"module\" for moving entities";
+  let description = [{
+    Sometimes EDA tools require designs to have a module hierarchy which doesn't
+    match the logical structure a designer would like to have. "Design
+    partitions" allow the designer to "tag" entities (instances, registers, etc.)
+    with a target design partition. During lowering, CIRCT will modify the
+    hierarchy to move the tagged entities into the design partition module. The
+    target design partition can then be used by subsequent EDA tools.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$verilogName);
+  let assemblyFormat = "$sym_name `,` $verilogName attr-dict";
 }
 
 def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,

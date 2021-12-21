@@ -13,6 +13,7 @@
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -243,6 +244,176 @@ namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createLowerToHWPass() {
   return std::make_unique<LowerToHWPass>();
+}
+} // namespace msft
+} // namespace circt
+
+namespace {
+struct PartitionPass : public PartitionBase<PartitionPass> {
+  void runOnOperation() override;
+
+  void partition(MSFTModuleOp mod);
+  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
+
+private:
+  hw::SymbolCache topLevelSyms;
+};
+} // anonymous namespace
+
+/// Fill a symbol cache with all the top level symbols.
+static void populateSymbolCache(mlir::ModuleOp mod, hw::SymbolCache &cache) {
+  for (Operation &op : mod.getBody()->getOperations()) {
+    StringAttr symName = SymbolTable::getSymbolName(&op);
+    if (!symName)
+      continue;
+    // Add the symbol to the cache.
+    cache.addDefinition(symName, &op);
+  }
+  cache.freeze();
+}
+
+void PartitionPass::runOnOperation() {
+  ModuleOp outerMod = getOperation();
+  ::populateSymbolCache(outerMod, topLevelSyms);
+
+  // TODO: sort modules by number of instantiations so we only have to run one
+  // "bubbling" pass.
+  outerMod.walk([this](MSFTModuleOp mod) { partition(mod); });
+}
+
+void PartitionPass::partition(MSFTModuleOp mod) {
+  DenseMap<SymbolRefAttr, SmallVector<Operation *, 1>> partMembers;
+  mod.walk([&partMembers](Operation *op) {
+    if (auto part = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition"))
+      partMembers[part].push_back(op);
+  });
+
+  for (auto part :
+       llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
+    SymbolRefAttr partSym = SymbolRefAttr::get(SymbolTable::getSymbolName(mod),
+                                               {SymbolRefAttr::get(part)});
+
+    auto usersIter = partMembers.find(partSym);
+    if (usersIter != partMembers.end()) {
+      this->partition(part, usersIter->second);
+      partMembers.erase(usersIter);
+    }
+    part.erase();
+  }
+
+  // TODO: For operations which target partitions not in the same module, bubble
+  // them up.
+}
+
+void PartitionPass::partition(DesignPartitionOp partOp,
+                              SmallVectorImpl<Operation *> &toMove) {
+
+  auto *ctxt = partOp.getContext();
+  auto loc = partOp.getLoc();
+
+  //*************
+  //   Determine the partition module's interface. Keep some bookkeeping around.
+  SmallVector<hw::PortInfo, 128> ports;
+  SmallVector<Value, 64> partInstInputs;
+  SmallVector<Value, 64> partInstOutputs;
+
+  // Handle module-like operations. Not strictly necessary, but we can base the
+  // new portnames on the portnames of the instance being moved and the instance
+  // name.
+  auto addModuleLike = [&](Operation *inst, hw::ModulePortInfo modPorts) {
+    StringAttr name = SymbolTable::getSymbolName(inst);
+
+    for (auto port :
+         llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
+      ports.push_back(
+          hw::PortInfo{/*name*/ StringAttr::get(ctxt, name.getValue() + "_" +
+                                                          port.name.getValue()),
+                       /*direction*/ port.direction,
+                       /*type*/ port.type,
+                       /*argNum*/ ports.size()});
+      if (port.direction == hw::PortDirection::OUTPUT)
+        partInstOutputs.push_back(inst->getResult(port.argNum));
+      else
+        partInstInputs.push_back(inst->getOperand(port.argNum));
+    }
+  };
+  // Handle all other operators.
+  auto addOther = [&](Operation *op) { assert(false && "Unimplemented"); };
+
+  // Aggregate the args/results into partition module ports.
+  for (Operation *op : toMove) {
+    if (auto inst = dyn_cast<InstanceOp>(op)) {
+      Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
+      assert(modOp && "Module instantiated should exist. Verifier should have "
+                      "caught this.");
+
+      if (auto mod = dyn_cast<MSFTModuleOp>(modOp)) {
+        addModuleLike(inst, mod.getPorts());
+      } else if (auto mod = dyn_cast<MSFTModuleExternOp>(modOp)) {
+        addModuleLike(inst, mod.getPorts());
+      }
+    } else {
+      addOther(op);
+    }
+  }
+
+  //*************
+  //   Construct the partition module and replace the design partition op.
+
+  // Build the module.
+  auto partMod =
+      OpBuilder::atBlockEnd(getOperation().getBody())
+          .create<hw::HWModuleOp>(loc, partOp.verilogNameAttr(), ports);
+  Block *partBlock = partMod.getBodyBlock();
+  partBlock->clear();
+  auto partBuilder = OpBuilder::atBlockEnd(partBlock);
+
+  // Replace partOp with an instantion of the partition.
+  auto partInst = OpBuilder(partOp).create<hw::InstanceOp>(
+      loc, partMod, partOp.getNameAttr(), partInstInputs, ArrayAttr(),
+      SymbolTable::getSymbolName(partOp));
+
+  // Replace original ops' outputs with partition outputs.
+  assert(partInstOutputs.size() == partInst.getNumResults());
+  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
+    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
+
+  //*************
+  //   Move the operations!
+
+  // Map the original operation's inputs to block arguments.
+  mlir::BlockAndValueMapping mapping;
+  assert(partInstInputs.size() == partBlock->getNumArguments());
+  for (size_t argNum = 0, e = partInstInputs.size(); argNum < e; ++argNum) {
+    mapping.map(partInstInputs[argNum], partBlock->getArgument(argNum));
+  }
+
+  // Since the same value can map to multiple outputs, compute the 1-N mapping
+  // here.
+  DenseMap<Value, SmallVector<int, 1>> resultOutputConnections;
+  for (size_t outNum = 0, e = partInstOutputs.size(); outNum < e; ++outNum)
+    resultOutputConnections[partInstOutputs[outNum]].push_back(outNum);
+
+  // Hold the block outputs.
+  SmallVector<Value, 64> outputs(partInstOutputs.size(), Value());
+
+  // Clone the ops into the partition block. Map the results into the module
+  // outputs.
+  for (Operation *op : toMove) {
+    auto *newOp = partBuilder.insert(op->clone(mapping));
+    newOp->removeAttr("targetDesignPartition");
+    for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
+      for (int outputNum : resultOutputConnections[op->getResult(resNum)])
+        outputs[outputNum] = newOp->getResult(resNum);
+    op->erase();
+  }
+  partBuilder.create<hw::OutputOp>(loc, outputs);
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createPartitionPass() {
+  return std::make_unique<PartitionPass>();
 }
 } // namespace msft
 } // namespace circt

@@ -19,6 +19,7 @@ class InstanceBuilder(support.NamedValueOpView):
                *,
                sym_name=None,
                parameters=None,
+               target_design_partition=None,
                loc=None,
                ip=None):
     self.module = module
@@ -31,7 +32,7 @@ class InstanceBuilder(support.NamedValueOpView):
       parameters = _hw_ext.create_parameters(parameters, module)
     else:
       parameters = []
-    post_args = [_ir.ArrayAttr.get(parameters)]
+    post_args = [_ir.ArrayAttr.get(parameters), target_design_partition]
     results = module.type.results
 
     super().__init__(

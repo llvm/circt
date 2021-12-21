@@ -325,7 +325,7 @@ def _module_base(cls, extern_name: str, params={}):
 
   class mod(cls):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, partition: DesignPartition = None, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
       # Ensure the module has been created.
@@ -379,6 +379,10 @@ def _module_base(cls, extern_name: str, params={}):
       self._instantiation = mod._pycde_mod.instantiate(instance_name,
                                                        inputs,
                                                        loc=loc)
+
+      op = self._instantiation.operation
+      if partition:
+        op.attributes["targetDesignPartition"] = partition._tag
 
     def output_values(self):
       return {outname: getattr(self, outname) for (outname, _) in mod.outputs()}
@@ -534,3 +538,14 @@ class _GeneratorPortAccess:
     """Set all of the output values in a portname -> value dict."""
     for (name, value) in port_values.items():
       self.__setattr__(name, value)
+
+
+class DesignPartition:
+  """Construct a design partition "module" for entities to target."""
+
+  def __init__(self, name: str):
+    sym_name = mlir.ir.StringAttr.get(name)
+    dp = msft.DesignPartitionOp(sym_name, sym_name)
+    parent_mod = dp.operation.parent.attributes["sym_name"]
+    # TODO: Add SymbolRefAttr to mlir.ir
+    self._tag = mlir.ir.Attribute.parse(f"@{parent_mod}::@{sym_name}")
