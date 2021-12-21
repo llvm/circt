@@ -163,7 +163,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
   // portArgNum is the index into the result of getAllModulePortInfos.
   // Also ensure the correct index into the input/output list is computed.
   ssize_t portId = portArgNum;
-  auto verilogNameAttr = "hw.verilogName";
+  char verilogNameAttr[] = "hw.verilogName";
   // Check for input ports.
   if (portArgNum < numInputs) {
     if (auto argAttr = module->getAttrOfType<ArrayAttr>(
