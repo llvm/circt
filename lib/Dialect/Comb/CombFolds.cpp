@@ -1957,11 +1957,16 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
 
   // Invert the condition if needed.  Or/Xor invert when dealing with
   // TrueOperand, And inverts for False operand.
-  if (isTrueOperand ^ isa<AndOp>(subExpr))
+  bool isaAndOp = isa<AndOp>(subExpr);
+  if (isTrueOperand ^ isaAndOp)
     cond = invertBoolValue(cond);
 
   auto extendedCond =
       rewriter.createOrFold<ReplicateOp>(op.getLoc(), op.getType(), cond);
+
+  // Cache this information before subExpr is erased by extraction below.
+  bool isaXorOp = isa<XorOp>(subExpr);
+  bool isaOrOp = isa<OrOp>(subExpr);
 
   // Handle the fully associative ops, start by pulling out the subexpression
   // from a many operand version of the op.
@@ -1970,10 +1975,10 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
 
   // `mux(cond, x|y|z|a, a)` -> `(x|y|z)&replicate(cond) | a`
   // `mux(cond, x^y^z^a, a)` -> `(x^y^z)&replicate(cond) ^ a`
-  if (isa<OrOp, XorOp>(subExpr)) {
+  if (isaOrOp || isaXorOp) {
     auto masked =
         rewriter.createOrFold<AndOp>(op.getLoc(), extendedCond, restOfAssoc);
-    if (isa<XorOp>(subExpr))
+    if (isaXorOp)
       rewriter.replaceOpWithNewOp<XorOp>(op, masked, commonValue);
     else
       rewriter.replaceOpWithNewOp<OrOp>(op, masked, commonValue);
@@ -1981,7 +1986,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   }
 
   // `mux(cond, a, x&y&z&a)` -> `((x&y&z)|replicate(cond)) & a`
-  assert(isa<AndOp>(subExpr) && "unexpected operation here");
+  assert(isaAndOp && "unexpected operation here");
   auto masked =
       rewriter.createOrFold<OrOp>(op.getLoc(), extendedCond, restOfAssoc);
   rewriter.replaceOpWithNewOp<AndOp>(op, masked, commonValue);
