@@ -27,7 +27,7 @@ using namespace firrtl;
 /// When a module has multiple prefixes, it will be cloned for each one. Usually
 /// there is only a single prefix applied to each module, although there could
 /// be many.
-using PrefixMap = DenseMap<StringRef, llvm::SmallVector<std::string, 1>>;
+using PrefixMap = llvm::DenseMap<StringRef, std::vector<std::string>>;
 
 /// Insert a string into the end of vector if the string is not already present.
 static void recordPrefix(PrefixMap &prefixMap, StringRef moduleName,
@@ -213,31 +213,31 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   if (prefixes.empty())
     prefixes.push_back("");
 
+  auto &firstPrefix = prefixes.front();
+
   // Rename the module for each required prefix. This will clone the module
   // once for each prefix but the first.
   OpBuilder builder(module);
   builder.setInsertionPointAfter(module);
-  for (auto &outerPrefix : drop_begin(prefixes)) {
+  for (auto &outerPrefix : llvm::drop_begin(prefixes)) {
     auto moduleClone = cast<FModuleOp>(builder.clone(*module));
     moduleClone.setName(outerPrefix + moduleName);
+    // Each call to this function could invalidate the `prefixes` reference.
     renameModuleBody((outerPrefix + innerPrefix).str(), moduleClone);
   }
 
   // The first prefix renames the module in place. There is always at least 1
   // prefix.
-  auto &outerPrefix = prefixes.front();
-  module.setName(outerPrefix + moduleName);
-  renameModuleBody((outerPrefix + innerPrefix).str(), module);
+  module.setName(firstPrefix + moduleName);
+  auto prefixFull = (firstPrefix + innerPrefix).str();
+  renameModuleBody(prefixFull, module);
 
   // If this module contains a Grand Central interface, then also apply renames
   // to that, but only if there are prefixes to apply.
-  if (prefixes.empty())
-    return;
   AnnotationSet annotations(module);
   if (!annotations.hasAnnotation(
           "sifive.enterprise.grandcentral.ViewAnnotation"))
     return;
-  auto prefixFull = (outerPrefix + innerPrefix).str();
   SmallVector<Attribute> newAnnotations;
   for (auto anno : annotations) {
     if (!anno.isClass("sifive.enterprise.grandcentral.ViewAnnotation")) {
@@ -295,7 +295,7 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
   };
 
   // Duplicate the external module if there is more than one prefix.
-  for (auto &prefix : drop_begin(prefixes)) {
+  for (auto &prefix : llvm::drop_begin(prefixes)) {
     auto duplicate = cast<FExtModuleOp>(builder.clone(*extModule));
     applyPrefixToNameAndDefName(duplicate, prefix);
   }
