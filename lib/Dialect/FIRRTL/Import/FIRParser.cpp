@@ -26,7 +26,6 @@
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -1201,13 +1200,18 @@ struct FIRModuleContext : public FIRParser {
   //===--------------------------------------------------------------------===//
   // SubaccessCache
 
-  /// This returns a reference with the assumption that the caller will
-  /// fill in the cached value.
-  Value &getOrConstructCachedSubaccess(Value aggregate, unsigned index) {
-    auto &value = subaccessCache[{aggregate, index}];
-    if (!value && currentScope)
-      currentScope->scopedSubaccesses.push_back({aggregate, index});
-    return value;
+  /// This returns a reference with the assumption that the caller will fill in
+  /// the cached value. We keep track of inserted subaccesses so that we can
+  /// remove them when we exit a scope.
+  Value &getCachedSubaccess(Value value, unsigned index) {
+    auto &result = subaccessCache[{value, index}];
+    if (!result) {
+      // The outer most block won't be in the map.
+      auto it = scopeMap.find(value.getParentBlock());
+      if (it != scopeMap.end())
+        it->second->scopedSubaccesses.push_back({result, index});
+    }
+    return result;
   }
 
   //===--------------------------------------------------------------------===//
@@ -1249,30 +1253,36 @@ struct FIRModuleContext : public FIRParser {
 
   /// Provide a symbol table scope that automatically pops all the entries off
   /// the symbol table when the scope is exited.
-  struct SymbolTableScope {
+  struct ContextScope {
     friend struct FIRModuleContext;
-    SymbolTableScope(FIRModuleContext &moduleContext)
-        : moduleContext(moduleContext),
+    ContextScope(FIRModuleContext &moduleContext, Block *block)
+        : moduleContext(moduleContext), block(block),
           previousScope(moduleContext.currentScope) {
       moduleContext.currentScope = this;
+      moduleContext.scopeMap[block] = this;
     }
-    ~SymbolTableScope() {
+    ~ContextScope() {
       // Mark all entries in this scope as being invalid.  We track validity
       // through the SMLoc field instead of deleting entries.
       for (auto *entryPtr : scopedDecls)
         entryPtr->second.first = SMLoc();
-      // Erase the scoped subacceses from the cache.
+      // Erase the scoped subacceses from the cache. If the block is deleted we
+      // could resuse the memory, although the chances are quite small.
       for (auto subaccess : scopedSubaccesses)
         moduleContext.subaccessCache.erase(subaccess);
+      // Erase this context from the map.
+      moduleContext.scopeMap.erase(block);
+      // Reset to the previous scope.
       moduleContext.currentScope = previousScope;
     }
 
   private:
-    void operator=(const SymbolTableScope &) = delete;
-    SymbolTableScope(const SymbolTableScope &) = delete;
+    void operator=(const ContextScope &) = delete;
+    ContextScope(const ContextScope &) = delete;
 
     FIRModuleContext &moduleContext;
-    SymbolTableScope *previousScope;
+    Block *block;
+    ContextScope *previousScope;
     std::vector<ModuleSymbolTableEntry *> scopedDecls;
     std::vector<std::pair<Value, unsigned>> scopedSubaccesses;
   };
@@ -1292,10 +1302,13 @@ private:
   /// subaccess result.
   SubaccessCache subaccessCache;
 
+  /// This maps a block to related ContextScope.
+  DenseMap<Block *, ContextScope *> scopeMap;
+
   /// If non-null, all new entries added to the symbol table are added to this
   /// list.  This allows us to "pop" the entries by resetting them to null when
   /// scope is exited.
-  SymbolTableScope *currentScope = nullptr;
+  ContextScope *currentScope = nullptr;
 };
 
 } // end anonymous namespace
@@ -1584,9 +1597,12 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   TypeSwitch<FIRRTLType>(tpe)
       .Case<BundleType>([&](auto tpe) {
         for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
-          auto subfield = moduleContext.getOrConstructCachedSubaccess(val, i);
-          if (!subfield)
+          auto &subfield = moduleContext.getCachedSubaccess(val, i);
+          if (!subfield) {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointAfterValue(val);
             subfield = builder.create<SubfieldOp>(val, i);
+          }
           emitInvalidate(subfield,
                          tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
         }
@@ -1594,9 +1610,12 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
       .Case<FVectorType>([&](auto tpe) {
         auto tpex = tpe.getElementType();
         for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i) {
-          auto subindex = moduleContext.getOrConstructCachedSubaccess(val, i);
-          if (!subindex)
+          auto &subindex = moduleContext.getCachedSubaccess(val, i);
+          if (!subindex) {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointAfterValue(val);
             subindex = builder.create<SubindexOp>(tpex, val, i);
+          }
           emitInvalidate(subindex, flow);
         }
       })
@@ -1755,13 +1774,6 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
            << result.getType();
   auto indexNo = indexV.getValue();
 
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getOrConstructCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
-    return success();
-  }
-
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
@@ -1773,8 +1785,18 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     return failure();
   }
 
-  // Create the result operation.
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
+  if (value) {
+    result = value;
+    return success();
+  }
+
+  // Create the result operation, inserting at the location of the declaration.
+  // This will cache the subfield operation for further uses.
   locationProcessor.setLoc(loc);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(result);
   auto op = builder.create<SubfieldOp>(resultType, result, attrs);
 
   // Insert the newly creatd operation into the cache.
@@ -1798,13 +1820,6 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   if (indexNo < 0)
     return emitError(loc, "invalid index specifier"), failure();
 
-  // Check if we already have created this Subindex op.
-  auto &value = moduleContext.getOrConstructCachedSubaccess(result, indexNo);
-  if (value) {
-    result = value;
-    return success();
-  }
-
   // Make sure the index expression is valid and compute the result type for the
   // expression.
   // TODO: This should ideally be folded into a `tryCreate` method on the
@@ -1818,8 +1833,18 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
     return failure();
   }
 
-  // Create the result operation.
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
+  if (value) {
+    result = value;
+    return success();
+  }
+
+  // Create the result operation, inserting at the location of the declaration.
+  // This will cache the subindex operation for further uses.
   locationProcessor.setLoc(loc);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(result);
   auto op = builder.create<SubindexOp>(resultType, result, attrs);
 
   // Insert the newly creatd operation into the cache.
@@ -2496,7 +2521,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // This is a function to parse a suite body.
   auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
-    FIRModuleContext::SymbolTableScope suiteScope(moduleContext);
+    FIRModuleContext::ContextScope suiteScope(moduleContext,
+                                              &blockToInsertInto);
 
     // After parsing the when region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
