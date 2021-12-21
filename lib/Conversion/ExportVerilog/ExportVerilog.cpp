@@ -132,6 +132,9 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
 /// `getDeclarationVerilogName` for them.
 static StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
+  // If legalizeNames has renamed it, then the attribute must be set.
+  if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
+    return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
       .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
@@ -143,9 +146,6 @@ static StringRef getSymOpName(Operation *symOp) {
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.sym_name(); })
       .Default([&](Operation *op) {
-        // If legalizeNames has renamed it, then the attribute must be set.
-        if (auto attr = op->getAttrOfType<StringAttr>("hw.verilogName"))
-          return attr.getValue();
         if (auto attr = op->getAttrOfType<StringAttr>("name"))
           return attr.getValue();
         if (auto attr = op->getAttrOfType<StringAttr>("instanceName"))
@@ -1927,16 +1927,14 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
   auto decl = op.getReferencedDecl(state.symbolCache);
-  os << names.getName(op.iface()) << '.'
-     << state.globalNames.getInterfaceVerilogName(decl);
+  os << names.getName(op.iface()) << '.' << getSymOpName(decl);
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   auto decl = op.getReferencedDecl(state.symbolCache);
 
-  os << names.getName(op.iface()) << '.'
-     << state.globalNames.getInterfaceVerilogName(decl);
+  os << names.getName(op.iface()) << '.' << getSymOpName(decl);
   return {Selection, IsUnsigned};
 }
 
@@ -2683,7 +2681,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
   assert(interfaceOp && "InterfaceInstanceOp has invalid symbol that does not "
                         "point to an interface");
 
-  auto verilogName = state.globalNames.getInterfaceVerilogName(interfaceOp);
+  auto verilogName = getSymOpName(interfaceOp);
   indent() << prefix << verilogName << " " << op.name() << "();";
 
   emitLocationInfoAndNewLine(ops);
@@ -3411,7 +3409,7 @@ LogicalResult StmtEmitter::visitSV(BindOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
-  os << "interface " << state.globalNames.getInterfaceVerilogName(op) << ";\n";
+  os << "interface " << getSymOpName(op) << ";\n";
   // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
   os << "endinterface\n\n";
@@ -3422,21 +3420,20 @@ LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
   emitter.printPackedType(stripUnpackedTypes(op.type()), os, op->getLoc(),
                           false);
-  os << ' ' << state.globalNames.getInterfaceVerilogName(op);
+  os << ' ' << getSymOpName(op);
   emitter.printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
-  indent() << "modport " << state.globalNames.getInterfaceVerilogName(op)
-           << '(';
+  indent() << "modport " << getSymOpName(op) << '(';
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
     os << port.direction().getValue() << ' ';
     auto signalDecl = state.symbolCache.getDefinition(port.signal());
-    os << state.globalNames.getInterfaceVerilogName(signalDecl);
+    os << getSymOpName(signalDecl);
   });
 
   os << ");\n";

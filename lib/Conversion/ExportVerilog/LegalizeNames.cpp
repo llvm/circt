@@ -155,19 +155,22 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
 
   // Legalize the value names.
   module.walk([&](Operation *op) {
-    if (auto nameAttr = getDeclarationName(op)) {
-      auto newName = nameResolver.getLegalName(nameAttr);
-      if (newName != nameAttr.getValue()) {
-        op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
+    if (!isa<HWModuleOp>(op))
+      if (auto nameAttr = getDeclarationName(op)) {
+        auto newName = nameResolver.getLegalName(nameAttr);
+        if (newName != nameAttr.getValue()) {
+          op->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
+        }
       }
-    }
   });
 }
 
 void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
+  MLIRContext *ctxt = interface.getContext();
+  auto verilogNameAttr = StringAttr::get(ctxt, "hw.verilogName");
   auto newName = globalNameResolver.getLegalName(interface.getName());
   if (newName != interface.getName())
-    globalNameTable.addRenamedInterfaceOp(interface, newName);
+    interface->setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
 
   NameCollisionResolver localNames;
   // Rename signals and modports.
@@ -176,7 +179,7 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
       auto name = SymbolTable::getSymbolName(&op).getValue();
       auto newName = localNames.getLegalName(name);
       if (newName != name)
-        globalNameTable.addRenamedInterfaceOp(&op, newName);
+        op.setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
     }
   }
 }
