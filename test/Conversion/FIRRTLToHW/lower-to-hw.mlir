@@ -1520,4 +1520,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
   }
+
+  // CHECK-LABEL: hw.module @AggregateRegAssign
+  firrtl.module @AggregateRegAssign(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+    %reg = firrtl.reg %clock : !firrtl.vector<uint<1>, 1>
+    %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %0 = sv.array_index_inout %reg[%false] : !hw.inout<array<1xi1>>, i1
+    // CHECK:  sv.passign %0, %value : i1
+  }
+
+  // CHECK-LABEL: hw.module @AggregateRegResetAssign
+  firrtl.module @AggregateRegResetAssign(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+                                         in %init: !firrtl.vector<uint<1>, 1>, in %value: !firrtl.uint<1>) {
+    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %0 = sv.array_index_inout %reg[%false] : !hw.inout<array<1xi1>>, i1
+    // CHECK:  sv.passign %0, %value : i1
+  }
 }

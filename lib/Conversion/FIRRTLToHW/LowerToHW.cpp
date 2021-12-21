@@ -2996,9 +2996,11 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
   // If this is an assignment to a register, then the connect implicitly
   // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
     Value clockVal = getLoweredValue(regOp.clockVal());
     if (!clockVal)
       return failure();
@@ -3010,7 +3012,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
 
   // If this is an assignment to a RegReset, then the connect implicitly
   // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
     Value clockVal = getLoweredValue(regResetOp.clockVal());
     Value resetSignal = getLoweredValue(regResetOp.resetSignal());
     if (!clockVal || !resetSignal)
@@ -3047,9 +3049,11 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
   // If this is an assignment to a register, then the connect implicitly
   // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
     Value clockVal = getLoweredValue(regOp.clockVal());
     if (!clockVal)
       return failure();
@@ -3061,7 +3065,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
 
   // If this is an assignment to a RegReset, then the connect implicitly
   // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
     Value clockVal = getLoweredValue(regResetOp.clockVal());
     Value resetSignal = getLoweredValue(regResetOp.resetSignal());
     if (!clockVal || !resetSignal)
