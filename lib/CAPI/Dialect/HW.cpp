@@ -145,6 +145,15 @@ MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
   return wrap(InnerRefAttr::get(moduleNameAttr, innerSymAttr));
 }
 
+bool hwAttrIsAGlobalRefAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<GlobalRefAttr>();
+}
+
+MlirAttribute hwGlobalRefAttrGet(MlirAttribute symName) {
+  auto symbolRef = FlatSymbolRefAttr::get(unwrap(symName).cast<StringAttr>());
+  return wrap(GlobalRefAttr::get(symbolRef.getContext(), symbolRef));
+}
+
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute attr) {
   return unwrap(attr).isa<ParamDeclAttr>();
 }

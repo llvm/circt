@@ -144,4 +144,9 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
                                  MlirAttribute innerSym) {
         return cls(hwInnerRefAttrGet(moduleName, innerSym));
       });
+
+  mlir_attribute_subclass(m, "GlobalRefAttr", hwAttrIsAGlobalRefAttr)
+      .def_classmethod("get", [](py::object cls, MlirAttribute symName) {
+        return cls(hwGlobalRefAttrGet(symName));
+      });
 }

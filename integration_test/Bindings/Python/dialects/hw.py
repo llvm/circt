@@ -84,3 +84,7 @@ with Context() as ctx, Location.unknown():
                                   StringAttr.get("some_instance"))
   # CHECK: #hw.innerNameRef<@some_module::@some_instance>
   print(inner_ref)
+
+  global_ref = hw.GlobalRefAttr.get(StringAttr.get("foo"))
+  # CHECK: #hw.globalNameRef<@foo>
+  print(global_ref)

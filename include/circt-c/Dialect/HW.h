@@ -112,6 +112,9 @@ MLIR_CAPI_EXPORTED bool hwAttrIsAInnerRefAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
                                                    MlirAttribute innerSym);
 
+MLIR_CAPI_EXPORTED bool hwAttrIsAGlobalRefAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute hwGlobalRefAttrGet(MlirAttribute symName);
+
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef name,
                                                     MlirAttribute type,
