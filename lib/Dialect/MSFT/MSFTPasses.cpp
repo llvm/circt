@@ -254,6 +254,7 @@ struct PartitionPass : public PartitionBase<PartitionPass> {
 
 private:
   hw::SymbolCache topLevelSyms;
+  DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
   void partition(MSFTModuleOp mod);
   void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
@@ -262,8 +263,10 @@ private:
 
   // Find all the modules and use the partial order of the instantiation DAG
   // to sort them. If we use this order when "bubbling" up operations, we
-  // guarantee one-pass completeness. Assumption (unchecked): there is not a
-  // cycle in the instantiation graph.
+  // guarantee one-pass completeness. As a side-effect, populate the module to
+  // instantiation sites mapping.
+  //
+  // Assumption (unchecked): there is not a cycle in the instantiation graph.
   void getAndSortModules(SmallVectorImpl<MSFTModuleOp> &mods);
   void getAndSortModulesVisitor(MSFTModuleOp mod,
                                 SmallVectorImpl<MSFTModuleOp> &mods,
@@ -284,6 +287,7 @@ void PartitionPass::getAndSortModulesVisitor(
     auto mod = dyn_cast_or_null<MSFTModuleOp>(modOp);
     if (!mod)
       return;
+    moduleInstantiations[mod].push_back(inst);
     getAndSortModulesVisitor(mod, mods, modsSeen);
   });
 
@@ -359,13 +363,17 @@ hw::ModulePortInfo getModulePortInfo(Operation *op) {
 }
 
 static StringRef getOpName(Operation *op) { return ""; }
+static void setOpName(Operation *op, Twine name) {}
 static StringRef getResultName(OpResult res) { return ""; }
 static StringRef getOperandName(OpOperand &oper) { return ""; }
 
 void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
-  BlockAndValueMapping instantiationMapping;
+  // This particular implementation is _very_ sensitive to iteration order. It
+  // assumes that the order in which the ops, operands, and results are the same
+  // _every_ time it runs through them. Doing this saves on bookkeeping.
   SmallVector<std::pair<Twine, Type>, 64> newInputs;
   SmallVector<std::pair<Twine, Value>, 64> newOutputs;
+  SmallVector<Type, 64> newResTypes;
 
   for (auto op : ops) {
     StringRef opName = ::getOpName(op);
@@ -376,16 +384,44 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     for (auto &oper : op->getOpOperands()) {
       StringRef name = getOperandName(oper);
       newOutputs.push_back(std::make_pair(opName + "_" + name, oper.get()));
+      newResTypes.push_back(oper.get().getType());
     }
   }
 
   auto newBlockArgs = mod.addPorts(newInputs, newOutputs);
   size_t blockArgNum = 0;
-  for (auto op : ops) {
+  for (auto op : ops)
     for (auto res : op->getResults())
       res.replaceAllUsesWith(newBlockArgs[blockArgNum++]);
-    op->erase();
+
+  for (auto inst : moduleInstantiations[mod]) {
+    OpBuilder b(inst);
+
+    // Since we only have to add result types, just copy most everything.
+    SmallVector<Type, 64> resTypes(inst.getResultTypes());
+    resTypes.append(newResTypes);
+    auto newInst = cast<InstanceOp>(b.insert(Operation::create(
+        OperationState(inst->getLoc(), inst->getName().getStringRef(),
+                       inst->getOperands(), resTypes, inst->getAttrs()))));
+    size_t resultNum = 0;
+    for (auto origRes : inst.getResults())
+      origRes.replaceAllUsesWith(newInst->getResult(resultNum++));
+
+    SmallVector<Value, 64> newOperands(inst->getOperands());
+    for (auto op : ops) {
+      BlockAndValueMapping map;
+      for (auto oper : op->getOperands())
+        map.map(oper, newInst->getResult(resultNum++));
+      Operation *newOp = b.insert(op->clone(map));
+      for (auto res : newOp->getResults())
+        newOperands.push_back(res);
+    }
+    newInst->setOperands(newOperands);
+    inst.erase();
   }
+
+  for (auto op : ops)
+    op->erase();
 }
 
 void PartitionPass::partition(DesignPartitionOp partOp,
