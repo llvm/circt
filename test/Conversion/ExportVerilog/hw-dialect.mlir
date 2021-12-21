@@ -867,7 +867,10 @@ hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> 
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
-  // CHECK: renameKeyword inst1
+  // CHECK:      renameKeyword inst1 (
+  // CHECK-NEXT:   .a  (a),
+  // CHECK-NEXT:   .r1 (inst1_r1)
+  // CHECK-NEXT: )
 
   // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } [[WIREA:.+]] = a;
   %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
