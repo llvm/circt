@@ -485,6 +485,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
+  std::string nameBuffer;
 
   //*************
   //   Determine the partition module's interface. Keep some bookkeeping around.
@@ -497,16 +498,15 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   // name.
   auto addModuleLike = [&](Operation *inst, Operation *modOp) {
     hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
-    StringAttr name = SymbolTable::getSymbolName(inst);
+    StringRef name = ::getOpName(inst);
 
     for (auto port :
          llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
-      ports.push_back(
-          hw::PortInfo{/*name*/ StringAttr::get(ctxt, name.getValue() + "_" +
-                                                          port.name.getValue()),
-                       /*direction*/ port.direction,
-                       /*type*/ port.type,
-                       /*argNum*/ ports.size()});
+      ports.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ port.direction,
+          /*type*/ port.type,
+          /*argNum*/ ports.size()});
       if (port.direction == hw::PortDirection::OUTPUT)
         partInstOutputs.push_back(inst->getResult(port.argNum));
       else
@@ -514,7 +514,30 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     }
   };
   // Handle all other operators.
-  auto addOther = [&](Operation *op) { assert(false && "Unimplemented"); };
+  auto addOther = [&](Operation *op) {
+    StringRef name = ::getOpName(op);
+
+    for (auto &oper : op->getOpOperands()) {
+      ports.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(
+              ctxt,
+              name + "." + getOperandName(oper, topLevelSyms, nameBuffer)),
+          /*direction*/ hw::PortDirection::INPUT,
+          /*type*/ oper.get().getType(),
+          /*argNum*/ ports.size()});
+      partInstInputs.push_back(oper.get());
+    }
+
+    for (auto res : op->getOpResults()) {
+      ports.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(
+              ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ res.getType(),
+          /*argNum*/ ports.size()});
+      partInstOutputs.push_back(res);
+    }
+  };
 
   // Aggregate the args/results into partition module ports.
   for (Operation *op : toMove) {
