@@ -78,7 +78,7 @@ struct HandshakeInsertBuffersPass
   // Inserts a buffer at a specific operand use.
   void bufferOperand(OpOperand &use, OpBuilder &builder, size_t numSlots,
                      bool sequential) {
-    auto usingOp = use.getOwner();
+    auto *usingOp = use.getOwner();
     Value usingValue = use.get();
 
     builder.setInsertionPoint(usingOp);
@@ -94,7 +94,7 @@ struct HandshakeInsertBuffersPass
                       bool sequential) {
     for (auto &use : op->getOpOperands()) {
       auto *srcOp = use.get().getDefiningOp();
-      if (srcOp && isa<handshake::BufferOp>(srcOp))
+      if (isa_and_nonnull<handshake::BufferOp>(srcOp))
         continue;
       bufferOperand(use, builder, numSlots, sequential);
     }
