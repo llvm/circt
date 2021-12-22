@@ -8,14 +8,21 @@
 // CHECK-NOT: attributes
 // CHECK: hw.module @issue1246_assert(%clock: i1) attributes {output_file = #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
+// CHECK: sv.error "Assertion failed"
+// CHECK: sv.error "assert:"
+// CHECK: sv.fwrite "assert:"
+// CHECK: sv.fwrite "Assertion failed:"
+// CHECK: sv.fatal 1
 // CHECK: foo_assert
 // CHECK: hw.module @issue1246_assume(%clock: i1) 
 // CHECK-NOT: attributes 
 // CHECK: sv.assume
+// CHECK: sv.fwrite "assume:"
 // CHECK: foo_assume
 // CHECK: hw.module @issue1246_cover(%clock: i1) 
 // CHECK-NOT: attributes 
 // CHECK: sv.cover
+// CHECK: sv.fwrite "cover:"
 // CHECK: foo_cover
 // CHECK: hw.module @issue1246
 // CHECK-NOT: sv.assert
@@ -37,8 +44,15 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
       } else  {
         sv.if %2937  {
           sv.assert %clock, immediate
+          sv.error "Assertion failed"
+          sv.error "assert:"
+          sv.fwrite "assert:"
+          sv.fwrite "Assertion failed:"
+          sv.fatal 1
           sv.assume %clock, immediate
+          sv.fwrite "assume:"
           sv.cover %clock, immediate
+          sv.fwrite "cover:"
         }
       }
     }

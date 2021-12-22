@@ -334,14 +334,37 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.assert.extra"))
           return true;
-    return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
-           isa<AssertConcurrentOp>(op);
+
+    // Error with a message which starts with "assert:" or "Assertion failed" is
+    // considered as an assert.
+    if (auto error = dyn_cast<ErrorOp>(op)) {
+      if (auto message = error.message())
+        return message.getValue().startswith("assert:") ||
+               message.getValue().startswith("Assertion failed");
+      return false;
+    }
+
+    // FWrite with a message which starts with "assert:" or "Assertion failed"
+    // is considered as assert.
+    if (auto fwrite = dyn_cast<FWriteOp>(op))
+      return fwrite.string().startswith("assert:") ||
+             fwrite.string().startswith("Assertion failed");
+
+    return isa<AssertOp>(op) || isa<FinishOp>(op) ||
+           isa<AssertConcurrentOp>(op) || isa<FatalOp>(op);
   };
+
   auto isAssume = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
       if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.assume.extra"))
           return true;
+
+    // FWrite with a message which starts with "assume:" is considered as
+    // assume.
+    if (auto fwrite = dyn_cast<FWriteOp>(op))
+      return fwrite.string().startswith("assume:");
+
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
   auto isCover = [&symCache](Operation *op) -> bool {
@@ -349,6 +372,11 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.cover.extra"))
           return true;
+
+    // FWrite with a message which starts with "cover:" is considered as cover.
+    if (auto fwrite = dyn_cast<FWriteOp>(op))
+      return fwrite.string().startswith("cover:");
+
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
