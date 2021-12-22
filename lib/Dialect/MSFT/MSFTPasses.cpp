@@ -349,11 +349,11 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   }
 }
 
+/// TODO: Migrate these to some sort of OpInterface shared with hw.
 static bool isAnyModule(Operation *module) {
   return isa<MSFTModuleOp>(module) || isa<MSFTModuleExternOp>(module) ||
          hw::isAnyModule(module);
 }
-
 hw::ModulePortInfo getModulePortInfo(Operation *op) {
   if (auto mod = dyn_cast<MSFTModuleOp>(op)) {
     return mod.getPorts();
@@ -364,6 +364,7 @@ hw::ModulePortInfo getModulePortInfo(Operation *op) {
   }
 }
 
+/// Heuristics to get the entity name.
 static StringRef getOpName(Operation *op) {
   StringAttr name;
   if ((name = op->getAttrOfType<StringAttr>("name")) && name.size())
@@ -372,13 +373,16 @@ static StringRef getOpName(Operation *op) {
     return name.getValue();
   return op->getName().getStringRef();
 }
-static void setOpName(Operation *op, Twine name) {
+/// Try to set the entity name.
+/// TODO: this needs to be more complex to deal with renaming symbols.
+static void setEntityName(Operation *op, Twine name) {
   StringAttr nameAttr = StringAttr::get(op->getContext(), name);
   if (op->hasAttrOfType<StringAttr>("name"))
     op->setAttr("name", nameAttr);
   if (op->hasAttrOfType<StringAttr>("sym_name"))
     op->setAttr("sym_name", nameAttr);
 }
+/// Heuristics to get the output name.
 static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
                                std::string &buff) {
   Operation *op = res.getDefiningOp();
@@ -399,10 +403,13 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
       return retName;
   }
 
+  // Fallback. Not ideal.
   buff.clear();
   llvm::raw_string_ostream(buff) << "out" << res.getResultNumber();
   return buff;
 }
+
+/// Heuristics to get the input name.
 static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
                                 std::string &buff) {
   Operation *op = oper.getOwner();
@@ -413,6 +420,8 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
     auto ports = getModulePortInfo(modOp);
     return ports.inputs[oper.getOperandNumber()].name;
   }
+
+  // Fallback. Not ideal.
   buff.clear();
   llvm::raw_string_ostream(buff) << "in" << oper.getOperandNumber();
   return buff;
@@ -424,6 +433,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   // _every_ time it runs through them. Doing this saves on bookkeeping.
   auto ctxt = mod.getContext();
   std::string nameBuffer;
+
+  //*************
+  //   Figure out all the new ports 'mod' is going to need. The outputs need to
+  //   know where they're being driven from, which'll be the outputs of 'ops'.
   SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
   SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
   SmallVector<Type, 64> newResTypes;
@@ -443,12 +456,21 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     }
   }
 
+  //*************
+  //   Add them to 'mod' and replace all of the old 'ops' results with the new
+  //   ports.
   auto newBlockArgs = mod.addPorts(newInputs, newOutputs);
   size_t blockArgNum = 0;
   for (auto op : ops)
     for (auto res : op->getResults())
       res.replaceAllUsesWith(newBlockArgs[blockArgNum++]);
 
+  //*************
+  //   For all of the instantiation sites (for 'mod'):
+  //     - Create a new instance with the correct result types.
+  //     - Clone in 'ops'.
+  //     - Construct the new instance operands from the old ones + the cloned
+  //     ops' results.
   for (auto inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
 
@@ -470,12 +492,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       Operation *newOp = b.insert(op->clone(map));
       for (auto res : newOp->getResults())
         newOperands.push_back(res);
-      setOpName(newOp, inst.getName() + "." + ::getOpName(op));
+      setEntityName(newOp, inst.getName() + "." + ::getOpName(op));
     }
     newInst->setOperands(newOperands);
     inst.erase();
   }
 
+  //*************
+  //   Done.
   for (auto op : ops)
     op->erase();
 }
