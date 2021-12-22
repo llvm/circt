@@ -158,50 +158,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return circtMSFTPhysLocationAttrGetNum(self);
       });
 
-  mlir_attribute_subclass(m, "RootedInstancePathAttr",
-                          circtMSFTAttributeIsARootedInstancePathAttribute)
-      .def_classmethod(
-          "get",
-          [](py::object cls, MlirAttribute rootSymbol,
-             std::vector<MlirAttribute> instancePath, MlirContext ctxt) {
-            return cls(circtMSFTRootedInstancePathAttrGet(
-                ctxt, rootSymbol, instancePath.data(), instancePath.size()));
-          },
-          "Create an rooted instance path attribute", py::arg(),
-          py::arg("root_symbol"), py::arg("instance_path"),
-          py::arg("ctxt") = py::none());
-
-  mlir_attribute_subclass(m, "SwitchInstanceAttr",
-                          circtMSFTAttributeIsASwitchInstanceAttribute)
-      .def_classmethod(
-          "get",
-          [](py::object cls,
-             std::vector<std::pair<MlirAttribute, MlirAttribute>> listOfCases,
-             MlirContext ctxt) {
-            std::vector<CirctMSFTSwitchInstanceCase> cases;
-            for (auto p : listOfCases)
-              cases.push_back({std::get<0>(p), std::get<1>(p)});
-            return cls(circtMSFTSwitchInstanceAttrGet(ctxt, cases.data(),
-                                                      cases.size()));
-          },
-          "Create an instance switch attribute", py::arg(),
-          py::arg("list_of_cases"), py::arg("ctxt") = py::none())
-      .def_property_readonly(
-          "cases",
-          [](MlirAttribute self) {
-            size_t numCases = circtMSFTSwitchInstanceAttrGetNumCases(self);
-            std::vector<CirctMSFTSwitchInstanceCase> cases(numCases);
-            circtMSFTSwitchInstanceAttrGetCases(self, cases.data(),
-                                                cases.max_size());
-            std::vector<std::pair<MlirAttribute, MlirAttribute>> pyCases;
-            for (auto c : cases)
-              pyCases.push_back(std::make_pair(c.instance, c.attr));
-            return pyCases;
-          })
-      .def_property_readonly("num_cases", [](MlirAttribute self) {
-        return circtMSFTSwitchInstanceAttrGetNumCases(self);
-      });
-
   mlir_attribute_subclass(m, "PhysicalBoundsAttr",
                           circtMSFTAttributeIsAPhysicalBoundsAttr)
       .def_classmethod(
