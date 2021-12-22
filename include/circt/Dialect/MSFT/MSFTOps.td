@@ -63,7 +63,7 @@ def MSFTModuleOp : MSFTOp<"module",
     A lot like `hw.module`, but with a few differences:
       - Can exist without a body. The body is filled in by a generator post op
       creation.
-      - MSFT-specific methods and arguments will be added later on.
+      - Provides methods for mutation.
   }];
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
@@ -90,6 +90,12 @@ def MSFTModuleOp : MSFTOp<"module",
     // Decode information about the input and output ports on this module.
     ::circt::hw::ModulePortInfo getPorts();
 
+    // Adds input and output ports. Returns a list of new block arguments for
+    // the new inputs.
+    SmallVector<BlockArgument> addPorts(
+      ArrayRef<std::pair<StringAttr, Type>> inputs,
+      ArrayRef<std::pair<StringAttr, Value>> outputs);
+
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
       return (*this)->getAttrOfType<StringAttr>(
@@ -100,6 +106,8 @@ def MSFTModuleOp : MSFTOp<"module",
     StringRef getName() {
       return getNameAttr().getValue();
     }
+
+    Block *getBodyBlock() { return &body().front(); }
 
   private:
     // This trait needs access to the hooks defined below.

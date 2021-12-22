@@ -65,10 +65,8 @@ s.print()
 
 # CHECK-LABEL: ** Post pass/emit
 # CHECK-LABEL: hw.module @TopLevel
-# CHECK:         %part1_Plus1_y = sv.wire  : !hw.inout<i32>
-# CHECK:         %part1.Plus1_y = hw.instance "part1" sym @part1 @part1(Plus1_a: %x: i32, Plus1_b: %x: i32) -> (Plus1_y: i32)
-# CHECK:         sv.assign %part1_Plus1_y, %part1.Plus1_y : i32
-# CHECK:         %PlusPipeline.y = hw.instance "PlusPipeline" sym @PlusPipeline @PlusPipeline(a: %x: i32) -> (y: i32)
-# CHECK-LABEL: hw.module @part1(%Plus1_a: i32, %Plus1_b: i32) -> (Plus1_y: i32) {
-# CHECK:         %Plus1.y = hw.instance "Plus1" sym @Plus1 @Plus(a: %Plus1_b: i32, b: %Plus1_b: i32) -> (y: i32)
-# CHECK:         hw.output %Plus1.y : i32
+# CHECK:         hw.instance "part1" sym @part1 @part1
+# CHECK:         hw.instance "PlusPipeline" sym @PlusPipeline @PlusPipeline
+# CHECK-LABEL: hw.module @part1
+# CHECK:         hw.instance "Plus1" sym @Plus1 @Plus
+# CHECK:         hw.instance "PlusPipeline.Plus_1" sym @PlusPipeline.Plus_1 @Plus
