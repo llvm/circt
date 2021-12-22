@@ -169,56 +169,6 @@ uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
   return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getNum();
 }
 
-bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute cAttr) {
-  return unwrap(cAttr).isa<RootedInstancePathAttr>();
-}
-MlirAttribute
-circtMSFTRootedInstancePathAttrGet(MlirContext cCtxt, MlirAttribute cRootSym,
-                                   MlirAttribute *cPathStringAttrs,
-                                   size_t num) {
-  auto ctxt = unwrap(cCtxt);
-  auto rootSym = unwrap(cRootSym).cast<FlatSymbolRefAttr>();
-  SmallVector<StringAttr, 16> path;
-  for (size_t i = 0; i < num; ++i)
-    path.push_back(unwrap(cPathStringAttrs[i]).cast<StringAttr>());
-  return wrap(RootedInstancePathAttr::get(ctxt, rootSym, path));
-}
-
-bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute attr) {
-  return unwrap(attr).isa<SwitchInstanceAttr>();
-}
-MlirAttribute
-circtMSFTSwitchInstanceAttrGet(MlirContext cCtxt,
-                               CirctMSFTSwitchInstanceCase *listOfCases,
-                               size_t numCases) {
-  MLIRContext *ctxt = unwrap(cCtxt);
-  SmallVector<SwitchInstanceCaseAttr, 64> cases;
-  for (size_t i = 0; i < numCases; ++i) {
-    CirctMSFTSwitchInstanceCase pair = listOfCases[i];
-    Attribute instanceAttr = unwrap(pair.instance);
-    auto instance = instanceAttr.dyn_cast<RootedInstancePathAttr>();
-    assert(instance &&
-           "Expected `RootedInstancePathAttr` in switch instance case.");
-    auto attr = unwrap(pair.attr);
-    cases.push_back(SwitchInstanceCaseAttr::get(ctxt, instance, attr));
-  }
-  return wrap(SwitchInstanceAttr::get(ctxt, cases));
-}
-size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute attr) {
-  return unwrap(attr).cast<SwitchInstanceAttr>().getCases().size();
-}
-void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
-                                         CirctMSFTSwitchInstanceCase *dstArray,
-                                         size_t space) {
-  auto sw = unwrap(attr).cast<SwitchInstanceAttr>();
-  ArrayRef<SwitchInstanceCaseAttr> cases = sw.getCases();
-  assert(space >= cases.size());
-  for (size_t i = 0, e = cases.size(); i < e; ++i) {
-    auto c = cases[i];
-    dstArray[i] = {wrap(c.getInst()), wrap(c.getAttr())};
-  }
-}
-
 bool circtMSFTAttributeIsAPhysicalBoundsAttr(MlirAttribute attr) {
   return unwrap(attr).isa<PhysicalBoundsAttr>();
 }
