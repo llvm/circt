@@ -58,10 +58,15 @@ class Instance:
     return self.parent.root_instance
 
   @property
-  def path_attr(self) -> msft.RootedInstancePathAttr:
-    return msft.RootedInstancePathAttr.get(
-        ir.FlatSymbolRefAttr.get(self.sys._get_module_symbol(self.root_module)),
-        [x.name_attr for x in self.path[:-1]])
+  def path_attr(self) -> ir.ArrayAttr:
+    module_names = [self.sys._get_module_symbol(self.root_module)] + [
+        self.sys._get_module_symbol(instance.module)
+        for instance in self.path[:-1]
+    ]
+    modules = [ir.StringAttr.get(name) for name in module_names]
+    instances = [instance.name_attr for instance in self.path]
+    inner_refs = [hw.InnerRefAttr.get(m, i) for m, i in zip(modules, instances)]
+    return ir.ArrayAttr.get(inner_refs)
 
   @property
   def name(self):
@@ -73,17 +78,6 @@ class Instance:
       return ir.StringAttr(self.instOp.sym_name)
     elif isinstance(self.instOp, seq.CompRegOp):
       return ir.StringAttr(self.instOp.innerSym)
-
-  @property
-  def inner_ref_path(self):
-    module_names = [self.sys._get_module_symbol(self.root_module)] + [
-        self.sys._get_module_symbol(instance.module)
-        for instance in self.path[:-1]
-    ]
-    modules = [ir.StringAttr.get(name) for name in module_names]
-    instances = [instance.name_attr for instance in self.path]
-    inner_refs = [hw.InnerRefAttr.get(m, i) for m, i in zip(modules, instances)]
-    return ir.ArrayAttr.get(inner_refs)
 
   @property
   def is_root(self):
@@ -138,9 +132,9 @@ class Instance:
 
     # Create a global ref to this path.
     global_ref_symbol = Instance.get_global_ref_symbol()
-    inner_ref_path = self.inner_ref_path
+    path_attr = self.path_attr
     with ir.InsertionPoint(self.sys.mod.body):
-      global_ref = hw.GlobalRefOp(global_ref_symbol, inner_ref_path)
+      global_ref = hw.GlobalRefOp(global_ref_symbol, path_attr)
 
     # Attach the attribute to the global ref.
     global_ref.attributes["loc:" + attr_key[4:]] = attr

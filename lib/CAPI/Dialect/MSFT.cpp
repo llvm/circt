@@ -68,8 +68,7 @@ MlirLogicalResult
 circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
                                  CirctMSFTPlacedInstance cInst) {
   Attribute attr = unwrap(cLoc);
-  RootedInstancePathAttr path =
-      unwrap(cInst.path).cast<RootedInstancePathAttr>();
+  ArrayAttr path = unwrap(cInst.path).cast<ArrayAttr>();
   StringAttr subpath = StringAttr::get(
       attr.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
   auto inst =

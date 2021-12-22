@@ -117,23 +117,11 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
   if (!globalRef)
     return 0;
 
-  // Build a RootedInstancePathAttr for the database.
-  FlatSymbolRefAttr rootModule;
-  SmallVector<StringAttr> path;
-  for (auto innerRef : globalRef.namepath().getAsRange<hw::InnerRefAttr>()) {
-    if (!rootModule) {
-      rootModule = FlatSymbolRefAttr::get(innerRef.getModule());
-      continue;
-    }
-
-    path.push_back(innerRef.getName());
-  }
-
-  auto instPath =
-      RootedInstancePathAttr::get(op->getContext(), rootModule, path);
+  ArrayAttr instPath = globalRef.namepath();
 
   // Filter out all paths which aren't related to this DB.
-  if (instPath.getRootModule() != rootMod)
+  auto rootInnerRef = instPath.getValue()[0].cast<hw::InnerRefAttr>();
+  if (rootInnerRef.getModule().getValue() != rootMod.getValue())
     return 0;
 
   size_t numFailed = 0;

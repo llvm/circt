@@ -72,7 +72,7 @@ public:
   /// modeled in MLIR, the instance path within the MLIR instance is often
   /// necessary as most often the instance is an extern module.
   struct PlacedInstance {
-    RootedInstancePathAttr path;
+    ArrayAttr path;
     llvm::StringRef subpath;
     Operation *op;
   };

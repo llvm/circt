@@ -48,46 +48,24 @@ struct TclOutputState {
 };
 } // anonymous namespace
 
-void emitInnerRefPart(TclOutputState &s, Operation *op) {
-  // Extract the name from an InstanceOp or other op with a "name".
-  StringAttr nameAttr;
-  if (auto instOp = dyn_cast<msft::InstanceOp>(op))
-    nameAttr = instOp.instanceNameAttr();
-  else if (auto regOp = dyn_cast<seq::CompRegOp>(op))
-    nameAttr = regOp.innerSymAttr();
-  else if (auto name = op->getAttrOfType<StringAttr>("name"))
-    nameAttr = name;
-  assert(nameAttr && !nameAttr.getValue().empty() &&
-         "placed ops must have a name");
-
+void emitInnerRefPart(TclOutputState &s, hw::InnerRefAttr innerRef) {
   // We append new symbolRefs to the state, so s.symbolRefs.size() is the
   // index of the InnerRefAttr we are about to add.
   s.os << "{{" << s.symbolRefs.size() << "}}";
 
-  // At this point, everything is contained within MSFTModuleOps.
-  auto mod = op->getParentOfType<MSFTModuleOp>();
-  assert(mod && "named op must be contained in MSFTModuleOp");
-  StringAttr modName = mod.getNameAttr();
-
   // Append a new inner reference for the template above.
-  s.symbolRefs.push_back(InnerRefAttr::get(modName, nameAttr));
+  s.symbolRefs.push_back(innerRef);
 }
 
-void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst,
-              SymbolCache &symCache) {
+void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst) {
   // Traverse each part of the path.
-  RootedInstancePathAttr path = inst.path;
-  for (auto part : path.getPath()) {
-    auto inst = cast<msft::InstanceOp>(symCache.getDefinition(part));
-    assert(inst && "path instance must be in symbol cache");
-
-    emitInnerRefPart(s, inst);
-    s.os << '|';
+  auto parts = inst.path.getAsRange<hw::InnerRefAttr>();
+  auto lastPart = std::prev(parts.end());
+  for (auto part : parts) {
+    emitInnerRefPart(s, part);
+    if (part != *lastPart)
+      s.os << '|';
   }
-
-  // If instance name is specified, add it in between the parent entity path and
-  // the child entity path.
-  emitInnerRefPart(s, inst.op);
 
   // Some placements don't require subpaths.
   if (!inst.subpath.empty()) {
@@ -101,7 +79,7 @@ void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst,
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
 static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
-                 PhysLocationAttr pla, SymbolCache &symCache) {
+                 PhysLocationAttr pla) {
 
   s.indent() << "set_location_assignment ";
 
@@ -130,7 +108,7 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 
   // To which entity does this apply?
   s.os << " -to $parent|";
-  emitPath(s, inst, symCache);
+  emitPath(s, inst);
 }
 
 /// Emit tcl in the form of:
@@ -139,7 +117,7 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 /// set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|a|b|c
 /// set_instance_assignment -name REGION_NAME test_region -to $parent|a|b|c
 static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
-                 PhysicalRegionRefAttr regionRef, SymbolCache &symCache) {
+                 PhysicalRegionRefAttr regionRef) {
   auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
   auto physicalRegion =
       topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
@@ -160,56 +138,29 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
       ";");
   s.os << '"';
   s.os << " -to $parent|";
-  emitPath(s, inst, symCache);
+  emitPath(s, inst);
 
   // RESERVE_PLACE_REGION directive.
   s.indent() << "set_instance_assignment -name RESERVE_PLACE_REGION OFF";
   s.os << " -to $parent|";
-  emitPath(s, inst, symCache);
+  emitPath(s, inst);
 
   // CORE_ONLY_PLACE_REGION directive.
   s.indent() << "set_instance_assignment -name CORE_ONLY_PLACE_REGION ON";
   s.os << " -to $parent|";
-  emitPath(s, inst, symCache);
+  emitPath(s, inst);
 
   // REGION_NAME directive.
   s.indent() << "set_instance_assignment -name REGION_NAME ";
   s.os << physicalRegion.getName();
   s.os << " -to $parent|";
-  emitPath(s, inst, symCache);
-}
-
-/// Create a SymbolCache to use during Tcl export.
-void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
-  // Traverse each module and each instance within the module.
-  for (auto msftMod : mod.getOps<MSFTModuleOp>()) {
-    for (auto inst : msftMod.getOps<msft::InstanceOp>()) {
-      // Use the instance symbol name.
-      StringAttr symName = inst.sym_nameAttr();
-
-      // Add the symbol to the cache.
-      cache.addDefinition(symName, inst);
-    }
-    for (auto reg : msftMod.getOps<seq::CompRegOp>()) {
-      if (!reg.innerSym().hasValue())
-        continue;
-
-      // Use the register inner symbol name.
-      StringAttr symName = reg.innerSymAttr();
-
-      // Add the symbol to the cache.
-      cache.addDefinition(symName, reg);
-    }
-  }
-
-  cache.freeze();
+  emitPath(s, inst);
 }
 
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
 LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
-                                            SymbolCache &symCache,
                                             StringRef outputFile) {
   // Build up the output Tcl, tracking symbol references in state.
   std::string s;
@@ -222,16 +173,15 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
 
   os << "proc " << hwMod.getName() << "_config { parent } {\n";
 
-  db.walkPlacements([&state, &symCache](PhysLocationAttr loc,
-                                        PlacementDB::PlacedInstance inst) {
-    emit(state, inst, loc, symCache);
-  });
-
-  db.walkRegionPlacements(
-      [&state, &symCache](PhysicalRegionRefAttr regionRef,
-                          PlacementDB::PlacedInstance inst) {
-        emit(state, inst, regionRef, symCache);
+  db.walkPlacements(
+      [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
+        emit(state, inst, loc);
       });
+
+  db.walkRegionPlacements([&state](PhysicalRegionRefAttr regionRef,
+                                   PlacementDB::PlacedInstance inst) {
+    emit(state, inst, regionRef);
+  });
 
   os << "}\n\n";
 
