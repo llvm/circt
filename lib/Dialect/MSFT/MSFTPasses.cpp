@@ -328,12 +328,12 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
   SmallVector<Operation *, 64> nonLocalTaggedOps;
   mod.walk([&](Operation *op) {
-    auto part = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
-    if (!part)
+    auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    if (!partRef)
       return;
 
-    if (part.getRootReference() == SymbolTable::getSymbolName(mod))
-      localPartMembers[part.getLeafReference()].push_back(op);
+    if (partRef.getRootReference() == SymbolTable::getSymbolName(mod))
+      localPartMembers[partRef.getLeafReference()].push_back(op);
     else
       nonLocalTaggedOps.push_back(op);
   });
@@ -355,13 +355,11 @@ static bool isAnyModule(Operation *module) {
          hw::isAnyModule(module);
 }
 hw::ModulePortInfo getModulePortInfo(Operation *op) {
-  if (auto mod = dyn_cast<MSFTModuleOp>(op)) {
+  if (auto mod = dyn_cast<MSFTModuleOp>(op))
     return mod.getPorts();
-  } else if (auto mod = dyn_cast<MSFTModuleExternOp>(op)) {
+  if (auto mod = dyn_cast<MSFTModuleExternOp>(op))
     return mod.getPorts();
-  } else {
-    return hw::getModulePortInfo(op);
-  }
+  return hw::getModulePortInfo(op);
 }
 
 /// Heuristics to get the entity name.
@@ -387,10 +385,10 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
                                std::string &buff) {
   Operation *op = res.getDefiningOp();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
-    auto modOp = syms.getDefinition(inst.moduleNameAttr());
+    Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
     assert(modOp && "Invalid IR");
     assert(isAnyModule(modOp) && "Instance must point to a module");
-    auto ports = getModulePortInfo(modOp);
+    hw::ModulePortInfo ports = getModulePortInfo(modOp);
     return ports.outputs[res.getResultNumber()].name;
   }
   if (auto asmInterface = dyn_cast<mlir::OpAsmOpInterface>(op)) {
@@ -414,10 +412,10 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
                                 std::string &buff) {
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
-    auto modOp = syms.getDefinition(inst.moduleNameAttr());
+    Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
     assert(modOp && "Invalid IR");
     assert(isAnyModule(modOp) && "Instance must point to a module");
-    auto ports = getModulePortInfo(modOp);
+    hw::ModulePortInfo ports = getModulePortInfo(modOp);
     return ports.inputs[oper.getOperandNumber()].name;
   }
 
@@ -431,7 +429,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   // This particular implementation is _very_ sensitive to iteration order. It
   // assumes that the order in which the ops, operands, and results are the same
   // _every_ time it runs through them. Doing this saves on bookkeeping.
-  auto ctxt = mod.getContext();
+  auto *ctxt = mod.getContext();
   std::string nameBuffer;
 
   //*************
@@ -441,14 +439,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
   SmallVector<Type, 64> newResTypes;
 
-  for (auto op : ops) {
+  for (Operation *op : ops) {
     StringRef opName = ::getOpName(op);
-    for (auto res : op->getResults()) {
+    for (OpResult res : op->getOpResults()) {
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + "." + name), res.getType()));
     }
-    for (auto &oper : op->getOpOperands()) {
+    for (OpOperand &oper : op->getOpOperands()) {
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + "." + name), oper.get()));
@@ -459,10 +457,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //*************
   //   Add them to 'mod' and replace all of the old 'ops' results with the new
   //   ports.
-  auto newBlockArgs = mod.addPorts(newInputs, newOutputs);
+  SmallVector<BlockArgument> newBlockArgs = mod.addPorts(newInputs, newOutputs);
   size_t blockArgNum = 0;
-  for (auto op : ops)
-    for (auto res : op->getResults())
+  for (Operation *op : ops)
+    for (OpResult res : op->getResults())
       res.replaceAllUsesWith(newBlockArgs[blockArgNum++]);
 
   //*************
@@ -471,7 +469,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //     - Clone in 'ops'.
   //     - Construct the new instance operands from the old ones + the cloned
   //     ops' results.
-  for (auto inst : moduleInstantiations[mod]) {
+  for (InstanceOp inst : moduleInstantiations[mod]) {
     OpBuilder b(inst);
 
     // Since we only have to add result types, just copy most everything.
@@ -481,16 +479,16 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
         OperationState(inst->getLoc(), inst->getName().getStringRef(),
                        inst->getOperands(), resTypes, inst->getAttrs()))));
     size_t resultNum = 0;
-    for (auto origRes : inst.getResults())
+    for (Value origRes : inst.getResults())
       origRes.replaceAllUsesWith(newInst->getResult(resultNum++));
 
     SmallVector<Value, 64> newOperands(inst->getOperands());
-    for (auto op : ops) {
+    for (Operation *op : ops) {
       BlockAndValueMapping map;
-      for (auto oper : op->getOperands())
+      for (Value oper : op->getOperands())
         map.map(oper, newInst->getResult(resultNum++));
       Operation *newOp = b.insert(op->clone(map));
-      for (auto res : newOp->getResults())
+      for (Value res : newOp->getResults())
         newOperands.push_back(res);
       setEntityName(newOp, inst.getName() + "." + ::getOpName(op));
     }
@@ -500,7 +498,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
 
   //*************
   //   Done.
-  for (auto op : ops)
+  for (Operation *op : ops)
     op->erase();
 }
 
@@ -541,7 +539,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   auto addOther = [&](Operation *op) {
     StringRef name = ::getOpName(op);
 
-    for (auto &oper : op->getOpOperands()) {
+    for (OpOperand &oper : op->getOpOperands()) {
       ports.push_back(hw::PortInfo{
           /*name*/ StringAttr::get(
               ctxt,
@@ -552,7 +550,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       partInstInputs.push_back(oper.get());
     }
 
-    for (auto res : op->getOpResults()) {
+    for (OpResult res : op->getOpResults()) {
       ports.push_back(hw::PortInfo{
           /*name*/ StringAttr::get(
               ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
@@ -620,7 +618,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   // Clone the ops into the partition block. Map the results into the module
   // outputs.
   for (Operation *op : toMove) {
-    auto *newOp = partBuilder.insert(op->clone(mapping));
+    Operation *newOp = partBuilder.insert(op->clone(mapping));
     newOp->removeAttr("targetDesignPartition");
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
