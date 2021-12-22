@@ -20,6 +20,8 @@ class Instance:
   to a module instantiation within another module."""
   import pycde.system as system
 
+  global_ref_counter = 0
+
   def __init__(self,
                module: type,
                instOp: Union[msft.InstanceOp, seq.CompRegOp],
@@ -73,12 +75,29 @@ class Instance:
       return ir.StringAttr(self.instOp.innerSym)
 
   @property
+  def inner_ref_path(self):
+    module_names = [self.sys._get_module_symbol(self.root_module)] + [
+        self.sys._get_module_symbol(instance.module)
+        for instance in self.path[:-1]
+    ]
+    modules = [ir.StringAttr.get(name) for name in module_names]
+    instances = [instance.name_attr for instance in self.path]
+    inner_refs = [hw.InnerRefAttr.get(m, i) for m, i in zip(modules, instances)]
+    return ir.ArrayAttr.get(inner_refs)
+
+  @property
   def is_root(self):
     return self.parent is None
 
   @property
   def appid(self):
     return AppID(*[i.name for i in self.path])
+
+  @classmethod
+  def get_global_ref_symbol(cls):
+    counter = cls.global_ref_counter
+    cls.global_ref_counter += 1
+    return ir.StringAttr.get("ref" + str(counter))
 
   def __repr__(self):
     path_names = map(lambda i: i.name, self.path)
@@ -117,18 +136,34 @@ class Instance:
     if not rc:
       raise ValueError("Failed to place")
 
-    if attr_key not in self.instOp.attributes:
-      cases = []
-    else:
-      existing_attr = self.instOp.attributes[attr_key]
-      try:
-        inst_switch = msft.SwitchInstanceAttr(existing_attr)
-        cases = inst_switch.cases
-      except TypeError:
-        raise ValueError(
-            f"Existing attribute ({existing_attr}) is not msft.switch.inst.")
-    cases.append((self.path_attr, attr))
-    self.instOp.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
+    # Create a global ref to this path.
+    global_ref_symbol = Instance.get_global_ref_symbol()
+    inner_ref_path = self.inner_ref_path
+    with ir.InsertionPoint(self.sys.mod.body):
+      global_ref = hw.GlobalRefOp(global_ref_symbol, inner_ref_path)
+
+    # Attach the attribute to the global ref.
+    global_ref.attributes["loc:" + attr_key[4:]] = attr
+
+    # Add references to the global ref for each instance through the hierarchy.
+    for instance in self.path:
+      # Find any existing global refs.
+      if "circt.globalRef" in instance.instOp.attributes:
+        global_refs = [
+            ref for ref in ir.ArrayAttr(
+                instance.instOp.attributes["circt.globalRef"])
+        ]
+      else:
+        global_refs = []
+
+      # Add the new global ref.
+      global_refs.append(hw.GlobalRefAttr.get(global_ref_symbol))
+      global_refs_attr = ir.ArrayAttr.get(global_refs)
+      instance.instOp.attributes["circt.globalRef"] = global_refs_attr
+
+      # Set the expected inner_sym attribute on the instance to abide by the
+      # global ref contract.
+      instance.instOp.attributes["inner_sym"] = instance.name_attr
 
   def place(self,
             subpath: Union[str, list[str]],

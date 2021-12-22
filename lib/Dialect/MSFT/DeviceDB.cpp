@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/DeviceDB.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "llvm/ADT/TypeSwitch.h"
@@ -111,47 +112,58 @@ LogicalResult PlacementDB::addPlacement(PhysicalRegionRefAttr regionRef,
 /// Return the number of placements which weren't added due to conflicts.
 size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
                                   mlir::Operation *op) {
+  // Placements must be specified via a GlobalRef.
+  auto globalRef = dyn_cast<hw::GlobalRefOp>(op);
+  if (!globalRef)
+    return 0;
+
+  // Build a RootedInstancePathAttr for the database.
+  FlatSymbolRefAttr rootModule;
+  SmallVector<StringAttr> path;
+  for (auto innerRef : globalRef.namepath().getAsRange<hw::InnerRefAttr>()) {
+    if (!rootModule) {
+      rootModule = FlatSymbolRefAttr::get(innerRef.getModule());
+      continue;
+    }
+
+    path.push_back(innerRef.getName());
+  }
+
+  auto instPath =
+      RootedInstancePathAttr::get(op->getContext(), rootModule, path);
+
+  // Filter out all paths which aren't related to this DB.
+  if (instPath.getRootModule() != rootMod)
+    return 0;
+
   size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef attrName = attr.getName();
     llvm::TypeSwitch<Attribute>(attr.getValue())
 
-        // Handle switch instance.
-        .Case([&](SwitchInstanceAttr instSwitch) {
-          for (auto caseAttr : instSwitch.getCases()) {
-            RootedInstancePathAttr instPath = caseAttr.getInst();
-
-            // Filter out all paths which aren't related to this DB.
-            if (instPath.getRootModule() != rootMod)
-              continue;
-
-            // If we recognize the type, validate and add it.
-            if (auto loc = caseAttr.getAttr().dyn_cast<PhysLocationAttr>()) {
-              if (!attrName.startswith("loc:")) {
-                op->emitOpError(
-                    "PhysLoc attributes must have names starting with 'loc'");
-                ++numFailed;
-                continue;
-              }
-              LogicalResult added = addPlacement(
-                  loc, PlacedInstance{instPath, attrName.substr(4), op});
-              if (failed(added))
-                ++numFailed;
-            } else if (auto loc = caseAttr.getAttr()
-                                      .dyn_cast<PhysicalRegionRefAttr>()) {
-              LogicalResult added =
-                  addPlacement(loc, PlacedInstance{instPath, StringRef(), op});
-              if (failed(added))
-                ++numFailed;
-            }
+        // Handle PhysLocationAttr.
+        .Case([&](PhysLocationAttr physLoc) {
+          // PhysLoc has a subpath, which comes from the attribute name.
+          // TODO(mikeurbach): make this an inherent attribute of the PhysLoc.
+          if (!attrName.startswith("loc:")) {
+            op->emitOpError(
+                "PhysLoc attributes must have names starting with 'loc'");
+            ++numFailed;
+            return;
           }
+
+          LogicalResult added = addPlacement(
+              physLoc, PlacedInstance{instPath, attrName.substr(4), op});
+          if (failed(added))
+            ++numFailed;
         })
 
-        // Physloc outside of a switch instance is not valid.
-        .Case([op, &numFailed](PhysLocationAttr) {
-          ++numFailed;
-          op->emitOpError("PhysLoc attribute must be inside an "
-                          "instance switch attribute");
+        // Handle PhysicalRegionRefAttr.
+        .Case([&](PhysicalRegionRefAttr physRegion) {
+          LogicalResult added = addPlacement(
+              physRegion, PlacedInstance{instPath, StringRef(), op});
+          if (failed(added))
+            ++numFailed;
         })
 
         // Ignore attributes we don't understand.
