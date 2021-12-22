@@ -51,20 +51,17 @@ with ir.Context() as ctx, ir.Location.unknown():
   regAttr = msft.PhysLocationAttr.get(msft.FF, x=0, y=0, num=0)
   print(regAttr)
 
-  path = msft.RootedInstancePathAttr.get(
-      ir.Attribute.parse("@top"),
-      [ir.StringAttr.get("inst1"),
-       ir.StringAttr.get("ext1")])
+  path = ir.ArrayAttr.get([
+      hw.InnerRefAttr.get(ir.StringAttr.get("top"), ir.StringAttr.get("inst1")),
+      hw.InnerRefAttr.get(ir.StringAttr.get("MyWidget"),
+                          ir.StringAttr.get("ext1"))
+  ])
   print(path)
-  # CHECK-NEXT: #msft<"@top[\22inst1\22,\22ext1\22]">
-  # CHECK-NEXT: #msft.switch.inst<@top["inst1","ext1"]=#msft.physloc<M20K, 2, 6, 1>>
-  instSwitch = msft.SwitchInstanceAttr.get([(path, physAttr)])
-  print(instSwitch)
+  # CHECK-NEXT: [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
 
   resolved_inst = msft.get_instance(top.operation,
                                     ir.Attribute.parse("@inst1::@ext1"))
   assert (resolved_inst == ext_inst.operation)
-  resolved_inst.attributes["loc:foo_subpath"] = instSwitch
 
   not_found_inst = msft.get_instance(top.operation,
                                      ir.Attribute.parse("@inst_none::@ext1"))
@@ -86,8 +83,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert located_inst[1] == "foo_subpath"
   assert located_inst[2] == resolved_inst
 
-  num_failed = db.add_design_placements()
-  assert num_failed == 1
+  place_rc = db.add_placement(physAttr, path, "foo_subpath", resolved_inst)
+  assert not place_rc
   # ERR: error: 'msft.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by msft.instance @ext1 @MyExternMod
 
   devdb = msft.PrimitiveDB()
@@ -105,6 +102,9 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   rc = seeded_pdb.add_placement(physAttr, path, "foo_subpath", resolved_inst)
   assert rc
+  with ir.InsertionPoint(m.body):
+    global_ref = hw.GlobalRefOp(ir.StringAttr.get("foo"), path)
+    global_ref.attributes["loc:foo_subpath"] = physAttr
 
   nearest = seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4)
   assert isinstance(nearest, msft.PhysLocationAttr)
@@ -116,7 +116,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   def print_placement(loc, placement):
     assert isinstance(loc, msft.PhysLocationAttr)
     if placement:
-      path = msft.RootedInstancePathAttr(placement[0])
+      path = placement[0]
       print(f"{loc}, {path}")
     else:
       print(f"{loc}")
@@ -124,13 +124,13 @@ with ir.Context() as ctx, ir.Location.unknown():
   print("=== Placements:")
   seeded_pdb.walk_placements(print_placement)
   # CHECK-LABEL: === Placements:
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
+  # CHECK: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2):")
   seeded_pdb.walk_placements(print_placement, bounds=(2, 2, None, None))
   # CHECK-LABEL: === Placements (col 2):
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
+  # CHECK: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2, row > 10):")
@@ -156,7 +156,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   print("=== tcl ===")
 
   # CHECK: proc top_config { parent } {
-  # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|foo_subpath
+  # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
   pm = mlir.passmanager.PassManager.parse("lower-msft-to-hw{tops=top}")
   pm.run(m)
   circt.export_verilog(m, sys.stdout)

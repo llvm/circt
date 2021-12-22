@@ -2,10 +2,14 @@
 
 hw.module.extern @Foo()
 
+// expected-error @+1 {{'hw.globalRef' op referenced non-existant PhysicalRegion named region1}}
+hw.globalRef @ref [#hw.innerNameRef<@top::@foo1>] {
+  "loc:" = #msft.physical_region_ref<@region1>
+}
+
 // expected-error @+1 {{Could not place 1 instances}}
 msft.module @top {} () -> () {
-  // expected-error @+1 {{PhysLoc attribute must be inside an instance switch attribute}}
-  msft.instance @foo1 @Foo() {"loc:" = #msft.physloc<DSP, 0, 0, 0> } : () -> ()
+  msft.instance @foo1 @Foo() {circt.globalRef = [#hw.globalNameRef<@ref>], inner_sym = "foo1"} : () -> ()
   msft.output
 }
 
@@ -13,20 +17,13 @@ msft.module @top {} () -> () {
 
 hw.module.extern @Foo()
 
-// expected-error @+1 {{Could not place 1 instances}}
-msft.module @top {} () -> () {
-  // expected-error @+1 {{'msft.instance' op referenced non-existant PhysicalRegion named region1}}
-  msft.instance @foo1 @Foo() {"loc" = #msft.switch.inst<@top[]=#msft.physical_region_ref<@region1>>} : () -> ()
-  msft.output
+// expected-error @+1 {{'hw.globalRef' op PhysLoc attributes must have names starting with 'loc'}}
+hw.globalRef @ref [#hw.innerNameRef<@top::@foo1>] {
+  "phys:" = #msft.physloc<DSP, 0, 0, 0>
 }
 
-// -----
-
-hw.module.extern @Foo()
-
 // expected-error @+1 {{Could not place 1 instances}}
 msft.module @top {} () -> () {
-  // expected-error @+1 {{'msft.instance' op PhysLoc attributes must have names starting with 'loc'}}
-  msft.instance @foo1 @Foo() {"phys:" = #msft.switch.inst< @top[] = #msft.physloc<DSP, 0, 0, 0> > } : () -> ()
+  msft.instance @foo1 @Foo() {circt.globalRef = [#hw.globalNameRef<@ref>], inner_sym = "foo1"} : () -> ()
   msft.output
 }
