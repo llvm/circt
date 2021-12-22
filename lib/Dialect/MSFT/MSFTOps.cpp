@@ -90,8 +90,8 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
 }
 
 SmallVector<BlockArgument>
-MSFTModuleOp::addPorts(ArrayRef<std::pair<Twine, Type>> inputs,
-                       ArrayRef<std::pair<Twine, Value>> outputs) {
+MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
+                       ArrayRef<std::pair<StringAttr, Value>> outputs) {
   auto *ctxt = getContext();
   FunctionType ftype = getType();
   Block *body = getBodyBlock();
@@ -102,7 +102,7 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<Twine, Type>> inputs,
   SmallVector<Attribute> modifiedArgNames(argNames().getAsRange<Attribute>());
   SmallVector<BlockArgument> newBlockArgs;
   for (auto ttPair : inputs) {
-    modifiedArgNames.push_back(StringAttr::get(ctxt, ttPair.first));
+    modifiedArgNames.push_back(ttPair.first);
     modifiedArgs.push_back(ttPair.second);
     newBlockArgs.push_back(body->addArgument(ttPair.second));
   }
@@ -116,7 +116,7 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<Twine, Type>> inputs,
   Operation *terminator = body->getTerminator();
   SmallVector<Value, 32> modifiedOutputs(terminator->getOperands());
   for (auto tvPair : outputs) {
-    modifiedResultNames.push_back(StringAttr::get(ctxt, tvPair.first));
+    modifiedResultNames.push_back(tvPair.first);
     modifiedResults.push_back(tvPair.second.getType());
     modifiedOutputs.push_back(tvPair.second);
   }

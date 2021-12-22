@@ -93,8 +93,8 @@ def MSFTModuleOp : MSFTOp<"module",
     // Adds input and output ports. Returns a list of new block arguments for
     // the new inputs.
     SmallVector<BlockArgument> addPorts(
-      ArrayRef<std::pair<Twine, Type>> inputs,
-      ArrayRef<std::pair<Twine, Value>> outputs);
+      ArrayRef<std::pair<StringAttr, Type>> inputs,
+      ArrayRef<std::pair<StringAttr, Value>> outputs);
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {

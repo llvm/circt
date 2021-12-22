@@ -349,8 +349,9 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   }
 }
 
-static bool isAnyMsftModule(Operation *module) {
-  return isa<MSFTModuleOp>(module) || isa<MSFTModuleExternOp>(module);
+static bool isAnyModule(Operation *module) {
+  return isa<MSFTModuleOp>(module) || isa<MSFTModuleExternOp>(module) ||
+         hw::isAnyModule(module);
 }
 
 hw::ModulePortInfo getModulePortInfo(Operation *op) {
@@ -358,32 +359,86 @@ hw::ModulePortInfo getModulePortInfo(Operation *op) {
     return mod.getPorts();
   } else if (auto mod = dyn_cast<MSFTModuleExternOp>(op)) {
     return mod.getPorts();
+  } else {
+    return hw::getModulePortInfo(op);
   }
-  assert(false);
 }
 
-static StringRef getOpName(Operation *op) { return ""; }
-static void setOpName(Operation *op, Twine name) {}
-static StringRef getResultName(OpResult res) { return ""; }
-static StringRef getOperandName(OpOperand &oper) { return ""; }
+static StringRef getOpName(Operation *op) {
+  StringAttr name;
+  if ((name = op->getAttrOfType<StringAttr>("name")) && name.size())
+    return name.getValue();
+  if ((name = op->getAttrOfType<StringAttr>("sym_name")) && name.size())
+    return name.getValue();
+  return op->getName().getStringRef();
+}
+static void setOpName(Operation *op, Twine name) {
+  StringAttr nameAttr = StringAttr::get(op->getContext(), name);
+  if (op->hasAttrOfType<StringAttr>("name"))
+    op->setAttr("name", nameAttr);
+  if (op->hasAttrOfType<StringAttr>("sym_name"))
+    op->setAttr("sym_name", nameAttr);
+}
+static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
+                               std::string &buff) {
+  Operation *op = res.getDefiningOp();
+  if (auto inst = dyn_cast<InstanceOp>(op)) {
+    auto modOp = syms.getDefinition(inst.moduleNameAttr());
+    assert(modOp && "Invalid IR");
+    assert(isAnyModule(modOp) && "Instance must point to a module");
+    auto ports = getModulePortInfo(modOp);
+    return ports.outputs[res.getResultNumber()].name;
+  }
+  if (auto asmInterface = dyn_cast<mlir::OpAsmOpInterface>(op)) {
+    StringRef retName;
+    asmInterface.getAsmResultNames([&](Value v, StringRef name) {
+      if (v == res && !name.empty())
+        retName = StringAttr::get(op->getContext(), name).getValue();
+    });
+    if (!retName.empty())
+      return retName;
+  }
+
+  buff.clear();
+  llvm::raw_string_ostream(buff) << "out" << res.getResultNumber();
+  return buff;
+}
+static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
+                                std::string &buff) {
+  Operation *op = oper.getOwner();
+  if (auto inst = dyn_cast<InstanceOp>(op)) {
+    auto modOp = syms.getDefinition(inst.moduleNameAttr());
+    assert(modOp && "Invalid IR");
+    assert(isAnyModule(modOp) && "Instance must point to a module");
+    auto ports = getModulePortInfo(modOp);
+    return ports.inputs[oper.getOperandNumber()].name;
+  }
+  buff.clear();
+  llvm::raw_string_ostream(buff) << "in" << oper.getOperandNumber();
+  return buff;
+}
 
 void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   // This particular implementation is _very_ sensitive to iteration order. It
   // assumes that the order in which the ops, operands, and results are the same
   // _every_ time it runs through them. Doing this saves on bookkeeping.
-  SmallVector<std::pair<Twine, Type>, 64> newInputs;
-  SmallVector<std::pair<Twine, Value>, 64> newOutputs;
+  auto ctxt = mod.getContext();
+  std::string nameBuffer;
+  SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
+  SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
   SmallVector<Type, 64> newResTypes;
 
   for (auto op : ops) {
     StringRef opName = ::getOpName(op);
     for (auto res : op->getResults()) {
-      StringRef name = getResultName(res);
-      newInputs.push_back(std::make_pair(opName + "_" + name, res.getType()));
+      StringRef name = getResultName(res, topLevelSyms, nameBuffer);
+      newInputs.push_back(std::make_pair(
+          StringAttr::get(ctxt, opName + "." + name), res.getType()));
     }
     for (auto &oper : op->getOpOperands()) {
-      StringRef name = getOperandName(oper);
-      newOutputs.push_back(std::make_pair(opName + "_" + name, oper.get()));
+      StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
+      newOutputs.push_back(std::make_pair(
+          StringAttr::get(ctxt, opName + "." + name), oper.get()));
       newResTypes.push_back(oper.get().getType());
     }
   }
@@ -415,6 +470,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       Operation *newOp = b.insert(op->clone(map));
       for (auto res : newOp->getResults())
         newOperands.push_back(res);
+      setOpName(newOp, inst.getName() + "." + ::getOpName(op));
     }
     newInst->setOperands(newOperands);
     inst.erase();
@@ -467,7 +523,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       assert(modOp && "Module instantiated should exist. Verifier should have "
                       "caught this.");
 
-      if (isAnyMsftModule(modOp))
+      if (isAnyModule(modOp))
         addModuleLike(inst, modOp);
     } else {
       addOther(op);
