@@ -43,6 +43,12 @@ bool fromOMIRJSON(llvm::json::Value &value, StringRef circuitTarget,
                   llvm::StringMap<ArrayAttr> &annotationMap,
                   llvm::json::Path path, MLIRContext *context);
 
+bool scatterCustomMultiCircuitAnnotations(
+    SmallVectorImpl<Attribute> &attrs,
+    llvm::StringMap<ArrayAttr> &annotationMap,
+    llvm::StringMap<ArrayAttr> &subcircuitAnnotationMap, CircuitOp circuit,
+    unsigned &annotationID, Location loc, size_t &nlaNumber);
+
 bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
                               CircuitOp circuit, unsigned &annotationID,
                               Location loc, size_t &nlaNumber);

@@ -1232,6 +1232,67 @@ static Optional<Attribute> scatterOMIRAnnotation(
   return DictionaryAttr::get(ctx, newAnnotation);
 }
 
+// Scatter annotations in subCircuit.json. These are signal-driving or
+// module-swapping annotations which will scatter attributes to both the main
+// circuit and the subcircuit.
+bool circt::firrtl::scatterCustomMultiCircuitAnnotations(
+    SmallVectorImpl<Attribute> &attrs,
+    llvm::StringMap<ArrayAttr> &annotationMap,
+    llvm::StringMap<ArrayAttr> &subcircuitAnnotationMap, CircuitOp circuit,
+    unsigned &annotationID, Location loc, size_t &nlaNumber) {
+  MLIRContext *context = circuit.getContext();
+
+  // Mutable store of new annotations produced.
+  llvm::StringMap<llvm::SmallVector<Attribute>> newAnnotations;
+  llvm::StringMap<llvm::SmallVector<Attribute>> newSubcircuitAnnotations;
+
+  for (auto attr : attrs) {
+    auto dict = attr.cast<DictionaryAttr>();
+    StringAttr classAttr = dict.getAs<StringAttr>("class");
+    // If the annotation doesn't have a "class" field, then we can't handle it.
+    // Just copy it over.
+    if (!classAttr) {
+      mlir::emitError(loc, "subcircuit annotation must have a class attribute")
+              .attachNote()
+          << "annotation:" << dict << "\n";
+      continue;
+    }
+
+    StringRef clazz = classAttr.getValue();
+
+    if (clazz == "sifive.enterprise.grandcentral.SignalDriverAnnotation") {
+      // TODO: scatter annotations
+    }
+
+    if (clazz == "sifive.enterprise.grandcentral.ModuleReplacementAnnotation") {
+      // TODO: scatter annotations
+    }
+  }
+
+  // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
+  for (auto a : newAnnotations.keys()) {
+    // If multiple annotations on a single object, then append it.
+    if (annotationMap.count(a))
+      for (auto attr : annotationMap[a])
+        newAnnotations[a].push_back(attr);
+
+    annotationMap[a] = ArrayAttr::get(context, newAnnotations[a]);
+  }
+
+  // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
+  for (auto a : newSubcircuitAnnotations.keys()) {
+    // If multiple annotations on a single object, then append it.
+    if (subcircuitAnnotationMap.count(a))
+      for (auto attr : subcircuitAnnotationMap[a])
+        newSubcircuitAnnotations[a].push_back(attr);
+
+    subcircuitAnnotationMap[a] =
+        ArrayAttr::get(context, newSubcircuitAnnotations[a]);
+  }
+
+  return true;
+}
+
 /// Convert known custom FIRRTL Annotations with compound targets to multiple
 /// attributes that are attached to IR operations where they have semantic
 /// meaning.  This rewrites the input \p annotationMap to convert non-specific

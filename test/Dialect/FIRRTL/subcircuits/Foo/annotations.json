@@ -1,0 +1,6 @@
+[
+  {"Foo":"Foo","target":"~Foo|Foo"},
+  {"a":"a","target":"~Foo|Foo>a"},
+  {"b":"b","target":"~Foo|Foo>b"},
+  {"c":"c","target":"~Foo|Foo>c"}
+]

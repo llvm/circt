@@ -38,6 +38,8 @@ struct FIRParserOptions {
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
   unsigned numAnnotationFiles;
+
+  Optional<std::string> subcircuitDir;
 };
 
 mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,

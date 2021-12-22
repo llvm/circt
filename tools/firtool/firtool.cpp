@@ -242,6 +242,10 @@ static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
                 cl::init(""));
 
+static cl::opt<std::string>
+    subcircuitDir("subcircuit-dir", cl::desc("input subcircuits directory"),
+                  cl::init(""));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -296,6 +300,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     options.ignoreInfoLocators = ignoreFIRLocations;
     options.rawAnnotations = newAnno;
     options.numAnnotationFiles = numAnnotationFiles;
+    if (subcircuitDir != "") {
+      options.subcircuitDir = subcircuitDir;
+    }
     module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");

@@ -19,12 +19,14 @@
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
@@ -32,6 +34,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -3174,6 +3177,13 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 //===----------------------------------------------------------------------===//
 
 namespace {
+struct SubCircuit {
+  SourceMgr &sourceMgr;
+  const llvm::MemoryBuffer *annotationsBuf;
+  const llvm::MemoryBuffer *firrtlBuf;
+  const llvm::MemoryBuffer *subCircuitBuf;
+};
+
 /// This class implements the outer level of the parser, including things
 /// like circuit and module.
 struct FIRCircuitParser : public FIRParser {
@@ -3226,6 +3236,12 @@ private:
   /// A global identifier that can be used to link multiple annotations
   /// together.  This should be incremented on use.
   unsigned annotationID = 0;
+
+  // Parse firrtl and annotations for a subcircuit and merge its modules with
+  // the current circuit.
+  ParseResult importSubCircuit(SubCircuit subCircuit, FIRParserOptions options,
+                               size_t &nlaNumber, CircuitOp mainCircuit,
+                               StringRef circuitTarget, SMLoc loc);
 };
 
 } // end anonymous namespace
@@ -3354,6 +3370,121 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
     existing = ArrayAttr::get(getContext(), annotationVec);
   }
 
+  return success();
+}
+
+ParseResult FIRCircuitParser::importSubCircuit(
+    SubCircuit subCircuit, FIRParserOptions options, size_t &nlaNumber,
+    CircuitOp mainCircuit, StringRef circuitTarget, SMLoc loc) {
+  MLIRContext *context = getContext();
+
+  // These are annotations that scatter annotations to targets in both the main
+  // circuit and the subcircuit
+  auto multiCircuitAnnotations =
+      json::parse(subCircuit.subCircuitBuf->getBuffer());
+  if (auto err = multiCircuitAnnotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
+      auto diag = emitError(loc, "Failed to parse subCircuit.json");
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  json::Path::Root root;
+  SmallVector<Attribute> attrs;
+  // subCircuit.json should only contain either signal-driving or
+  // module-swapping annotations, so don't try to find and remove "target"
+  // fields. Just convert json to attributes and use custom scattering
+  if (!fromJSONRaw(multiCircuitAnnotations.get(), circuitTarget, attrs, root,
+                   getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+        "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(multiCircuitAnnotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
+  }
+
+  llvm::StringMap<ArrayAttr> thisAnnotationMap;
+  llvm::StringMap<ArrayAttr> thisSubcircuitAnnotationMap;
+  if (!scatterCustomMultiCircuitAnnotations(
+          attrs, thisAnnotationMap, thisSubcircuitAnnotationMap, mainCircuit,
+          annotationID, translateLocation(loc), nlaNumber)) {
+    return failure();
+  }
+
+  // Merge the attributes we just parsed into the global set we're
+  // accumulating.
+  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
+  for (auto &thisEntry : thisAnnotationMap) {
+    auto &existing = resultAnnoMap[thisEntry.getKey()];
+    if (!existing) {
+      existing = thisEntry.getValue();
+      continue;
+    }
+
+    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
+    annotationVec.append(thisEntry.getValue().begin(),
+                         thisEntry.getValue().end());
+    existing = ArrayAttr::get(getContext(), annotationVec);
+  }
+
+  // This is the result module for the subcircuit we are parsing into.
+  OwningModuleRef module(ModuleOp::create(FileLineColLoc::get(
+      context, subCircuit.firrtlBuf->getBufferIdentifier(), /*line=*/0,
+      /*column=*/0)));
+
+  // use the same options for the subcircuit parser, but leave subcircuitDir`
+  // empty
+  FIRParserOptions newOptions;
+  newOptions.ignoreInfoLocators = options.ignoreInfoLocators;
+  newOptions.rawAnnotations = options.rawAnnotations;
+  newOptions.numAnnotationFiles = options.numAnnotationFiles;
+  SharedParserConstants state(context, newOptions);
+  FIRLexer lexer(subCircuit.sourceMgr, context);
+  FIRCircuitParser subCircuitParser(state, lexer, *module);
+
+  // Merge attributes from subCircuit.json that were scattered to the
+  // subcircuit into the subcircuit parser's annotation map.
+  llvm::StringMap<ArrayAttr> &subCircuitResultAnnoMap =
+      subCircuitParser.getConstants().annotationMap;
+  for (auto &thisEntry : thisSubcircuitAnnotationMap) {
+    auto &existing = subCircuitResultAnnoMap[thisEntry.getKey()];
+    if (!existing) {
+      existing = thisEntry.getValue();
+      continue;
+    }
+
+    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
+    annotationVec.append(thisEntry.getValue().begin(),
+                         thisEntry.getValue().end());
+    existing = ArrayAttr::get(getContext(), annotationVec);
+  }
+
+  SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
+  SmallVector<const llvm::MemoryBuffer *> omirBufs;
+  annotationsBufs.push_back(subCircuit.annotationsBuf);
+  if (subCircuitParser.parseCircuit(annotationsBufs, omirBufs)) {
+    return failure();
+  }
+
+  // Make sure the subcircuit module has no other structural problems detected
+  // by the verifier.
+  if (failed(verify(*module)))
+    return {};
+
+  // move the subcircuit modules into the main circuit
+  OpBuilder builder = mainCircuit.getBodyBuilder();
+  for (auto &circuitOp : module->body().getBlocks().front().getOperations()) {
+    if (auto subcircuit = dyn_cast<CircuitOp>(circuitOp)) {
+      for (auto &op : *subcircuit.getBody()) {
+        builder.clone(op);
+      }
+    } else {
+      emitError(loc, "Expected module to contain a circuit op: ") << circuitOp << "\n";
+    }
+  }
   return success();
 }
 
@@ -3740,6 +3871,68 @@ ParseResult FIRCircuitParser::parseCircuit(
     //   2. Annotations targeting the circuit, e.g., "~Foo"
     annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
                                  getConstants().targetSet);
+    if (getConstants().options.subcircuitDir) {
+      const auto subCircuitDir = *getConstants().options.subcircuitDir;
+      SmallVector<SubCircuit> subCircuits;
+      std::error_code ec;
+      for (llvm::sys::fs::directory_iterator i(subCircuitDir, ec), e; i != e;
+           i.increment(ec)) {
+        auto subCircuitDir = i->path();
+        if (!llvm::sys::fs::is_directory(subCircuitDir)) {
+          continue;
+        }
+
+        llvm::SourceMgr sourceMgr;
+
+        std::string errorMessage;
+        auto firrtlFileName = subCircuitDir + "/circuit.fir";
+        auto firrtlFile = mlir::openInputFile(firrtlFileName, &errorMessage);
+        if (!firrtlFile) {
+          emitError(errorMessage);
+          continue;
+        }
+        unsigned int firrtlId =
+            sourceMgr.AddNewSourceBuffer(std::move(firrtlFile), llvm::SMLoc());
+        if (!firrtlId) {
+          emitError(Twine("cannot open subcircuit firrtl file '") +
+                    firrtlFileName + "': No such file or directory");
+          continue;
+        }
+
+        auto annotationsFile = subCircuitDir + "/annotations.json";
+        std::string annotationsFileDetermined;
+        auto annotationsId = sourceMgr.AddIncludeFile(
+            annotationsFile, llvm::SMLoc(), annotationsFileDetermined);
+        if (!annotationsId) {
+          emitError(Twine("cannot open subcircuit annotation file '") +
+                    annotationsFile + "': No such file or directory");
+          continue;
+        }
+
+        auto subCircuitFile = subCircuitDir + "/subCircuit.json";
+        std::string subCircuitFileDetermined;
+        unsigned int subCircuitId = sourceMgr.AddIncludeFile(
+            subCircuitFile, llvm::SMLoc(), subCircuitFileDetermined);
+        if (!subCircuitId) {
+          emitError(Twine("cannot open subcircuit json file '") +
+                    subCircuitFile + "': No such file or directory");
+          continue;
+        }
+
+        SubCircuit subCircuit{
+            sourceMgr,
+            sourceMgr.getMemoryBuffer(annotationsId),
+            sourceMgr.getMemoryBuffer(firrtlId),
+            sourceMgr.getMemoryBuffer(subCircuitId),
+        };
+        subCircuits.push_back(subCircuit);
+
+        if (importSubCircuit(subCircuit, getConstants().options, nlaNumber,
+                             circuit, circuitTarget, info.getFIRLoc())) {
+          return failure();
+        }
+      }
+    }
   }
   circuit->setAttr("annotations", annotations);
   deferredModules.reserve(16);
