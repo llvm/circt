@@ -344,12 +344,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       return false;
     }
 
-    // FWrite with a message which starts with "assert:" or "Assertion failed"
-    // is considered as assert.
-    if (auto fwrite = dyn_cast<FWriteOp>(op))
-      return fwrite.string().startswith("assert:") ||
-             fwrite.string().startswith("Assertion failed");
-
     return isa<AssertOp>(op) || isa<FinishOp>(op) ||
            isa<AssertConcurrentOp>(op) || isa<FatalOp>(op);
   };
@@ -360,11 +354,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         if (mod->getAttr("firrtl.extract.assume.extra"))
           return true;
 
-    // FWrite with a message which starts with "assume:" is considered as
-    // assume.
-    if (auto fwrite = dyn_cast<FWriteOp>(op))
-      return fwrite.string().startswith("assume:");
-
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
   auto isCover = [&symCache](Operation *op) -> bool {
@@ -372,10 +361,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.cover.extra"))
           return true;
-
-    // FWrite with a message which starts with "cover:" is considered as cover.
-    if (auto fwrite = dyn_cast<FWriteOp>(op))
-      return fwrite.string().startswith("cover:");
 
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
