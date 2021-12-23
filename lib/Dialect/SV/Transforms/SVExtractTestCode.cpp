@@ -343,17 +343,14 @@ void SVExtractTestCodeImplPass::runOnOperation() {
                message.getValue().startswith("Assertion failed");
       return false;
     }
-
     return isa<AssertOp>(op) || isa<FinishOp>(op) ||
            isa<AssertConcurrentOp>(op) || isa<FatalOp>(op);
   };
-
   auto isAssume = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
       if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.assume.extra"))
           return true;
-
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
   auto isCover = [&symCache](Operation *op) -> bool {
@@ -361,7 +358,6 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.cover.extra"))
           return true;
-
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
