@@ -1,6 +1,6 @@
-; RUN: firtool %s | FileCheck %s --check-prefix=DEFAULT
-; RUN: not firtool --lowering-options=bad-option %s 2>&1 | FileCheck %s --check-prefix=BADOPTION
-; RUN: firtool --lowering-options=noAlwaysComb %s | FileCheck %s --check-prefix=OPTIONS
+; RUN: firtool %s --ir-fir| FileCheck %s --check-prefix=DEFAULT
+; RUN: not firtool --ir-fir --lowering-options=bad-option %s 2>&1 | FileCheck %s --check-prefix=BADOPTION
+; RUN: firtool --ir-fir --lowering-options=noAlwaysComb %s | FileCheck %s --check-prefix=OPTIONS
 
 circuit test :
   module test :

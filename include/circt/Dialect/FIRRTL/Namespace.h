@@ -15,66 +15,13 @@
 #define CIRCT_DIALECT_FIRRTL_NAMESPACE_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "llvm/ADT/StringSet.h"
+#include "circt/Support/Namespace.h"
 
 namespace circt {
 namespace firrtl {
 
-/// A namespace that is used to store existing names and generate new names in
-/// some scope within the IR. This exists to work around limitations of
-/// SymbolTables. This acts as a base class providing facilities common to all
-/// namespaces implementations.
-class NamespaceBase {
-public:
-  NamespaceBase() {}
-  NamespaceBase(const NamespaceBase &other) = default;
-  NamespaceBase(NamespaceBase &&other) : internal(std::move(other.internal)) {}
-
-  NamespaceBase &operator=(const NamespaceBase &other) = default;
-  NamespaceBase &operator=(NamespaceBase &&other) {
-    internal = std::move(other.internal);
-    return *this;
-  }
-
-  /// Empty the namespace.
-  void clear() { internal.clear(); }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  StringRef newName(const Twine &name) {
-    // Special case the situation where there is no name collision to avoid
-    // messing with the SmallString allocation below.
-    llvm::SmallString<64> tryName;
-    auto inserted = internal.insert(name.toStringRef(tryName));
-    if (inserted.second)
-      return inserted.first->getKey();
-
-    // Try different suffixes until we get a collision-free one.
-    size_t i = 0;
-    if (tryName.empty())
-      name.toVector(tryName); // toStringRef may leave tryName unfilled
-    tryName.push_back('_');
-    size_t baseLength = tryName.size();
-    for (;;) {
-      tryName.resize(baseLength);
-      Twine(i++).toVector(tryName); // append integer to tryName
-      auto inserted = internal.insert(tryName);
-      if (inserted.second)
-        return inserted.first->getKey();
-    }
-  }
-
-protected:
-  llvm::StringSet<> internal;
-};
-
 /// The namespace of a `CircuitOp`, generally inhabited by modules.
-struct CircuitNamespace : public NamespaceBase {
+struct CircuitNamespace : public Namespace {
   CircuitNamespace() {}
   CircuitNamespace(CircuitOp circuit) { add(circuit); }
 
@@ -91,7 +38,7 @@ struct CircuitNamespace : public NamespaceBase {
 
 /// The namespace of a `FModuleLike` operation, generally inhabited by its ports
 /// and declarations.
-struct ModuleNamespace : public NamespaceBase {
+struct ModuleNamespace : public Namespace {
   ModuleNamespace() {}
   ModuleNamespace(FModuleLike module) { add(module); }
 

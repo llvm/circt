@@ -1,4 +1,4 @@
-// RUN: firtool %s | FileCheck %s
+// RUN: firtool --ir-fir %s | FileCheck %s
 // Tests extracted from:
 // - test/scala/firrtlTests/AsyncResetSpec.scala
 

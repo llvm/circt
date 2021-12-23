@@ -45,7 +45,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a, 
+  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a,
   // CHECK-SAME:  @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40)
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i1) -> (R0_data: i42, RW0_rdata: i42)
@@ -107,8 +107,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     %in2s = firrtl.asSInt %in2 : (!firrtl.uint<2>) -> !firrtl.sint<2>
 
-    // CHECK: [[PADRES_SIGN:%.+]] = comb.extract %in2 from 1 : (i2) -> i1 
-    // CHECK: [[PADRES:%.+]] = comb.concat  [[PADRES_SIGN]], %in2 : i1, i2 
+    // CHECK: [[PADRES_SIGN:%.+]] = comb.extract %in2 from 1 : (i2) -> i1
+    // CHECK: [[PADRES:%.+]] = comb.concat  [[PADRES_SIGN]], %in2 : i1, i2
     %3 = firrtl.pad %in2s, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
     // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
@@ -186,8 +186,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[VAL18:%.+]] = comb.mul  [[ZEXTC1]], [[ZEXT2]] : i14
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
-    // CHECK: [[IN3SEXT:%.+]] = comb.concat {{.*}}, %in3 : i1, i8 
-    // CHECK: [[PADRESSEXT:%.+]] = comb.concat {{.*}}, [[PADRES]] : i6, i3 
+    // CHECK: [[IN3SEXT:%.+]] = comb.concat {{.*}}, %in3 : i1, i8
+    // CHECK: [[PADRESSEXT:%.+]] = comb.concat {{.*}}, [[PADRES]] : i6, i3
     // CHECK-NEXT: = comb.divs [[IN3SEXT]], [[PADRESSEXT]] : i9
     %19 = firrtl.div %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
@@ -196,7 +196,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract [[MOD1]] from 0 : (i8) -> i3
     %20 = firrtl.rem %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
-    // CHECK: [[IN4EX:%.+]] = comb.concat {{.*}}, [[PADRES]] : i5, i3 
+    // CHECK: [[IN4EX:%.+]] = comb.concat {{.*}}, [[PADRES]] : i5, i3
     // CHECK-NEXT: [[MOD2:%.+]] = comb.mods [[IN4EX]], %in3 : i8
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
@@ -690,12 +690,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {
+    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:      %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:    }
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
-    // CHECK-NEXT:       %3 = comb.extract %RANDOM from 0 : (i32) -> i2
-    // CHECK-NEXT:       sv.bpassign %count, %3 : i2
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@UninitReg1::@count>, #hw.innerNameRef<@UninitReg1::@[[RANDOM_SYM]]>]}
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
@@ -735,9 +737,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     %4 = firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
-    // CHECK-NEXT: %reg = sv.reg : !hw.inout<i32>
+    // CHECK-NEXT: %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
     // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
-    // CHECK-NEXT: %reg2 = sv.reg : !hw.inout<i32>
+    // CHECK-NEXT: %reg2 = sv.reg sym @[[reg2_sym:.+]] : !hw.inout<i32>
     // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
     // CHECK-NEXT: sv.always posedge %clock  {
     // CHECK-NEXT:   sv.if %reset  {
@@ -747,13 +749,17 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:     %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
-    // CHECK-NEXT:       sv.bpassign %reg, %RANDOM : i32
-    // CHECK-NEXT:       %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32
-    // CHECK-NEXT:       sv.bpassign %reg2, %RANDOM_0 : i32
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg2_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -1039,14 +1045,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {
+    // CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:      %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:      %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:    }
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
-    // CHECK-NEXT:       %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32
-    // CHECK-NEXT:       %3 = comb.extract %RANDOM_0 from 0 : (i32) -> i10
-    // CHECK-NEXT:       %4 = comb.concat %RANDOM, %3 : i32, i10
-    // CHECK-NEXT:       sv.bpassign %count, %4 : i42
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{][{]1[}][}]}}[9:0], {{[{][{]2[}][}][}]}};" {symbols = [#hw.innerNameRef<@UninitReg42::@count>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@UninitReg42::@[[RANDOM_0_SYM]]>]}
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
@@ -1173,7 +1181,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @BitCast1() {
     %a = firrtl.wire : !firrtl.vector<uint<2>, 13>
     %b = firrtl.bitcast %a : (!firrtl.vector<uint<2>, 13>) -> (!firrtl.uint<26>)
-    // CHECK: hw.bitcast %0 : (!hw.array<13xi2>) -> i26 
+    // CHECK: hw.bitcast %0 : (!hw.array<13xi2>) -> i26
   }
 
   // CHECK-LABEL: hw.module @BitCast2
@@ -1253,27 +1261,34 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r2 = firrtl.reg %clock  : !firrtl.uint<4>
     %r3 = firrtl.reg %clock  : !firrtl.uint<32>
     %r4 = firrtl.reg %clock  : !firrtl.uint<100>
-    // CHECK:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:    %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:    %8 = comb.extract %RANDOM from 0 : (i32) -> i2
-    // CHECK-NEXT:    sv.bpassign %r1, %8 : i2
-    // CHECK-NEXT:    %9 = comb.extract %RANDOM from 2 : (i32) -> i4
-    // CHECK-NEXT:    sv.bpassign %r2, %9 : i4
-    // CHECK-NEXT:    %10 = comb.extract %RANDOM from 6 : (i32) -> i26
-    // CHECK-NEXT:    %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:    %11 = comb.extract %RANDOM_0 from 0 : (i32) -> i6
-    // CHECK-NEXT:    %12 = comb.concat %10, %11 : i26, i6
-    // CHECK-NEXT:    sv.bpassign %r3, %12 : i32
-    // CHECK-NEXT:    %13 = comb.extract %RANDOM_0 from 6 : (i32) -> i26
-    // CHECK-NEXT:    %RANDOM_1 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:    %RANDOM_2 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:    %RANDOM_3 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:    %14 = comb.extract %RANDOM_3 from 0 : (i32) -> i10
-    // CHECK-NEXT:    %15 = comb.concat %RANDOM_2, %14 : i32, i10
-    // CHECK-NEXT:    %16 = comb.concat %RANDOM_1, %15 : i32, i42
-    // CHECK-NEXT:    %17 = comb.concat %13, %16 : i26, i74
-    // CHECK-NEXT:    sv.bpassign %r4, %17 : i100
-    // CHECK-NEXT:  }
+    // CHECK:      %r1 = sv.reg sym @[[r1_sym:[_A-Za-z0-9]+]]
+    // CHECK:      %r2 = sv.reg sym @[[r2_sym:[_A-Za-z0-9]+]]
+    // CHECK:      %r3 = sv.reg sym @[[r3_sym:[_A-Za-z0-9]+]]
+    // CHECK:      %r4 = sv.reg sym @[[r4_sym:[_A-Za-z0-9]+]]
+    // CHECK:      sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:     %[[RANDOM_0:.+]] = sv.reg sym @[[RANDOM_0_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:     %[[RANDOM_1:.+]] = sv.reg sym @[[RANDOM_1_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:     %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:     %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]]
+    // CHECK-NEXT:     %[[RANDOM_4:.+]] = sv.reg sym @[[RANDOM_4_SYM:[_A-Za-z0-9]+]]{{.+}}
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.initial {
+    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[1:0];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r1_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}}[5:2];" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r2_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[5:0], {{[{][{]2[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r3_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_0_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{]}}{{[{][{]1[}][}]}}[9:0], {{[{][{]2[}][}]}}, {{[{][{]3[}][}]}}, {{[{][{]4[}][}]}}[31:6]{{[}]}};" {symbols = [#hw.innerNameRef<@regInitRandomReuse::@[[r4_sym]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_4_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_3_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_2_SYM]]>, #hw.innerNameRef<@regInitRandomReuse::@[[RANDOM_1_SYM]]>]}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
     firrtl.connect %r1, %a : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %r2, %a : !firrtl.uint<4>, !firrtl.uint<1>
     firrtl.connect %r3, %a : !firrtl.uint<32>, !firrtl.uint<1>
@@ -1283,18 +1298,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %o3, %r3 : !firrtl.uint<32>, !firrtl.uint<32>
     firrtl.connect %o4, %r4 : !firrtl.uint<100>, !firrtl.uint<100>
   }
-  
+
   // CHECK-LABEL: hw.module @init1DVector
   firrtl.module @init1DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %r = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
-    // CHECK:      sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:   %1 = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
-    // CHECK-NEXT:   %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
-    // CHECK-NEXT:   %2 = comb.extract %RANDOM from 0 : (i32) -> i1
-    // CHECK-NEXT:   sv.bpassign %1, %2 : i1
-    // CHECK-NEXT:   %3 = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
-    // CHECK-NEXT:   %4 = comb.extract %RANDOM from 1 : (i32) -> i1
-    // CHECK-NEXT:   sv.bpassign %3, %4 : i1
+    // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
+    // CHECK:      sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.initial {
+    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}}[0] = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}}[1] = {{[{][{]1[}][}]}}[1];" {symbols = [#hw.innerNameRef<@init1DVector::@[[r_sym]]>, #hw.innerNameRef<@init1DVector::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
 
     firrtl.connect %r, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
@@ -1349,14 +1370,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %r1, %a : !firrtl.vector<sint<2>, 1>, !firrtl.vector<sint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<sint<3>, 1>, !firrtl.vector<sint<2>, 1>
     // CHECK:      %2 = hw.array_get %a[%false] : !hw.array<1xi1>
-    // CHECK-NEXT: %3 = comb.concat %2, %2 : i1, i1 
+    // CHECK-NEXT: %3 = comb.concat %2, %2 : i1, i1
     // CHECK-NEXT: %4 = hw.array_create %3 : i2
     // CHECK-NEXT: sv.always posedge %clock  {
     // CHECK-NEXT:   sv.passign %r1, %4 : !hw.array<1xi2>
     // CHECK-NEXT: }
     // CHECK-NEXT: %5 = hw.array_get %1[%false] : !hw.array<1xi2>
-    // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i2) -> i1 
-    // CHECK-NEXT: %7 = comb.concat %6, %5 : i1, i2 
+    // CHECK-NEXT: %6 = comb.extract %5 from 1 : (i2) -> i1
+    // CHECK-NEXT: %7 = comb.concat %6, %5 : i1, i2
     // CHECK-NEXT: %8 = hw.array_create %7 : i3
     // CHECK-NEXT: sv.assign %.b.output, %8 : !hw.array<1xi3>
     // CHECK-NEXT: hw.output %0 : !hw.array<1xi3>
@@ -1465,5 +1486,86 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %3 = sv.struct_field_inout %2["c"] : !hw.inout<struct<c: i1>>
     // CHECK-NEXT: sv.assign %3, %in : i1
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: !hw.struct<c: i1>>>
+  }
+
+  // CHECK-LABEL: hw.module @initStruct
+  firrtl.module @initStruct(in %clock: !firrtl.clock) {
+    %r = firrtl.reg %clock  : !firrtl.bundle<a: uint<1>>
+    // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
+    // CHECK:      sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
+    // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]]{{.+}}
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.initial {
+    // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = `RANDOM;" {symbols = [#hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}}.a = {{[{][{]1[}][}]}}[0];" {symbols = [#hw.innerNameRef<@initStruct::@[[r_sym]]>, #hw.innerNameRef<@initStruct::@[[RANDOM_SYM]]>]}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+  }
+
+  // CHECK-LABEL: hw.module @RegResetStructNarrow
+  firrtl.module @RegResetStructNarrow(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
+    // CHECK:      %0 = hw.struct_extract %init["a"] : !hw.struct<a: i2>
+    // CHECK-NEXT: %1 = comb.extract %0 from 0 : (i2) -> i1
+    // CHECK-NEXT: %2 = hw.struct_create (%1) : !hw.struct<a: i1>
+    // CHECK-NEXT: %reg = sv.reg {{.+}}  : !hw.inout<struct<a: i1>>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg, %2 : !hw.struct<a: i1>
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+  }
+
+  // CHECK-LABEL: hw.module @BundleConnection
+  firrtl.module @BundleConnection(in %source: !firrtl.bundle<a: bundle<b: uint<1>>>, out %sink: !firrtl.bundle<a: bundle<b: uint<1>>>) {
+    %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
+    %1 = firrtl.subfield %source(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
+    firrtl.connect %0, %1 : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+    // CHECK:      %.sink.output = sv.wire  : !hw.inout<struct<a: !hw.struct<b: i1>>>
+    // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: i1>>>
+    // CHECK-NEXT: %1 = sv.struct_field_inout %.sink.output["a"] : !hw.inout<struct<a: !hw.struct<b: i1>>>
+    // CHECK-NEXT: %2 = hw.struct_extract %source["a"] : !hw.struct<a: !hw.struct<b: i1>>
+    // CHECK-NEXT: sv.assign %1, %2 : !hw.struct<b: i1>
+    // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: i1>>
+  }
+
+  // CHECK-LABEL: hw.module @AggregateInvalidValue
+  firrtl.module @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    // CHECK:      %c0_i101 = hw.constant 0 : i101
+    // CHECK-NEXT: %0 = hw.bitcast %c0_i101 : (i101) -> !hw.struct<a: i1, b: !hw.array<10xi10>>
+    // CHECK-NEXT: %reg = sv.reg {{.+}} : !hw.inout<struct<a: i1, b: !hw.array<10xi10>>>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg, %0 : !hw.struct<a: i1, b: !hw.array<10xi10>>
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+  }
+
+  // CHECK-LABEL: hw.module @AggregateRegAssign
+  firrtl.module @AggregateRegAssign(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+    %reg = firrtl.reg %clock : !firrtl.vector<uint<1>, 1>
+    %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %0 = sv.array_index_inout %reg[%false] : !hw.inout<array<1xi1>>, i1
+    // CHECK:  sv.passign %0, %value : i1
+  }
+
+  // CHECK-LABEL: hw.module @AggregateRegResetAssign
+  firrtl.module @AggregateRegResetAssign(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+                                         in %init: !firrtl.vector<uint<1>, 1>, in %value: !firrtl.uint<1>) {
+    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
+    firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %0 = sv.array_index_inout %reg[%false] : !hw.inout<array<1xi1>>, i1
+    // CHECK:  sv.passign %0, %value : i1
   }
 }

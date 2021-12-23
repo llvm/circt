@@ -24,14 +24,33 @@ namespace json = llvm::json;
 
 namespace {
 /// Helper class to destructure parsed JSON and emit appropriate error messages.
+/// This class should be treated with the same care as a Twine; it should never
+/// be assigned to a local variable and should only be passed by constant
+/// reference parameters.
 template <typename JsonType>
-struct ExtractionSummaryCursor {
-  Location loc;
-  const Twine &path;
-  JsonType value;
+class ExtractionSummaryCursor {
 
+  // Allow ExtractionSummaryCursor to construct other instances.
+  template <typename T>
+  friend class ExtractionSummaryCursor;
+
+  // This is a friend function since we have no public contructors.
+  template <typename T, typename FnType>
+  friend ParseResult parseJson(Location loc, const T &jsonValue, FnType fn);
+
+  // Private constructor and destructor.
+  ExtractionSummaryCursor(Location loc, Twine path, JsonType value)
+      : loc(loc), path(path), value(value) {}
+  ~ExtractionSummaryCursor() = default;
+
+  // Deleted constructors.
   ExtractionSummaryCursor(const ExtractionSummaryCursor &) = delete;
   ExtractionSummaryCursor &operator=(const ExtractionSummaryCursor &) = delete;
+
+public:
+  Location loc;
+  Twine path;
+  JsonType value;
 
   /// Report an error about the current path.
   InFlightDiagnostic emitError() const {
@@ -134,10 +153,9 @@ struct ExtractionSummaryCursor {
 };
 
 /// Convenience function to create a `ExtractionSummaryCursor`.
-template <typename JsonType>
-ExtractionSummaryCursor<JsonType>
-makeExtractionSummaryCursor(Location loc, JsonType jsonValue) {
-  return ExtractionSummaryCursor<JsonType>{loc, {}, jsonValue};
+template <typename JsonType, typename FnType>
+ParseResult parseJson(Location loc, const JsonType &jsonValue, FnType fn) {
+  return fn(ExtractionSummaryCursor<JsonType>{loc, {}, jsonValue});
 }
 } // namespace
 
@@ -436,16 +454,17 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
 
     // Extract and apply any predicate modifier.
     PredicateModifier predMod;
-    if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
-            .withObjectField("predicateModifier", [&](const auto &ex) {
-              return ex.withStringField("type", [&](const auto &ex) {
-                if (auto pm = parsePredicateModifier(ex)) {
-                  predMod = *pm;
-                  return success();
-                }
-                return failure();
-              });
-            }))
+    if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
+          return ex.withObjectField("predicateModifier", [&](const auto &ex) {
+            return ex.withStringField("type", [&](const auto &ex) {
+              if (auto pm = parsePredicateModifier(ex)) {
+                predMod = *pm;
+                return success();
+              }
+              return failure();
+            });
+          });
+        }))
       return failure();
 
     Value predicate = whenStmt.condition();
@@ -464,54 +483,59 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
 
     // Extract the preprocessor macro names that should guard this assertion.
     SmallVector<Attribute> guards;
-    if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
-            .withArrayField("conditionalCompileToggles", [&](const auto &ex) {
-              return ex.withObject([&](const auto &ex) {
-                return ex.withStringField("type", [&](const auto &ex) {
-                  if (auto guard = parseConditionalCompileToggle(ex)) {
-                    guards.push_back(
-                        StringAttr::get(builder.getContext(), *guard));
-                    return success();
-                  }
-                  return failure();
+    if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
+          return ex.withArrayField(
+              "conditionalCompileToggles", [&](const auto &ex) {
+                return ex.withObject([&](const auto &ex) {
+                  return ex.withStringField("type", [&](const auto &ex) {
+                    if (auto guard = parseConditionalCompileToggle(ex)) {
+                      guards.push_back(
+                          StringAttr::get(builder.getContext(), *guard));
+                      return success();
+                    }
+                    return failure();
+                  });
                 });
               });
-            }))
+        }))
       return failure();
 
     // Extract label additions and the message.
     SmallString<32> label("verif_library");
-    if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
-            .withArrayField("labelExts", [&](const auto &ex) {
-              return ex.withString([&](const auto &ex) {
-                label.push_back('_');
-                label.append(ex.value);
-                return success();
-              });
-            }))
+    if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
+          return ex.withArrayField("labelExts", [&](const auto &ex) {
+            return ex.withString([&](const auto &ex) {
+              label.push_back('_');
+              label.append(ex.value);
+              return success();
+            });
+          });
+        }))
       return failure();
 
     StringRef message = fmt;
-    if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
-            .withStringField("baseMsg", [&](const auto &ex) {
-              message = ex.value;
-              return success();
-            }))
+    if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
+          return ex.withStringField("baseMsg", [&](const auto &ex) {
+            message = ex.value;
+            return success();
+          });
+        }))
       return failure();
 
     // Assertions carry an additional `format` field.
     Optional<StringRef> format;
     if (flavor == VerifFlavor::VerifLibAssert) {
-      if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
-              .withObjectField("format", [&](const auto &ex) {
-                return ex.withStringField("type", [&](const auto &ex) {
-                  if (auto f = parseAssertionFormat(ex)) {
-                    format = *f;
-                    return success();
-                  }
-                  return failure();
-                });
-              }))
+      if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
+            return ex.withObjectField("format", [&](const auto &ex) {
+              return ex.withStringField("type", [&](const auto &ex) {
+                if (auto f = parseAssertionFormat(ex)) {
+                  format = *f;
+                  return success();
+                }
+                return failure();
+              });
+            });
+          }))
         return failure();
     }
 

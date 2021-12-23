@@ -6,7 +6,7 @@ from ._comb_ops_gen import *
 
 from circt.support import NamedValueOpView
 
-from mlir.ir import IntegerAttr, IntegerType
+from mlir.ir import IntegerAttr, IntegerType, OpView
 
 
 # Sugar classes for the various possible verions of ICmpOp.
@@ -28,7 +28,7 @@ def CompareOp(predicate):
 
   def decorated(cls):
 
-    class _Class(cls):
+    class _Class(cls, OpView):
 
       @staticmethod
       def create(lhs=None, rhs=None):

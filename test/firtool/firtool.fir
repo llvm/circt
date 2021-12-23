@@ -1,12 +1,12 @@
-; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
-; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --format=fir -mlir -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
+; RUN: firtool %s --format=fir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
+; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --format=fir --ir-fir --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --format=fir --ir-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
-; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
-; RUN: firtool %s --format=fir -verilog-ir | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
+; RUN: firtool %s --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
 
 
 circuit test_mod : %[[{"a": "a"}]]

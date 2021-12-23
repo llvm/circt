@@ -1,5 +1,5 @@
 // RUN: circt-opt --export-verilog %s | FileCheck %s
-// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW
+// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
 
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.
@@ -8,31 +8,36 @@
 // DISALLOW-LABEL: module side_effect_expr
 hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 
-  // DISALLOW: reg [[SE_REG:[_A-Za-z0-9]+]];
+  // CHECK: `ifdef FOO_MACRO
+  // DISALLOW: `ifdef FOO_MACRO
+  sv.ifdef "FOO_MACRO" {
+    // DISALLOW: {{^    }}reg [[SE_REG:[_A-Za-z0-9]+]];
+    // DISALLOW: {{^    }}wire [[COND:[_A-Za-z0-9]+]] = INLINE_OK;
 
-  // DISALLOW: wire [[COND:[_A-Za-z0-9]+]] = INLINE_OK;
+    // CHECK:    always @(posedge clock)
+    // DISALLOW: always @(posedge clock)
+    sv.always posedge %clock  {
+      %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
 
-  // CHECK:    always @(posedge clock)
-  // DISALLOW: always @(posedge clock)
-  sv.always posedge %clock  {
-    %0 = sv.verbatim.expr "INLINE_OK" : () -> i1
+      // This shouldn't be pushed into a reg.
+      // CHECK: if (INLINE_OK)
+      // DISALLOW: if ([[COND]])
+      sv.if %0  {
+        sv.fatal 1
+      }
 
-    // This shouldn't be pushed into a reg.
-    // CHECK: if (INLINE_OK)
-    // DISALLOW: if ([[COND]])
-    sv.if %0  {
-      sv.fatal 1
-    }
-
-    // This should go through a reg when in "disallow" mode.
-    // CHECK: if (SIDE_EFFECT)
-    // DISALLOW: [[SE_REG]] = SIDE_EFFECT;
-    // DISALLOW: if ([[SE_REG]])
-    %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
-    sv.if %1  {
-      sv.fatal 1
+      // This should go through a reg when in "disallow" mode.
+      // CHECK: if (SIDE_EFFECT)
+      // DISALLOW: [[SE_REG]] = SIDE_EFFECT;
+      // DISALLOW: if ([[SE_REG]])
+      %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
+      sv.if %1  {
+        sv.fatal 1
+      }
     }
   }
+  // CHECK: `endif
+  // DISALLOW: `endif
 
   // Top level things should go unmodified.
   %2 = sv.verbatim.expr "NO_SE" : () -> i1

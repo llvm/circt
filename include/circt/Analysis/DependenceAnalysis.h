@@ -66,6 +66,9 @@ struct MemoryDependenceAnalysis {
   // Returns the dependences, if any, that the given Operation depends on.
   ArrayRef<MemoryDependence> getDependences(Operation *);
 
+  // Replaces the dependences, if any, from the oldOp to the newOp.
+  void replaceOp(Operation *oldOp, Operation *newOp);
+
 private:
   // Store dependence results.
   MemoryDependenceResult results;

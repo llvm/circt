@@ -2,8 +2,6 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import builtins
-
 from pycde.devicedb import PrimitiveDB, PhysicalRegion
 
 from .module import _SpecializedModule
@@ -19,7 +17,6 @@ import circt.dialects.msft
 import circt.support
 
 from contextvars import ContextVar
-import io
 import os
 import sys
 import typing
@@ -43,6 +40,7 @@ class System:
   ]
 
   PASSES = """
+    msft-partition,
     lower-msft-to-hw{{tops={tops} verilog-file={verilog_file} tcl-file={tcl_file}}},
     lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup)
   """

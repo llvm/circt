@@ -7,16 +7,6 @@
 // CHECK:   sv.ifdef.procedural "RANDOMIZE_GARBAGE_ASSIGN"  {
 // CHECK-NEXT:   sv.verbatim "`define RANDOMIZE"
 // CHECK-NEXT:  }
-firrtl.circuit "InvalidBundle" {
-
-  // https://github.com/llvm/circt/issues/593
-  firrtl.module @InvalidBundle() {
-    // expected-error @+1 {{unsupported type}}
-    %0 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
-  }
-}
-
-// -----
 
 firrtl.circuit "OperandTypeIsFIRRTL" {
   firrtl.module @OperandTypeIsFIRRTL() { }

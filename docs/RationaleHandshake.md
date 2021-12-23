@@ -1,4 +1,4 @@
-# 'handshake' Dialect
+# Handshake Dialect Rationale
 
 [TOC]
 

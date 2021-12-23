@@ -354,10 +354,17 @@ def MuxOp : Handshake_Op<"mux", [
 		Variadic<AnyType> : $dataOperands);
   let results = (outs AnyType : $result);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand, "int":$inputs)>];
+  let builders = [
+    // Note/warning: This builder should only be used by StandardToHandshake
+    // since it contains some hardcoded assumptions that the conversion pass
+    // will manually adjust its operand later.
+    OpBuilder<(ins "Value":$anyInput, "int":$inputs)>,
+    // Use this builder for any other use case.
+    OpBuilder<(ins "Value":$selectOperand, "ValueRange":$inputs)>];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verify(*this);";
+  let hasCanonicalizer = 1;
 }
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
@@ -482,13 +489,16 @@ def SinkOp
 def SourceOp : Handshake_Op<"source", [NoSideEffect]> {
   let summary = "source operation";
   let description = [{
-    The source operation represents continuous data
+    The source operation represents continuous token
     source.  The source continously sets a 'valid' signal which the
     successor can consume at any point in time.
   }];
 
+  let skipDefaultBuilders = 1;
   let results = (outs AnyType:$result);
-  let assemblyFormat = [{ attr-dict `:` type($result)}];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [OpBuilder<(ins)>];
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
@@ -531,6 +541,7 @@ def ConstantOp : Handshake_Op<"constant", [
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
   let assemblyFormat = [{ $ctrl attr-dict `:` type($result)}];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def EndOp

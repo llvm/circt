@@ -44,6 +44,15 @@ def HandshakeMaterializeForksSinks : Pass<"handshake-materialize-forks-sinks", "
   let constructor = "circt::handshake::createHandshakeMaterializeForksSinksPass()";
 }
 
+def HandshakeDematerializeForksSinks : Pass<"handshake-dematerialize-forks-sinks", "handshake::FuncOp"> {
+  let summary = "Dematerialize fork and sink operations.";
+  let description = [{
+    This pass analyses a handshake.func operation and removes all fork and sink
+    operations.
+  }];
+  let constructor = "circt::handshake::createHandshakeDematerializeForksSinksPass()";
+}
+
 def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp"> {
   let summary = "Remove buffers from handshake functions.";
   let description = [{
@@ -64,6 +73,18 @@ def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
     `handshake.func` operation.
   }];
   let constructor = "circt::handshake::createHandshakeAddIDsPass()";
+}
+
+def HandshakeInsertBuffers
+  : Pass<"handshake-insert-buffers", "handshake::FuncOp"> {
+  let summary = "Insert buffers to break graph cycles";
+  let constructor = "circt::handshake::createHandshakeInsertBuffersPass()";
+  let options = [
+    Option<"strategy", "strategy", "std::string", "\"all\"",
+           "Strategy to apply. Possible values are: cycles, allFIFO, all (default)">,
+    Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
+           "Number of slots in each buffer">,
+  ];
 }
 
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD

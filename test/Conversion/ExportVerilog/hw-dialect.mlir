@@ -448,6 +448,38 @@ hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
   hw.output %o1, %o2, %o3 : i4, i0, !hw.array<3xi0>
 }
 
+// CHECK: module TestZeroStruct(
+// CHECK-NEXT:  // input  /*Zero Width*/                           structZero,
+// CHECK-NEXT:  // input  struct packed {logic /*Zero Width*/ a; } structZeroNest,
+// CHECK-NEXT:  // output /*Zero Width*/                           structZero_0,
+// CHECK-NEXT:  // output struct packed {logic /*Zero Width*/ a; } structZeroNest_0
+// CHECK-NEXT: );
+hw.module @TestZeroStruct(%structZero: !hw.struct<>, %structZeroNest: !hw.struct<a: !hw.struct<>>)
+  -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
+
+  hw.output %structZero, %structZeroNest : !hw.struct<>, !hw.struct<a: !hw.struct<>>
+  // CHECK:      // Zero width: assign structZero_0 = structZero;
+  // CHECK-NEXT: // Zero width: assign structZeroNest_0 = structZeroNest;
+  // CHECK-NEXT: endmodule
+}
+
+// CHECK-LABEL: TestZeroStructInstance
+hw.module @TestZeroStructInstance(%structZero: !hw.struct<>, %structZeroNest: !hw.struct<a: !hw.struct<>>)
+  -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>) {
+
+// CHECK: TestZeroStruct iii (
+// CHECK-NEXT:  //.structZero       (structZero)
+// CHECK-NEXT:  //.structZeroNest   (structZeroNest)
+// CHECK-NEXT:  //.structZero_0     (structZero_0)
+// CHECK-NEXT:  //.structZeroNest_0 (structZeroNest_0)
+// CHECK-NEXT:  );
+
+  %o1, %o2 = hw.instance "iii" @TestZeroStruct(structZero: %structZero: !hw.struct<>, structZeroNest: %structZeroNest: !hw.struct<a: !hw.struct<>>)
+                                -> (structZero_0: !hw.struct<>, structZeroNest_0: !hw.struct<a: !hw.struct<>>)
+
+  hw.output %o1, %o2 : !hw.struct<>, !hw.struct<a: !hw.struct<>>
+}
+
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 hw.module @cyclic(%a: i1) -> (b: i1) {
@@ -584,6 +616,13 @@ hw.module @largeConstant(%a: i100000, %b: i16) -> (x: i100000, y: i16) {
   %2 = comb.add %b, %c2, %c2, %c2, %c2, %c2, %c2, %c2, %c2 : i16
 
   hw.output %1, %2 : i100000, i16
+}
+// CHECK-LABEL: StructExtractExtract
+hw.module @StructExtractExtract(%a: !hw.struct<b: i4>) -> (r: i2) {
+  %0 = hw.struct_extract %a["b"] : !hw.struct<b: i4>
+  %1 = comb.extract %0 from 1 : (i4) -> i2
+  // CHECK: assign r = a.b[2:1];
+  hw.output %1 : i2
 }
 
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
@@ -798,6 +837,23 @@ hw.module @SignedShiftRightPrecendence(%p: i1, %x: i45) -> (o: i45) {
   %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
   %1 = comb.shrs %x, %0 : i45
   hw.output %1 : i45
+}
+
+// CHECK-LABEL: structExtractChain
+hw.module @structExtractChain(%cond: i1, %a: !hw.struct<c: !hw.struct<d:i1>>) -> (out: i1) {
+    %1 = hw.struct_extract %a["c"] : !hw.struct<c: !hw.struct<d:i1>>
+    %2 = hw.struct_extract %1["d"] : !hw.struct<d:i1>
+    // CHECK: assign out = a.c.d;
+    hw.output %2 : i1
+}
+
+// CHECK-LABEL: structExtractFromTemporary
+hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.struct<c: i1>) -> (out: i1) {
+    %0 = comb.mux %cond, %a, %b : !hw.struct<c: i1>
+    %1 = hw.struct_extract %0["c"] : !hw.struct<c: i1>
+    // CHECK: wire struct packed {logic c; } _T = cond ? a : b;
+    // CHECK-NEXT: assign out = _T.c;
+    hw.output %1 : i1
 }
 
 // CHECK-LABEL: module replicate

@@ -418,6 +418,31 @@ class ArrayCreateOp:
     return hw.ArrayCreateOp(hw.ArrayType.get(type, len(vals)), vals)
 
 
+class ArrayConcatOp:
+
+  @staticmethod
+  def create(*sub_arrays):
+    vals = []
+    types = []
+    element_type = None
+    for array in sub_arrays:
+      array_value = support.get_value(array)
+      array_type = support.type_to_pytype(array_value.type)
+      if array_value is None or not isinstance(array_type, hw.ArrayType):
+        raise TypeError(f"Cannot concatenate {array_value}")
+      if element_type is None:
+        element_type = array_type.element_type
+      elif element_type != array_type.element_type:
+        raise TypeError(
+            "All arguments must be the same type to concatenate arrays")
+      vals.append(array_value)
+      types.append(array_type)
+
+    size = sum(t.size for t in types)
+    combined_type = hw.ArrayType.get(element_type, size)
+    return hw.ArrayConcatOp(combined_type, vals)
+
+
 class StructCreateOp:
 
   @staticmethod

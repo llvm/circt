@@ -21,7 +21,8 @@ def InstanceOp : MSFTOp<"instance", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
-                       OptionalAttr<ParamDeclArrayAttr>:$parameters);
+                       OptionalAttr<ParamDeclArrayAttr>:$parameters,
+                       OptionalAttr<SymbolRefAttr>:$targetDesignPartition);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -62,7 +63,7 @@ def MSFTModuleOp : MSFTOp<"module",
     A lot like `hw.module`, but with a few differences:
       - Can exist without a body. The body is filled in by a generator post op
       creation.
-      - MSFT-specific methods and arguments will be added later on.
+      - Provides methods for mutation.
   }];
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
@@ -89,6 +90,12 @@ def MSFTModuleOp : MSFTOp<"module",
     // Decode information about the input and output ports on this module.
     ::circt::hw::ModulePortInfo getPorts();
 
+    // Adds input and output ports. Returns a list of new block arguments for
+    // the new inputs.
+    SmallVector<BlockArgument> addPorts(
+      ArrayRef<std::pair<StringAttr, Type>> inputs,
+      ArrayRef<std::pair<StringAttr, Value>> outputs);
+
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
       return (*this)->getAttrOfType<StringAttr>(
@@ -99,6 +106,8 @@ def MSFTModuleOp : MSFTOp<"module",
     StringRef getName() {
       return getNameAttr().getValue();
     }
+
+    Block *getBodyBlock() { return &body().front(); }
 
   private:
     // This trait needs access to the hooks defined below.
@@ -156,6 +165,22 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
     /// Decode information about the input and output ports on this module.
     hw::ModulePortInfo getPorts();
   }];
+}
+
+def DesignPartitionOp : MSFTOp<"partition",
+                               [Symbol, HasParent<"msft::MSFTModuleOp">]> {
+  let summary = "A target \"module\" for moving entities";
+  let description = [{
+    Sometimes EDA tools require designs to have a module hierarchy which doesn't
+    match the logical structure a designer would like to have. "Design
+    partitions" allow the designer to "tag" entities (instances, registers, etc.)
+    with a target design partition. During lowering, CIRCT will modify the
+    hierarchy to move the tagged entities into the design partition module. The
+    target design partition can then be used by subsequent EDA tools.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$verilogName);
+  let assemblyFormat = "$sym_name `,` $verilogName attr-dict";
 }
 
 def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,

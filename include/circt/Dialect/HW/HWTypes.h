@@ -27,9 +27,8 @@ class TypedeclOp;
 namespace detail {
 /// Struct defining a field. Used in structs and unions.
 struct FieldInfo {
-  mlir::StringRef name;
+  mlir::StringAttr name;
   mlir::Type type;
-  FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const;
 };
 } // namespace detail
 } // namespace hw

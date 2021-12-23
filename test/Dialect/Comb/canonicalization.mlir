@@ -886,6 +886,27 @@ hw.module @dont_fold_mux_tree1(%sel: i7, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: 
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @dont_fold_mux_tree2
+// This shouldn't be turned into a mux tree because its too large.
+hw.module @dont_fold_mux_tree2(%sel: i64) -> (o: i3) {
+  // CHECK-NOT: array_create
+  // CHECK: hw.output
+  %c-3_i3 = hw.constant -3 : i3
+  %c-4_i3 = hw.constant -4 : i3
+  %c3_i3 = hw.constant 3 : i3
+  %c0_i3 = hw.constant 0 : i3
+  %c14_i64 = hw.constant 14 : i64
+  %0 = comb.icmp eq %sel, %c14_i64 : i64
+  %1 = comb.mux %0, %c3_i3, %c0_i3 : i3
+  %c15_i64 = hw.constant 15 : i64
+  %2 = comb.icmp eq %sel, %c15_i64 : i64
+  %3 = comb.mux %2, %c-4_i3, %1 : i3
+  %c13_i64 = hw.constant 13 : i64
+  %4 = comb.icmp eq %sel, %c13_i64 : i64
+  %5 = comb.mux %4, %c-3_i3, %3 : i3
+  hw.output %5: i3
+}
+
 // Issue 675: https://github.com/llvm/circt/issues/675
 // CHECK-LABEL: hw.module @SevenSegmentDecoder
 hw.module @SevenSegmentDecoder(%in: i4) -> (out: i7) {

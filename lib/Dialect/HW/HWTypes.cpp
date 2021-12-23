@@ -31,10 +31,6 @@ using namespace circt::hw::detail;
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.cpp.inc"
 
-FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
-  return FieldInfo{alloc.copyInto(name), type};
-}
-
 //===----------------------------------------------------------------------===//
 // Type Helpers
 //===----------------------------------------------------------------------===/
@@ -236,7 +232,8 @@ static ParseResult parseFields(AsmParser &p,
         Type type;
         if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
           return failure();
-        parameters.push_back(FieldInfo{name, type});
+        parameters.push_back(
+            FieldInfo{StringAttr::get(name, p.getContext()), type});
         return success();
       });
 }
@@ -245,7 +242,7 @@ static ParseResult parseFields(AsmParser &p,
 static void printFields(AsmPrinter &p, ArrayRef<FieldInfo> fields) {
   p << '<';
   llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
-    p << field.name << ": " << field.type;
+    p << field.name.getValue() << ": " << field.type;
   });
   p << ">";
 }

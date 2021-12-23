@@ -1,5 +1,5 @@
 ; REQUIRES: verilator
-; RUN: firtool -verilog -lower-to-hw %s > %t.sv
+; RUN: firtool -verilog %s > %t.sv
 ; RUN: circt-rtl-sim.py %t.sv 2>&1 | tee %t.out
 ; RUN: grep PASS %t.out
 

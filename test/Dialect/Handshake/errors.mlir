@@ -105,3 +105,11 @@ handshake.func @invalid_num_resnames(%a : i32, %b : i32, %c : none) -> (i32, non
 handshake.func @invalid_type_resnames(%a : i32, %b : none) -> none attributes {resNames = [2 : i32]} {
   return %b : none
 }
+
+// -----
+
+handshake.func @invalid_constant_value(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.constant' op constant value type differs from operation result type.}}
+  %0 = constant %ctrl {value = 1 : i31} : i32
+  return %ctrl : none
+}

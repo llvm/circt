@@ -173,7 +173,8 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let printer = "return ::print$cppClass(p, *this);";
 
   let builders = [
-    OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>
+    OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
+    OpBuilder<(ins "Value":$input, "StringAttr":$field)>
   ];
 }
 

@@ -74,7 +74,9 @@ def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
 
 def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
   let summary = "Lower SCF/Standard to Calyx";
-  let description = "This pass lowers SCF / standard to Calyx.";
+  let description = [{
+    This pass lowers SCF / standard to Calyx.
+  }];
   let constructor = "circt::createSCFToCalyxPass()";
   let dependentDialects = [
     "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
@@ -92,7 +94,9 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 
 def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower Calyx to HW";
-  let description = "This pass lowers Calyx to HW.";
+  let description = [{
+    This pass lowers Calyx to HW.
+  }];
   let constructor = "circt::createCalyxToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
@@ -104,8 +108,9 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 
 def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower FIRRTL to HW";
-  let description =
-    "Lower a module of FIRRTL dialect to the HW dialect family.";
+  let description = [{
+    Lower a module of FIRRTL dialect to the HW dialect family.
+  }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
@@ -125,7 +130,9 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
 
 def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
   let summary = "Lower Handshake to FIRRTL";
-  let description = "Lower Handshake to FIRRTL.";
+  let description = [{
+    Lower Handshake to FIRRTL.
+  }];
   let constructor = "circt::createHandshakeToFIRRTLPass()";
   let dependentDialects = ["firrtl::FIRRTLDialect"];
 }
@@ -150,7 +157,9 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
 
 def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
   let summary = "Convert LLHD to LLVM";
-  let description = "This pass translates LLHD to LLVM.";
+  let description = [{
+    This pass translates LLHD to LLVM."
+  }];
   let constructor = "circt::createConvertLLHDToLLVMPass()";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
@@ -182,19 +191,6 @@ def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
   let summary = "Remove block structure in Handshake IR";
   let constructor = "circt::createHandshakeRemoveBlockPass()";
-}
-
-def HandshakeInsertBuffer
-  : Pass<"handshake-insert-buffer", "handshake::FuncOp"> {
-  let summary = "Insert buffers to break graph cycles";
-  let constructor = "circt::createHandshakeInsertBufferPass()";
-  let options = [
-    ListOption<"strategies", "strategies", "std::string",
-               "List of strategies to apply. Possible values are: cycles, all (default)",
-               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
-    Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
-           "Number of slots in each buffer">,
-  ];
 }
 
 //===----------------------------------------------------------------------===//

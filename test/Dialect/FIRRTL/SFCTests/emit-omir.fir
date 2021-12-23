@@ -65,9 +65,9 @@ circuit Foo : %[[
   extmodule MySRAM:
     defname = MySRAM
   module Foo :
-    input unsigned : UInt<17>
+    input unsigned : UInt<29>
     input zeroW : UInt<0>
-    output signed : UInt<19>
+    output signed : UInt<31>
     inst parameter of Bar
     signed <= unsigned
   module Bar :
@@ -135,11 +135,11 @@ circuit Foo : %[[
 ; CHECK-NEXT:    {
 ; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>unsigned_0",
 ; CHECK-NEXT:      "direction": "OMString:Input",
-; CHECK-NEXT:      "width": "OMBigInt:17"
+; CHECK-NEXT:      "width": "OMBigInt:1d"
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    {
 ; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>signed_1",
 ; CHECK-NEXT:      "direction": "OMString:Output",
-; CHECK-NEXT:      "width": "OMBigInt:19"
+; CHECK-NEXT:      "width": "OMBigInt:1f"
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:  ]

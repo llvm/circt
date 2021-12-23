@@ -1,5 +1,5 @@
 // RUN: circt-opt -lower-std-to-handshake %s \
-// RUN: | circt-opt --handshake-insert-buffer="strategies=all" \
+// RUN: | circt-opt --handshake-insert-buffers="strategy=all" \
 // RUN: | handshake-runner | FileCheck %s
 // CHECK: 42
 module {

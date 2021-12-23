@@ -33,14 +33,23 @@ static SmallVector<SmallVector<unsigned>> parseArrayOfArrays(ArrayAttr attr) {
   return result;
 }
 
-static SmallVector<std::pair<llvm::StringRef, unsigned>>
+template <typename T = unsigned>
+static SmallVector<std::pair<llvm::StringRef, T>>
 parseArrayOfDicts(ArrayAttr attr, StringRef key) {
-  SmallVector<std::pair<llvm::StringRef, unsigned>> result;
+  SmallVector<std::pair<llvm::StringRef, T>> result;
   for (auto dictAttr : attr.getAsRange<DictionaryAttr>()) {
     auto name = dictAttr.getAs<StringAttr>("name");
-    auto value = dictAttr.getAs<IntegerAttr>(key);
-    if (name && value)
-      result.push_back(std::make_pair(name.getValue(), value.getInt()));
+    if (!name)
+      continue;
+    auto intAttr = dictAttr.getAs<IntegerAttr>(key);
+    if (intAttr) {
+      result.push_back(std::make_pair(name.getValue(), intAttr.getInt()));
+      continue;
+    }
+    auto floatAttr = dictAttr.getAs<FloatAttr>(key);
+    if (floatAttr)
+      result.push_back(
+          std::make_pair(name.getValue(), floatAttr.getValueAsDouble()));
   }
   return result;
 }
@@ -97,6 +106,25 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
       Operation *to = ops[elemArr[1]];
       unsigned dist = elemArr[2];
       prob.setDistance(std::make_pair(from, to), dist);
+    }
+  }
+}
+
+static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
+  // patch the default operator type to have zero-delay
+  auto unitOpr = prob.getOrInsertOperatorType("unit");
+  prob.setIncomingDelay(unitOpr, 0.0f);
+  prob.setOutgoingDelay(unitOpr, 0.0f);
+
+  // parse operator type info (again) to extract delays
+  if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
+    for (auto &elem : parseArrayOfDicts<float>(attr, "incdelay")) {
+      auto opr = prob.getOrInsertOperatorType(std::get<0>(elem));
+      prob.setIncomingDelay(opr, std::get<1>(elem));
+    }
+    for (auto &elem : parseArrayOfDicts<float>(attr, "outdelay")) {
+      auto opr = prob.getOrInsertOperatorType(std::get<0>(elem));
+      prob.setOutgoingDelay(opr, std::get<1>(elem));
     }
   }
 }
@@ -191,6 +219,47 @@ void TestCyclicProblemPass::runOnFunction() {
   for (auto *op : prob.getOperations())
     if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
       prob.setStartTime(op, startTimeAttr.getInt());
+
+  if (failed(prob.verify())) {
+    func->emitError("problem verification failed");
+    return signalPassFailure();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ChainingProblem
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestChainingProblemPass
+    : public PassWrapper<TestChainingProblemPass, FunctionPass> {
+  void runOnFunction() override;
+  StringRef getArgument() const override { return "test-chaining-problem"; }
+  StringRef getDescription() const override {
+    return "Import a solution for the chaining problem encoded as attributes";
+  }
+};
+} // namespace
+
+void TestChainingProblemPass::runOnFunction() {
+  auto func = getFunction();
+
+  auto prob = ChainingProblem::get(func);
+  constructProblem(prob, func);
+  constructChainingProblem(prob, func);
+
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
+
+  // get schedule and physical start times from the test case
+  for (auto *op : prob.getOperations()) {
+    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
+      prob.setStartTime(op, startTimeAttr.getInt());
+    if (auto sticAttr = op->getAttrOfType<FloatAttr>("problemStartTimeInCycle"))
+      prob.setStartTimeInCycle(op, sticAttr.getValueAsDouble());
+  }
 
   if (failed(prob.verify())) {
     func->emitError("problem verification failed");
@@ -417,6 +486,9 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestCyclicProblemPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestChainingProblemPass>();
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSharedOperatorsProblemPass>();

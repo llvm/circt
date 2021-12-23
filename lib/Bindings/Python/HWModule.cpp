@@ -57,8 +57,10 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
               auto type = tuple[1].cast<MlirType>();
               ctx = mlirTypeGetContext(type);
               names.emplace_back(tuple[0].cast<std::string>());
+              auto nameStringRef =
+                  mlirStringRefCreate(names[i].data(), names[i].size());
               mlirFieldInfos.push_back(HWStructFieldInfo{
-                  mlirStringRefCreate(names[i].data(), names[i].size()), type});
+                  mlirIdentifierGet(ctx, nameStringRef), type});
             }
             return cls(hwStructTypeGet(ctx, mlirFieldInfos.size(),
                                        mlirFieldInfos.data()));
@@ -73,7 +75,8 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
         py::list fields;
         for (intptr_t i = 0; i < num_fields; ++i) {
           auto field = hwStructTypeGetFieldNum(self, i);
-          std::string name(field.name.data, field.name.length);
+          auto fieldName = mlirIdentifierStr(field.name);
+          std::string name(fieldName.data, fieldName.length);
           fields.append(py::make_tuple(name, field.type));
         }
         return fields;

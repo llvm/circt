@@ -90,8 +90,14 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins);
-  let results = (outs HWIntegerType:$result);
+  let results = (outs HWValueType:$result);
   let assemblyFormat = " attr-dict `:` type($result)";
+  let verifier = "return ::verify$cppClass(*this);";
+  let extraClassDeclaration = [{
+    int64_t getWidth() {
+      return hw::getBitWidth(getType());
+    }
+  }];
 }
 
 def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
@@ -102,8 +108,14 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins);
-  let results = (outs HWIntegerType:$result);
+  let results = (outs HWValueType:$result);
   let assemblyFormat = " attr-dict `:` type($result)";
+  let verifier = "return ::verify$cppClass(*this);";
+  let extraClassDeclaration = [{
+    int64_t getWidth() {
+      return hw::getBitWidth(getType());
+    }
+  }];
 }
 
 def LocalParamOp : SVOp<"localparam",

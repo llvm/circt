@@ -15,12 +15,12 @@
 // CHECK:           %[[VAL_11:.*]]:2 = fork [2] %[[VAL_10]] : i1
 // CHECK:           %[[VAL_12:.*]] = arith.subi %[[VAL_7]]#1, %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_13:.*]] = arith.subi %[[VAL_3]]#0, %[[VAL_9]]#0 : index
-// CHECK:           %[[VAL_14:.*]] = std.select %[[VAL_11]]#1, %[[VAL_12]], %[[VAL_13]] : index
+// CHECK:           %[[VAL_14:.*]] = mux %[[VAL_11]]#1 {{\[}}%[[VAL_13]], %[[VAL_12]]] : i1, index
 // CHECK:           %[[VAL_15:.*]] = arith.divsi %[[VAL_14]], %[[VAL_5]] : index
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : index
 // CHECK:           %[[VAL_17:.*]] = arith.subi %[[VAL_7]]#2, %[[VAL_16]]#1 : index
 // CHECK:           %[[VAL_18:.*]] = arith.addi %[[VAL_16]]#0, %[[VAL_9]]#1 : index
-// CHECK:           %[[VAL_19:.*]] = std.select %[[VAL_11]]#0, %[[VAL_17]], %[[VAL_18]] : index
+// CHECK:           %[[VAL_19:.*]] = mux %[[VAL_11]]#0 {{\[}}%[[VAL_18]], %[[VAL_17]]] : i1, index
 // CHECK:           return %[[VAL_19]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
 func @affine_apply_ceildiv(%arg0: index) -> index {

@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -72,9 +73,7 @@ static Type lowerType(Type type) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
-      // TODO: make hw::StructType contain StringAttrs.
-      auto name = StringAttr::get(element.name.getValue(), type.getContext());
-      hwfields.push_back(hw::StructType::FieldInfo{name, etype});
+      hwfields.push_back(hw::StructType::FieldInfo{element.name, etype});
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
@@ -190,8 +189,9 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(StringAttr::get(attrBase, ctx),
-                     hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
+    old.emplace_back(
+        StringAttr::get(attrBase, ctx),
+        hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
     top->setAttrs(old);
   }
   if (auto file = anno.getMember<StringAttr>("filename")) {
@@ -1085,11 +1085,31 @@ void FIRRTLModuleLowering::lowerModuleBody(
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+struct MixedModuleNamespace : Namespace {
+  MixedModuleNamespace() {}
+  MixedModuleNamespace(hw::HWModuleOp module) { add(module); }
+
+  /// Populate the namespace from a module-like operation. This namespace will
+  /// be composed of the `inner_sym`s of the module's ports and declarations.
+  void add(hw::HWModuleOp module) {
+    for (auto port : module.getAllPorts())
+      if (port.sym && !port.sym.getValue().empty())
+        internal.insert(port.sym.getValue());
+    module.walk([&](Operation *op) {
+      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+      if (attr)
+        internal.insert(attr.getValue());
+    });
+  }
+};
+
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()) {}
+        builder(module.getLoc(), module.getContext()),
+        moduleNamespace(MixedModuleNamespace(module)) {}
 
   void run();
 
@@ -1136,8 +1156,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
-  Value getExtOrTruncArrayValue(Value array, FIRRTLType sourceType,
-                                FIRRTLType destType, bool allowTruncate);
+  Value getExtOrTruncAggregateValue(Value array, FIRRTLType sourceType,
+                                    FIRRTLType destType, bool allowTruncate);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1326,6 +1346,10 @@ private:
   /// This is a map from block to a pair of a random value and its unused bits.
   /// It is used to reduce the number of random value.
   DenseMap<Block *, std::pair<Value, unsigned>> blockRandomValueAndRemain;
+
+  /// A namespace that can be used to generte new symbol names that are unique
+  /// within this module.
+  MixedModuleNamespace moduleNamespace;
 };
 } // end anonymous namespace
 
@@ -1484,13 +1508,12 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
-/// Return the lowered array value whose type is converted into `destType`.
+/// Return the lowered aggregate value whose type is converted into `destType`.
 /// We have to care about the extension/truncation/signedness of each element.
-/// If returns a null value for complex arrays such as arrays with bundles.
-Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
-                                              FIRRTLType sourceType,
-                                              FIRRTLType destType,
-                                              bool allowTruncate) {
+Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
+                                                  FIRRTLType sourceType,
+                                                  FIRRTLType destType,
+                                                  bool allowTruncate) {
   SmallVector<Value> resultBuffer;
 
   // Helper function to cast each element of array to dest type.
@@ -1541,6 +1564,30 @@ Value FIRRTLLowering::getExtOrTruncArrayValue(Value array,
           resultBuffer.push_back(array);
           return success();
         })
+        .Case<BundleType>([&](BundleType srcStructType) {
+          auto destStructType = destType.cast<BundleType>();
+          unsigned size = resultBuffer.size();
+
+          // TODO: We don't support partial connects for bundles for now.
+          if (destStructType.getNumElements() != srcStructType.getNumElements())
+            return failure();
+
+          for (auto elem : enumerate(destStructType.getElements())) {
+            auto structExtract =
+                builder.create<hw::StructExtractOp>(src, elem.value().name);
+            if (failed(recurse(structExtract,
+                               srcStructType.getElementType(elem.index()),
+                               destStructType.getElementType(elem.index()))))
+              return failure();
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto newStruct = builder.createOrFold<hw::StructCreateOp>(
+              lowerType(destStructType), temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(newStruct);
+          return success();
+        })
         .Case<IntType>([&](auto) {
           if (auto result = cast(src, srcType, destType)) {
             resultBuffer.push_back(result);
@@ -1588,14 +1635,15 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
-  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+  // Aggregates values
+  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
     // Types already match.
     if (destType == value.getType())
       return result;
 
-    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
-                                   destType.cast<FIRRTLType>(),
-                                   /* allowTruncate */ false);
+    return getExtOrTruncAggregateValue(
+        result, value.getType().cast<FIRRTLType>(), destType.cast<FIRRTLType>(),
+        /* allowTruncate */ false);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1647,14 +1695,15 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
-  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+  // Aggregates values
+  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
     // Types already match.
     if (destType == value.getType())
       return result;
 
-    return getExtOrTruncArrayValue(result, value.getType().cast<FIRRTLType>(),
-                                   destType.cast<FIRRTLType>(),
-                                   /* allowTruncate */ true);
+    return getExtOrTruncAggregateValue(
+        result, value.getType().cast<FIRRTLType>(), destType.cast<FIRRTLType>(),
+        /* allowTruncate */ true);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -2114,55 +2163,112 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 }
 
 void FIRRTLLowering::initializeRegister(Value reg) {
+  typedef std::pair<Attribute, std::pair<unsigned, unsigned>> SymbolAndRange;
+
+  // The point in the design where we should add randomization register
+  // definitions.  This is at the top of the "`ifndef SYNTHESIS" block.
+  mlir::OpBuilder::InsertPoint regInsertionPoint;
+
+  auto regDef = cast<sv::RegOp>(reg.getDefiningOp());
+  if (!regDef->hasAttrOfType<StringAttr>("inner_sym"))
+    regDef->setAttr("inner_sym", builder.getStringAttr(moduleNamespace.newName(
+                                     Twine("__") + regDef.name() + "__")));
+  auto regDefSym =
+      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.inner_symAttr());
+
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
   // VerbatimExprSEOp.
   constexpr unsigned randomWidth = 32;
-  auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprSEOp>(
-        builder.getIntegerType(randomWidth), "`RANDOM");
+  auto getRandom32Val = [&](Twine suffix = "") -> Value {
+    sv::RegOp randReg;
+    {
+      OpBuilder::InsertionGuard topBuilder(builder);
+      builder.restoreInsertionPoint(regInsertionPoint);
+      randReg = builder.create<sv::RegOp>(
+          reg.getLoc(), builder.getIntegerType(randomWidth),
+          /*name=*/builder.getStringAttr("_RANDOM"),
+          /*inner_sym=*/
+          builder.getStringAttr(moduleNamespace.newName(Twine("_RANDOM"))));
+    }
+
+    builder.create<sv::VerbatimOp>(
+        builder.getStringAttr(Twine("{{0}} = `RANDOM;")), ValueRange{},
+        builder.getArrayAttr({hw::InnerRefAttr::get(theModule.getNameAttr(),
+                                                    randReg.inner_symAttr())}));
+
+    return randReg.getResult();
   };
 
-  // Return an expression containing random bits of the specified width.
-  // An explicit std::function is required here due to recursion.
-  std::function<Value(IntegerType)> getRandomValue =
-      [&](IntegerType type) -> Value {
-    assert(type.getWidth() != 0 && "zero bit width's not supported");
-    auto &randomValueAndRemain = blockRandomValueAndRemain[builder.getBlock()];
-    if (randomValueAndRemain.second >= type.getWidth()) {
-      auto value = builder.createOrFold<comb::ExtractOp>(
-          type, randomValueAndRemain.first,
-          randomWidth - randomValueAndRemain.second);
+  auto getRandomValues = [&](IntegerType type,
+                             SmallVector<SymbolAndRange> &values) {
+    auto width = type.getWidth();
+    assert(width != 0 && "zero bit width's not supported");
+    while (width > 0) {
+      auto &randomValueAndRemain =
+          blockRandomValueAndRemain[builder.getBlock()];
 
-      randomValueAndRemain.second -= type.getWidth();
-      return value;
+      // If there are no bits left, then generate a new random value.
+      if (!randomValueAndRemain.second)
+        randomValueAndRemain = {getRandom32Val("foo"), randomWidth};
+
+      auto reg = cast<sv::RegOp>(randomValueAndRemain.first.getDefiningOp());
+
+      auto symbol =
+          hw::InnerRefAttr::get(theModule.getNameAttr(), reg.inner_symAttr());
+      unsigned low = randomWidth - randomValueAndRemain.second;
+      unsigned high = randomWidth - 1;
+      if (width <= randomValueAndRemain.second)
+        high = width - 1 + low;
+      unsigned consumed = high - low + 1;
+      values.push_back({symbol, {high, low}});
+      randomValueAndRemain.second -= consumed;
+      width -= consumed;
     }
-
-    // If nothing remains, produce new 32 bit random value and call it
-    // recursively.
-    if (randomValueAndRemain.second == 0) {
-      randomValueAndRemain = {getRandom32Val(), randomWidth};
-      return getRandomValue(type);
-    }
-
-    // Consume all the bits we have now, and then concat the rest.
-    auto currentWidth = builder.getIntegerType(randomValueAndRemain.second);
-    auto value = builder.createOrFold<comb::ExtractOp>(
-        currentWidth, randomValueAndRemain.first,
-        randomWidth - randomValueAndRemain.second);
-    randomValueAndRemain = {getRandom32Val(), randomWidth};
-    auto rest = getRandomValue(
-        builder.getIntegerType(type.getWidth() - currentWidth.getWidth()));
-    return builder.createOrFold<comb::ConcatOp>(value, rest);
   };
 
   // Get a random value with the specified width, combining or truncating
   // 32-bit units as necessary.
-  auto emitRandomInit = [&](Value dest, Type type) {
+  auto emitRandomInit = [&](Value dest, Type type, Twine accessor) {
     auto intType = type.cast<IntegerType>();
     if (intType.getWidth() == 0)
       return;
-    builder.create<sv::BPAssignOp>(dest, getRandomValue(intType));
+
+    SmallVector<SymbolAndRange> values;
+    getRandomValues(intType, values);
+
+    SmallString<32> rhs(("{{0}}" + accessor + " = ").str());
+    unsigned i = 1;
+    SmallVector<Attribute, 4> symbols({regDefSym});
+    if (values.size() > 1)
+      rhs.append("{");
+    for (auto [value, range] : llvm::reverse(values)) {
+      symbols.push_back(value);
+      auto [high, low] = range;
+      if (i > 1)
+        rhs.append(", ");
+      rhs.append(("{{" + Twine(i++) + "}}").str());
+
+      // This uses all bits of the random value. Emit without part select.
+      if (high == randomWidth - 1 && low == 0)
+        continue;
+
+      // Emit a single bit part select, e.g., emit "[0]" and not "[0:0]".
+      if (high == low) {
+        rhs.append(("[" + Twine(high) + "]").str());
+        continue;
+      }
+
+      // Emit a part select, e.g., "[4:2]"
+      rhs.append(
+          ("[" + Twine(range.first) + ":" + Twine(range.second) + "]").str());
+    }
+    if (values.size() > 1)
+      rhs.append("}");
+    rhs.append(";");
+
+    builder.create<sv::VerbatimOp>(rhs, ValueRange{},
+                                   builder.getArrayAttr(symbols));
   };
 
   // Randomly initialize everything in the register. If the register
@@ -2170,25 +2276,29 @@ void FIRRTLLowering::initializeRegister(Value reg) {
   // constituent ground types.
   auto randomInit = [&]() {
     auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-    std::function<void(Value, Type)> recurse = [&](Value reg, Type type) {
+    std::function<void(Value, Type, Twine)> recurse = [&](Value reg, Type type,
+                                                          Twine accessor) {
       TypeSwitch<Type>(type)
           .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
-            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-              auto iIdx =
-                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
-              auto arrayIndex =
-                  builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-              recurse(arrayIndex, a.getElementType());
-            }
+            for (size_t i = 0, e = a.getSize(); i != e; ++i)
+              recurse(reg, a.getElementType(), accessor + "[" + Twine(i) + "]");
           })
-          .Default([&](auto type) { emitRandomInit(reg, type); });
+          .Case<hw::StructType>([&](hw::StructType s) {
+            for (auto elem : s.getElements())
+              recurse(reg, elem.type, accessor + "." + elem.name.getValue());
+          })
+          .Default([&](auto type) { emitRandomInit(reg, type, accessor); });
     };
-    recurse(reg, type);
+    recurse(reg, type, "");
   };
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    addToIfDefBlock(
+        "RANDOMIZE_REG_INIT",
+        [&]() { regInsertionPoint = builder.saveInsertionPoint(); },
+        std::function<void()>());
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       circuitState.used_RANDOMIZE_REG_INIT = 1;
@@ -2821,14 +2931,22 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
     // not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
+  // We don't allow aggregate values which contain values of analog types.
+  if (op.getType().cast<FIRRTLType>().containsAnalog())
+    return failure();
+
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
   // lowering it to a random value, we should see if this is what we need to
   // do.
-  if (auto intType = resultTy.dyn_cast<IntegerType>()) {
-    if (intType.getWidth() == 0) // Let the caller handle zero width values.
+  if (auto bitwidth = firrtl::getBitWidth(op.getType().cast<FIRRTLType>())) {
+    if (bitwidth.getValue() == 0) // Let the caller handle zero width values.
       return failure();
-    return setLowering(
-        op, getOrCreateIntConstant(resultTy.getIntOrFloatBitWidth(), 0));
+
+    auto constant = getOrCreateIntConstant(bitwidth.getValue(), 0);
+    // If the result is an aggregate value, we have to bitcast the constant.
+    if (!resultTy.isa<IntegerType>())
+      constant = builder.create<hw::BitcastOp>(resultTy, constant);
+    return setLowering(op, constant);
   }
 
   // Invalid for bundles isn't supported.
@@ -2957,9 +3075,11 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
   // If this is an assignment to a register, then the connect implicitly
   // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
     Value clockVal = getLoweredValue(regOp.clockVal());
     if (!clockVal)
       return failure();
@@ -2971,7 +3091,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
 
   // If this is an assignment to a RegReset, then the connect implicitly
   // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
     Value clockVal = getLoweredValue(regResetOp.clockVal());
     Value resetSignal = getLoweredValue(regResetOp.resetSignal());
     if (!clockVal || !resetSignal)
@@ -3008,9 +3128,11 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
   // If this is an assignment to a register, then the connect implicitly
   // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
     Value clockVal = getLoweredValue(regOp.clockVal());
     if (!clockVal)
       return failure();
@@ -3022,7 +3144,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
 
   // If this is an assignment to a RegReset, then the connect implicitly
   // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
     Value clockVal = getLoweredValue(regResetOp.clockVal());
     Value resetSignal = getLoweredValue(regResetOp.resetSignal());
     if (!clockVal || !resetSignal)

@@ -1405,123 +1405,17 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 }
 
 namespace {
-struct HandshakeInsertBufferPass
-    : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
-  // Returns true if a block argument should have buffers added to its uses.
-  static bool shouldBufferArgument(BlockArgument arg) {
-    // At the moment, buffers only make sense on arguments which we know
-    // will lower down to a handshake bundle.
-    return arg.getType().isIntOrFloat() || arg.getType().isa<NoneType>();
-  }
-  // Perform a depth first search and insert buffers when cycles are detected.
-  void bufferCyclesStrategy() {
-    auto f = getOperation();
-    DenseSet<Operation *> opVisited;
-    DenseSet<Operation *> opInFlight;
-
-    // Traverse each use of each argument of the entry block.
-    auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getBody().front().getArguments()) {
-      if (!shouldBufferArgument(arg))
-        continue;
-      for (auto &operand : arg.getUses()) {
-        if (opVisited.count(operand.getOwner()) == 0)
-          insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
-                          opInFlight);
-      }
-    }
-  }
-
-  // Perform a depth first search and add a buffer to any un-buffered channel.
-  void bufferAllStrategy() {
-    auto f = getOperation();
-    auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getArguments()) {
-      if (!shouldBufferArgument(arg))
-        continue;
-      for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, bufferSize,
-                              [](Operation *definingOp, Operation *usingOp) {
-                                return !isa_and_nonnull<BufferOp>(definingOp) &&
-                                       !isa<BufferOp>(usingOp);
-                              });
-    }
-  }
-
-  /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
-  /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferDFS(Operation *op, OpBuilder &builder, unsigned numSlots,
-                       DenseSet<Operation *> &opVisited,
-                       DenseSet<Operation *> &opInFlight) {
-    // Mark operation as visited and push into the stack.
-    opVisited.insert(op);
-    opInFlight.insert(op);
-
-    // Traverse all uses of the current operation.
-    for (auto &operand : op->getUses()) {
-      auto *user = operand.getOwner();
-
-      // If graph cycle detected, insert a BufferOp into the edge.
-      if (opInFlight.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
-          !isa<handshake::BufferOp>(user)) {
-        auto value = operand.get();
-
-        builder.setInsertionPointAfter(op);
-        auto bufferOp =
-            builder.create<handshake::BufferOp>(op->getLoc(), value.getType(),
-                                                /*slots=*/numSlots, value,
-                                                /*sequential=*/true);
-        value.replaceUsesWithIf(
-            bufferOp,
-            function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
-              return !isa<handshake::BufferOp>(operand.getOwner());
-            }));
-      }
-      // For unvisited operations, recursively call insertBufferDFS() method.
-      else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight);
-    }
-    // Pop operation out of the stack.
-    opInFlight.erase(op);
-  }
-
-  void
-  insertBufferRecursive(OpOperand &use, OpBuilder builder, size_t numSlots,
-                        function_ref<bool(Operation *, Operation *)> callback) {
-    auto oldValue = use.get();
-    auto *definingOp = oldValue.getDefiningOp();
-    auto *usingOp = use.getOwner();
-    if (callback(definingOp, usingOp)) {
-      builder.setInsertionPoint(usingOp);
-      auto buffer = builder.create<handshake::BufferOp>(
-          oldValue.getLoc(), oldValue.getType(),
-          /*slots=*/numSlots, oldValue,
-          /*sequential=*/true);
-      use.getOwner()->setOperand(use.getOperandNumber(), buffer);
-    }
-
-    for (auto &childUse : usingOp->getUses())
-      if (!isa<handshake::BufferOp>(childUse.getOwner()))
-        insertBufferRecursive(childUse, builder, numSlots, callback);
-  }
-
-  void runOnOperation() override {
-    if (strategies.empty())
-      strategies = {"all"};
-
-    for (auto strategy : strategies) {
-      if (strategy == "cycles")
-        bufferCyclesStrategy();
-      else if (strategy == "all")
-        bufferAllStrategy();
-      else {
-        getOperation().emitOpError() << "Unknown buffer strategy: " << strategy;
-        signalPassFailure();
-        return;
-      }
-    }
-  }
+struct ConvertSelectOps : public OpConversionPattern<mlir::SelectOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(mlir::SelectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<handshake::MuxOp>(
+        op, adaptor.getCondition(),
+        SmallVector<Value>{adaptor.getFalseValue(), adaptor.getTrueValue()});
+    return success();
+  };
 };
 
 struct HandshakeRemoveBlockPass
@@ -1541,9 +1435,22 @@ struct HandshakeDataflowPass
       }
     }
 
-    // Legalize the resulting regions, which can have no basic blocks.
-    for (auto func : m.getOps<handshake::FuncOp>())
+    // Legalize the resulting regions, removing basic blocks and performing
+    // any simple conversions.
+    for (auto func : m.getOps<handshake::FuncOp>()) {
       removeBasicBlocks(func);
+      if (failed(postDataflowConvert(func)))
+        return signalPassFailure();
+    }
+  }
+
+  LogicalResult postDataflowConvert(handshake::FuncOp op) {
+    ConversionTarget target(getContext());
+    target.addLegalDialect<handshake::HandshakeDialect>();
+    target.addIllegalOp<mlir::SelectOp>();
+    RewritePatternSet patterns(&getContext());
+    patterns.insert<ConvertSelectOps>(&getContext());
+    return applyPartialConversion(op, target, std::move(patterns));
   }
 };
 
@@ -1557,9 +1464,4 @@ circt::createHandshakeDataflowPass() {
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 circt::createHandshakeRemoveBlockPass() {
   return std::make_unique<HandshakeRemoveBlockPass>();
-}
-
-std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
-circt::createHandshakeInsertBufferPass() {
-  return std::make_unique<HandshakeInsertBufferPass>();
 }
