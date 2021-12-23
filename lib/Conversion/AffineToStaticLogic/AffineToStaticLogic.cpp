@@ -49,12 +49,12 @@ struct AffineToStaticLogic
   void runOnFunction() override;
 
 private:
-  LogicalResult convertIfOps();
+  LogicalResult
+  lowerAffineStructures(MemoryDependenceAnalysis &dependenceAnalysis);
   LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
   LogicalResult
   createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
-  LogicalResult convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
@@ -63,10 +63,10 @@ private:
 
 void AffineToStaticLogic::runOnFunction() {
   // Get dependence analysis for the whole function.
-  getAnalysis<MemoryDependenceAnalysis>();
+  auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
 
-  // After dependence analysis, materialize AffineIfOps as scf::IfOps.
-  if (failed(convertIfOps()))
+  // After dependence analysis, materialize affine structures.
+  if (failed(lowerAffineStructures(dependenceAnalysis)))
     return signalPassFailure();
 
   // Get scheduling analysis for the whole function.
@@ -93,14 +93,80 @@ void AffineToStaticLogic::runOnFunction() {
     // Convert the IR.
     if (failed(createStaticLogicPipeline(nestedLoops)))
       return signalPassFailure();
-
-    // Convert remaining affine operations to memref and combinational logic.
-    if (failed(convertAffineOps(nestedLoops)))
-      return signalPassFailure();
   }
 }
 
-/// Helper to hoist computation out of scf::IfOp branches.
+/// Apply the affine map from an 'affine.load' operation to its operands, and
+/// feed the results to a newly created 'memref.load' operation (which replaces
+/// the original 'affine.load').
+/// Also replaces the affine load with the memref load in dependenceAnalysis.
+/// TODO(mikeurbach): this is copied from AffineToStandard, see if we can reuse.
+class AffineLoadLowering : public OpConversionPattern<AffineLoadOp> {
+public:
+  AffineLoadLowering(MLIRContext *context,
+                     MemoryDependenceAnalysis &dependenceAnalysis)
+      : OpConversionPattern(context), dependenceAnalysis(dependenceAnalysis) {}
+
+  LogicalResult
+  matchAndRewrite(AffineLoadOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Expand affine map from 'affineLoadOp'.
+    SmallVector<Value, 8> indices(op.getMapOperands());
+    auto resultOperands =
+        expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(), indices);
+    if (!resultOperands)
+      return failure();
+
+    // Build memref.load memref[expandedMap.results].
+    auto memrefLoad = rewriter.replaceOpWithNewOp<memref::LoadOp>(
+        op, op.getMemRef(), *resultOperands);
+
+    dependenceAnalysis.replaceOp(op, memrefLoad);
+
+    return success();
+  }
+
+private:
+  MemoryDependenceAnalysis &dependenceAnalysis;
+};
+
+/// Apply the affine map from an 'affine.store' operation to its operands, and
+/// feed the results to a newly created 'memref.store' operation (which replaces
+/// the original 'affine.store').
+/// Also replaces the affine load with the memref load in dependenceAnalysis.
+/// TODO(mikeurbach): this is copied from AffineToStandard, see if we can reuse.
+class AffineStoreLowering : public OpConversionPattern<AffineStoreOp> {
+public:
+  AffineStoreLowering(MLIRContext *context,
+                      MemoryDependenceAnalysis &dependenceAnalysis)
+      : OpConversionPattern(context), dependenceAnalysis(dependenceAnalysis) {}
+
+  LogicalResult
+  matchAndRewrite(AffineStoreOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Expand affine map from 'affineStoreOp'.
+    SmallVector<Value, 8> indices(op.getMapOperands());
+    auto maybeExpandedMap =
+        expandAffineMap(rewriter, op.getLoc(), op.getAffineMap(), indices);
+    if (!maybeExpandedMap)
+      return failure();
+
+    // Build memref.store valueToStore, memref[expandedMap.results].
+    auto memrefStore = rewriter.replaceOpWithNewOp<memref::StoreOp>(
+        op, op.getValueToStore(), op.getMemRef(), *maybeExpandedMap);
+
+    dependenceAnalysis.replaceOp(op, memrefStore);
+
+    return success();
+  }
+
+private:
+  MemoryDependenceAnalysis &dependenceAnalysis;
+};
+
+/// Helper to hoist computation out of scf::IfOp branches, turning it into a
+/// mux-like operation, and exposing potentially concurrent execution of its
+/// branches.
 struct IfOpHoisting : OpConversionPattern<IfOp> {
   using OpConversionPattern<IfOp>::OpConversionPattern;
 
@@ -122,7 +188,7 @@ struct IfOpHoisting : OpConversionPattern<IfOp> {
   }
 };
 
-/// Helper to determine if an scf::IfOp is essentially a mux.
+/// Helper to determine if an scf::IfOp is in mux-like form.
 static bool ifOpLegalityCallback(IfOp op) {
   return op.thenBlock()->without_terminator().empty() &&
          (!op.elseBlock() || op.elseBlock()->without_terminator().empty());
@@ -135,23 +201,28 @@ static bool yieldOpLegalityCallback(AffineYieldOp op) {
 }
 
 /// After analyzing memory dependences, and before creating the schedule, we
-/// want to materialize AffineIfOps as scf::IfOps, which make the condition
-/// computation explicit in the arithmetic dialect. This is important so the
-/// schedule can consider potentially complex computations in the condition.
-/// Furthermore, we want to ensure that each scf::IfOp is essentially a mux, so
-/// we hoist computation out of the branches.
-LogicalResult AffineToStaticLogic::convertIfOps() {
+/// want to materialize affine operations with arithmetic, scf, and memref
+/// operations, which make the condition computation of addresses, etc.
+/// explicit. This is important so the schedule can consider potentially complex
+/// computations in the condition of ifs, or the addresses of loads and stores.
+/// The dependence analysis will be updated so the dependences from the affine
+/// loads and stores are now on the memref loads and stores.
+LogicalResult AffineToStaticLogic::lowerAffineStructures(
+    MemoryDependenceAnalysis &dependenceAnalysis) {
   auto *context = &getContext();
   auto op = getOperation();
 
   ConversionTarget target(*context);
-  target.addLegalDialect<AffineDialect, ArithmeticDialect, SCFDialect>();
-  target.addIllegalOp<AffineIfOp>();
+  target.addLegalDialect<AffineDialect, ArithmeticDialect, MemRefDialect,
+                         SCFDialect>();
+  target.addIllegalOp<AffineIfOp, AffineLoadOp, AffineStoreOp>();
   target.addDynamicallyLegalOp<IfOp>(ifOpLegalityCallback);
   target.addDynamicallyLegalOp<AffineYieldOp>(yieldOpLegalityCallback);
 
   RewritePatternSet patterns(context);
   populateAffineToStdConversionPatterns(patterns);
+  patterns.add<AffineLoadLowering>(context, dependenceAnalysis);
+  patterns.add<AffineStoreLowering>(context, dependenceAnalysis);
   patterns.add<IfOpHoisting>(context);
 
   if (failed(applyPartialConversion(op, target, std::move(patterns))))
@@ -191,7 +262,7 @@ LogicalResult AffineToStaticLogic::populateOperatorTypes(
           problem.setLinkedOperatorType(combOp, combOpr);
           return WalkResult::advance();
         })
-        .Case<AffineReadOpInterface, AffineWriteOpInterface>(
+        .Case<AffineLoadOp, AffineStoreOp, memref::LoadOp, memref::StoreOp>(
             [&](Operation *seqOp) {
               // Some known sequential ops. In certain cases, reads may be
               // combinational in Calyx, but taking advantage of that is left as
@@ -429,26 +500,6 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     op->dropAllReferences();
     op->erase();
   });
-
-  return success();
-}
-
-/// Convert remaining affine operations to memref and combinational logic.
-LogicalResult
-AffineToStaticLogic::convertAffineOps(SmallVectorImpl<AffineForOp> &loopNest) {
-  auto *context = &getContext();
-
-  // Use the upstream AffineToStandard conversion patterns to do a full
-  // conversion away from the Affine dialect.
-  ConversionTarget target(*context);
-  target.addLegalDialect<ArithmeticDialect, BuiltinDialect, MemRefDialect,
-                         SCFDialect, StandardOpsDialect, StaticLogicDialect>();
-  target.addIllegalDialect<AffineDialect>();
-
-  RewritePatternSet patterns(context);
-  populateAffineToStdConversionPatterns(patterns);
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    return failure();
 
   return success();
 }

@@ -14,6 +14,7 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/AnalysisManager.h"
@@ -101,7 +102,9 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   // Set the anchor for scheduling. Insert dependences from all stores to the
   // terminator to ensure the problem schedules them before the terminator.
   auto *anchor = forOp.getBody()->getTerminator();
-  forOp.getBody()->walk([&](AffineWriteOpInterface op) {
+  forOp.getBody()->walk([&](Operation *op) {
+    if (!isa<mlir::AffineStoreOp, memref::StoreOp>(op))
+      return;
     Problem::Dependence dep(op, anchor);
     auto depInserted = problem.insertDependence(dep);
     assert(succeeded(depInserted));

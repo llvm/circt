@@ -147,3 +147,23 @@ ArrayRef<MemoryDependence>
 circt::analysis::MemoryDependenceAnalysis::getDependences(Operation *op) {
   return results[op];
 }
+
+/// Replaces the dependences, if any, from the source op to the destination op.
+void circt::analysis::MemoryDependenceAnalysis::replaceOp(
+    Operation *source, Operation *destination) {
+  // If source had any dependences.
+  auto it = results.find(source);
+  if (it != results.end())
+    // Move the dependences to destination.
+    it->first = destination;
+
+  // Find any dependences originating from source and replace the source.
+  // TODO(mikeurbach): consider adding an inverted index to avoid this scan.
+  for (auto &it : results)
+    for (auto &dep : it.second)
+      if (dep.source == source)
+        dep.source = destination;
+
+  // Remove the source.
+  results.erase(source);
+}
