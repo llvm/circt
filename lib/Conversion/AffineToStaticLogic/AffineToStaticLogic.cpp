@@ -413,11 +413,14 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
 
     // Collect the return types for this stage. Operations whose results are not
     // used within this stage are returned.
+    auto isLoopTerminator = [forOp](Operation *op) {
+      return isa<AffineYieldOp>(op) && op->getParentOp() == forOp;
+    };
     SmallVector<Type> stageTypes;
     DenseSet<Operation *> opsWithReturns;
     for (auto *op : group) {
       for (auto *user : op->getUsers()) {
-        if (*problem.getStartTime(user) != startTime) {
+        if (*problem.getStartTime(user) > startTime || isLoopTerminator(user)) {
           opsWithReturns.insert(op);
           stageTypes.append(op->getResultTypes().begin(),
                             op->getResultTypes().end());
