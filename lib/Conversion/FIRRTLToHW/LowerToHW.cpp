@@ -3112,19 +3112,25 @@ void FIRRTLModuleLowering::runOnOperation() {
       return success(isZeroBitFIRRTLType(op.src().getType()) ||
                      isZeroBitFIRRTLType(destType));
 
-    auto destVal = getPossiblyInoutLoweredValue(dest);
-    if (!destVal)
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
+  // If this is an assignment to a register, then the connect implicitly
+  // happens under the clock that gates the register.
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
+    Value clockVal = getLoweredValue(regOp.clockVal());
+    if (!clockVal)
       return failure();
 
     if (!destVal.getType().isa<hw::InOutType>())
       return op.emitError("destination isn't an inout type");
 
-    // If this is an assignment to a register, then the connect implicitly
-    // happens under the clock that gates the register.
-    if (auto regOp = dyn_cast_or_null<RegOp>(dest.getDefiningOp())) {
-      Value clockVal = getLoweredValue(regOp.clockVal());
-      if (!clockVal)
-        return failure();
+  // If this is an assignment to a RegReset, then the connect implicitly
+  // happens under the clock and reset that gate the register.
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
+    Value clockVal = getLoweredValue(regResetOp.clockVal());
+    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
+    if (!clockVal || !resetSignal)
+      return failure();
 
       addToAlwaysBlock(
           clockVal, [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
@@ -3181,16 +3187,25 @@ void FIRRTLModuleLowering::runOnOperation() {
           };
       recurse(destVal, srcVal, destType, op.src().getType());
 
-      return success();
-    }
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
+  // If this is an assignment to a register, then the connect implicitly
+  // happens under the clock that gates the register.
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
+    Value clockVal = getLoweredValue(regOp.clockVal());
+    if (!clockVal)
+      return failure();
 
     builder.create<sv::AssignOp>(destVal, srcVal);
     return success();
   }
 
-  LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
-    auto srcVal = getLoweredValue(op.src());
-    if (!srcVal)
+  // If this is an assignment to a RegReset, then the connect implicitly
+  // happens under the clock and reset that gate the register.
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
+    Value clockVal = getLoweredValue(regResetOp.clockVal());
+    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
+    if (!clockVal || !resetSignal)
       return failure();
 
     auto destVal = getPossiblyInoutLoweredValue(op.dest());
