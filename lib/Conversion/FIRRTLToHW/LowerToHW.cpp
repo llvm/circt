@@ -484,7 +484,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       for (auto mod : state.oldToNewModuleMap) {
         if (!state.getInstanceGraph()->isAncestor(mod.first, dut)) {
           auto outputFile = hw::OutputFileAttr::getAsDirectory(
-              circuit.getContext(), tbdir.getValue());
+              circuit.getContext(), tbdir.getValue(), false, true);
           mod.second->setAttr("output_file", outputFile);
         }
       }
