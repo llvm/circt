@@ -78,19 +78,33 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   });
 
   // Insert conditional dependences into the problem.
-  forOp.getBody()->walk([&](scf::IfOp op) {
+  forOp.getBody()->walk([&](Operation *op) {
+    Block *thenBlock = nullptr;
+    Block *elseBlock = nullptr;
+    if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+      thenBlock = ifOp.thenBlock();
+      elseBlock = ifOp.elseBlock();
+    }
+    if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
+      thenBlock = ifOp.getThenBlock();
+      if (ifOp.hasElse())
+        elseBlock = ifOp.getElseBlock();
+    }
+    if (!thenBlock)
+      return WalkResult::advance();
+
     // No special handling required for control-only `if`s.
-    if (op.getNumResults() == 0)
+    if (op->getNumResults() == 0)
       return WalkResult::skip();
 
     // Model the implicit value flow from the `yield` to the `if`'s result(s).
-    Problem::Dependence depThen(op.thenBlock()->getTerminator(), op);
+    Problem::Dependence depThen(thenBlock->getTerminator(), op);
     auto depInserted = problem.insertDependence(depThen);
     assert(succeeded(depInserted));
     (void)depInserted;
 
-    if (op.elseBlock()) {
-      Problem::Dependence depElse(op.elseBlock()->getTerminator(), op);
+    if (elseBlock) {
+      Problem::Dependence depElse(elseBlock->getTerminator(), op);
       depInserted = problem.insertDependence(depElse);
       assert(succeeded(depInserted));
       (void)depInserted;

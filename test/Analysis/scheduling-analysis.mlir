@@ -150,3 +150,19 @@ func @test9(%arg0: memref<4x4xi32>, %arg1: memref<4x4xi32>, %arg2: memref<4x4xi3
   }
   return
 }
+
+// CHECK-LABEL: func @test10
+func @test10(%arg0: memref<5xi32>) {
+  %true = arith.constant 1 : i1
+  affine.for %arg1 = 0 to 5 {
+    %0 = scf.if %true -> (i32) {
+      %1 = memref.load %arg0[%arg1] : memref<5xi32>
+      scf.yield %1 : i32
+    } else {
+      %1 = memref.load %arg0[%arg1] : memref<5xi32>
+      scf.yield %1 : i32
+    }
+    // CHECK: } {dependence}
+  }
+  return
+}
