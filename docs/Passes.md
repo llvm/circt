@@ -16,6 +16,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "FIRRTLPasses.md"]
 
+## Handshake Dialect Passes
+
+[include "HandshakePasses.md"]
+
 ## LLHD Dialect Passes
 
 [include "LLHDPasses.md"]
