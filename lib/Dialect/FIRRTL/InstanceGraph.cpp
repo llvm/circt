@@ -119,16 +119,16 @@ void InstanceGraph::replaceInstance(InstanceOp inst, InstanceOp newInst) {
 bool InstanceGraph::isAncestor(FModuleLike child, FModuleOp parent) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
-  auto cn = lookup(child);
+  auto *cn = lookup(child);
   worklist.push_back(cn);
   seen.insert(cn);
   while (!worklist.empty()) {
-    auto node = worklist.back();
+    auto *node = worklist.back();
     worklist.pop_back();
     if (node->getModule() == parent)
       return true;
-    for (auto use : node->uses()) {
-      auto mod = use->getParent();
+    for (auto *use : node->uses()) {
+      auto *mod = use->getParent();
       if (!seen.count(mod)) {
         seen.insert(mod);
         worklist.push_back(mod);
