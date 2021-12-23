@@ -368,9 +368,8 @@ private:
   /// Recursively emits the Calyx control.
   void emitCalyxControl(Block *body) {
     Operation *parent = body->getParentOp();
-    assert(isa<ControlOp>(parent) ||
-           parent->hasTrait<ControlLike>() &&
-               "This should only be used to emit Calyx Control structures.");
+    assert((isa<ControlOp>(parent) || parent->hasTrait<ControlLike>()) &&
+           "This should only be used to emit Calyx Control structures.");
 
     // Check to see if this is a stand-alone EnableOp, i.e.
     // calyx.control { calyx.enable @G }
