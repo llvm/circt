@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -1084,11 +1085,31 @@ void FIRRTLModuleLowering::lowerModuleBody(
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+struct MixedModuleNamespace : Namespace {
+  MixedModuleNamespace() {}
+  MixedModuleNamespace(hw::HWModuleOp module) { add(module); }
+
+  /// Populate the namespace from a module-like operation. This namespace will
+  /// be composed of the `inner_sym`s of the module's ports and declarations.
+  void add(hw::HWModuleOp module) {
+    for (auto port : module.getAllPorts())
+      if (port.sym && !port.sym.getValue().empty())
+        internal.insert(port.sym.getValue());
+    module.walk([&](Operation *op) {
+      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+      if (attr)
+        internal.insert(attr.getValue());
+    });
+  }
+};
+
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()) {}
+        builder(module.getLoc(), module.getContext()),
+        moduleNamespace(MixedModuleNamespace(module)) {}
 
   void run();
 
@@ -1325,6 +1346,10 @@ private:
   /// This is a map from block to a pair of a random value and its unused bits.
   /// It is used to reduce the number of random value.
   DenseMap<Block *, std::pair<Value, unsigned>> blockRandomValueAndRemain;
+
+  /// A namespace that can be used to generte new symbol names that are unique
+  /// within this module.
+  MixedModuleNamespace moduleNamespace;
 };
 } // end anonymous namespace
 
@@ -2138,55 +2163,112 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 }
 
 void FIRRTLLowering::initializeRegister(Value reg) {
+  typedef std::pair<Attribute, std::pair<unsigned, unsigned>> SymbolAndRange;
+
+  // The point in the design where we should add randomization register
+  // definitions.  This is at the top of the "`ifndef SYNTHESIS" block.
+  mlir::OpBuilder::InsertPoint regInsertionPoint;
+
+  auto regDef = cast<sv::RegOp>(reg.getDefiningOp());
+  if (!regDef->hasAttrOfType<StringAttr>("inner_sym"))
+    regDef->setAttr("inner_sym", builder.getStringAttr(moduleNamespace.newName(
+                                     Twine("__") + regDef.name() + "__")));
+  auto regDefSym =
+      hw::InnerRefAttr::get(theModule.getNameAttr(), regDef.inner_symAttr());
+
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
   // unsigned expression.  Calls to $random have side effects, so we use
   // VerbatimExprSEOp.
   constexpr unsigned randomWidth = 32;
-  auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprSEOp>(
-        builder.getIntegerType(randomWidth), "`RANDOM");
+  auto getRandom32Val = [&](Twine suffix = "") -> Value {
+    sv::RegOp randReg;
+    {
+      OpBuilder::InsertionGuard topBuilder(builder);
+      builder.restoreInsertionPoint(regInsertionPoint);
+      randReg = builder.create<sv::RegOp>(
+          reg.getLoc(), builder.getIntegerType(randomWidth),
+          /*name=*/builder.getStringAttr("_RANDOM"),
+          /*inner_sym=*/
+          builder.getStringAttr(moduleNamespace.newName(Twine("_RANDOM"))));
+    }
+
+    builder.create<sv::VerbatimOp>(
+        builder.getStringAttr(Twine("{{0}} = `RANDOM;")), ValueRange{},
+        builder.getArrayAttr({hw::InnerRefAttr::get(theModule.getNameAttr(),
+                                                    randReg.inner_symAttr())}));
+
+    return randReg.getResult();
   };
 
-  // Return an expression containing random bits of the specified width.
-  // An explicit std::function is required here due to recursion.
-  std::function<Value(IntegerType)> getRandomValue =
-      [&](IntegerType type) -> Value {
-    assert(type.getWidth() != 0 && "zero bit width's not supported");
-    auto &randomValueAndRemain = blockRandomValueAndRemain[builder.getBlock()];
-    if (randomValueAndRemain.second >= type.getWidth()) {
-      auto value = builder.createOrFold<comb::ExtractOp>(
-          type, randomValueAndRemain.first,
-          randomWidth - randomValueAndRemain.second);
+  auto getRandomValues = [&](IntegerType type,
+                             SmallVector<SymbolAndRange> &values) {
+    auto width = type.getWidth();
+    assert(width != 0 && "zero bit width's not supported");
+    while (width > 0) {
+      auto &randomValueAndRemain =
+          blockRandomValueAndRemain[builder.getBlock()];
 
-      randomValueAndRemain.second -= type.getWidth();
-      return value;
+      // If there are no bits left, then generate a new random value.
+      if (!randomValueAndRemain.second)
+        randomValueAndRemain = {getRandom32Val("foo"), randomWidth};
+
+      auto reg = cast<sv::RegOp>(randomValueAndRemain.first.getDefiningOp());
+
+      auto symbol =
+          hw::InnerRefAttr::get(theModule.getNameAttr(), reg.inner_symAttr());
+      unsigned low = randomWidth - randomValueAndRemain.second;
+      unsigned high = randomWidth - 1;
+      if (width <= randomValueAndRemain.second)
+        high = width - 1 + low;
+      unsigned consumed = high - low + 1;
+      values.push_back({symbol, {high, low}});
+      randomValueAndRemain.second -= consumed;
+      width -= consumed;
     }
-
-    // If nothing remains, produce new 32 bit random value and call it
-    // recursively.
-    if (randomValueAndRemain.second == 0) {
-      randomValueAndRemain = {getRandom32Val(), randomWidth};
-      return getRandomValue(type);
-    }
-
-    // Consume all the bits we have now, and then concat the rest.
-    auto currentWidth = builder.getIntegerType(randomValueAndRemain.second);
-    auto value = builder.createOrFold<comb::ExtractOp>(
-        currentWidth, randomValueAndRemain.first,
-        randomWidth - randomValueAndRemain.second);
-    randomValueAndRemain = {getRandom32Val(), randomWidth};
-    auto rest = getRandomValue(
-        builder.getIntegerType(type.getWidth() - currentWidth.getWidth()));
-    return builder.createOrFold<comb::ConcatOp>(value, rest);
   };
 
   // Get a random value with the specified width, combining or truncating
   // 32-bit units as necessary.
-  auto emitRandomInit = [&](Value dest, Type type) {
+  auto emitRandomInit = [&](Value dest, Type type, Twine accessor) {
     auto intType = type.cast<IntegerType>();
     if (intType.getWidth() == 0)
       return;
-    builder.create<sv::BPAssignOp>(dest, getRandomValue(intType));
+
+    SmallVector<SymbolAndRange> values;
+    getRandomValues(intType, values);
+
+    SmallString<32> rhs(("{{0}}" + accessor + " = ").str());
+    unsigned i = 1;
+    SmallVector<Attribute, 4> symbols({regDefSym});
+    if (values.size() > 1)
+      rhs.append("{");
+    for (auto [value, range] : llvm::reverse(values)) {
+      symbols.push_back(value);
+      auto [high, low] = range;
+      if (i > 1)
+        rhs.append(", ");
+      rhs.append(("{{" + Twine(i++) + "}}").str());
+
+      // This uses all bits of the random value. Emit without part select.
+      if (high == randomWidth - 1 && low == 0)
+        continue;
+
+      // Emit a single bit part select, e.g., emit "[0]" and not "[0:0]".
+      if (high == low) {
+        rhs.append(("[" + Twine(high) + "]").str());
+        continue;
+      }
+
+      // Emit a part select, e.g., "[4:2]"
+      rhs.append(
+          ("[" + Twine(range.first) + ":" + Twine(range.second) + "]").str());
+    }
+    if (values.size() > 1)
+      rhs.append("}");
+    rhs.append(";");
+
+    builder.create<sv::VerbatimOp>(rhs, ValueRange{},
+                                   builder.getArrayAttr(symbols));
   };
 
   // Randomly initialize everything in the register. If the register
@@ -2194,32 +2276,29 @@ void FIRRTLLowering::initializeRegister(Value reg) {
   // constituent ground types.
   auto randomInit = [&]() {
     auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-    std::function<void(Value, Type)> recurse = [&](Value reg, Type type) {
+    std::function<void(Value, Type, Twine)> recurse = [&](Value reg, Type type,
+                                                          Twine accessor) {
       TypeSwitch<Type>(type)
           .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
-            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-              auto iIdx =
-                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
-              auto arrayIndex =
-                  builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-              recurse(arrayIndex, a.getElementType());
-            }
+            for (size_t i = 0, e = a.getSize(); i != e; ++i)
+              recurse(reg, a.getElementType(), accessor + "[" + Twine(i) + "]");
           })
           .Case<hw::StructType>([&](hw::StructType s) {
-            for (auto elem : s.getElements()) {
-              auto field =
-                  builder.create<sv::StructFieldInOutOp>(reg, elem.name);
-              recurse(field, elem.type);
-            }
+            for (auto elem : s.getElements())
+              recurse(reg, elem.type, accessor + "." + elem.name.getValue());
           })
-          .Default([&](auto type) { emitRandomInit(reg, type); });
+          .Default([&](auto type) { emitRandomInit(reg, type, accessor); });
     };
-    recurse(reg, type);
+    recurse(reg, type, "");
   };
 
   // Emit the initializer expression for simulation that fills it with random
   // value.
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    addToIfDefBlock(
+        "RANDOMIZE_REG_INIT",
+        [&]() { regInsertionPoint = builder.saveInsertionPoint(); },
+        std::function<void()>());
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       circuitState.used_RANDOMIZE_REG_INIT = 1;
