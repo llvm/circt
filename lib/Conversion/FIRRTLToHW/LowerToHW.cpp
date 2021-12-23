@@ -3113,19 +3113,6 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  // If this is an assignment to a RegReset, then the connect implicitly
-  // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(dest.getDefiningOp())) {
-    Value clockVal = getLoweredValue(regResetOp.clockVal());
-    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
-    if (!clockVal || !resetSignal)
-      return failure();
-
     auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
                           ? ::ResetType::AsyncReset
                           : ::ResetType::SyncReset;
