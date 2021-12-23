@@ -148,7 +148,7 @@ circt::analysis::MemoryDependenceAnalysis::getDependences(Operation *op) {
   return results[op];
 }
 
-/// Replaces the dependences, if any, from the oldOp op to the newOp op.
+/// Replaces the dependences, if any, from the oldOp to the newOp.
 void circt::analysis::MemoryDependenceAnalysis::replaceOp(Operation *oldOp,
                                                           Operation *newOp) {
   // If oldOp had any dependences.
