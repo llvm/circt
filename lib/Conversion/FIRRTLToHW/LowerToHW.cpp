@@ -3151,380 +3151,396 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
           .Default([&](auto) { llvm_unreachable("must fail before"); });
     };
     recurse(destVal, srcVal, destType, op.src().getType());
+    return success();
+  }
 
-    auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+  builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
+}
 
-    // If this is an assignment to a register, then the connect implicitly
-    // happens under the clock that gates the register.
-    if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
-      Value clockVal = getLoweredValue(regOp.clockVal());
-      if (!clockVal)
-        return failure();
+LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
+  auto srcVal = getLoweredValue(op.src());
+  if (!srcVal)
+    return failure();
 
-      builder.create<sv::AssignOp>(destVal, srcVal);
-      return success();
+  auto destVal = getPossiblyInoutLoweredValue(op.dest());
+  if (!destVal)
+    return failure();
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+  });
+  return success();
+}
+
+// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// and an sv.fwrite all nested together.
+LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
+  auto clock = getLoweredValue(op.clock());
+  auto cond = getLoweredValue(op.cond());
+  if (!clock || !cond)
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    operands.push_back(getLoweredValue(operand));
+    if (!operands.back()) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        operands.back() = getOrCreateIntConstant(1, 0);
     }
+  }
 
-    // If this is an assignment to a RegReset, then the connect implicitly
-    // happens under the clock and reset that gate the register.
-    if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
-      Value clockVal = getLoweredValue(regResetOp.clockVal());
-      Value resetSignal = getLoweredValue(regResetOp.resetSignal());
-      if (!clockVal || !resetSignal)
-        return failure();
+  addToAlwaysBlock(clock, [&]() {
+    // Emit an "#ifndef SYNTHESIS" guard into the always block.
+    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      circuitState.used_PRINTF_COND = true;
 
-      auto destVal = getPossiblyInoutLoweredValue(op.dest());
-      if (!destVal)
-        return failure();
-
-      if (!destVal.getType().isa<hw::InOutType>())
-        return op.emitError("destination isn't an inout type");
-
-      addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
-        addToInitialBlock(
-            [&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
+      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
+      addIfProceduralBlock(ifCond, [&]() {
+        // Emit the sv.fwrite.
+        builder.create<sv::FWriteOp>(op.formatString(), operands);
       });
-      return success();
+    });
+  });
+  return success();
+}
+// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
+// and an sv.fwrite all nested together.
+LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
+  auto clock = getLoweredValue(op.clock());
+  auto cond = getLoweredValue(op.cond());
+  if (!clock || !cond)
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    operands.push_back(getLoweredValue(operand));
+    if (!operands.back()) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      operands.back() = getOrCreateIntConstant(1, 0);
+    }
+  }
+
+  addToAlwaysBlock(clock, [&]() {
+    // Emit an "#ifndef SYNTHESIS" guard into the always block.
+    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      circuitState.used_PRINTF_COND = true;
+
+      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
+      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
+
+      addIfProceduralBlock(ifCond, [&]() {
+        // Emit the sv.fwrite.
+        builder.create<sv::FWriteOp>(op.formatString(), operands);
+      });
+    });
+  });
+
+  return success();
+}
+
+// Stop lowers into a nested series of behavioral statements plus $fatal
+// or $finish.
+LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
+  auto clock = getLoweredValue(op.clock());
+  auto cond = getLoweredValue(op.cond());
+  if (!clock || !cond)
+    return failure();
+
+  // Emit this into an "sv.always posedge" body.
+  addToAlwaysBlock(clock, [&]() {
+    // Emit an "#ifndef SYNTHESIS" guard into the always block.
+    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      circuitState.used_STOP_COND = true;
+
+      // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
+      Value ifCond =
+          builder.create<sv::VerbatimExprOp>(cond.getType(), "`STOP_COND_");
+      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
+      addIfProceduralBlock(ifCond, [&]() {
+        // Emit the sv.fatal or sv.finish.
+        if (op.exitCode())
+          builder.create<sv::FatalOp>();
+        else
+          builder.create<sv::FinishOp>();
+      });
+    });
+  });
+
+  return success();
+}
+
+/// Helper function to build an immediate assert operation based on the
+/// original FIRRTL operation name. This reduces code duplication in
+/// `lowerVerificationStatement`.
+template <typename... Args>
+static Operation *buildImmediateVerifOp(ImplicitLocOpBuilder &builder,
+                                        StringRef opName, Args &&...args) {
+  if (opName == "assert")
+    return builder.create<sv::AssertOp>(std::forward<Args>(args)...);
+  if (opName == "assume")
+    return builder.create<sv::AssumeOp>(std::forward<Args>(args)...);
+  if (opName == "cover")
+    return builder.create<sv::CoverOp>(std::forward<Args>(args)...);
+  llvm_unreachable("unknown verification op");
+}
+
+/// Helper function to build a concurrent assert operation based on the
+/// original FIRRTL operation name. This reduces code duplication in
+/// `lowerVerificationStatement`.
+template <typename... Args>
+static Operation *buildConcurrentVerifOp(ImplicitLocOpBuilder &builder,
+                                         StringRef opName, Args &&...args) {
+  if (opName == "assert")
+    return builder.create<sv::AssertConcurrentOp>(std::forward<Args>(args)...);
+  if (opName == "assume")
+    return builder.create<sv::AssumeConcurrentOp>(std::forward<Args>(args)...);
+  if (opName == "cover")
+    return builder.create<sv::CoverConcurrentOp>(std::forward<Args>(args)...);
+  llvm_unreachable("unknown verification op");
+}
+
+/// Template for lowering verification statements from type A to
+/// type B.
+///
+/// For example, lowering the "foo" op to the "bar" op would start
+/// with:
+///
+///     foo(clock, condition, enable, "message")
+///
+/// This becomes a Verilog clocking block with the "bar" op guarded
+/// by an if enable:
+///
+///     always @(posedge clock) begin
+///       if (enable) begin
+///         bar(condition);
+///       end
+///     end
+/// The above can also be reduced into a concurrent verification statement
+/// sv.assert.concurrent posedge %clock (condition && enable)
+LogicalResult FIRRTLLowering::lowerVerificationStatement(
+    Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
+    Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
+    StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
+
+  StringRef opName = op->getName().stripDialect();
+  auto isAssert = opName == "assert";
+  auto isCover = opName == "cover";
+
+  auto clock = getLoweredValue(opClock);
+  auto enable = getLoweredValue(opEnable);
+  auto predicate = getLoweredValue(opPredicate);
+  if (!clock || !enable || !predicate)
+    return failure();
+
+  StringAttr label;
+  if (opNameAttr && !opNameAttr.getValue().empty())
+    label = opNameAttr;
+  StringAttr prefixedLabel;
+  if (label)
+    prefixedLabel =
+        StringAttr::get(builder.getContext(), labelPrefix + label.getValue());
+
+  StringAttr message;
+  SmallVector<Value> messageOps;
+  if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
+    message = opMessageAttr;
+    for (auto operand : opOperands)
+      messageOps.push_back(getLoweredValue(operand));
+  }
+
+  auto emit = [&]() {
+    // Handle the purely procedural flavor of the operation.
+    if (!isConcurrent) {
+      auto deferImmediate = circt::sv::DeferAssertAttr::get(
+          builder.getContext(), circt::sv::DeferAssert::Immediate);
+      addToAlwaysBlock(clock, [&]() {
+        addIfProceduralBlock(enable, [&]() {
+          buildImmediateVerifOp(builder, opName, predicate, deferImmediate,
+                                prefixedLabel, message, messageOps);
+        });
+      });
+      return;
     }
 
-    // Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
-    // and an sv.fwrite all nested together.
-    LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-      auto clock = getLoweredValue(op.clock());
-      auto cond = getLoweredValue(op.cond());
-      if (!clock || !cond)
-        return failure();
+    auto boolType = IntegerType::get(builder.getContext(), 1);
+    auto allOnes = builder.create<hw::ConstantOp>(APInt::getAllOnesValue(1));
 
-      SmallVector<Value, 4> operands;
-      operands.reserve(op.operands().size());
-      for (auto operand : op.operands()) {
-        operands.push_back(getLoweredValue(operand));
-        if (!operands.back()) {
-          // If this is a zero bit operand, just pass a one bit zero.
-          if (!isZeroBitFIRRTLType(operand.getType()))
-            return failure();
-          operands.back() = getOrCreateIntConstant(1, 0);
-        }
-      }
-
+    // Handle the `ifElseFatal` format, which does not emit an SVA but
+    // rather a process that uses $error and $fatal to perform the checks.
+    // TODO: This should *not* be part of the op, but rather a lowering
+    // option that the user of this pass can choose.
+    auto format = op->template getAttrOfType<StringAttr>("format");
+    if (format && format.getValue() == "ifElseFatal") {
+      predicate = builder.createOrFold<comb::XorOp>(predicate, allOnes);
+      predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
       addToAlwaysBlock(clock, [&]() {
-        // Emit an "#ifndef SYNTHESIS" guard into the always block.
-        addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
-          circuitState.used_PRINTF_COND = true;
-
-          // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-          Value ifCond = builder.create<sv::VerbatimExprOp>(cond.getType(),
-                                                            "`PRINTF_COND_");
-          ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
-
-          addIfProceduralBlock(ifCond, [&]() {
-            // Emit the sv.fwrite.
-            builder.create<sv::FWriteOp>(op.formatString(), operands);
+        addToIfDefProceduralBlock("SYNTHESIS", {}, [&]() {
+          addIfProceduralBlock(predicate, [&]() {
+            circuitState.used_ASSERT_VERBOSE_COND = true;
+            circuitState.used_STOP_COND = true;
+            addIfProceduralBlock(
+                builder.create<sv::VerbatimExprOp>(boolType,
+                                                   "`ASSERT_VERBOSE_COND_"),
+                [&]() { builder.create<sv::ErrorOp>(message, messageOps); });
+            addIfProceduralBlock(
+                builder.create<sv::VerbatimExprOp>(boolType, "`STOP_COND_"),
+                [&]() { builder.create<sv::FatalOp>(); });
           });
         });
       });
-
-      return success();
+      return;
     }
 
-    // Stop lowers into a nested series of behavioral statements plus $fatal
-    // or $finish.
-    LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
-      auto clock = getLoweredValue(op.clock());
-      auto cond = getLoweredValue(op.cond());
-      if (!clock || !cond)
-        return failure();
+    // Formulate the `enable -> predicate` as `!enable | predicate`.
+    auto notEnable = builder.createOrFold<comb::XorOp>(enable, allOnes);
+    predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
 
-      // Emit this into an "sv.always posedge" body.
-      addToAlwaysBlock(clock, [&]() {
-        // Emit an "#ifndef SYNTHESIS" guard into the always block.
-        addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
-          circuitState.used_STOP_COND = true;
-
-          // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
-          Value ifCond =
-              builder.create<sv::VerbatimExprOp>(cond.getType(), "`STOP_COND_");
-          ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
-          addIfProceduralBlock(ifCond, [&]() {
-            // Emit the sv.fatal or sv.finish.
-            if (op.exitCode())
-              builder.create<sv::FatalOp>();
-            else
-              builder.create<sv::FinishOp>();
-          });
-        });
-      });
-
-      return success();
+    // Handle the regular SVA case.
+    sv::EventControl event;
+    switch (opEventControl) {
+    case EventControl::AtPosEdge:
+      event = circt::sv::EventControl::AtPosEdge;
+      break;
+    case EventControl::AtEdge:
+      event = circt::sv::EventControl::AtEdge;
+      break;
+    case EventControl::AtNegEdge:
+      event = circt::sv::EventControl::AtNegEdge;
+      break;
     }
+    buildConcurrentVerifOp(
+        builder, opName,
+        circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
+        predicate, prefixedLabel, message, messageOps);
 
-    /// Helper function to build an immediate assert operation based on the
-    /// original FIRRTL operation name. This reduces code duplication in
-    /// `lowerVerificationStatement`.
-    template <typename... Args>
-    static Operation *buildImmediateVerifOp(ImplicitLocOpBuilder & builder,
-                                            StringRef opName, Args && ...args) {
-      if (opName == "assert")
-        return builder.create<sv::AssertOp>(std::forward<Args>(args)...);
-      if (opName == "assume")
-        return builder.create<sv::AssumeOp>(std::forward<Args>(args)...);
-      if (opName == "cover")
-        return builder.create<sv::CoverOp>(std::forward<Args>(args)...);
-      llvm_unreachable("unknown verification op");
-    }
-
-    /// Helper function to build a concurrent assert operation based on the
-    /// original FIRRTL operation name. This reduces code duplication in
-    /// `lowerVerificationStatement`.
-    template <typename... Args>
-    static Operation *buildConcurrentVerifOp(
-        ImplicitLocOpBuilder & builder, StringRef opName, Args && ...args) {
-      if (opName == "assert")
-        return builder.create<sv::AssertConcurrentOp>(
-            std::forward<Args>(args)...);
-      if (opName == "assume")
-        return builder.create<sv::AssumeConcurrentOp>(
-            std::forward<Args>(args)...);
-      if (opName == "cover")
-        return builder.create<sv::CoverConcurrentOp>(
-            std::forward<Args>(args)...);
-      llvm_unreachable("unknown verification op");
-    }
-
-    /// Template for lowering verification statements from type A to
-    /// type B.
-    ///
-    /// For example, lowering the "foo" op to the "bar" op would start
-    /// with:
-    ///
-    ///     foo(clock, condition, enable, "message")
-    ///
-    /// This becomes a Verilog clocking block with the "bar" op guarded
-    /// by an if enable:
-    ///
-    ///     always @(posedge clock) begin
-    ///       if (enable) begin
-    ///         bar(condition);
-    ///       end
-    ///     end
-    /// The above can also be reduced into a concurrent verification statement
-    /// sv.assert.concurrent posedge %clock (condition && enable)
-    LogicalResult FIRRTLLowering::lowerVerificationStatement(
-        Operation * op, StringRef labelPrefix, Value opClock, Value opPredicate,
-        Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
-        StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
-
-      StringRef opName = op->getName().stripDialect();
-      auto isAssert = opName == "assert";
-      auto isCover = opName == "cover";
-
-      auto clock = getLoweredValue(opClock);
-      auto enable = getLoweredValue(opEnable);
-      auto predicate = getLoweredValue(opPredicate);
-      if (!clock || !enable || !predicate)
-        return failure();
-
-      StringAttr label;
-      if (opNameAttr && !opNameAttr.getValue().empty())
-        label = opNameAttr;
-      StringAttr prefixedLabel;
+    // Assertions gain a companion `assume` behind a
+    // `USE_PROPERTY_AS_CONSTRAINT` guard.
+    if (isAssert) {
+      StringAttr assumeLabel;
       if (label)
-        prefixedLabel = StringAttr::get(builder.getContext(),
-                                        labelPrefix + label.getValue());
-
-      StringAttr message;
-      SmallVector<Value> messageOps;
-      if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
-        message = opMessageAttr;
-        for (auto operand : opOperands)
-          messageOps.push_back(getLoweredValue(operand));
-      }
-
-      auto emit = [&]() {
-        // Handle the purely procedural flavor of the operation.
-        if (!isConcurrent) {
-          auto deferImmediate = circt::sv::DeferAssertAttr::get(
-              builder.getContext(), circt::sv::DeferAssert::Immediate);
-          addToAlwaysBlock(clock, [&]() {
-            addIfProceduralBlock(enable, [&]() {
-              buildImmediateVerifOp(builder, opName, predicate, deferImmediate,
-                                    prefixedLabel, message, messageOps);
-            });
-          });
-          return;
-        }
-
-        auto boolType = IntegerType::get(builder.getContext(), 1);
-        auto allOnes =
-            builder.create<hw::ConstantOp>(APInt::getAllOnesValue(1));
-
-        // Handle the `ifElseFatal` format, which does not emit an SVA but
-        // rather a process that uses $error and $fatal to perform the checks.
-        // TODO: This should *not* be part of the op, but rather a lowering
-        // option that the user of this pass can choose.
-        auto format = op->template getAttrOfType<StringAttr>("format");
-        if (format && format.getValue() == "ifElseFatal") {
-          predicate = builder.createOrFold<comb::XorOp>(predicate, allOnes);
-          predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
-          addToAlwaysBlock(clock, [&]() {
-            addToIfDefProceduralBlock("SYNTHESIS", {}, [&]() {
-              addIfProceduralBlock(predicate, [&]() {
-                circuitState.used_ASSERT_VERBOSE_COND = true;
-                circuitState.used_STOP_COND = true;
-                addIfProceduralBlock(builder.create<sv::VerbatimExprOp>(
-                                         boolType, "`ASSERT_VERBOSE_COND_"),
-                                     [&]() {
-                                       builder.create<sv::ErrorOp>(message,
-                                                                   messageOps);
-                                     });
-                addIfProceduralBlock(
-                    builder.create<sv::VerbatimExprOp>(boolType, "`STOP_COND_"),
-                    [&]() { builder.create<sv::FatalOp>(); });
-              });
-            });
-          });
-          return;
-        }
-
-        // Formulate the `enable -> predicate` as `!enable | predicate`.
-        auto notEnable = builder.createOrFold<comb::XorOp>(enable, allOnes);
-        predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
-
-        // Handle the regular SVA case.
-        sv::EventControl event;
-        switch (opEventControl) {
-        case EventControl::AtPosEdge:
-          event = circt::sv::EventControl::AtPosEdge;
-          break;
-        case EventControl::AtEdge:
-          event = circt::sv::EventControl::AtEdge;
-          break;
-        case EventControl::AtNegEdge:
-          event = circt::sv::EventControl::AtNegEdge;
-          break;
-        }
-        buildConcurrentVerifOp(
-            builder, opName,
+        assumeLabel = StringAttr::get(builder.getContext(),
+                                      "assume__" + label.getValue());
+      addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
+        builder.create<sv::AssumeConcurrentOp>(
             circt::sv::EventControlAttr::get(builder.getContext(), event),
-            clock, predicate, prefixedLabel, message, messageOps);
+            clock, predicate, assumeLabel);
+      });
+    }
+  };
 
-        // Assertions gain a companion `assume` behind a
-        // `USE_PROPERTY_AS_CONSTRAINT` guard.
-        if (isAssert) {
-          StringAttr assumeLabel;
-          if (label)
-            assumeLabel = StringAttr::get(builder.getContext(),
-                                          "assume__" + label.getValue());
-          addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
-            builder.create<sv::AssumeConcurrentOp>(
-                circt::sv::EventControlAttr::get(builder.getContext(), event),
-                clock, predicate, assumeLabel);
-          });
-        }
-      };
+  // Wrap the verification statement up in the optional preprocessor
+  // guards. This is a bit awkward since we want to translate an array of
+  // guards into a recursive call to `addToIfDefBlock`.
+  ArrayRef<Attribute> guards{};
+  if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
+    guards = guardsAttr.getValue();
+  bool anyFailed = false;
+  std::function<void()> emitWrapped = [&]() {
+    if (guards.empty()) {
+      emit();
+      return;
+    }
+    auto guard = guards[0].dyn_cast<StringAttr>();
+    if (!guard) {
+      op->emitOpError("elements in `guards` array must be `StringAttr`");
+      anyFailed = true;
+      return;
+    }
+    guards = guards.drop_front();
+    addToIfDefBlock(guard.getValue(), emitWrapped);
+  };
+  emitWrapped();
+  if (anyFailed)
+    return failure();
 
-      // Wrap the verification statement up in the optional preprocessor
-      // guards. This is a bit awkward since we want to translate an array of
-      // guards into a recursive call to `addToIfDefBlock`.
-      ArrayRef<Attribute> guards{};
-      if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
-        guards = guardsAttr.getValue();
-      bool anyFailed = false;
-      std::function<void()> emitWrapped = [&]() {
-        if (guards.empty()) {
-          emit();
-          return;
-        }
-        auto guard = guards[0].dyn_cast<StringAttr>();
-        if (!guard) {
-          op->emitOpError("elements in `guards` array must be `StringAttr`");
-          anyFailed = true;
-          return;
-        }
-        guards = guards.drop_front();
-        addToIfDefBlock(guard.getValue(), emitWrapped);
-      };
-      emitWrapped();
-      if (anyFailed)
+  return success();
+}
+
+// Lower an assert to SystemVerilog.
+LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
+  return lowerVerificationStatement(
+      op, "assert__", op.clock(), op.predicate(), op.enable(), op.messageAttr(),
+      op.operands(), op.nameAttr(), op.isConcurrent(), op.eventControl());
+}
+
+// Lower an assume to SystemVerilog.
+LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
+  return lowerVerificationStatement(
+      op, "assume__", op.clock(), op.predicate(), op.enable(), op.messageAttr(),
+      op.operands(), op.nameAttr(), op.isConcurrent(), op.eventControl());
+}
+
+// Lower a cover to SystemVerilog.
+LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
+  return lowerVerificationStatement(
+      op, "cover__", op.clock(), op.predicate(), op.enable(), op.messageAttr(),
+      op.operands(), op.nameAttr(), op.isConcurrent(), op.eventControl());
+}
+
+LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
+  // Don't emit anything for a zero or one operand attach.
+  if (op.operands().size() < 2)
+    return success();
+
+  SmallVector<Value, 4> inoutValues;
+  for (auto v : op.operands()) {
+    inoutValues.push_back(getPossiblyInoutLoweredValue(v));
+    if (!inoutValues.back()) {
+      // Ignore zero bit values.
+      if (!isZeroBitFIRRTLType(v.getType()))
         return failure();
-
-      return success();
+      inoutValues.pop_back();
+      continue;
     }
 
-    // Lower an assert to SystemVerilog.
-    LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-      return lowerVerificationStatement(
-          op, "assert__", op.clock(), op.predicate(), op.enable(),
-          op.messageAttr(), op.operands(), op.nameAttr(), op.isConcurrent(),
-          op.eventControl());
-    }
+    if (!inoutValues.back().getType().isa<hw::InOutType>())
+      return op.emitError("operand isn't an inout type");
+  }
 
-    // Lower an assume to SystemVerilog.
-    LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-      return lowerVerificationStatement(
-          op, "assume__", op.clock(), op.predicate(), op.enable(),
-          op.messageAttr(), op.operands(), op.nameAttr(), op.isConcurrent(),
-          op.eventControl());
-    }
+  if (inoutValues.size() < 2)
+    return success();
 
-    // Lower a cover to SystemVerilog.
-    LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-      return lowerVerificationStatement(
-          op, "cover__", op.clock(), op.predicate(), op.enable(),
-          op.messageAttr(), op.operands(), op.nameAttr(), op.isConcurrent(),
-          op.eventControl());
-    }
+  addToIfDefBlock(
+      "SYNTHESIS",
+      // If we're doing synthesis, we emit an all-pairs assign complex.
+      [&]() {
+        SmallVector<Value, 4> values;
+        for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
+          values.push_back(getReadInOutOp(inoutValues[i]));
 
-    LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
-      // Don't emit anything for a zero or one operand attach.
-      if (op.operands().size() < 2)
-        return success();
-
-      SmallVector<Value, 4> inoutValues;
-      for (auto v : op.operands()) {
-        inoutValues.push_back(getPossiblyInoutLoweredValue(v));
-        if (!inoutValues.back()) {
-          // Ignore zero bit values.
-          if (!isZeroBitFIRRTLType(v.getType()))
-            return failure();
-          inoutValues.pop_back();
-          continue;
+        for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
+          for (size_t i2 = 0; i2 != e; ++i2)
+            if (i1 != i2)
+              builder.create<sv::AssignOp>(inoutValues[i1], values[i2]);
         }
+      },
+      // In the non-synthesis case, we emit a SystemVerilog alias
+      // statement.
+      [&]() {
+        builder.create<sv::IfDefOp>(
+            "verilator",
+            [&]() {
+              builder.create<sv::VerbatimOp>(
+                  "`error \"Verilator does not support alias and thus "
+                  "cannot "
+                  "arbitrarily connect bidirectional wires and ports\"");
+            },
+            [&]() { builder.create<sv::AliasOp>(inoutValues); });
+      });
 
-        if (!inoutValues.back().getType().isa<hw::InOutType>())
-          return op.emitError("operand isn't an inout type");
-      }
-
-      if (inoutValues.size() < 2)
-        return success();
-
-      addToIfDefBlock(
-          "SYNTHESIS",
-          // If we're doing synthesis, we emit an all-pairs assign complex.
-          [&]() {
-            SmallVector<Value, 4> values;
-            for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-              values.push_back(getReadInOutOp(inoutValues[i]));
-
-            for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
-              for (size_t i2 = 0; i2 != e; ++i2)
-                if (i1 != i2)
-                  builder.create<sv::AssignOp>(inoutValues[i1], values[i2]);
-            }
-          },
-          // In the non-synthesis case, we emit a SystemVerilog alias
-          // statement.
-          [&]() {
-            builder.create<sv::IfDefOp>(
-                "verilator",
-                [&]() {
-                  builder.create<sv::VerbatimOp>(
-                      "`error \"Verilator does not support alias and thus "
-                      "cannot "
-                      "arbitrarily connect bidirectional wires and ports\"");
-                },
-                [&]() { builder.create<sv::AliasOp>(inoutValues); });
-          });
-
-      return success();
-    }
+  return success();
+}
