@@ -3151,6 +3151,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
           .Default([&](auto) { llvm_unreachable("must fail before"); });
     };
     recurse(destVal, srcVal, destType, op.src().getType());
+
     return success();
   }
 
@@ -3176,42 +3177,6 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   return success();
 }
 
-// Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
-// and an sv.fwrite all nested together.
-LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-  auto clock = getLoweredValue(op.clock());
-  auto cond = getLoweredValue(op.cond());
-  if (!clock || !cond)
-    return failure();
-
-  SmallVector<Value, 4> operands;
-  operands.reserve(op.operands().size());
-  for (auto operand : op.operands()) {
-    operands.push_back(getLoweredValue(operand));
-    if (!operands.back()) {
-      // If this is a zero bit operand, just pass a one bit zero.
-      if (!isZeroBitFIRRTLType(operand.getType()))
-        operands.back() = getOrCreateIntConstant(1, 0);
-    }
-  }
-
-  addToAlwaysBlock(clock, [&]() {
-    // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
-      circuitState.used_PRINTF_COND = true;
-
-      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
-      addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite.
-        builder.create<sv::FWriteOp>(op.formatString(), operands);
-      });
-    });
-  });
-  return success();
-}
 // Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
