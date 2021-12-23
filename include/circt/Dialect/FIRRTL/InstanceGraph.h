@@ -166,6 +166,9 @@ public:
   /// InstanceOp.getReferencedModule() will be a linear search through the IR.
   Operation *getReferencedModule(InstanceOp op);
 
+  /// Check if child is a decendent of parent.
+  bool isAncestor(FModuleLike child, FModuleOp parent);
+
   /// Iterate through all modules.
   using iterator = NodeIterator;
   iterator begin() { return nodes.begin(); }
