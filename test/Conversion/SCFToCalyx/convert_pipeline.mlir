@@ -23,15 +23,15 @@
 // CHECK-DAG:         calyx.assign %[[ADD_RIGHT]] = %c1_i64 : i64
 // CHECK-DAG:         calyx.group_done %[[ITER_ARG_DONE]] : i1
 // CHECK:         calyx.control
-// CHECK-NEXT       calyx.seq
-// CHECK-NEXT         calyx.enable @assign_while_0_init
-// CHECK-NEXT         calyx.while %[[LT_OUT]] with @bb0_0
-// CHECK-NEXT           calyx.seq
-// CHECK-NEXT             calyx.enable @assign_while_0_latch
-// CHECK-NEXT           }
-// CHECK-NEXT         }
-// CHECK-NEXT       }
-// CHECK-NEXT     }
+// CHECK-NEXT:      calyx.seq
+// CHECK-NEXT:        calyx.enable @assign_while_0_init
+// CHECK-NEXT:        calyx.while %[[LT_OUT]] with @bb0_0
+// CHECK-NEXT:          calyx.par
+// CHECK-NEXT:            calyx.enable @assign_while_0_latch
+// CHECK-NEXT:          }
+// CHECK-NEXT:        }
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
 func @minimal() {
   %c0_i64 = arith.constant 0 : i64
   %c10_i64 = arith.constant 10 : i64

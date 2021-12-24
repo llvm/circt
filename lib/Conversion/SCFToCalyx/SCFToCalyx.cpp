@@ -1703,16 +1703,21 @@ private:
         auto whileCtrlOp =
             rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
-        auto whileSeqOp =
-            rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
+        Operation *whileBodyOp;
+        if (isa<staticlogic::PipelineWhileOp>(whileOp.getOperation()))
+          whileBodyOp =
+              rewriter.create<calyx::ParOp>(whileOp.getOperation()->getLoc());
+        else
+          whileBodyOp =
+              rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
+        auto *whileBodyOpBlock = &whileBodyOp->getRegion(0).front();
 
         /// Only schedule the after block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
-        LogicalResult res =
-            buildCFGControl(path, rewriter, whileSeqOp.getBody(), block,
-                            whileOp.getBodyBlock());
+        LogicalResult res = buildCFGControl(path, rewriter, whileBodyOpBlock,
+                                            block, whileOp.getBodyBlock());
         // Insert loop-latch at the end of the while group
-        rewriter.setInsertionPointToEnd(whileSeqOp.getBody());
+        rewriter.setInsertionPointToEnd(whileBodyOpBlock);
         rewriter.create<calyx::EnableOp>(
             loc, getComponentState().getWhileLatchGroup(whileOp).getName());
         if (res.failed())
