@@ -1593,7 +1593,7 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
 
       // Create a register for each stage.
       for (size_t i = 0; i < op.getNumOperands(); ++i) {
-        // If this result is an iter arg or result, dont' create a register.
+        // Iter args and results are handled in BuildWhileGroups.
         Value stageResult = stage.getResult(i);
         bool isIterArgOrResult = false;
         for (auto &use : stageResult.getUses())
@@ -1914,8 +1914,8 @@ private:
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
-              src.getDefiningOp()))
+              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp,
+              staticlogic::PipelineWhileOp>(src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -2283,13 +2283,9 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
-    // llvm::outs() << "before pattern:\n";
-    // getOperation()->dump();
     LogicalResult partialPatternRes = runPartialPattern(
         pat.pattern,
         /*runOnce=*/pat.strategy == LoweringPattern::Strategy::Once);
-    // llvm::outs() << "after pattern:\n";
-    // getOperation()->dump();
     if (succeeded(partialPatternRes))
       continue;
     signalPassFailure();
