@@ -1577,50 +1577,6 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
   }
 };
 
-/// Builds registers for each pipeline stage in the program.
-class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
-  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
-
-  LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
-                           PatternRewriter &rewriter) const override {
-    funcOp.walk([&](staticlogic::PipelineRegisterOp op) {
-      // Condition registers are handled in BuildWhileGroups.
-      auto *parent = op->getParentOp();
-      auto stage = dyn_cast<staticlogic::PipelineStageOp>(parent);
-      if (!stage)
-        return;
-
-      // Create a register for each stage.
-      for (size_t i = 0; i < op.getNumOperands(); ++i) {
-        // Iter args and results are handled in BuildWhileGroups.
-        Value stageResult = stage.getResult(i);
-        bool isIterArgOrResult = false;
-        for (auto &use : stageResult.getUses())
-          if (isa<staticlogic::PipelineTerminatorOp>(use.getOwner()))
-            isIterArgOrResult = true;
-        if (isIterArgOrResult)
-          continue;
-
-        // Create a register for passing this result to later stages.
-        Value value = op.getOperand(i);
-        Type resultType = value.getType();
-        assert(resultType.isa<IntegerType>() &&
-               "unsupported pipeline result type");
-        auto name = SmallString<20>("stage_");
-        name += std::to_string(stage.getStageNumber());
-        name += "_register_";
-        name += std::to_string(i);
-        unsigned width = resultType.getIntOrFloatBitWidth();
-        auto reg = createReg(getComponentState(), rewriter, value.getLoc(),
-                             name, width);
-        value.replaceAllUsesWith(reg.out());
-      }
-    });
-    return success();
-  }
-};
-
 /// Builds registers for the return statement of the program and constant
 /// assignments to the component return value.
 class BuildReturnRegs : public FuncOpPartialLoweringPattern {
@@ -2234,9 +2190,6 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// This pattern creates registers for all basic-block arguments.
   addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
-
-  /// This pattern creates registers for all pipeline stages.
-  addOncePattern<BuildPipelineRegs>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern creates registers for the function return values.
   addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
