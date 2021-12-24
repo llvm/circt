@@ -1064,7 +1064,14 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      staticlogic::PipelineStageOp stage) const {
-  // TODO: find pipeline registers, create assignments, and add group.
+  // Replace stage results with their values.
+  auto *stageTerminator = stage.getBodyBlock().getTerminator();
+  for (size_t i = 0; i < stageTerminator->getNumOperands(); ++i) {
+    auto oldValue = stage->getResult(i);
+    auto newValue = stageTerminator->getOperand(i);
+    oldValue.replaceAllUsesWith(newValue);
+  }
+
   return success();
 }
 
@@ -1905,12 +1912,10 @@ private:
       ///   return values have at the current point of conversion not yet
       ///   been rewritten to their register outputs, see comment in
       ///   LateSSAReplacement)
-      /// - Pipeline stage return values, which are handled in
-      ///   LateSSAReplacement.
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp,
-              staticlogic::PipelineStageOp>(src.getDefiningOp()))
+              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
+              src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -1944,20 +1949,6 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
       for (auto res : getComponentState().getWhileIterRegs(whileOp))
         whileOp.getOperation()->getResults()[res.first].replaceAllUsesWith(
             res.second.out());
-    });
-
-    funcOp.walk([&](staticlogic::PipelineWhileOp op) {
-      // For each iter arg, get the stage result, find the value that becomes
-      // that result, and replace all uses.
-      auto *term = op.getStagesBlock().getTerminator();
-      for (auto &operand : term->getOpOperands()) {
-        auto stage =
-            operand.get().getDefiningOp<staticlogic::PipelineStageOp>();
-        auto index = operand.getOperandNumber();
-        auto oldValue = stage->getResult(index);
-        auto newValue = stage.getBodyBlock().getTerminator()->getOperand(index);
-        oldValue.replaceAllUsesWith(newValue);
-      }
     });
 
     funcOp.walk([&](memref::LoadOp loadOp) {
@@ -2292,13 +2283,13 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
-    llvm::outs() << "before pattern:\n";
-    getOperation()->dump();
+    // llvm::outs() << "before pattern:\n";
+    // getOperation()->dump();
     LogicalResult partialPatternRes = runPartialPattern(
         pat.pattern,
         /*runOnce=*/pat.strategy == LoweringPattern::Strategy::Once);
-    llvm::outs() << "after pattern:\n";
-    getOperation()->dump();
+    // llvm::outs() << "after pattern:\n";
+    // getOperation()->dump();
     if (succeeded(partialPatternRes))
       continue;
     signalPassFailure();

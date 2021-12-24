@@ -5,25 +5,27 @@
 // CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
 // CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i64
 // CHECK-DAG:     %[[C10:.+]] = hw.constant 10 : i64
-// CHECK-DAG:     %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i64, i64, i64
-// CHECK-DAG:     %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i64, i64, i1
-// CHECK-DAG:     %while_0_arg0_reg.in, %while_0_arg0_reg.write_en, %while_0_arg0_reg.clk, %while_0_arg0_reg.reset, %while_0_arg0_reg.out, %while_0_arg0_reg.done = calyx.register @while_0_arg0_reg : i64, i1, i1, i1, i64, i1
+// CHECK-DAG:     %[[ADD_LEFT:.+]], %[[ADD_RIGHT:.+]], %[[ADD_OUT:.+]] = calyx.std_add
+// CHECK-DAG:     %[[LT_LEFT:.+]], %[[LT_RIGHT:.+]], %[[LT_OUT:.+]] = calyx.std_lt
+// CHECK-DAG:     %[[ITER_ARG_IN:.+]], %[[ITER_ARG_EN:.+]], %while_0_arg0_reg.clk, %while_0_arg0_reg.reset, %[[ITER_ARG_OUT:.+]], %[[ITER_ARG_DONE:.+]] = calyx.register
 // CHECK:         calyx.wires
 // CHECK-DAG:       calyx.group @assign_while_0_init
-// CHECK-DAG:         calyx.assign %while_0_arg0_reg.in = %[[C0]] : i64
-// CHECK-DAG:         calyx.assign %while_0_arg0_reg.write_en = %[[TRUE]] : i1
-// CHECK-DAG:         calyx.group_done %while_0_arg0_reg.done : i1
+// CHECK-DAG:         calyx.assign %[[ITER_ARG_IN]] = %[[C0]] : i64
+// CHECK-DAG:         calyx.assign %[[ITER_ARG_EN]] = %[[TRUE]] : i1
+// CHECK-DAG:         calyx.group_done %[[ITER_ARG_DONE]] : i1
 // CHECK-DAG:       calyx.comb_group @bb0_0
-// CHECK-DAG:         calyx.assign %std_lt_0.left = %while_0_arg0_reg.out : i64
-// CHECK-DAG:         calyx.assign %std_lt_0.right = %[[C10]] : i64
+// CHECK-DAG:         calyx.assign %[[LT_LEFT]] = %[[ITER_ARG_OUT]] : i64
+// CHECK-DAG:         calyx.assign %[[LT_RIGHT]] = %[[C10]] : i64
 // CHECK-DAG:       calyx.group @assign_while_0_latch
-// CHECK-DAG:         calyx.assign %while_0_arg0_reg.in = %std_add_0.out : i64
-// CHECK-DAG:         calyx.assign %while_0_arg0_reg.write_en = %[[TRUE]] : i1
-// CHECK-DAG:         calyx.group_done %while_0_arg0_reg.done : i1
+// CHECK-DAG:         calyx.assign %[[ITER_ARG_IN]] = %[[ADD_OUT]] : i64
+// CHECK-DAG:         calyx.assign %[[ITER_ARG_EN]] = %[[TRUE]] : i1
+// CHECK-DAG:         calyx.assign %[[ADD_LEFT]] = %[[ITER_ARG_OUT]] : i64
+// CHECK-DAG:         calyx.assign %[[ADD_RIGHT]] = %c1_i64 : i64
+// CHECK-DAG:         calyx.group_done %[[ITER_ARG_DONE]] : i1
 // CHECK:         calyx.control
 // CHECK-NEXT       calyx.seq
 // CHECK-NEXT         calyx.enable @assign_while_0_init
-// CHECK-NEXT         calyx.while %std_lt_0.out with @bb0_0
+// CHECK-NEXT         calyx.while %[[LT_OUT]] with @bb0_0
 // CHECK-NEXT           calyx.seq
 // CHECK-NEXT             calyx.enable @assign_while_0_latch
 // CHECK-NEXT           }
