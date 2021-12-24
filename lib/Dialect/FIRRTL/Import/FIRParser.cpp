@@ -1535,6 +1535,14 @@ private:
 
 } // end anonymous namespace
 
+static bool removeDontTouch(ArrayAttr &annotations) {
+  AnnotationSet filteredAnnos(annotations);
+  bool hasDontTouch = filteredAnnos.removeDontTouch();
+  if (hasDontTouch)
+    annotations = filteredAnnos.getArrayAttr();
+  return hasDontTouch;
+}
+
 /// Attach invalid values to every element of the value.
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   auto tpe = val.getType().cast<FIRRTLType>();
@@ -2612,9 +2620,12 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
+    bool addSym = removeDontTouch(annotations.first);
     result = builder.create<InstanceOp>(referencedModule, id,
                                         annotations.first.getValue(),
                                         annotations.second.getValue());
+    if (addSym)
+      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
   }
 
   // Since we are implicitly unbundling the instance results, we need to keep
@@ -2662,9 +2673,12 @@ ParseResult FIRStmtParser::parseCombMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
+  bool addSym = removeDontTouch(annotations);
   auto result =
       builder.create<CombMemOp>(vectorType.getElementType(),
                                 vectorType.getNumElements(), id, annotations);
+  if (addSym)
+    result.inner_symAttr(StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2700,10 +2714,13 @@ ParseResult FIRStmtParser::parseSeqMem() {
     annotations =
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
+  bool addSym = removeDontTouch(annotations);
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
                                          vectorType.getNumElements(), ruw, id,
                                          annotations);
+  if (addSym)
+    result.inner_symAttr( StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2840,10 +2857,13 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
         getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                             ports, moduleContext.targetsInModule);
 
+    bool addSym = removeDontTouch(annotations.first);
     result = builder.create<MemOp>(
         resultTypes, readLatency, writeLatency, depth, ruw,
         builder.getArrayAttr(resultNames), id, annotations.first,
         annotations.second, StringAttr{});
+    if (addSym)
+      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
   }
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2899,8 +2919,11 @@ ParseResult FIRStmtParser::parseNode() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, initializerType);
 
-  Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
+    bool addSym = removeDontTouch(annotations);
+  auto  result = builder.create<NodeOp>(initializer.getType(), initializer, id,
                                         annotations, StringAttr{});
+    if (addSym)
+      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2928,7 +2951,10 @@ ParseResult FIRStmtParser::parseWire() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
+  bool addSym = removeDontTouch(annotations);
   auto result = builder.create<WireOp>(type, id, annotations, StringAttr{});
+    if (addSym)
+      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3021,12 +3047,20 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
                        moduleContext.targetsInModule, type);
 
   Value result;
-  if (resetSignal)
-    result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
+    bool addSym = removeDontTouch(annotations);
+  if (resetSignal) {
+    auto reg  = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, annotations, StringAttr{});
-  else
-    result = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
-
+    result = reg;
+    if (addSym)
+      reg.inner_symAttr( StringAttr::get(builder.getContext(), id));
+  }
+  else {
+    auto reg = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
+    result = reg;
+    if (addSym)
+      reg.inner_symAttr( StringAttr::get(builder.getContext(), id));
+  }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

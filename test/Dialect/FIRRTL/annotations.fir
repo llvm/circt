@@ -386,33 +386,25 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     input reset : UInt<1>
     input clock : Clock
 
-    ; CHECK: %_T_0 = firrtl.wire  {annotations =
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_0 = firrtl.wire sym @_T_0  
     wire _T_0 : UInt<1>
-    ; CHECK: %_T_1 = firrtl.node %_T_0  {annotations =
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_1 = firrtl.node sym @_T_1 %_T_0
     node _T_1 = _T_0
-    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations =
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_2 = firrtl.reg sym @_T_2 %clock
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations =
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_3 = firrtl.regreset sym @_T_3 %clock, %reset, %c0_ui4
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = chirrtl.seqmem Undefined  {annotations =
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_4 = chirrtl.seqmem sym @_T_4 Undefined
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = chirrtl.combmem  {annotations = [
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_5 = chirrtl.combmem sym @_T_5
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: chirrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance _T_7 {annotations =
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: firrtl.instance _T_7 sym @_T_7
     inst _T_7 of Bar
-    ; CHECK: firrtl.mem Undefined  {annotations =
-    ; CHECK_SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: firrtl.mem sym @_T_8 Undefined
     mem _T_8 :
         data-type => UInt<4>
         depth => 8
@@ -422,8 +414,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
         read-under-write => undefined
 
     wire aggregate : { a : UInt<1>}
-    ; CHECK: %_T_9 = firrtl.node
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK: %_T_9 = firrtl.node sym @_T_9
     node _T_9 = aggregate
 
 
@@ -635,28 +626,24 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    portID = [[PORT_ID_5]] : i64}
 
     ; CHECK: firrtl.module @InnerMod
-    ; CHECK-NEXT: %w = firrtl.wire
+    ; CHECK-NEXT: %w = firrtl.wire sym @w
     ; CHECK-SAME: {circt.nonlocal = @nla_1, class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}
-    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
 
     ; CHECK: firrtl.module @GCTDataTap
-    ; CHECK: firrtl.reg
+    ; CHECK: firrtl.reg  sym @r
     ; CHECk-SAME: annotations =
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_0]] : i64,
     ; CHECK-SAME:    type = "source"}
-    ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
 
-    ; CHECK: firrtl.wire
+    ; CHECK: firrtl.wire sym @w
     ; CHECK-SAME: annotations =
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_2]] : i64,
     ; CHECK-SAME:      type = "source"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
-    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
