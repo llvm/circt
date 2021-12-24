@@ -861,7 +861,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input enable: UInt<1>
     input not_reset: UInt<1>
     input value: UInt<42>
-    input io : {clock: Clock, nest: {enable: UInt<1>}}
+    input io : {clock: Clock}
 
     ; rocket-chip properties
     when cond:
