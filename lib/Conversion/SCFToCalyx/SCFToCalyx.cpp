@@ -1586,6 +1586,16 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
 
       // Create a register for each stage.
       for (size_t i = 0; i < op.getNumOperands(); ++i) {
+        // If this result is an iter arg or result, dont' create a register.
+        Value stageResult = stage.getResult(i);
+        bool isIterArgOrResult = false;
+        for (auto &use : stageResult.getUses())
+          if (isa<staticlogic::PipelineTerminatorOp>(use.getOwner()))
+            isIterArgOrResult = true;
+        if (isIterArgOrResult)
+          continue;
+
+        // Create a register for passing this result to later stages.
         Value value = op.getOperand(i);
         Type resultType = value.getType();
         assert(resultType.isa<IntegerType>() &&
@@ -2235,8 +2245,7 @@ void SCFToCalyxPass::runOnOperation() {
   addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern creates registers for all pipeline stages.
-  // addOncePattern<BuildPipelineRegs>(loweringPatterns, funcMap,
-  // *loweringState);
+  addOncePattern<BuildPipelineRegs>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern creates registers for the function return values.
   addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
