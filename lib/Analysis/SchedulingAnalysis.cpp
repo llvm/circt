@@ -84,14 +84,13 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
     if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
       thenBlock = ifOp.thenBlock();
       elseBlock = ifOp.elseBlock();
-    }
-    if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
+    } else if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
       thenBlock = ifOp.getThenBlock();
       if (ifOp.hasElse())
         elseBlock = ifOp.getElseBlock();
-    }
-    if (!thenBlock)
+    } else {
       return WalkResult::advance();
+    }
 
     // No special handling required for control-only `if`s.
     if (op->getNumResults() == 0)
