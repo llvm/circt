@@ -1064,7 +1064,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      staticlogic::PipelineStageOp stage) const {
-  // Replace stage results with their values.
+  // Stage computations have already been lowered, so simply replace stage
+  // results with the lowered value.
   auto *stageTerminator = stage.getBodyBlock().getTerminator();
   for (size_t i = 0; i < stageTerminator->getNumOperands(); ++i) {
     auto oldValue = stage->getResult(i);
