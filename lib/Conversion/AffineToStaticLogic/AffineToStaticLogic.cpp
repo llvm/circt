@@ -133,7 +133,7 @@ private:
 /// Apply the affine map from an 'affine.store' operation to its operands, and
 /// feed the results to a newly created 'memref.store' operation (which replaces
 /// the original 'affine.store').
-/// Also replaces the affine load with the memref load in dependenceAnalysis.
+/// Also replaces the affine store with the memref store in dependenceAnalysis.
 /// TODO(mikeurbach): this is copied from AffineToStandard, see if we can reuse.
 class AffineStoreLowering : public OpConversionPattern<AffineStoreOp> {
 public:
@@ -317,6 +317,10 @@ LogicalResult AffineToStaticLogic::solveSchedulingProblem(
   if (failed(scheduleSimplex(problem, anchor)))
     return failure();
 
+  // Verify the solution.
+  if (failed(problem.verify()))
+    return failure();
+
   // Optionally debug problem outputs.
   LLVM_DEBUG({
     llvm::dbgs() << "Scheduled initiation interval = "
@@ -381,11 +385,9 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   // Add the non-yield operations to their start time groups.
   DenseMap<unsigned, SmallVector<Operation *>> startGroups;
   for (auto *op : problem.getOperations()) {
-    auto startTime = problem.getStartTime(op);
-    if (!startTime.hasValue())
-      return op->emitOpError("didn't have scheduled start time");
     if (isa<AffineYieldOp, YieldOp>(op))
       continue;
+    auto startTime = problem.getStartTime(op);
     startGroups[*startTime].push_back(op);
   }
 
