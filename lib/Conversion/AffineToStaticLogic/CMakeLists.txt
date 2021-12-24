@@ -5,6 +5,7 @@ add_circt_library(CIRCTAffineToStaticLogic
   CIRCTConversionPassIncGen
 
   LINK_LIBS PUBLIC
+  MLIRAffineToStandard
   MLIRPass
   CIRCTScheduling
   CIRCTSchedulingAnalysis

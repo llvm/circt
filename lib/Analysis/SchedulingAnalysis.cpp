@@ -14,6 +14,8 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/AnalysisManager.h"
 #include "mlir/Transforms/LoopUtils.h"
@@ -76,19 +78,32 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   });
 
   // Insert conditional dependences into the problem.
-  forOp.getBody()->walk([&](AffineIfOp op) {
+  forOp.getBody()->walk([&](Operation *op) {
+    Block *thenBlock = nullptr;
+    Block *elseBlock = nullptr;
+    if (auto ifOp = dyn_cast<scf::IfOp>(op)) {
+      thenBlock = ifOp.thenBlock();
+      elseBlock = ifOp.elseBlock();
+    } else if (auto ifOp = dyn_cast<AffineIfOp>(op)) {
+      thenBlock = ifOp.getThenBlock();
+      if (ifOp.hasElse())
+        elseBlock = ifOp.getElseBlock();
+    } else {
+      return WalkResult::advance();
+    }
+
     // No special handling required for control-only `if`s.
-    if (op.getNumResults() == 0)
+    if (op->getNumResults() == 0)
       return WalkResult::skip();
 
     // Model the implicit value flow from the `yield` to the `if`'s result(s).
-    Problem::Dependence depThen(op.getThenBlock()->getTerminator(), op);
+    Problem::Dependence depThen(thenBlock->getTerminator(), op);
     auto depInserted = problem.insertDependence(depThen);
     assert(succeeded(depInserted));
     (void)depInserted;
 
-    if (op.hasElse()) {
-      Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
+    if (elseBlock) {
+      Problem::Dependence depElse(elseBlock->getTerminator(), op);
       depInserted = problem.insertDependence(depElse);
       assert(succeeded(depInserted));
       (void)depInserted;
@@ -100,7 +115,9 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   // Set the anchor for scheduling. Insert dependences from all stores to the
   // terminator to ensure the problem schedules them before the terminator.
   auto *anchor = forOp.getBody()->getTerminator();
-  forOp.getBody()->walk([&](AffineWriteOpInterface op) {
+  forOp.getBody()->walk([&](Operation *op) {
+    if (!isa<mlir::AffineStoreOp, memref::StoreOp>(op))
+      return;
     Problem::Dependence dep(op, anchor);
     auto depInserted = problem.insertDependence(dep);
     assert(succeeded(depInserted));

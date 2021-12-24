@@ -17,6 +17,10 @@ namespace arith {
 class ArithmeticDialect;
 } // namespace arith
 
+namespace memref {
+class MemRefDialect;
+} // namespace memref
+
 namespace scf {
 class SCFDialect;
 } // namespace scf
@@ -24,6 +28,8 @@ class SCFDialect;
 namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM
+
+class StandardOpsDialect;
 } // namespace mlir
 
 namespace circt {
