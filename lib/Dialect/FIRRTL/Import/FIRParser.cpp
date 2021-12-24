@@ -50,8 +50,7 @@ namespace json = llvm::json;
 
 namespace circt {
 namespace firrtl {
-ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
-                                   WhenOp whenStmt);
+ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
 } // namespace firrtl
 } // namespace circt
 
@@ -2479,13 +2478,13 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // If the else is present, handle it otherwise we're done.
   if (getToken().isNot(FIRToken::kw_else))
-    return foldWhenEncodedVerifOp(builder, whenStmt);
+    return success();
 
   // If the 'else' is less indented than the when, then it must belong to some
   // containing 'when'.
   auto elseIndent = getIndentation();
   if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
-    return foldWhenEncodedVerifOp(builder, whenStmt);
+    return success();
 
   consumeToken(FIRToken::kw_else);
 
@@ -3698,6 +3697,18 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
   if (FIRCircuitParser(state, lexer, *module)
           .parseCircuit(annotationsBufs, omirBufs))
     return nullptr;
+
+  // Apply `foldWhenEncodedVerifOp` to all PrintFOp as a post processing.
+  mlir::parallelForEach(
+      context, module.get().getBody()->getOperations(), [&](Operation &op) {
+        // It's dangerous to modify IR in the walk so first accumulate into
+        // buffer.
+        SmallVector<PrintFOp> buffer;
+        op.walk([&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
+
+        llvm::for_each(buffer,
+                       [](auto printFOp) { foldWhenEncodedVerifOp(printFOp); });
+      });
 
   // Make sure the parse module has no other structural problems detected by
   // the verifier.
