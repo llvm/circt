@@ -48,12 +48,6 @@ namespace json = llvm::json;
 // Parser-related utilities
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
-} // namespace firrtl
-} // namespace circt
-
 std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
@@ -3487,8 +3481,25 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
+  if (failed(result))
+    return result;
+
+  // Convert print-encoded verifications after parsing.
+
+  // It is dangerous to modify IR in the walk, so accumulate printFOp to
+  // buffer.
+  SmallVector<PrintFOp> buffer;
+  deferredModule.moduleOp.walk(
+      [&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
+
+  for (auto printFOp : buffer) {
+    auto result = circt::firrtl::foldWhenEncodedVerifOp(printFOp);
+    if (failed(result))
+      return result;
+  }
+
   deferredModule.targetSet = std::move(moduleContext.targetsInModule);
-  return result;
+  return success();
 }
 
 /// file ::= circuit
@@ -3697,18 +3708,6 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
   if (FIRCircuitParser(state, lexer, *module)
           .parseCircuit(annotationsBufs, omirBufs))
     return nullptr;
-
-  // Apply `foldWhenEncodedVerifOp` to all PrintFOp as a post processing.
-  mlir::parallelForEach(
-      context, module.get().getBody()->getOperations(), [&](Operation &op) {
-        // It's dangerous to modify IR in the walk so first accumulate into
-        // buffer.
-        SmallVector<PrintFOp> buffer;
-        op.walk([&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
-
-        llvm::for_each(buffer,
-                       [](auto printFOp) { foldWhenEncodedVerifOp(printFOp); });
-      });
 
   // Make sure the parse module has no other structural problems detected by
   // the verifier.

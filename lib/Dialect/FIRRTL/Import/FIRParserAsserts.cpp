@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -189,9 +190,6 @@ parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   return llvm::None;
 }
 
-namespace circt {
-namespace firrtl {
-
 /// Chisel has a tendency to emit complex assert/assume/cover statements encoded
 /// as print operations with special formatting and metadata embedded in the
 /// message literal. These always reside in a when block of the following form:
@@ -203,7 +201,7 @@ namespace firrtl {
 /// Depending on the nature the verification operation, the `stop` may be
 /// optional. The Scala implementation simply removes all `stop`s that have the
 /// same condition as the printf.
-ParseResult foldWhenEncodedVerifOp(PrintFOp printOp) {
+ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   auto *context = printOp.getContext();
   auto whenStmt = dyn_cast<WhenOp>(printOp->getParentOp());
 
@@ -570,6 +568,3 @@ ParseResult foldWhenEncodedVerifOp(PrintFOp printOp) {
     whenStmt.erase();
   return success();
 }
-
-} // namespace firrtl
-} // namespace circt
