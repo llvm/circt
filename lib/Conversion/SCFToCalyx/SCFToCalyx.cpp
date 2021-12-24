@@ -1019,8 +1019,7 @@ BuildOpGroups::buildOp(PatternRewriter &rewriter,
                        staticlogic::PipelineTerminatorOp term) const {
   if (term.getOperands().size() == 0)
     return success();
-  auto whileOp = dyn_cast<staticlogic::PipelineWhileOp>(term->getParentOp());
-  assert(whileOp);
+  auto whileOp = cast<staticlogic::PipelineWhileOp>(term->getParentOp());
   WhileOpInterface whileOpInterface(whileOp);
   auto assignGroup = buildWhileIterArgAssignments(
       rewriter, getComponentState(), term.getLoc(), whileOpInterface,
