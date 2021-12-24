@@ -1026,14 +1026,10 @@ firrtl.circuit "TopLevel" {
   }
 
 // CHECK-LABEL: firrtl.module @multidimRead(in %a_0_0: !firrtl.uint<2>, in %a_0_1: !firrtl.uint<2>, in %a_1_0: !firrtl.uint<2>, in %a_1_1: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
-// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %0 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.mux(%0, %a_1_0, %a_0_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %2 = firrtl.mux(%0, %a_1_1, %a_0_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui1_0 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %3 = firrtl.eq %sel, %c1_ui1_0 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %4 = firrtl.mux(%3, %2, %1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      firrtl.connect %b, %4 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      %0 = firrtl.multibit_mux %sel, %a_0_0, %a_1_0 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      %1 = firrtl.multibit_mux %sel, %a_0_1, %a_1_1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      %2 = firrtl.multibit_mux %sel, %0, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      firrtl.connect %b, %2 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
 
 //  module Foo:
@@ -1164,22 +1160,14 @@ firrtl.circuit "TopLevel" {
   }
 
 // CHECK-LABEL:    firrtl.module @multiSubaccess(in %a_0_0: !firrtl.uint<2>, in %a_0_1: !firrtl.uint<2>, in %a_1_0: !firrtl.uint<2>, in %a_1_1: !firrtl.uint<2>, in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<1>, out %b: !firrtl.uint<2>, out %c: !firrtl.uint<2>) {
-// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %0 = firrtl.eq %sel1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.mux(%0, %a_1_0, %a_0_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %2 = firrtl.mux(%0, %a_1_1, %a_0_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui1_0 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %3 = firrtl.eq %sel1, %c1_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %4 = firrtl.mux(%3, %2, %1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      firrtl.connect %b, %4 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %5 = firrtl.eq %sel1, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %6 = firrtl.mux(%5, %a_1_0, %a_0_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %7 = firrtl.mux(%5, %a_1_1, %a_0_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui1_2 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %8 = firrtl.eq %sel2, %c1_ui1_2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %9 = firrtl.mux(%8, %7, %6) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      firrtl.connect %c, %9 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      %0 = firrtl.multibit_mux %sel1, %a_0_0, %a_1_0 : !firrtl.uint<1>, !firrtl.uint<2>
+// CHECK-NEXT:      %1 = firrtl.multibit_mux %sel1, %a_0_1, %a_1_1 : !firrtl.uint<1>, !firrtl.uint<2>
+// CHECK-NEXT:      %2 = firrtl.multibit_mux %sel1, %0, %1 : !firrtl.uint<1>, !firrtl.uint<2>
+// CHECK-NEXT:      firrtl.connect %b, %2 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      %3 = firrtl.multibit_mux %sel1, %a_0_0, %a_1_0 : !firrtl.uint<1>, !firrtl.uint<2>
+// CHECK-NEXT:      %4 = firrtl.multibit_mux %sel1, %a_0_1, %a_1_1 : !firrtl.uint<1>, !firrtl.uint<2>
+// CHECK-NEXT:      %5 = firrtl.multibit_mux %sel2, %3, %4 : !firrtl.uint<1>, !firrtl.uint<2>
+// CHECK-NEXT:      firrtl.connect %c, %5 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:    }
 
 
@@ -1418,18 +1406,10 @@ firrtl.module @is1436_FOO() {
 firrtl.module @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl.uint<2>, out %z: !firrtl.uint<10>) {
   %0 = firrtl.subaccess %x[%source] : !firrtl.vector<uint<10>, 5>, !firrtl.uint<2>
   firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
-  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 1
-  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
-  // CHECK-NEXT: firrtl.mux([[EQ]], %x_1, %x_0)
-  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 2
-  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
-  // CHECK-NEXT: firrtl.mux([[EQ]], %x_2,
-  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 3
-  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
-  // CHECK-NEXT: firrtl.mux([[EQ]], %x_3,
-  // CHECK-NEXT: [[IDX:%.+]] = firrtl.constant 4
-  // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %source, [[IDX]]
-  // CHECK-NEXT: firrtl.mux([[EQ]], %x_4,
+  // The width of multibit mux index will be converted at LowerToHW,
+  // so it is ok that the type of `%source` is uint<2> here.
+  // CHECK:      %0 = firrtl.multibit_mux %source, %x_0, %x_1, %x_2, %x_3, %x_4 : !firrtl.uint<2>, !firrtl.uint<10>
+  // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
 }
 
 } // CIRCUIT
