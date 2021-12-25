@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "mlir/IR/BuiltinOps.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -22,6 +23,11 @@ void InstanceGraphNode::recordUse(InstanceRecord *record) {
 }
 
 InstanceGraph::InstanceGraph(Operation *operation) {
+  if (auto mod = dyn_cast<mlir::ModuleOp>(operation))
+    for (auto &op : *mod.getBody())
+      if ((operation = dyn_cast<CircuitOp>(&op)))
+        break;
+
   auto circuitOp = cast<CircuitOp>(operation);
 
   // We insert the top level module first in to the node map.  Getting the node
@@ -108,6 +114,28 @@ void InstanceGraph::replaceInstance(InstanceOp inst, InstanceOp newInst) {
   // We can just replace the instance op in the InstanceRecord without updating
   // any instance lists.
   (*it)->instance = newInst;
+}
+
+bool InstanceGraph::isAncestor(FModuleLike child, FModuleOp parent) {
+  DenseSet<InstanceGraphNode *> seen;
+  SmallVector<InstanceGraphNode *> worklist;
+  auto *cn = lookup(child);
+  worklist.push_back(cn);
+  seen.insert(cn);
+  while (!worklist.empty()) {
+    auto *node = worklist.back();
+    worklist.pop_back();
+    if (node->getModule() == parent)
+      return true;
+    for (auto *use : node->uses()) {
+      auto *mod = use->getParent();
+      if (!seen.count(mod)) {
+        seen.insert(mod);
+        worklist.push_back(mod);
+      }
+    }
+  }
+  return false;
 }
 
 ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Operation *op) {
