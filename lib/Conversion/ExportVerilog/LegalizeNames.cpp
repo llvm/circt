@@ -46,75 +46,6 @@ StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
 // FieldNameResolver
 //===----------------------------------------------------------------------===//
 
-/// This constructs the legalized type for given `type` with cache.
-Type FieldNameResolver::getLegalizedType(Type type) {
-  auto it = legalizedTypes.find(type);
-  if (it != legalizedTypes.end())
-    return it->second;
-  Type legalizedType =
-      TypeSwitch<Type, Type>(type)
-          .Case<StructType>([&](auto fieldType) -> Type {
-            auto elements = fieldType.getElements();
-            bool changed = false;
-            SmallVector<hw::detail::FieldInfo> newFields;
-            newFields.reserve(elements.size());
-            for (auto fieldInfo : elements) {
-              auto newFieldInfo = getRenamedFieldInfo(fieldInfo);
-              changed |= newFieldInfo != fieldInfo;
-              newFields.push_back(newFieldInfo);
-            }
-
-            return changed ? decltype(fieldType)::get(fieldType.getContext(),
-                                                      newFields)
-                           : fieldType;
-          })
-          // Other than struct types, just recursively apply to
-          // their subtypes.
-          .Case<ArrayType, UnpackedArrayType>([&](auto parentType) -> Type {
-            auto elem = getLegalizedType(parentType.getElementType());
-            if (elem == parentType.getElementType())
-              return type;
-
-            return decltype(parentType)::get(elem, parentType.getSize());
-          })
-          .Case<InOutType>([&](auto inoutType) -> Type {
-            auto elem = getLegalizedType(inoutType.getElementType());
-            if (elem == inoutType.getElementType())
-              return type;
-            return InOutType::get(elem);
-          })
-          .Case<FunctionType>([&](FunctionType functionType) -> Type {
-            auto inputs = functionType.getInputs();
-            auto results = functionType.getResults();
-            bool changed = false;
-            auto renameTypes = [&](auto types) {
-              SmallVector<Type> newInputs;
-              newInputs.reserve(types.size());
-              llvm::transform(types, std::back_inserter(newInputs),
-                              [&](Type type) {
-                                auto newType = getLegalizedType(type);
-                                changed |= newType != type;
-                                return newType;
-                              });
-              return newInputs;
-            };
-            auto newInputs = renameTypes(inputs);
-            auto newResults = renameTypes(results);
-            return changed ? FunctionType::get(functionType.getContext(),
-                                               newInputs, newResults)
-                           : type;
-          })
-          .Case<TypeAliasType>([&](TypeAliasType aliasType) -> Type {
-            auto innerType = getLegalizedType(aliasType.getInnerType());
-            if (innerType == aliasType.getInnerType())
-              return type;
-            return TypeAliasType::get(aliasType.getRef(), innerType);
-          })
-          .Default([](auto baseType) { return baseType; });
-  legalizedTypes[type] = legalizedType;
-  return legalizedType;
-}
-
 void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
                                             StringAttr newFieldName) {
   renamedFieldNames[fieldName] = newFieldName;
@@ -142,72 +73,6 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
 
   setRenamedFieldName(fieldName, newFieldNameAttr);
   return newFieldNameAttr;
-}
-
-hw::detail::FieldInfo
-FieldNameResolver::getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo) {
-  fieldInfo.name = getRenamedFieldName(fieldInfo.name);
-  fieldInfo.type = getLegalizedType(fieldInfo.type);
-  return fieldInfo;
-}
-
-LogicalResult FieldNameResolver::legalizeToplevelOperation(Operation *op) {
-  // Legalize operations including `op` itself. `legalizeOperationTypes` returns
-  // a failure if there is an invalid field name in external modules.
-  return failure(op->walk([&](Operation *op) -> WalkResult {
-                     return legalizeOperationTypes(op);
-                   }).wasInterrupted());
-}
-
-LogicalResult FieldNameResolver::legalizeOperationTypes(Operation *op) {
-  // Legalize result types.
-  for (auto result : op->getResults()) {
-    auto newType = getLegalizedType(result.getType());
-    if (result.getType() != newType)
-      result.setType(newType);
-  }
-
-  return TypeSwitch<Operation *, LogicalResult>(op)
-      .Case<sv::StructFieldInOutOp, hw::StructExtractOp, hw::StructInjectOp>(
-          [&](auto fieldOp) {
-            // Rename field names referred in operations.
-            auto fieldNameAttr = fieldOp.fieldAttr();
-            auto newFieldNameAttr = getRenamedFieldName(fieldNameAttr);
-            if (fieldNameAttr != newFieldNameAttr)
-              op->setAttr("field", newFieldNameAttr);
-            return success();
-          })
-      .Case<HWModuleOp>([&](HWModuleOp module) {
-        // Legalize module types.
-        auto type = getLegalizedType(module.getType());
-        if (type != module.getType())
-          module.setType(type.cast<mlir::FunctionType>());
-
-        // We have to replace argument types as well.
-        for (auto arg : module.getBody().getArguments()) {
-          auto newType = getLegalizedType(arg.getType());
-          if (arg.getType() != newType)
-            arg.setType(newType);
-        }
-        return success();
-      })
-      .Case<HWModuleExternOp>([&](HWModuleExternOp extmodule) {
-        auto type = getLegalizedType(extmodule.getType());
-        if (type != extmodule.getType()) {
-          extmodule.emitError() << "external module has an invalid field name";
-          return failure();
-        }
-        return success();
-      })
-      .Case<InterfaceSignalOp>([&](InterfaceSignalOp interfaceSignal) {
-        auto type = getLegalizedType(interfaceSignal.type());
-        if (type != interfaceSignal.type())
-          interfaceSignal.typeAttr(TypeAttr::get(type));
-        return success();
-      })
-      .Default([](auto) { // Otherwise assume that they don't have types.
-        return success();
-      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -273,11 +138,6 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
-    // Legalize field names.
-    if (failed(fieldNameResolver.legalizeToplevelOperation(&op)))
-      // TODO: Propagate the failure.
-      return;
-
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeModuleNames(module);
       continue;

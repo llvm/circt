@@ -179,20 +179,14 @@ private:
 struct FieldNameResolver {
   FieldNameResolver() = default;
 
-  Type getLegalizedType(Type type);
   StringAttr getRenamedFieldName(StringAttr fieldName);
-  hw::detail::FieldInfo getRenamedFieldInfo(hw::detail::FieldInfo fieldInfo);
-
-  LogicalResult legalizeOperationTypes(Operation *op);
-  LogicalResult legalizeToplevelOperation(Operation *module);
+private:
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
 
-private:
   /// Those contain entries for field names and types respectively. Struct types
   /// have names as field names, which must be renamed if they conflict with
   /// verilog keywords.
   DenseMap<StringAttr, StringAttr> renamedFieldNames;
-  DenseMap<Type, Type> legalizedTypes;
 
   /// This contains field names *after* the type legalization to avoid conflicts
   /// of renamed field names.
