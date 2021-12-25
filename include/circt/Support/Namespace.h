@@ -56,9 +56,12 @@ public:
       return inserted.first->getKey();
 
     // Try different suffixes until we get a collision-free one.
-    size_t i = 0;
     if (tryName.empty())
       name.toVector(tryName); // toStringRef may leave tryName unfilled
+
+    // Indexes between [0, nextIndex[tryName]) are already used, so skip
+    // them.
+    size_t &i = nextIndex[tryName];
     tryName.push_back('_');
     size_t baseLength = tryName.size();
     for (;;) {
@@ -72,6 +75,7 @@ public:
 
 protected:
   llvm::StringSet<> internal;
+  llvm::StringMap<size_t> nextIndex;
 };
 
 } // namespace circt
