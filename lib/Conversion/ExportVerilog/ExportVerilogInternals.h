@@ -180,6 +180,7 @@ struct FieldNameResolver {
   FieldNameResolver() = default;
 
   StringAttr getRenamedFieldName(StringAttr fieldName);
+
 private:
   void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
 
