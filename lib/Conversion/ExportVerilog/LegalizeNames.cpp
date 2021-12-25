@@ -14,7 +14,6 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace sv;

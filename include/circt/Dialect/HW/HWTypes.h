@@ -29,10 +29,6 @@ namespace detail {
 struct FieldInfo {
   mlir::StringAttr name;
   mlir::Type type;
-  bool operator==(const FieldInfo &rhs) {
-    return name == rhs.name && type == rhs.type;
-  }
-  bool operator!=(const FieldInfo &rhs) { return !(*this == rhs); }
 };
 } // namespace detail
 } // namespace hw
