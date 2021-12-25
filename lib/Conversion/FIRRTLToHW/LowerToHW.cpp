@@ -285,7 +285,7 @@ private:
 
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 
-  /// Cache of module symbols.  We need to test hirarchy-basec properties to
+  /// Cache of module symbols.  We need to test hirarchy-based properties to
   /// lower annotaitons.
   InstanceGraph *instanceGraph;
 
