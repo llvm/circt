@@ -306,7 +306,8 @@ private:
   /// errors and cause the pass to abort. Otherwise they are warnings.
   const bool nonConstAsyncResetValueIsError = true;
 
-  // The Dut, if it is found
+  // The design-under-test (DUT), if it is found.  This will be set if a
+  // "sifive.enterprise.firrtl.MarkDUTAnnotation" exists.
   FModuleOp dut;
 };
 
