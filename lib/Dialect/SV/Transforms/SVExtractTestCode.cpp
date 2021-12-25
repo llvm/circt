@@ -335,15 +335,19 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         if (mod->getAttr("firrtl.extract.assert.extra"))
           return true;
 
-    // Error with a message which starts with "assert:" or "Assertion failed" is
-    // considered as an assert.
+    // If the format of assert is "ifElseFatal", PrintOp is lowered into
+    // ErrorOp. So we have to check message contents whether they encode
+    // verifications. See FIRParserAsserts for more details.
     if (auto error = dyn_cast<ErrorOp>(op)) {
       if (auto message = error.message())
         return message.getValue().startswith("assert:") ||
-               message.getValue().startswith("Assertion failed");
+               message.getValue().startswith("Assertion failed") ||
+               message.getValue().startswith("assertNotX:") ||
+               message.getValue().contains("[verif-library-assert]");
       return false;
     }
-    return isa<AssertOp>(op) || isa<FinishOp>(op) ||
+
+    return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
            isa<AssertConcurrentOp>(op) || isa<FatalOp>(op);
   };
   auto isAssume = [&symCache](Operation *op) -> bool {

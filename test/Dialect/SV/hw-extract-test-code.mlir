@@ -10,6 +10,8 @@
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
+// CHECK: sv.error "assertNotX:"
+// CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
 // CHECK: hw.module @issue1246_assume(%clock: i1) 
@@ -42,6 +44,8 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
           sv.assert %clock, immediate
           sv.error "Assertion failed"
           sv.error "assert:"
+          sv.error "assertNotX:"
+          sv.error "check [verif-library-assert] is included"
           sv.fatal 1
           sv.assume %clock, immediate
           sv.cover %clock, immediate
