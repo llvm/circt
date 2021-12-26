@@ -566,6 +566,8 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 }
 
+/// Creates a new group that assigns the 'ops' values to the iter arg registers
+/// of the 'whileOp'.
 static calyx::GroupOp buildWhileIterArgAssignments(
     PatternRewriter &rewriter, ComponentLoweringState &state, Location loc,
     WhileOpInterface whileOp, Twine uniqueSuffix, ValueRange ops) {
@@ -575,9 +577,9 @@ static calyx::GroupOp buildWhileIterArgAssignments(
   auto groupName = "assign_" + uniqueSuffix;
   auto groupOp = createGroup<calyx::GroupOp>(rewriter, state.getComponentOp(),
                                              loc, groupName);
-  // Create register assignment for each iter_arg. a calyx::GroupDone signal
-  // is created for each register. This is later cleaned up in
-  // GroupDoneCleanupPattern.
+  /// Create register assignment for each iter_arg. a calyx::GroupDone signal
+  /// is created for each register. These will be &'ed together in
+  /// MultipleGroupDonePattern.
   for (auto arg : enumerate(ops)) {
     auto reg = state.getWhileIterReg(whileOp, arg.index());
     buildAssignmentsForRegisterWrite(state, rewriter, groupOp, reg,
