@@ -1711,7 +1711,7 @@ private:
               rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
         auto *whileBodyOpBlock = &whileBodyOp->getRegion(0).front();
 
-        /// Only schedule the after block. The 'before' block is
+        /// Only schedule the 'after' block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
         LogicalResult res = buildCFGControl(path, rewriter, whileBodyOpBlock,
                                             block, whileOp.getBodyBlock());
