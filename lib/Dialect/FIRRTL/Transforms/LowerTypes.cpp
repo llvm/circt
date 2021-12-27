@@ -444,8 +444,6 @@ bool TypeLoweringVisitor::lowerProducer(
     if (innerSym) {
       // TODO: All clients of inner_sym, must handle symbol lowering for aggregate types.
       // Also verify the correct FlatSymbolRef. So, if any reference to the innerSym existed, verifier should fail after LowerTypes.
-        op->emitWarning("symbol @")
-            << innerSym.getValue() << " dropped after lowering";
       newOp->setAttr("inner_sym", StringAttr::get(context, innerSym.getValue() + loweredName));
     }
     lowered.push_back(newOp->getResult(0));
@@ -818,9 +816,6 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     // Memory for each field
     for (auto field : fields)
       newMemories.push_back(cloneMemWithNewType(builder, op, field));
-  if (op.inner_symAttr())
-        op->emitWarning("symbol @")
-            << op.inner_symAttr().getValue() << " dropped after lowering";
   }
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
