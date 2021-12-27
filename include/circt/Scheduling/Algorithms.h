@@ -43,6 +43,13 @@ LogicalResult scheduleSimplex(CyclicProblem &prob, Operation *lastOp);
 /// dependence graph contains cycles.
 LogicalResult scheduleSimplex(SharedOperatorsProblem &prob, Operation *lastOp);
 
+/// Solve the modulo scheduling problem using a linear programming-based
+/// heuristic. The approach tries to determine the smallest feasible initiation
+/// interval, and to minimize the start time of the given \p lastOp, but
+/// optimality is not guaranteed. Fails if the dependence graph contains cycles
+/// that do not include at least one edge with a non-zero distance.
+LogicalResult scheduleSimplex(ModuloProblem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 
