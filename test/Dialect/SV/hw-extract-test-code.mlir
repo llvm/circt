@@ -8,6 +8,11 @@
 // CHECK-NOT: attributes
 // CHECK: hw.module @issue1246_assert(%clock: i1) attributes {output_file = #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
+// CHECK: sv.error "Assertion failed"
+// CHECK: sv.error "assert:"
+// CHECK: sv.error "assertNotX:"
+// CHECK: sv.error "check [verif-library-assert] is included"
+// CHECK: sv.fatal 1
 // CHECK: foo_assert
 // CHECK: hw.module @issue1246_assume(%clock: i1) 
 // CHECK-NOT: attributes 
@@ -37,6 +42,11 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
       } else  {
         sv.if %2937  {
           sv.assert %clock, immediate
+          sv.error "Assertion failed"
+          sv.error "assert:"
+          sv.error "assertNotX:"
+          sv.error "check [verif-library-assert] is included"
+          sv.fatal 1
           sv.assume %clock, immediate
           sv.cover %clock, immediate
         }
