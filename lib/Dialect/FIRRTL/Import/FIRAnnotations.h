@@ -31,6 +31,7 @@ namespace circt {
 namespace firrtl {
 
 class CircuitOp;
+class PrintFOp;
 
 bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
@@ -49,6 +50,8 @@ bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
 bool fromJSONRaw(llvm::json::Value &value, StringRef circuitTarget,
                  SmallVectorImpl<Attribute> &attrs, llvm::json::Path path,
                  MLIRContext *context);
+
+ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
 
 } // namespace firrtl
 } // namespace circt

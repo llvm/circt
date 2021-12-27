@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -207,9 +208,6 @@ parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
   return llvm::None;
 }
 
-namespace circt {
-namespace firrtl {
-
 /// Chisel has a tendency to emit complex assert/assume/cover statements encoded
 /// as print operations with special formatting and metadata embedded in the
 /// message literal. These always reside in a when block of the following form:
@@ -221,9 +219,14 @@ namespace firrtl {
 /// Depending on the nature the verification operation, the `stop` may be
 /// optional. The Scala implementation simply removes all `stop`s that have the
 /// same condition as the printf.
-ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
-                                   WhenOp whenStmt) {
-  auto *context = builder.getContext();
+ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
+  auto *context = printOp.getContext();
+  auto whenStmt = dyn_cast<WhenOp>(printOp->getParentOp());
+
+  // If the parent of printOp is not when, printOp doesn't encode a
+  // verification.
+  if (!whenStmt)
+    return success();
 
   // The when blocks we're interested in don't have an else region.
   if (whenStmt.hasElseRegion())
@@ -232,17 +235,18 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
   // The when blocks we're interested in contain a `PrintFOp` and an optional
   // `StopOp` with the same clock and condition as the print.
   Block &thenBlock = whenStmt.getThenBlock();
-  auto opIt = thenBlock.begin();
+  auto opIt = std::next(printOp->getIterator());
   auto opEnd = thenBlock.end();
-  if (opIt == opEnd)
-    return success();
-
-  // `printf(clock, enable, ...)`
-  auto printOp = dyn_cast<PrintFOp>(*opIt++);
-  if (!printOp)
-    return success();
 
   // optional `stop(clock, enable, ...)`
+  //
+  // FIXME: Currently, we can't detetct stopOp in the following IR:
+  //    when invCond:
+  //      printf(io.clock, UInt<1>(1), "assert: ..")
+  //      stop(io.clock, UInt<1>(1), 1)
+  // It is because `io.clock` will create another subfield op so StopOp is not
+  // the next operation. Also, we will have to modify `stopOp.clock() !=
+  // printOp.clock()` below since they are not CSEd.
   if (opIt != opEnd) {
     auto stopOp = dyn_cast<StopOp>(*opIt++);
     if (!stopOp || opIt != opEnd || stopOp.clock() != printOp.clock() ||
@@ -322,8 +326,31 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
       op->erase();
   }
 
-  builder.setInsertionPointAfter(whenStmt);
+  // A recursive function to move all the dependency in `printOp` operands.
+  std::function<void(Operation *)> moveOperationsToParent = [&](Operation *op) {
+    // If operation is not defined in when, it's ok.
+    if (!op || op->getBlock() != &whenStmt.getThenBlock())
+      return;
 
+    llvm::for_each(op->getOperands(), [&](Value value) {
+      moveOperationsToParent(value.getDefiningOp());
+    });
+
+    // `op` might be already moved to parent op by the previous recursive calls,
+    // so check again.
+    if (op->getBlock() != &whenStmt.getThenBlock())
+      return;
+
+    op->moveBefore(whenStmt);
+  };
+
+  // Move all operands in printOp to the parent block.
+  llvm::for_each(printOp->getOperands(), [&](Value value) {
+    moveOperationsToParent(value.getDefiningOp());
+  });
+
+  ImplicitLocOpBuilder builder(whenStmt.getLoc(), whenStmt);
+  builder.setInsertionPointAfter(whenStmt);
   // CAREFUL: Since the assertions are encoded as "when something wrong, then
   // print" an error message, we're actually asserting that something is *not*
   // going wrong.
@@ -565,6 +592,3 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     whenStmt.erase();
   return success();
 }
-
-} // namespace firrtl
-} // namespace circt

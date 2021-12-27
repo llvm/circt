@@ -48,13 +48,6 @@ namespace json = llvm::json;
 // Parser-related utilities
 //===----------------------------------------------------------------------===//
 
-namespace circt {
-namespace firrtl {
-ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
-                                   WhenOp whenStmt);
-} // namespace firrtl
-} // namespace circt
-
 std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
@@ -2479,13 +2472,13 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // If the else is present, handle it otherwise we're done.
   if (getToken().isNot(FIRToken::kw_else))
-    return foldWhenEncodedVerifOp(builder, whenStmt);
+    return success();
 
   // If the 'else' is less indented than the when, then it must belong to some
   // containing 'when'.
   auto elseIndent = getIndentation();
   if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
-    return foldWhenEncodedVerifOp(builder, whenStmt);
+    return success();
 
   consumeToken(FIRToken::kw_else);
 
@@ -3488,8 +3481,25 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
+  if (failed(result))
+    return result;
+
+  // Convert print-encoded verifications after parsing.
+
+  // It is dangerous to modify IR in the walk, so accumulate printFOp to
+  // buffer.
+  SmallVector<PrintFOp> buffer;
+  deferredModule.moduleOp.walk(
+      [&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
+
+  for (auto printFOp : buffer) {
+    auto result = circt::firrtl::foldWhenEncodedVerifOp(printFOp);
+    if (failed(result))
+      return result;
+  }
+
   deferredModule.targetSet = std::move(moduleContext.targetsInModule);
-  return result;
+  return success();
 }
 
 /// file ::= circuit
