@@ -275,3 +275,15 @@ hw.module @Use<xx: i41>() {
 hw.module @Use<xx: i41, xx: i41>() {
 }
 
+// -----
+
+module  {
+// expected-error @+1 {{'inst_1' in module:'A' does not contain a reference to 'glbl_D_M1'}}
+  hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_1>]
+  hw.module @C() -> () {
+  }
+  hw.module @A() -> () {
+    hw.instance "h2" sym @inst_1 @C() -> () {circt.globalRef = []}
+    hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+  }
+}

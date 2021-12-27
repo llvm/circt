@@ -437,3 +437,24 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
 
   let verifier = "return ::verifyOutputOp(this);";
 }
+
+def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
+  let summary = "A global reference to uniquely identify each"
+                                    "instance of an operation";
+  let description = [{
+    This works like a symbol reference to an operation by specifying the
+    instance path to uniquely identify it globally.
+    It can be used to attach per instance metadata (non-local attributes).
+    This also lets components of the path point to a common entity.
+  }];
+
+  let extraClassDeclaration = [{
+    LogicalResult verifyGlobalRef();
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
+
+  let assemblyFormat = [{ $sym_name $namepath attr-dict}];
+
+  let verifier = "return this->verifyGlobalRef();";
+}

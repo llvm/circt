@@ -142,6 +142,47 @@ notable differences: for example:
    on the other hand, do support both of these.  Zero width ports are omitted (printed as
    comments) when generating verilog.
 
+### GlobalRefOp
+The GlobalRefOp operation (`hw.globalRef`) can be used to identify the unique
+ instance path of an operation globally.
+`hw.globalRef` can be used to attach nonlocal annotations in FIRRTL dialect
+and also for metadata emission.
+`hw.globalRef` defines a symbol and contains a list of module local
+`hw.innerNameRef` symbols to define the instance path.
+ For example, in the following example, `@glbl_B_M1` specifies instance
+ "h1" in module `@A`, followed by instance
+ "M1" in module `@B`.
+
+`hw.globalRef` can define a unique instance path, and each element along the way
+ carries an attribute `circt.globalRef`, pointing to the global op. 
+ Thus instances participating in nonlocal paths are readily apparent.
+
+``` mlir
+  hw.globalRef @glbl_B_M1 [#hw.innerNameRef<@A::@inst_1>, #hw.innerNameRef<@B::@memInst>]
+  hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@memInst>]
+  hw.globalRef @glbl_D_M2 [#hw.innerNameRef<@A::@SF>, #hw.innerNameRef<@F::@symA>]
+  hw.globalRef @glbl_D_M3 [#hw.innerNameRef<@A::@SF>, #hw.innerNameRef<@F::@symB>]
+  hw.module @D() -> () {
+    hw.instance "M1" sym @memInst @FIRRTLMem() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+  }
+  hw.module @B() -> () {
+     hw.instance "M1" sym @memInst @FIRRTLMem() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_B_M1>]}
+  }
+  hw.module @C() -> () {
+    hw.instance "m" sym @inst @D() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+  }
+  hw.module @A() -> () {
+    hw.instance "h1" sym @inst_1 @B() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_B_M1>]}
+    hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+    %c0 = hw.constant 0 : i1
+    %2 = hw.instance "ab" sym @SF  @F (a1: %c0: i1) -> (a2 : i1) {circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>, #hw.globalNameRef<@glbl_D_M3>]}
+  }
+  hw.module.extern  @F(%a1: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (a2: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
+
+sv.verbatim "{{0}}" { symbols = [@glbl_D_M1] }
+sv.verbatim "{{0}}" { symbols = [@glbl_B_M1] }
+```
+
 ### Instance paths
 
 An IR for Hardware is different than an IR for Software in a very important way:

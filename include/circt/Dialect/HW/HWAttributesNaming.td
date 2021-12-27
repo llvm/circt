@@ -22,4 +22,19 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
       return get(module.getContext(), module, name);
     }]>,
   ];
+  let extraClassDeclaration = [{
+    /// Get the InnerRefAttr for an operation and add the sym on it.
+    static InnerRefAttr getFromOperation(mlir::Operation *op,
+                  mlir::StringAttr symName, mlir::StringAttr moduleName) ;
+  }];
+}
+
+def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
+  let summary = "Refer to a non-local symbol";
+  let description = [{
+    This works like a symbol reference, but to a global symbol with a possible
+    unique instance path.
+  }];
+  let mnemonic = "globalNameRef";
+  let parameters = (ins "::mlir::FlatSymbolRefAttr":$glblSym);
 }

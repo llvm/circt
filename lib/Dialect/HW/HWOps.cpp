@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
@@ -1221,6 +1222,75 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
+
+LogicalResult GlobalRefOp::verifyGlobalRef() {
+  Operation *parent = (*this)->getParentOp();
+  StringAttr symNameAttr = (*this).sym_nameAttr();
+  static const char globalRefStr[] = "circt.globalRef";
+  SymbolTable symTable(parent);
+  auto hasGlobalRef = [&](Attribute attr) -> bool {
+    for (auto ref : attr.cast<ArrayAttr>().getAsRange<GlobalRefAttr>())
+      if (ref.getGlblSym().getAttr() == symNameAttr)
+        return true;
+    return false;
+  };
+  // For all inner refs in the namepath, ensure they have a corresponding
+  // GlobalRefAttr to this GlobalRefOp.
+  for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
+    StringAttr modName = innerRef.getModule();
+    StringAttr innerSym = innerRef.getName();
+    Operation *mod = symTable.lookup(modName);
+    if (!mod) {
+      (*this)->emitOpError("module:'" + modName.str() + "' not found");
+      return failure();
+    }
+    bool glblSymNotFound = true;
+    mod->walk([&](Operation *op) -> WalkResult {
+      StringAttr attr = op->getAttrOfType<StringAttr>("inner_sym");
+      // If this is one of the ops in the instance path for the GlobalRefOp.
+      if (attr && attr == innerSym) {
+        // Each op can have an array of GlobalRefAttr, check if this op is one
+        // of them.
+        if (hasGlobalRef(op->getAttr(globalRefStr))) {
+          glblSymNotFound = false;
+          return WalkResult::interrupt();
+        }
+        // If cannot find the ref, then its an error.
+        return failure();
+      }
+      return WalkResult::advance();
+    });
+    if (glblSymNotFound) {
+      // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
+      // implement an interface.
+      if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
+        if (auto argAttrs =
+                mod->getAttr(mlir::function_like_impl::getArgDictAttrName()))
+          for (auto attr :
+               argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
+            if (auto symRef = attr.get("hw.exportPort"))
+              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+                if (hasGlobalRef(attr.get(globalRefStr)))
+                  return success();
+
+        if (auto resAttrs =
+                mod->getAttr(mlir::function_like_impl::getResultDictAttrName()))
+          for (auto attr :
+               resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
+            if (auto symRef = attr.get("hw.exportPort"))
+              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+                if (hasGlobalRef(attr.get(globalRefStr)))
+                  return success();
+      }
+    }
+    if (glblSymNotFound) {
+      return (*this)->emitOpError(
+          "operation:'" + innerSym.str() + "' in module:'" + modName.str() +
+          "' does not contain a reference to '" + symNameAttr.str() + "'");
+    }
+  }
+  return success();
+}
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {

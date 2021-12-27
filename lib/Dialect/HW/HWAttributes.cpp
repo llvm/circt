@@ -205,6 +205,38 @@ void InnerRefAttr::print(AsmPrinter &p) const {
   p << ">";
 }
 
+/// Get an InnerRefAttr, and add the sym to the op if not already
+/// there. Also reponsibility of client to ensure the symName is unique.
+InnerRefAttr InnerRefAttr::getFromOperation(mlir::Operation *op,
+                                            mlir::StringAttr symName,
+                                            mlir::StringAttr moduleName) {
+  char attrName[] = "inner_sym";
+  auto attr = op->getAttrOfType<StringAttr>(attrName);
+  if (!attr) {
+    attr = symName;
+    op->setAttr(attrName, attr);
+  }
+  return InnerRefAttr::get(moduleName, attr);
+}
+
+//===----------------------------------------------------------------------===//
+// GlobalRefAttr
+//===----------------------------------------------------------------------===//
+
+Attribute GlobalRefAttr::parse(AsmParser &p, Type type) {
+  FlatSymbolRefAttr attr;
+  if (p.parseLess() || p.parseAttribute<FlatSymbolRefAttr>(attr) ||
+      p.parseGreater())
+    return Attribute();
+  return GlobalRefAttr::get(p.getContext(), attr);
+}
+
+void GlobalRefAttr::print(AsmPrinter &p) const {
+  p << "<";
+  p.printSymbolName(getGlblSym().getValue());
+  p << ">";
+}
+
 //===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
