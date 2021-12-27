@@ -57,23 +57,35 @@ struct WhileOpInterface {
   }
 
   Block::BlockArgListType getBodyArgs() {
-    return TypeSwitch<Operation *, Block::BlockArgListType>(impl).Case(
-        [](scf::WhileOp op) { return op.getAfterArguments(); });
+    return TypeSwitch<Operation *, Block::BlockArgListType>(impl)
+        .Case([](scf::WhileOp op) { return op.getAfterArguments(); })
+        .Case([](staticlogic::PipelineWhileOp op) {
+          return op.getStagesBlock().getArguments();
+        });
+    ;
   }
 
   Block *getBodyBlock() {
-    return TypeSwitch<Operation *, Block *>(impl).Case(
-        [](scf::WhileOp op) { return &op.after().front(); });
+    return TypeSwitch<Operation *, Block *>(impl)
+        .Case([](scf::WhileOp op) { return &op.after().front(); })
+        .Case([](staticlogic::PipelineWhileOp op) {
+          return &op.getStagesBlock();
+        });
   }
 
   Block *getConditionBlock() {
-    return TypeSwitch<Operation *, Block *>(impl).Case(
-        [](scf::WhileOp op) { return &op.before().front(); });
+    return TypeSwitch<Operation *, Block *>(impl)
+        .Case([](scf::WhileOp op) { return &op.before().front(); })
+        .Case(
+            [](staticlogic::PipelineWhileOp op) { return &op.getCondBlock(); });
   }
 
   Value getConditionValue() {
-    return TypeSwitch<Operation *, Value>(impl).Case(
-        [](scf::WhileOp op) { return op.getConditionOp().getOperand(0); });
+    return TypeSwitch<Operation *, Value>(impl)
+        .Case([](scf::WhileOp op) { return op.getConditionOp().getOperand(0); })
+        .Case([](staticlogic::PipelineWhileOp op) {
+          return op.getCondBlock().getTerminator()->getOperand(0);
+        });
   }
 
   Operation *getOperation() { return impl; }
@@ -718,13 +730,17 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
-                             IndexCastOp>(
+                             IndexCastOp,
+                             /// static logic
+                             staticlogic::PipelineTerminatorOp,
+                             staticlogic::PipelineStageOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
-                  [&](auto) {
-                    /// Skip: these special cases will be handled separately.
-                    return true;
-                  })
+              .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp,
+                             staticlogic::PipelineWhileOp,
+                             staticlogic::PipelineRegisterOp>([&](auto) {
+                /// Skip: these special cases will be handled separately.
+                return true;
+              })
               .Default([&](auto op) {
                 op->emitError() << "Unhandled operation during BuildOpGroups()";
                 return false;
@@ -762,6 +778,10 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        staticlogic::PipelineTerminatorOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        staticlogic::PipelineStageOp op) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -996,6 +1016,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return success();
 }
 
+LogicalResult
+BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                       staticlogic::PipelineTerminatorOp term) const {
+  if (term.getOperands().size() == 0)
+    return success();
+  auto whileOp = cast<staticlogic::PipelineWhileOp>(term->getParentOp());
+  WhileOpInterface whileOpInterface(whileOp);
+  auto assignGroup = buildWhileIterArgAssignments(
+      rewriter, getComponentState(), term.getLoc(), whileOpInterface,
+      getComponentState().getUniqueName(whileOp) + "_latch",
+      term.getOperands());
+  getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
+  return success();
+}
+
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      BranchOpInterface brOp) const {
   /// Branch argument passing group creation
@@ -1025,6 +1060,20 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     /// when entering the successor block from this block (srcBlock).
     getComponentState().addBlockArgGroup(srcBlock, succBlock.value(), groupOp);
   }
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     staticlogic::PipelineStageOp stage) const {
+  // Stage computations have already been lowered, so simply replace stage
+  // results with the lowered value.
+  auto *stageTerminator = stage.getBodyBlock().getTerminator();
+  for (size_t i = 0; i < stageTerminator->getNumOperands(); ++i) {
+    auto oldValue = stage->getResult(i);
+    auto newValue = stageTerminator->getOperand(i);
+    oldValue.replaceAllUsesWith(newValue);
+  }
+
   return success();
 }
 
@@ -1655,16 +1704,21 @@ private:
         auto whileCtrlOp =
             rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
-        auto whileSeqOp =
-            rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
+        Operation *whileBodyOp;
+        if (isa<staticlogic::PipelineWhileOp>(whileOp.getOperation()))
+          whileBodyOp =
+              rewriter.create<calyx::ParOp>(whileOp.getOperation()->getLoc());
+        else
+          whileBodyOp =
+              rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
+        auto *whileBodyOpBlock = &whileBodyOp->getRegion(0).front();
 
-        /// Only schedule the after block. The 'before' block is
+        /// Only schedule the 'after' block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
-        LogicalResult res =
-            buildCFGControl(path, rewriter, whileSeqOp.getBody(), block,
-                            whileOp.getBodyBlock());
+        LogicalResult res = buildCFGControl(path, rewriter, whileBodyOpBlock,
+                                            block, whileOp.getBodyBlock());
         // Insert loop-latch at the end of the while group
-        rewriter.setInsertionPointToEnd(whileSeqOp.getBody());
+        rewriter.setInsertionPointToEnd(whileBodyOpBlock);
         rewriter.create<calyx::EnableOp>(
             loc, getComponentState().getWhileLatchGroup(whileOp).getName());
         if (res.failed())
