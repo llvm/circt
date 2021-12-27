@@ -471,6 +471,29 @@ void TestSimplexSchedulerPass::runOnFunction() {
     return;
   }
 
+  if (problemToTest == "ModuloProblem") {
+    auto prob = ModuloProblem::get(func);
+    constructProblem(prob, func);
+    constructCyclicProblem(prob, func);
+    constructSharedOperatorsProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleSimplex(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("simplexInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
+  }
+
   llvm_unreachable("Unsupported scheduling problem");
 }
 
