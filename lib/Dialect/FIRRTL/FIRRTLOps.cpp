@@ -2163,7 +2163,7 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
   }
 
   // Check all mux inputs have the same type.
-  if (!llvm::all_of(operands.drop_front(), [&](auto op) {
+  if (!llvm::all_of(operands.drop_front(2), [&](auto op) {
         return operands[1].getType() == op.getType();
       })) {
     if (loc)
