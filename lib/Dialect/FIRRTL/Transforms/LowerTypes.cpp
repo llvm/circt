@@ -69,33 +69,33 @@ struct FlatBundleFieldEntry {
 } // end anonymous namespace
 
 /// Return true if the type has more than zero bitwidth.
-static bool hasNonZeroBitWidth(FIRRTLType type) {
+static bool hasZeroBitWidth(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
           auto elt = bundle.getElement(i);
-          if (hasNonZeroBitWidth(elt.type))
+          if (hasZeroBitWidth(elt.type))
             return true;
         }
-        return false;
+        return bundle.getNumElements() == 0;
       })
       .Case<FVectorType>([&](auto vector) {
         if (vector.getNumElements() == 0)
-          return false;
-        return hasNonZeroBitWidth(vector.getElementType());
+          return true;
+        return hasZeroBitWidth(vector.getElementType());
       })
       .Default([](auto groundType) {
-        return firrtl::getBitWidth(groundType).getValueOr(0) > 0;
+        return firrtl::getBitWidth(groundType).getValueOr(0) == 0;
       });
 }
 
 /// Return true if we can preserve the aggregate type. We can a preserve the
-/// type iff (i) the type is not passive, (ii) the type don't contain analog and
-/// (iii) type has non-zero bitwidth.
+/// type iff (i) the type is not passive, (ii) the type doesn't contain analog
+/// and (iii) type don't contain zero bitwidth.
 static bool isPreservableAggregateType(Type type) {
   auto firrtlType = type.cast<FIRRTLType>();
   return firrtlType.isPassive() && !firrtlType.containsAnalog() &&
-         hasNonZeroBitWidth(firrtlType);
+         !hasZeroBitWidth(firrtlType);
 }
 
 /// Peel one layer of an aggregate type into its components.  Type may be
@@ -1116,7 +1116,8 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (peelType(op.input().getType(), fields, preserveAggregate)) {
+  if (peelType(op.input().getType(), fields,
+               /* allowedToPreserveAggregate */ false)) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
@@ -1138,11 +1139,6 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       uptoBits += fieldBitwidth;
     }
   } else {
-    // If input is a preservable aggregate, we don't have to lower the
-    // current operations.
-    if (op.input().getType().isa<BundleType, FVectorType>())
-      return false;
-
     srcLoweredVal = builder->createOrFold<AsUIntPrimOp>(srcLoweredVal);
   }
   // Now the input has been cast to srcLoweredVal, which is of UInt type.
