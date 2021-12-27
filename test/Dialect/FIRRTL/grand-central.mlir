@@ -12,7 +12,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
         description = "multi\nline\ndescription\nof\nbar",
         name = "bar",
-        id = 2 : i64}],
+        id = 2 : i64},
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "baz",
+        id = 3 : i64}],
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
@@ -40,6 +43,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
       {a},
       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
        id = 2 : i64}]} : !firrtl.uint<4>
+    %c = firrtl.wire  {annotations = [
+      {a},
+      #firrtl.subAnno<fieldID = 4, {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                                    id = 3 : i64}>]} : !firrtl.vector<bundle<d: uint<2>>, 2>
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceGroundType() {
@@ -63,6 +70,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: annotations = [{a}]
 // CHECK: %b = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
+// CHECK: %c = firrtl.wire
+// CHECK-SAME: annotations = [{a}]
 
 // CHECK: firrtl.module @View_mapping
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
@@ -76,6 +85,11 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:   @InterfaceGroundType
 // CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}[1].d;"
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
+// CHECK-SAME:   @InterfaceGroundType
+// CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@c>]
 
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
