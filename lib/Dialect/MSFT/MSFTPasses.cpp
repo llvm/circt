@@ -249,17 +249,12 @@ std::unique_ptr<Pass> createLowerToHWPass() {
 } // namespace circt
 
 namespace {
-struct PartitionPass : public PartitionBase<PartitionPass> {
-  void runOnOperation() override;
-
-private:
+struct PassCommon {
+protected:
   hw::SymbolCache topLevelSyms;
   DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
-  void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
-
-  void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+  void populateSymbolCache(ModuleOp topMod);
 
   // Find all the modules and use the partial order of the instantiation DAG
   // to sort them. If we use this order when "bubbling" up operations, we
@@ -267,7 +262,7 @@ private:
   // instantiation sites mapping.
   //
   // Assumption (unchecked): there is not a cycle in the instantiation graph.
-  void getAndSortModules(SmallVectorImpl<MSFTModuleOp> &mods);
+  void getAndSortModules(ModuleOp topMod, SmallVectorImpl<MSFTModuleOp> &mods);
   void getAndSortModulesVisitor(MSFTModuleOp mod,
                                 SmallVectorImpl<MSFTModuleOp> &mods,
                                 DenseSet<MSFTModuleOp> &modsSeen);
@@ -275,9 +270,9 @@ private:
 } // anonymous namespace
 
 // Run a post-order DFS.
-void PartitionPass::getAndSortModulesVisitor(
-    MSFTModuleOp mod, SmallVectorImpl<MSFTModuleOp> &mods,
-    DenseSet<MSFTModuleOp> &modsSeen) {
+void PassCommon::getAndSortModulesVisitor(MSFTModuleOp mod,
+                                          SmallVectorImpl<MSFTModuleOp> &mods,
+                                          DenseSet<MSFTModuleOp> &modsSeen) {
   if (modsSeen.contains(mod))
     return;
   modsSeen.insert(mod);
@@ -294,32 +289,45 @@ void PartitionPass::getAndSortModulesVisitor(
   mods.push_back(mod);
 }
 
-void PartitionPass::getAndSortModules(SmallVectorImpl<MSFTModuleOp> &mods) {
+void PassCommon::getAndSortModules(ModuleOp topMod,
+                                   SmallVectorImpl<MSFTModuleOp> &mods) {
   // Add here _before_ we go deeper to prevent infinite recursion.
   DenseSet<MSFTModuleOp> modsSeen;
-  getOperation().walk(
+  topMod.walk(
       [&](MSFTModuleOp mod) { getAndSortModulesVisitor(mod, mods, modsSeen); });
 }
 
 /// Fill a symbol cache with all the top level symbols.
-static void populateSymbolCache(mlir::ModuleOp mod, hw::SymbolCache &cache) {
+void PassCommon::populateSymbolCache(mlir::ModuleOp mod) {
   for (Operation &op : mod.getBody()->getOperations()) {
     StringAttr symName = SymbolTable::getSymbolName(&op);
     if (!symName)
       continue;
     // Add the symbol to the cache.
-    cache.addDefinition(symName, &op);
+    topLevelSyms.addDefinition(symName, &op);
   }
-  cache.freeze();
+  topLevelSyms.freeze();
 }
+
+namespace {
+struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
+  void runOnOperation() override;
+
+private:
+  void partition(MSFTModuleOp mod);
+  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
+
+  void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+};
+} // anonymous namespace
 
 void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
-  ::populateSymbolCache(outerMod, topLevelSyms);
+  populateSymbolCache(outerMod);
 
   // Get a properly sorted list, then partition the mods in order.
   SmallVector<MSFTModuleOp, 64> sortedMods;
-  getAndSortModules(sortedMods);
+  getAndSortModules(outerMod, sortedMods);
   for (auto mod : sortedMods)
     partition(mod);
 }
@@ -632,6 +640,24 @@ namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createPartitionPass() {
   return std::make_unique<PartitionPass>();
+}
+} // namespace msft
+} // namespace circt
+
+namespace {
+struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
+  void runOnOperation() override;
+
+private:
+};
+} // anonymous namespace
+
+void WireCleanupPass::runOnOperation() {}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createWireCleanupPass() {
+  return std::make_unique<WireCleanupPass>();
 }
 } // namespace msft
 } // namespace circt

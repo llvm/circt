@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --msft-partition -verify-diagnostics -split-input-file | FileCheck %s
+// RUN: circt-opt %s --msft-partition --msft-wire-cleanup -verify-diagnostics -split-input-file | FileCheck --check-prefix=CLEANUP %s
 
 msft.module @top {} (%clk : i1) -> () {
   msft.partition @part1, "dp"
@@ -37,3 +38,18 @@ msft.module @B {} (%clk : i1) -> (x: i1)  {
 // CHECK:         %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.unit2.foo_a)  : (i1) -> i1
 // CHECK:         %unit1.foo_x = msft.instance @unit1 @Extern(%unit1.foo_a)  : (i1) -> i1
 // CHECK:         hw.output %b.unit1.foo_x, %b.seq.compreg, %b.unit2.foo_x, %unit1.foo_x : i1, i1, i1, i1
+
+// CLEANUP-LABEL: msft.module @top {} (%clk: i1) {
+// CLEANUP:         %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x, %part1.unit1.foo_x = hw.instance "part1" sym @part1 @dp(b.unit1.foo_a: %b.unit1.foo_a: i1, b.seq.compreg.in0: %b.seq.compreg.in0: i1, b.seq.compreg.in1: %b.seq.compreg.in1: i1, b.unit2.foo_a: %b.unit2.foo_a: i1, unit1.foo_a: %false: i1) -> (b.unit1.foo_x: i1, b.seq.compreg.b.seq.compreg: i1, b.unit2.foo_x: i1, unit1.foo_x: i1)
+// CLEANUP:         %b.x, %b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a = msft.instance @b @B(%clk, %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x)  : (i1, i1, i1, i1) -> (i32, i1, i1, i1, i1)
+// CLEANUP:         %false = hw.constant false
+// CLEANUP:         msft.output
+// CLEANUP-LABEL: msft.module @B {} (%clk: i1, %unit1.foo_x: i1, %seq.compreg.out0: i1, %unit2.foo_x: i1) -> (x: i1, unit1.foo_a: i1, seq.compreg.in0: i1, seq.compreg.in1: i1, unit2.foo_a: i1) {
+// CLEANUP:         %true = hw.constant true
+// CLEANUP:         msft.output %unit2.foo_x, %true, %unit1.foo_x, %clk, %seq.compreg.out0 : i1, i1, i1, i1, i1
+// CLEANUP-LABEL: hw.module @dp(%b.unit1.foo_a: i1, %b.seq.compreg.in0: i1, %b.seq.compreg.in1: i1, %b.unit2.foo_a: i1, %unit1.foo_a: i1) -> (b.unit1.foo_x: i1, b.seq.compreg.b.seq.compreg: i1, b.unit2.foo_x: i1, unit1.foo_x: i1) {
+// CLEANUP:         %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%b.unit1.foo_a)  : (i1) -> i1
+// CLEANUP:         %b.seq.compreg = seq.compreg %b.seq.compreg.in0, %b.seq.compreg.in1 : i1
+// CLEANUP:         %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.unit2.foo_a)  : (i1) -> i1
+// CLEANUP:         %unit1.foo_x = msft.instance @unit1 @Extern(%unit1.foo_a)  : (i1) -> i1
+// CLEANUP:         hw.output %b.unit1.foo_x, %b.seq.compreg, %b.unit2.foo_x, %unit1.foo_x : i1, i1, i1, i1
