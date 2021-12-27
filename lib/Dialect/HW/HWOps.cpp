@@ -1261,7 +1261,8 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
       return WalkResult::advance();
     });
     if (glblSymNotFound) {
-      // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to implement an interface.
+      // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
+      // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
         if (auto argAttrs =
                 mod->getAttr(mlir::function_like_impl::getArgDictAttrName()))
