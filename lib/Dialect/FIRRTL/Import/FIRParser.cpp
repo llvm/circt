@@ -1535,6 +1535,8 @@ private:
 
 } // end anonymous namespace
 
+/// TODO: Get unisque names for symbols!!
+/// TODO: The op name can conflict with a symbol name !!
 static bool removeDontTouch(ArrayAttr &annotations) {
   AnnotationSet filteredAnnos(annotations);
   bool hasDontTouch = filteredAnnos.removeDontTouch();
@@ -3301,11 +3303,15 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     info.setDefaultLoc(defaultLoc);
 
     AnnotationSet annotations(getContext());
-    if (!getConstants().options.rawAnnotations)
+    StringAttr innerSym = {};
+    if (!getConstants().options.rawAnnotations) {
       annotations = AnnotationSet(
           getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
                          getConstants().targetSet, type));
-    resultPorts.push_back({name, type, direction::get(isOutput), StringAttr{},
+      if (annotations.removeDontTouch())
+        innerSym = StringAttr::get(getContext(), name.getValue());
+    }
+    resultPorts.push_back({name, type, direction::get(isOutput), innerSym,
                            info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
   }
