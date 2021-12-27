@@ -630,16 +630,17 @@ LogicalResult SimplexSchedulerBase::scheduleAt(unsigned startTimeVariable,
 
   // Temporarily set S to the desired value, and attempt to solve.
   parameterS = timeStep;
-  auto res = solveTableau();
+  auto solved = solveTableau();
   parameterS = 0;
 
-  if (failed(res)) {
+  if (failed(solved)) {
     // The LP is infeasible with the new constraint. We could try other values
     // for S, but for now, we just roll back and signal failure to the driver.
     translate(frozenCol, /* factor1= */ 0, /* factorS= */ -1, /* factorT= */ 0);
     frozenVariables.erase(startTimeVariable);
-    res = solveTableau();
-    assert(succeeded(res));
+    auto solvedAfterRollback = solveTableau();
+    assert(succeeded(solvedAfterRollback));
+    (void)solvedAfterRollback;
     return failure();
   }
 
@@ -855,8 +856,9 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
 
     // Fix the start time. As explained above, this cannot make the problem
     // infeasible.
-    auto res = scheduleAt(startTimeVar, candTime);
-    assert(succeeded(res));
+    auto fixed = scheduleAt(startTimeVar, candTime);
+    assert(succeeded(fixed));
+    (void)fixed;
 
     // Record the operator use.
     ++reservationTable[opr][candTime];
@@ -937,7 +939,10 @@ void ModuloSimplexScheduler::updateMargins() {
   for (auto *axapTimes : {&alapTimes, &asapTimes}) {
     multiplyRow(OBJ_AXAP, -1);
     // This should not fail for a feasible tableau.
-    assert(succeeded(restoreDualFeasibility()) && succeeded(solveTableau()));
+    auto dualFeasRestored = restoreDualFeasibility();
+    auto solved = solveTableau();
+    assert(succeeded(dualFeasRestored) && succeeded(solved));
+    (void)dualFeasRestored, (void)solved;
 
     for (unsigned stv = 0; stv < startTimeLocations.size(); ++stv)
       (*axapTimes)[stv] = getStartTime(stv);
@@ -979,7 +984,9 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
 
   for (unsigned ct : candTimes)
     if (succeeded(mrt.enter(n, ct))) {
-      assert(succeeded(scheduleAt(stvN, stN)));
+      auto fixedN = scheduleAt(stvN, stN);
+      assert(succeeded(fixedN));
+      (void)fixedN;
       LLVM_DEBUG(dbgs() << "Success at t=" << stN << " " << *n << '\n');
       return;
     }
@@ -1030,18 +1037,25 @@ void ModuloSimplexScheduler::scheduleOperation(Operation *n) {
 
   // Finally, increment the II.
   incrementII();
-  assert(succeeded(solveTableau()));
+  auto solved = solveTableau();
+  assert(succeeded(solved));
+  (void)solved;
 
   // Re-enter moved operations into their new slots.
   for (auto *m : moved)
     mrt.release(m);
-  for (auto *m : moved)
-    assert(succeeded(mrt.enter(m, getStartTime(startTimeVariables[m]))));
+  for (auto *m : moved) {
+    auto enteredM = mrt.enter(m, getStartTime(startTimeVariables[m]));
+    assert(succeeded(enteredM));
+    (void)enteredM;
+  }
 
   // Finally, schedule the operation. Adding `phiN` accounts for the implicit
   // shift caused by incrementing the II; cf. `incrementII()`.
-  assert(succeeded(scheduleAt(stvN, stN + phiN + deltaN)));
-  assert(succeeded(mrt.enter(n, tauN + deltaN)));
+  auto fixedN = scheduleAt(stvN, stN + phiN + deltaN);
+  auto enteredN = mrt.enter(n, tauN + deltaN);
+  assert(succeeded(fixedN) && succeeded(enteredN));
+  (void)fixedN, (void)enteredN;
 }
 
 LogicalResult ModuloSimplexScheduler::schedule() {
