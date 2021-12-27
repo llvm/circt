@@ -160,6 +160,8 @@ and also for metadata emission.
 ``` mlir
   hw.globalRef @glbl_B_M1 [#hw.innerNameRef<@A::@inst_1>, #hw.innerNameRef<@B::@memInst>]
   hw.globalRef @glbl_D_M1 [#hw.innerNameRef<@A::@inst_0>, #hw.innerNameRef<@C::@inst>, #hw.innerNameRef<@D::@memInst>]
+  hw.globalRef @glbl_D_M2 [#hw.innerNameRef<@A::@SF>, #hw.innerNameRef<@F::@symA>]
+  hw.globalRef @glbl_D_M3 [#hw.innerNameRef<@A::@SF>, #hw.innerNameRef<@F::@symB>]
   hw.module @D() -> () {
     hw.instance "M1" sym @memInst @FIRRTLMem() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
   }
@@ -172,7 +174,10 @@ and also for metadata emission.
   hw.module @A() -> () {
     hw.instance "h1" sym @inst_1 @B() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_B_M1>]}
     hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
+    %c0 = hw.constant 0 : i1
+    %2 = hw.instance "ab" sym @SF  @F (a1: %c0: i1) -> (a2 : i1) {circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>, #hw.globalNameRef<@glbl_D_M3>]}
   }
+  hw.module.extern  @F(%a1: i1 {hw.exportPort = @symA, circt.globalRef = [#hw.globalNameRef<@glbl_D_M2>]}) -> (a2: i1 {hw.exportPort = @symB, circt.globalRef = [#hw.globalNameRef<@glbl_D_M3>]}) attributes {}
 
 sv.verbatim "{{0}}" { symbols = [@glbl_D_M1] }
 sv.verbatim "{{0}}" { symbols = [@glbl_B_M1] }

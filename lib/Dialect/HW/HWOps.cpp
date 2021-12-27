@@ -1228,18 +1228,22 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
   StringAttr symNameAttr = (*this).sym_nameAttr();
   static const char globalRefStr[] = "circt.globalRef";
   SymbolTable symTable(parent);
+  auto hasGlobalRef = [&](Attribute attr) -> bool {
+    for (auto ref : attr.cast<ArrayAttr>().getAsRange<GlobalRefAttr>())
+      if (ref.getGlblSym().getAttr() == symNameAttr)
+        return true;
+    return false;
+  };
   // For all inner refs in the namepath, ensure they have a corresponding
   // GlobalRefAttr to this GlobalRefOp.
   for (auto innerRef : namepath().getAsRange<hw::InnerRefAttr>()) {
     StringAttr modName = innerRef.getModule();
-    llvm::errs() << "\n mod::"<< modName;
     StringAttr innerSym = innerRef.getName();
     Operation *mod = symTable.lookup(modName);
     if (!mod) {
       (*this)->emitOpError("module:'" + modName.str() + "' not found");
       return failure();
     }
-    llvm::errs() << "\n mod::"<< *mod;
     bool glblSymNotFound = true;
     mod->walk([&](Operation *op) -> WalkResult {
       StringAttr attr = op->getAttrOfType<StringAttr>("inner_sym");
@@ -1247,48 +1251,36 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
       if (attr && attr == innerSym) {
         // Each op can have an array of GlobalRefAttr, check if this op is one
         // of them.
-        for (auto ref : op->getAttr(globalRefStr)
-                            .cast<ArrayAttr>()
-                            .getAsRange<GlobalRefAttr>())
-          if (ref.getGlblSym().getAttr() == symNameAttr) {
-            glblSymNotFound = false;
-            return WalkResult::interrupt();
-          }
+        if (hasGlobalRef(op->getAttr(globalRefStr))) {
+          glblSymNotFound = false;
+          return WalkResult::interrupt();
+        }
         // If cannot find the ref, then its an error.
         return failure();
       }
       return WalkResult::advance();
     });
     if (glblSymNotFound) {
-    // TODO: Doesn't yet work for symbls on FIRRTL module. Need to implement an interface.
-    if (isa<HWModuleOp, HWModuleExternOp>(mod)){
-      auto exports = mod->getAttr(mlir::function_like_impl::getArgDictAttrName());
-      auto gRef = mod->getAttr(globalRefStr).cast<ArrayAttr>();
-      for (auto a: mod->getAttrs()){
-        llvm::errs() << "\n attr:"<< a.getName() <<"=="<<a.getValue();
+      // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to implement an interface.
+      if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
+        if (auto argAttrs =
+                mod->getAttr(mlir::function_like_impl::getArgDictAttrName()))
+          for (auto attr :
+               argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
+            if (auto symRef = attr.get("hw.exportPort"))
+              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+                if (hasGlobalRef(attr.get(globalRefStr)))
+                  return success();
+
+        if (auto resAttrs =
+                mod->getAttr(mlir::function_like_impl::getResultDictAttrName()))
+          for (auto attr :
+               resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
+            if (auto symRef = attr.get("hw.exportPort"))
+              if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
+                if (hasGlobalRef(attr.get(globalRefStr)))
+                  return success();
       }
-      auto hwMod = dyn_cast<HWModuleOp>(mod);
-      SmallVector<PortInfo> inputs, outputs;
-      if (hwMod) {
-        ModulePortInfo ports = hwMod.getPorts();
-        inputs = ports.inputs;
-        outputs = ports.outputs;
-      } else if (auto ext = dyn_cast<HWModuleExternOp>(mod)){
-        ModulePortInfo ports = ext.getPorts();
-        inputs = ports.inputs;
-        outputs = ports.outputs;
-      }
-      for (auto in : inputs) {
-        llvm::errs() << " in sym:" << in.sym << "::" << in.getName();
-        if (in.sym == symNameAttr)
-          glblSymNotFound = false;
-      }
-      for (auto out : outputs) {
-        llvm::errs() << " in sym:" << out.sym <<"::"<< out.getName();
-        if (out.sym == symNameAttr)
-          glblSymNotFound = false;
-      }
-    }
     }
     if (glblSymNotFound) {
       return (*this)->emitOpError(
