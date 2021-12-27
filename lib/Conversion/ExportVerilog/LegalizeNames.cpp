@@ -107,9 +107,6 @@ private:
   /// This keeps track of globally visible names like module parameters.
   GlobalNameTable globalNameTable;
 
-  /// This keeps track of field names of struct types.
-  FieldNameResolver fieldNameResolver;
-
   GlobalNameResolver(const GlobalNameResolver &) = delete;
   void operator=(const GlobalNameResolver &) = delete;
 };
