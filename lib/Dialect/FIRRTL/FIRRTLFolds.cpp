@@ -1367,7 +1367,7 @@ OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
 
   if (auto constIndex = getConstant(operands[0])) {
     auto index = constIndex->getExtValue();
-    // operands[0] is index so (value + 1) is the index we want.
+    // operands[0] is index so (index + 1) is the index we want.
     if (index >= 0 && index + 1 < static_cast<int64_t>(operands.size()))
       return getOperand(index + 1);
   }
