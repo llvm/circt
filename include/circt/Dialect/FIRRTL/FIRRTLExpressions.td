@@ -258,7 +258,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
   // Need a custom parser/printer to emit operands type only once.
   let parser = "return parse$cppClass(parser, result);";
   let printer = "print$cppClass(p, *this);";
-  let hasFolder = 1;
+  let hasFolder = true;
   let hasCanonicalizeMethod = true;
 }
 
