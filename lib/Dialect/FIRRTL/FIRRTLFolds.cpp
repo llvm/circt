@@ -1360,6 +1360,45 @@ LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
       });
 }
 
+OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
+  // If there is only one input, just return it.
+  if (operands.size() == 2)
+    return getOperand(1);
+
+  if (auto constIndex = getConstant(operands[0])) {
+    auto index = constIndex->getExtValue();
+    // operands[0] is index so (index + 1) is the index we want.
+    if (index >= 0 && index + 1 < static_cast<int64_t>(operands.size()))
+      return getOperand(index + 1);
+  }
+
+  return {};
+}
+
+LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
+                                          PatternRewriter &rewriter) {
+  // If all operands are equal, just canonicalize to it. We can add this
+  // canonicalization as a folder but it costly to look through all inputs so it
+  // is added here.
+  if (llvm::all_of(op.inputs().drop_front(),
+                   [&](auto input) { return input == op.inputs().front(); })) {
+    rewriter.replaceOp(op, op.inputs().front());
+    return success();
+  }
+
+  // If the size is 2, canonicalize into a normal mux to introduce more folds.
+  if (op.inputs().size() != 2)
+    return failure();
+
+  // multibit_mux(index, {lhs, rhs}) -> mux(index==0, lhs, rhs)
+  Value zero = rewriter.create<ConstantOp>(
+      op.getLoc(), op.index().getType().cast<IntType>(), APInt(1, 0));
+  Value cond = rewriter.createOrFold<EQPrimOp>(op.getLoc(), op.index(), zero);
+  rewriter.replaceOpWithNewOp<MuxPrimOp>(op, cond, op.inputs()[0],
+                                         op.inputs()[1]);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
