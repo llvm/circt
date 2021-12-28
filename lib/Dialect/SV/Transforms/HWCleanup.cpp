@@ -140,8 +140,7 @@ void HWCleanupPass::runOnRegionsInOp(Operation &op) {
   }
 }
 
-/// Run simplifications on the specified graph region.  If shallow is true, then
-/// we only look at the specified region, we don't recurse into subregions.
+/// Run simplifications on the specified graph region.
 void HWCleanupPass::runOnGraphRegion(Region &region) {
   if (region.getBlocks().size() != 1)
     return;
@@ -204,8 +203,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region) {
   }
 }
 
-/// Run simplifications on the specified procedural region.  If shallow is true,
-/// then we only look at the specified region, we don't recurse into subregions.
+/// Run simplifications on the specified procedural region.
 void HWCleanupPass::runOnProceduralRegion(Region &region) {
   if (region.getBlocks().size() != 1)
     return;
