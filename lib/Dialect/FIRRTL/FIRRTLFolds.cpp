@@ -1378,8 +1378,8 @@ OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
 LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
                                           PatternRewriter &rewriter) {
   // If all operands are equal, just canonicalize to it. We can add this
-  // canonicalization to folder but it costly to look through all inputs so it is
-  // added here.
+  // canonicalization as a folder but it costly to look through all inputs so it
+  // is added here.
   if (llvm::all_of(op.inputs().drop_front(),
                    [&](auto input) { return input == op.inputs().front(); })) {
     rewriter.replaceOp(op, op.inputs().front());
