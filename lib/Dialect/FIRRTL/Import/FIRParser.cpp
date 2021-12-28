@@ -1535,7 +1535,7 @@ private:
 
 } // end anonymous namespace
 
-/// TODO: Get unisque names for symbols!!
+/// TODO: Get unique names for symbols!!
 /// TODO: The op name can conflict with a symbol name !!
 static bool removeDontTouch(ArrayAttr &annotations) {
   AnnotationSet filteredAnnos(annotations);

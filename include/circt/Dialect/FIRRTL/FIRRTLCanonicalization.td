@@ -33,8 +33,6 @@ def NonConstantOp : Constraint<CPred<[{
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
 
-// Constraint that matches no inner sym on the op.
-def NoInnerSym : Constraint<CPred<"!$0">>;
 
 def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
@@ -136,30 +134,30 @@ def GetWidthAsIntAttr : NativeCodeCall<
 def DropNameNode : Pat<
   (NodeOp $x, $name, $annotations, $inner_sym),
   (NodeOp $x, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NoInnerSym $inner_sym)]>;
+  [(uselessNameAttr $name), (NullAttr $inner_sym)]>;
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
   (WireOp $name, $annotations, $inner_sym),
   (WireOp (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NoInnerSym $inner_sym)]>;
+  [(uselessNameAttr $name), (NullAttr $inner_sym)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
   (RegOp $clk, $name, $annotations, $inner_sym),
   (RegOp $clk, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NoInnerSym $inner_sym)]>;
+  [(uselessNameAttr $name), (NullAttr $inner_sym)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
 def DropNameRegReset : Pat<
   (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym),
   (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations, $inner_sym),
-  [(uselessNameAttr $name), (NoInnerSym $inner_sym)]>;
+  [(uselessNameAttr $name), (NullAttr $inner_sym)]>;
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
   (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno, $inner_sym),
   (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno, $inner_sym),
-  [(uselessNameAttr $name), (NoInnerSym $inner_sym)]>;
+  [(uselessNameAttr $name), (NullAttr $inner_sym)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
