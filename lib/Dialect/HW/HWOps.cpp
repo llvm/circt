@@ -115,6 +115,36 @@ bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
   return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
+/// Return the symbol (if any, else null) on the corresponding input port
+/// argument.
+StringAttr hw::getArgSym(Operation *op, unsigned i) {
+  assert(isAnyModuleOrInstance(op) &&
+         "Can only get module ports from an instance or module");
+  StringAttr sym = {};
+  auto argAttrs = op->getAttrOfType<ArrayAttr>(
+      mlir::function_like_impl::getArgDictAttrName());
+  if (argAttrs && (i < argAttrs.size()))
+    if (auto s = argAttrs[i].cast<DictionaryAttr>())
+      if (auto symRef = s.get("hw.exportPort"))
+        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+  return sym;
+}
+
+/// Return the symbol (if any, else null) on the corresponding output port
+/// argument.
+StringAttr hw::getResultSym(Operation *op, unsigned i) {
+  assert(isAnyModuleOrInstance(op) &&
+         "Can only get module ports from an instance or module");
+  StringAttr sym = {};
+  auto resAttrs = op->getAttrOfType<ArrayAttr>(
+      mlir::function_like_impl::getResultDictAttrName());
+  if (resAttrs && (i < resAttrs.size()))
+    if (auto s = resAttrs[i].cast<DictionaryAttr>())
+      if (auto symRef = s.get("hw.exportPort"))
+        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+  return sym;
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -456,8 +486,6 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
   auto argTypes = getModuleType(op).getInputs();
 
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getArgDictAttrName());
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
@@ -467,28 +495,16 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
       type = inout.getElementType();
     }
 
-    StringAttr sym = {};
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    if (argAttrs && (i < argAttrs.size()))
-      if (auto s = argAttrs[i].cast<DictionaryAttr>())
-        if (auto symRef = s.get("hw.exportPort"))
-          sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
-
-    inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i, sym});
+    inputs.push_back(
+        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
-  auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getResultDictAttrName());
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    StringAttr sym = {};
-    if (resAttrs && (i < resAttrs.size()))
-      if (auto s = resAttrs[i].cast<DictionaryAttr>())
-        if (auto symRef = s.get("hw.exportPort"))
-          sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
     outputs.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, sym});
+                       resultTypes[i], i, getResultSym(op, i)});
   }
   return ModulePortInfo(inputs, outputs);
 }
@@ -503,8 +519,6 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   SmallVector<PortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getArgDictAttrName());
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
@@ -515,27 +529,15 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
     }
 
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    StringAttr sym = {};
-    if (argAttrs && (i < argAttrs.size()))
-      if (auto s = argAttrs[i].cast<DictionaryAttr>())
-        if (auto symRef = s.get("hw.exportPort"))
-          sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
     results.push_back(
-        {argNames[i].cast<StringAttr>(), direction, type, i, sym});
+        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
-  auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getResultDictAttrName());
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    StringAttr sym = {};
-    if (resAttrs && (i < resAttrs.size()))
-      if (auto s = resAttrs[i].cast<DictionaryAttr>())
-        if (auto symRef = s.get("hw.exportPort"))
-          sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
     results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, sym});
+                       resultTypes[i], i, getResultSym(op, i)});
   }
   return results;
 }
@@ -544,8 +546,6 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
 PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   auto argTypes = getModuleType(op).getInputs();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-  auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getArgDictAttrName());
   bool isInOut = false;
   auto type = argTypes[idx];
 
@@ -555,12 +555,8 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   }
 
   auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-  StringAttr sym = {};
-  if (argAttrs && (idx < argAttrs.size()))
-    if (auto s = argAttrs[idx].cast<DictionaryAttr>())
-      if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
-  return {argNames[idx].cast<StringAttr>(), direction, type, idx, sym};
+  return {argNames[idx].cast<StringAttr>(), direction, type, idx,
+          getArgSym(op, idx)};
 }
 
 /// Return the PortInfo for the specified output port.
@@ -568,15 +564,8 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
   assert(idx < resultNames.size() && "invalid result number");
-  auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getResultDictAttrName());
-  StringAttr sym = {};
-  if (resAttrs && (idx < resAttrs.size()))
-    if (auto s = resAttrs[idx].cast<DictionaryAttr>())
-      if (auto symRef = s.get("hw.exportPort"))
-        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
   return {resultNames[idx].cast<StringAttr>(), PortDirection::OUTPUT,
-          resultTypes[idx], idx, sym};
+          resultTypes[idx], idx, getResultSym(op, idx)};
 }
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
