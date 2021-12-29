@@ -1535,13 +1535,25 @@ private:
 
 } // end anonymous namespace
 
-/// TODO: Get unique names for symbols!!
-/// TODO: The op name can conflict with a symbol name !!
 static bool removeDontTouch(ArrayAttr &annotations) {
-  AnnotationSet filteredAnnos(annotations);
-  bool hasDontTouch = filteredAnnos.removeDontTouch();
-  if (hasDontTouch)
-    annotations = filteredAnnos.getArrayAttr();
+  SmallVector<Attribute> filteredAnnos;
+  bool hasDontTouch = false;
+  for (Attribute anno : annotations){
+    DictionaryAttr dict = {};
+    if (auto subAnno = anno.dyn_cast<SubAnnotationAttr>()) {
+      if (subAnno.getFieldID() == 0)
+        dict = subAnno.getAnnotations();
+    }else 
+      dict = anno.dyn_cast<DictionaryAttr>();
+    if (dict)
+      if (auto cls = dict.get("class"))
+      if ( cls.cast<StringAttr>().getValue().equals("firrtl.transforms.DontTouchAnnotation")) {
+        hasDontTouch = true;
+        continue;
+      }
+    filteredAnnos.push_back(anno);
+  }
+  annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
   return hasDontTouch;
 }
 
@@ -3305,11 +3317,12 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     AnnotationSet annotations(getContext());
     StringAttr innerSym = {};
     if (!getConstants().options.rawAnnotations) {
-      annotations = AnnotationSet(
-          getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
-                         getConstants().targetSet, type));
-      if (annotations.removeDontTouch())
+      auto annos = getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
+                         getConstants().targetSet, type);
+    bool addSym = removeDontTouch(annos);
+      if (addSym)
         innerSym = StringAttr::get(getContext(), name.getValue());
+      annotations = AnnotationSet(annos);
     }
     resultPorts.push_back({name, type, direction::get(isOutput), innerSym,
                            info.getLoc(), annotations});

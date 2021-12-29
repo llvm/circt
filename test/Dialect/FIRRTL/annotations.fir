@@ -414,7 +414,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
         read-under-write => undefined
 
     wire aggregate : { a : UInt<1>}
-    ; CHECK: %_T_9 = firrtl.node sym @_T_9
+    ; CHECK: %_T_9 = firrtl.node %aggregate {annotations = [#firrtl.subAnno<fieldID = 1, {class = "firrtl.transforms.DontTouchAnnotation"}>]} : !firrtl.bundle<a: uint<1>>
     node _T_9 = aggregate
 
 
@@ -552,7 +552,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    id = [[ID:[0-9]+]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_0:[0-9]+]] : i64,
     ; CHECK-SAME:    type = "portName"}
-    ; CHECK-SAME: _1: !firrtl.vector<uint<1>, 1> sym @_1 [
+    ; CHECK-SAME: _1: !firrtl.vector<uint<1>, 1> [
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
+    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
@@ -563,7 +565,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_2:[0-9]+]] : i64,
     ; CHECK-SAME:    type = "portName"}
-    ; CHECK-SAME: _3: !firrtl.vector<uint<1>, 1> sym @_3 [
+    ; CHECK-SAME: _3: !firrtl.vector<uint<1>, 1> [
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
+    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
@@ -573,7 +577,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_4:[0-9]+]] : i64}
-    ; CHECK-SAME: _5: !firrtl.vector<uint<1>, 1> sym @_5 [
+    ; CHECK-SAME: _5: !firrtl.vector<uint<1>, 1> [
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
+    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
@@ -581,14 +587,18 @@ circuit GCTDataTap : %[
     ; CHECK-SAME: _6: !firrtl.uint<1> sym @_6 [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
     ; CHECK-SAME:    id = [[ID]] : i64}
-    ; CHECK-SAME: _7: !firrtl.vector<uint<1>, 1> sym @_7 [
+    ; CHECK-SAME: _7: !firrtl.vector<uint<1>, 1> [
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
+    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64}>
     ; CHECK-SAME: _8: !firrtl.uint<1> sym @_8 [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:    literal = "UInt<16>(\22h2a\22)"}
-    ; CHECK-SAME: _9: !firrtl.vector<uint<1>, 1> sym @_9 [
+    ; CHECK-SAME: _9: !firrtl.vector<uint<1>, 1> [
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
+    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:      literal = "UInt<16>(\22h2a\22)"}
     ; CHECK-SAME: _10: !firrtl.uint<1> sym @_10 [
@@ -621,13 +631,15 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    portID = [[PORT_ID_0]] : i64,
     ; CHECK-SAME:    type = "source"}
 
-    ; CHECK: firrtl.wire sym @w
+    ; CHECK: firrtl.wire
     ; CHECK-SAME: annotations =
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_2]] : i64,
     ; CHECK-SAME:      type = "source"}>
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
+    ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
