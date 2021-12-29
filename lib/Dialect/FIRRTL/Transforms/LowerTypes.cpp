@@ -216,11 +216,6 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
         if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
           // If the target is a subfield/subindex of the current field, create a
           // new sub-annotation with a new field ID.
-          if (Annotation(opAttr).getClass() ==
-              "firrtl.transforms.DontTouchAnnotation") {
-            hasDontTouch = true;
-            continue;
-          }
           retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID,
                                                   subAnno.getAnnotations()));
         } else {
