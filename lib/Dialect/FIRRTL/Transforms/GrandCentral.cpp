@@ -785,8 +785,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
         if (fieldID > tpe.getMaxFieldID()) {
           leafValue.getDefiningOp()->emitError()
-              << "subannotation with fieldID=" << fieldID << " to " << tpe
-              << " is invalid";
+              << "subannotation with fieldID=" << fieldID
+              << " is too large for type " << tpe;
           return false;
         }
 

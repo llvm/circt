@@ -254,7 +254,7 @@ firrtl.circuit "InvalidFieldID" attributes {
        name = "view",
        type = "parent"}
     ]} {
-    // expected-error @+1 {{subannotation with fieldID=3 to '!firrtl.vector<uint<2>, 1>' is invalid}}
+    // expected-error @+1 {{subannotation with fieldID=3 is too large for type '!firrtl.vector<uint<2>, 1>'}}
     %a = firrtl.wire {
       annotations = [
         {a},
