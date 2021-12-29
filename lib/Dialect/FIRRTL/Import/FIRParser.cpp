@@ -1535,22 +1535,30 @@ private:
 
 } // end anonymous namespace
 
+/// Remove the DontTouch annotation and return true, if it exists.
+/// Ignore DontTouch that will apply only to a subfield.
 static bool removeDontTouch(ArrayAttr &annotations) {
   SmallVector<Attribute> filteredAnnos;
   bool hasDontTouch = false;
-  for (Attribute anno : annotations){
+  // Only check for DontTouch annotation that applies to the entire op.
+  // Then drop it and return true.
+  // We cannot use AnnotationSet::removeDontTouch, because it does not ignore
+  // Subfield annotations.
+  for (Attribute anno : annotations) {
     DictionaryAttr dict = {};
+    // If subfield annotation, then field must be 0.
     if (auto subAnno = anno.dyn_cast<SubAnnotationAttr>()) {
       if (subAnno.getFieldID() == 0)
         dict = subAnno.getAnnotations();
-    }else 
+    } else
       dict = anno.dyn_cast<DictionaryAttr>();
     if (dict)
       if (auto cls = dict.get("class"))
-      if ( cls.cast<StringAttr>().getValue().equals("firrtl.transforms.DontTouchAnnotation")) {
-        hasDontTouch = true;
-        continue;
-      }
+        if (cls.cast<StringAttr>().getValue().equals(
+                "firrtl.transforms.DontTouchAnnotation")) {
+          hasDontTouch = true;
+          continue;
+        }
     filteredAnnos.push_back(anno);
   }
   annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
@@ -2639,7 +2647,7 @@ ParseResult FIRStmtParser::parseInstance() {
                                         annotations.first.getValue(),
                                         annotations.second.getValue());
     if (addSym)
-      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
+      result.inner_symAttr(StringAttr::get(builder.getContext(), id));
   }
 
   // Since we are implicitly unbundling the instance results, we need to keep
@@ -2734,7 +2742,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
                                          vectorType.getNumElements(), ruw, id,
                                          annotations);
   if (addSym)
-    result.inner_symAttr( StringAttr::get(builder.getContext(), id));
+    result.inner_symAttr(StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2877,7 +2885,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
         builder.getArrayAttr(resultNames), id, annotations.first,
         annotations.second, StringAttr{});
     if (addSym)
-      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
+      result.inner_symAttr(StringAttr::get(builder.getContext(), id));
   }
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2933,11 +2941,11 @@ ParseResult FIRStmtParser::parseNode() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, initializerType);
 
-    bool addSym = removeDontTouch(annotations);
-  auto  result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                        annotations, StringAttr{});
-    if (addSym)
-      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
+  bool addSym = removeDontTouch(annotations);
+  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
+                                       annotations, StringAttr{});
+  if (addSym)
+    result.inner_symAttr(StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2967,8 +2975,8 @@ ParseResult FIRStmtParser::parseWire() {
 
   bool addSym = removeDontTouch(annotations);
   auto result = builder.create<WireOp>(type, id, annotations, StringAttr{});
-    if (addSym)
-      result.inner_symAttr( StringAttr::get(builder.getContext(), id));
+  if (addSym)
+    result.inner_symAttr(StringAttr::get(builder.getContext(), id));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3061,19 +3069,19 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
                        moduleContext.targetsInModule, type);
 
   Value result;
-    bool addSym = removeDontTouch(annotations);
+  bool addSym = removeDontTouch(annotations);
   if (resetSignal) {
-    auto reg  = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations, StringAttr{});
+    auto reg = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
+                                          id, annotations, StringAttr{});
     result = reg;
     if (addSym)
-      reg.inner_symAttr( StringAttr::get(builder.getContext(), id));
-  }
-  else {
-    auto reg = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
+      reg.inner_symAttr(StringAttr::get(builder.getContext(), id));
+  } else {
+    auto reg =
+        builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
     result = reg;
     if (addSym)
-      reg.inner_symAttr( StringAttr::get(builder.getContext(), id));
+      reg.inner_symAttr(StringAttr::get(builder.getContext(), id));
   }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3317,9 +3325,10 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     AnnotationSet annotations(getContext());
     StringAttr innerSym = {};
     if (!getConstants().options.rawAnnotations) {
-      auto annos = getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
+      auto annos =
+          getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
                          getConstants().targetSet, type);
-    bool addSym = removeDontTouch(annos);
+      bool addSym = removeDontTouch(annos);
       if (addSym)
         innerSym = StringAttr::get(getContext(), name.getValue());
       annotations = AnnotationSet(annos);
