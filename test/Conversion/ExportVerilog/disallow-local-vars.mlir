@@ -153,4 +153,23 @@ hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
   hw.output
 }
 
-
+// CHECK-LABEL: module ReadInoutAggregate(
+hw.module @ReadInoutAggregate(%clock: i1) {
+  %register = sv.reg  : !hw.inout<array<1xstruct<a: i32>>>
+  sv.always posedge %clock  {
+    %c0_i16 = hw.constant 0 : i16
+    %false = hw.constant false
+    %0 = sv.array_index_inout %register[%false] : !hw.inout<array<1xstruct<a: i32>>>, i1
+    %1 = sv.struct_field_inout %0["a"] : !hw.inout<struct<a: i32>>
+    %2 = sv.read_inout %1 : !hw.inout<i32>
+    %3 = comb.extract %2 from 0 : (i32) -> i16
+    %4 = comb.concat %c0_i16, %3 : i16, i16
+    sv.passign %1, %4 : i32
+  }
+  // DISALLOW: localparam [[T:.+]] = 1'h0;
+  // DISALLOW-NEXT: wire [31:0] [[READ:.+]] = register{{\[}}[[T]]{{\]}}.a;
+  // DISALLOW-NEXT: wire [31:0] [[CONCAT:.+]] = {16'h0, [[READ]][15:0]};
+  // DISALLOW-NEXT: always @(
+  // DISALLOW-NEXT:  register{{\[}}[[T]]{{\]}}.a <= [[CONCAT]];
+  hw.output
+}

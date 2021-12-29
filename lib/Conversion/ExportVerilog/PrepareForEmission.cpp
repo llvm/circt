@@ -311,7 +311,8 @@ static bool rewriteSideEffectingExpr(Operation *op) {
 static bool hoistNonSideEffectExpr(Operation *op) {
   // Never hoist "always inline" expressions - they will never generate a
   // temporary and in fact must always be emitted inline.
-  if (isExpressionAlwaysInline(op) && !isa<sv::ReadInOutOp>(op))
+  if (isExpressionAlwaysInline(op) &&
+      !isa<sv::ReadInOutOp, sv::ArrayIndexInOutOp, sv::StructFieldInOutOp>(op))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.
