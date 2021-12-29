@@ -227,3 +227,42 @@ firrtl.circuit "multiInstance2" attributes {
   firrtl.nla @nla1 [@multiInstance1] ["dut"]
   firrtl.nla @nla2 [@multiInstance1] ["dut1"]
 }
+
+// -----
+
+firrtl.circuit "InvalidFieldID" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64,
+        name = "foo"}],
+     id = 0 : i64}
+    ]} {
+  firrtl.module @View_companion() attributes {
+     annotations = [
+       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+        defName = "Foo",
+        id = 0 : i64,
+        name = "View",
+        type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    // expected-error @+1 {{subannotation with fieldID=3 is too large for type '!firrtl.vector<uint<2>, 1>'}}
+    %a = firrtl.wire {
+      annotations = [
+        {a},
+        #firrtl.subAnno<fieldID = 3, {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+                        id = 1 : i64}>]} : !firrtl.vector<uint<2>, 1>
+    firrtl.instance View_companion @View_companion()
+  }
+  firrtl.module @InvalidFieldID() {
+    firrtl.instance dut @DUT()
+  }
+}
