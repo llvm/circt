@@ -2467,7 +2467,7 @@ private:
   /// This is the index of the end of the declaration region of the current
   /// 'begin' block, used to emit variable declarations.
   RearrangableOStream::Cursor blockDeclarationInsertPoint;
-  unsigned blockDeclarationIndentLevel = 0;
+  unsigned blockDeclarationIndentLevel = INDENT_AMOUNT;
 
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
