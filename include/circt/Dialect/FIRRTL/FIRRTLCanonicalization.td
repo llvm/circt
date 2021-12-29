@@ -32,8 +32,6 @@ def NonConstantOp : Constraint<CPred<[{
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
-
-
 def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
 def NullAttr : Constraint<CPred<"!$0">>;

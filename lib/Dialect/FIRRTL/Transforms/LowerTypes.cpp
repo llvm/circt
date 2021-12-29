@@ -202,7 +202,6 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
-
     if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
       // Apply annotations to all elements if fieldID is equal to zero.
       if (subAnno.getFieldID() == 0) {
@@ -247,6 +246,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
     ports.push_back(MemOp::getTypeForPort(op.depth(), field.type, port.second));
     portNames.push_back(port.first);
   }
+
   // It's easier to duplicate the old annotations, then fix and filter them.
   auto newMem = b->create<MemOp>(
       ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),

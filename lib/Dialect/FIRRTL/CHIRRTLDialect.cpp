@@ -169,7 +169,8 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
                       FIRRTLType elementType, unsigned numElements,
-                      StringRef name, ArrayAttr annotations, StringAttr innerSym) {
+                      StringRef name, ArrayAttr annotations,
+                      StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
         annotations, innerSym);
@@ -191,7 +192,8 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLType elementType, unsigned numElements, RUWAttr ruw,
-                     StringRef name, ArrayAttr annotations, StringAttr innerSym) {
+                     StringRef name, ArrayAttr annotations,
+                     StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, annotations, innerSym);
