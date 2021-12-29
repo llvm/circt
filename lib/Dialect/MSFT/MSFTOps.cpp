@@ -39,18 +39,6 @@ StringAttr InstanceOp::getResultName(size_t idx) {
   return hw::getModuleResultNameAttr(getReferencedModule(), idx);
 }
 
-InstanceOp InstanceOp::getWithNewResults(MSFTModuleOp mod,
-                                         SmallVectorImpl<size_t> &newToOldMap) {
-  // Since we only have to add result types, just copy most everything.
-  OpBuilder b(*this);
-  auto newInst = b.create<InstanceOp>(getLoc(), mod.getType().getResults(),
-                                      getOperands(), (*this)->getAttrs());
-  for (size_t portNum = 0, e = newToOldMap.size(); portNum < e; ++portNum)
-    getResult(newToOldMap[portNum])
-        .replaceAllUsesWith(newInst.getResult(portNum));
-  return newInst;
-}
-
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -142,8 +130,8 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
 }
 
 // Remove the ports at the specified indexes.
-void MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
-                               ArrayRef<unsigned> outputs) {
+SmallVector<unsigned> MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
+                                                ArrayRef<unsigned> outputs) {
   FunctionType ftype = getType();
   Block *body = getBodyBlock();
   setType(ftype.getWithoutArgsAndResults(inputs, outputs));
@@ -160,12 +148,82 @@ void MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
   terminator->setOperands(newOutputValues);
 
   body->eraseArguments(inputs);
+
+  SmallVector<unsigned> newToOldResultMap;
+  DenseSet<unsigned> outputsRemoved(outputs.begin(), outputs.end());
+  for (unsigned resNum = 0; resNum < numResults; ++resNum)
+    if (!outputsRemoved.contains(resNum))
+      newToOldResultMap.push_back(resNum);
+  return newToOldResultMap;
 }
 
-void MSFTModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                         StringAttr name, ArrayRef<hw::PortInfo> ports,
+static void buildModule(OpBuilder &builder, OperationState &result,
+                        StringAttr name, const hw::ModulePortInfo &ports) {
+  using namespace mlir::function_like_impl;
+
+  // Add an attribute for the name.
+  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+
+  SmallVector<Attribute> argNames, resultNames;
+  SmallVector<Type, 4> argTypes, resultTypes;
+  SmallVector<Attribute> argAttrs, resultAttrs;
+  auto exportPortIdent = StringAttr::get("hw.exportPort", builder.getContext());
+
+  for (auto elt : ports.inputs) {
+    if (elt.direction == hw::PortDirection::INOUT &&
+        !elt.type.isa<hw::InOutType>())
+      elt.type = hw::InOutType::get(elt.type);
+    argTypes.push_back(elt.type);
+    argNames.push_back(elt.name);
+    Attribute attr;
+    if (elt.sym && !elt.sym.getValue().empty())
+      attr = builder.getDictionaryAttr(
+          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    else
+      attr = builder.getDictionaryAttr({});
+    argAttrs.push_back(attr);
+  }
+
+  for (auto elt : ports.outputs) {
+    resultTypes.push_back(elt.type);
+    resultNames.push_back(elt.name);
+    Attribute attr;
+    if (elt.sym && !elt.sym.getValue().empty())
+      attr = builder.getDictionaryAttr(
+          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    else
+      attr = builder.getDictionaryAttr({});
+    resultAttrs.push_back(attr);
+  }
+
+  // Record the argument and result types as an attribute.
+  auto type = builder.getFunctionType(argTypes, resultTypes);
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
+  result.addAttribute("parameters", builder.getDictionaryAttr({}));
+  result.addAttribute(mlir::function_like_impl::getArgDictAttrName(),
+                      builder.getArrayAttr(argAttrs));
+  result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
+                      builder.getArrayAttr(resultAttrs));
+  result.addRegion();
+}
+
+void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
+                         StringAttr name, hw::ModulePortInfo ports,
                          ArrayRef<NamedAttribute> params) {
-  assert(false && "Unimplemented");
+  buildModule(builder, result, name, ports);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto elt : ports.inputs)
+    body->addArgument(elt.type);
+
+  MSFTModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -351,7 +409,7 @@ static ParseResult parseParameterList(OpAsmParser &parser,
 /// Print a parameter list for a module or instance. Same format as HW dialect.
 static void printParameterList(OpAsmPrinter &p, Operation *op,
                                ArrayAttr parameters) {
-  if (parameters.empty())
+  if (!parameters || parameters.empty())
     return;
 
   p << '<';
@@ -618,6 +676,8 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
 
   return hw::ModulePortInfo(inputs, outputs);
 }
+
+void OutputOp::build(OpBuilder &builder, OperationState &result) {}
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.cpp.inc"
