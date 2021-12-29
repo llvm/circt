@@ -96,21 +96,17 @@ struct HWCleanupPass : public sv::HWCleanupBase<HWCleanupPass> {
   void runOnOperation() override;
 
   void runOnRegionsInOp(Operation &op);
-  void runOnGraphRegion(Region &region, bool shallow);
-  void runOnProceduralRegion(Region &region, bool shallow);
+  void runOnGraphRegion(Region &region);
+  void runOnProceduralRegion(Region &region);
 
 private:
   /// Inline all regions from the second operation into the first and delete the
   /// second operation.
-  void mergeOperationsIntoFrom(Operation *op1, Operation *op2,
-                               DenseSet<Operation *> &opsToRevisitRegionsIn) {
+  void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
     assert(op1 != op2 && "Cannot merge an op into itself");
     for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
       mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
 
-    // Remember that we need to revisit op1 because it changed.
-    opsToRevisitRegionsIn.erase(op2);
-    opsToRevisitRegionsIn.insert(op1);
     op2->erase();
     anythingChanged = true;
   }
@@ -123,7 +119,7 @@ void HWCleanupPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
-  runOnGraphRegion(getOperation().getBody(), /*shallow=*/false);
+  runOnGraphRegion(getOperation().getBody());
 
   // If we did not change anything in the graph mark all analysis as
   // preserved.
@@ -136,16 +132,15 @@ void HWCleanupPass::runOnOperation() {
 void HWCleanupPass::runOnRegionsInOp(Operation &op) {
   if (op.hasTrait<sv::ProceduralRegion>()) {
     for (auto &region : op.getRegions())
-      runOnProceduralRegion(region, /*shallow=*/false);
+      runOnProceduralRegion(region);
   } else {
     for (auto &region : op.getRegions())
-      runOnGraphRegion(region, /*shallow=*/false);
+      runOnGraphRegion(region);
   }
 }
 
-/// Run simplifications on the specified graph region.  If shallow is true, then
-/// we only look at the specified region, we don't recurse into subregions.
-void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
+/// Run simplifications on the specified graph region.
+void HWCleanupPass::runOnGraphRegion(Region &region) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
@@ -158,15 +153,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   sv::InitialOp initialOpSeen;
   sv::AlwaysCombOp alwaysCombOpSeen;
 
-  // As we merge operations with regions, we need to revisit the regions within
-  // them to see if merging the outer level allows simplifications in the inner
-  // level.  We do that after our pass so we only revisit each subregion once.
-  DenseSet<Operation *> opsToRevisitRegionsIn;
-
   for (Operation &op : llvm::make_early_inc_range(body)) {
-    // Recursively process any regions in the op before we visit it.
-    if (!shallow && op.getNumRegions() != 0)
-      runOnRegionsInOp(op);
     // Merge alwaysff and always operations by hashing them to check to see if
     // we've already encountered one.  If so, merge them and reprocess the body.
     if (isa<sv::AlwaysOp, sv::AlwaysFFOp>(op)) {
@@ -175,7 +162,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
       if (itAndInserted.second)
         continue;
       auto *existingAlways = *itAndInserted.first;
-      mergeOperationsIntoFrom(&op, existingAlways, opsToRevisitRegionsIn);
+      mergeOperationsIntoFrom(&op, existingAlways);
 
       *itAndInserted.first = &op;
       continue;
@@ -185,7 +172,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
     if (auto ifdefOp = dyn_cast<sv::IfDefOp>(op)) {
       auto *&entry = ifdefOps[ifdefOp.condAttr()];
       if (entry)
-        mergeOperationsIntoFrom(ifdefOp, entry, opsToRevisitRegionsIn);
+        mergeOperationsIntoFrom(ifdefOp, entry);
 
       entry = ifdefOp;
       continue;
@@ -194,8 +181,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
     // Merge initial ops anywhere in the module.
     if (auto initialOp = dyn_cast<sv::InitialOp>(op)) {
       if (initialOpSeen)
-        mergeOperationsIntoFrom(initialOp, initialOpSeen,
-                                opsToRevisitRegionsIn);
+        mergeOperationsIntoFrom(initialOp, initialOpSeen);
       initialOpSeen = initialOp;
       continue;
     }
@@ -203,42 +189,27 @@ void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
     // Merge always_comb ops anywhere in the module.
     if (auto alwaysComb = dyn_cast<sv::AlwaysCombOp>(op)) {
       if (alwaysCombOpSeen)
-        mergeOperationsIntoFrom(alwaysComb, alwaysCombOpSeen,
-                                opsToRevisitRegionsIn);
+        mergeOperationsIntoFrom(alwaysComb, alwaysCombOpSeen);
       alwaysCombOpSeen = alwaysComb;
       continue;
     }
   }
 
-  // Reprocess the merged body because this may have uncovered other
-  // simplifications.  Note that iterating over a set is generally not a stable
-  // thing to do, but this is a parallel operation whose order of visitation
-  // doesn't matter.
-  // TODO: This could be a parallel for-each loop.
-  for (auto *op : opsToRevisitRegionsIn) {
-    for (auto &reg : op->getRegions())
-      runOnGraphRegion(reg, /*shallow=*/true);
+  for (Operation &op : llvm::make_early_inc_range(body)) {
+    // Recursively process any regions in the op.
+    if (op.getNumRegions() != 0)
+      runOnRegionsInOp(op);
   }
 }
 
-/// Run simplifications on the specified procedural region.  If shallow is true,
-/// then we only look at the specified region, we don't recurse into subregions.
-void HWCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
+/// Run simplifications on the specified procedural region.
+void HWCleanupPass::runOnProceduralRegion(Region &region) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
 
-  // As we merge operations with regions, we need to revisit the regions within
-  // them to see if merging the outer level allows simplifications in the inner
-  // level.  We do that after our pass so we only revisit each subregion once.
-  DenseSet<Operation *> opsToRevisitRegionsIn;
-
   Operation *lastSideEffectingOp = nullptr;
   for (Operation &op : llvm::make_early_inc_range(body)) {
-    // Recursively process any regions in the op before we visit it.
-    if (!shallow && op.getNumRegions() != 0)
-      runOnRegionsInOp(op);
-
     // Merge procedural ifdefs with neighbors in the procedural region.
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(op)) {
       if (auto prevIfDef =
@@ -246,7 +217,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
         if (ifdef.cond() == prevIfDef.cond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
-          mergeOperationsIntoFrom(ifdef, prevIfDef, opsToRevisitRegionsIn);
+          mergeOperationsIntoFrom(ifdef, prevIfDef);
         }
       }
     }
@@ -257,7 +228,7 @@ void HWCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
         if (ifop.cond() == prevIf.cond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
-          mergeOperationsIntoFrom(ifop, prevIf, opsToRevisitRegionsIn);
+          mergeOperationsIntoFrom(ifop, prevIf);
         }
       }
     }
@@ -267,14 +238,10 @@ void HWCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
       lastSideEffectingOp = &op;
   }
 
-  // Reprocess the merged body because this may have uncovered other
-  // simplifications.  Note that iterating over a set is generally not a stable
-  // thing to do, but this is a parallel operation whose order of visitation
-  // doesn't matter.
-  // TODO: This could be a parallel for-each loop.
-  for (auto *op : opsToRevisitRegionsIn) {
-    for (auto &region : op->getRegions())
-      runOnProceduralRegion(region, /*shallow=*/true);
+  for (Operation &op : llvm::make_early_inc_range(body)) {
+    // Recursively process any regions in the op.
+    if (op.getNumRegions() != 0)
+      runOnRegionsInOp(op);
   }
 }
 

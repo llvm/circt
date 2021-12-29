@@ -274,3 +274,35 @@ hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (x: i1, y: i1) {
 
   hw.output %out1, %out2 : i1, i1
 }
+
+// CHECK-LABEL: hw.module @nested_regions(
+hw.module @nested_regions() {
+  sv.initial {
+    sv.ifdef.procedural "L1" {
+      sv.ifdef.procedural "L2" {
+        sv.ifdef.procedural "L3" {
+          sv.fwrite "A"
+        }
+      }
+    }
+  }
+  sv.initial {
+    sv.ifdef.procedural "L1" {
+      sv.ifdef.procedural "L2" {
+        sv.ifdef.procedural "L3" {
+          sv.fwrite "B"
+        }
+      }
+    }
+  }
+  // CHECK-NEXT:  sv.initial  {
+  // CHECK-NEXT:    sv.ifdef.procedural "L1"  {
+  // CHECK-NEXT:      sv.ifdef.procedural "L2"  {
+  // CHECK-NEXT:        sv.ifdef.procedural "L3"  {
+  // CHECK-NEXT:          sv.fwrite "A"
+  // CHECK-NEXT:          sv.fwrite "B"
+  // CHECK-NEXT:        }
+  // CHECK-NEXT:      }
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:  }
+}
