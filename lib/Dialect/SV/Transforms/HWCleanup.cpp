@@ -107,7 +107,6 @@ private:
     for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
       mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
 
-    // Remember that we need to revisit op1 because it changed.
     op2->erase();
     anythingChanged = true;
   }
