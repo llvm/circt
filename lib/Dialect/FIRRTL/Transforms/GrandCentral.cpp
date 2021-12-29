@@ -803,7 +803,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 unsigned index = bundle.getIndexForFieldID(fieldID);
                 tpe = bundle.getSubTypeByFieldID(fieldID);
                 fieldID -= bundle.getFieldID(index);
-                // TODO: Handle invalid field names somehow.
+                // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
+                // be renamed at ExportVerilog so the path constructed here
+                // might become invalid. We can use an inner name ref to encode
+                // a reference to a subfield.
                 path.append("." + Twine(bundle.getElement(index).name));
               })
               .Default([&](auto op) {
