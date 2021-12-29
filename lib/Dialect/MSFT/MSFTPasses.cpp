@@ -351,8 +351,8 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
     auto usersIter = localPartMembers.find(part.sym_nameAttr());
-    if (usersIter != localPartMembers.end())
-      this->partition(part, usersIter->second);
+    // if (usersIter != localPartMembers.end())
+    //   this->partition(part, usersIter->second);
     part.erase();
   }
 }
@@ -478,18 +478,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //     - Construct the new instance operands from the old ones + the cloned
   //     ops' results.
   for (InstanceOp inst : moduleInstantiations[mod]) {
-    OpBuilder b(inst);
 
-    // Since we only have to add result types, just copy most everything.
-    SmallVector<Type, 64> resTypes(inst.getResultTypes());
-    resTypes.append(newResTypes);
-    auto newInst = cast<InstanceOp>(b.insert(Operation::create(
-        OperationState(inst->getLoc(), inst->getName().getStringRef(),
-                       inst->getOperands(), resTypes, inst->getAttrs()))));
-    size_t resultNum = 0;
-    for (Value origRes : inst.getResults())
-      origRes.replaceAllUsesWith(newInst->getResult(resultNum++));
+    SmallVector<size_t> resValues;
+    for (size_t i = 0, e = inst.getNumResults(); i < e; ++i)
+      resValues.push_back(i);
+    size_t resultNum = inst.getNumResults();
+    InstanceOp newInst = inst.getWithNewResults(mod, resValues);
 
+    OpBuilder b(newInst);
     SmallVector<Value, 64> newOperands(inst->getOperands());
     for (Operation *op : ops) {
       BlockAndValueMapping map;
@@ -649,10 +645,64 @@ struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
   void runOnOperation() override;
 
 private:
+  void cleanup(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
-void WireCleanupPass::runOnOperation() {}
+void WireCleanupPass::runOnOperation() {
+  ModuleOp topMod = getOperation();
+  populateSymbolCache(topMod);
+  SmallVector<MSFTModuleOp> sortedMods;
+  getAndSortModules(topMod, sortedMods);
+
+  for (auto mod : sortedMods)
+    cleanup(mod);
+}
+
+void WireCleanupPass::cleanup(MSFTModuleOp mod) {
+  Block *body = mod.getBodyBlock();
+  Operation *terminator = body->getTerminator();
+  DenseMap<Value, hw::PortInfo> passThroughs;
+
+  SmallVector<unsigned> inputPortsToRemove;
+  for (hw::PortInfo inputPort : mod.getPorts().inputs) {
+    BlockArgument portArg = body->getArgument(inputPort.argNum);
+    bool removePort = true;
+    for (OpOperand user : portArg.getUsers()) {
+      if (user.getOwner() == terminator)
+        passThroughs[portArg] = inputPort;
+      else
+        removePort = false;
+    }
+    if (removePort)
+      inputPortsToRemove.push_back(inputPort.argNum);
+  }
+
+  DenseMap<unsigned, unsigned> outputToInputIdx;
+  SmallVector<unsigned> outputPortsToRemove;
+  for (hw::PortInfo outputPort : mod.getPorts().outputs) {
+    assert(outputPort.argNum <= terminator->getNumOperands() && "Invalid IR");
+    Value outputValue = terminator->getOperand(outputPort.argNum);
+    auto inputNumF = passThroughs.find(outputValue);
+    if (inputNumF == passThroughs.end())
+      continue;
+    hw::PortInfo inputPort = inputNumF->second;
+    outputToInputIdx[outputPort.argNum] = inputPort.argNum;
+    outputPortsToRemove.push_back(outputPort.argNum);
+  }
+
+  mod.removePorts(inputPortsToRemove, outputPortsToRemove);
+  for (InstanceOp inst : moduleInstantiations[mod]) {
+    for (auto idxPair : outputToInputIdx) {
+      size_t outputPortNum = idxPair.first;
+      assert(outputPortNum <= inst.getNumResults());
+      size_t inputPortNum = idxPair.second;
+      assert(inputPortNum <= inst.getNumOperands());
+      inst.getResult(outputPortNum)
+          .replaceAllUsesWith(inst.getOperand(inputPortNum));
+    }
+  }
+}
 
 namespace circt {
 namespace msft {

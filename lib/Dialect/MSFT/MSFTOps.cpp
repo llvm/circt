@@ -20,6 +20,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/FunctionSupport.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -36,6 +37,18 @@ Operation *InstanceOp::getReferencedModule() {
 
 StringAttr InstanceOp::getResultName(size_t idx) {
   return hw::getModuleResultNameAttr(getReferencedModule(), idx);
+}
+
+InstanceOp InstanceOp::getWithNewResults(MSFTModuleOp mod,
+                                         SmallVectorImpl<size_t> &newToOldMap) {
+  // Since we only have to add result types, just copy most everything.
+  OpBuilder b(*this);
+  auto newInst = b.create<InstanceOp>(getLoc(), mod.getType().getResults(),
+                                      getOperands(), (*this)->getAttrs());
+  for (size_t portNum = 0, e = newToOldMap.size(); portNum < e; ++portNum)
+    getResult(newToOldMap[portNum])
+        .replaceAllUsesWith(newInst.getResult(portNum));
+  return newInst;
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -126,6 +139,27 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   // Finalize and return.
   setType(FunctionType::get(ctxt, modifiedArgs, modifiedResults));
   return newBlockArgs;
+}
+
+// Remove the ports at the specified indexes.
+void MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
+                               ArrayRef<unsigned> outputs) {
+  FunctionType ftype = getType();
+  Block *body = getBodyBlock();
+  setType(ftype.getWithoutArgsAndResults(inputs, outputs));
+
+  unsigned numResults = ftype.getNumResults();
+  llvm::BitVector skipOutputs(numResults);
+  SmallVector<Value> newOutputValues;
+  Operation *terminator = body->getTerminator();
+  for (unsigned i : outputs)
+    skipOutputs.set(i);
+  for (unsigned i = 0; i < numResults; ++i)
+    if (!skipOutputs.test(i))
+      newOutputValues.push_back(terminator->getOperand(i));
+  terminator->setOperands(newOutputValues);
+
+  body->eraseArguments(inputs);
 }
 
 void MSFTModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,

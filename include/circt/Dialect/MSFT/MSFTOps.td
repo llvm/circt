@@ -42,6 +42,10 @@ def InstanceOp : MSFTOp<"instance", [
     StringAttr instanceNameAttr() {
       return sym_nameAttr();
     }
+
+    // Update the results.
+    InstanceOp getWithNewResults(MSFTModuleOp mod,
+                                 SmallVectorImpl<size_t> &newToOldMap);
   }];
 
   /// sym keyword for optional symbol simplifies parsing
@@ -95,6 +99,9 @@ def MSFTModuleOp : MSFTOp<"module",
     SmallVector<BlockArgument> addPorts(
       ArrayRef<std::pair<StringAttr, Type>> inputs,
       ArrayRef<std::pair<StringAttr, Value>> outputs);
+
+    // Remove the ports at the specified indexes.
+    void removePorts(ArrayRef<unsigned> inputs, ArrayRef<unsigned> outputs);
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
