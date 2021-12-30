@@ -32,7 +32,7 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
-  let results = (outs AnySignlessIntegerOrInOutType:$result);
+  let results = (outs AnyType:$result);
   let assemblyFormat = [{
     $string (`(` $operands^ `)`)?
       `:` functional-type($operands, $result) attr-dict 
@@ -68,7 +68,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols );
-  let results = (outs AnySignlessIntegerOrInOutType:$result);
+  let results = (outs AnyType:$result);
   let assemblyFormat = [{
     $string (`(` $operands^ `)`)?
       `:` functional-type($operands, $result) attr-dict 
