@@ -222,7 +222,7 @@ struct SharedEmitterState {
 static inline bool isExpressionAlwaysInline(Operation *op) {
   // We need to emit array indexes inline per verilog "lvalue" semantics.
   if (isa<sv::ArrayIndexInOutOp>(op) || isa<sv::StructFieldInOutOp>(op) ||
-      isa<sv::ReadInOutOp>(op))
+      isa<sv::IndexedPartSelectInOutOp>(op) || isa<sv::ReadInOutOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.

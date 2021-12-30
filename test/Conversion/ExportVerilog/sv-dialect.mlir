@@ -445,6 +445,19 @@ hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
   sv.assign %1, %true : i1
 }
 
+// CHECK-LABEL: module PartSelectInoutInline(
+hw.module @PartSelectInoutInline(%v:i40) {
+  %r = sv.reg : !hw.inout<i42>
+  %c2_i3 = hw.constant 2 : i3
+  %a = sv.indexed_part_select_inout %r[%c2_i3 : 40] : !hw.inout<i42>, i3
+  // CHECK:      localparam [2:0] _T = 3'h2;
+  // CHECK-NEXT: initial
+  // CHECK-NEXT:   r[_T +: 40] = v;
+  sv.initial {
+    sv.bpassign %a, %v : i40
+  }
+}
+
 // CHECK-LABEL: module AggregateConstantXZ(
 hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3xi4>>,
                                      res2: !hw.struct<foo: i2, bar: !hw.array<3xi4>>) {
