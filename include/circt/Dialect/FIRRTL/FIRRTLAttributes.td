@@ -141,4 +141,52 @@ def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
   let extraClassDeclaration = hasName;
 }
 
+
+/// An attribute describing a module parameter, or instance parameter
+/// specification.
+def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl"> {
+  let summary = "module or instance parameter definition";
+
+  /// The value of the attribute - in a module, this is the default
+  /// value (and may be missing).  In an instance, this is a required field that
+  /// specifies the value being passed.  The verilog emitter omits printing the
+  /// parameter for an instance when the applied value and the default value are
+  /// the same.
+  let parameters = (ins "::mlir::StringAttr":$name,
+                        "::mlir::TypeAttr":$type,
+                        "::mlir::Attribute":$value);
+  let mnemonic = "param.decl";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
+                                         "::mlir::Type":$type),
+      "auto *context = type.getContext();\n"
+      "return $_get(context, name, TypeAttr::get(type), Attribute());">,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
+                                         "::mlir::Type":$type),
+      "return get(StringAttr::get(type.getContext(), name), type);">,
+
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
+                                        "::mlir::Attribute":$value),
+      "auto *context = value.getContext();\n"
+      "return $_get(context, name, TypeAttr::get(value.getType()), value);">,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
+                                        "::mlir::Attribute":$value),
+      "return get(StringAttr::get(value.getContext(), name), value);">
+  ];
+
+  let extraClassDeclaration = [{
+    static ParamDeclAttr getWithName(ParamDeclAttr param,
+                                     ::mlir::StringAttr name) {
+      return get(param.getContext(), name, param.getType(), param.getValue());
+    }
+  }];
+}
+
+/// An array of ParamDeclAttr's that may or may not have a 'value' specified,
+/// to be used on hw.module or hw.instance.  The hw.instance verifier further
+/// ensures that all the values are specified.
+def ParamDeclArrayAttr
+  : TypedArrayAttrBase<ParamDeclAttr, "parameter array attribute">;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
