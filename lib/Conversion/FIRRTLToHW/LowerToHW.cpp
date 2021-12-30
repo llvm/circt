@@ -1134,11 +1134,11 @@ struct MixedModuleNamespace : Namespace {
   void add(hw::HWModuleOp module) {
     for (auto port : module.getAllPorts())
       if (port.sym && !port.sym.getValue().empty())
-        internal.insert(port.sym.getValue());
+        nextIndex.insert({port.sym.getValue(), 0});
     module.walk([&](Operation *op) {
       auto attr = op->getAttrOfType<StringAttr>("inner_sym");
       if (attr)
-        internal.insert(attr.getValue());
+        nextIndex.insert({attr.getValue(), 0});
     });
   }
 };

@@ -29,16 +29,16 @@ class Namespace {
 public:
   Namespace() {}
   Namespace(const Namespace &other) = default;
-  Namespace(Namespace &&other) : internal(std::move(other.internal)) {}
+  Namespace(Namespace &&other) : nextIndex(std::move(other.nextIndex)) {}
 
   Namespace &operator=(const Namespace &other) = default;
   Namespace &operator=(Namespace &&other) {
-    internal = std::move(other.internal);
+    nextIndex = std::move(other.nextIndex);
     return *this;
   }
 
   /// Empty the namespace.
-  void clear() { internal.clear(); }
+  void clear() { nextIndex.clear(); }
 
   /// Return a unique name, derived from the input `name`, and add the new name
   /// to the internal namespace.  There are two possible outcomes for the
@@ -51,7 +51,7 @@ public:
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
     llvm::SmallString<64> tryName;
-    auto inserted = internal.insert(name.toStringRef(tryName));
+    auto inserted = nextIndex.insert({name.toStringRef(tryName), 0});
     if (inserted.second)
       return inserted.first->getKey();
 
@@ -59,22 +59,24 @@ public:
     if (tryName.empty())
       name.toVector(tryName); // toStringRef may leave tryName unfilled
 
-    // Indexes between [0, nextIndex[tryName]) are already used, so skip
-    // them.
+    // Indexes less than nextIndex[tryName] are lready used, so skip them.
+    // Indexes larger than nextIndex[tryName] may be used in another name.
     size_t &i = nextIndex[tryName];
     tryName.push_back('_');
     size_t baseLength = tryName.size();
-    for (;;) {
+    do {
       tryName.resize(baseLength);
       Twine(i++).toVector(tryName); // append integer to tryName
-      auto inserted = internal.insert(tryName);
-      if (inserted.second)
-        return inserted.first->getKey();
-    }
+      inserted = nextIndex.insert({tryName, 0});
+    } while (!inserted.second);
+
+    return inserted.first->getKey();
   }
 
 protected:
-  llvm::StringSet<> internal;
+  // The "next index" that will be tried when trying to unique a string within a
+  // namespace.  It follows that all values less than the "next index" value are
+  // already used.
   llvm::StringMap<size_t> nextIndex;
 };
 
