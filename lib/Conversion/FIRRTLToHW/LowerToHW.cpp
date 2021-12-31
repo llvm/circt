@@ -3402,7 +3402,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
     Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
     StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
-
   StringRef opName = op->getName().stripDialect();
   auto isAssert = opName == "assert";
   auto isCover = opName == "cover";

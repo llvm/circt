@@ -104,7 +104,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule", 
+def FExtModuleOp : FIRRTLOp<"extmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
        DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL extmodule";
@@ -146,4 +146,3 @@ def NonLocalAnchor : FIRRTLOp<"nla",
   let results = (outs);
   let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
 }
-
