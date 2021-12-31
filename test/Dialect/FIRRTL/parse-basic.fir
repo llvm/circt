@@ -27,12 +27,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
     defname = myextmodule
 
-  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
-  ; CHECK: attributes {defname = "name_thing",
-  ; CHECK: parameters = {DEFAULT = 0 : ui32,
-  ; CHECK:               DEPTH = 3.242000e+01 : f64,
-  ; CHECK:               FORMAT = "xyz_timeout=%d\0A",
-  ; CHECK:               WIDTH = 32 : ui32}}
+  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule
+  ; CHECK-SAME:    <FORMAT: none = "xyz_timeout=%d\0A",
+  ; CHECK-SAME:     DEFAULT: ui32 = 0,
+  ; CHECK-SAME:     WIDTH: ui32 = 32,
+  ; CHECK-SAME:     DEPTH: f64 = 3.242000e+01>
+  ; CHECK-SAME:    (in in: !firrtl.uint,
+  ; CHECK-SAME:     out out: !firrtl.uint<8>)
+  ; CHECK-SAME:    attributes {defname = "name_thing"}
   ; CHECK-NOT: {
   extmodule MyParameterizedExtModule :
     input in: UInt
@@ -575,8 +577,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     tmp12 <= SInt<4>(-4)
     ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.sint<4>
 
-  ; CHECK-LABEL: firrtl.extmodule @issue183()
-  ; CHECK: attributes {parameters = {A = -1 : si32}}
+  ; CHECK-LABEL: firrtl.extmodule @issue183<A: si32 = -1>()
   extmodule issue183:
      parameter A = -1
 
@@ -829,9 +830,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     c <= mux(sel, a, b)
 
   ; CHECK-LABEL: firrtl.extmodule @RawStringParam
-  ; CHECK: parameters = {FORMAT = "xyz_timeout=%d\\n",
-  ; CHECK:               MIXED_QUOTES = "\22'\\\22",
-  ; CHECK:               TYPE = "bit"}}
+  ; CHECK-SAME:    <TYPE: none = "bit",
+  ; CHECK-SAME:     FORMAT: none = "xyz_timeout=%d\\n",
+  ; CHECK-SAME:     MIXED_QUOTES: none = "\22'\\\22">
   extmodule RawStringParam :
     parameter TYPE = 'bit'
     parameter FORMAT = 'xyz_timeout=%d\n'

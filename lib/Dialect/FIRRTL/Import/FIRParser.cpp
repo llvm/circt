@@ -3439,7 +3439,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       return failure();
   }
 
-  NamedAttrList parameters;
+  SmallVector<Attribute> parameters;
   SmallPtrSet<StringAttr, 8> seenNames;
 
   // Parse the parameter list.
@@ -3497,15 +3497,13 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     auto nameId = builder.getIdentifier(paramName);
     if (!seenNames.insert(nameId).second)
       return emitError(loc, "redefinition of parameter '" + paramName + "'");
-    parameters.append(nameId, value);
+    parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
 
-  if (!parameters.empty())
-    fmodule->setAttr("parameters",
-                     DictionaryAttr::get(getContext(), parameters));
+  fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
 
   return success();
 }
