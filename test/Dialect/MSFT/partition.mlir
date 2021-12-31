@@ -1,15 +1,15 @@
 // RUN: circt-opt %s --msft-partition -verify-diagnostics -split-input-file | FileCheck %s
 // RUN: circt-opt %s --msft-partition --msft-wire-cleanup -verify-diagnostics -split-input-file | FileCheck --check-prefix=CLEANUP %s
 
-msft.module @top {} (%clk : i1) -> () {
+msft.module @top {} (%clk : i1) -> (out1: i32, out2: i1) {
   msft.partition @part1, "dp"
 
-  msft.instance @b @B(%clk) : (i1) -> (i32)
+  %res1 = msft.instance @b @B(%clk) : (i1) -> (i32)
 
   %c0 = hw.constant 0 : i1
-  msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i1) -> (i1)
+  %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i1) -> (i1)
 
-  msft.output
+  msft.output %res1, %res2 : i32, i1
 }
 
 msft.module.extern @Extern (%foo_a: i1) -> (foo_x: i1)

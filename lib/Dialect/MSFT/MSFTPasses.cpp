@@ -280,6 +280,7 @@ void PassCommon::updateInstances(
         getOperandsFunc) {
   SmallVector<InstanceOp, 1> newInstances;
   for (InstanceOp inst : moduleInstantiations[mod]) {
+    assert(inst->getParentOp());
     OpBuilder b(inst);
     auto newInst =
         b.create<InstanceOp>(inst.getLoc(), mod.getType().getResults(),
@@ -294,11 +295,11 @@ void PassCommon::updateInstances(
     SmallVector<Value> newOperands;
     getOperandsFunc(newInst, inst, newOperands);
     newInst->setOperands(newOperands);
-    inst.erase();
 
     newInstances.push_back(newInst);
+    inst->dropAllUses();
+    inst->erase();
   }
-  moduleInstantiations[mod].swap(newInstances);
 }
 
 // Run a post-order DFS.
@@ -325,6 +326,8 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
                                    SmallVectorImpl<MSFTModuleOp> &mods) {
   // Add here _before_ we go deeper to prevent infinite recursion.
   DenseSet<MSFTModuleOp> modsSeen;
+  mods.clear();
+  moduleInstantiations.clear();
   topMod.walk(
       [&](MSFTModuleOp mod) { getAndSortModulesVisitor(mod, mods, modsSeen); });
 }
@@ -701,10 +704,12 @@ void WireCleanupPass::runOnOperation() {
   SmallVector<MSFTModuleOp> sortedMods;
   getAndSortModules(topMod, sortedMods);
 
-  for (auto mod : sortedMods) {
+  for (auto mod : sortedMods)
     bubbleWiresUp(mod);
+
+  getAndSortModules(topMod, sortedMods);
+  for (auto mod : sortedMods)
     sinkWiresDown(mod);
-  }
 }
 
 void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
@@ -719,7 +724,7 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   for (unsigned resNum = 0, e = inst.getNumResults(); resNum < e; ++resNum) {
     bool allLoops = true;
     for (auto &use : inst.getResult(resNum).getUses()) {
-      if (use.getOwner() != inst)
+      if (use.getOwner() != inst.getOperation())
         allLoops = false;
       else
         resultOperandConnection.push_back(
@@ -739,10 +744,9 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   }
 
   auto newToOldResultMap = mod.removePorts(argsToErase, resultsToErase);
-  llvm::sort(argsToErase);
-
   auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                          SmallVectorImpl<Value> &newOperands) {
+    llvm::sort(argsToErase);
     unsigned mergeJoinCtr = 0;
     for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
          ++argNum) {

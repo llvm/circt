@@ -31,12 +31,15 @@ using namespace msft;
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  assert(topLevelModuleOp && "Required to have a ModuleOp parent.");
+  if (!topLevelModuleOp)
+    return nullptr;
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  return hw::getModuleResultNameAttr(getReferencedModule(), idx);
+  if (auto refMod = getReferencedModule())
+    return hw::getModuleResultNameAttr(refMod, idx);
+  return StringAttr();
 }
 
 /// Suggest a name for each result value based on the saved result names
