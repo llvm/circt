@@ -274,6 +274,13 @@ protected:
 };
 } // anonymous namespace
 
+/// Update all the instantiations of 'mod' to match the port list. For any
+/// output ports which survived, automatically map the result according to
+/// `newToOldResultMap`. Calls 'getOperandsFunc' with the new instance op, the
+/// old instance op, and expects the operand vector to return filled.
+/// `getOperandsFunc` can (and often does) modify other operations. The update
+/// call deletes the original instance op, so all references are invalidated
+/// after this call.
 void PassCommon::updateInstances(
     MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
@@ -300,6 +307,7 @@ void PassCommon::updateInstances(
     inst->dropAllUses();
     inst->erase();
   }
+  moduleInstantiations[mod].swap(newInstances);
 }
 
 // Run a post-order DFS.
@@ -707,11 +715,11 @@ void WireCleanupPass::runOnOperation() {
   for (auto mod : sortedMods)
     bubbleWiresUp(mod);
 
-  getAndSortModules(topMod, sortedMods);
-  for (auto mod : sortedMods)
+  for (auto mod : llvm::reverse(sortedMods))
     sinkWiresDown(mod);
 }
 
+/// Sink all the instance connections which are loops.
 void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation.
@@ -760,6 +768,7 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   updateInstances(mod, newToOldResultMap, getOperands);
 }
 
+/// Push up any wires which are simply passed-through.
 void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
