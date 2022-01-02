@@ -18,6 +18,7 @@
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -2831,6 +2832,16 @@ public:
   void runOnOperation() override {
     auto op = getOperation();
     auto *ctx = op.getContext();
+
+    // Lowering to FIRRTL requires that every value is used exactly once. To
+    // ensure this precondition, run fork/sink materialization.
+    PassManager pm(ctx);
+    pm.addNestedPass<handshake::FuncOp>(
+        createHandshakeMaterializeForksSinksPass());
+    if (failed(pm.run(op))) {
+      signalPassFailure();
+      return;
+    }
 
     // Resolve the instance graph to get a top-level module.
     std::string topLevel;
