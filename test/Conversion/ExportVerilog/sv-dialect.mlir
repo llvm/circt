@@ -468,6 +468,17 @@ hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3x
   hw.output %0, %1 : !hw.struct<foo: i2, bar: !hw.array<3xi4>>, !hw.struct<foo: i2, bar: !hw.array<3xi4>>
 }
 
+// CHECK-LABEL: module AggregateVerbatim(
+hw.module @AggregateVerbatim() -> (res1: !hw.struct<a: i1>, res2: !hw.array<1xi1>, res3: !hw.array<1xi1>) {
+  %a = sv.verbatim.expr "STRUCT_A_" : () -> !hw.struct<a: i1>
+  %b = sv.verbatim.expr "ARRAY_" : () -> !hw.array<1xi1>
+  %c = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%a, %b) : (!hw.struct<a: i1>, !hw.array<1xi1>) -> !hw.array<1xi1>
+  hw.output %a, %b, %c: !hw.struct<a: i1>, !hw.array<1xi1>, !hw.array<1xi1>
+  // CHECK: assign res1 = STRUCT_A_;
+  // CHECK: assign res2 = ARRAY_;
+  // CHECK: assign res3 = MACRO(STRUCT_A_, ARRAY_);
+}
+
 // CHECK-LABEL: issue508
 // https://github.com/llvm/circt/issues/508
 hw.module @issue508(%in1: i1, %in2: i1) {
