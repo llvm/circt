@@ -537,7 +537,8 @@ void PartitionPass::partition(DesignPartitionOp partOp,
 
   //*************
   //   Determine the partition module's interface. Keep some bookkeeping around.
-  SmallVector<hw::PortInfo, 128> ports;
+  SmallVector<hw::PortInfo> inputPorts;
+  SmallVector<hw::PortInfo> outputPorts;
   SmallVector<Value, 64> partInstInputs;
   SmallVector<Value, 64> partInstOutputs;
 
@@ -550,15 +551,22 @@ void PartitionPass::partition(DesignPartitionOp partOp,
 
     for (auto port :
          llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
-      ports.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-          /*direction*/ port.direction,
-          /*type*/ port.type,
-          /*argNum*/ ports.size()});
-      if (port.direction == hw::PortDirection::OUTPUT)
+
+      if (port.direction == hw::PortDirection::OUTPUT) {
         partInstOutputs.push_back(inst->getResult(port.argNum));
-      else
+        outputPorts.push_back(hw::PortInfo{
+            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+            /*direction*/ port.direction,
+            /*type*/ port.type,
+            /*argNum*/ outputPorts.size()});
+      } else {
         partInstInputs.push_back(inst->getOperand(port.argNum));
+        inputPorts.push_back(hw::PortInfo{
+            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+            /*direction*/ port.direction,
+            /*type*/ port.type,
+            /*argNum*/ inputPorts.size()});
+      }
     }
   };
   // Handle all other operators.
@@ -566,23 +574,23 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     StringRef name = ::getOpName(op);
 
     for (OpOperand &oper : op->getOpOperands()) {
-      ports.push_back(hw::PortInfo{
+      inputPorts.push_back(hw::PortInfo{
           /*name*/ StringAttr::get(
               ctxt,
               name + "." + getOperandName(oper, topLevelSyms, nameBuffer)),
           /*direction*/ hw::PortDirection::INPUT,
           /*type*/ oper.get().getType(),
-          /*argNum*/ ports.size()});
+          /*argNum*/ inputPorts.size()});
       partInstInputs.push_back(oper.get());
     }
 
     for (OpResult res : op->getOpResults()) {
-      ports.push_back(hw::PortInfo{
+      outputPorts.push_back(hw::PortInfo{
           /*name*/ StringAttr::get(
               ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
           /*direction*/ hw::PortDirection::OUTPUT,
           /*type*/ res.getType(),
-          /*argNum*/ ports.size()});
+          /*argNum*/ outputPorts.size()});
       partInstOutputs.push_back(res);
     }
   };
@@ -605,17 +613,22 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   //   Construct the partition module and replace the design partition op.
 
   // Build the module.
+  hw::ModulePortInfo modPortInfo(inputPorts, outputPorts);
   auto partMod =
       OpBuilder::atBlockEnd(getOperation().getBody())
-          .create<hw::HWModuleOp>(loc, partOp.verilogNameAttr(), ports);
+          .create<MSFTModuleOp>(loc, partOp.verilogNameAttr(), modPortInfo,
+                                ArrayRef<NamedAttribute>{});
   Block *partBlock = partMod.getBodyBlock();
   partBlock->clear();
   auto partBuilder = OpBuilder::atBlockEnd(partBlock);
 
   // Replace partOp with an instantion of the partition.
-  auto partInst = OpBuilder(partOp).create<hw::InstanceOp>(
-      loc, partMod, partOp.getNameAttr(), partInstInputs, ArrayAttr(),
-      SymbolTable::getSymbolName(partOp));
+  SmallVector<Type> instRetTypes(
+      llvm::map_range(partInstOutputs, [](Value v) { return v.getType(); }));
+  auto partInst = OpBuilder(partOp).create<InstanceOp>(
+      loc, instRetTypes, partOp.getNameAttr(),
+      SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
+      SymbolRefAttr());
 
   // Replace original ops' outputs with partition outputs.
   assert(partInstOutputs.size() == partInst.getNumResults());
@@ -651,7 +664,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
         outputs[outputNum] = newOp->getResult(resNum);
     op->erase();
   }
-  partBuilder.create<hw::OutputOp>(loc, outputs);
+  partBuilder.create<OutputOp>(loc, outputs);
 }
 
 namespace circt {
