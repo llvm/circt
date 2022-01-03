@@ -666,11 +666,12 @@ private:
 
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
-  hw::InnerRefAttr getInnerRefTo(Operation *op);
+  hw::InnerRefAttr getInnerRefTo(Operation *op, unsigned fieldID = 0);
 
   /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
   /// to that port.
-  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
+  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx,
+                                 unsigned fieldID = 0);
 };
 
 } // namespace
@@ -751,6 +752,14 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
 
+        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
+        if (fieldID > tpe.getMaxFieldID()) {
+          leafValue.getDefiningOp()->emitError()
+              << "subannotation with fieldID=" << fieldID
+              << " is too large for type " << tpe;
+          return false;
+        }
+
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
@@ -777,42 +786,9 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         path += '.';
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-          path += getInnerRefTo(module, blockArg.getArgNumber());
+          path += getInnerRefTo(module, blockArg.getArgNumber(), fieldID);
         } else {
-          path += getInnerRefTo(leafValue.getDefiningOp());
-        }
-
-        FIRRTLType tpe = leafValue.getType().cast<FIRRTLType>();
-        if (fieldID > tpe.getMaxFieldID()) {
-          leafValue.getDefiningOp()->emitError()
-              << "subannotation with fieldID=" << fieldID
-              << " is too large for type " << tpe;
-          return false;
-        }
-
-        // Construct a path given by fieldID.
-        while (fieldID) {
-          TypeSwitch<FIRRTLType>(tpe)
-              .template Case<FVectorType>([&](FVectorType vector) {
-                unsigned index = vector.getIndexForFieldID(fieldID);
-                tpe = vector.getSubTypeByFieldID(fieldID);
-                fieldID -= vector.getFieldID(index);
-                path.append("[" + Twine(index) + "]");
-              })
-              .template Case<BundleType>([&](BundleType bundle) {
-                unsigned index = bundle.getIndexForFieldID(fieldID);
-                tpe = bundle.getSubTypeByFieldID(fieldID);
-                fieldID -= bundle.getFieldID(index);
-                // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
-                // be renamed at ExportVerilog so the path constructed here
-                // might become invalid. We can use an inner name ref to encode
-                // a reference to a subfield.
-                path.append("." + Twine(bundle.getElement(index).name));
-              })
-              .Default([&](auto op) {
-                llvm_unreachable(
-                    "fieldID > maxFieldID case must be already handled");
-              });
+          path += getInnerRefTo(leafValue.getDefiningOp(), fieldID);
         }
 
         // Assemble the verbatim op.
@@ -1649,16 +1625,18 @@ StringAttr GrandCentralPass::getOrAddInnerSym(FModuleLike module,
   return attr;
 }
 
-hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op) {
+hw::InnerRefAttr GrandCentralPass::getInnerRefTo(Operation *op,
+                                                 unsigned fieldID) {
   return hw::InnerRefAttr::get(
       SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+      getOrAddInnerSym(op), fieldID);
 }
 
 hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,
-                                                 size_t portIdx) {
+                                                 size_t portIdx,
+                                                 unsigned fieldID) {
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                               getOrAddInnerSym(module, portIdx));
+                               getOrAddInnerSym(module, portIdx), fieldID);
 }
 
 //===----------------------------------------------------------------------===//

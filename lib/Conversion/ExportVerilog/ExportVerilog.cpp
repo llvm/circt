@@ -492,6 +492,52 @@ static bool isOkToBitSelectFrom(Value v) {
   return false;
 }
 
+/// Construct a access path which points at the element given by `fieldID`.
+/// TODO: This function should be removed once HW/SV dialects implement
+/// fieldID utilities like FIRRTL dialect.
+static bool constructAccessPathToFieldID(SmallString<16> &path, Type type,
+                                         unsigned fieldID) {
+  std::function<bool(Type)> constructPath = [&](Type type) {
+    if (fieldID == 0)
+      return true;
+    return TypeSwitch<Type, bool>(type)
+        .Case<hw::StructType>([&](hw::StructType structTy) {
+          path.append(".");
+          unsigned size = path.size();
+          for (auto elem : structTy.getElements()) {
+            // FIXME: Rename invalid verilog field names.
+            path.append(elem.name);
+            fieldID--;
+            if (constructPath(elem.type))
+              return true;
+            path.resize(size);
+          }
+          return false;
+        })
+        .Case<hw::ArrayType, hw::UnpackedArrayType>([&](auto arrayType) {
+          path.push_back('[');
+          unsigned size = path.size();
+          for (auto idx : llvm::seq(0lu, arrayType.getSize())) {
+            path.append(llvm::utostr(idx) + "]");
+            fieldID--;
+            if (constructPath(arrayType.getElementType()))
+              return true;
+            path.resize(size);
+          }
+          return false;
+        })
+        .Case<hw::InOutType>([&](auto inout) {
+          // NOTE: Do not decrement fieldID for InOutType.
+          return constructPath(inout.getElementType());
+        })
+        .Default([&](auto base) {
+          // Otherwise assume the type is a base type.
+          return false;
+        });
+  };
+  return constructPath(type);
+}
+
 //===----------------------------------------------------------------------===//
 // ModuleNameManager Implementation
 //===----------------------------------------------------------------------===//
@@ -769,6 +815,7 @@ void EmitterBase::emitTextWithSubstitutions(
         unsigned symOpNum = operandNo - op->getNumOperands();
         auto sym = symAttrs[symOpNum];
         StringRef symVerilogName;
+        SmallString<16> suffixPath;
         if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
           if (auto *symOp = state.symbolCache.getDefinition(fsym))
             symVerilogName = namify(sym, symOp);
@@ -776,8 +823,31 @@ void EmitterBase::emitTextWithSubstitutions(
           auto symOp =
               state.symbolCache.getDefinition(isym.getModule(), isym.getName());
           symVerilogName = namify(sym, symOp);
+          // Print an access path to fieldID if the inner ref has non-zero
+          // fieldID.
+          if (auto fieldID = isym.getFieldID()) {
+            Type tpe;
+            if (symOp.hasPort()) {
+              auto moduleType =
+                  mlir::function_like_impl::getFunctionType(symOp.getOp());
+              if (moduleType.getNumInputs() <= symOp.getPort())
+                tpe = moduleType.getResult(symOp.getPort() -
+                                           moduleType.getNumInputs());
+              else
+                tpe = moduleType.getInput(symOp.getPort());
+
+            } else {
+              assert(symOp.getOp()->getNumResults() == 1 &&
+                     "the number of result must be one");
+              tpe = symOp.getOp()->getResult(0).getType();
+            }
+
+            if (!constructAccessPathToFieldID(suffixPath, tpe, fieldID))
+              emitError(op, "faield to create an access path to fieldID=")
+                  << fieldID << " for type " << tpe;
+          }
         }
-        os << symVerilogName;
+        os << symVerilogName << suffixPath;
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
