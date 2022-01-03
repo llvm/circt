@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -185,6 +186,26 @@ public:
 } // anonymous namespace
 
 namespace {
+/// Simply remove hw::GlobalRefOps for placement when done.
+struct GlobalRefOpLowering : public OpConversionPattern<hw::GlobalRefOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::GlobalRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    for (auto attr : op->getAttrs()) {
+      if (attr.getName().getValue().startswith("loc")) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+    return failure();
+  }
+};
+} // anonymous namespace
+
+namespace {
 struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
   void runOnOperation() override;
 };
@@ -196,13 +217,11 @@ void LowerToHWPass::runOnOperation() {
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
-  hw::SymbolCache symCache;
-  populateSymbolCache(top, symCache);
   for (auto moduleName : tops) {
     auto hwmod = top.lookupSymbol<msft::MSFTModuleOp>(moduleName);
     if (!hwmod)
       continue;
-    if (failed(exportQuartusTcl(hwmod, symCache, tclFile)))
+    if (failed(exportQuartusTcl(hwmod, tclFile)))
       return signalPassFailure();
   }
 
@@ -216,11 +235,18 @@ void LowerToHWPass::runOnOperation() {
   target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
+  target.addDynamicallyLegalOp<hw::GlobalRefOp>([](hw::GlobalRefOp op) {
+    for (auto attr : op->getAttrs())
+      if (attr.getName().getValue().startswith("loc"))
+        return false;
+    return true;
+  });
 
   RewritePatternSet patterns(ctxt);
   patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
   patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
+  patterns.insert<GlobalRefOpLowering>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();

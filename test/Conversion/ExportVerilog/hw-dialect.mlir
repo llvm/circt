@@ -999,3 +999,14 @@ hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
 // CHECK-NEXT:  module moduleWithComment
 hw.module @moduleWithComment()
   attributes {comment = "moduleWithComment has a comment\nhello"} {}
+
+
+// CHECK-LABEL: module Foo(
+// https://github.com/llvm/circt/issues/2363
+hw.module @Foo(%a: i1, %b: i1) -> (r1: i1, r2: i1) {
+  // Make sure the temporary wire is indented correctly.
+  // CHECK: {{^  wire _T = a == b;}}
+  %0 = comb.icmp eq %a, %b : i1
+  hw.output %0, %0 : i1, i1
+}
+

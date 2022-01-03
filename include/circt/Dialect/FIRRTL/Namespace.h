@@ -32,7 +32,7 @@ struct CircuitNamespace : public Namespace {
     for (auto &op : *circuit.getBody())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
               SymbolTable::getSymbolAttrName()))
-        internal.insert(symbol.getValue());
+        nextIndex.insert({symbol.getValue(), 0});
   }
 };
 
@@ -47,11 +47,11 @@ struct ModuleNamespace : public Namespace {
   void add(FModuleLike module) {
     for (auto portSymbol : module.getPortSymbolsAttr().getAsRange<StringAttr>())
       if (!portSymbol.getValue().empty())
-        internal.insert(portSymbol.getValue());
+        nextIndex.insert({portSymbol.getValue(), 0});
     module.walk([&](Operation *op) {
       auto attr = op->getAttrOfType<StringAttr>("inner_sym");
       if (attr)
-        internal.insert(attr.getValue());
+        nextIndex.insert({attr.getValue(), 0});
     });
   }
 };

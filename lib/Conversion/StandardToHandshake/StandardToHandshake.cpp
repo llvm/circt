@@ -87,20 +87,11 @@ LogicalResult setControlOnlyPath(handshake::FuncOp f,
   Operation *startOp = rewriter.create<StartOp>(entryBlock->front().getLoc());
 
   // Replace original return ops with new returns with additional control input
-  for (Block &block : f) {
-    Operation *termOp = block.getTerminator();
-    if (!isa<mlir::ReturnOp>(termOp))
-      continue;
-
-    rewriter.setInsertionPoint(termOp);
-
-    // Remove operands from old return op and add them to new op
-    SmallVector<Value, 8> operands(termOp->getOperands());
-    for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
-      termOp->eraseOperand(0);
-    assert(termOp->getNumOperands() == 0);
+  for (auto retOp : llvm::make_early_inc_range(f.getOps<mlir::ReturnOp>())) {
+    rewriter.setInsertionPoint(retOp);
+    SmallVector<Value, 8> operands(retOp->getOperands());
     operands.push_back(startOp->getResult(0));
-    rewriter.replaceOpWithNewOp<handshake::ReturnOp>(termOp, operands);
+    rewriter.replaceOpWithNewOp<handshake::ReturnOp>(retOp, operands);
   }
   return success();
 }

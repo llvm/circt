@@ -48,25 +48,6 @@ MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
 MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
 
-MLIR_CAPI_EXPORTED bool
-    circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
-MLIR_CAPI_EXPORTED MlirAttribute
-circtMSFTRootedInstancePathAttrGet(MlirContext, MlirAttribute rootSym,
-                                   MlirAttribute *pathStringAttrs, size_t num);
-
-typedef struct {
-  MlirAttribute instance;
-  MlirAttribute attr;
-} CirctMSFTSwitchInstanceCase;
-
-MLIR_CAPI_EXPORTED bool
-    circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
-MLIR_CAPI_EXPORTED MlirAttribute circtMSFTSwitchInstanceAttrGet(
-    MlirContext, CirctMSFTSwitchInstanceCase *listOfCases, size_t numCases);
-MLIR_CAPI_EXPORTED size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
-MLIR_CAPI_EXPORTED void circtMSFTSwitchInstanceAttrGetCases(
-    MlirAttribute, CirctMSFTSwitchInstanceCase *dstArray, size_t space);
-
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTGetInstance(MlirOperation root,
                                                       MlirAttribute path);
 

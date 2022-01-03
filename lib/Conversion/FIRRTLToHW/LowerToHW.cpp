@@ -1134,11 +1134,11 @@ struct MixedModuleNamespace : Namespace {
   void add(hw::HWModuleOp module) {
     for (auto port : module.getAllPorts())
       if (port.sym && !port.sym.getValue().empty())
-        internal.insert(port.sym.getValue());
+        nextIndex.insert({port.sym.getValue(), 0});
     module.walk([&](Operation *op) {
       auto attr = op->getAttrOfType<StringAttr>("inner_sym");
       if (attr)
-        internal.insert(attr.getValue());
+        nextIndex.insert({attr.getValue(), 0});
     });
   }
 };
@@ -1321,6 +1321,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
+  LogicalResult visitExpr(MultibitMuxOp op);
   LogicalResult visitExpr(VerbatimExprOp op);
 
   // Statements
@@ -3071,6 +3072,27 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
                                     ifFalse);
 }
 
+LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
+  // Lower and resize to the index width.
+  auto index = getLoweredAndExtOrTruncValue(
+      op.index(), UIntType::get(op.getContext(),
+                                getBitWidthFromVectorSize(op.inputs().size())));
+
+  if (!index)
+    return failure();
+  SmallVector<Value> loweredInputs;
+  loweredInputs.reserve(op.inputs().size());
+
+  for (auto input : op.inputs()) {
+    auto lowered = getLoweredAndExtendedValue(input, op.getType());
+    if (!lowered)
+      return failure();
+    loweredInputs.push_back(lowered);
+  }
+  Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
+  return setLoweringTo<hw::ArrayGetOp>(op, array, index);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
@@ -3380,7 +3402,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
     Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
     StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
-
   StringRef opName = op->getName().stripDialect();
   auto isAssert = opName == "assert";
   auto isCover = opName == "cover";

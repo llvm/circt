@@ -2,6 +2,22 @@
 // RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv | FileCheck %s --check-prefix=LOWER
 // RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv --export-verilog | FileCheck %s --check-prefix=TCL
 
+hw.globalRef @ref1 [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>] {
+  "loc:memBank2" = #msft.physloc<M20K, 15, 9, 3>
+}
+
+hw.globalRef @ref2 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>] {
+  "loc:memBank2" = #msft.physloc<M20K, 8, 19, 1>
+}
+
+hw.globalRef @ref3 [#hw.innerNameRef<@regions::@module>] {
+  "loc:" = #msft.physical_region_ref<@region1>
+}
+
+hw.globalRef @ref4 [#hw.innerNameRef<@reg::@reg>] {
+  "loc:" = #msft.physloc<FF, 0, 0, 0>
+}
+
 hw.module.extern @Foo()
 
 // CHECK-LABEL: msft.module @leaf
@@ -11,8 +27,7 @@ msft.module @leaf {} () -> () {
   // LOWER: hw.instance "module" sym @module @Foo() -> ()
   // LOWER-NOT: #msft.switch.inst
   msft.instance @module @Foo() {
-    "loc:memBank2" = #msft.switch.inst< @shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>,
-                                        @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3> >
+    circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "module"
   } : () -> ()
   // LOWER: sv.verbatim "proc shallow_config
   // LOWER: sv.verbatim "proc deeper_config
@@ -26,14 +41,14 @@ msft.module @leaf {} () -> () {
 
 // TCL-LABEL: proc shallow_config
 msft.module @shallow {} () -> () {
-  msft.instance @leaf @leaf() : () -> ()
+  msft.instance @leaf @leaf() { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "leaf" } : () -> ()
   // TCL: set_location_assignment M20K_X8_Y19_N1 -to $parent|leaf|module_0|memBank2
   msft.output
 }
 
 // TCL-LABEL: proc deeper_config
 msft.module @deeper {} () -> () {
-  msft.instance @branch @shallow() : () -> ()
+  msft.instance @branch @shallow() { circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "branch" } : () -> ()
   msft.instance @leaf @leaf() : () -> ()
   // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|module_0|memBank2
   msft.output
@@ -46,7 +61,7 @@ msft.physical_region @region1, [
 // TCL-LABEL: proc regions_config
 msft.module @regions {} () -> () {
   msft.instance @module @Foo() {
-    "msft:loc" = #msft.switch.inst<@regions[]=#msft.physical_region_ref<@region1>>
+    circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "module"
   } : () -> ()
   // TCL: set_instance_assignment -name PLACE_REGION "X0 Y0 X10 Y10;X20 Y20 X30 Y30" -to $parent|module_0
   // TCL: set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|module_0
@@ -57,7 +72,7 @@ msft.module @regions {} () -> () {
 
 // TCL-LABEL: proc reg_config
 msft.module @reg {} (%input : i8, %clk : i1) -> () {
-  %reg = seq.compreg sym @reg %input, %clk {"loc:" = #msft.switch.inst<@reg[]=#msft.physloc<FF, 0, 0, 0>>} : i8
+  %reg = seq.compreg sym @reg %input, %clk { circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "reg" } : i8
   // TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_1
   msft.output
 }

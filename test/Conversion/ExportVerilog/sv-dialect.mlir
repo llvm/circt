@@ -445,6 +445,19 @@ hw.module @struct_field_inout2(%a: !hw.inout<struct<b: !hw.struct<c: i1>>>) {
   sv.assign %1, %true : i1
 }
 
+// CHECK-LABEL: module PartSelectInoutInline(
+hw.module @PartSelectInoutInline(%v:i40) {
+  %r = sv.reg : !hw.inout<i42>
+  %c2_i3 = hw.constant 2 : i3
+  %a = sv.indexed_part_select_inout %r[%c2_i3 : 40] : !hw.inout<i42>, i3
+  // CHECK:      localparam [2:0] _T = 3'h2;
+  // CHECK-NEXT: initial
+  // CHECK-NEXT:   r[_T +: 40] = v;
+  sv.initial {
+    sv.bpassign %a, %v : i40
+  }
+}
+
 // CHECK-LABEL: module AggregateConstantXZ(
 hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3xi4>>,
                                      res2: !hw.struct<foo: i2, bar: !hw.array<3xi4>>) {
@@ -453,6 +466,17 @@ hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3x
   // CHECK: assign res1 = 14'bx
   // CHECK: assign res2 = 14'bz
   hw.output %0, %1 : !hw.struct<foo: i2, bar: !hw.array<3xi4>>, !hw.struct<foo: i2, bar: !hw.array<3xi4>>
+}
+
+// CHECK-LABEL: module AggregateVerbatim(
+hw.module @AggregateVerbatim() -> (res1: !hw.struct<a: i1>, res2: !hw.array<1xi1>, res3: !hw.array<1xi1>) {
+  %a = sv.verbatim.expr "STRUCT_A_" : () -> !hw.struct<a: i1>
+  %b = sv.verbatim.expr "ARRAY_" : () -> !hw.array<1xi1>
+  %c = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%a, %b) : (!hw.struct<a: i1>, !hw.array<1xi1>) -> !hw.array<1xi1>
+  hw.output %a, %b, %c: !hw.struct<a: i1>, !hw.array<1xi1>, !hw.array<1xi1>
+  // CHECK: assign res1 = STRUCT_A_;
+  // CHECK: assign res2 = ARRAY_;
+  // CHECK: assign res3 = MACRO(STRUCT_A_, ARRAY_);
 }
 
 // CHECK-LABEL: issue508

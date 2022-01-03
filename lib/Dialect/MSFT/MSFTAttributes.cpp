@@ -23,73 +23,6 @@ using namespace msft;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
 
-static Attribute parseRootedInstancePath(AsmParser &p) {
-  FlatSymbolRefAttr root;
-  if (p.parseAttribute(root) || p.parseLSquare())
-    return Attribute();
-  SmallVector<StringAttr, 16> path;
-  if (p.parseOptionalRSquare()) {
-    do {
-      StringAttr instName;
-      if (p.parseAttribute(instName))
-        return Attribute();
-      path.push_back(instName);
-    } while (!p.parseOptionalComma());
-    if (p.parseRSquare())
-      return Attribute();
-  }
-  return RootedInstancePathAttr::get(p.getContext(), root, path);
-}
-
-static void printRootedInstancePath(RootedInstancePathAttr me, AsmPrinter &p) {
-  p << me.getRootModule() << '[';
-  llvm::interleave(me.getPath(), p, ",");
-  p << ']';
-}
-
-Attribute SwitchInstanceAttr::parse(AsmParser &p, Type type) {
-  if (p.parseLess())
-    return Attribute();
-  if (!p.parseOptionalGreater())
-    return SwitchInstanceAttr::get(p.getContext(), {});
-
-  SmallVector<SwitchInstanceCaseAttr> instPairs;
-  do {
-    auto path =
-        parseRootedInstancePath(p).dyn_cast_or_null<RootedInstancePathAttr>();
-    if (!path)
-      return Attribute();
-
-    Attribute attr;
-    if (p.parseEqual() || p.parseAttribute(attr))
-      return Attribute();
-    instPairs.push_back(
-        SwitchInstanceCaseAttr::get(p.getContext(), path, attr));
-  } while (!p.parseOptionalComma());
-  if (p.parseGreater())
-    return Attribute();
-
-  return SwitchInstanceAttr::get(p.getContext(), instPairs);
-}
-
-void SwitchInstanceAttr::print(AsmPrinter &p) const {
-  p << "<";
-  llvm::interleaveComma(getCases(), p, [&](auto instCase) {
-    printRootedInstancePath(instCase.getInst(), p);
-    p << '=';
-    p.printAttribute(instCase.getAttr());
-  });
-  p << '>';
-}
-
-Attribute SwitchInstanceAttr::lookup(RootedInstancePathAttr id) {
-  // TODO: This is obviously very slow. Speed this up by using a sorted list.
-  for (auto c : getCases())
-    if (c.getInst() == id)
-      return c.getAttr();
-  return Attribute();
-}
-
 Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
@@ -174,11 +107,7 @@ Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
 void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
   if (succeeded(generatedAttributePrinter(attr, p)))
     return;
-  TypeSwitch<Attribute>(attr)
-      .Case([&p](RootedInstancePathAttr path) {
-        printRootedInstancePath(path, p);
-      })
-      .Default([](Attribute) { llvm_unreachable("Unexpected attribute"); });
+  llvm_unreachable("Unexpected attribute");
 }
 
 void MSFTDialect::registerAttributes() {

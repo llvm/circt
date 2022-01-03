@@ -65,15 +65,13 @@ bool circt::hw::isHWValueType(Type type) {
   if (auto array = type.dyn_cast<UnpackedArrayType>())
     return isHWValueType(array.getElementType());
 
-  if (auto t = type.dyn_cast<StructType>()) {
-    return std::all_of(t.getElements().begin(), t.getElements().end(),
-                       [](const auto &f) { return isHWValueType(f.type); });
-  }
+  if (auto t = type.dyn_cast<StructType>())
+    return llvm::all_of(t.getElements(),
+                        [](auto f) { return isHWValueType(f.type); });
 
-  if (auto t = type.dyn_cast<UnionType>()) {
-    return std::all_of(t.getElements().begin(), t.getElements().end(),
-                       [](const auto &f) { return isHWValueType(f.type); });
-  }
+  if (auto t = type.dyn_cast<UnionType>())
+    return llvm::all_of(t.getElements(),
+                        [](auto f) { return isHWValueType(f.type); });
 
   if (auto t = type.dyn_cast<TypeAliasType>())
     return isHWValueType(t.getCanonicalType());
