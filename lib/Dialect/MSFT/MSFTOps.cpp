@@ -37,7 +37,7 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto refMod = getReferencedModule())
+  if (auto *refMod = getReferencedModule())
     return hw::getModuleResultNameAttr(refMod, idx);
   return StringAttr();
 }
