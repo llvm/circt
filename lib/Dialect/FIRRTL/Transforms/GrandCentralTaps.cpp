@@ -99,6 +99,8 @@ struct PortWiring {
   ArrayRef<InstancePath> prefices;
   /// The operation or module port being wire to this data tap module port.
   Target target;
+  /// The fieldID we want to connect in the port.
+  unsigned targetFieldID;
   /// An additional string suffix to append to the hierarchical name.
   SmallString<16> suffix;
   /// If set, the port should output a constant literal.
@@ -313,11 +315,12 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   /// Returns a port's `inner_sym`, adding one if necessary.
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
-  /// to that operation.
-  hw::InnerRefAttr getInnerRefTo(Operation *op);
+  /// to that operation. Specify fieldID if necessary.
+  hw::InnerRefAttr getInnerRefTo(Operation *op, unsigned fieldID = 0);
   /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
-  /// to that port.
-  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
+  /// to that port. Specify fieldID if necessary.
+  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx,
+                                 unsigned fieldID = 0);
 
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
@@ -582,10 +585,10 @@ void GrandCentralTapsPass::runOnOperation() {
           addSymbol(getInnerRefTo(inst));
         if (port.target.getOp()) {
           if (port.target.hasPort())
-            addSymbol(
-                getInnerRefTo(port.target.getOp(), port.target.getPort()));
+            addSymbol(getInnerRefTo(port.target.getOp(), port.target.getPort(),
+                                    port.targetFieldID));
           else
-            addSymbol(getInnerRefTo(port.target.getOp()));
+            addSymbol(getInnerRefTo(port.target.getOp(), port.targetFieldID));
         }
         if (!port.suffix.empty()) {
           hname += '.';
@@ -671,6 +674,8 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   auto targetAnnoIt = annos.find(key);
   auto targetAnno =
       targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
+
+  wiring.targetFieldID = targetAnno.getFieldID();
 
   // Handle data taps on signals and ports.
   if (targetAnno.isClass(referenceKeyClass)) {
@@ -832,16 +837,18 @@ StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
   return attr;
 }
 
-hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
+hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op,
+                                                     unsigned fieldID) {
   return hw::InnerRefAttr::get(
       SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op));
+      getOrAddInnerSym(op), fieldID);
 }
 
 hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
-                                                     size_t portIdx) {
+                                                     size_t portIdx,
+                                                     unsigned fieldID) {
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                               getOrAddInnerSym(module, portIdx));
+                               getOrAddInnerSym(module, portIdx), fieldID);
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralTapsPass() {
