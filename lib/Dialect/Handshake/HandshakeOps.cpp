@@ -862,14 +862,14 @@ void SourceOp::build(OpBuilder &builder, OperationState &result) {
   setupSourceOp(result);
 }
 
-static ParseResult parseSourceOp(OpAsmParser &, OperationState &result) {
-  // Nothin to do; source ops always generate a none-typed control token.
+static ParseResult parseSourceOp(OpAsmParser &parser, OperationState &result) {
+  parser.parseOptionalAttrDict(result.attributes);
   setupSourceOp(result);
   return success();
 }
 
 static void printSourceOp(OpAsmPrinter &p, SourceOp op) {
-  sost::printOp(p, op, false);
+  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
 }
 
 static ParseResult verifyConstantOp(handshake::ConstantOp op) {
