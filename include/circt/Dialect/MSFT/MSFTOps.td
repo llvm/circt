@@ -57,7 +57,8 @@ def OneOrNoBlocksRegion : Region<
 
 def MSFTModuleOp : MSFTOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       HasParent<"mlir::ModuleOp">]>{
+       HasParent<"mlir::ModuleOp">,
+       SingleBlockImplicitTerminator<"OutputOp">]>{
   let summary = "MSFT HW Module";
   let description = [{
     A lot like `hw.module`, but with a few differences:
@@ -74,7 +75,7 @@ def MSFTModuleOp : MSFTOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
+    OpBuilder<(ins "StringAttr":$name, "hw::ModulePortInfo":$ports,
                    "ArrayRef<NamedAttribute>":$params)>
   ];
 
@@ -188,6 +189,9 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
   let summary = "termination operation";
 
   let arguments = (ins Variadic<AnyType>:$operands);
+  let builders = [
+    OpBuilder<(ins)>
+  ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }
