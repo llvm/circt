@@ -37,7 +37,7 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  if (auto refMod = getReferencedModule())
+  if (auto *refMod = getReferencedModule())
     return hw::getModuleResultNameAttr(refMod, idx);
   return StringAttr();
 }
@@ -160,6 +160,8 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
   return newToOldResultMap;
 }
 
+// Copied nearly exactly from hwops.cpp.
+// TODO: Unify code once a `ModuleLike` op interface exists.
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const hw::ModulePortInfo &ports) {
   using namespace mlir::function_like_impl;
