@@ -119,14 +119,12 @@ class Instance:
       callback(inst)
       inst.walk(callback)
 
-  def _attach_attribute(self, attr_key: str, attr: ir.Attribute):
+  def _attach_attribute(self, sub_path: str, attr: ir.Attribute):
     if isinstance(attr, PhysLocation):
-      assert attr_key.startswith("loc:")
       attr = attr._loc
 
     db = self.root_instance.placedb._db
-    rc = db.add_placement(attr, self.path_attr, attr_key[4:],
-                          self.instOp.operation)
+    rc = db.add_placement(attr, self.path_attr, sub_path, self.instOp.operation)
     if not rc:
       raise ValueError("Failed to place")
 
@@ -137,7 +135,7 @@ class Instance:
       global_ref = hw.GlobalRefOp(global_ref_symbol, path_attr)
 
     # Attach the attribute to the global ref.
-    global_ref.attributes["loc:" + attr_key[4:]] = attr
+    global_ref.attributes["loc:" + sub_path] = attr
 
     # Add references to the global ref for each instance through the hierarchy.
     for instance in self.path:
@@ -165,7 +163,7 @@ class Instance:
             x: int,
             y: int,
             num: int = 0):
-    loc = msft.PhysLocationAttr.get(devtype, x, y, num)
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
-    self._attach_attribute(f"loc:{subpath}", loc)
+    loc = msft.PhysLocationAttr.get(devtype, x, y, num, subpath)
+    self._attach_attribute(subpath, loc)

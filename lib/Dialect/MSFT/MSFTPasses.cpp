@@ -195,7 +195,7 @@ public:
   matchAndRewrite(hw::GlobalRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     for (auto attr : op->getAttrs()) {
-      if (attr.getName().getValue().startswith("loc")) {
+      if (isa<MSFTDialect>(attr.getValue().getDialect())) {
         rewriter.eraseOp(op);
         return success();
       }
@@ -237,7 +237,7 @@ void LowerToHWPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
   target.addDynamicallyLegalOp<hw::GlobalRefOp>([](hw::GlobalRefOp op) {
     for (auto attr : op->getAttrs())
-      if (attr.getName().getValue().startswith("loc"))
+      if (isa<MSFTDialect>(attr.getValue().getDialect()))
         return false;
     return true;
   });
