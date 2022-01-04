@@ -772,7 +772,7 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
   DenseMap<unsigned, unsigned> outputToInputIdx;
   SmallVector<unsigned> outputPortsToRemove;
   for (hw::PortInfo outputPort : mod.getPorts().outputs) {
-    assert(outputPort.argNum <= terminator->getNumOperands() && "Invalid IR");
+    assert(outputPort.argNum < terminator->getNumOperands() && "Invalid IR");
     Value outputValue = terminator->getOperand(outputPort.argNum);
     auto inputNumF = passThroughs.find(outputValue);
     if (inputNumF == passThroughs.end())
@@ -806,7 +806,7 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
     size_t mergeCtr = 0;
     for (size_t operNum = 0, e = oldInst.getNumOperands(); operNum < e;
          ++operNum) {
-      if (operNum < inputPortsToRemove.size() &&
+      if (mergeCtr < inputPortsToRemove.size() &&
           operNum == inputPortsToRemove[mergeCtr])
         ++mergeCtr;
       else
@@ -819,7 +819,8 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
 /// Sink all the instance connections which are loops.
 void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
-  // TODO: remove this limitation.
+  // TODO: remove this limitation. This would involve looking at the common
+  // loopbacks for all the instances.
   if (instantiations.size() != 1)
     return;
   InstanceOp inst = instantiations[0];
