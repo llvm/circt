@@ -137,26 +137,29 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
                                                 ArrayRef<unsigned> outputs) {
   FunctionType ftype = getType();
   Block *body = getBodyBlock();
+  Operation *terminator = body->getTerminator();
+
   setType(ftype.getWithoutArgsAndResults(inputs, outputs));
 
+  // Build new operand list for output op. Construct an output mapping to return
+  // as a side-effect.
   unsigned numResults = ftype.getNumResults();
   llvm::BitVector skipOutputs(numResults);
   SmallVector<Value> newOutputValues;
-  Operation *terminator = body->getTerminator();
+  SmallVector<unsigned> newToOldResultMap;
   for (unsigned i : outputs)
     skipOutputs.set(i);
   for (unsigned i = 0; i < numResults; ++i)
-    if (!skipOutputs.test(i))
+    if (!skipOutputs.test(i)) {
       newOutputValues.push_back(terminator->getOperand(i));
+      newToOldResultMap.push_back(i);
+    }
   terminator->setOperands(newOutputValues);
 
+  // Erase the arguments after setting the new output op operands since the
+  // arguments might be used by output op.
   body->eraseArguments(inputs);
 
-  SmallVector<unsigned> newToOldResultMap;
-  DenseSet<unsigned> outputsRemoved(outputs.begin(), outputs.end());
-  for (unsigned resNum = 0; resNum < numResults; ++resNum)
-    if (!outputsRemoved.contains(resNum))
-      newToOldResultMap.push_back(resNum);
   return newToOldResultMap;
 }
 
