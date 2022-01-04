@@ -853,8 +853,10 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
     argsToErase.push_back(resOper.first);
   }
 
+  // Remove the ports.
   SmallVector<unsigned> newToOldResultMap =
       mod.removePorts(argsToErase, resultsToErase);
+  // and update the instantiations.
   llvm::sort(argsToErase);
   auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                          SmallVectorImpl<Value> &newOperands) {
