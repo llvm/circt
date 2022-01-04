@@ -2833,12 +2833,11 @@ public:
     auto op = getOperation();
     auto *ctx = op.getContext();
 
-    // Lowering to FIRRTL requires that every value is used exactly once. To
-    // ensure this precondition, run fork/sink materialization.
-    PassManager pm(ctx);
-    pm.addNestedPass<handshake::FuncOp>(
-        createHandshakeMaterializeForksSinksPass());
-    if (failed(pm.run(op))) {
+    // Lowering to FIRRTL requires that every value is used exactly once. Check
+    // whether this precondition is met, and if not, exit.
+    if (llvm::any_of(op.getOps<handshake::FuncOp>(), [](auto f) {
+          return failed(verifyAllValuesHasOneUse(f));
+        })) {
       signalPassFailure();
       return;
     }
