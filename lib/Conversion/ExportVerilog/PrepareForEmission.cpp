@@ -311,12 +311,34 @@ static bool rewriteSideEffectingExpr(Operation *op) {
 static bool hoistNonSideEffectExpr(Operation *op) {
   // Never hoist "always inline" expressions - they will never generate a
   // temporary and in fact must always be emitted inline.
-  if (isExpressionAlwaysInline(op) &&
-      !isa<sv::ReadInOutOp, sv::ArrayIndexInOutOp, sv::StructFieldInOutOp>(op))
+  if (isExpressionAlwaysInline(op) && !isa<sv::ReadInOutOp>(op))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.
   Operation *parentOp = findParentInNonProceduralRegion(op);
+
+  // If op is a read_inout, we have to hoist the inout chains at the same time
+  // so handle read_inout specially.
+  if (isa<sv::ReadInOutOp>(op)) {
+    std::function<void(Operation *)> moveBefore = [&](Operation *op) {
+      if (!isa_and_nonnull<sv::ArrayIndexInOutOp, sv::IndexedPartSelectInOutOp,
+                           sv::StructFieldInOutOp, sv::ReadInOutOp>(op))
+        return;
+
+      // If op is already in a nonprocedural region, it's ok.
+      if (!op->getParentOp()->hasTrait<ProceduralRegion>())
+        return;
+
+      // We recursively hoist the operands first.
+      llvm::for_each(op->getOperands(), [&](Value operand) {
+        moveBefore(operand.getDefiningOp());
+      });
+
+      op->moveBefore(parentOp);
+    };
+    moveBefore(op);
+    return true;
+  }
 
   // We can typically hoist all the way out to the top level in one step, but
   // there may be intermediate operands that aren't hoistable.  If so, just
