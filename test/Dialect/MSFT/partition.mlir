@@ -25,7 +25,7 @@ msft.module @B {} (%clk : i1) -> (x: i1)  {
 
 // CHECK-LABEL: msft.module @top {} (%clk: i1) {
 // CHECK:         %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a, %false) : (i1, i1, i1, i1, i1) -> (i1, i1, i1, i1)
-// CHECK:         %b.x, %b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a = msft.instance @b @B(%clk, %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x)  : (i1, i1, i1, i1) -> (i32, i1, i1, i1, i1)
+// CHECK:         %b.x, %b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a = msft.instance @b @B(%clk, %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x)  : (i1, i1, i1, i1) -> (i1, i1, i1, i1, i1)
 // CHECK:         %false = hw.constant false
 // CHECK:         msft.output
 // CHECK-LABEL: msft.module @B {} (%clk: i1, %unit1.foo_x: i1, %seq.compreg.out0: i1, %unit2.foo_x: i1) -> (x: i1, unit1.foo_a: i1, seq.compreg.in0: i1, seq.compreg.in1: i1, unit2.foo_a: i1) {
