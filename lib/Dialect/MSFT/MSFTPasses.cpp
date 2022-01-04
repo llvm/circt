@@ -723,6 +723,167 @@ std::unique_ptr<Pass> createPartitionPass() {
 } // namespace circt
 
 namespace {
+struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
+  void runOnOperation() override;
+
+private:
+  void bubbleWiresUp(MSFTModuleOp mod);
+  void sinkWiresDown(MSFTModuleOp mod);
+};
+} // anonymous namespace
+
+void WireCleanupPass::runOnOperation() {
+  ModuleOp topMod = getOperation();
+  populateSymbolCache(topMod);
+  SmallVector<MSFTModuleOp> sortedMods;
+  getAndSortModules(topMod, sortedMods);
+
+  for (auto mod : sortedMods)
+    bubbleWiresUp(mod);
+
+  for (auto mod : llvm::reverse(sortedMods))
+    sinkWiresDown(mod);
+}
+
+/// Push up any wires which are simply passed-through.
+void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
+  Block *body = mod.getBodyBlock();
+  Operation *terminator = body->getTerminator();
+
+  // Find all "passthough" internal wires, filling 'inputPortsToRemove' as a
+  // side-effect.
+  DenseMap<Value, hw::PortInfo> passThroughs;
+  SmallVector<unsigned> inputPortsToRemove;
+  for (hw::PortInfo inputPort : mod.getPorts().inputs) {
+    BlockArgument portArg = body->getArgument(inputPort.argNum);
+    bool removePort = true;
+    for (OpOperand user : portArg.getUsers()) {
+      if (user.getOwner() == terminator)
+        passThroughs[portArg] = inputPort;
+      else
+        removePort = false;
+    }
+    if (removePort)
+      inputPortsToRemove.push_back(inputPort.argNum);
+  }
+
+  // Find all output ports which we can remove. Fill in 'outputToInputIdx' to
+  // help rewire instantiations later on.
+  DenseMap<unsigned, unsigned> outputToInputIdx;
+  SmallVector<unsigned> outputPortsToRemove;
+  for (hw::PortInfo outputPort : mod.getPorts().outputs) {
+    assert(outputPort.argNum < terminator->getNumOperands() && "Invalid IR");
+    Value outputValue = terminator->getOperand(outputPort.argNum);
+    auto inputNumF = passThroughs.find(outputValue);
+    if (inputNumF == passThroughs.end())
+      continue;
+    hw::PortInfo inputPort = inputNumF->second;
+    outputToInputIdx[outputPort.argNum] = inputPort.argNum;
+    outputPortsToRemove.push_back(outputPort.argNum);
+  }
+
+  // Use MSFTModuleOp's `removePorts` method to remove the ports. It returns a
+  // mapping of the new output port to old output port indices to assist in
+  // updating the instantiations later on.
+  auto newToOldResult =
+      mod.removePorts(inputPortsToRemove, outputPortsToRemove);
+
+  // Update the instantiations.
+  llvm::sort(inputPortsToRemove);
+  auto setPassthroughsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
+                                        SmallVectorImpl<Value> &newOperands) {
+    // Re-map the passthrough values around the instance.
+    for (auto idxPair : outputToInputIdx) {
+      size_t outputPortNum = idxPair.first;
+      assert(outputPortNum <= oldInst.getNumResults());
+      size_t inputPortNum = idxPair.second;
+      assert(inputPortNum <= oldInst.getNumOperands());
+      oldInst.getResult(outputPortNum)
+          .replaceAllUsesWith(oldInst.getOperand(inputPortNum));
+    }
+    // Use a sort-merge-join approach to figure out the operand mapping on the
+    // fly.
+    size_t mergeCtr = 0;
+    for (size_t operNum = 0, e = oldInst.getNumOperands(); operNum < e;
+         ++operNum) {
+      if (mergeCtr < inputPortsToRemove.size() &&
+          operNum == inputPortsToRemove[mergeCtr])
+        ++mergeCtr;
+      else
+        newOperands.push_back(oldInst.getOperand(operNum));
+    }
+  };
+  updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
+}
+
+/// Sink all the instance connections which are loops.
+void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
+  auto instantiations = moduleInstantiations[mod];
+  // TODO: remove this limitation. This would involve looking at the common
+  // loopbacks for all the instances.
+  if (instantiations.size() != 1)
+    return;
+  InstanceOp inst = instantiations[0];
+
+  // Find all the "loopback" connections in the instantiation. Populate
+  // 'inputToOutputLoopback' with a mapping of input port to output port which
+  // drives it. Populate 'resultsToErase' with output ports which only drive
+  // input ports.
+  DenseMap<unsigned, unsigned> inputToOutputLoopback;
+  SmallVector<unsigned> resultsToErase; // This is sorted.
+  for (unsigned resNum = 0, e = inst.getNumResults(); resNum < e; ++resNum) {
+    bool allLoops = true;
+    for (auto &use : inst.getResult(resNum).getUses()) {
+      if (use.getOwner() != inst.getOperation())
+        allLoops = false;
+      else
+        inputToOutputLoopback[use.getOperandNumber()] = resNum;
+    }
+    if (allLoops)
+      resultsToErase.push_back(resNum);
+  }
+
+  // Add internal connections to replace the instantiation's loop back
+  // connections.
+  Block *body = mod.getBodyBlock();
+  Operation *terminator = body->getTerminator();
+  SmallVector<unsigned> argsToErase;
+  for (auto resOper : inputToOutputLoopback) {
+    body->getArgument(resOper.first)
+        .replaceAllUsesWith(terminator->getOperand(resOper.second));
+    argsToErase.push_back(resOper.first);
+  }
+
+  // Remove the ports.
+  SmallVector<unsigned> newToOldResultMap =
+      mod.removePorts(argsToErase, resultsToErase);
+  // and update the instantiations.
+  llvm::sort(argsToErase);
+  auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
+                         SmallVectorImpl<Value> &newOperands) {
+    // Use sort-merge-join to compute the new operands;
+    unsigned mergeJoinCtr = 0;
+    for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
+         ++argNum) {
+      if (mergeJoinCtr < argsToErase.size() &&
+          argNum == argsToErase[mergeJoinCtr])
+        ++mergeJoinCtr;
+      else
+        newOperands.push_back(oldInst.getOperand(argNum));
+    }
+  };
+  updateInstances(mod, newToOldResultMap, getOperands);
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createWireCleanupPass() {
+  return std::make_unique<WireCleanupPass>();
+}
+} // namespace msft
+} // namespace circt
+
+namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/MSFT/MSFTPasses.h.inc"
 } // namespace

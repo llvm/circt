@@ -132,6 +132,37 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   return newBlockArgs;
 }
 
+// Remove the ports at the specified indexes.
+SmallVector<unsigned> MSFTModuleOp::removePorts(ArrayRef<unsigned> inputs,
+                                                ArrayRef<unsigned> outputs) {
+  FunctionType ftype = getType();
+  Block *body = getBodyBlock();
+  Operation *terminator = body->getTerminator();
+
+  setType(ftype.getWithoutArgsAndResults(inputs, outputs));
+
+  // Build new operand list for output op. Construct an output mapping to return
+  // as a side-effect.
+  unsigned numResults = ftype.getNumResults();
+  llvm::BitVector skipOutputs(numResults);
+  SmallVector<Value> newOutputValues;
+  SmallVector<unsigned> newToOldResultMap;
+  for (unsigned i : outputs)
+    skipOutputs.set(i);
+  for (unsigned i = 0; i < numResults; ++i)
+    if (!skipOutputs.test(i)) {
+      newOutputValues.push_back(terminator->getOperand(i));
+      newToOldResultMap.push_back(i);
+    }
+  terminator->setOperands(newOutputValues);
+
+  // Erase the arguments after setting the new output op operands since the
+  // arguments might be used by output op.
+  body->eraseArguments(inputs);
+
+  return newToOldResultMap;
+}
+
 // Copied nearly exactly from hwops.cpp.
 // TODO: Unify code once a `ModuleLike` op interface exists.
 static void buildModule(OpBuilder &builder, OperationState &result,
