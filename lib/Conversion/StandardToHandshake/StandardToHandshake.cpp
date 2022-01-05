@@ -536,33 +536,32 @@ LogicalResult addBranchOps(handshake::FuncOp f,
 }
 
 LogicalResult connectConstantsToControl(handshake::FuncOp f,
-                                        ConversionPatternRewriter &rewriter) {
-  // Create new constants which have a control-only input to trigger them
-  // Connect input to ControlMerge (trigger const when its block is entered)
+                                        ConversionPatternRewriter &rewriter,
+                                        bool sourceConstants) {
+  // Create new constants which have a control-only input to trigger them. These
+  // are conneted to the control network or optionally to a Source operation
+  // (always triggering). Control-network connected constants may help
+  // debugability, but result in a slightly larger circuit.
 
-  for (Block &block : f) {
-    Operation *cntrlMg =
-        block.isEntryBlock() ? getStartOp(&block) : getControlMerge(&block);
-    assert(cntrlMg != nullptr);
-    std::vector<Operation *> cstOps;
-    for (Operation &op : block) {
-      if (auto constantOp = dyn_cast<arith::ConstantOp>(op)) {
-        rewriter.setInsertionPointAfter(&op);
-        Operation *newOp = rewriter.create<handshake::ConstantOp>(
-            op.getLoc(), constantOp.value(), cntrlMg->getResult(0));
-
-        op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-        cstOps.push_back(&op);
-      }
+  if (sourceConstants) {
+    for (auto constantOp :
+         llvm::make_early_inc_range(f.getOps<arith::ConstantOp>())) {
+      rewriter.setInsertionPointAfter(constantOp);
+      rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
+          constantOp, constantOp.value(),
+          rewriter.create<handshake::SourceOp>(constantOp.getLoc()));
     }
-
-    // Erase StandardOp constants
-    for (unsigned i = 0, e = cstOps.size(); i != e; ++i) {
-      auto *op = cstOps[i];
-      for (int j = 0, e = op->getNumOperands(); j < e; ++j)
-        op->eraseOperand(0);
-      assert(op->getNumOperands() == 0);
-      rewriter.eraseOp(op);
+  } else {
+    for (Block &block : f) {
+      Operation *cntrlMg =
+          block.isEntryBlock() ? getStartOp(&block) : getControlMerge(&block);
+      assert(cntrlMg != nullptr && "No control operation found in block");
+      for (auto constantOp :
+           llvm::make_early_inc_range(block.getOps<arith::ConstantOp>())) {
+        rewriter.setInsertionPointAfter(constantOp);
+        rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
+            constantOp, constantOp.value(), cntrlMg->getResult(0));
+      }
     }
   }
   return success();
@@ -1298,7 +1297,8 @@ LogicalResult replaceCallOps(handshake::FuncOp f,
   if (failed(logicalResult))                                                   \
     return logicalResult;
 
-LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
+LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
+                          bool sourceConstants) {
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
@@ -1357,7 +1357,10 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   returnOnError(
       partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
   returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
-      connectConstantsToControl, ctx, newFuncOp));
+      [&](handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
+        return connectConstantsToControl(f, rewriter, sourceConstants);
+      },
+      ctx, newFuncOp));
   returnOnError(
       partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
   returnOnError(checkDataflowConversion(newFuncOp));
@@ -1420,7 +1423,7 @@ struct StandardToHandshakePass
     ModuleOp m = getOperation();
 
     for (auto funcOp : llvm::make_early_inc_range(m.getOps<mlir::FuncOp>())) {
-      if (failed(lowerFuncOp(funcOp, &getContext()))) {
+      if (failed(lowerFuncOp(funcOp, &getContext(), sourceConstants))) {
         signalPassFailure();
         return;
       }
