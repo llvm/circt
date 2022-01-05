@@ -112,11 +112,8 @@ struct HandshakeInsertBuffersPass
   };
 
   // Add a buffer to any un-buffered channel.
-  void bufferAllStrategy(
-      handshake::FuncOp f, OpBuilder &builder, unsigned numSlots,
-      bool sequential = true,
-      llvm::function_ref<bool(Operation *, Operation *)> filter =
-          [](auto *, auto *) { return false; }) {
+  void bufferAllStrategy(handshake::FuncOp f, OpBuilder &builder,
+                         unsigned numSlots, bool sequential = true) {
 
     for (auto &arg : f.getArguments()) {
       if (!shouldBufferArgument(arg))
@@ -126,13 +123,9 @@ struct HandshakeInsertBuffersPass
 
     for (auto &defOp : f.getOps()) {
       for (auto res : defOp.getResults()) {
-        for (auto useOp : res.getUsers()) {
+        for (auto *useOp : res.getUsers()) {
           if (!isUnbufferedChannel(&defOp, useOp))
             continue;
-
-          if (filter(&defOp, useOp))
-            continue;
-
           insertBuffer(res.getLoc(), res, builder, numSlots, sequential);
         }
       }
