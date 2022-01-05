@@ -98,6 +98,16 @@ static bool isPreservableAggregateType(Type type) {
          !hasZeroBitWidth(firrtlType);
 }
 
+/// Return true if we can preserve the arguments of the given module.
+/// Exteranal modules and toplevel modules are currently assumed to have lowered
+/// types.
+static bool isModuleAllowedToPreserveAggregate(FModuleLike moduleLike) {
+  if (isa<FExtModuleOp>(moduleLike))
+    return false;
+  auto module = cast<FModuleOp>(moduleLike);
+  return cast<CircuitOp>(module->getParentOp()).getMainModule() != module;
+}
+
 /// Peel one layer of an aggregate type into its components.  Type may be
 /// complex, but empty, in which case fields is empty, but the return is true.
 static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields,
@@ -310,7 +320,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   bool lowerArg(Operation *module, size_t argIndex,
                 SmallVectorImpl<PortInfo> &newArgs,
-                SmallVectorImpl<Value> &lowering);
+                SmallVectorImpl<Value> &lowering,
+                bool allowedToPreserveAggregate);
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
                                     FIRRTLType srcType,
                                     FlatBundleFieldEntry field,
@@ -509,12 +520,13 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 // Lower arguments with bundle type by flattening them.
 bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
                                    SmallVectorImpl<PortInfo> &newArgs,
-                                   SmallVectorImpl<Value> &lowering) {
+                                   SmallVectorImpl<Value> &lowering,
+                                   bool allowedToPreserveAggregate) {
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes, preserveAggregate))
+  if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
@@ -909,7 +921,9 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
-    if (lowerArg(extModule, argIndex, newArgs, lowering))
+    // It is not possible to preserve aggregates of external modules.
+    if (lowerArg(extModule, argIndex, newArgs, lowering,
+                 /*allowedToPreserveAggregate=*/false))
       argsToRemove.push_back(argIndex);
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
@@ -978,9 +992,14 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   auto newArgs = module.getPorts();
+
+  // We can preserve aggregates in the arguments if the module is not toplevel.
+  bool allowedToPreserveAggregateOfArguments =
+      preserveAggregate && isModuleAllowedToPreserveAggregate(module);
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
-    if (lowerArg(module, argIndex, newArgs, lowerings)) {
+    if (lowerArg(module, argIndex, newArgs, lowerings,
+                 allowedToPreserveAggregateOfArguments)) {
       auto arg = module.getArgument(argIndex);
       processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
@@ -1181,6 +1200,9 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
+  bool allowedToPreserveAggregate =
+      preserveAggregate &&
+      isModuleAllowedToPreserveAggregate(op.getReferencedModule());
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
@@ -1188,7 +1210,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes, preserveAggregate)) {
+    if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);

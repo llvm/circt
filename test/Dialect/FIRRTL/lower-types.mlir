@@ -40,8 +40,10 @@ firrtl.circuit "TopLevel" {
   // COMMON-SAME: out %sink_valid: [[SINK_VALID_TYPE:!firrtl.uint<1>]]
   // COMMON-SAME: in %sink_ready: [[SINK_READY_TYPE:!firrtl.uint<1>]]
   // COMMON-SAME: out %sink_data: [[SINK_DATA_TYPE:!firrtl.uint<64>]]
+  // COMMON-SAME: in %dummy_valid: !firrtl.uint<1>
   firrtl.module @TopLevel(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
-                          out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
+                          out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
+                          in %dummy: !firrtl.bundle<valid: uint<1>>) {
 
     // COMMON-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
     // COMMON-SAME: = firrtl.instance "" @Simple(
@@ -513,9 +515,13 @@ firrtl.circuit "TopLevel" {
 
   // COMMON-LABEL: firrtl.extmodule @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
   firrtl.extmodule @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+  // COMMON-LABEL: firrtl.extmodule @ExternalModuleShouldBeLowerTyped(in source_valid: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+  firrtl.extmodule @ExternalModuleShouldBeLowerTyped(in source: !firrtl.bundle<valid: uint<1>, data: uint<64>>)
   firrtl.module @Test() {
     // COMMON: %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance "" @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
     %inst_source = firrtl.instance "" @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+    // COMMON: %inst_source_valid_0, %inst_source_data_1 = firrtl.instance "" @ExternalModuleShouldBeLowerTyped(in source_valid: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+    %inst_source2 = firrtl.instance "" @ExternalModuleShouldBeLowerTyped(in source: !firrtl.bundle<valid: uint<1>, data: uint<64>>)
   }
 
 // Test RegResetOp lowering
