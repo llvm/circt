@@ -185,9 +185,9 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
+def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
-  let constructor = "circt::createHandshakeDataflowPass()";
+  let constructor = "circt::createStandardToHandshakePass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
 }
 
