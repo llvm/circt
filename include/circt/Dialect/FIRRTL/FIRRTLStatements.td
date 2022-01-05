@@ -202,3 +202,14 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let assemblyFormat =
     "$dest `,` $src attr-dict `:` type($dest) `,` type($src)";
 }
+
+def ProbeOp : FIRRTLOp<"probe", []> {
+  let summary = "FIRRTL Value Probe";
+  let description = [{
+
+  }];
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$inner_sym, Variadic<FIRRTLType>:$operands);
+  let results = (outs);
+
+  let assemblyFormat = "`sym` $inner_sym $operands attr-dict `:` type($operands)";
+}
