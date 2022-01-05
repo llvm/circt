@@ -46,12 +46,12 @@
 // CHECK:           %[[VAL_49:.*]] = arith.addi %[[VAL_48]], %[[VAL_41]]#3 : index
 // CHECK:           %[[VAL_50:.*]]:2 = fork [2] %[[VAL_49]] : index
 // CHECK:           %[[VAL_51:.*]] = arith.cmpi sgt, %[[VAL_39]]#3, %[[VAL_50]]#1 : index
-// CHECK:           %[[VAL_52:.*]] = mux %[[VAL_51]] {{\[}}%[[VAL_50]]#0, %[[VAL_39]]#2] : i1, index
+// CHECK:           %[[VAL_52:.*]] = select %[[VAL_51]], %[[VAL_50]]#0, %[[VAL_39]]#2 : index
 // CHECK:           %[[VAL_53:.*]] = constant %[[VAL_46]]#1 {value = 10 : index} : index
 // CHECK:           %[[VAL_54:.*]] = arith.addi %[[VAL_39]]#1, %[[VAL_53]] : index
 // CHECK:           %[[VAL_55:.*]]:2 = fork [2] %[[VAL_54]] : index
 // CHECK:           %[[VAL_56:.*]] = arith.cmpi slt, %[[VAL_41]]#2, %[[VAL_55]]#1 : index
-// CHECK:           %[[VAL_57:.*]] = mux %[[VAL_56]] {{\[}}%[[VAL_55]]#0, %[[VAL_41]]#1] : i1, index
+// CHECK:           %[[VAL_57:.*]] = select %[[VAL_56]], %[[VAL_55]]#0, %[[VAL_41]]#1 : index
 // CHECK:           %[[VAL_58:.*]] = constant %[[VAL_46]]#0 {value = 1 : index} : index
 // CHECK:           %[[VAL_59:.*]] = br %[[VAL_39]]#0 : index
 // CHECK:           %[[VAL_60:.*]] = br %[[VAL_41]]#0 : index

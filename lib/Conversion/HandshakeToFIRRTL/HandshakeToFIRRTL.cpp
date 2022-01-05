@@ -933,6 +933,7 @@ public:
   bool visitHandshake(ExternalMemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
+  bool visitHandshake(handshake::SelectOp op);
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
   bool visitHandshake(handshake::StoreOp op);
@@ -1167,6 +1168,57 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
     rewriter.create<ConnectOp>(insertLoc, argReady[i],
                                oneHotAndResultValidAndReady);
   }
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(handshake::SelectOp op) {
+  ValueVector selectSubfields = portList[0];
+  Value selectValid = selectSubfields[0];
+  Value selectReady = selectSubfields[1];
+  Value selectData = selectSubfields[2];
+
+  ValueVector resultSubfields = portList[3];
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  ValueVector trueSubfields = portList[1];
+  Value trueValid = trueSubfields[0];
+  Value trueReady = trueSubfields[1];
+  Value trueData = trueSubfields[2];
+
+  ValueVector falseSubfields = portList[2];
+  Value falseValid = falseSubfields[0];
+  Value falseReady = falseSubfields[1];
+  Value falseData = falseSubfields[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Mux the true and false data.
+  auto muxedData =
+      createMuxTree({falseData, trueData}, selectData, insertLoc, rewriter);
+
+  // Connect the selected data signal to the result data.
+  rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+
+  // 'and' the arg valids and select valid
+  Value allValid = rewriter.create<WireOp>(insertLoc, bitType, "allValid");
+  buildReductionTree<AndPrimOp>({trueValid, falseValid, selectValid}, allValid);
+
+  // Connect that to the result valid.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, allValid);
+
+  // 'and' the result valid with the result ready.
+  auto resultValidAndReady =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, allValid, resultReady);
+
+  // Connect that to the 'ready' signal of all inputs. This implies that all
+  // inputs + select is transacted when all are valid (and the output is ready),
+  // but only the selected data is forwarded.
+  rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
+  rewriter.create<ConnectOp>(insertLoc, trueReady, resultValidAndReady);
+  rewriter.create<ConnectOp>(insertLoc, falseReady, resultValidAndReady);
 
   return true;
 }

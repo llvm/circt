@@ -32,7 +32,7 @@ public:
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
             EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
-            MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
+            MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp, handshake::SelectOp,
             SourceOp, StartOp, StoreOp, TerminatorOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitHandshake(opNode, args...);
@@ -73,6 +73,7 @@ public:
   HANDLE(LazyForkOp);
   HANDLE(LoadOp);
   HANDLE(MemoryOp);
+  HANDLE(handshake::SelectOp);
   HANDLE(ExternalMemoryOp);
   HANDLE(MergeOp);
   HANDLE(MuxOp);

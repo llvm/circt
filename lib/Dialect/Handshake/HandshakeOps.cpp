@@ -808,6 +808,67 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
     result.addAttribute("control", builder.getBoolAttr(true));
 }
 
+static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  Type dataType;
+  SmallVector<Type> operandTypes;
+  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(allOperands) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(dataType))
+    return failure();
+
+  if (allOperands.size() != 3)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "Expected exactly 3 operands");
+
+  result.addTypes({dataType});
+  operandTypes.push_back(IntegerType::get(parser.getContext(), 1));
+  operandTypes.push_back(dataType);
+  operandTypes.push_back(dataType);
+  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
+                             result.operands))
+    return failure();
+
+  if (dataType.isa<NoneType>())
+    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+
+  return success();
+}
+
+static void printSelectOp(OpAsmPrinter &p, SelectOp op) {
+  Type type = op.trueOperand().getType();
+  p << " " << op->getOperands();
+  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
+  p << " : " << type;
+}
+
+std::string handshake::SelectOp::getOperandName(unsigned int idx) {
+  switch (idx) {
+  case 0:
+    return "sel";
+  case 1:
+    return "true";
+  case 2:
+    return "false";
+  default:
+    llvm_unreachable("Expected exactly 3 operands");
+  }
+}
+
+void handshake::SelectOp::build(OpBuilder &builder, OperationState &result,
+                                Value condOperand, Value trueOperand,
+                                Value falseOperand) {
+  auto type = trueOperand.getType();
+  result.types.append(1, type);
+  result.addOperands(condOperand);
+  result.addOperands(trueOperand);
+  result.addOperands(falseOperand);
+  result.addAttribute("dataType", TypeAttr::get(type));
+  result.addAttribute("control",
+                      BoolAttr::get(type.getContext(), type.isa<NoneType>()));
+}
+
 void StartOp::build(OpBuilder &builder, OperationState &result) {
   // Control-only output, has no type
   auto type = builder.getNoneType();

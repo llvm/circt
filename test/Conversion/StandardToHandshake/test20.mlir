@@ -8,22 +8,22 @@
 // CHECK:           %[[VAL_4:.*]]:3 = fork [3] %[[VAL_1]] : none
 // CHECK:           %[[VAL_5:.*]] = constant %[[VAL_4]]#1 {value = 0 : index} : index
 // CHECK:           %[[VAL_6:.*]] = arith.cmpi slt, %[[VAL_3]]#12, %[[VAL_3]]#13 : index
-// CHECK:           %[[VAL_7:.*]] = mux %[[VAL_6]] {{\[}}%[[VAL_3]]#11, %[[VAL_3]]#10] : i1, index
+// CHECK:           %[[VAL_7:.*]] = select %[[VAL_6]], %[[VAL_3]]#11, %[[VAL_3]]#10 : index
 // CHECK:           %[[VAL_8:.*]]:2 = fork [2] %[[VAL_7]] : index
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi slt, %[[VAL_8]]#1, %[[VAL_3]]#9 : index
-// CHECK:           %[[VAL_10:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_3]]#8, %[[VAL_8]]#0] : i1, index
+// CHECK:           %[[VAL_10:.*]] = select %[[VAL_9]], %[[VAL_3]]#8, %[[VAL_8]]#0 : index
 // CHECK:           %[[VAL_11:.*]]:2 = fork [2] %[[VAL_10]] : index
 // CHECK:           %[[VAL_12:.*]] = arith.cmpi slt, %[[VAL_11]]#1, %[[VAL_3]]#7 : index
-// CHECK:           %[[VAL_13:.*]] = mux %[[VAL_12]] {{\[}}%[[VAL_3]]#6, %[[VAL_11]]#0] : i1, index
+// CHECK:           %[[VAL_13:.*]] = select %[[VAL_12]], %[[VAL_3]]#6, %[[VAL_11]]#0 : index
 // CHECK:           %[[VAL_14:.*]]:2 = fork [2] %[[VAL_13]] : index
 // CHECK:           %[[VAL_15:.*]] = arith.cmpi slt, %[[VAL_14]]#1, %[[VAL_3]]#5 : index
-// CHECK:           %[[VAL_16:.*]] = mux %[[VAL_15]] {{\[}}%[[VAL_3]]#4, %[[VAL_14]]#0] : i1, index
+// CHECK:           %[[VAL_16:.*]] = select %[[VAL_15]], %[[VAL_3]]#4, %[[VAL_14]]#0 : index
 // CHECK:           %[[VAL_17:.*]]:2 = fork [2] %[[VAL_16]] : index
 // CHECK:           %[[VAL_18:.*]] = arith.cmpi slt, %[[VAL_17]]#1, %[[VAL_3]]#3 : index
-// CHECK:           %[[VAL_19:.*]] = mux %[[VAL_18]] {{\[}}%[[VAL_3]]#2, %[[VAL_17]]#0] : i1, index
+// CHECK:           %[[VAL_19:.*]] = select %[[VAL_18]], %[[VAL_3]]#2, %[[VAL_17]]#0 : index
 // CHECK:           %[[VAL_20:.*]]:2 = fork [2] %[[VAL_19]] : index
 // CHECK:           %[[VAL_21:.*]] = arith.cmpi slt, %[[VAL_20]]#1, %[[VAL_3]]#1 : index
-// CHECK:           %[[VAL_22:.*]] = mux %[[VAL_21]] {{\[}}%[[VAL_3]]#0, %[[VAL_20]]#0] : i1, index
+// CHECK:           %[[VAL_22:.*]] = select %[[VAL_21]], %[[VAL_3]]#0, %[[VAL_20]]#0 : index
 // CHECK:           %[[VAL_23:.*]] = constant %[[VAL_4]]#0 {value = 1 : index} : index
 // CHECK:           %[[VAL_24:.*]] = br %[[VAL_4]]#2 : none
 // CHECK:           %[[VAL_25:.*]] = br %[[VAL_5]] : index

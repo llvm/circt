@@ -466,6 +466,38 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
   }];
 }
 
+def SelectOp : Handshake_Op<"select", [
+  NoSideEffect,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  TypesMatchWith<"data operand type matches true branch result type",
+                    "trueOperand", "falseOperand", "$_self">,
+  TypesMatchWith<"data operand type matches false branch result type",
+                    "falseOperand", "result", "$_self">
+]> {
+  let summary = "Select operation";
+  let description = [{
+     The select operation will select between two inputs based on an input
+     conditional. The select operation differs from a mux in that
+     1. both operands must be valid before the operation can transact
+     2. both operands will be transacted once one of them is selected 
+
+     Example:
+     ```mlir
+     %res = select %cond, %true, %false : i32
+     ```
+  }];
+
+  let arguments = (ins I1 : $condOperand,
+                       AnyType : $trueOperand, AnyType : $falseOperand);
+  let results = (outs AnyType : $result);
+
+  let builders = [OpBuilder<(ins 
+    "Value":$condOperand, "Value":$trueOperand, "Value":$falseOperand)>];
+  let skipDefaultBuilders = 1;
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+}
+
 def SinkOp
     : Handshake_Op<"sink", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "sink operation";
