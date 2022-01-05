@@ -1414,8 +1414,8 @@ struct HandshakeRemoveBlockPass
   void runOnOperation() override { removeBasicBlocks(getOperation()); }
 };
 
-struct HandshakeDataflowPass
-    : public HandshakeDataflowBase<HandshakeDataflowPass> {
+struct StandardToHandshakePass
+    : public StandardToHandshakeBase<StandardToHandshakePass> {
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
@@ -1448,8 +1448,8 @@ struct HandshakeDataflowPass
 } // namespace
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-circt::createHandshakeDataflowPass() {
-  return std::make_unique<HandshakeDataflowPass>();
+circt::createStandardToHandshakePass() {
+  return std::make_unique<StandardToHandshakePass>();
 }
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
