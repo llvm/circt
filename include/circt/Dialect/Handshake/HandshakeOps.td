@@ -478,8 +478,8 @@ def SelectOp : Handshake_Op<"select", [
   let description = [{
      The select operation will select between two inputs based on an input
      conditional. The select operation differs from a mux in that
-     1. both operands must be valid before the operation can transact
-     2. both operands will be transacted once one of them is selected 
+     1. All operands must be valid before the operation can transact
+     2. All operands will be transacted at simultaneously
 
      Example:
      ```mlir
