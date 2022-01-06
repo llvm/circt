@@ -17,6 +17,7 @@
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
+#include "llvm/ADT/BitVector.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.h.inc"

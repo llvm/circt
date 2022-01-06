@@ -104,7 +104,7 @@ def MSFTModuleOp : MSFTOp<"module",
     // Remove the ports at the specified indexes. Returns the new to old result
     // mapping.
     SmallVector<unsigned>
-    removePorts(ArrayRef<unsigned> inputs, ArrayRef<unsigned> outputs);
+    removePorts(llvm::BitVector inputs, llvm::BitVector outputs);
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {
