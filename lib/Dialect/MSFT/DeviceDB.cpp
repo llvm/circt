@@ -56,7 +56,7 @@ void PrimitiveDB::foreach (
       for (auto n : y.second)
         for (auto p : n.second)
           callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
-                                         x.first, y.first, n.first));
+                                         x.first, y.first, n.first, ""));
 }
 
 //===----------------------------------------------------------------------===//
@@ -126,22 +126,14 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
 
   size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
-    StringRef attrName = attr.getName();
     llvm::TypeSwitch<Attribute>(attr.getValue())
 
         // Handle PhysLocationAttr.
         .Case([&](PhysLocationAttr physLoc) {
-          // PhysLoc has a subpath, which comes from the attribute name.
-          // TODO(mikeurbach): make this an inherent attribute of the PhysLoc.
-          if (!attrName.startswith("loc:")) {
-            op->emitOpError(
-                "PhysLoc attributes must have names starting with 'loc'");
-            ++numFailed;
-            return;
-          }
-
-          LogicalResult added = addPlacement(
-              physLoc, PlacedInstance{instPath, attrName.substr(4), op});
+          // PhysLoc has a subpath.
+          auto subPath = physLoc.getSubPath();
+          LogicalResult added =
+              addPlacement(physLoc, PlacedInstance{instPath, subPath, op});
           if (failed(added))
             ++numFailed;
         })
@@ -265,8 +257,9 @@ void PlacementDB::walkPlacements(
           PlacedInstance inst = devF->getSecond();
 
           // Marshall and run the callback.
-          PhysLocationAttr loc = PhysLocationAttr::get(
-              ctxt, PrimitiveTypeAttr::get(ctxt, devtype), x, y, num);
+          PhysLocationAttr loc =
+              PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, devtype),
+                                    x, y, num, inst.subpath);
           callback(loc, inst);
         }
       }

@@ -33,6 +33,7 @@
 // CHECK: firrtl.module @main(in %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_26:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_27:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_28:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_29:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_30:.*]]: !firrtl.clock, in %[[VAL_31:.*]]: !firrtl.uint<1>) {
 // CHECK:             %[[VAL_32:.*]], %[[VAL_33:.*]], %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]] = firrtl.instance handshake_store0  @handshake_store_in_ui64_ui8_out_ui8_ui64(in addrIn0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in dataIn: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in ctrl: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out dataToMem: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out addrOut0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: none, ...) -> (i8, index, none) {
-  %0:2 = store [%arg1] %arg0, %arg2 : index, i8
-  return %0#0, %0#1, %arg2 : i8, index, none
+  %0:2 = fork [2] %arg2 : none
+  %1:2 = store [%arg1] %arg0, %0#0 : index, i8
+  return %1#0, %1#1, %0#1 : i8, index, none
 }

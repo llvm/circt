@@ -156,4 +156,17 @@ firrtl.module @LowerToBind() {
 firrtl.nla @NLA1 [] []
 firrtl.nla @NLA2 [@InstanceLowerToBind] ["foo"]
 
+
+// CHECK-LABEL: @ProbeTest
+firrtl.module @ProbeTest(in %in1 : !firrtl.uint<2>, in %in2 : !firrtl.uint<3>, out %out3: !firrtl.uint<3>) {
+  %w1 = firrtl.wire  : !firrtl.uint<4>
+  // CHECK: %[[TMP3:.+]] = firrtl.cat
+  %w2 = firrtl.cat %in1, %in1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+  firrtl.connect %w1, %w2 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.connect %out3, %in2 : !firrtl.uint<3>, !firrtl.uint<3>
+  %someNode = firrtl.node %in1 : !firrtl.uint<2>
+  // CHECK: firrtl.probe sym @foobar %in1, %in2, %out3, %w1, %[[TMP3]], %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
+  firrtl.probe sym @foobar %in1, %in2, %out3, %w1, %w2, %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
+}
+
 }

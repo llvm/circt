@@ -333,14 +333,16 @@ def MuxOp : Handshake_Op<"mux", [
 ]> {
   let summary = "mux operation";
   let description = [{
-    The mux operation represents a(deterministic)
-        merge operation.
+    The mux operation represents a(deterministic) merge operation.
     Operands: select, data0, data1, data2, ...
 
     The 'select' operand is received from ControlMerge of the same
     block and it represents the index of the data operand that the mux
     should propagate to its single output.  The number of data inputs
     corresponds to the number of predecessor blocks.
+
+    The mux operation is intended solely for control+dataflow selection.
+    For purely dataflow selection, use the 'select' operation instead.
 
     Example:
     ```mlir
@@ -464,6 +466,42 @@ def ConditionalBranchOp : Handshake_Op<"cond_br", [
     // These are the indices into the dests list.
     enum { trueIndex = 0, falseIndex = 1 };
   }];
+}
+
+def SelectOp : Handshake_Op<"select", [
+  NoSideEffect,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  TypesMatchWith<"data operand type matches true branch result type",
+                    "trueOperand", "falseOperand", "$_self">,
+  TypesMatchWith<"data operand type matches false branch result type",
+                    "falseOperand", "result", "$_self">
+]> {
+  let summary = "Select operation";
+  let description = [{
+     The select operation will select between two inputs based on an input
+     conditional. The select operation differs from a mux in that
+     1. All operands must be valid before the operation can transact
+     2. All operands will be transacted at simultaneously
+
+     The 'select' operation is intended to handle 'std.select' and other
+     ternary-like operators, which considers strictly dataflow. The 'mux' operator
+     considers control+dataflow between blocks.
+
+     Example:
+     ```mlir
+     %res = select %cond, %true, %false : i32
+     ```
+  }];
+
+  let arguments = (ins I1 : $condOperand,
+                       AnyType : $trueOperand, AnyType : $falseOperand);
+  let results = (outs AnyType : $result);
+
+  let builders = [OpBuilder<(ins 
+    "Value":$condOperand, "Value":$trueOperand, "Value":$falseOperand)>];
+  let skipDefaultBuilders = 1;
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def SinkOp

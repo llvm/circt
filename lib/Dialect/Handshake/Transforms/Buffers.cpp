@@ -111,17 +111,24 @@ struct HandshakeInsertBuffersPass
     }
   };
 
-  // Perform a depth first search and add a buffer to any un-buffered channel
-  // where it makes reasonable sense.
+  // Add a buffer to any un-buffered channel.
   void bufferAllStrategy(handshake::FuncOp f, OpBuilder &builder,
                          unsigned numSlots, bool sequential = true) {
 
     for (auto &arg : f.getArguments()) {
       if (!shouldBufferArgument(arg))
         continue;
-      for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, numSlots, isUnbufferedChannel,
-                              /*sequential=*/sequential);
+      insertBuffer(arg.getLoc(), arg, builder, numSlots, sequential);
+    }
+
+    for (auto &defOp : f.getOps()) {
+      for (auto res : defOp.getResults()) {
+        for (auto *useOp : res.getUsers()) {
+          if (!isUnbufferedChannel(&defOp, useOp))
+            continue;
+          insertBuffer(res.getLoc(), res, builder, numSlots, sequential);
+        }
+      }
     }
   }
 
@@ -185,23 +192,6 @@ struct HandshakeInsertBuffersPass
         return true;
     }
     return false;
-  }
-
-  void
-  insertBufferRecursive(OpOperand &use, OpBuilder builder, size_t numSlots,
-                        function_ref<bool(Operation *, Operation *)> callback,
-                        bool sequential) {
-    auto oldValue = use.get();
-    auto *definingOp = oldValue.getDefiningOp();
-    auto *usingOp = use.getOwner();
-    if (callback(definingOp, usingOp)) {
-      bufferOperand(use, builder, numSlots, sequential);
-    }
-
-    for (auto &childUse : usingOp->getUses())
-      if (!isa<handshake::BufferOp>(childUse.getOwner()))
-        insertBufferRecursive(childUse, builder, numSlots, callback,
-                              sequential);
   }
 
   void runOnOperation() override {
