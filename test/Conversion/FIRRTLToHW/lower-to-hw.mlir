@@ -1573,4 +1573,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:  %0 = sv.array_index_inout %reg[%false] : !hw.inout<array<1xi1>>, i1
     // CHECK:  sv.passign %0, %value : i1
   }
+
+  // CHECK-LABEL: hw.module @ForceNameSubmodule
+  firrtl.nla @nla_1 [@ForceNameTop, @ForceNameSubmodule] ["foo", "ForceNameSubmodule"]
+  firrtl.nla @nla_2 [@ForceNameTop, @ForceNameSubmodule] ["bar", "ForceNameSubmodule"]
+  firrtl.module @ForceNameSubmodule() attributes {annotations = [
+    {circt.nonlocal = @nla_2,
+     class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
+    {circt.nonlocal = @nla_1,
+     class = "chisel3.util.experimental.ForceNameAnnotation", name = "Foo"}]} {}
+  // CHECK: hw.module @ForceNameTop
+  firrtl.module @ForceNameTop() {
+    firrtl.instance foo
+      {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}
+      @ForceNameSubmodule()
+    firrtl.instance bar
+      {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}
+      @ForceNameSubmodule()
+    // CHECK:      hw.instance "foo" {{.+}} {hw.verilogName = "Foo"}
+    // CHECK-NEXT: hw.instance "bar" {{.+}} {hw.verilogName = "Bar"}
+  }
 }
