@@ -134,7 +134,7 @@ void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
   mlir::Operation *op = unwrap(cOp);
   mlir::MLIRContext *ctxt = op->getContext();
   PhysLocationAttr loc = PhysLocationAttr::get(
-      ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num);
+      ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num, entityName);
   llvm::SmallString<64> entity("loc:");
   entity.append(entityName);
   op->setAttr(entity, loc);
@@ -145,11 +145,12 @@ bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute attr) {
 }
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
                                            CirctMSFTPrimitiveType devType,
-                                           uint64_t x, uint64_t y,
-                                           uint64_t num) {
-  auto ctxt = unwrap(cCtxt);
+                                           uint64_t x, uint64_t y, uint64_t num,
+                                           MlirStringRef subPath) {
+  auto *ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
-      ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
+      ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num,
+      unwrap(subPath)));
 }
 
 CirctMSFTPrimitiveType

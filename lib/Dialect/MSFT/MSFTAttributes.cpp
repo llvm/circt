@@ -25,11 +25,21 @@ using namespace msft;
 
 Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
+  std::string subPath;
   StringRef devTypeStr;
   uint64_t x, y, num;
+
   if (p.parseLess() || p.parseKeyword(&devTypeStr) || p.parseComma() ||
       p.parseInteger(x) || p.parseComma() || p.parseInteger(y) ||
-      p.parseComma() || p.parseInteger(num) || p.parseGreater())
+      p.parseComma() || p.parseInteger(num))
+    return Attribute();
+
+  // Parse an optional subPath.
+  if (succeeded(p.parseOptionalComma()))
+    if (p.parseString(&subPath))
+      return Attribute();
+
+  if (p.parseGreater())
     return Attribute();
 
   Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
@@ -39,13 +49,20 @@ Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
   }
   PrimitiveTypeAttr devTypeAttr =
       PrimitiveTypeAttr::get(p.getContext(), *devType);
-  auto phy = PhysLocationAttr::get(p.getContext(), devTypeAttr, x, y, num);
+  auto phy =
+      PhysLocationAttr::get(p.getContext(), devTypeAttr, x, y, num, subPath);
   return phy;
 }
 
 void PhysLocationAttr::print(AsmPrinter &p) const {
   p << "<" << stringifyPrimitiveType(getPrimitiveType().getValue()) << ", "
-    << getX() << ", " << getY() << ", " << getNum() << '>';
+    << getX() << ", " << getY() << ", " << getNum();
+
+  // Print an optional subPath.
+  if (!getSubPath().empty())
+    p << ", \"" << getSubPath() << '"';
+
+  p << '>';
 }
 
 Attribute PhysicalRegionRefAttr::parse(AsmParser &p, Type type) {
