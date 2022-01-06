@@ -197,6 +197,13 @@ static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
                              cl::init(false));
 
+/// Enable the pass to merge the read and write ports of a memory, if their
+/// enable conditions are mutually exclusive.
+static cl::opt<bool>
+    inferMemReadWrite("infer-rw",
+                      cl::desc("enable infer read write ports for memory"),
+                      cl::init(true));
+
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -366,6 +373,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+
+  // Run the infer-rw pass, which merges read and write ports of a memory with
+  // mutually exclusive enables.
+  if (inferMemReadWrite)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createInferReadWritePass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());

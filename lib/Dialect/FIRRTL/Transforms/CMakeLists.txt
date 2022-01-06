@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentralSignalMappings.cpp
   IMConstProp.cpp
   InferResets.cpp
+  InferReadWrite.cpp
   InferWidths.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp

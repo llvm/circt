@@ -340,4 +340,13 @@ def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createRemoveResetsPass()";
 }
 
+def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
+  let summary = "Infer the read-write memory port";
+  let description = [{
+    This pass merges the read and write ports of a memory,
+    if the enable conditions are mutually exclusive.
+  }];
+  let constructor = "circt::firrtl::createInferReadWritePass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
