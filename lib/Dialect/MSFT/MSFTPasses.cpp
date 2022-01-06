@@ -796,8 +796,8 @@ void WireCleanupPass::runOnOperation() {
   for (auto mod : sortedMods)
     bubbleWiresUp(mod);
 
-  // for (auto mod : llvm::reverse(sortedMods))
-  //   sinkWiresDown(mod);
+  for (auto mod : llvm::reverse(sortedMods))
+    sinkWiresDown(mod);
 }
 
 /// Push up any wires which are simply passed-through.
