@@ -5,7 +5,7 @@
 // CHECK:           %[[VAL_4:.*]] = merge %[[VAL_0]] : i1
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = merge %[[VAL_2]] : i32
-// CHECK:           %[[VAL_7:.*]] = mux %[[VAL_4]] {{\[}}%[[VAL_6]], %[[VAL_5]]] : i1, i32
+// CHECK:           %[[VAL_7:.*]] = select %[[VAL_4]], %[[VAL_6]], %[[VAL_5]] : i32
 // CHECK:           return %[[VAL_7]], %[[VAL_3]] : i32, none
 // CHECK:         }
 func @main(%c : i1, %a : i32, %b : i32) -> i32 {

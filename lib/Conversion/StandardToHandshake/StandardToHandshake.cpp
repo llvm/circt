@@ -1405,9 +1405,9 @@ struct ConvertSelectOps : public OpConversionPattern<mlir::SelectOp> {
   LogicalResult
   matchAndRewrite(mlir::SelectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<handshake::MuxOp>(
-        op, adaptor.getCondition(),
-        SmallVector<Value>{adaptor.getFalseValue(), adaptor.getTrueValue()});
+    rewriter.replaceOpWithNewOp<handshake::SelectOp>(op, adaptor.getCondition(),
+                                                     adaptor.getFalseValue(),
+                                                     adaptor.getTrueValue());
     return success();
   };
 };
