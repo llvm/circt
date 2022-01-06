@@ -189,6 +189,10 @@ def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createStandardToHandshakePass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
+  let options =
+    [Option<"sourceConstants", "source-constants", "bool", "false",
+            "If true, will connect constants to source operations instead of "
+            "to the control network. May reduce the size of the final circuit.">];
 }
 
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
