@@ -502,6 +502,122 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
   return buff;
 }
 
+/// Helper to update GlobalRefOps after referenced ops bubble up.
+static void bubbleUpGlobalRefs(Operation *op) {
+  if (auto globalRefs = op->getAttrOfType<ArrayAttr>("circt.globalRef")) {
+    for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
+      // Resolve the GlobalRefOp and get its path.
+      auto rootModule = op->getParentOfType<ModuleOp>();
+      auto refSymbol = globalRef.getGlblSym();
+      auto globalRefOp = rootModule.lookupSymbol<hw::GlobalRefOp>(refSymbol);
+      auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
+
+      // Construct a new path starting from the old path.
+      SmallVector<Attribute> newPath(oldPath);
+
+      // If there aren't two elements in the path, this GlobalRefOp has already
+      // been updated.
+      if (newPath.size() < 2)
+        return;
+
+      // Splice the last two elements in the path, combining their names with a
+      // dot, and taking the module from the second to last element.
+      auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
+      auto nextElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
+      auto newModule = nextElement.getModule();
+
+      SmallString<16> newName;
+      newName += nextElement.getName().getValue();
+      newName += '.';
+      newName += lastElement.getName().getValue();
+      auto newNameAttr = StringAttr::get(op->getContext(), newName);
+
+      auto newLeaf = hw::InnerRefAttr::get(newModule, newNameAttr);
+      newPath.push_back(newLeaf);
+
+      // Update the path on the GlobalRefOp.
+      auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
+      globalRefOp.namepathAttr(newPathAttr);
+    }
+  }
+}
+
+/// Helper to update GlobalRefops after referenced ops are pushed down.
+static void pushDownGlobalRefs(Operation *op) {
+  if (auto globalRefs = op->getAttrOfType<ArrayAttr>("circt.globalRef")) {
+    for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
+      // Resolve the GlobalRefOp and get its path.
+      auto rootModule = op->getParentOfType<ModuleOp>();
+      auto refSymbol = globalRef.getGlblSym();
+      auto globalRefOp = rootModule.lookupSymbol<hw::GlobalRefOp>(refSymbol);
+      auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
+
+      // Get the module containing the partition and the partition's name.
+      auto partAttr = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+      auto partMod = partAttr.getRootReference();
+      auto partName = partAttr.getLeafReference();
+
+      // Resolve the DesignPartitionOp and get its verilog name.
+      auto mod = op->getParentOfType<MSFTModuleOp>();
+      StringAttr partModName;
+      for (auto part : mod.getOps<DesignPartitionOp>()) {
+        if (part.sym_nameAttr() == partName) {
+          partModName = part.verilogNameAttr();
+          break;
+        }
+      }
+      assert(partModName);
+
+      // Construct a new path starting from the old path.
+      SmallVector<Attribute> newPath(oldPath);
+      auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
+
+      // If the last element in the path is not pointing at the module
+      // containing the partition, this GlobalRefOp has already been updated.
+      if (lastElement.getModule() != partMod)
+        continue;
+
+      // Split the last element in the path to add the partition.
+      auto partRef = hw::InnerRefAttr::get(partMod, partName);
+      auto leafRef = hw::InnerRefAttr::get(partModName, lastElement.getName());
+      newPath.push_back(partRef);
+      newPath.push_back(leafRef);
+
+      // Update the path on the GlobalRefOp.
+      auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
+      globalRefOp.namepathAttr(newPathAttr);
+
+      // Find the instance of the design partition.
+      InstanceOp partInstance;
+      for (auto instOp : mod.getOps<InstanceOp>()) {
+        if (instOp.sym_nameAttr() == partName) {
+          partInstance = instOp;
+          break;
+        }
+      }
+      assert(partInstance);
+
+      // Ensure the instance has this GlobalRefAttr, or collect any existing
+      // global refs if not.
+      SmallVector<Attribute> newGlobalRefs;
+      auto partRefs = partInstance->getAttrOfType<ArrayAttr>("circt.globalRef");
+      if (partRefs) {
+        for (auto ref : partRefs.getAsRange<hw::GlobalRefAttr>()) {
+          if (ref == globalRef)
+            return;
+
+          newGlobalRefs.push_back(ref);
+        }
+      }
+
+      newGlobalRefs.push_back(globalRef);
+      auto newRefsAttr = ArrayAttr::get(op->getContext(), newGlobalRefs);
+      partInstance->setAttr("circt.globalRef", newRefsAttr);
+      partInstance->setAttr("inner_sym", partInstance.sym_nameAttr());
+    }
+  }
+}
+
 void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   // This particular implementation is _very_ sensitive to iteration order. It
   // assumes that the order in which the ops, operands, and results are the same
@@ -565,9 +681,18 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       for (Value res : newOp->getResults())
         newOperands.push_back(res);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
+      // GlobalRefs use the inner_sym attribute, so keep it up to date.
+      if (newOp->hasAttr("inner_sym"))
+        newOp->setAttr("inner_sym",
+                       StringAttr::get(op->getContext(), ::getOpName(newOp)));
     }
   };
   updateInstances(mod, resValues, cloneOpsGetOperands);
+
+  //*************
+  //   Update any global refs the 'ops' participate in to the new hierarchy.
+  for (Operation *op : ops)
+    bubbleUpGlobalRefs(op);
 
   //*************
   //   Done.
@@ -702,13 +827,14 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Value, 64> outputs(partInstOutputs.size(), Value());
 
   // Clone the ops into the partition block. Map the results into the module
-  // outputs.
+  // outputs. Push down any global refs to include the partition.
   for (Operation *op : toMove) {
     Operation *newOp = partBuilder.insert(op->clone(mapping));
     newOp->removeAttr("targetDesignPartition");
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
+    pushDownGlobalRefs(op);
     op->erase();
   }
   partBuilder.create<OutputOp>(loc, outputs);
