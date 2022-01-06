@@ -36,9 +36,9 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   }];
   let mnemonic = "physloc";
   let parameters = (ins
-    StringRefParameter<"subPath">:$subPath,
     "PrimitiveTypeAttr":$primitiveType,
-    "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
+    "uint64_t":$x, "uint64_t":$y, "uint64_t":$num,
+    StringRefParameter<"subPath">:$subPath);
 }
 
 def PhysicalBounds : MSFT_Attr<"PhysicalBounds"> {

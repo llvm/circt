@@ -55,9 +55,8 @@ void PrimitiveDB::foreach (
     for (auto y : x.second)
       for (auto n : y.second)
         for (auto p : n.second)
-          callback(PhysLocationAttr::get(ctxt, "",
-                                         PrimitiveTypeAttr::get(ctxt, p),
-                                         x.first, y.first, n.first));
+          callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
+                                         x.first, y.first, n.first, ""));
 }
 
 //===----------------------------------------------------------------------===//
@@ -258,9 +257,9 @@ void PlacementDB::walkPlacements(
           PlacedInstance inst = devF->getSecond();
 
           // Marshall and run the callback.
-          PhysLocationAttr loc = PhysLocationAttr::get(
-              ctxt, inst.subpath, PrimitiveTypeAttr::get(ctxt, devtype), x, y,
-              num);
+          PhysLocationAttr loc =
+              PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, devtype),
+                                    x, y, num, inst.subpath);
           callback(loc, inst);
         }
       }

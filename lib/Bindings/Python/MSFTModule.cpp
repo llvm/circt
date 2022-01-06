@@ -135,8 +135,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           [](py::object cls, PrimitiveType devType, uint64_t x, uint64_t y,
              uint64_t num, std::string subPath, MlirContext ctxt) {
             auto cSubPath = mlirStringRefCreateFromCString(subPath.c_str());
-            return cls(circtMSFTPhysLocationAttrGet(
-                ctxt, cSubPath, (uint64_t)devType, x, y, num));
+            return cls(circtMSFTPhysLocationAttrGet(ctxt, (uint64_t)devType, x,
+                                                    y, num, cSubPath));
           },
           "Create a physical location attribute", py::arg(),
           py::arg("dev_type"), py::arg("x"), py::arg("y"), py::arg("num"),

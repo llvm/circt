@@ -3,11 +3,11 @@
 // RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv --export-verilog | FileCheck %s --check-prefix=TCL
 
 hw.globalRef @ref1 [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>] {
-  "foo" = #msft.physloc<"memBank2", M20K, 15, 9, 3>
+  "foo" = #msft.physloc<M20K, 15, 9, 3, "memBank2">
 }
 
 hw.globalRef @ref2 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>] {
-  "bar" = #msft.physloc<"memBank2", M20K, 8, 19, 1>
+  "bar" = #msft.physloc<M20K, 8, 19, 1, "memBank2">
 }
 
 hw.globalRef @ref3 [#hw.innerNameRef<@regions::@module>] {
