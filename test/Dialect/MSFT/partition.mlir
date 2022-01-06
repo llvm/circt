@@ -41,17 +41,17 @@ msft.module @B {} (%clk : i1) -> (x: i2)  {
 // CHECK:    msft.output %b.unit1.foo_x, %b.seq.compreg, %b.unit2.foo_x, %unit1.foo_x : i2, i2, i2, i2
 
 // CLEANUP-LABEL: msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
-// CLEANUP:    %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg = msft.instance @part1 @dp(%b.x, %clk, %c0_i2)  : (i2, i1, i2) -> (i2, i2)
-// CLEANUP:    %b.x = msft.instance @b @B()  : () -> i2
+// CLEANUP:    %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %clk, %c0_i2)  : (i2, i1, i2) -> (i2, i2)
+// CLEANUP:    %b.unit1.foo_a = msft.instance @b @B()  : () -> i2
 // CLEANUP:    %c0_i2 = hw.constant 0 : i2
-// CLEANUP:    msft.output %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg : i2, i2
+// CLEANUP:    msft.output %part1.b.unit2.foo_x, %part1.unit1.foo_x : i2, i2
 // CLEANUP-LABEL: msft.module.extern @Extern(%foo_a: i2) -> (foo_x: i2)
-// CLEANUP-LABEL: msft.module @B {} () -> (x: i2) {
+// CLEANUP-LABEL: msft.module @B {} () -> (unit1.foo_a: i2) {
 // CLEANUP:    %c1_i2 = hw.constant 1 : i2
 // CLEANUP:    msft.output %c1_i2 : i2
-// CLEANUP-LABEL: msft.module @dp {} (%b.unit1.foo_a: i2, %b.seq.compreg.in0: i1, %b.seq.compreg.in1: i2) -> (b.unit1.foo_x: i2, b.seq.compreg.b.seq.compreg: i2) {
+// CLEANUP-LABEL: msft.module @dp {} (%b.unit1.foo_a: i2, %b.seq.compreg.in1: i1, %unit1.foo_a: i2) -> (b.unit2.foo_x: i2, unit1.foo_x: i2)
 // CLEANUP:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%b.unit1.foo_a)  : (i2) -> i2
-// CLEANUP:    %b.seq.compreg = seq.compreg %b.unit1.foo_x, %b.seq.compreg.in0 : i2
+// CLEANUP:    %b.seq.compreg = seq.compreg %b.unit1.foo_x, %b.seq.compreg.in1 : i2
 // CLEANUP:    %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.seq.compreg)  : (i2) -> i2
-// CLEANUP:    %unit1.foo_x = msft.instance @unit1 @Extern(%b.seq.compreg.in1)  : (i2) -> i2
+// CLEANUP:    %unit1.foo_x = msft.instance @unit1 @Extern(%unit1.foo_a)  : (i2) -> i2
 // CLEANUP:    msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
