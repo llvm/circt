@@ -297,6 +297,14 @@ protected:
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
+
+  static bool isWireManipulationOp(Operation *op) {
+    return isa<hw::ArrayConcatOp>(op) || isa<hw::ArrayCreateOp>(op) ||
+           isa<hw::ArrayGetOp>(op) || isa<hw::ArraySliceOp>(op) ||
+           isa<hw::StructCreateOp>(op) || isa<hw::StructExplodeOp>(op) ||
+           isa<hw::StructExtractOp>(op) || isa<hw::StructInjectOp>(op) ||
+           isa<hw::StructCreateOp>(op) || isa<hw::ConstantOp>(op);
+  }
 };
 } // anonymous namespace
 
@@ -384,9 +392,12 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
+  void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+
+  // Tag wire manipulation ops connected to this potentially tagged op.
+  static void markWireOps(Operation *op);
 };
 } // anonymous namespace
 
@@ -401,9 +412,42 @@ void PartitionPass::runOnOperation() {
     partition(mod);
 }
 
+void PartitionPass::markWireOps(Operation *taggedOp) {
+  auto partRef =
+      taggedOp->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+  if (!partRef)
+    return;
+  SmallVector<Operation *, 8> opQueue;
+  opQueue.push_back(taggedOp);
+
+  while (!opQueue.empty()) {
+    Operation *op = opQueue.back();
+    opQueue.pop_back();
+
+    for (auto user : op->getUsers()) {
+      if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
+        continue;
+      user->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(user);
+    }
+
+    for (auto operValue : op->getOperands()) {
+      Operation *defOp = operValue.getDefiningOp();
+      if (!defOp || !isWireManipulationOp(defOp) ||
+          defOp->hasAttr("targetDesignPartition"))
+        continue;
+      defOp->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(defOp);
+    }
+  }
+}
+
 void PartitionPass::partition(MSFTModuleOp mod) {
   DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
   SmallVector<Operation *, 64> nonLocalTaggedOps;
+
+  mod.walk(&markWireOps);
+
   mod.walk([&](Operation *op) {
     auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
     if (!partRef)
@@ -477,6 +521,14 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
     if (!retName.empty())
       return retName;
   }
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+    buff.clear();
+    llvm::raw_string_ostream(buff) << "c" << constOp.value();
+    return buff;
+  }
+
+  if (res.getDefiningOp()->getNumResults() == 1)
+    return {};
 
   // Fallback. Not ideal.
   buff.clear();
@@ -522,12 +574,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     for (OpResult res : op->getOpResults()) {
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), res.getType()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          res.getType()));
     }
     for (OpOperand &oper : op->getOpOperands()) {
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), oper.get()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          oper.get()));
       newResTypes.push_back(oper.get().getType());
     }
   }
@@ -576,7 +630,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
 }
 
 void PartitionPass::partition(DesignPartitionOp partOp,
-                              SmallVectorImpl<Operation *> &toMove) {
+                              ArrayRef<Operation *> toMove) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -596,24 +650,22 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
     StringRef name = ::getOpName(inst);
 
-    for (auto port :
-         llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
+    for (auto port : modPorts.inputs) {
+      partInstInputs.push_back(inst->getOperand(port.argNum));
+      inputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::INPUT,
+          /*type*/ port.type,
+          /*argNum*/ inputPorts.size()});
+    }
 
-      if (port.direction == hw::PortDirection::OUTPUT) {
-        partInstOutputs.push_back(inst->getResult(port.argNum));
-        outputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ outputPorts.size()});
-      } else {
-        partInstInputs.push_back(inst->getOperand(port.argNum));
-        inputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ inputPorts.size()});
-      }
+    for (auto port : modPorts.outputs) {
+      partInstOutputs.push_back(inst->getResult(port.argNum));
+      outputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ port.type,
+          /*argNum*/ outputPorts.size()});
     }
   };
   // Handle all other operators.
@@ -632,12 +684,13 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     }
 
     for (OpResult res : op->getOpResults()) {
-      outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(
-              ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ res.getType(),
-          /*argNum*/ outputPorts.size()});
+      StringRef resName = getResultName(res, topLevelSyms, nameBuffer);
+      outputPorts.push_back(
+          hw::PortInfo{/*name*/ StringAttr::get(
+                           ctxt, name + (resName.empty() ? "" : "." + resName)),
+                       /*direction*/ hw::PortDirection::OUTPUT,
+                       /*type*/ res.getType(),
+                       /*argNum*/ outputPorts.size()});
       partInstOutputs.push_back(res);
     }
   };
@@ -677,11 +730,6 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
       SymbolRefAttr());
 
-  // Replace original ops' outputs with partition outputs.
-  assert(partInstOutputs.size() == partInst.getNumResults());
-  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
-    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
-
   //*************
   //   Move the operations!
 
@@ -709,9 +757,16 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
-    op->erase();
   }
   partBuilder.create<OutputOp>(loc, outputs);
+
+  // Replace original ops' outputs with partition outputs.
+  assert(partInstOutputs.size() == partInst.getNumResults());
+  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
+    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
+
+  for (Operation *op : toMove)
+    op->erase();
 }
 
 namespace circt {
@@ -741,20 +796,21 @@ void WireCleanupPass::runOnOperation() {
   for (auto mod : sortedMods)
     bubbleWiresUp(mod);
 
-  for (auto mod : llvm::reverse(sortedMods))
-    sinkWiresDown(mod);
+  // for (auto mod : llvm::reverse(sortedMods))
+  //   sinkWiresDown(mod);
 }
 
 /// Push up any wires which are simply passed-through.
 void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
+  hw::ModulePortInfo ports = mod.getPorts();
 
   // Find all "passthough" internal wires, filling 'inputPortsToRemove' as a
   // side-effect.
   DenseMap<Value, hw::PortInfo> passThroughs;
-  SmallVector<unsigned> inputPortsToRemove;
-  for (hw::PortInfo inputPort : mod.getPorts().inputs) {
+  llvm::BitVector inputPortsToRemove(ports.inputs.size());
+  for (hw::PortInfo inputPort : ports.inputs) {
     BlockArgument portArg = body->getArgument(inputPort.argNum);
     bool removePort = true;
     for (OpOperand user : portArg.getUsers()) {
@@ -764,14 +820,14 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
         removePort = false;
     }
     if (removePort)
-      inputPortsToRemove.push_back(inputPort.argNum);
+      inputPortsToRemove.set(inputPort.argNum);
   }
 
   // Find all output ports which we can remove. Fill in 'outputToInputIdx' to
   // help rewire instantiations later on.
   DenseMap<unsigned, unsigned> outputToInputIdx;
-  SmallVector<unsigned> outputPortsToRemove;
-  for (hw::PortInfo outputPort : mod.getPorts().outputs) {
+  llvm::BitVector outputPortsToRemove(ports.outputs.size());
+  for (hw::PortInfo outputPort : ports.outputs) {
     assert(outputPort.argNum < terminator->getNumOperands() && "Invalid IR");
     Value outputValue = terminator->getOperand(outputPort.argNum);
     auto inputNumF = passThroughs.find(outputValue);
@@ -779,7 +835,7 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
       continue;
     hw::PortInfo inputPort = inputNumF->second;
     outputToInputIdx[outputPort.argNum] = inputPort.argNum;
-    outputPortsToRemove.push_back(outputPort.argNum);
+    outputPortsToRemove.set(outputPort.argNum);
   }
 
   // Use MSFTModuleOp's `removePorts` method to remove the ports. It returns a
@@ -789,7 +845,6 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
       mod.removePorts(inputPortsToRemove, outputPortsToRemove);
 
   // Update the instantiations.
-  llvm::sort(inputPortsToRemove);
   auto setPassthroughsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                         SmallVectorImpl<Value> &newOperands) {
     // Re-map the passthrough values around the instance.
@@ -803,15 +858,10 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
     }
     // Use a sort-merge-join approach to figure out the operand mapping on the
     // fly.
-    size_t mergeCtr = 0;
     for (size_t operNum = 0, e = oldInst.getNumOperands(); operNum < e;
-         ++operNum) {
-      if (mergeCtr < inputPortsToRemove.size() &&
-          operNum == inputPortsToRemove[mergeCtr])
-        ++mergeCtr;
-      else
+         ++operNum)
+      if (!inputPortsToRemove.test(operNum))
         newOperands.push_back(oldInst.getOperand(operNum));
-    }
   };
   updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
 }
@@ -830,7 +880,7 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   // drives it. Populate 'resultsToErase' with output ports which only drive
   // input ports.
   DenseMap<unsigned, unsigned> inputToOutputLoopback;
-  SmallVector<unsigned> resultsToErase; // This is sorted.
+  llvm::BitVector resultsToErase(inst.getNumResults());
   for (unsigned resNum = 0, e = inst.getNumResults(); resNum < e; ++resNum) {
     bool allLoops = true;
     for (auto &use : inst.getResult(resNum).getUses()) {
@@ -840,37 +890,31 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
         inputToOutputLoopback[use.getOperandNumber()] = resNum;
     }
     if (allLoops)
-      resultsToErase.push_back(resNum);
+      resultsToErase.set(resNum);
   }
 
   // Add internal connections to replace the instantiation's loop back
   // connections.
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
-  SmallVector<unsigned> argsToErase;
+  llvm::BitVector argsToErase(body->getNumArguments());
   for (auto resOper : inputToOutputLoopback) {
     body->getArgument(resOper.first)
         .replaceAllUsesWith(terminator->getOperand(resOper.second));
-    argsToErase.push_back(resOper.first);
+    argsToErase.set(resOper.first);
   }
 
   // Remove the ports.
   SmallVector<unsigned> newToOldResultMap =
       mod.removePorts(argsToErase, resultsToErase);
   // and update the instantiations.
-  llvm::sort(argsToErase);
   auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                          SmallVectorImpl<Value> &newOperands) {
     // Use sort-merge-join to compute the new operands;
-    unsigned mergeJoinCtr = 0;
     for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
-         ++argNum) {
-      if (mergeJoinCtr < argsToErase.size() &&
-          argNum == argsToErase[mergeJoinCtr])
-        ++mergeJoinCtr;
-      else
+         ++argNum)
+      if (!argsToErase.test(argNum))
         newOperands.push_back(oldInst.getOperand(argNum));
-    }
   };
   updateInstances(mod, newToOldResultMap, getOperands);
 }

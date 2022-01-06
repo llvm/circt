@@ -1,27 +1,64 @@
 // RUN: circt-opt %s --msft-partition -verify-diagnostics -split-input-file | FileCheck %s
 // RUN: circt-opt %s --msft-partition --msft-wire-cleanup -verify-diagnostics -split-input-file | FileCheck --check-prefix=CLEANUP %s
 
-msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
-  msft.partition @part1, "dp"
+// msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
+//   msft.partition @part1, "dp"
 
-  %res1 = msft.instance @b @B(%clk) : (i1) -> (i2)
+//   %res1 = msft.instance @b @B(%clk) : (i1) -> (i2)
 
+//   %c0 = hw.constant 0 : i2
+//   %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+
+//   msft.output %res1, %res2 : i2, i2
+// }
+
+// msft.module.extern @Extern (%foo_a: i2) -> (foo_x: i2)
+
+// msft.module @B {} (%clk : i1) -> (x: i2)  {
+//   %c1 = hw.constant 1 : i2
+//   %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+//   %1 = seq.compreg %0, %clk { targetDesignPartition = @top::@part1 } : i2
+
+//   %2 = msft.instance @unit2 @Extern(%1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+
+//   msft.output %2: i2
+// }
+
+msft.module @TopComplex {} (%clk : i1, %arr_in: !hw.array<4xi5>) -> (out2: i5) {
+  msft.partition @part1, "dp_complex"
+
+  %mut_arr = msft.instance @b @Array(%arr_in) : (!hw.array<4xi5>) -> (!hw.array<4xi5>)
   %c0 = hw.constant 0 : i2
-  %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+  %a0 = hw.array_get %mut_arr[%c0] : !hw.array<4xi5>
+  %c1 = hw.constant 1 : i2
+  %a1 = hw.array_get %mut_arr[%c1] : !hw.array<4xi5>
+  // %c2 = hw.constant 2 : i2
+  // %a2 = hw.array_get %mut_arr[%c2] : !hw.array<4xi5>
+  // %c3 = hw.constant 3 : i2
+  // %a3 = hw.array_get %mut_arr[%c3] : !hw.array<4xi5>
 
-  msft.output %res1, %res2 : i2, i2
+  %res1 = comb.add %a0, %a1 { targetDesignPartition = @TopComplex::@part1 } : i5
+
+  msft.output %res1 : i5
 }
 
-msft.module.extern @Extern (%foo_a: i2) -> (foo_x: i2)
+msft.module.extern @ExternI5 (%foo_a: i5) -> (foo_x: i5)
 
-msft.module @B {} (%clk : i1) -> (x: i2)  {
+msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
+  %c0 = hw.constant 0 : i2
+  %in0 = hw.array_get %arr_in[%c0] : !hw.array<4xi5>
+  %out0 = msft.instance @unit2 @ExternI5(%in0) { targetDesignPartition = @TopComplex::@part1 }: (i5) -> (i5)
   %c1 = hw.constant 1 : i2
-  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
-  %1 = seq.compreg %0, %clk { targetDesignPartition = @top::@part1 } : i2
-
-  %2 = msft.instance @unit2 @Extern(%1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
-
-  msft.output %2: i2
+  %in1 = hw.array_get %arr_in[%c1] : !hw.array<4xi5>
+  %out1 = msft.instance @unit2 @ExternI5(%in1) { targetDesignPartition = @TopComplex::@part1 }: (i5) -> (i5)
+  // %c2 = hw.constant 2 : i2
+  // %in2 = hw.array_get %arr_in[%c2] : !hw.array<4xi5>
+  // %out2 = msft.instance @unit2 @ExternI5(%in2) { targetDesignPartition = @TopComplex::@part1 }: (i5) -> (i5)
+  // %c3 = hw.constant 3 : i2
+  // %in3 = hw.array_get %arr_in[%c3] : !hw.array<4xi5>
+  // %out3 = msft.instance @unit2 @ExternI5(%in3) { targetDesignPartition = @TopComplex::@part1 }: (i5) -> (i5)
+  %arr_out = hw.array_create %out0, %out1, %out0, %out1 : i5
+  msft.output %arr_out : !hw.array<4xi5>
 }
 
 // CHECK-LABEL: msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
