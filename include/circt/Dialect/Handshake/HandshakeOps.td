@@ -333,14 +333,16 @@ def MuxOp : Handshake_Op<"mux", [
 ]> {
   let summary = "mux operation";
   let description = [{
-    The mux operation represents a(deterministic)
-        merge operation.
+    The mux operation represents a(deterministic) merge operation.
     Operands: select, data0, data1, data2, ...
 
     The 'select' operand is received from ControlMerge of the same
     block and it represents the index of the data operand that the mux
     should propagate to its single output.  The number of data inputs
     corresponds to the number of predecessor blocks.
+
+    The mux operation is intended solely for control+dataflow selection.
+    For purely dataflow selection, use the 'select' operation instead.
 
     Example:
     ```mlir
@@ -480,6 +482,10 @@ def SelectOp : Handshake_Op<"select", [
      conditional. The select operation differs from a mux in that
      1. All operands must be valid before the operation can transact
      2. All operands will be transacted at simultaneously
+
+     The 'select' operation is intended to handle 'std.select' and other
+     ternary-like operators, which considers strictly dataflow. The 'mux' operator
+     considers control+dataflow between blocks.
 
      Example:
      ```mlir
