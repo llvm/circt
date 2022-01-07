@@ -322,7 +322,6 @@ def MergeOp : Handshake_Op<"merge", [
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
 
-  let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "ValueRange":$operands)>];
 }

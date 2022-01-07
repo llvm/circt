@@ -1,27 +1,5 @@
 // RUN: circt-opt -split-input-file -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
-// CHECK-LABEL:   handshake.func @simple(
-// CHECK-SAME:                           %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
-// CHECK:           %[[VAL_1:.*]] = constant %[[VAL_0]] {value = 1 : index} : index
-// CHECK:           %[[VAL_2:.*]]:2 = fork [2] %[[VAL_0]] : none
-// CHECK:           %[[VAL_3:.*]] = constant %[[VAL_2]]#0 {value = 42 : index} : index
-// CHECK:           %[[VAL_4:.*]] = arith.addi %[[VAL_1]], %[[VAL_3]] : index
-// CHECK:           sink %[[VAL_4]] : index
-// CHECK:           return %[[VAL_2]]#1 : none
-// CHECK:         }
-handshake.func @simple(%arg0: none, ...) -> none {
-  %0 = constant %arg0 {value = 1 : index} : index
-  %1 = br %arg0 : none
-  %2 = br %0 : index
-  %3 = merge %1 : none
-  %4 = merge %2 : index
-  %5:2 = fork [2] %3 : none
-  %6 = constant %5#0 {value = 42 : index} : index
-  %7 = arith.addi %4, %6 : index
-  sink %7 : index
-  handshake.return %5#1 : none
-}
-
 // -----
 
 // CHECK:   handshake.func @cmerge_with_control_used(%[[VAL_0:.*]]: none, %[[VAL_1:.*]]: none, %[[VAL_2:.*]]: none, ...) -> (none, index, none) attributes {argNames = ["arg0", "arg1", "arg2"], resNames = ["out0", "out1", "outCtrl"]} {
