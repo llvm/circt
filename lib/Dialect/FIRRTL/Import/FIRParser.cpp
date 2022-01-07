@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1447,16 +1448,48 @@ private:
 };
 } // end anonymous namespace
 
+/// Remove the DontTouch annotation and return true, if it exists.
+/// Ignore DontTouch that will apply only to a subfield.
+static bool removeDontTouch(ArrayAttr &annotations) {
+  SmallVector<Attribute> filteredAnnos;
+  bool hasDontTouch = false;
+  // Only check for DontTouch annotation that applies to the entire op.
+  // Then drop it and return true.
+  // We cannot use AnnotationSet::removeDontTouch, because it does not ignore
+  // Subfield annotations.
+  for (Attribute anno : annotations) {
+    DictionaryAttr dict = {};
+    // If subfield annotation, then field must be 0.
+    if (auto subAnno = anno.dyn_cast<SubAnnotationAttr>()) {
+      if (subAnno.getFieldID() == 0)
+        dict = subAnno.getAnnotations();
+    } else
+      dict = anno.dyn_cast<DictionaryAttr>();
+    if (dict)
+      if (auto cls = dict.get("class"))
+        if (cls.cast<StringAttr>().getValue().equals(
+                "firrtl.transforms.DontTouchAnnotation")) {
+          hasDontTouch = true;
+          continue;
+        }
+    filteredAnnos.push_back(anno);
+  }
+  if (hasDontTouch)
+    annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
+  return hasDontTouch;
+}
 namespace {
 /// This class implements logic and state for parsing statements, suites, and
 /// similar module body constructs.
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
-                         FIRModuleContext &moduleContext)
+                         FIRModuleContext &moduleContext,
+                         Namespace modNameSpace)
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
         builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
             UnknownLoc::get(getContext()), &blockToInsertInto)),
-        locationProcessor(this->builder), moduleContext(moduleContext) {}
+        locationProcessor(this->builder), moduleContext(moduleContext),
+        modNameSpace(modNameSpace) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -1525,12 +1558,26 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
 
+  /// Remove the DontTouch annotation and return a valid symbol name if the
+  /// annotation exists. Ignore DontTouch that will apply only to a subfield.
+  StringAttr removeDontTouch(ArrayAttr &annotations, StringRef id) {
+    SmallVector<Attribute> filteredAnnos;
+    bool hasDontTouch = ::removeDontTouch(annotations);
+    if (hasDontTouch)
+      return StringAttr::get(annotations.getContext(),
+                             modNameSpace.newName(id));
+
+    return {};
+  }
+
   // The builder to build into.
   ImplicitLocOpBuilder builder;
   LazyLocationListener locationProcessor;
 
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
+
+  Namespace modNameSpace;
 };
 
 } // end anonymous namespace
@@ -2449,7 +2496,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
-    FIRStmtParser subParser(blockToInsertInto, moduleContext);
+    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -2491,7 +2538,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext);
+    FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext,
+                            modNameSpace);
     return subParser.parseSimpleStmt(whenIndent);
   }
 
@@ -2612,9 +2660,10 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    result = builder.create<InstanceOp>(referencedModule, id,
-                                        annotations.first.getValue(),
-                                        annotations.second.getValue());
+    auto sym = removeDontTouch(annotations.first, id);
+    result = builder.create<InstanceOp>(
+        referencedModule, id, annotations.first.getValue(),
+        annotations.second.getValue(), false, sym);
   }
 
   // Since we are implicitly unbundling the instance results, we need to keep
@@ -2662,9 +2711,10 @@ ParseResult FIRStmtParser::parseCombMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result =
-      builder.create<CombMemOp>(vectorType.getElementType(),
-                                vectorType.getNumElements(), id, annotations);
+  auto sym = removeDontTouch(annotations, id);
+  auto result = builder.create<CombMemOp>(vectorType.getElementType(),
+                                          vectorType.getNumElements(), id,
+                                          annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2700,10 +2750,11 @@ ParseResult FIRStmtParser::parseSeqMem() {
     annotations =
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
+  auto sym = removeDontTouch(annotations, id);
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
                                          vectorType.getNumElements(), ruw, id,
-                                         annotations);
+                                         annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2840,10 +2891,13 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
         getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                             ports, moduleContext.targetsInModule);
 
-    result = builder.create<MemOp>(
-        resultTypes, readLatency, writeLatency, depth, ruw,
-        builder.getArrayAttr(resultNames), id, annotations.first,
-        annotations.second, StringAttr{});
+    auto sym = removeDontTouch(annotations.first, id);
+    if (!sym)
+      sym = removeDontTouch(annotations.second, id);
+    result =
+        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
+                              ruw, builder.getArrayAttr(resultNames), id,
+                              annotations.first, annotations.second, sym);
   }
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2899,8 +2953,9 @@ ParseResult FIRStmtParser::parseNode() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, initializerType);
 
-  Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                        annotations, StringAttr{});
+  auto sym = removeDontTouch(annotations, id);
+  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
+                                       annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2928,7 +2983,8 @@ ParseResult FIRStmtParser::parseWire() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<WireOp>(type, id, annotations, StringAttr{});
+  auto sym = removeDontTouch(annotations, id);
+  auto result = builder.create<WireOp>(type, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3021,12 +3077,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
                        moduleContext.targetsInModule, type);
 
   Value result;
+  auto sym = removeDontTouch(annotations, id);
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations, StringAttr{});
+                                        id, annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
-
+    result = builder.create<RegOp>(type, clock, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3267,11 +3323,17 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     info.setDefaultLoc(defaultLoc);
 
     AnnotationSet annotations(getContext());
-    if (!getConstants().options.rawAnnotations)
-      annotations = AnnotationSet(
+    StringAttr innerSym = {};
+    if (!getConstants().options.rawAnnotations) {
+      auto annos =
           getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
-                         getConstants().targetSet, type));
-    resultPorts.push_back({name, type, direction::get(isOutput), StringAttr{},
+                         getConstants().targetSet, type);
+      bool addSym = removeDontTouch(annos);
+      if (addSym)
+        innerSym = StringAttr::get(getContext(), name.getValue());
+      annotations = AnnotationSet(annos);
+    }
+    resultPorts.push_back({name, type, direction::get(isOutput), innerSym,
                            info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
   }
@@ -3467,17 +3529,19 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
+  Namespace modNameSpace;
   auto portList = moduleOp.getPorts();
   auto portArgs = moduleOp.getArguments();
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
     BlockArgument portArg = std::get<2>(tuple);
+    modNameSpace.newName(port.sym.getValue());
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext, modNameSpace);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);

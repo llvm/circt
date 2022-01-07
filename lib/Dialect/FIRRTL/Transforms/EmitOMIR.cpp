@@ -737,7 +737,6 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       LLVM_DEBUG(llvm::dbgs()
                  << "Marking NLA-participating instance " << nameAttr
                  << " in module " << symAttr << " as dont-touch\n");
-      AnnotationSet::addDontTouch(instOp);
       instName = getInnerRefTo(instOp);
     }
   } else {
@@ -753,7 +752,6 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   hw::InnerRefAttr componentName;
   if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
     componentName = getInnerRefTo(tracker.op);
-    AnnotationSet::addDontTouch(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
   } else if (!isa<FModuleOp>(tracker.op)) {
