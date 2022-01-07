@@ -5,7 +5,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   Buffers.cpp
 
   DEPENDS
-  MLIRHandshakeCanonicalizationIncGen
+  CIRCTHandshakeTransformsIncGen
 
   LINK_LIBS PUBLIC
   CIRCTHandshake
