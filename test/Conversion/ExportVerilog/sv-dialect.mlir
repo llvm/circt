@@ -473,8 +473,9 @@ hw.module @AggregateVerbatim() -> (res1: !hw.struct<a: i1>, res2: !hw.array<1xi1
   %aggregateWire = sv.wire sym @wire : !hw.inout<struct<a: !hw.array<2xi1>>>
   %a = sv.verbatim.expr "STRUCT_A_" : () -> !hw.struct<a: i1>
   %b = sv.verbatim.expr "ARRAY_" : () -> !hw.array<1xi1>
-  %c = sv.verbatim.expr "MACRO({{0}}, {{1}}, {{2}})" (%a, %b) : (!hw.struct<a: i1>, !hw.array<1xi1>) -> !hw.array<1xi1>
-                                            {symbols = [#hw.innerNameRef<@AggregateVerbatim::@wire, 3>] }
+  %c = sv.verbatim.expr "MACRO({{0}}, {{1}}, {{2}}{{3}})" (%a, %b) : (!hw.struct<a: i1>, !hw.array<1xi1>) -> !hw.array<1xi1>
+                                            {symbols = [#hw.innerNameRef<@AggregateVerbatim::@wire>,
+                                                        #hw.innerFieldRef<@AggregateVerbatim::@wire, 3>] }
   hw.output %a, %b, %c: !hw.struct<a: i1>, !hw.array<1xi1>, !hw.array<1xi1>
   // CHECK: assign res1 = STRUCT_A_;
   // CHECK: assign res2 = ARRAY_;

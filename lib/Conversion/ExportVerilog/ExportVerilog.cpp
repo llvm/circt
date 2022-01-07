@@ -815,7 +815,7 @@ void EmitterBase::emitTextWithSubstitutions(
         unsigned symOpNum = operandNo - op->getNumOperands();
         auto sym = symAttrs[symOpNum];
         StringRef symVerilogName;
-        SmallString<16> suffixPath;
+        SmallString<16> suffix;
         if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
           if (auto *symOp = state.symbolCache.getDefinition(fsym))
             symVerilogName = namify(sym, symOp);
@@ -823,31 +823,34 @@ void EmitterBase::emitTextWithSubstitutions(
           auto symOp =
               state.symbolCache.getDefinition(isym.getModule(), isym.getName());
           symVerilogName = namify(sym, symOp);
-          // Print an access path to fieldID if the inner ref has non-zero
-          // fieldID.
-          if (auto fieldID = isym.getFieldID()) {
-            Type tpe;
-            if (symOp.hasPort()) {
-              auto moduleType =
-                  mlir::function_like_impl::getFunctionType(symOp.getOp());
-              if (moduleType.getNumInputs() <= symOp.getPort())
-                tpe = moduleType.getResult(symOp.getPort() -
-                                           moduleType.getNumInputs());
-              else
-                tpe = moduleType.getInput(symOp.getPort());
+        } else if (auto innerFieldRef = sym.dyn_cast<InnerFieldRefAttr>()) {
+          auto symOp = state.symbolCache.getDefinition(
+              innerFieldRef.getModule(), innerFieldRef.getName());
+          // Construct an access path to fieldID.
+          auto fieldID = innerFieldRef.getFieldID();
+          Type tpe;
+          if (symOp.hasPort()) {
+            auto moduleType =
+                mlir::function_like_impl::getFunctionType(symOp.getOp());
 
+            if (moduleType.getNumInputs() <= symOp.getPort()) {
+              // Port exists in outputs.
+              tpe = moduleType.getResult(symOp.getPort() -
+                                         moduleType.getNumInputs());
             } else {
-              assert(symOp.getOp()->getNumResults() == 1 &&
-                     "the number of result must be one");
-              tpe = symOp.getOp()->getResult(0).getType();
+              // Port exists in inputs.
+              tpe = moduleType.getInput(symOp.getPort());
             }
-
-            if (!constructAccessPathToFieldID(suffixPath, tpe, fieldID))
-              emitError(op, "faield to create an access path to fieldID=")
-                  << fieldID << " for type " << tpe;
+          } else {
+            // Associated with the operation.
+            tpe = symOp.getOp()->getResult(0).getType();
           }
+
+          if (!constructAccessPathToFieldID(suffix, tpe, fieldID))
+            emitError(op, "faield to create an access path to fieldID=")
+                << fieldID << " for type " << tpe;
         }
-        os << symVerilogName << suffixPath;
+        os << symVerilogName << suffix;
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;

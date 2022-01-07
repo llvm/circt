@@ -85,11 +85,12 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:   @InterfaceGroundType
 // CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}};"
+// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}{{[{][{]4[}][}]}};"
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-SAME:   @InterfaceGroundType
 // CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@c, 4>]
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@c>
+// CHECK-SAME:   #hw.innerFieldRef<@DUT::@c, 4>]
 
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"

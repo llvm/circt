@@ -16,6 +16,26 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
     This works like a symbol reference, but to a name inside a module.
   }];
   let mnemonic = "innerNameRef";
+  let parameters = (ins "::mlir::StringAttr":$module, "::mlir::StringAttr":$name);
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$module, "::mlir::StringAttr":$name),[{
+      return get(module.getContext(), module, name);
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    /// Get the InnerRefAttr for an operation and add the sym on it.
+    static InnerRefAttr getFromOperation(mlir::Operation *op,
+                  mlir::StringAttr symName, mlir::StringAttr moduleName) ;
+  }];
+}
+
+def InnerFieldRefAttr : AttrDef<HWDialect, "InnerFieldRef"> {
+  let summary = "Refer to a name inside a module";
+  let description = [{
+    This represents an access path from the associated operation to the
+    subelement given by fieldID.
+  }];
+  let mnemonic = "innerFieldRef";
   let parameters = (ins "::mlir::StringAttr":$module, "::mlir::StringAttr":$name,
                         "unsigned":$fieldID);
   let builders = [
@@ -23,21 +43,13 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
                                         "::mlir::StringAttr":$name,
                                         "unsigned":$fieldID),[{
       return get(module.getContext(), module, name, fieldID);
-    }]>,
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$module,
-                                        "::mlir::StringAttr":$name),[{
-      return get(module.getContext(), module, name, 0);
-    }]>,
+    }]>
   ];
   let extraClassDeclaration = [{
-    /// Get the InnerRefAttr for an operation and add the sym on it.
-    static InnerRefAttr getFromOperation(mlir::Operation *op,
+    /// Get the InnerFieldRefAttr for an operation and add the sym on it.
+    static InnerFieldRefAttr getFromOperation(mlir::Operation *op,
                   mlir::StringAttr symName, mlir::StringAttr moduleName,
-                  unsigned fieldID = 0);
-    static InnerRefAttr get(mlir::MLIRContext* ctx,
-                  mlir::StringAttr symName, mlir::StringAttr moduleName){
-      return get(ctx, symName, moduleName, 0);
-    }
+                  unsigned fieldID);
   }];
 }
 
