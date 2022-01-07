@@ -146,3 +146,14 @@ def NonLocalAnchor : FIRRTLOp<"nla",
   let results = (outs);
   let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
 }
+
+def BindOp : FIRRTLOp<"bind",
+      [IsolatedFromAbove, HasParent<"CircuitOp">]> {
+  let summary = "Bind Operation";
+  let description = [{
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, 
+                       hw::InnerRefAttr:$probeLoc);
+  let results = (outs);
+  let assemblyFormat = [{ $moduleName $probeLoc attr-dict}];
+}

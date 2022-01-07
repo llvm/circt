@@ -27,7 +27,6 @@ def InstanceOp : FIRRTLOp<"instance", [
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
-                       BoolAttr:$lowerToBind,
                        OptionalAttr<SymbolNameAttr>:$inner_sym);
 
   let results = (outs Variadic<FIRRTLType>:$results);
@@ -44,7 +43,6 @@ def InstanceOp : FIRRTLOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
 
     /// Constructor when you have the target module in hand.
@@ -52,7 +50,6 @@ def InstanceOp : FIRRTLOp<"instance", [
                    "mlir::StringRef":$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 

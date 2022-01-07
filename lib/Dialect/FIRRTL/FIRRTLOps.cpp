@@ -925,7 +925,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        StringRef name, ArrayRef<Direction> portDirections,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       ArrayRef<Attribute> portAnnotations, 
                        StringAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
@@ -936,7 +936,6 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   if (innerSym)
     result.addAttribute("inner_sym", innerSym);
 
@@ -955,7 +954,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       ArrayRef<Attribute> portAnnotations, 
                        StringAttr innerSym) {
 
   // Gather the result types.
@@ -978,7 +977,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                SymbolRefAttr::get(builder.getContext(), module.moduleName()),
                builder.getStringAttr(name), module.getPortDirectionsAttr(),
                module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+               portAnnotationsAttr, innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -999,7 +998,7 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
 
   auto newOp = builder.create<InstanceOp>(
       getLoc(), newResultTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnotations, lowerToBind(),
+      newPortNames, annotations().getValue(), newPortAnnotations, 
       inner_symAttr());
 
   SmallDenseSet<unsigned> portSet(portIndices.begin(), portIndices.end());
@@ -1066,7 +1065,7 @@ InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   // Create a new instance op with the reset inserted.
   return OpBuilder(*this).create<InstanceOp>(
       getLoc(), newPortTypes, moduleName(), name(), newPortDirections,
-      newPortNames, annotations().getValue(), newPortAnnos, lowerToBind(),
+      newPortNames, annotations().getValue(), newPortAnnos, 
       inner_symAttr());
 }
 
@@ -1204,8 +1203,6 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
   SmallVector<StringRef, 4> omittedAttrs = {
       "moduleName",      "name",     "portDirections", "portNames", "portTypes",
       "portAnnotations", "inner_sym"};
-  if (!op.lowerToBind())
-    omittedAttrs.push_back("lowerToBind");
   if (op.annotations().empty())
     omittedAttrs.push_back("annotations");
   p.printOptionalAttrDict(op->getAttrs(), omittedAttrs);
@@ -1270,12 +1267,10 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
     result.addAttribute("portAnnotations",
                         ArrayAttr::get(context, portAnnotations));
 
-  // Annotations and LowerToBind are omitted in the printed format if they are
+  // Annotations are omitted in the printed format if they are
   // empty and false, respectively.
   if (!resultAttrs.get("annotations"))
     resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("lowerToBind"))
-    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
 
   // Add result types.
   result.types.reserve(portTypes.size());

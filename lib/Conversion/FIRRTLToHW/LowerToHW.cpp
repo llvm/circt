@@ -1340,6 +1340,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
+  LogicalResult visitStmt(ProbeOp op);
 
 private:
   /// The module we're lowering into.
@@ -2634,6 +2635,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // CircuitLoweringState so that this can be moved outside of module once
   // we're guaranteed to not be a parallel context.
   StringAttr symbol = oldInstance.inner_symAttr();
+#if 0
   if (oldInstance.lowerToBind()) {
     if (!symbol)
       symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
@@ -2646,13 +2648,11 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     // encapsulating module after all modules have been processed in parallel.
     circuitState.addBind(bindOp);
   }
+#endif
 
   // Create the new hw.instance operation.
   auto newInstance = builder.create<hw::InstanceOp>(
       newModule, oldInstance.nameAttr(), operands, parameters, symbol);
-
-  if (oldInstance.lowerToBind())
-    newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
@@ -3609,4 +3609,23 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       });
 
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    operands.push_back(getLoweredValue(operand));
+    if (!operands.back()) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      operands.back() = getOrCreateIntConstant(1, 0);
+    }
+  }
+
+  builder.create<hw::ProbeOp>(op.inner_sym(), operands);
+
+  return success();
+ 
 }

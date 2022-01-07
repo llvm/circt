@@ -1364,21 +1364,17 @@ void GrandCentralPass::runOnOperation() {
 
               // Instantiate the mapping module inside the companion.
               builder.setInsertionPointToEnd(op.getBody());
-              builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
-                                         mapping.getName());
-
-              // Assert that the companion is instantiated once and only once.
-              auto instance = exactlyOneInstance(op, "companion");
-              if (!instance)
-                return false;
+              auto probe = builder.create<ProbeOp>(circuitOp.getLoc(), mapping.getName(), ValueRange{});
+              builder.setInsertionPointToEnd(circuitOp.getBody());
+              auto bind = builder.create<firrtl::BindOp>(circuitOp.getLoc(), mapping.getName(), probe.inner_sym());
+              builder.setInsertionPointToEnd(op.getBody());
 
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
               if (!maybeExtractInfo)
                 return true;
 
-              instance.getValue()->setAttr("lowerToBind", trueAttr);
-              instance.getValue()->setAttr(
+              bind->setAttr(
                   "output_file",
                   hw::OutputFileAttr::getFromFilename(
                       &getContext(),

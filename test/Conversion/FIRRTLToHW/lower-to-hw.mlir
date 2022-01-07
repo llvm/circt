@@ -603,13 +603,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: sv.bind #hw.innerNameRef<@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module @bindTest()
-  firrtl.module @bindTest() {
-    // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
-    %baz = firrtl.instance baz {lowerToBind = true} @bar(in io_cpu_flush: !firrtl.uint<1>)
-    // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
-    %qux = firrtl.instance qux {lowerToBind = true, output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
+  firrtl.module @bindTest(in %io_cpu_test : !firrtl.uint<1>) {
+    // CHECK: hw.probe baz io_cpu_flush
+    firrtl.probe @baz (%io_cpu_flush) : !firrtl.uint<1>
+    // CHECK: hw.probe qux io_cpu_flush
+    firrtl.probe @qux (%io_cpu_flush) : !firrtl.uint<1>
   }
-
+  firrtl.bind @bar #innerNameRef<@bindTest::@baz>
+  firrtl.bind @bar #innerNameRef<@bindTest::@qux> {output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>}
 
   // CHECK-LABEL: hw.module @output_fileTest
   // CHECK-SAME: output_file = #hw.output_file<"output_fileTest/dir/output_fileTest.sv", excludeFromFileList>

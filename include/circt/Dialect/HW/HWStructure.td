@@ -458,3 +458,20 @@ def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
 
   let verifier = "return this->verifyGlobalRef();";
 }
+
+def ProbeOp : HWOp<"probe", [
+        //DeclareOpInterfaceMethods<SymbolUserOpInterface>
+        ]> {
+  let summary = "Probe values for use in remote references";
+  let description = [{
+    Captures values without binding to any accidental name.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$inner_sym,
+                       Variadic<AnyType>:$operands);
+  let results = (outs);
+
+  let assemblyFormat = "`sym` $inner_sym $operands attr-dict `:` type($operands)";
+
+}
+
