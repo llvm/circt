@@ -114,8 +114,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   }];
   let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
-                   OptionalAttr<DictionaryAttr>:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations
+                   ParamDeclArrayAttr:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -125,7 +125,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
   ];
 
   let printer = "return ::print$cppClass(p, *this);";

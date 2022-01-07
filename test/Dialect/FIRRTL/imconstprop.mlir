@@ -7,7 +7,7 @@ firrtl.circuit "Test" {
   firrtl.module @PassThrough(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 
-    %dontTouchWire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    %dontTouchWire = firrtl.wire sym @a1 : !firrtl.uint<1>
     // CHECK-NEXT: %dontTouchWire = firrtl.wire
     firrtl.connect %dontTouchWire, %source : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: firrtl.connect %dontTouchWire, %c0_ui1
@@ -174,7 +174,8 @@ firrtl.circuit "Issue1188"  {
 firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module @blockProp
   firrtl.module @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{class = "firrtl.transforms.DontTouchAnnotation"}],[]]
+    portAnnotations = [[], [],[]],
+    portSyms = ["", "dntSym", ""]
   }{
     //CHECK: %c = firrtl.reg
     %c = firrtl.reg %clock : !firrtl.uint<1>
@@ -192,7 +193,7 @@ firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module @blockProp3
   firrtl.module @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
     //CHECK: %c = firrtl.reg
-    %c = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    %c = firrtl.reg sym @s2 %clock : !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -217,7 +218,7 @@ firrtl.circuit "testDontTouch"  {
   }
   // CHECK-LABEL: firrtl.module @CheckNode
   firrtl.module @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
-    %z = firrtl.node %x  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    %z = firrtl.node   sym @s2 %x: !firrtl.uint<1>
     // CHECK: firrtl.connect %y, %z
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -227,10 +228,10 @@ firrtl.circuit "testDontTouch"  {
 // -----
 
 firrtl.circuit "OutPortTop" {
-    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
+    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1>)  attributes {portSyms = ["dntSym"]}{
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+    } 
     firrtl.module @OutPortChild2(out %out: !firrtl.uint<1>) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -262,7 +263,7 @@ firrtl.circuit "InputPortTop"   {
   }
   // CHECK-LABEL: firrtl.module @InputPortChild
   firrtl.module @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
-    portAnnotations = [[], [{class = "firrtl.transforms.DontTouchAnnotation"}], []]
+    portAnnotations = [[], [], []], portSyms = ["", "dntSym", ""]
   } {
     // CHECK: %0 = firrtl.and %in0, %in1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -537,7 +538,7 @@ firrtl.circuit "dntOutput" {
     %m = firrtl.mux(%c, %int_b, %const) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %b, %m : !firrtl.uint<3>, !firrtl.uint<3>
   }
-  firrtl.module @foo(out %b: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
+  firrtl.module @foo(out %b: !firrtl.uint<3> ) attributes {portSyms = ["dntSym1"] } {
     %const = firrtl.constant 1 : !firrtl.uint<3>
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }

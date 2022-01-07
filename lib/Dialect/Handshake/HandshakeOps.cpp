@@ -272,11 +272,6 @@ static ParseResult parseMergeOp(OpAsmParser &parser, OperationState &result) {
 
 void printMergeOp(OpAsmPrinter &p, MergeOp op) { sost::printOp(p, op, false); }
 
-void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-  results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
-}
-
 /// Returns a dematerialized version of the value 'v', defined as the source of
 /// the value before passing through a buffer or fork operation.
 static Value getDematerialized(Value v) {
@@ -808,6 +803,67 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
     result.addAttribute("control", builder.getBoolAttr(true));
 }
 
+static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  Type dataType;
+  SmallVector<Type> operandTypes;
+  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(allOperands) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(dataType))
+    return failure();
+
+  if (allOperands.size() != 3)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "Expected exactly 3 operands");
+
+  result.addTypes({dataType});
+  operandTypes.push_back(IntegerType::get(parser.getContext(), 1));
+  operandTypes.push_back(dataType);
+  operandTypes.push_back(dataType);
+  if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
+                             result.operands))
+    return failure();
+
+  if (dataType.isa<NoneType>())
+    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+
+  return success();
+}
+
+static void printSelectOp(OpAsmPrinter &p, SelectOp op) {
+  Type type = op.trueOperand().getType();
+  p << " " << op->getOperands();
+  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
+  p << " : " << type;
+}
+
+std::string handshake::SelectOp::getOperandName(unsigned int idx) {
+  switch (idx) {
+  case 0:
+    return "sel";
+  case 1:
+    return "true";
+  case 2:
+    return "false";
+  default:
+    llvm_unreachable("Expected exactly 3 operands");
+  }
+}
+
+void handshake::SelectOp::build(OpBuilder &builder, OperationState &result,
+                                Value condOperand, Value trueOperand,
+                                Value falseOperand) {
+  auto type = trueOperand.getType();
+  result.types.append(1, type);
+  result.addOperands(condOperand);
+  result.addOperands(trueOperand);
+  result.addOperands(falseOperand);
+  result.addAttribute("dataType", TypeAttr::get(type));
+  result.addAttribute("control",
+                      BoolAttr::get(type.getContext(), type.isa<NoneType>()));
+}
+
 void StartOp::build(OpBuilder &builder, OperationState &result) {
   // Control-only output, has no type
   auto type = builder.getNoneType();
@@ -827,6 +883,16 @@ void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
 void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
   result.addOperands(operand);
   sost::addAttributes(result, 1, operand.getType());
+}
+
+void SinkOp::build(OpBuilder &builder, OperationState &odsState,
+                   TypeRange resultTypes, ValueRange operands,
+                   ArrayRef<NamedAttribute> attributes) {
+  assert(operands.size() == 1u && "mismatched number of parameters");
+  build(builder, odsState, operands[0]);
+  odsState.addAttributes(attributes);
+  assert(resultTypes.size() == 0u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
 }
 
 static ParseResult parseSinkOp(OpAsmParser &parser, OperationState &result) {
@@ -900,6 +966,11 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
                                     ArrayRef<Block *> successors) {
   // Add all the successor blocks of the block which contains this terminator
   result.addSuccessors(successors);
+}
+
+void handshake::BufferOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.insert<circt::handshake::EliminateSunkBuffersPattern>(context);
 }
 
 void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,

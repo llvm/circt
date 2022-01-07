@@ -166,8 +166,9 @@ size_t firrtl::getNumPorts(Operation *op) {
 /// Check whether an operation has a `DontTouch` annotation, or a symbol that
 /// should prevent certain types of canonicalizations.
 bool firrtl::hasDontTouch(Operation *op) {
-  return op->getAttr(hw::InnerName::getInnerNameAttrName()) ||
-         AnnotationSet(op).hasDontTouch();
+  if (isa<FExtModuleOp, FModuleOp>(op))
+    return AnnotationSet(op).hasDontTouch();
+  return op->getAttr(hw::InnerName::getInnerNameAttrName()) != nullptr;
 }
 
 /// Check whether a block argument ("port") or the operation defining a value
@@ -178,7 +179,7 @@ bool firrtl::hasDontTouch(Value value) {
     return hasDontTouch(op);
   auto arg = value.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
-  return AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
+  return (!module.getPortSymbol(arg.getArgNumber()).empty());
 }
 
 //===----------------------------------------------------------------------===//
@@ -277,7 +278,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     FExtModuleOp collidingExtModule;
     if (auto &value = defnameMap[defname]) {
       collidingExtModule = value;
-      if (value.parameters() && !extModule.parameters())
+      if (!value.parameters().empty() && extModule.parameters().empty())
         value = extModule;
     } else {
       value = extModule;
@@ -310,7 +311,8 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
       StringAttr aName = std::get<0>(p).name, bName = std::get<1>(p).name;
       FIRRTLType aType = std::get<0>(p).type, bType = std::get<1>(p).type;
 
-      if (extModule.parameters() || collidingExtModule.parameters()) {
+      if (!extModule.parameters().empty() ||
+          !collidingExtModule.parameters().empty()) {
         aType = aType.getWidthlessType();
         bType = bType.getWidthlessType();
       }
@@ -575,10 +577,13 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
-                         StringRef defnameAttr, ArrayAttr annotations) {
+                         StringRef defnameAttr, ArrayAttr annotations,
+                         ArrayAttr parameters) {
   buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
+  if (!parameters)
+    result.addAttribute("parameters", builder.getArrayAttr({}));
 }
 
 /// Print a list of module ports in the following form:
@@ -733,10 +738,30 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
                                         parseArgument);
 }
 
+/// Print a paramter list for a module or instance.
+static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
+  if (!parameters || parameters.empty())
+    return;
+
+  p << '<';
+  llvm::interleaveComma(parameters, p, [&](Attribute param) {
+    auto paramAttr = param.cast<ParamDeclAttr>();
+    p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
+    if (auto value = paramAttr.getValue()) {
+      p << " = ";
+      p.printAttributeWithoutType(value);
+    }
+  });
+  p << '>';
+}
+
 static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   // Print the operation and the function name.
   p << " ";
   p.printSymbolName(op.moduleName());
+
+  // Print the parameter list (if non-empty).
+  printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
 
   // Both modules and external modules have a body, but it is always empty for
   // external modules.
@@ -750,8 +775,9 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols());
 
-  SmallVector<StringRef, 4> omittedAttrs = {
-      "sym_name", "portDirections", "portTypes", "portAnnotations", "portSyms"};
+  SmallVector<StringRef, 4> omittedAttrs = {"sym_name",  "portDirections",
+                                            "portTypes", "portAnnotations",
+                                            "portSyms",  "parameters"};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -781,6 +807,38 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
                   /*printBlockTerminators=*/true);
 }
 
+/// Parse an parameter list if present.
+/// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
+/// parameter-decl ::= identifier `:` type
+/// parameter-decl ::= identifier `:` type `=` attribute
+///
+static ParseResult
+parseOptionalParameters(OpAsmParser &parser,
+                        SmallVectorImpl<Attribute> &parameters) {
+
+  return parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
+        std::string name;
+        Type type;
+        Attribute value;
+
+        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
+          return failure();
+
+        // Parse the default value if present.
+        if (succeeded(parser.parseOptionalEqual())) {
+          if (parser.parseAttribute(value, type))
+            return failure();
+        }
+
+        auto &builder = parser.getBuilder();
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(),
+                                                builder.getStringAttr(name),
+                                                TypeAttr::get(type), value));
+        return success();
+      });
+}
+
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                                       OperationState &result,
                                       bool hasSSAIdentifiers) {
@@ -792,6 +850,12 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
+
+  // Parse optional parameters.
+  SmallVector<Attribute, 4> parameters;
+  if (parseOptionalParameters(parser, parameters))
+    return failure();
+  result.addAttribute("parameters", builder.getArrayAttr(parameters));
 
   // Parse the module ports.
   SmallVector<OpAsmParser::OperandType> entryArgs;
@@ -881,22 +945,22 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
-  auto paramDictOpt = op.parameters();
-  if (!paramDictOpt)
+  auto params = op.parameters();
+  if (params.empty())
     return success();
 
-  DictionaryAttr paramDict = paramDictOpt.getValue();
-  auto checkParmValue = [&](NamedAttribute elt) -> bool {
-    auto value = elt.getValue();
+  auto checkParmValue = [&](Attribute elt) -> bool {
+    auto param = elt.cast<ParamDeclAttr>();
+    auto value = param.getValue();
     if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
         value.isa<FloatAttr>())
       return true;
     op.emitError() << "has unknown extmodule parameter value '"
-                   << elt.getName().getValue() << "' = " << value;
+                   << param.getName().getValue() << "' = " << value;
     return false;
   };
 
-  if (!llvm::all_of(paramDict, checkParmValue))
+  if (!llvm::all_of(params, checkParmValue))
     return failure();
 
   return success();

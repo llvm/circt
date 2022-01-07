@@ -195,7 +195,7 @@ public:
   matchAndRewrite(hw::GlobalRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     for (auto attr : op->getAttrs()) {
-      if (attr.getName().getValue().startswith("loc")) {
+      if (isa<MSFTDialect>(attr.getValue().getDialect())) {
         rewriter.eraseOp(op);
         return success();
       }
@@ -237,7 +237,7 @@ void LowerToHWPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
   target.addDynamicallyLegalOp<hw::GlobalRefOp>([](hw::GlobalRefOp op) {
     for (auto attr : op->getAttrs())
-      if (attr.getName().getValue().startswith("loc"))
+      if (isa<MSFTDialect>(attr.getValue().getDialect()))
         return false;
     return true;
   });
@@ -749,12 +749,13 @@ void WireCleanupPass::runOnOperation() {
 void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
+  hw::ModulePortInfo ports = mod.getPorts();
 
   // Find all "passthough" internal wires, filling 'inputPortsToRemove' as a
   // side-effect.
   DenseMap<Value, hw::PortInfo> passThroughs;
-  SmallVector<unsigned> inputPortsToRemove;
-  for (hw::PortInfo inputPort : mod.getPorts().inputs) {
+  llvm::BitVector inputPortsToRemove(ports.inputs.size());
+  for (hw::PortInfo inputPort : ports.inputs) {
     BlockArgument portArg = body->getArgument(inputPort.argNum);
     bool removePort = true;
     for (OpOperand user : portArg.getUsers()) {
@@ -764,14 +765,14 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
         removePort = false;
     }
     if (removePort)
-      inputPortsToRemove.push_back(inputPort.argNum);
+      inputPortsToRemove.set(inputPort.argNum);
   }
 
   // Find all output ports which we can remove. Fill in 'outputToInputIdx' to
   // help rewire instantiations later on.
   DenseMap<unsigned, unsigned> outputToInputIdx;
-  SmallVector<unsigned> outputPortsToRemove;
-  for (hw::PortInfo outputPort : mod.getPorts().outputs) {
+  llvm::BitVector outputPortsToRemove(ports.outputs.size());
+  for (hw::PortInfo outputPort : ports.outputs) {
     assert(outputPort.argNum < terminator->getNumOperands() && "Invalid IR");
     Value outputValue = terminator->getOperand(outputPort.argNum);
     auto inputNumF = passThroughs.find(outputValue);
@@ -779,7 +780,7 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
       continue;
     hw::PortInfo inputPort = inputNumF->second;
     outputToInputIdx[outputPort.argNum] = inputPort.argNum;
-    outputPortsToRemove.push_back(outputPort.argNum);
+    outputPortsToRemove.set(outputPort.argNum);
   }
 
   // Use MSFTModuleOp's `removePorts` method to remove the ports. It returns a
@@ -789,7 +790,6 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
       mod.removePorts(inputPortsToRemove, outputPortsToRemove);
 
   // Update the instantiations.
-  llvm::sort(inputPortsToRemove);
   auto setPassthroughsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                         SmallVectorImpl<Value> &newOperands) {
     // Re-map the passthrough values around the instance.
@@ -803,15 +803,10 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
     }
     // Use a sort-merge-join approach to figure out the operand mapping on the
     // fly.
-    size_t mergeCtr = 0;
     for (size_t operNum = 0, e = oldInst.getNumOperands(); operNum < e;
-         ++operNum) {
-      if (mergeCtr < inputPortsToRemove.size() &&
-          operNum == inputPortsToRemove[mergeCtr])
-        ++mergeCtr;
-      else
+         ++operNum)
+      if (!inputPortsToRemove.test(operNum))
         newOperands.push_back(oldInst.getOperand(operNum));
-    }
   };
   updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
 }
@@ -830,7 +825,7 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
   // drives it. Populate 'resultsToErase' with output ports which only drive
   // input ports.
   DenseMap<unsigned, unsigned> inputToOutputLoopback;
-  SmallVector<unsigned> resultsToErase; // This is sorted.
+  llvm::BitVector resultsToErase(inst.getNumResults());
   for (unsigned resNum = 0, e = inst.getNumResults(); resNum < e; ++resNum) {
     bool allLoops = true;
     for (auto &use : inst.getResult(resNum).getUses()) {
@@ -840,37 +835,31 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
         inputToOutputLoopback[use.getOperandNumber()] = resNum;
     }
     if (allLoops)
-      resultsToErase.push_back(resNum);
+      resultsToErase.set(resNum);
   }
 
   // Add internal connections to replace the instantiation's loop back
   // connections.
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
-  SmallVector<unsigned> argsToErase;
+  llvm::BitVector argsToErase(body->getNumArguments());
   for (auto resOper : inputToOutputLoopback) {
     body->getArgument(resOper.first)
         .replaceAllUsesWith(terminator->getOperand(resOper.second));
-    argsToErase.push_back(resOper.first);
+    argsToErase.set(resOper.first);
   }
 
   // Remove the ports.
   SmallVector<unsigned> newToOldResultMap =
       mod.removePorts(argsToErase, resultsToErase);
   // and update the instantiations.
-  llvm::sort(argsToErase);
   auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                          SmallVectorImpl<Value> &newOperands) {
     // Use sort-merge-join to compute the new operands;
-    unsigned mergeJoinCtr = 0;
     for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
-         ++argNum) {
-      if (mergeJoinCtr < argsToErase.size() &&
-          argNum == argsToErase[mergeJoinCtr])
-        ++mergeJoinCtr;
-      else
+         ++argNum)
+      if (!argsToErase.test(argNum))
         newOperands.push_back(oldInst.getOperand(argNum));
-    }
   };
   updateInstances(mod, newToOldResultMap, getOperands);
 }

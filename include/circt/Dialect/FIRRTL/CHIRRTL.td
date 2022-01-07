@@ -100,12 +100,14 @@ def CombMemOp : CHIRRTLOp<"combmem"> {
     Define a new behavioral combinational memory. Combinational memories have a
     write latency of 1 and a read latency of 0.
   }];
-  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
+  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations,
+                              OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "custom<CombMemOp>(attr-dict) `:` type($result)";
+  let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` type($result)";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements, 
-                   "mlir::StringRef":$name, "ArrayAttr":$annotations)>
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+                   "mlir::StringRef":$name, "ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 }
 
@@ -116,13 +118,15 @@ def SeqMemOp : CHIRRTLOp<"seqmem"> {
     write latency and a read latency of 1.
   }];
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
-                       AnnotationArrayAttr:$annotations);
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
+  let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements, 
-                   "RUWAttr":$ruw, "mlir::StringRef":$name, 
-                   "ArrayAttr":$annotations)>
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+                   "RUWAttr":$ruw, "mlir::StringRef":$name,
+                   "ArrayAttr":$annotations,
+                   CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 }
 
