@@ -166,7 +166,7 @@ struct HandshakeRemoveSimpleMergesPass
     : public HandshakeRemoveSimpleMergesBase<HandshakeRemoveSimpleMergesPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
-    auto ctx = op.getContext();
+    auto *ctx = op.getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<EliminateSimpleMergesPattern>(ctx);
     if (failed(applyPatternsAndFoldGreedily(op, std::move(patterns))))
