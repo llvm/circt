@@ -798,8 +798,9 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
 /// representation for parameters.  If `ignoreValues` is true, all the values
 /// are dropped.
 static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
-  auto paramsOptional = module.parameters();
-  if (!paramsOptional.hasValue())
+  auto params = llvm::map_range(
+      module.parameters(), [](Attribute a) { return a.cast<ParamDeclAttr>(); });
+  if (params.empty())
     return {};
 
   Builder builder(module);
@@ -808,7 +809,7 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
   // directly.  MLIR's DictionaryAttr always stores keys in the dictionary
   // in sorted order which is nicely stable.
   SmallVector<Attribute> newParams;
-  for (const NamedAttribute &entry : paramsOptional.getValue()) {
+  for (const ParamDeclAttr &entry : params) {
     auto name = entry.getName();
     auto type = TypeAttr::get(entry.getValue().getType());
     auto value = ignoreValues ? Attribute() : entry.getValue();
