@@ -285,14 +285,6 @@ struct CircuitLoweringState {
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 
-  NonLocalAnchor lookupNLA(FlatSymbolRefAttr sym) {
-    return nlaMap[sym.getAttr()];
-  }
-
-  Attribute lookupInstanceForceName(std::pair<Attribute, Attribute> instance) {
-    return instanceForceNames.lookup(instance);
-  }
-
 private:
   friend struct FIRRTLModuleLowering;
   friend struct FIRRTLLowering;
@@ -936,7 +928,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       return false;
     }
 
-    auto nla = loweringState.lookupNLA(sym);
+    auto nla = loweringState.nlaMap.lookup(sym.getAttr());
     // The non-local anchor must exist.
     //
     // TODO: handle this with annotation verification.
@@ -2745,7 +2737,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
-  if (auto forceName = circuitState.lookupInstanceForceName(
+  if (auto forceName = circuitState.instanceForceNames.lookup(
           {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
            newInstance.getName()}))
     newInstance->setAttr("hw.verilogName", forceName);
