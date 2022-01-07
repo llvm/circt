@@ -62,6 +62,17 @@ def HandshakeRemoveBuffers : Pass<"handshake-remove-buffers", "handshake::FuncOp
   let constructor = "circt::handshake::createHandshakeRemoveBuffersPass()";
 }
 
+def HandshakeRemoveSimpleMerges : Pass<"handshake-remove-simple-merges", "handshake::FuncOp"> {
+  let summary = "Remove simple merges from handshake functions.";
+  let description = [{
+    This pass analysis a handshake.func operation and removes any simple merges
+    - merge operation with a single input - from the function.
+    Simple merges are allowed in canonical Handshake IR due to their importance
+    in correct buffer placement.
+  }];
+  let constructor = "circt::handshake::createHandshakeRemoveSimpleMergesPass()";
+}
+
 def HandshakeAddIDs : Pass<"handshake-add-ids", "handshake::FuncOp"> {
   let summary = "Add an ID to each operation in a handshake function.";
   let description = [{
