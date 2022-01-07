@@ -900,7 +900,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input enable: UInt<1>
     input not_reset: UInt<1>
     input value: UInt<42>
-    input io : {clock: Clock}
 
     ; rocket-chip properties
     when cond:
@@ -1049,8 +1048,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.assert %clock, {{.+}} "double user assert"
 
     when cond :
-        printf(io.clock, not(enable), "assert: bar")
-    ; CHECK: [[CLOCK:%.+]] = firrtl.subfield %io(0)
-    ; CHECK-NEXT: [[NOT_ENABLE:%.+]] = firrtl.not %enable
+        printf(clock, not(enable), "assert: bar")
+    ; CHECK: [[NOT_ENABLE:%.+]] = firrtl.not %enable
     ; CHECK-NEXT: [[NOT_COND:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert [[CLOCK]], [[NOT_COND]], [[NOT_ENABLE]]
+    ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]]
