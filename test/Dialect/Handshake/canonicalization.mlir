@@ -143,3 +143,18 @@ handshake.func @fork_to_fork(%arg0 : i32, %arg1: none) -> (i32, i32, i32, none) 
   %1:2 = fork [2] %0#0 : i32
   handshake.return %0#1, %1#0, %1#1, %arg1 : i32, i32, i32, none
 }
+
+// -----
+
+// CHECK-LABEL:   handshake.func @sunk_buffer(
+// CHECK-SAME:                                 %[[VAL_0:.*]]: i32,
+// CHECK-SAME:                                 %[[VAL_1:.*]]: none, ...) -> none
+// CHECK:           sink %[[VAL_0]] : i32
+// CHECK:           return %[[VAL_1]] : none
+// CHECK:         }
+
+handshake.func @sunk_buffer(%arg0 : i32, %arg1: none) -> (none) {
+  %0 = buffer [2] %arg0 {sequential  = false} : i32
+  sink %0 : i32
+  return %arg1 : none
+}

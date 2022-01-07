@@ -34,4 +34,8 @@ def EliminateSunkConstantsPattern
     : Pat<(SinkOp:$sink (ConstantOp $control, $value)),
           (replaceWithValue $sink)>;
 
+def EliminateSunkBuffersPattern
+    : Pat<(SinkOp:$sink (BufferOp $dataType, $size, $value, $sequential)),
+          (SinkOp $value)>;
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKECANONICALIZATION_TD

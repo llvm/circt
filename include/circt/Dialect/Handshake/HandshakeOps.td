@@ -240,6 +240,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   }];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+  let hasCanonicalizer = 1;
 }
 
 def ForkOp : Handshake_Op<"fork", [
@@ -519,7 +520,12 @@ def SinkOp
   let arguments = (ins AnyType:$operand);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand)>];
+  let builders = [
+    OpBuilder<(ins "Value":$operand)>,
+    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns. 
+    OpBuilder<(ins 
+      "TypeRange":$resultTypes, "ValueRange":$operands, "ArrayRef<::mlir::NamedAttribute>":$attributes)>
+  ];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
 }
