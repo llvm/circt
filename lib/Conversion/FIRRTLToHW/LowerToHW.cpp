@@ -2745,9 +2745,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
-  if (auto forceName = circuitState.instanceForceNames[{
-          cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
-          newInstance.getName()}])
+  if (auto forceName = circuitState.lookupInstanceForceName(
+          {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
+           newInstance.getName()}))
     newInstance->setAttr("hw.verilogName", forceName);
 
   // Now that we have the new hw.instance, we need to remap all of the users
