@@ -2892,6 +2892,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
                             ports, moduleContext.targetsInModule);
 
     auto sym = removeDontTouch(annotations.first, id);
+    if (!sym)
+      sym = removeDontTouch(annotations.second, id);
     result =
         builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                               ruw, builder.getArrayAttr(resultNames), id,
