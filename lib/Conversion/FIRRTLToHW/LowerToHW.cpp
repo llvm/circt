@@ -289,9 +289,9 @@ struct CircuitLoweringState {
     return nlaMap[sym.getAttr()];
   }
 
-  /// A mapping of instances to their forced instantiation names (if
-  /// applicable).
-  DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
+  Attribute lookupInstanceForceName(std::pair<Attribute, Attribute> instance) {
+    return instanceForceNames.lookup(instance);
+  }
 
 private:
   friend struct FIRRTLModuleLowering;
@@ -325,6 +325,10 @@ private:
   // The design-under-test (DUT), if it is found.  This will be set if a
   // "sifive.enterprise.firrtl.MarkDUTAnnotation" exists.
   FModuleOp dut;
+
+  /// A mapping of instances to their forced instantiation names (if
+  /// applicable).
+  DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
 
   /// Map of symbol name to NonLocalAnchor op.
   llvm::DenseMap<Attribute, NonLocalAnchor> nlaMap;
