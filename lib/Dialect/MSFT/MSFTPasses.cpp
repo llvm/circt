@@ -384,7 +384,7 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
+  void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
 };
@@ -477,6 +477,14 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
     if (!retName.empty())
       return retName;
   }
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+    buff.clear();
+    llvm::raw_string_ostream(buff) << "c" << constOp.value();
+    return buff;
+  }
+
+  if (res.getDefiningOp()->getNumResults() == 1)
+    return {};
 
   // Fallback. Not ideal.
   buff.clear();
@@ -495,6 +503,9 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
     hw::ModulePortInfo ports = getModulePortInfo(modOp);
     return ports.inputs[oper.getOperandNumber()].name;
   }
+
+  if (oper.getOwner()->getNumOperands() == 1)
+    return "in";
 
   // Fallback. Not ideal.
   buff.clear();
@@ -522,12 +533,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     for (OpResult res : op->getOpResults()) {
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), res.getType()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          res.getType()));
     }
     for (OpOperand &oper : op->getOpOperands()) {
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), oper.get()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          oper.get()));
       newResTypes.push_back(oper.get().getType());
     }
   }
@@ -576,7 +589,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
 }
 
 void PartitionPass::partition(DesignPartitionOp partOp,
-                              SmallVectorImpl<Operation *> &toMove) {
+                              ArrayRef<Operation *> toMove) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -596,24 +609,22 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
     StringRef name = ::getOpName(inst);
 
-    for (auto port :
-         llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
+    for (auto port : modPorts.inputs) {
+      partInstInputs.push_back(inst->getOperand(port.argNum));
+      inputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::INPUT,
+          /*type*/ port.type,
+          /*argNum*/ inputPorts.size()});
+    }
 
-      if (port.direction == hw::PortDirection::OUTPUT) {
-        partInstOutputs.push_back(inst->getResult(port.argNum));
-        outputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ outputPorts.size()});
-      } else {
-        partInstInputs.push_back(inst->getOperand(port.argNum));
-        inputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ inputPorts.size()});
-      }
+    for (auto port : modPorts.outputs) {
+      partInstOutputs.push_back(inst->getResult(port.argNum));
+      outputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ port.type,
+          /*argNum*/ outputPorts.size()});
     }
   };
   // Handle all other operators.
@@ -632,12 +643,13 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     }
 
     for (OpResult res : op->getOpResults()) {
-      outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(
-              ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ res.getType(),
-          /*argNum*/ outputPorts.size()});
+      StringRef resName = getResultName(res, topLevelSyms, nameBuffer);
+      outputPorts.push_back(
+          hw::PortInfo{/*name*/ StringAttr::get(
+                           ctxt, name + (resName.empty() ? "" : "." + resName)),
+                       /*direction*/ hw::PortDirection::OUTPUT,
+                       /*type*/ res.getType(),
+                       /*argNum*/ outputPorts.size()});
       partInstOutputs.push_back(res);
     }
   };

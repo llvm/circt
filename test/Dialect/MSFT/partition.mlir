@@ -30,9 +30,9 @@ msft.module @B {} (%clk : i1) -> (x: i2)  {
 // CHECK:    %c0_i2 = hw.constant 0 : i2
 // CHECK:    msft.output %b.x, %part1.unit1.foo_x : i2, i2
 // CHECK-LABEL: msft.module.extern @Extern(%foo_a: i2) -> (foo_x: i2)
-// CHECK-LABEL: msft.module @B {} (%clk: i1, %unit1.foo_x: i2, %seq.compreg.out0: i2, %unit2.foo_x: i2) -> (x: i2, unit1.foo_a: i2, seq.compreg.in0: i2, seq.compreg.in1: i1, unit2.foo_a: i2) {
+// CHECK-LABEL: msft.module @B {} (%clk: i1, %unit1.foo_x: i2, %seq.compreg: i2, %unit2.foo_x: i2) -> (x: i2, unit1.foo_a: i2, seq.compreg.in0: i2, seq.compreg.in1: i1, unit2.foo_a: i2) {
 // CHECK:    %c1_i2 = hw.constant 1 : i2
-// CHECK:    msft.output %unit2.foo_x, %c1_i2, %unit1.foo_x, %clk, %seq.compreg.out0 : i2, i2, i2, i1, i2
+// CHECK:    msft.output %unit2.foo_x, %c1_i2, %unit1.foo_x, %clk, %seq.compreg : i2, i2, i2, i1, i2
 // CHECK-LABEL: msft.module @dp {} (%b.unit1.foo_a: i2, %b.seq.compreg.in0: i2, %b.seq.compreg.in1: i1, %b.unit2.foo_a: i2, %unit1.foo_a: i2) -> (b.unit1.foo_x: i2, b.seq.compreg.b.seq.compreg: i2, b.unit2.foo_x: i2, unit1.foo_x: i2) {
 // CHECK:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%b.unit1.foo_a)  : (i2) -> i2
 // CHECK:    %b.seq.compreg = seq.compreg %b.seq.compreg.in0, %b.seq.compreg.in1 : i2
