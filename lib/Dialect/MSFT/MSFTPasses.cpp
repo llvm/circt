@@ -548,6 +548,9 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
     return ports.inputs[oper.getOperandNumber()].name;
   }
 
+  if (oper.getOwner()->getNumOperands() == 1)
+    return "in";
+
   // Fallback. Not ideal.
   buff.clear();
   llvm::raw_string_ostream(buff) << "in" << oper.getOperandNumber();
