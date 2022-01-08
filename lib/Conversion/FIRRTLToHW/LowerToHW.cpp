@@ -49,6 +49,8 @@ static const char testHarnessHierAnnoClass[] =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
 static const char verifBBClass[] =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
+static const char forceNameClass[] =
+    "chisel3.util.experimental.ForceNameAnnotation";
 
 /// Attribute that indicates that the module hierarchy starting at the
 /// annotated module should be dumped to a file.
@@ -253,7 +255,12 @@ struct CircuitLoweringState {
                        InstanceGraph *instanceGraph)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {}
+        nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {
+    // Populate the NLA map with any discovered NonLocalAnchors.
+    NonLocalAnchor foo;
+    for (auto nla : circuitOp.getBody()->getOps<NonLocalAnchor>())
+      nlaMap[nla.sym_nameAttr()] = nla;
+  }
 
   Operation *getNewModule(Operation *oldModule) {
     auto it = oldToNewModuleMap.find(oldModule);
@@ -310,6 +317,13 @@ private:
   // The design-under-test (DUT), if it is found.  This will be set if a
   // "sifive.enterprise.firrtl.MarkDUTAnnotation" exists.
   FModuleOp dut;
+
+  /// A mapping of instances to their forced instantiation names (if
+  /// applicable).
+  DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
+
+  /// Map of symbol name to NonLocalAnchor op.
+  llvm::DenseMap<Attribute, NonLocalAnchor> nlaMap;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -891,6 +905,74 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   if (annos.removeAnnotation(verifBBClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
+  bool failed = false;
+  // Remove ForceNameAnnotations by generating verilogNames on instances.
+  annos.removeAnnotations([&](Annotation anno) {
+    if (!anno.isClass(forceNameClass))
+      return false;
+
+    auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+    // This must be a non-local annotation due to how the Chisel API is
+    // implemented.
+    //
+    // TODO: handle this in some sensible way based on what the SFC does with
+    // a local annotation.
+    if (!sym) {
+      auto diag = oldModule.emitOpError()
+                  << "contains a '" << forceNameClass
+                  << "' that is not a non-local annotation";
+      diag.attachNote() << "the erroneous annotation is '" << anno.getDict()
+                        << "'\n";
+      failed = true;
+      return false;
+    }
+
+    auto nla = loweringState.nlaMap.lookup(sym.getAttr());
+    // The non-local anchor must exist.
+    //
+    // TODO: handle this with annotation verification.
+    if (!nla) {
+      auto diag = oldModule.emitOpError()
+                  << "contains a '" << forceNameClass
+                  << "' whose non-local symbol, '" << sym
+                  << "' does not exist in the circuit";
+      diag.attachNote() << "the erroneous annotation is '" << anno.getDict();
+      failed = true;
+      return false;
+    }
+
+    // Add the forced name to global state (keyed by a pseudo-inner name ref).
+    // Error out if this key is alredy in use.
+    //
+    // TODO: this error behavior can be relaxed to always overwrite with the
+    // new forced name (the bug-compatible behavior of the Chisel
+    // implementation) or fixed to duplicate modules such that the naming can
+    // be applied.
+    auto mod = nla.modpath()
+                   .getValue()
+                   .take_back(2)[0]
+                   .cast<FlatSymbolRefAttr>()
+                   .getAttr();
+    auto inst = nla.namepath().getValue().take_back(2)[0];
+    auto inserted = loweringState.instanceForceNames.insert(
+        {{mod, inst}, anno.getMember("name")});
+    if (!inserted.second &&
+        (anno.getMember("name") != (inserted.first->second))) {
+      auto diag = oldModule.emitError()
+                  << "contained multiple '" << forceNameClass
+                  << "' with different names: " << inserted.first->second
+                  << " was not " << anno.getMember("name");
+      diag.attachNote() << "the erroneous annotation is '" << anno.getDict()
+                        << "'";
+      failed = true;
+      return false;
+    }
+    return true;
+  });
+
+  if (failed)
+    return {};
 
   loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
@@ -2654,6 +2736,11 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
+
+  if (auto forceName = circuitState.instanceForceNames.lookup(
+          {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
+           newInstance.getName()}))
+    newInstance->setAttr("hw.verilogName", forceName);
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
