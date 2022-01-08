@@ -259,27 +259,27 @@ void Emitter::emitModule(FExtModuleOp op) {
     indent() << "defname = " << op.defname() << "\n";
 
   // Emit the parameters.
-  if (auto params = op.parameters()) {
-    for (auto param : *params) {
-      indent() << "parameter " << param.getName().getValue() << " = ";
-      TypeSwitch<Attribute>(param.getValue())
-          .Case<IntegerAttr>([&](auto attr) { os << attr.getValue(); })
-          .Case<FloatAttr>([&](auto attr) {
-            SmallString<16> str;
-            attr.getValue().toString(str);
-            os << str;
-          })
-          .Case<StringAttr>([&](auto attr) {
-            os << "\"";
-            os.write_escaped(attr.getValue());
-            os << "\"";
-          })
-          .Default([&](auto attr) {
-            emitOpError(op, "with unsupported parameter attribute: ") << attr;
-            os << "<unsupported-attr " << attr << ">";
-          });
-      os << "\n";
-    }
+  for (auto param : llvm::map_range(op.parameters(), [](Attribute attr) {
+         return attr.cast<ParamDeclAttr>();
+       })) {
+    indent() << "parameter " << param.getName().getValue() << " = ";
+    TypeSwitch<Attribute>(param.getValue())
+        .Case<IntegerAttr>([&](auto attr) { os << attr.getValue(); })
+        .Case<FloatAttr>([&](auto attr) {
+          SmallString<16> str;
+          attr.getValue().toString(str);
+          os << str;
+        })
+        .Case<StringAttr>([&](auto attr) {
+          os << "\"";
+          os.write_escaped(attr.getValue());
+          os << "\"";
+        })
+        .Default([&](auto attr) {
+          emitOpError(op, "with unsupported parameter attribute: ") << attr;
+          os << "<unsupported-attr " << attr << ">";
+        });
+    os << "\n";
   }
 
   reduceIndent();

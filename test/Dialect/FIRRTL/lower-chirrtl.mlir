@@ -24,7 +24,7 @@ firrtl.module @UnusedMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1
 // CHECK-NEXT: }
 
 firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, out %out : !firrtl.uint<1>, in %vec : !firrtl.vector<uint<1>, 2>) {
-  // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
+  // CHECK: %ram_ramport = firrtl.mem sym @s1 Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport(0)
   // CHECK: firrtl.connect [[ADDR]], %invalid_ui8
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport(1)
@@ -32,7 +32,7 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
   // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport(2)
   // CHECK: firrtl.connect [[CLOCK]], %invalid_clock
   // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
+  %ram = chirrtl.combmem  sym @s1 : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
   // CHECK: firrtl.when %cond {

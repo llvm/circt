@@ -304,7 +304,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]
   }
 
-  firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
   // CHECK-NEXT:    input in : UInt
   // CHECK-NEXT:    output out : UInt<8>

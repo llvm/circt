@@ -272,11 +272,6 @@ static ParseResult parseMergeOp(OpAsmParser &parser, OperationState &result) {
 
 void printMergeOp(OpAsmPrinter &p, MergeOp op) { sost::printOp(p, op, false); }
 
-void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-  results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
-}
-
 /// Returns a dematerialized version of the value 'v', defined as the source of
 /// the value before passing through a buffer or fork operation.
 static Value getDematerialized(Value v) {
@@ -890,6 +885,16 @@ void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
   sost::addAttributes(result, 1, operand.getType());
 }
 
+void SinkOp::build(OpBuilder &builder, OperationState &odsState,
+                   TypeRange resultTypes, ValueRange operands,
+                   ArrayRef<NamedAttribute> attributes) {
+  assert(operands.size() == 1u && "mismatched number of parameters");
+  build(builder, odsState, operands[0]);
+  odsState.addAttributes(attributes);
+  assert(resultTypes.size() == 0u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+}
+
 static ParseResult parseSinkOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
@@ -961,6 +966,11 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
                                     ArrayRef<Block *> successors) {
   // Add all the successor blocks of the block which contains this terminator
   result.addSuccessors(successors);
+}
+
+void handshake::BufferOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.insert<circt::handshake::EliminateSunkBuffersPattern>(context);
 }
 
 void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,

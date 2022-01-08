@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1171,6 +1172,8 @@ using ModuleSymbolTableEntry =
 using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
 
+using SubaccessCache = llvm::DenseMap<std::pair<Value, unsigned>, Value>;
+
 namespace {
 /// This struct provides context information that is global to the module we're
 /// currently parsing into.
@@ -1187,6 +1190,26 @@ struct FIRModuleContext : public FIRParser {
   // in the parser, do an implicit CSE to reduce parse time and silliness in the
   // resulting IR.
   llvm::DenseMap<std::pair<Attribute, Type>, Value> constantCache;
+
+  //===--------------------------------------------------------------------===//
+  // SubaccessCache
+
+  /// This returns a reference with the assumption that the caller will fill in
+  /// the cached value. We keep track of inserted subaccesses so that we can
+  /// remove them when we exit a scope.
+  Value &getCachedSubaccess(Value value, unsigned index) {
+    auto &result = subaccessCache[{value, index}];
+    if (!result) {
+      // The outer most block won't be in the map.
+      auto it = scopeMap.find(value.getParentBlock());
+      if (it != scopeMap.end())
+        it->second->scopedSubaccesses.push_back({result, index});
+    }
+    return result;
+  }
+
+  //===--------------------------------------------------------------------===//
+  // SymbolTable
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
@@ -1224,27 +1247,38 @@ struct FIRModuleContext : public FIRParser {
 
   /// Provide a symbol table scope that automatically pops all the entries off
   /// the symbol table when the scope is exited.
-  struct SymbolTableScope {
-    SymbolTableScope(FIRModuleContext &moduleContext)
-        : moduleContext(moduleContext),
-          prevScopedDecls(moduleContext.currentScopeCollector) {
-      moduleContext.currentScopeCollector = &scopedDecls;
+  struct ContextScope {
+    friend struct FIRModuleContext;
+    ContextScope(FIRModuleContext &moduleContext, Block *block)
+        : moduleContext(moduleContext), block(block),
+          previousScope(moduleContext.currentScope) {
+      moduleContext.currentScope = this;
+      moduleContext.scopeMap[block] = this;
     }
-    ~SymbolTableScope() {
+    ~ContextScope() {
       // Mark all entries in this scope as being invalid.  We track validity
       // through the SMLoc field instead of deleting entries.
       for (auto *entryPtr : scopedDecls)
         entryPtr->second.first = SMLoc();
-      moduleContext.currentScopeCollector = prevScopedDecls;
+      // Erase the scoped subacceses from the cache. If the block is deleted we
+      // could resuse the memory, although the chances are quite small.
+      for (auto subaccess : scopedSubaccesses)
+        moduleContext.subaccessCache.erase(subaccess);
+      // Erase this context from the map.
+      moduleContext.scopeMap.erase(block);
+      // Reset to the previous scope.
+      moduleContext.currentScope = previousScope;
     }
 
   private:
-    void operator=(const SymbolTableScope &) = delete;
-    SymbolTableScope(const SymbolTableScope &) = delete;
+    void operator=(const ContextScope &) = delete;
+    ContextScope(const ContextScope &) = delete;
 
     FIRModuleContext &moduleContext;
-    std::vector<ModuleSymbolTableEntry *> *prevScopedDecls;
+    Block *block;
+    ContextScope *previousScope;
     std::vector<ModuleSymbolTableEntry *> scopedDecls;
+    std::vector<std::pair<Value, unsigned>> scopedSubaccesses;
   };
 
   /// A set of all Annotation Targets found in this module.  This is used to
@@ -1257,10 +1291,18 @@ private:
   /// This is scoped because conditional statements introduce subscopes.
   ModuleSymbolTable symbolTable;
 
+  /// This is a cache of subindex and subfield operations so we don't constantly
+  /// recreate large chains of them.  This maps a bundle value + index to the
+  /// subaccess result.
+  SubaccessCache subaccessCache;
+
+  /// This maps a block to related ContextScope.
+  DenseMap<Block *, ContextScope *> scopeMap;
+
   /// If non-null, all new entries added to the symbol table are added to this
   /// list.  This allows us to "pop" the entries by resetting them to null when
   /// scope is exited.
-  std::vector<ModuleSymbolTableEntry *> *currentScopeCollector = nullptr;
+  ContextScope *currentScope = nullptr;
 };
 
 } // end anonymous namespace
@@ -1288,8 +1330,8 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
   // If we didn't have a hit, then record the location, and remember that this
   // was new to this scope.
   entryIt->second = {loc, entry};
-  if (currentScopeCollector && !insertNameIntoGlobalScope)
-    currentScopeCollector->push_back(&*entryIt);
+  if (currentScope && !insertNameIntoGlobalScope)
+    currentScope->scopedDecls.push_back(&*entryIt);
 
   return success();
 }
@@ -1447,16 +1489,48 @@ private:
 };
 } // end anonymous namespace
 
+/// Remove the DontTouch annotation and return true, if it exists.
+/// Ignore DontTouch that will apply only to a subfield.
+static bool removeDontTouch(ArrayAttr &annotations) {
+  SmallVector<Attribute> filteredAnnos;
+  bool hasDontTouch = false;
+  // Only check for DontTouch annotation that applies to the entire op.
+  // Then drop it and return true.
+  // We cannot use AnnotationSet::removeDontTouch, because it does not ignore
+  // Subfield annotations.
+  for (Attribute anno : annotations) {
+    DictionaryAttr dict = {};
+    // If subfield annotation, then field must be 0.
+    if (auto subAnno = anno.dyn_cast<SubAnnotationAttr>()) {
+      if (subAnno.getFieldID() == 0)
+        dict = subAnno.getAnnotations();
+    } else
+      dict = anno.dyn_cast<DictionaryAttr>();
+    if (dict)
+      if (auto cls = dict.get("class"))
+        if (cls.cast<StringAttr>().getValue().equals(
+                "firrtl.transforms.DontTouchAnnotation")) {
+          hasDontTouch = true;
+          continue;
+        }
+    filteredAnnos.push_back(anno);
+  }
+  if (hasDontTouch)
+    annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
+  return hasDontTouch;
+}
 namespace {
 /// This class implements logic and state for parsing statements, suites, and
 /// similar module body constructs.
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
-                         FIRModuleContext &moduleContext)
+                         FIRModuleContext &moduleContext,
+                         Namespace modNameSpace)
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
         builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
             UnknownLoc::get(getContext()), &blockToInsertInto)),
-        locationProcessor(this->builder), moduleContext(moduleContext) {}
+        locationProcessor(this->builder), moduleContext(moduleContext),
+        modNameSpace(modNameSpace) {}
 
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
@@ -1525,12 +1599,26 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
 
+  /// Remove the DontTouch annotation and return a valid symbol name if the
+  /// annotation exists. Ignore DontTouch that will apply only to a subfield.
+  StringAttr removeDontTouch(ArrayAttr &annotations, StringRef id) {
+    SmallVector<Attribute> filteredAnnos;
+    bool hasDontTouch = ::removeDontTouch(annotations);
+    if (hasDontTouch)
+      return StringAttr::get(annotations.getContext(),
+                             modNameSpace.newName(id));
+
+    return {};
+  }
+
   // The builder to build into.
   ImplicitLocOpBuilder builder;
   LazyLocationListener locationProcessor;
 
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
+
+  Namespace modNameSpace;
 };
 
 } // end anonymous namespace
@@ -1549,15 +1637,27 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   TypeSwitch<FIRRTLType>(tpe)
       .Case<BundleType>([&](auto tpe) {
         for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
-          auto subfield = builder.create<SubfieldOp>(val, i);
+          auto &subfield = moduleContext.getCachedSubaccess(val, i);
+          if (!subfield) {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointAfterValue(val);
+            subfield = builder.create<SubfieldOp>(val, i);
+          }
           emitInvalidate(subfield,
-                         subfield.isFieldFlipped() ? swapFlow(flow) : flow);
+                         tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
         }
       })
       .Case<FVectorType>([&](auto tpe) {
         auto tpex = tpe.getElementType();
-        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i)
-          emitInvalidate(builder.create<SubindexOp>(tpex, val, i), flow);
+        for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i) {
+          auto &subindex = moduleContext.getCachedSubaccess(val, i);
+          if (!subindex) {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointAfterValue(val);
+            subindex = builder.create<SubindexOp>(tpex, val, i);
+          }
+          emitInvalidate(subindex, flow);
+        }
       })
       // Drop invalidation of analog.
       .Case<AnalogType>([](auto) {})
@@ -1711,13 +1811,13 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   auto indexV = bundle.getElementIndex(fieldName);
   if (!indexV)
     return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
-               << result.getType(),
-           failure();
-  auto index = indexV.getValue();
+           << result.getType();
+  auto indexNo = indexV.getValue();
+
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
-                          builder.getUI32IntegerAttr(index)};
+                          builder.getI32IntegerAttr(indexNo)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
@@ -1725,10 +1825,24 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     return failure();
   }
 
-  // Create the result operation.
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
+  if (value) {
+    result = value;
+    return success();
+  }
+
+  // Create the result operation, inserting at the location of the declaration.
+  // This will cache the subfield operation for further uses.
   locationProcessor.setLoc(loc);
-  auto op = builder.create<SubfieldOp>(resultType, result, index);
-  result = op.getResult();
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(result);
+  auto op = builder.create<SubfieldOp>(resultType, result, attrs);
+
+  // Insert the newly creatd operation into the cache.
+  value = op.getResult();
+
+  result = value;
   return success();
 }
 
@@ -1759,10 +1873,24 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
     return failure();
   }
 
-  // Create the result operation.
+  // Check if we already have created this Subindex op.
+  auto &value = moduleContext.getCachedSubaccess(result, indexNo);
+  if (value) {
+    result = value;
+    return success();
+  }
+
+  // Create the result operation, inserting at the location of the declaration.
+  // This will cache the subindex operation for further uses.
   locationProcessor.setLoc(loc);
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(result);
   auto op = builder.create<SubindexOp>(resultType, result, attrs);
-  result = op.getResult();
+
+  // Insert the newly creatd operation into the cache.
+  value = op.getResult();
+
+  result = value;
   return success();
 }
 
@@ -1960,7 +2088,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   auto type = IntType::get(builder.getContext(), isSigned, width);
 
   IntegerType::SignednessSemantics signedness;
-  if (type.isSigned()) {
+  if (isSigned) {
     signedness = IntegerType::Signed;
     if (width != -1) {
       // Check for overlow if we are truncating bits.
@@ -2433,7 +2561,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // This is a function to parse a suite body.
   auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
-    FIRModuleContext::SymbolTableScope suiteScope(moduleContext);
+    FIRModuleContext::ContextScope suiteScope(moduleContext,
+                                              &blockToInsertInto);
 
     // After parsing the when region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
@@ -2449,7 +2578,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
     // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
-    FIRStmtParser subParser(blockToInsertInto, moduleContext);
+    FIRStmtParser subParser(blockToInsertInto, moduleContext, modNameSpace);
 
     // Figure out whether the body is a single statement or a nested one.
     auto stmtIndent = getIndentation();
@@ -2491,7 +2620,8 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext);
+    FIRStmtParser subParser(whenStmt.getElseBlock(), moduleContext,
+                            modNameSpace);
     return subParser.parseSimpleStmt(whenIndent);
   }
 
@@ -2612,9 +2742,10 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    result = builder.create<InstanceOp>(referencedModule, id,
-                                        annotations.first.getValue(),
-                                        annotations.second.getValue());
+    auto sym = removeDontTouch(annotations.first, id);
+    result = builder.create<InstanceOp>(
+        referencedModule, id, annotations.first.getValue(),
+        annotations.second.getValue(), false, sym);
   }
 
   // Since we are implicitly unbundling the instance results, we need to keep
@@ -2662,9 +2793,10 @@ ParseResult FIRStmtParser::parseCombMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result =
-      builder.create<CombMemOp>(vectorType.getElementType(),
-                                vectorType.getNumElements(), id, annotations);
+  auto sym = removeDontTouch(annotations, id);
+  auto result = builder.create<CombMemOp>(vectorType.getElementType(),
+                                          vectorType.getNumElements(), id,
+                                          annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2700,10 +2832,11 @@ ParseResult FIRStmtParser::parseSeqMem() {
     annotations =
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
+  auto sym = removeDontTouch(annotations, id);
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
                                          vectorType.getNumElements(), ruw, id,
-                                         annotations);
+                                         annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2840,10 +2973,13 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
         getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                             ports, moduleContext.targetsInModule);
 
-    result = builder.create<MemOp>(
-        resultTypes, readLatency, writeLatency, depth, ruw,
-        builder.getArrayAttr(resultNames), id, annotations.first,
-        annotations.second, StringAttr{});
+    auto sym = removeDontTouch(annotations.first, id);
+    if (!sym)
+      sym = removeDontTouch(annotations.second, id);
+    result =
+        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
+                              ruw, builder.getArrayAttr(resultNames), id,
+                              annotations.first, annotations.second, sym);
   }
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2899,8 +3035,9 @@ ParseResult FIRStmtParser::parseNode() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, initializerType);
 
-  Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                        annotations, StringAttr{});
+  auto sym = removeDontTouch(annotations, id);
+  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
+                                       annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2928,7 +3065,8 @@ ParseResult FIRStmtParser::parseWire() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<WireOp>(type, id, annotations, StringAttr{});
+  auto sym = removeDontTouch(annotations, id);
+  auto result = builder.create<WireOp>(type, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3021,12 +3159,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
                        moduleContext.targetsInModule, type);
 
   Value result;
+  auto sym = removeDontTouch(annotations, id);
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations, StringAttr{});
+                                        id, annotations, sym);
   else
-    result = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
-
+    result = builder.create<RegOp>(type, clock, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3267,11 +3405,17 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     info.setDefaultLoc(defaultLoc);
 
     AnnotationSet annotations(getContext());
-    if (!getConstants().options.rawAnnotations)
-      annotations = AnnotationSet(
+    StringAttr innerSym = {};
+    if (!getConstants().options.rawAnnotations) {
+      auto annos =
           getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
-                         getConstants().targetSet, type));
-    resultPorts.push_back({name, type, direction::get(isOutput), StringAttr{},
+                         getConstants().targetSet, type);
+      bool addSym = removeDontTouch(annos);
+      if (addSym)
+        innerSym = StringAttr::get(getContext(), name.getValue());
+      annotations = AnnotationSet(annos);
+    }
+    resultPorts.push_back({name, type, direction::get(isOutput), innerSym,
                            info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
   }
@@ -3377,7 +3521,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       return failure();
   }
 
-  NamedAttrList parameters;
+  SmallVector<Attribute> parameters;
   SmallPtrSet<StringAttr, 8> seenNames;
 
   // Parse the parameter list.
@@ -3435,15 +3579,13 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     auto nameId = builder.getIdentifier(paramName);
     if (!seenNames.insert(nameId).second)
       return emitError(loc, "redefinition of parameter '" + paramName + "'");
-    parameters.append(nameId, value);
+    parameters.push_back(ParamDeclAttr::get(nameId, value));
   }
 
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
 
-  if (!parameters.empty())
-    fmodule->setAttr("parameters",
-                     DictionaryAttr::get(getContext(), parameters));
+  fmodule->setAttr("parameters", builder.getArrayAttr(parameters));
 
   return success();
 }
@@ -3467,17 +3609,19 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
+  Namespace modNameSpace;
   auto portList = moduleOp.getPorts();
   auto portArgs = moduleOp.getArguments();
   for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
     PortInfo &port = std::get<0>(tuple);
     llvm::SMLoc loc = std::get<1>(tuple);
     BlockArgument portArg = std::get<2>(tuple);
+    modNameSpace.newName(port.sym.getValue());
     if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext, modNameSpace);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
