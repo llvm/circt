@@ -2301,9 +2301,10 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
       initValues = op.getInitValues();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
                                op.isControl(), initValues);
-  } else
-    return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                                op.isControl());
+  }
+
+  return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
+                              op.isControl());
 }
 
 bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {
