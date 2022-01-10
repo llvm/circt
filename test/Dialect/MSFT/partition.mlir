@@ -75,6 +75,9 @@ msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
   msft.output %arr_out : !hw.array<4xi5>
 }
 
+// CLEANUP:  hw.globalRef @ref1 [#hw.innerNameRef<@top::@part1>, #hw.innerNameRef<@dp::@b.unit1>] {loc = #msft.physloc<M20K, 0, 0, 0>}
+// CLEANUP:  hw.globalRef @ref2 [#hw.innerNameRef<@top::@part1>, #hw.innerNameRef<@dp::@b.c.unit3>] {loc = #msft.physloc<M20K, 0, 0, 1>}
+
 // CLEANUP-LABEL:  msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
 // CLEANUP:          %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%clk) {circt.globalRef = [{{.+}}], inner_sym = "part1"} : (i1) -> (i2, i2)
 // CLEANUP:          msft.instance @b @B() {{.*}} : () -> ()
