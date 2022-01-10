@@ -530,20 +530,18 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     if (newPath.size() < 2)
       return;
 
-    // Splice the last two elements in the path, combining their names with a
-    // dot, and taking the module from the second to last element.
-    auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
+    // Splice the last two elements in the path, using the combined name from
+    // the op's attributes, and taking the module from the second to last
+    // element.
+    newPath.pop_back_val().cast<hw::InnerRefAttr>();
     auto nextElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
     auto newModule = nextElement.getModule();
-
-    SmallString<16> newName;
-    newName += nextElement.getName().getValue();
-    newName += '.';
-    newName += lastElement.getName().getValue();
-    auto newNameAttr = StringAttr::get(op->getContext(), newName);
-
+    auto newNameAttr = StringAttr::get(op->getContext(), ::getOpName(op));
     auto newLeaf = hw::InnerRefAttr::get(newModule, newNameAttr);
     newPath.push_back(newLeaf);
+
+    // GlobalRefs use the inner_sym attribute, so keep it up to date.
+    op->setAttr("inner_sym", newNameAttr);
 
     // Update the path on the GlobalRefOp.
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
@@ -674,18 +672,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       for (Value res : newOp->getResults())
         newOperands.push_back(res);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
-      // GlobalRefs use the inner_sym attribute, so keep it up to date.
-      if (newOp->hasAttr("inner_sym"))
-        newOp->setAttr("inner_sym",
-                       StringAttr::get(op->getContext(), ::getOpName(newOp)));
+      bubbleUpGlobalRefs(newOp);
     }
   };
   updateInstances(mod, resValues, cloneOpsGetOperands);
-
-  //*************
-  //   Update any global refs the 'ops' participate in to the new hierarchy.
-  for (Operation *op : ops)
-    bubbleUpGlobalRefs(op);
 
   //*************
   //   Done.
