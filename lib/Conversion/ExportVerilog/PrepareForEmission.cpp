@@ -309,9 +309,11 @@ static bool rewriteSideEffectingExpr(Operation *op) {
 /// non-constant expressions out to the top level so they don't turn into local
 /// variable declarations.
 static bool hoistNonSideEffectExpr(Operation *op) {
-  // Never hoist "always inline" expressions - they will never generate a
-  // temporary and in fact must always be emitted inline.
-  if (isExpressionAlwaysInline(op) && !isa<sv::ReadInOutOp>(op))
+  // Never hoist "always inline" expressions except for inout stuffs - they will
+  // never generate a temporary and in fact must always be emitted inline.
+  if (isExpressionAlwaysInline(op) &&
+      !(isa<sv::ReadInOutOp>(op) ||
+        op->getResult(0).getType().isa<hw::InOutType>()))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.

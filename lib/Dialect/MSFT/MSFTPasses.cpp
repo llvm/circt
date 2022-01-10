@@ -297,6 +297,14 @@ protected:
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
+
+  static bool isWireManipulationOp(Operation *op) {
+    return isa<hw::ArrayConcatOp>(op) || isa<hw::ArrayCreateOp>(op) ||
+           isa<hw::ArrayGetOp>(op) || isa<hw::ArraySliceOp>(op) ||
+           isa<hw::StructCreateOp>(op) || isa<hw::StructExplodeOp>(op) ||
+           isa<hw::StructExtractOp>(op) || isa<hw::StructInjectOp>(op) ||
+           isa<hw::StructCreateOp>(op) || isa<hw::ConstantOp>(op);
+  }
 };
 } // anonymous namespace
 
@@ -384,10 +392,13 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
+  void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
   void bubbleUpGlobalRefs(Operation *op);
+
+  // Tag wire manipulation ops connected to this potentially tagged op.
+  static void markWireOps(Operation *op);
 };
 } // anonymous namespace
 
@@ -402,9 +413,42 @@ void PartitionPass::runOnOperation() {
     partition(mod);
 }
 
+void PartitionPass::markWireOps(Operation *taggedOp) {
+  auto partRef =
+      taggedOp->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+  if (!partRef)
+    return;
+  SmallVector<Operation *, 8> opQueue;
+  opQueue.push_back(taggedOp);
+
+  while (!opQueue.empty()) {
+    Operation *op = opQueue.back();
+    opQueue.pop_back();
+
+    for (auto *user : op->getUsers()) {
+      if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
+        continue;
+      user->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(user);
+    }
+
+    for (auto operValue : op->getOperands()) {
+      Operation *defOp = operValue.getDefiningOp();
+      if (!defOp || !isWireManipulationOp(defOp) ||
+          defOp->hasAttr("targetDesignPartition"))
+        continue;
+      defOp->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(defOp);
+    }
+  }
+}
+
 void PartitionPass::partition(MSFTModuleOp mod) {
   DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
   SmallVector<Operation *, 64> nonLocalTaggedOps;
+
+  mod.walk(&markWireOps);
+
   mod.walk([&](Operation *op) {
     auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
     if (!partRef)
@@ -478,6 +522,14 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
     if (!retName.empty())
       return retName;
   }
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+    buff.clear();
+    llvm::raw_string_ostream(buff) << "c" << constOp.value();
+    return buff;
+  }
+
+  if (res.getDefiningOp()->getNumResults() == 1)
+    return {};
 
   // Fallback. Not ideal.
   buff.clear();
@@ -496,6 +548,9 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
     hw::ModulePortInfo ports = getModulePortInfo(modOp);
     return ports.inputs[oper.getOperandNumber()].name;
   }
+
+  if (oper.getOwner()->getNumOperands() == 1)
+    return "in";
 
   // Fallback. Not ideal.
   buff.clear();
@@ -615,12 +670,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     for (OpResult res : op->getOpResults()) {
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), res.getType()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          res.getType()));
     }
     for (OpOperand &oper : op->getOpOperands()) {
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), oper.get()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          oper.get()));
       newResTypes.push_back(oper.get().getType());
     }
   }
@@ -670,7 +727,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
 }
 
 void PartitionPass::partition(DesignPartitionOp partOp,
-                              SmallVectorImpl<Operation *> &toMove) {
+                              ArrayRef<Operation *> toMove) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -690,24 +747,22 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
     StringRef name = ::getOpName(inst);
 
-    for (auto port :
-         llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
+    for (auto port : modPorts.inputs) {
+      partInstInputs.push_back(inst->getOperand(port.argNum));
+      inputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::INPUT,
+          /*type*/ port.type,
+          /*argNum*/ inputPorts.size()});
+    }
 
-      if (port.direction == hw::PortDirection::OUTPUT) {
-        partInstOutputs.push_back(inst->getResult(port.argNum));
-        outputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ outputPorts.size()});
-      } else {
-        partInstInputs.push_back(inst->getOperand(port.argNum));
-        inputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ inputPorts.size()});
-      }
+    for (auto port : modPorts.outputs) {
+      partInstOutputs.push_back(inst->getResult(port.argNum));
+      outputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ port.type,
+          /*argNum*/ outputPorts.size()});
     }
   };
   // Handle all other operators.
@@ -726,12 +781,13 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     }
 
     for (OpResult res : op->getOpResults()) {
-      outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(
-              ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ res.getType(),
-          /*argNum*/ outputPorts.size()});
+      StringRef resName = getResultName(res, topLevelSyms, nameBuffer);
+      outputPorts.push_back(
+          hw::PortInfo{/*name*/ StringAttr::get(
+                           ctxt, name + (resName.empty() ? "" : "." + resName)),
+                       /*direction*/ hw::PortDirection::OUTPUT,
+                       /*type*/ res.getType(),
+                       /*argNum*/ outputPorts.size()});
       partInstOutputs.push_back(res);
     }
   };
@@ -771,11 +827,6 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
       SymbolRefAttr());
 
-  // Replace original ops' outputs with partition outputs.
-  assert(partInstOutputs.size() == partInst.getNumResults());
-  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
-    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
-
   //*************
   //   Move the operations!
 
@@ -806,7 +857,6 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
     pushDownGlobalRefs(op, partOp, newGlobalRefs);
-    op->erase();
   }
   SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),
                                          newGlobalRefs.end());
@@ -815,6 +865,14 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   partInst->setAttr("inner_sym", partInst.sym_nameAttr());
 
   partBuilder.create<OutputOp>(loc, outputs);
+
+  // Replace original ops' outputs with partition outputs.
+  assert(partInstOutputs.size() == partInst.getNumResults());
+  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
+    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
+
+  for (Operation *op : toMove)
+    op->erase();
 }
 
 namespace circt {

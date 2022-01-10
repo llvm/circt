@@ -22,6 +22,7 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/IndentedOstream.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -149,6 +150,30 @@ struct HandshakeDematerializeForksSinksPass
   };
 };
 
+struct EliminateSimpleMergesPattern
+    : public OpRewritePattern<handshake::MergeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(handshake::MergeOp op,
+                                PatternRewriter &rewriter) const override {
+    if (op.getNumOperands() > 1)
+      return failure();
+    rewriter.replaceOp(op, op.getOperand(0));
+    return success();
+  };
+};
+
+struct HandshakeRemoveSimpleMergesPass
+    : public HandshakeRemoveSimpleMergesBase<HandshakeRemoveSimpleMergesPass> {
+  void runOnOperation() override {
+    handshake::FuncOp op = getOperation();
+    auto *ctx = op.getContext();
+    RewritePatternSet patterns(ctx);
+    patterns.add<EliminateSimpleMergesPattern>(ctx);
+    if (failed(applyPatternsAndFoldGreedily(op, std::move(patterns))))
+      signalPassFailure();
+  };
+};
+
 } // namespace
 
 std::unique_ptr<mlir::Pass>
@@ -159,4 +184,9 @@ circt::handshake::createHandshakeMaterializeForksSinksPass() {
 std::unique_ptr<mlir::Pass>
 circt::handshake::createHandshakeDematerializeForksSinksPass() {
   return std::make_unique<HandshakeDematerializeForksSinksPass>();
+}
+
+std::unique_ptr<mlir::Pass>
+circt::handshake::createHandshakeRemoveSimpleMergesPass() {
+  return std::make_unique<HandshakeRemoveSimpleMergesPass>();
 }

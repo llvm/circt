@@ -950,6 +950,11 @@ public:
   StringRef getNameRemotely(Value value, const ModulePortInfo &modulePorts,
                             HWModuleOp remoteModule);
 
+  /// Legalize the given field name if it is an invalid verilog name.
+  StringRef getVerilogStructFieldName(StringAttr field) {
+    return fieldNameResolver.getRenamedFieldName(field).getValue();
+  }
+
   //===--------------------------------------------------------------------===//
   // Methods for formatting types.
 
@@ -1000,6 +1005,9 @@ public:
   /// expressions in a procedural region, because we otherwise just emit wires
   /// on demand.
   SmallPtrSet<Operation *, 16> expressionsEmittedIntoDecl;
+
+  /// This class keeps track of field name renamings in the module scope.
+  FieldNameResolver fieldNameResolver;
 };
 
 } // end anonymous namespace
@@ -1097,7 +1105,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims, /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
-          os << ' ' << element.name.getValue();
+          os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << "; ";
         }
@@ -2077,7 +2085,7 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
 
 SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
   auto prec = emitSubExpr(op.input(), Selection, OOLUnary);
-  os << '.' << op.field();
+  os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
   return {Selection, prec.signedness};
 }
 
@@ -2101,34 +2109,34 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
   StructType stype = op.getType();
   os << "'{";
   size_t i = 0;
-  llvm::interleaveComma(stype.getElements(), os,
-                        [&](const StructType::FieldInfo &field) {
-                          os << field.name.getValue() << ": ";
-                          emitSubExpr(op.getOperand(i++), Selection, OOLBinary);
-                        });
+  llvm::interleaveComma(
+      stype.getElements(), os, [&](const StructType::FieldInfo &field) {
+        os << emitter.getVerilogStructFieldName(field.name) << ": ";
+        emitSubExpr(op.getOperand(i++), Selection, OOLBinary);
+      });
   os << '}';
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
   emitSubExpr(op.input(), Selection, OOLUnary);
-  os << '.' << op.field();
+  os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
   StructType stype = op.getType().cast<StructType>();
   os << "'{";
-  llvm::interleaveComma(stype.getElements(), os,
-                        [&](const StructType::FieldInfo &field) {
-                          os << field.name.getValue() << ": ";
-                          if (field.name == op.field()) {
-                            emitSubExpr(op.newValue(), Selection, OOLBinary);
-                          } else {
-                            emitSubExpr(op.input(), Selection, OOLBinary);
-                            os << '.' << field.name.getValue();
-                          }
-                        });
+  llvm::interleaveComma(
+      stype.getElements(), os, [&](const StructType::FieldInfo &field) {
+        os << emitter.getVerilogStructFieldName(field.name) << ": ";
+        if (field.name == op.field()) {
+          emitSubExpr(op.newValue(), Selection, OOLBinary);
+        } else {
+          emitSubExpr(op.input(), Selection, OOLBinary);
+          os << '.' << field.name.getValue();
+        }
+      });
   os << '}';
   return {Selection, IsUnsigned};
 }

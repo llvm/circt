@@ -178,6 +178,34 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   builder.create<firrtl::ConnectOp>(value, invalid);
 }
 
+/// Connect a value to every leave of a destination value.
+static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
+                           Value value) {
+  auto type = dest.getType().dyn_cast<firrtl::FIRRTLType>();
+  if (!type)
+    return;
+  if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
+    for (auto &element : llvm::enumerate(bundleType.getElements()))
+      connectToLeafs(builder,
+                     builder.create<firrtl::SubfieldOp>(dest, element.index()),
+                     value);
+    return;
+  }
+  if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
+    for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i)
+      connectToLeafs(builder, builder.create<firrtl::SubindexOp>(dest, i),
+                     value);
+    return;
+  }
+  if (!type.isa<firrtl::UIntType>()) {
+    if (type.isa<firrtl::SIntType>())
+      value = builder.create<firrtl::AsSIntPrimOp>(value);
+    else
+      return;
+  }
+  builder.create<firrtl::ConnectOp>(dest, value);
+}
+
 /// Reduce all leaf fields of a value through an XOR tree.
 static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
   auto type = value.getType().dyn_cast<firrtl::FIRRTLType>();
@@ -196,8 +224,13 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
                 builder.createOrFold<firrtl::SubindexOp>(value, i));
     return;
   }
-  if (type.isa<firrtl::UIntType, firrtl::SIntType>())
-    into = into ? builder.createOrFold<firrtl::XorPrimOp>(into, value) : value;
+  if (!type.isa<firrtl::UIntType>()) {
+    if (type.isa<firrtl::SIntType>())
+      value = builder.create<firrtl::AsUIntPrimOp>(value);
+    else
+      return;
+  }
+  into = into ? builder.createOrFold<firrtl::XorPrimOp>(into, value) : value;
 }
 
 /// A sample reduction pattern that maps `firrtl.instance` to a set of
@@ -293,7 +326,7 @@ struct MemoryStubber : public Reduction {
 
     // Hook up the outputs.
     for (auto output : outputs)
-      builder.create<firrtl::ConnectOp>(output, xorInputs);
+      connectToLeafs(builder, output, xorInputs);
 
     memOp->erase();
     return success();

@@ -168,11 +168,11 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 }
 // CHECK-LABEL: firrtl.circuit "LocalTrackers" {
 // CHECK-NEXT:    firrtl.module @A() {
-// CHECK-NEXT:      %c = firrtl.wire sym [[SYMC:@[a-zA-Z0-9_]+]] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+// CHECK-NEXT:      %c = firrtl.wire sym [[SYMC:@[a-zA-Z0-9_]+]] : !firrtl.uint<42>
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @LocalTrackers() {
-// CHECK-NEXT:      firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} @A()
-// CHECK-NEXT:      %b = firrtl.wire sym [[SYMB:@[a-zA-Z0-9_]+]] {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
+// CHECK-NEXT:      firrtl.instance a sym [[SYMA:@[a-zA-Z0-9_]+]] @A()
+// CHECK-NEXT:      %b = firrtl.wire sym [[SYMB:@[a-zA-Z0-9_]+]] : !firrtl.uint<42>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
@@ -290,17 +290,14 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NEXT:    firrtl.extmodule @MySRAM()
 // CHECK-NEXT:    firrtl.module @Submodule() {
 // CHECK-NEXT:      firrtl.instance mem1 sym [[SYMMEM1:@[a-zA-Z0-9_]+]]
-// CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        @MySRAM()
 // CHECK-NEXT:      firrtl.mem sym [[SYMMEM2:@[a-zA-Z0-9_]+]]
-// CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        name = "mem2"
 // CHECK-SAME:        : !firrtl.bundle
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @SRAMPaths() {
 // CHECK-NEXT:      firrtl.instance sub sym [[SYMSUB:@[a-zA-Z0-9_]+]]
 // CHECK-NOT:         circt.nonlocal
-// CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        @Submodule()
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

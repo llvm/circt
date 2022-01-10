@@ -1101,7 +1101,9 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   ValueVector resultSubfields = portList.back();
   Value resultValid = resultSubfields[0];
   Value resultReady = resultSubfields[1];
-  Value resultData = resultSubfields[2];
+  Value resultData;
+  if (!op.isControl())
+    resultData = resultSubfields[2];
 
   // Walk through each arg data to collect the subfields.
   SmallVector<Value, 4> argValid;
@@ -1111,14 +1113,17 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
     ValueVector argSubfields = portList[i];
     argValid.push_back(argSubfields[0]);
     argReady.push_back(argSubfields[1]);
-    argData.push_back(argSubfields[2]);
+    if (!op.isControl())
+      argData.push_back(argSubfields[2]);
   }
 
-  // Mux the arg data.
-  auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
+  if (!op.isControl()) {
+    // Mux the arg data.
+    auto muxedData = createMuxTree(argData, selectData, insertLoc, rewriter);
 
-  // Connect the selected data signal to the result data.
-  rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+    // Connect the selected data signal to the result data.
+    rewriter.create<ConnectOp>(insertLoc, resultData, muxedData);
+  }
 
   // Mux the arg valids.
   auto muxedValid = createMuxTree(argValid, selectData, insertLoc, rewriter);
@@ -1141,7 +1146,7 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   // Since addresses coming from Handshake are IndexType and have a hardcoded
   // 64-bit width in this pass, we may need to truncate down to the actual
   // width used to index into the decoder.
-  size_t bitsNeeded = getNumIndexBits(argData.size());
+  size_t bitsNeeded = getNumIndexBits(argValid.size());
   size_t selectBits =
       selectData.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
 
@@ -1155,8 +1160,8 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   // Create a decoder for the select data.
   auto decodedSelect = createDecoder(selectData, insertLoc, rewriter);
 
-  // Walk through each arg data.
-  for (unsigned i = 0, e = argData.size(); i != e; ++i) {
+  // Walk through each input.
+  for (unsigned i = 0, e = argValid.size(); i != e; ++i) {
     // Select the bit for this arg.
     auto oneHot = rewriter.create<BitsPrimOp>(insertLoc, decodedSelect, i, i);
 

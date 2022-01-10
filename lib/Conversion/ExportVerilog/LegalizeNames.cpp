@@ -42,6 +42,39 @@ StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
 }
 
 //===----------------------------------------------------------------------===//
+// FieldNameResolver
+//===----------------------------------------------------------------------===//
+
+void FieldNameResolver::setRenamedFieldName(StringAttr fieldName,
+                                            StringAttr newFieldName) {
+  renamedFieldNames[fieldName] = newFieldName;
+  usedFieldNames.insert(newFieldName);
+}
+
+StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
+  auto it = renamedFieldNames.find(fieldName);
+  if (it != renamedFieldNames.end())
+    return it->second;
+
+  // If a field name is not verilog name or used already, we have to rename it.
+  bool hasToBeRenamed = !sv::isNameValid(fieldName.getValue()) ||
+                        usedFieldNames.count(fieldName.getValue());
+
+  if (!hasToBeRenamed) {
+    setRenamedFieldName(fieldName, fieldName);
+    return fieldName;
+  }
+
+  StringRef newFieldName = sv::legalizeName(
+      fieldName.getValue(), usedFieldNames, nextGeneratedNameID);
+
+  auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);
+
+  setRenamedFieldName(fieldName, newFieldNameAttr);
+  return newFieldNameAttr;
+}
+
+//===----------------------------------------------------------------------===//
 // GlobalNameResolver
 //===----------------------------------------------------------------------===//
 
