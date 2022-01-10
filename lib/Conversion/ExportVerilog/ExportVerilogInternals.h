@@ -88,6 +88,31 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
+// FieldNameResolver
+//===----------------------------------------------------------------------===//
+
+struct FieldNameResolver {
+  FieldNameResolver() = default;
+
+  StringAttr getRenamedFieldName(StringAttr fieldName);
+
+private:
+  void setRenamedFieldName(StringAttr fieldName, StringAttr newFieldName);
+
+  /// Those contain entries for field names and types respectively. Struct types
+  /// have names as field names, which must be renamed if they conflict with
+  /// verilog keywords.
+  DenseMap<StringAttr, StringAttr> renamedFieldNames;
+
+  /// This contains field names *after* the type legalization to avoid conflicts
+  /// of renamed field names.
+  llvm::StringSet<> usedFieldNames;
+
+  /// Numeric suffix used as uniquification agent when resolving conflicts.
+  size_t nextGeneratedNameID = 0;
+};
+
+//===----------------------------------------------------------------------===//
 // SharedEmitterState
 //===----------------------------------------------------------------------===//
 
