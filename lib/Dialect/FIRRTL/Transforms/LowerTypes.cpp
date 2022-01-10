@@ -311,8 +311,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   bool lowerArg(Operation *module, size_t argIndex,
                 SmallVectorImpl<PortInfo> &newArgs,
-                SmallVectorImpl<Value> &lowering,
-                bool allowedToPreserveAggregate);
+                SmallVectorImpl<Value> &lowering);
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
                                     FIRRTLType srcType,
                                     FlatBundleFieldEntry field,
@@ -347,7 +346,7 @@ private:
                                                     StringRef, ArrayAttr)>
                          clone);
 
-  bool isModuleAllowedToPreserveAggregate(FModuleLike moduleLike);
+  bool isModuleAllowedToPreserveAggregate(Operation *moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
@@ -372,7 +371,7 @@ private:
 /// Exteranal modules and toplevel modules are sometimes assumed to have lowered
 /// types.
 bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
-    FModuleLike moduleLike) {
+    Operation *moduleLike) {
 
   if (!preserveAggregate)
     return false;
@@ -537,13 +536,13 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 // Lower arguments with bundle type by flattening them.
 bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
                                    SmallVectorImpl<PortInfo> &newArgs,
-                                   SmallVectorImpl<Value> &lowering,
-                                   bool allowedToPreserveAggregate) {
+                                   SmallVectorImpl<Value> &lowering) {
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate))
+  if (!peelType(srcType, fieldTypes,
+                isModuleAllowedToPreserveAggregate(module)))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
@@ -934,14 +933,11 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-  bool allowedToPreserveAggregate =
-      isModuleAllowedToPreserveAggregate(extModule);
   auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
     // It is not possible to preserve aggregates of external modules.
-    if (lowerArg(extModule, argIndex, newArgs, lowering,
-                 allowedToPreserveAggregate))
+    if (lowerArg(extModule, argIndex, newArgs, lowering))
       argsToRemove.push_back(argIndex);
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
@@ -1011,11 +1007,9 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   SmallVector<unsigned> argsToRemove;
   auto newArgs = module.getPorts();
 
-  bool allowedToPreserveAggregate = isModuleAllowedToPreserveAggregate(module);
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
-    if (lowerArg(module, argIndex, newArgs, lowerings,
-                 allowedToPreserveAggregate)) {
+    if (lowerArg(module, argIndex, newArgs, lowerings)) {
       auto arg = module.getArgument(argIndex);
       processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
