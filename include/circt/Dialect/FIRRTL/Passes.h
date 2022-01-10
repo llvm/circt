@@ -30,7 +30,8 @@ createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
 
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLTypesPass(bool replSeqMem = false,
-                           bool preserveAggregate = false);
+                           bool preserveAggregate = false,
+                           bool lowerToplevelAndExtModule = true);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 

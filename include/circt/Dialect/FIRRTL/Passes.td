@@ -47,7 +47,10 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
            "Concat all elements of the aggregate data into a single element.">,
     Option<"preserveAggregate", "preserve-aggregate", "bool", "false",
-           "(Experimental) Preserve aggregate vectors/bundles if possible.">
+           "(Experimental) Preserve aggregate vectors/bundles if possible.">,
+    Option<"lowerToplevelAndExtModule", "lower-toplevel-and-ext-module", "bool",
+           "true", "Force to lower ports of toplevel and external modules even"
+           "when aggregate preservation mode.">
   ];
 }
 

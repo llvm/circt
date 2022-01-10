@@ -118,6 +118,12 @@ static cl::opt<bool>
     preserveAggregate("experimental-preserve-aggregate",
                       cl::desc("preserve aggregate types in lower types"),
                       cl::init(false));
+
+static cl::opt<bool> lowerToplevelAndExtModule(
+    "lower-toplevel-and-ext-module",
+    cl::desc("force to lower ports of toplevel and external modules"),
+    cl::init(true));
+
 static cl::opt<std::string>
     replSeqMemCircuit("repl-seq-mem-circuit",
                       cl::desc("circuit root for seq mem metadata"),
@@ -349,8 +355,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(
-        firrtl::createLowerFIRRTLTypesPass(replSeqMem, preserveAggregate));
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+        replSeqMem, preserveAggregate, lowerToplevelAndExtModule));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
