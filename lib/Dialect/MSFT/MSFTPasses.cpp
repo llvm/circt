@@ -552,7 +552,8 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
 }
 
 /// Helper to update GlobalRefops after referenced ops are pushed down.
-static void pushDownGlobalRefs(Operation *op) {
+static void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
+                               InstanceOp partInst) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
@@ -568,16 +569,7 @@ static void pushDownGlobalRefs(Operation *op) {
     auto partAttr = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
     auto partMod = partAttr.getRootReference();
     auto partName = partAttr.getLeafReference();
-
-    // Resolve the DesignPartitionOp and get its verilog name.
-    auto mod = op->getParentOfType<MSFTModuleOp>();
-    StringAttr partModName;
-    for (auto part : mod.getOps<DesignPartitionOp>()) {
-      if (part.sym_nameAttr() == partName) {
-        partModName = part.verilogNameAttr();
-        break;
-      }
-    }
+    auto partModName = partOp.verilogNameAttr();
     assert(partModName);
 
     // Construct a new path starting from the old path.
@@ -599,20 +591,10 @@ static void pushDownGlobalRefs(Operation *op) {
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
     globalRefOp.namepathAttr(newPathAttr);
 
-    // Find the instance of the design partition.
-    InstanceOp partInstance;
-    for (auto instOp : mod.getOps<InstanceOp>()) {
-      if (instOp.sym_nameAttr() == partName) {
-        partInstance = instOp;
-        break;
-      }
-    }
-    assert(partInstance);
-
     // Ensure the instance has this GlobalRefAttr, or collect any existing
     // global refs if not.
     SmallVector<Attribute> newGlobalRefs;
-    auto partRefs = partInstance->getAttrOfType<ArrayAttr>("circt.globalRef");
+    auto partRefs = getGlobalRefs(partInst);
     if (partRefs) {
       for (auto ref : partRefs.getAsRange<hw::GlobalRefAttr>()) {
         if (ref == globalRef)
@@ -624,8 +606,8 @@ static void pushDownGlobalRefs(Operation *op) {
 
     newGlobalRefs.push_back(globalRef);
     auto newRefsAttr = ArrayAttr::get(op->getContext(), newGlobalRefs);
-    partInstance->setAttr("circt.globalRef", newRefsAttr);
-    partInstance->setAttr("inner_sym", partInstance.sym_nameAttr());
+    partInst->setAttr("circt.globalRef", newRefsAttr);
+    partInst->setAttr("inner_sym", partInst.sym_nameAttr());
   }
 }
 
@@ -845,7 +827,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
-    pushDownGlobalRefs(op);
+    pushDownGlobalRefs(op, partOp, partInst);
     op->erase();
   }
   partBuilder.create<OutputOp>(loc, outputs);
