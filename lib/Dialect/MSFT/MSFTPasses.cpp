@@ -551,7 +551,7 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
 
 /// Helper to update GlobalRefops after referenced ops are pushed down.
 static void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
-                               InstanceOp partInst) {
+                               DenseSet<Attribute> &newGlobalRefs) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
@@ -589,23 +589,9 @@ static void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
     globalRefOp.namepathAttr(newPathAttr);
 
-    // Ensure the instance has this GlobalRefAttr, or collect any existing
+    // Ensure the part instance will have this GlobalRefAttr.
     // global refs if not.
-    SmallVector<Attribute> newGlobalRefs;
-    auto partRefs = getGlobalRefs(partInst);
-    if (partRefs) {
-      for (auto ref : partRefs.getAsRange<hw::GlobalRefAttr>()) {
-        if (ref == globalRef)
-          return;
-
-        newGlobalRefs.push_back(ref);
-      }
-    }
-
-    newGlobalRefs.push_back(globalRef);
-    auto newRefsAttr = ArrayAttr::get(op->getContext(), newGlobalRefs);
-    partInst->setAttr("circt.globalRef", newRefsAttr);
-    partInst->setAttr("inner_sym", partInst.sym_nameAttr());
+    newGlobalRefs.insert(globalRef);
   }
 }
 
@@ -810,16 +796,24 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Value, 64> outputs(partInstOutputs.size(), Value());
 
   // Clone the ops into the partition block. Map the results into the module
-  // outputs. Push down any global refs to include the partition.
+  // outputs. Push down any global refs to include the partition. Update the
+  // partition to include the new set of global refs, and set its inner_sym.
+  DenseSet<Attribute> newGlobalRefs;
   for (Operation *op : toMove) {
     Operation *newOp = partBuilder.insert(op->clone(mapping));
     newOp->removeAttr("targetDesignPartition");
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
-    pushDownGlobalRefs(op, partOp, partInst);
+    pushDownGlobalRefs(op, partOp, newGlobalRefs);
     op->erase();
   }
+  SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),
+                                         newGlobalRefs.end());
+  auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
+  partInst->setAttr("circt.globalRef", newRefsAttr);
+  partInst->setAttr("inner_sym", partInst.sym_nameAttr());
+
   partBuilder.create<OutputOp>(loc, outputs);
 }
 

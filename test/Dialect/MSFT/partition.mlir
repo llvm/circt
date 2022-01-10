@@ -43,7 +43,7 @@ msft.module @C {} (%in : i2) -> (out: i2)  {
 // CHECK: hw.globalRef @ref2 [#hw.innerNameRef<@top::@part1>, #hw.innerNameRef<@dp::@b.c.unit3>]
 
 // CHECK-LABEL: msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
-// CHECK:    %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x, %part1.b.c.unit3.foo_x, %part1.b.c.out, %part1.b.c.unit3.foo_a, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a, %b.c.unit3.foo_a, %b.c.in, %b.c.unit3.foo_x, %c0_i2)  {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "part1"} : (i2, i2, i1, i2, i2, i2, i2, i2) -> (i2, i2, i2, i2, i2, i2, i2)
+// CHECK:    %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x, %part1.b.c.unit3.foo_x, %part1.b.c.out, %part1.b.c.unit3.foo_a, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a, %b.c.unit3.foo_a, %b.c.in, %b.c.unit3.foo_x, %c0_i2)  {circt.globalRef = [#hw.globalNameRef<@ref2>, #hw.globalNameRef<@ref1>], inner_sym = "part1"} : (i2, i2, i1, i2, i2, i2, i2, i2) -> (i2, i2, i2, i2, i2, i2, i2)
 // CHECK:    %b.x, %b.y, %b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a, %b.c.unit3.foo_a, %b.c.in, %b.c.unit3.foo_x = msft.instance @b @B(%clk, %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x, %part1.b.c.unit3.foo_x, %part1.b.c.out, %part1.b.c.unit3.foo_a)  {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b"} : (i1, i2, i2, i2, i2, i2, i2) -> (i2, i2, i2, i2, i1, i2, i2, i2, i2)
 // CHECK:    %c0_i2 = hw.constant 0 : i2
 // CHECK:    msft.output %b.x, %part1.unit1.foo_x : i2, i2
@@ -60,7 +60,7 @@ msft.module @C {} (%in : i2) -> (out: i2)  {
 // CHECK:    msft.output %b.unit1.foo_x, %b.seq.compreg, %b.unit2.foo_x, %b.c.unit3.foo_x_0, %b.c.out, %b.c.unit3.foo_a_1, %unit1.foo_x : i2, i2, i2, i2, i2, i2, i2
 
 // CLEANUP-LABEL: msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
-// CLEANUP:    %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %clk, %c0_i2) {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "part1"} : (i2, i1, i2) -> (i2, i2)
+// CLEANUP:    %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %clk, %c0_i2) {circt.globalRef = [#hw.globalNameRef<@ref2>, #hw.globalNameRef<@ref1>], inner_sym = "part1"} : (i2, i1, i2) -> (i2, i2)
 // CLEANUP:    %b.unit1.foo_a = msft.instance @b @B() {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b"} : () -> i2
 // CLEANUP:    %c0_i2 = hw.constant 0 : i2
 // CLEANUP:    msft.output %part1.b.unit2.foo_x, %part1.unit1.foo_x : i2, i2
