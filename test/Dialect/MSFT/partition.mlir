@@ -96,6 +96,7 @@ msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
 // CLEANUP:          %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%c1_i2) {circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "b.unit1"} : (i2) -> i2
 // CLEANUP:          %b.seq.compreg = seq.compreg %b.unit1.foo_x, %b.seq.compreg.in1 : i2
 // CLEANUP:          %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.seq.compreg)  : (i2) -> i2
+// CLEANUP:          %{{.+}} = msft.instance @b.c.unit3 {{.+}} {circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "b.c.unit3"}
 // CLEANUP:          %c0_i2 = hw.constant 0 : i2
 // CLEANUP:          %unit1.foo_x = msft.instance @unit1 @Extern(%c0_i2)  : (i2) -> i2
 // CLEANUP:          msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
