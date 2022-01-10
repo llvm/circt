@@ -424,7 +424,7 @@ void PartitionPass::markWireOps(Operation *taggedOp) {
     Operation *op = opQueue.back();
     opQueue.pop_back();
 
-    for (auto user : op->getUsers()) {
+    for (auto *user : op->getUsers()) {
       if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
         continue;
       user->setAttr("targetDesignPartition", partRef);
