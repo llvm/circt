@@ -936,7 +936,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
-    // It is not possible to preserve aggregates of external modules.
     if (lowerArg(extModule, argIndex, newArgs, lowering))
       argsToRemove.push_back(argIndex);
     // lowerArg might have invalidated any reference to newArgs, be careful
@@ -1006,7 +1005,6 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   auto newArgs = module.getPorts();
-
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
     if (lowerArg(module, argIndex, newArgs, lowerings)) {
