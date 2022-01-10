@@ -76,7 +76,7 @@ msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
 }
 
 // CLEANUP-LABEL:  msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
-// CLEANUP:          %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%clk) {circt.globalRef = [#hw.globalNameRef<@ref2>, #hw.globalNameRef<@ref1>], inner_sym = "part1"} : (i1) -> (i2, i2)
+// CLEANUP:          %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%clk) {circt.globalRef = [{{.+}}], inner_sym = "part1"} : (i1) -> (i2, i2)
 // CLEANUP:          msft.instance @b @B() {{.*}} : () -> ()
 // CLEANUP:          msft.output %part1.b.unit2.foo_x, %part1.unit1.foo_x : i2, i2
 // CLEANUP-LABEL:  msft.module.extern @Extern(%foo_a: i2) -> (foo_x: i2)
