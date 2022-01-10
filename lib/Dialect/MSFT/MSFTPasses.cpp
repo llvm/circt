@@ -297,6 +297,14 @@ protected:
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
+
+  static bool isWireManipulationOp(Operation *op) {
+    return isa<hw::ArrayConcatOp>(op) || isa<hw::ArrayCreateOp>(op) ||
+           isa<hw::ArrayGetOp>(op) || isa<hw::ArraySliceOp>(op) ||
+           isa<hw::StructCreateOp>(op) || isa<hw::StructExplodeOp>(op) ||
+           isa<hw::StructExtractOp>(op) || isa<hw::StructInjectOp>(op) ||
+           isa<hw::StructCreateOp>(op) || isa<hw::ConstantOp>(op);
+  }
 };
 } // anonymous namespace
 
@@ -387,6 +395,9 @@ private:
   void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+
+  // Tag wire manipulation ops connected to this potentially tagged op.
+  static void markWireOps(Operation *op);
 };
 } // anonymous namespace
 
@@ -401,9 +412,42 @@ void PartitionPass::runOnOperation() {
     partition(mod);
 }
 
+void PartitionPass::markWireOps(Operation *taggedOp) {
+  auto partRef =
+      taggedOp->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+  if (!partRef)
+    return;
+  SmallVector<Operation *, 8> opQueue;
+  opQueue.push_back(taggedOp);
+
+  while (!opQueue.empty()) {
+    Operation *op = opQueue.back();
+    opQueue.pop_back();
+
+    for (auto *user : op->getUsers()) {
+      if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
+        continue;
+      user->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(user);
+    }
+
+    for (auto operValue : op->getOperands()) {
+      Operation *defOp = operValue.getDefiningOp();
+      if (!defOp || !isWireManipulationOp(defOp) ||
+          defOp->hasAttr("targetDesignPartition"))
+        continue;
+      defOp->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(defOp);
+    }
+  }
+}
+
 void PartitionPass::partition(MSFTModuleOp mod) {
   DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
   SmallVector<Operation *, 64> nonLocalTaggedOps;
+
+  mod.walk(&markWireOps);
+
   mod.walk([&](Operation *op) {
     auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
     if (!partRef)
@@ -689,11 +733,6 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
       SymbolRefAttr());
 
-  // Replace original ops' outputs with partition outputs.
-  assert(partInstOutputs.size() == partInst.getNumResults());
-  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
-    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
-
   //*************
   //   Move the operations!
 
@@ -721,9 +760,16 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
-    op->erase();
   }
   partBuilder.create<OutputOp>(loc, outputs);
+
+  // Replace original ops' outputs with partition outputs.
+  assert(partInstOutputs.size() == partInst.getNumResults());
+  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
+    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
+
+  for (Operation *op : toMove)
+    op->erase();
 }
 
 namespace circt {

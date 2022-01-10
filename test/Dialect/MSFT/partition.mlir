@@ -1,4 +1,3 @@
-// RUN: circt-opt %s --msft-partition -verify-diagnostics -split-input-file | FileCheck %s
 // RUN: circt-opt %s --msft-partition --msft-wire-cleanup -verify-diagnostics -split-input-file | FileCheck --check-prefix=CLEANUP %s
 
 msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
@@ -24,34 +23,89 @@ msft.module @B {} (%clk : i1) -> (x: i2)  {
   msft.output %2: i2
 }
 
-// CHECK-LABEL: msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
-// CHECK:    %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a, %c0_i2)  : (i2, i2, i1, i2, i2) -> (i2, i2, i2, i2)
-// CHECK:    %b.x, %b.unit1.foo_a, %b.seq.compreg.in0, %b.seq.compreg.in1, %b.unit2.foo_a = msft.instance @b @B(%clk, %part1.b.unit1.foo_x, %part1.b.seq.compreg.b.seq.compreg, %part1.b.unit2.foo_x)  : (i1, i2, i2, i2) -> (i2, i2, i2, i1, i2)
-// CHECK:    %c0_i2 = hw.constant 0 : i2
-// CHECK:    msft.output %b.x, %part1.unit1.foo_x : i2, i2
-// CHECK-LABEL: msft.module.extern @Extern(%foo_a: i2) -> (foo_x: i2)
-// CHECK-LABEL: msft.module @B {} (%clk: i1, %unit1.foo_x: i2, %seq.compreg: i2, %unit2.foo_x: i2) -> (x: i2, unit1.foo_a: i2, seq.compreg.in0: i2, seq.compreg.in1: i1, unit2.foo_a: i2) {
-// CHECK:    %c1_i2 = hw.constant 1 : i2
-// CHECK:    msft.output %unit2.foo_x, %c1_i2, %unit1.foo_x, %clk, %seq.compreg : i2, i2, i2, i1, i2
-// CHECK-LABEL: msft.module @dp {} (%b.unit1.foo_a: i2, %b.seq.compreg.in0: i2, %b.seq.compreg.in1: i1, %b.unit2.foo_a: i2, %unit1.foo_a: i2) -> (b.unit1.foo_x: i2, b.seq.compreg.b.seq.compreg: i2, b.unit2.foo_x: i2, unit1.foo_x: i2) {
-// CHECK:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%b.unit1.foo_a)  : (i2) -> i2
-// CHECK:    %b.seq.compreg = seq.compreg %b.seq.compreg.in0, %b.seq.compreg.in1 : i2
-// CHECK:    %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.unit2.foo_a)  : (i2) -> i2
-// CHECK:    %unit1.foo_x = msft.instance @unit1 @Extern(%unit1.foo_a)  : (i2) -> i2
-// CHECK:    msft.output %b.unit1.foo_x, %b.seq.compreg, %b.unit2.foo_x, %unit1.foo_x : i2, i2, i2, i2
+msft.module @TopComplex {} (%clk : i1, %arr_in: !hw.array<4xi5>) -> (out2: i5) {
+  msft.partition @part2, "dp_complex"
 
-// CLEANUP-LABEL: msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
-// CLEANUP:    %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%b.unit1.foo_a, %clk, %c0_i2)  : (i2, i1, i2) -> (i2, i2)
-// CLEANUP:    %b.unit1.foo_a = msft.instance @b @B()  : () -> i2
-// CLEANUP:    %c0_i2 = hw.constant 0 : i2
-// CLEANUP:    msft.output %part1.b.unit2.foo_x, %part1.unit1.foo_x : i2, i2
-// CLEANUP-LABEL: msft.module.extern @Extern(%foo_a: i2) -> (foo_x: i2)
-// CLEANUP-LABEL: msft.module @B {} () -> (unit1.foo_a: i2) {
-// CLEANUP:    %c1_i2 = hw.constant 1 : i2
-// CLEANUP:    msft.output %c1_i2 : i2
-// CLEANUP-LABEL: msft.module @dp {} (%b.unit1.foo_a: i2, %b.seq.compreg.in1: i1, %unit1.foo_a: i2) -> (b.unit2.foo_x: i2, unit1.foo_x: i2)
-// CLEANUP:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%b.unit1.foo_a)  : (i2) -> i2
-// CLEANUP:    %b.seq.compreg = seq.compreg %b.unit1.foo_x, %b.seq.compreg.in1 : i2
-// CLEANUP:    %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.seq.compreg)  : (i2) -> i2
-// CLEANUP:    %unit1.foo_x = msft.instance @unit1 @Extern(%unit1.foo_a)  : (i2) -> i2
-// CLEANUP:    msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
+  %mut_arr = msft.instance @b @Array(%arr_in) : (!hw.array<4xi5>) -> (!hw.array<4xi5>)
+  %c0 = hw.constant 0 : i2
+  %a0 = hw.array_get %mut_arr[%c0] : !hw.array<4xi5>
+  %c1 = hw.constant 1 : i2
+  %a1 = hw.array_get %mut_arr[%c1] : !hw.array<4xi5>
+  %c2 = hw.constant 2 : i2
+  %a2 = hw.array_get %mut_arr[%c2] : !hw.array<4xi5>
+  %c3 = hw.constant 3 : i2
+  %a3 = hw.array_get %mut_arr[%c3] : !hw.array<4xi5>
+
+  %res1 = comb.add %a0, %a1, %a2, %a3 { targetDesignPartition = @TopComplex::@part2 } : i5
+
+  msft.output %res1 : i5
+}
+
+msft.module.extern @ExternI5 (%foo_a: i5) -> (foo_x: i5)
+
+msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
+  %c0 = hw.constant 0 : i2
+  %in0 = hw.array_get %arr_in[%c0] : !hw.array<4xi5>
+  %out0 = msft.instance @unit2 @ExternI5(%in0) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  %c1 = hw.constant 1 : i2
+  %in1 = hw.array_get %arr_in[%c1] : !hw.array<4xi5>
+  %out1 = msft.instance @unit2 @ExternI5(%in1) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  %c2 = hw.constant 2 : i2
+  %in2 = hw.array_get %arr_in[%c2] : !hw.array<4xi5>
+  %out2 = msft.instance @unit2 @ExternI5(%in2) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  %c3 = hw.constant 3 : i2
+  %in3 = hw.array_get %arr_in[%c3] : !hw.array<4xi5>
+  %out3 = msft.instance @unit2 @ExternI5(%in3) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  %arr_out = hw.array_create %out0, %out1, %out2, %out3 : i5
+  msft.output %arr_out : !hw.array<4xi5>
+}
+
+// CLEANUP-LABEL:  msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2) {
+// CLEANUP:          %part1.b.unit2.foo_x, %part1.unit1.foo_x = msft.instance @part1 @dp(%clk)  : (i1) -> (i2, i2)
+// CLEANUP:          msft.instance @b @B()  : () -> ()
+// CLEANUP:          msft.output %part1.b.unit2.foo_x, %part1.unit1.foo_x : i2, i2
+// CLEANUP-LABEL:  msft.module.extern @Extern(%foo_a: i2) -> (foo_x: i2)
+// CLEANUP-LABEL:  msft.module @B {} ()
+// CLEANUP:          msft.output
+
+// CLEANUP-LABEL:  msft.module @TopComplex {} (%arr_in: !hw.array<4xi5>) -> (out2: i5)
+// CLEANUP:          %part2.comb.add = msft.instance @part2 @dp_complex(%arr_in, %arr_in, %arr_in, %arr_in)  : (!hw.array<4xi5>, !hw.array<4xi5>, !hw.array<4xi5>, !hw.array<4xi5>) -> i5
+// CLEANUP:          msft.instance @b @Array()  : () -> ()
+// CLEANUP:          msft.output %part2.comb.add : i5
+// CLEANUP-LABEL:  msft.module.extern @ExternI5(%foo_a: i5) -> (foo_x: i5)
+// CLEANUP-LABEL:  msft.module @Array {} ()
+// CLEANUP:          msft.output
+
+// CLEANUP-LABEL:  msft.module @dp {} (%b.seq.compreg.in1: i1) -> (b.unit2.foo_x: i2, unit1.foo_x: i2) {
+// CLEANUP:          %c1_i2 = hw.constant 1 : i2
+// CLEANUP:          %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%c1_i2)  : (i2) -> i2
+// CLEANUP:          %b.seq.compreg = seq.compreg %b.unit1.foo_x, %b.seq.compreg.in1 : i2
+// CLEANUP:          %b.unit2.foo_x = msft.instance @b.unit2 @Extern(%b.seq.compreg)  : (i2) -> i2
+// CLEANUP:          %c0_i2 = hw.constant 0 : i2
+// CLEANUP:          %unit1.foo_x = msft.instance @unit1 @Extern(%c0_i2)  : (i2) -> i2
+// CLEANUP:          msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
+
+// CLEANUP-LABEL:  msft.module @dp_complex {} (%hw.array_get.in0: !hw.array<4xi5>, %hw.array_get.in0_0: !hw.array<4xi5>, %hw.array_get.in0_1: !hw.array<4xi5>, %hw.array_get.in0_2: !hw.array<4xi5>) -> (comb.add: i5) attributes {argNames = ["hw.array_get.in0", "hw.array_get.in0", "hw.array_get.in0", "hw.array_get.in0"]} {
+// CLEANUP:          %c0_i2 = hw.constant 0 : i2
+// CLEANUP:          %0 = hw.array_get %hw.array_get.in0[%c0_i2] : !hw.array<4xi5>
+// CLEANUP:          %b.unit2.foo_x = msft.instance @b.unit2 @ExternI5(%0)  : (i5) -> i5
+// CLEANUP:          %c1_i2 = hw.constant 1 : i2
+// CLEANUP:          %1 = hw.array_get %hw.array_get.in0_0[%c1_i2] : !hw.array<4xi5>
+// CLEANUP:          %b.unit2.foo_x_3 = msft.instance @b.unit2 @ExternI5(%1)  : (i5) -> i5
+// CLEANUP:          %c-2_i2 = hw.constant -2 : i2
+// CLEANUP:          %2 = hw.array_get %hw.array_get.in0_1[%c-2_i2] : !hw.array<4xi5>
+// CLEANUP:          %b.unit2.foo_x_4 = msft.instance @b.unit2 @ExternI5(%2)  : (i5) -> i5
+// CLEANUP:          %c-1_i2 = hw.constant -1 : i2
+// CLEANUP:          %3 = hw.array_get %hw.array_get.in0_2[%c-1_i2] : !hw.array<4xi5>
+// CLEANUP:          %b.unit2.foo_x_5 = msft.instance @b.unit2 @ExternI5(%3)  : (i5) -> i5
+// CLEANUP:          %4 = hw.array_create %b.unit2.foo_x, %b.unit2.foo_x_3, %b.unit2.foo_x_4, %b.unit2.foo_x_5 : i5
+// CLEANUP:          %c0_i2_6 = hw.constant 0 : i2
+// CLEANUP:          %5 = hw.array_get %4[%c0_i2_6] : !hw.array<4xi5>
+// CLEANUP:          %c1_i2_7 = hw.constant 1 : i2
+// CLEANUP:          %6 = hw.array_get %4[%c1_i2_7] : !hw.array<4xi5>
+// CLEANUP:          %c-2_i2_8 = hw.constant -2 : i2
+// CLEANUP:          %7 = hw.array_get %4[%c-2_i2_8] : !hw.array<4xi5>
+// CLEANUP:          %c-1_i2_9 = hw.constant -1 : i2
+// CLEANUP:          %8 = hw.array_get %4[%c-1_i2_9] : !hw.array<4xi5>
+// CLEANUP:          %9 = comb.add %5, %6, %7, %8 : i5
+// CLEANUP:          msft.output %9 : i5
