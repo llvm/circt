@@ -396,6 +396,8 @@ private:
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
   void bubbleUpGlobalRefs(Operation *op);
+  void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
+                          DenseSet<Attribute> &newGlobalRefs);
 
   // Tag wire manipulation ops connected to this potentially tagged op.
   static void markWireOps(Operation *op);
@@ -605,17 +607,18 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
 }
 
 /// Helper to update GlobalRefops after referenced ops are pushed down.
-static void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
-                               DenseSet<Attribute> &newGlobalRefs) {
+void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
+                                       DenseSet<Attribute> &newGlobalRefs) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
 
   for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
     // Resolve the GlobalRefOp and get its path.
-    auto rootModule = op->getParentOfType<ModuleOp>();
     auto refSymbol = globalRef.getGlblSym();
-    auto globalRefOp = rootModule.lookupSymbol<hw::GlobalRefOp>(refSymbol);
+    auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
+        topLevelSyms.getDefinition(refSymbol));
+    assert(globalRefOp && "symbol must reference a GlobalRefOp");
     auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
 
     // Get the module containing the partition and the partition's name.
