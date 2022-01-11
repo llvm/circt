@@ -119,8 +119,8 @@ static cl::opt<bool>
                       cl::desc("preserve aggregate types in lower types"),
                       cl::init(false));
 
-static cl::opt<bool> lowerToplevelAndExtModule(
-    "lower-toplevel-and-ext-module",
+static cl::opt<bool> preservePublicTypes(
+    "preserve-public-types",
     cl::desc("force to lower ports of toplevel and external modules"),
     cl::init(true));
 
@@ -356,7 +356,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // things up.
   if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        replSeqMem, preserveAggregate, lowerToplevelAndExtModule));
+        replSeqMem, preserveAggregate, preservePublicTypes));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();

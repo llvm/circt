@@ -298,9 +298,11 @@ namespace {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool f, bool p, bool l)
-      : context(context), flattenAggregateMemData(f), preserveAggregate(p),
-        lowerToplevelAndExtModule(l) {}
+  TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
+                      bool preserveAggregate, bool preservePublicTypes)
+      : context(context), flattenAggregateMemData(flattenAggregateMemData),
+        preserveAggregate(preserveAggregate),
+        preservePublicTypes(preservePublicTypes) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -360,7 +362,7 @@ private:
 
   /// Exteranal modules and toplevel modules should have lowered types if this
   /// flag is enabled.
-  bool lowerToplevelAndExtModule;
+  bool preservePublicTypes;
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -378,7 +380,7 @@ bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
 
   // If it is not forced to lower toplevel and external modules, it's ok to
   // preserve.
-  if (!lowerToplevelAndExtModule)
+  if (!preservePublicTypes)
     return true;
 
   if (isa<FExtModuleOp>(moduleLike))
@@ -1318,10 +1320,11 @@ bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
-  LowerTypesPass(bool f, bool p, bool l) {
-    flattenAggregateMemData = f;
-    preserveAggregate = p;
-    lowerToplevelAndExtModule = l;
+  LowerTypesPass(bool flattenAggregateMemDataFlag, bool preserveAggregateFlag,
+                 bool preservePublicTypesFlag) {
+    flattenAggregateMemData = flattenAggregateMemDataFlag;
+    preserveAggregate = preserveAggregateFlag;
+    preservePublicTypes = preservePublicTypesFlag;
   }
   void runOnOperation() override;
 };
@@ -1335,15 +1338,15 @@ void LowerTypesPass::runOnOperation() {
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
-                        preserveAggregate, lowerToplevelAndExtModule)
+                        preserveAggregate, preservePublicTypes)
         .lowerModule(ops[index]);
   });
 }
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
-    bool replSeqMem, bool preserveAggregate, bool lowerToplevelAndExtModule) {
+    bool replSeqMem, bool preserveAggregate, bool preservePublicTypes) {
 
   return std::make_unique<LowerTypesPass>(replSeqMem, preserveAggregate,
-                                          lowerToplevelAndExtModule);
+                                          preservePublicTypes);
 }

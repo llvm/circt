@@ -48,7 +48,7 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
            "Concat all elements of the aggregate data into a single element.">,
     Option<"preserveAggregate", "preserve-aggregate", "bool", "false",
            "(Experimental) Preserve aggregate vectors/bundles if possible.">,
-    Option<"lowerToplevelAndExtModule", "lower-toplevel-and-ext-module", "bool",
+    Option<"preservePublicTypes", "preserve-public-types", "bool",
            "true", "Force to lower ports of toplevel and external modules even"
            "when aggregate preservation mode.">
   ];
