@@ -782,14 +782,23 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 
         // Add the leaf value to the path.
         auto uloc = builder.getUnknownLoc();
-        Value pa = getSubelementFromFieldRef(fieldRef);
+        Value targetValue = getSubelementFromFieldRef(fieldRef);
         path += '.';
         hw::InnerRefAttr attr;
-        if (auto blockArg = pa.dyn_cast<BlockArgument>()) {
+        if (auto blockArg = targetValue.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
           attr = getInnerRefTo(module, blockArg.getArgNumber());
         } else {
-          attr = getInnerRefTo(pa.getDefiningOp());
+          attr = getInnerRefTo(targetValue.getDefiningOp());
+          if (fieldID) {
+            // Move inner_sym to probe op.
+            // NOTE: Not merge until probe op lowering is supported.
+            OpBuilder builder(targetValue.getContext());
+            builder.setInsertionPointAfter(targetValue.getDefiningOp());
+            builder.create<ProbeOp>(targetValue.getLoc(), attr.getName(),
+                                    targetValue);
+            targetValue.getDefiningOp()->removeAttr("inner_sym");
+          }
         }
         path += attr;
         // Assemble the verbatim op.

@@ -72,6 +72,9 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: annotations = [{a}]
 // CHECK: %c = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
+// CHECK-NEXT: %[[C1:.*]] = firrtl.subindex %c[1]
+// CHECK-NEXT: %[[C2:.*]] = firrtl.subfield %[[C1]](0)
+// CHECK-NEXT: firrtl.probe sym @gct_sym %[[C2]]
 
 // CHECK: firrtl.module @View_mapping
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
@@ -85,12 +88,11 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME:   @InterfaceGroundType
 // CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@b>
-// CHECK-NEXT: sv.verbatim "assign {{[{][{]0[}][}]}}.baz = {{[{][{]1[}][}]}}.{{[{][{]2[}][}]}}.{{[{][{]3[}][}]}}{{[{][{]4[}][}]}};"
+// CHECK-NEXT{LITERAL}: sv.verbatim "assign {{0}}.baz = {{1}}.{{2}}.{{3}};"
 // CHECK-SAME:   #hw.innerNameRef<@DUT::@__View_Foo__>
 // CHECK-SAME:   @InterfaceGroundType
 // CHECK-SAME:   #hw.innerNameRef<@InterfaceGroundType::@dut>
-// CHECK-SAME:   #hw.innerNameRef<@DUT::@c>
-// CHECK-SAME:   #hw.innerFieldRef<@DUT::@c, 4>]
+// CHECK-SAME:   #hw.innerNameRef<@DUT::@gct_sym>
 
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
