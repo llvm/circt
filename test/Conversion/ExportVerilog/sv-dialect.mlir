@@ -470,7 +470,6 @@ hw.module @AggregateConstantXZ() -> (res1: !hw.struct<foo: i2, bar: !hw.array<3x
 
 // CHECK-LABEL: module AggregateVerbatim(
 hw.module @AggregateVerbatim() -> (res1: !hw.struct<a: i1>, res2: !hw.array<1xi1>, res3: !hw.array<1xi1>) {
-  %aggregateWire = sv.wire sym @wire : !hw.inout<struct<a: !hw.array<2xi1>>>
   %a = sv.verbatim.expr "STRUCT_A_" : () -> !hw.struct<a: i1>
   %b = sv.verbatim.expr "ARRAY_" : () -> !hw.array<1xi1>
   %c = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%a, %b) : (!hw.struct<a: i1>, !hw.array<1xi1>) -> !hw.array<1xi1>
