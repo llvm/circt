@@ -470,6 +470,12 @@ void FIRRTLModuleLowering::runOnOperation() {
         .Case<NonLocalAnchor>([&](auto nla) {
           // Just drop it.
         })
+        .Case<firrtl::BindOp>([&](auto bind) {
+          auto builder = OpBuilder::atBlockEnd(topLevelModule);
+          auto nb = builder.create<sv::BindOp>(bind.getLoc(), bind.instName(), bind.moduleName(), bind.probeLoc());
+          if (auto outputFile = bind->getAttr("output_file"))
+            nb->setAttr("output_file", outputFile);
+        })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
           // we can forward the operation.  Otherwise, we emit an error and drop
@@ -2636,20 +2642,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // CircuitLoweringState so that this can be moved outside of module once
   // we're guaranteed to not be a parallel context.
   StringAttr symbol = oldInstance.inner_symAttr();
-#if 0
-  if (oldInstance.lowerToBind()) {
-    if (!symbol)
-      symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
-    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
-    // If the lowered op already had output file information, then use that.
-    // Otherwise, generate some default bind information.
-    if (auto outputFile = oldInstance->getAttr("output_file"))
-      bindOp->setAttr("output_file", outputFile);
-    // Add the bind to the circuit state.  This will be moved outside of the
-    // encapsulating module after all modules have been processed in parallel.
-    circuitState.addBind(bindOp);
-  }
-#endif
 
   // Create the new hw.instance operation.
   auto newInstance = builder.create<hw::InstanceOp>(

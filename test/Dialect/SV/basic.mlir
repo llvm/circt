@@ -227,21 +227,21 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   hw.output
 }
 
-//CHECK-LABEL: sv.bind #hw.innerNameRef<@AB::@a1>
-//CHECK-NEXT: sv.bind #hw.innerNameRef<@AB::@b1>
-sv.bind #hw.innerNameRef<@AB::@a1>
-sv.bind #hw.innerNameRef<@AB::@b1>
+//CHECK-LABEL: sv.bind "whatever" @ExternDestMod #hw.innerNameRef<@AB::@a1>
+//CHECK-NEXT: sv.bind "yo" @InternalDestMod #hw.innerNameRef<@AB::@b1>
+sv.bind "whatever" @ExternDestMod #hw.innerNameRef<@AB::@a1>
+sv.bind "yo" @InternalDestMod #hw.innerNameRef<@AB::@b1>
 
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2)
 hw.module @InternalDestMod(%a: i1, %b: i2) {}
 //CHECK-LABEL: hw.module @AB(%a: i1, %b: i2) {
-//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
-//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
+//CHECK-NEXT:   hw.probe @a1, %a, %b
+//CHECK-NEXT:   hw.probe @b1, %a, %b
 
 hw.module @AB(%a: i1, %b: i2) {
-  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
+  hw.probe @a1, %a, %b:i1,i2
+  hw.probe @b1, %a, %b:i1,i2
 }
 
 //CHECK-LABEL: hw.module @XMR_src

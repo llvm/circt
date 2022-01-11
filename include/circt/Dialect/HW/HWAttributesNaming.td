@@ -10,6 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
+#define CIRCT_DIALECT_HW_HWATTRIBUTESNAMING
+
+include "circt/Dialect/HW/HWDialect.td"
+
 def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   let summary = "Refer to a name inside a module";
   let description = [{
@@ -38,3 +43,5 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
   let mnemonic = "globalNameRef";
   let parameters = (ins "::mlir::FlatSymbolRefAttr":$glblSym);
 }
+
+#endif // CIRCT_DIALECT_HW_HWATTRIBUTESNAMING

@@ -3691,77 +3691,68 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 void ModuleEmitter::emitBind(BindOp op) {
-  InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
+  ProbeOp probe = op.getSite(&state.symbolCache);
 
-  HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
+  HWModuleOp parentMod = probe->getParentOfType<hw::HWModuleOp>();
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
 
-  Operation *childMod = inst.getReferencedModule(&state.symbolCache);
+  Operation *childMod = op.getInstantiatedModule(&state.symbolCache);
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
-           << childVerilogName.getValue() << ' ' << getSymOpName(inst) << " (";
+           << childVerilogName.getValue() << ' ' << getSymOpName(probe) << " (";
 
-  ModulePortInfo parentPortInfo = parentMod.getPorts();
-  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
+  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(childMod);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
-  for (auto &elt : childPortInfo) {
-    auto portName = getPortVerilogName(childMod, elt);
-    elt.name = Builder(inst.getContext()).getStringAttr(portName);
+  Builder namer(probe.getContext());
+  for (auto elt : childPortInfo) {
+//    auto portName = getPortVerilogName(childMod, elt);
+//    elt.name = namer.getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
   // Emit the argument and result ports.
-  auto opArgs = inst.inputs();
-  auto opResults = inst.getResults();
+//  auto opArgs = inst.inputs();
+//  auto opResults = inst.getResults();
   bool isFirst = true; // True until we print a port.
+
   for (auto &elt : childPortInfo) {
     // Figure out which value we are emitting.
-    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+//    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
     bool isZeroWidth = isZeroBitType(elt.type);
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
-    if (!isFirst) {
-      bool shouldPrintComma = true;
-      if (isZeroWidth) {
-        shouldPrintComma = false;
-        for (size_t i = (&elt - childPortInfo.data()) + 1,
-                    e = childPortInfo.size();
-             i != e; ++i)
-          if (!isZeroBitType(childPortInfo[i].type)) {
-            shouldPrintComma = true;
-            break;
-          }
-      }
+//    if (!isFirst) {
+//      bool shouldPrintComma = true;
+//      if (isZeroWidth) {
+//        shouldPrintComma = false;
+//        for (size_t i = (&elt - childPortInfo.data()) + 1,
+//                    e = childPortInfo.size();
+//             i != e; ++i)
+//          if (!isZeroBitType(childPortInfo[i].type)) {
+//            shouldPrintComma = true;
+//            break;
+//          }
+//      }
 
-      if (shouldPrintComma)
+//      if (shouldPrintComma)
         os << ',';
-    }
+//    }
     os << '\n';
 
     // Emit the port's name.
     indent();
-    if (!isZeroWidth) {
-      // If this is a real port we're printing, then it isn't the first one. Any
-      // subsequent ones will need a comma.
-      isFirst = false;
-      os << "  ";
-    } else {
-      // We comment out zero width ports, so their presence and initializer
-      // expressions are still emitted textually.
-      os << "//";
-    }
 
     os << '.' << elt.getName();
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
-    auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
-    assert(!name.empty() && "bind port connection must have a name");
-    os << name << ')';
+//    auto name = getNameRemotely(portVal, parentPortInfo, parentMod);
+//    assert(!name.empty() && "bind port connection must have a name");
+    os << /* name << */ ')';
   }
   if (!isFirst) {
     os << '\n';

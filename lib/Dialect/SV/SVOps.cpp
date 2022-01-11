@@ -1289,31 +1289,32 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
 /// Instances must be at the top level of the hw.module (or within a `ifdef)
 // and are typically at the end of it, so we scan backwards to find them.
-static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
+template<typename T>
+static T findSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
-    if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
-      if (instance.inner_sym() &&
-          instance.inner_sym().getValue() == name.getValue())
-        return instance;
+    if (auto locOp = dyn_cast<T>(op)) {
+      if (locOp.inner_symAttr() &&
+          locOp.inner_symAttr() == name)
+        return locOp;
     }
 
     if (auto ifdef = dyn_cast<IfDefOp>(op)) {
-      if (auto result = findInstanceSymbolInBlock(name, ifdef.getThenBlock()))
+      if (auto result = findSymbolInBlock<T>(name, ifdef.getThenBlock()))
         return result;
       if (ifdef.hasElse())
-        if (auto result = findInstanceSymbolInBlock(name, ifdef.getElseBlock()))
+        if (auto result = findSymbolInBlock<T>(name, ifdef.getElseBlock()))
           return result;
     }
   }
   return {};
 }
 
-hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
+hw::ProbeOp BindOp::getSite(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   // FIXME
   if (cache)
-    if (auto *result = cache->getDefinition(instance().getName()))
-      return dyn_cast<hw::InstanceOp>(result);
+    if (auto *result = cache->getDefinition(probeLoc().getName()))
+      return dyn_cast<hw::ProbeOp>(result);
 
   // Otherwise, resolve the instance by looking up the hw.module...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
@@ -1321,29 +1322,47 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
     return {};
 
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      topLevelModuleOp.lookupSymbol(instance().getModule()));
+      topLevelModuleOp.lookupSymbol(probeLoc().getModule()));
   if (!hwModule)
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock(instance().getName(),
+  return findSymbolInBlock<hw::ProbeOp>(probeLoc().getName(),
                                    hwModule.getBodyBlock());
+}
+
+Operation* BindOp::getInstantiatedModule(const hw::SymbolCache *cache) {
+  // If we have a cache, directly look up the referenced instance.
+  // FIXME
+  if (cache)
+    if (auto *result = cache->getDefinition(moduleName()))
+      return result;
+
+  // Otherwise, resolve the instance by looking up the hw.module...
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return {};
+
+  auto hwModule = topLevelModuleOp.lookupSymbol(moduleName());
+  if (!hwModule || !isa<hw::HWModuleOp, hw::HWModuleExternOp>(hwModule))
+      return {};
+  return hwModule;
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyBindOp(BindOp op) {
-  auto inst = op.getReferencedInstance();
+  auto inst = op.getSite();
   if (!inst)
-    return op.emitError("Referenced instance doesn't exist");
-  if (!inst->getAttr("doNotPrint"))
-    return op.emitError("Referenced instance isn't marked as doNotPrint");
+    return op.emitError("Referenced site doesn't exist");
   return success();
 }
 
-void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
-                   StringAttr name) {
-  auto ref = hw::InnerRefAttr::get(mod, name);
-  odsState.addAttribute("instance", ref);
+void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr name, Operation* mod,
+                   StringAttr targetMod, StringAttr targetProbe) {
+  auto ref = hw::InnerRefAttr::get(targetMod, targetProbe);
+  odsState.addAttribute("probeLoc", ref);
+  odsState.addAttribute("moduleName", FlatSymbolRefAttr::get(mod));
+  odsState.addAttribute("instName", name);
 }
 
 //===----------------------------------------------------------------------===//

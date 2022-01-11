@@ -2745,7 +2745,7 @@ ParseResult FIRStmtParser::parseInstance() {
     auto sym = removeDontTouch(annotations.first, id);
     result = builder.create<InstanceOp>(
         referencedModule, id, annotations.first.getValue(),
-        annotations.second.getValue(), false, sym);
+        annotations.second.getValue(), sym);
   }
 
   // Since we are implicitly unbundling the instance results, we need to keep

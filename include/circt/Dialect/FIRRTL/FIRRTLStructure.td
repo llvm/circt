@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Types.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
@@ -145,7 +146,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
   let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefArrayAttr:$modpath, StrArrayAttr:$namepath);
   let results = (outs);
-  let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
+  let assemblyFormat = "$sym_name $modpath $namepath attr-dict";
 }
 
 def BindOp : FIRRTLOp<"bind",
@@ -153,8 +154,8 @@ def BindOp : FIRRTLOp<"bind",
   let summary = "Bind Operation";
   let description = [{
   }];
-  let arguments = (ins FlatSymbolRefAttr:$moduleName, 
-                       hw::InnerRefAttr:$probeLoc);
+  let arguments = (ins StrAttr:$instName, FlatSymbolRefAttr:$moduleName, 
+                       InnerRefAttr:$probeLoc);
   let results = (outs);
-  let assemblyFormat = [{ $moduleName $probeLoc attr-dict}];
+  let assemblyFormat = "$instName $moduleName $probeLoc attr-dict";
 }

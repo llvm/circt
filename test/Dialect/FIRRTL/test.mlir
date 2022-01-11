@@ -165,8 +165,8 @@ firrtl.module @ProbeTest(in %in1 : !firrtl.uint<2>, in %in2 : !firrtl.uint<3>, o
   firrtl.connect %w1, %w2 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out3, %in2 : !firrtl.uint<3>, !firrtl.uint<3>
   %someNode = firrtl.node %in1 : !firrtl.uint<2>
-  // CHECK: firrtl.probe sym @foobar %in1, %in2, %out3, %w1, %[[TMP3]], %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
-  firrtl.probe sym @foobar %in1, %in2, %out3, %w1, %w2, %someNode : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
+  // CHECK: firrtl.probe @foobar(%in1, %in2, %out3, %w1, %[[TMP3]], %someNode) : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
+  firrtl.probe @foobar (%in1, %in2, %out3, %w1, %w2, %someNode) : !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<2>
 }
 
 }

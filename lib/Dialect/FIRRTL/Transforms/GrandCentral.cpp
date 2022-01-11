@@ -1366,7 +1366,7 @@ void GrandCentralPass::runOnOperation() {
               builder.setInsertionPointToEnd(op.getBody());
               auto probe = builder.create<ProbeOp>(circuitOp.getLoc(), mapping.getName(), ValueRange{});
               builder.setInsertionPointToEnd(circuitOp.getBody());
-              auto bind = builder.create<firrtl::BindOp>(circuitOp.getLoc(), mapping.getName(), probe.inner_sym());
+              auto bind = builder.create<firrtl::BindOp>(circuitOp.getLoc(), "asdf", mapping.getName(), hw::InnerRefAttr::get(op.getNameAttr(), probe.inner_symAttr()));
               builder.setInsertionPointToEnd(op.getBody());
 
               // If no extraction info was provided, exit.  Otherwise, setup the

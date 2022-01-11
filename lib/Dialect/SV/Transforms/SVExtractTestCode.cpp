@@ -172,17 +172,16 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
 
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
-  auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), newMod, ("InvisibleBind" + suffix).str(),
-      inputs.getArrayRef(), ArrayAttr(),
+  auto probe = b.create<hw::ProbeOp>(
+      op.getLoc(), 
       b.getStringAttr(
-          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
-  inst->setAttr("doNotPrint", b.getBoolAttr(true));
+          ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()),
+      inputs.getArrayRef());
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
   auto bindOp =
-      b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(), inst.inner_symAttr());
+      b.create<sv::BindOp>(op.getLoc(), probe.inner_symAttr(), newMod, op.getNameAttr(), probe.inner_symAttr());
   if (fileName)
     bindOp->setAttr("output_file", fileName);
   return newMod;

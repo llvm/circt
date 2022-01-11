@@ -473,17 +473,20 @@ def BindOp : SVOp<"bind", []> {
   }];
 
   let arguments =
-   (ins InnerRefAttr:$instance);
+   (ins StrAttr:$instName, FlatSymbolRefAttr:$moduleName, 
+                       InnerRefAttr:$probeLoc);
   let results = (outs);
   let verifier = "return ::verify$cppClass(*this);";
 
-  let assemblyFormat = "$instance attr-dict";
+  let assemblyFormat = "$instName $moduleName $probeLoc attr-dict";
   let builders = [
-    OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name)>
+    OpBuilder<(ins "StringAttr":$inst, "Operation*":$mod,
+                   "StringAttr":$targetMod, "StringAttr":$targetProbe)>
   ];
   let extraClassDeclaration = [{
     /// Lookup the instance for the bind.  This returns null on invalid IR.
-    hw::InstanceOp getReferencedInstance(const hw::SymbolCache *cache = nullptr);
+    hw::ProbeOp getSite(const hw::SymbolCache *cache = nullptr);
+    Operation* getInstantiatedModule(const hw::SymbolCache * cache = nullptr);
   }];
 }
 

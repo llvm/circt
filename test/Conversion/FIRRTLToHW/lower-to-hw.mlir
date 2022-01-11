@@ -598,19 +598,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind #hw.innerNameRef<@bindTest::@[[bazSymbol:.+]]>
-  // CHECK-NOT: output_file
-  // CHECK-NEXT: sv.bind #hw.innerNameRef<@bindTest::@[[quxSymbol:.+]]> {
-  // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
-  // CHECK-NEXT: hw.module @bindTest()
-  firrtl.module @bindTest(in %io_cpu_test : !firrtl.uint<1>) {
-    // CHECK: hw.probe baz io_cpu_flush
+  firrtl.module @bindTest(in %io_cpu_flush : !firrtl.uint<1>) {
+    // CHECK: hw.probe @baz, %io_cpu_flush : i1
     firrtl.probe @baz (%io_cpu_flush) : !firrtl.uint<1>
-    // CHECK: hw.probe qux io_cpu_flush
+    // CHECK: hw.probe @qux, %io_cpu_flush : i1
     firrtl.probe @qux (%io_cpu_flush) : !firrtl.uint<1>
   }
-  firrtl.bind @bar #innerNameRef<@bindTest::@baz>
-  firrtl.bind @bar #innerNameRef<@bindTest::@qux> {output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>}
+  // CHECK: sv.bind "test1" @bar #hw.innerNameRef<@bindTest::@baz>
+  // CHECK-NOT: output_file
+  // CHECK-NEXT: sv.bind "test2" @bar #hw.innerNameRef<@bindTest::@qux>
+  // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
+  firrtl.bind "test1" @bar #hw.innerNameRef<@bindTest::@baz>
+  firrtl.bind "test2" @bar #hw.innerNameRef<@bindTest::@qux> {output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>}
 
   // CHECK-LABEL: hw.module @output_fileTest
   // CHECK-SAME: output_file = #hw.output_file<"output_fileTest/dir/output_fileTest.sv", excludeFromFileList>
