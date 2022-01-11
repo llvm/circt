@@ -968,6 +968,23 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
   result.addSuccessors(successors);
 }
 
+static ParseResult verifyBufferOp(handshake::BufferOp op) {
+  // Verify that exactly 'size' number of initial values have been provided, if
+  // an initializer list have been provided.
+  if (op.initValues().hasValue()) {
+    if (!op.isSequential())
+      return op.emitOpError()
+             << "only sequential buffers are allowed to have initial values.";
+
+    auto nInits = op.initValues().getValue().size();
+    if (nInits != op.size())
+      return op.emitOpError() << "expected " << op.size()
+                              << " init values but got " << nInits << ".";
+  }
+
+  return success();
+}
+
 void handshake::BufferOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSunkBuffersPattern>(context);

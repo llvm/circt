@@ -962,7 +962,7 @@ public:
                             Value succReady, Value predData, Value dataReg);
   bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                            ValueVector *output, Value clock, Value reset,
-                           bool isControl);
+                           bool isControl, ArrayRef<int64_t> initValues = {});
   bool buildFIFOBufferLogic(int64_t numStage, ValueVector *input,
                             ValueVector *output, Value clock, Value reset,
                             bool isControl);
@@ -2191,7 +2191,8 @@ bool HandshakeBuilder::buildFIFOBufferLogic(int64_t numStage,
 
 bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
                                            ValueVector *output, Value clock,
-                                           Value reset, bool isControl) {
+                                           Value reset, bool isControl,
+                                           ArrayRef<int64_t> initValues) {
   if (input == nullptr || output == nullptr)
     return false;
 
@@ -2206,6 +2207,7 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
   // Create useful value and type for valid/ready signal.
   auto bitType = UIntType::get(rewriter.getContext(), 1);
   auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+  auto trueConst = createConstantOp(bitType, APInt(1, 1), insertLoc, rewriter);
 
   // Create useful value and type for data signal.
   FIRRTLType dataType = nullptr;
@@ -2230,21 +2232,28 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
 
   // Create multiple stages buffer logic.
   for (unsigned i = 0; i < numStage; ++i) {
+    bool isInitialized = initValues.size() > i;
+
     // Create wires for ready signal from the success buffer stage.
     auto readyWire = rewriter.create<WireOp>(insertLoc, bitType,
                                              "readyWire" + std::to_string(i));
 
     // Create a register for valid signal.
-    auto validReg =
-        rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
-                                    falseConst, "validReg" + std::to_string(i));
+    auto validReg = rewriter.create<RegResetOp>(
+        insertLoc, bitType, clock, reset,
+        isInitialized ? trueConst : falseConst, "validReg" + std::to_string(i));
 
     // Create registers for data signal.
     Value dataReg = nullptr;
+    Value initValue = zeroDataConst;
+    if (isInitialized)
+      initValue = createConstantOp(
+          dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
+          insertLoc, rewriter);
     if (!isControl)
-      dataReg = rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
-                                            zeroDataConst,
-                                            "dataReg" + std::to_string(i));
+      dataReg =
+          rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
+                                      initValue, "dataReg" + std::to_string(i));
 
     // Create wires for valid, ready and data signal coming from the control
     // buffer stage.
@@ -2291,12 +2300,16 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   Value reset = portList[3][0];
 
   // For now, we only support sequential buffers.
-  if (op.sequential())
+  if (op.sequential()) {
+    SmallVector<int64_t> initValues = {};
+    if (op.initValues())
+      initValues = op.getInitValues();
     return buildSeqBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                               op.isControl());
-  else
-    return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
-                                op.isControl());
+                               op.isControl(), initValues);
+  }
+
+  return buildFIFOBufferLogic(op.getNumSlots(), &input, &output, clock, reset,
+                              op.isControl());
 }
 
 bool HandshakeBuilder::visitHandshake(ExternalMemoryOp op) {

@@ -218,13 +218,21 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     must be an unsigned integer larger than 0. $sequantial=True indicates a
     nontransparent buffer, while $sequantial=False indicates a transparent
     buffer.
+
+    An 'initValues' attribute containing a list of integer values may be provided.
+    The list must be of the same length as the number of slots. This will
+    initialize the buffer with the given values upon reset.
+    For now, only sequential buffers are allowed to have initial values.
+    @todo: How to support different init types? these have to be stored (and
+    retrieved) as attributes, hence they must be of a known type.
   }];
 
   let arguments = (ins
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    BoolAttr:$sequential);
+    BoolAttr:$sequential,
+    OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Type":$dataType, "int":$size,
@@ -237,9 +245,18 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
     }
+    SmallVector<int64_t> getInitValues() {
+      assert(initValues() && "initValues attribute not set");
+      SmallVector<int64_t> values;
+      for (auto value : (*this)->getAttrOfType<ArrayAttr>("initValues"))
+        values.push_back(value.cast<IntegerAttr>().getValue().getSExtValue());
+      return values;
+    }
+
   }];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
   let hasCanonicalizer = 1;
 }
 

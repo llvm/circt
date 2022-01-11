@@ -129,3 +129,13 @@ handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none
   %0 = buffer [2] %arg0 {sequential = true} : index
   return %0, %arg1 : index, none
 }
+
+// -----
+
+// CHECK: %validReg0 = firrtl.regreset %clock, %reset, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK: %dataReg0 = firrtl.regreset %clock, %reset, %c42_ui64  : !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>
+
+handshake.func @test_buffer_init(%arg0: index, %arg1: none, ...) -> (index, none) {
+  %0 = buffer [1] %arg0 {sequential = true, initValues=[42]} : index
+  return %0, %arg1 : index, none
+}
