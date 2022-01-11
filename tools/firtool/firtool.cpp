@@ -115,7 +115,7 @@ static cl::opt<bool> replSeqMem(
         "replace the seq mem for macro replacement and emit relevant metadata"),
     cl::init(false));
 static cl::opt<bool>
-    preserveAggregate("experimental-preserve-aggregate",
+    preserveAggregate("preserve-aggregate",
                       cl::desc("preserve aggregate types in lower types"),
                       cl::init(false));
 static cl::opt<std::string>
