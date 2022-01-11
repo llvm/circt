@@ -1575,8 +1575,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @ForceNameSubmodule
-  firrtl.nla @nla_1 [#hw.innerNameRef<@ForceNameTop::@sym_foo>,#hw.innerNameRef<@ForceNameSubmodule::@ForceNameSubmodule>]
-  firrtl.nla @nla_2 [#hw.innerNameRef<@ForceNameTop::@sym_bar>,#hw.innerNameRef<@ForceNameSubmodule::@ForceNameSubmodule>]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@ForceNameTop::@sym_foo>,@ForceNameSubmodule]
+  firrtl.nla @nla_2 [#hw.innerNameRef<@ForceNameTop::@sym_bar>,@ForceNameSubmodule]
   firrtl.module @ForceNameSubmodule() attributes {annotations = [
     {circt.nonlocal = @nla_2,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
