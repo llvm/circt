@@ -299,11 +299,10 @@ protected:
           getOperandsFunc);
 
   static bool isWireManipulationOp(Operation *op) {
-    return isa<hw::ArrayConcatOp>(op) || isa<hw::ArrayCreateOp>(op) ||
-           isa<hw::ArrayGetOp>(op) || isa<hw::ArraySliceOp>(op) ||
-           isa<hw::StructCreateOp>(op) || isa<hw::StructExplodeOp>(op) ||
-           isa<hw::StructExtractOp>(op) || isa<hw::StructInjectOp>(op) ||
-           isa<hw::StructCreateOp>(op) || isa<hw::ConstantOp>(op);
+    return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
+               hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
+               hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
+               hw::ConstantOp>(op);
   }
 };
 } // anonymous namespace
@@ -462,7 +461,8 @@ void PartitionPass::partition(MSFTModuleOp mod) {
       nonLocalTaggedOps.push_back(op);
   });
 
-  bubbleUp(mod, nonLocalTaggedOps);
+  if (!nonLocalTaggedOps.empty())
+    bubbleUp(mod, nonLocalTaggedOps);
 
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
@@ -475,7 +475,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
 
 /// TODO: Migrate these to some sort of OpInterface shared with hw.
 static bool isAnyModule(Operation *module) {
-  return isa<MSFTModuleOp>(module) || isa<MSFTModuleExternOp>(module) ||
+  return isa<MSFTModuleOp, MSFTModuleExternOp>(module) ||
          hw::isAnyModule(module);
 }
 hw::ModulePortInfo getModulePortInfo(Operation *op) {
@@ -701,7 +701,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //     - Construct the new instance operands from the old ones + the cloned
   //     ops' results.
   SmallVector<unsigned> resValues;
-  for (size_t i = 0, e = origType.getNumInputs(); i < e; ++i)
+  for (size_t i = 0, e = origType.getNumResults(); i < e; ++i)
     resValues.push_back(i);
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
