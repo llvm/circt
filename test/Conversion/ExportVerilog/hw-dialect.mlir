@@ -856,6 +856,42 @@ hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.
     hw.output %1 : i1
 }
 
+// Rename field names
+// CHECK-LABEL: renameKeyword(
+// CHECK-NEXT:  input  struct packed {logic repeat_0; logic repeat_0_1; } a,
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r1);
+hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>){
+  hw.output %a : !hw.struct<repeat: i1, repeat_0: i1>
+}
+
+// CHECK-LABEL: useRenamedStruct(
+// CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_1; } a,
+// CHECK-NEXT:  output                                                    r1, r2,
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
+hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
+  // CHECK-EMPTY:
+  // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } inst1_r1;
+  %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
+
+  %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
+  // CHECK:      renameKeyword inst1 (
+  // CHECK-NEXT:   .a  (a),
+  // CHECK-NEXT:   .r1 (inst1_r1)
+  // CHECK-NEXT: )
+
+  // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } [[WIREA:.+]] = a;
+  %0 = sv.struct_field_inout %a["repeat"] : !hw.inout<struct<repeat: i1, repeat_0: i1>>
+  %1 = sv.read_inout %0 : !hw.inout<i1>
+  // assign r1 = a.repeat_0;
+  %2 = hw.struct_extract %read["repeat_0"] : !hw.struct<repeat: i1, repeat_0: i1>
+  // assign r2 = [[WIREA]].repeat_0_1;
+  %true = hw.constant true
+  %3 = hw.struct_inject %read["repeat_0"], %true : !hw.struct<repeat: i1, repeat_0: i1>
+  // assign r3 = '{repeat_0: a.repeat_0, repeat_0_1: (1'h1)};
+  hw.output %1, %2, %3 : i1, i1, !hw.struct<repeat: i1, repeat_0: i1>
+}
+
+
 // CHECK-LABEL: module replicate
 hw.module @replicate(%arg0: i7, %arg1: i1) -> (r1: i21, r2: i9, r3: i16, r4: i16) {
   // CHECK: assign r1 = {3{arg0}};

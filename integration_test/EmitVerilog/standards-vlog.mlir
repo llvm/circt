@@ -1,12 +1,12 @@
 // REQUIRES: questa
 
-// RUN: firtool --lower-to-hw --verilog %s > %t1.1995.v
-// RUN: firtool --lower-to-hw --verilog %s > %t1.2001.v
-// RUN: firtool --lower-to-hw --verilog %s > %t1.2005.v
-// RUN: firtool --lower-to-hw --verilog %s > %t1.2005.sv
-// RUN: firtool --lower-to-hw --verilog %s > %t1.2009.sv
-// RUN: firtool --lower-to-hw --verilog %s > %t1.2012.sv
-// RUN: firtool --lower-to-hw --verilog %s> %t1.2017.sv
+// RUN: firtool --verilog %s > %t1.1995.v
+// RUN: firtool --verilog %s > %t1.2001.v
+// RUN: firtool --verilog %s > %t1.2005.v
+// RUN: firtool --verilog %s > %t1.2005.sv
+// RUN: firtool --verilog %s > %t1.2009.sv
+// RUN: firtool --verilog %s > %t1.2012.sv
+// RUN: firtool --verilog %s> %t1.2017.sv
 
 // RUN: vlog -lint %t1.1995.v -vlog95compat || true
 // RUN: vlog -lint %t1.2001.v -vlog01compat || true

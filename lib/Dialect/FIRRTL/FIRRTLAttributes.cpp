@@ -111,3 +111,19 @@ void FIRRTLDialect::registerAttributes() {
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.cpp.inc"
       >();
 }
+
+//===----------------------------------------------------------------------===//
+// ParamDeclAttr
+//===----------------------------------------------------------------------===//
+
+Attribute ParamDeclAttr::parse(AsmParser &p, Type type) {
+  llvm::errs() << "Should never parse raw\n";
+  abort();
+}
+
+void ParamDeclAttr::print(AsmPrinter &p) const {
+  p << "<" << getName() << ": " << getType();
+  if (getValue())
+    p << " = " << getValue();
+  p << ">";
+}

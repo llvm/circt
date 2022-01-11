@@ -128,4 +128,10 @@ module {
     %s = hw.struct_create (%90) : !hw.struct<foo: !hw.array<384xi1>>
   }
 
+  // CHECK-LABEL: interface renameType;
+  sv.interface @renameType {
+    sv.interface.signal @data : !hw.struct<repeat: i1>
+    // CHECK-NEXT: struct packed {logic repeat_0; } data;
+  }
+
 }

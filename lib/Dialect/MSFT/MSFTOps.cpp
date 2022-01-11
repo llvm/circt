@@ -132,6 +132,63 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   return newBlockArgs;
 }
 
+// Remove the ports at the specified indexes.
+SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
+                                                llvm::BitVector outputs) {
+  MLIRContext *ctxt = getContext();
+  FunctionType ftype = getType();
+  Block *body = getBodyBlock();
+  Operation *terminator = body->getTerminator();
+
+  SmallVector<Type, 4> newInputTypes;
+  SmallVector<Attribute, 4> newArgNames;
+  unsigned originalNumArgs = ftype.getNumInputs();
+  ArrayRef<Attribute> origArgNames = argNamesAttr().getValue();
+  assert(origArgNames.size() == originalNumArgs);
+  for (size_t i = 0; i < originalNumArgs; ++i) {
+    if (!inputs.test(i)) {
+      newInputTypes.emplace_back(ftype.getInput(i));
+      newArgNames.emplace_back(origArgNames[i]);
+    }
+  }
+
+  SmallVector<Type, 4> newResultTypes;
+  SmallVector<Attribute, 4> newResultNames;
+  unsigned originalNumResults = getNumResults();
+  ArrayRef<Attribute> origResNames = resultNamesAttr().getValue();
+  assert(origResNames.size() == originalNumResults);
+  for (size_t i = 0; i < originalNumResults; ++i) {
+    if (!outputs.test(i)) {
+      newResultTypes.emplace_back(ftype.getResult(i));
+      newResultNames.emplace_back(origResNames[i]);
+    }
+  }
+
+  setType(FunctionType::get(ctxt, newInputTypes, newResultTypes));
+  resultNamesAttr(ArrayAttr::get(ctxt, newResultNames));
+  argNamesAttr(ArrayAttr::get(ctxt, newArgNames));
+
+  // Build new operand list for output op. Construct an output mapping to
+  // return as a side-effect.
+  unsigned numResults = ftype.getNumResults();
+  SmallVector<Value> newOutputValues;
+  SmallVector<unsigned> newToOldResultMap;
+
+  for (unsigned i = 0; i < numResults; ++i) {
+    if (!outputs.test(i)) {
+      newOutputValues.push_back(terminator->getOperand(i));
+      newToOldResultMap.push_back(i);
+    }
+  }
+  terminator->setOperands(newOutputValues);
+
+  // Erase the arguments after setting the new output op operands since the
+  // arguments might be used by output op.
+  body->eraseArguments(inputs);
+
+  return newToOldResultMap;
+}
+
 // Copied nearly exactly from hwops.cpp.
 // TODO: Unify code once a `ModuleLike` op interface exists.
 static void buildModule(OpBuilder &builder, OperationState &result,

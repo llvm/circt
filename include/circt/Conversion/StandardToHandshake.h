@@ -32,7 +32,7 @@ std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeAnalysisPass();
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createHandshakeDataflowPass();
+createStandardToHandshakePass();
 
 std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeCanonicalizePass();

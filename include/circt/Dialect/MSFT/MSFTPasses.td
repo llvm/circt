@@ -26,3 +26,9 @@ def Partition: Pass<"msft-partition", "mlir::ModuleOp"> {
   let constructor = "circt::msft::createPartitionPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
+
+def WireCleanup: Pass<"msft-wire-cleanup", "mlir::ModuleOp"> {
+  let summary = "Cleanup unnecessary ports and wires";
+  let constructor = "circt::msft::createWireCleanupPass()";
+  let dependentDialects = [];
+}

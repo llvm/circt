@@ -228,7 +228,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  firrtl.extmodule @Foo<width: i32 = 2>(in a : !firrtl.uint<2>) attributes { defname = "Foo" }
   // expected-note @+1 {{previous extmodule definition occurred here}}
   firrtl.extmodule @Bar(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.uint<2>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
@@ -249,7 +249,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  firrtl.extmodule @Foo<width: i32 = 2>(in a : !firrtl.uint<2>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint'}}
   firrtl.extmodule @Bar(in a : !firrtl.sint<1>) attributes { defname = "Foo" }
 
@@ -259,7 +259,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
-  firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
+  firrtl.extmodule @Foo<width: none = @Foo>(in a : !firrtl.uint<2>) attributes { defname = "Foo" }
 }
 
 // -----

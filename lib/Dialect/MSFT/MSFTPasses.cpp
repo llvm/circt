@@ -195,7 +195,7 @@ public:
   matchAndRewrite(hw::GlobalRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     for (auto attr : op->getAttrs()) {
-      if (attr.getName().getValue().startswith("loc")) {
+      if (isa<MSFTDialect>(attr.getValue().getDialect())) {
         rewriter.eraseOp(op);
         return success();
       }
@@ -237,7 +237,7 @@ void LowerToHWPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
   target.addDynamicallyLegalOp<hw::GlobalRefOp>([](hw::GlobalRefOp op) {
     for (auto attr : op->getAttrs())
-      if (attr.getName().getValue().startswith("loc"))
+      if (isa<MSFTDialect>(attr.getValue().getDialect()))
         return false;
     return true;
   });
@@ -297,6 +297,13 @@ protected:
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
+
+  static bool isWireManipulationOp(Operation *op) {
+    return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
+               hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
+               hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
+               hw::ConstantOp>(op);
+  }
 };
 } // anonymous namespace
 
@@ -384,9 +391,15 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, SmallVectorImpl<Operation *> &users);
+  void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+  void bubbleUpGlobalRefs(Operation *op);
+  void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
+                          DenseSet<Attribute> &newGlobalRefs);
+
+  // Tag wire manipulation ops connected to this potentially tagged op.
+  static void markWireOps(Operation *op);
 };
 } // anonymous namespace
 
@@ -401,9 +414,42 @@ void PartitionPass::runOnOperation() {
     partition(mod);
 }
 
+void PartitionPass::markWireOps(Operation *taggedOp) {
+  auto partRef =
+      taggedOp->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+  if (!partRef)
+    return;
+  SmallVector<Operation *, 8> opQueue;
+  opQueue.push_back(taggedOp);
+
+  while (!opQueue.empty()) {
+    Operation *op = opQueue.back();
+    opQueue.pop_back();
+
+    for (auto *user : op->getUsers()) {
+      if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
+        continue;
+      user->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(user);
+    }
+
+    for (auto operValue : op->getOperands()) {
+      Operation *defOp = operValue.getDefiningOp();
+      if (!defOp || !isWireManipulationOp(defOp) ||
+          defOp->hasAttr("targetDesignPartition"))
+        continue;
+      defOp->setAttr("targetDesignPartition", partRef);
+      opQueue.push_back(defOp);
+    }
+  }
+}
+
 void PartitionPass::partition(MSFTModuleOp mod) {
   DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
   SmallVector<Operation *, 64> nonLocalTaggedOps;
+
+  mod.walk(&markWireOps);
+
   mod.walk([&](Operation *op) {
     auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
     if (!partRef)
@@ -415,7 +461,8 @@ void PartitionPass::partition(MSFTModuleOp mod) {
       nonLocalTaggedOps.push_back(op);
   });
 
-  bubbleUp(mod, nonLocalTaggedOps);
+  if (!nonLocalTaggedOps.empty())
+    bubbleUp(mod, nonLocalTaggedOps);
 
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
@@ -428,7 +475,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
 
 /// TODO: Migrate these to some sort of OpInterface shared with hw.
 static bool isAnyModule(Operation *module) {
-  return isa<MSFTModuleOp>(module) || isa<MSFTModuleExternOp>(module) ||
+  return isa<MSFTModuleOp, MSFTModuleExternOp>(module) ||
          hw::isAnyModule(module);
 }
 hw::ModulePortInfo getModulePortInfo(Operation *op) {
@@ -477,6 +524,14 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
     if (!retName.empty())
       return retName;
   }
+  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+    buff.clear();
+    llvm::raw_string_ostream(buff) << "c" << constOp.value();
+    return buff;
+  }
+
+  if (res.getDefiningOp()->getNumResults() == 1)
+    return {};
 
   // Fallback. Not ideal.
   buff.clear();
@@ -496,10 +551,106 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
     return ports.inputs[oper.getOperandNumber()].name;
   }
 
+  if (oper.getOwner()->getNumOperands() == 1)
+    return "in";
+
   // Fallback. Not ideal.
   buff.clear();
   llvm::raw_string_ostream(buff) << "in" << oper.getOperandNumber();
   return buff;
+}
+
+/// Helper to get the circt.globalRef attribute.
+static ArrayAttr getGlobalRefs(Operation *op) {
+  return op->getAttrOfType<ArrayAttr>("circt.globalRef");
+}
+
+/// Helper to update GlobalRefOps after referenced ops bubble up.
+void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
+  auto globalRefs = getGlobalRefs(op);
+  if (!globalRefs)
+    return;
+
+  for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
+    // Resolve the GlobalRefOp and get its path.
+    auto refSymbol = globalRef.getGlblSym();
+    auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
+        topLevelSyms.getDefinition(refSymbol));
+    assert(globalRefOp && "symbol must reference a GlobalRefOp");
+    auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
+
+    // Construct a new path starting from the old path.
+    SmallVector<Attribute> newPath(oldPath);
+
+    // If there aren't two elements in the path, this GlobalRefOp has already
+    // been updated.
+    if (newPath.size() < 2)
+      return;
+
+    // Splice the last two elements in the path, using the combined name from
+    // the op's attributes, and taking the module from the second to last
+    // element.
+    newPath.pop_back_val().cast<hw::InnerRefAttr>();
+    auto nextElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
+    auto newModule = nextElement.getModule();
+    auto newNameAttr = StringAttr::get(op->getContext(), ::getOpName(op));
+    auto newLeaf = hw::InnerRefAttr::get(newModule, newNameAttr);
+    newPath.push_back(newLeaf);
+
+    // GlobalRefs use the inner_sym attribute, so keep it up to date.
+    op->setAttr("inner_sym", newNameAttr);
+
+    // Update the path on the GlobalRefOp.
+    auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
+    globalRefOp.namepathAttr(newPathAttr);
+  }
+}
+
+/// Helper to update GlobalRefops after referenced ops are pushed down.
+void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
+                                       DenseSet<Attribute> &newGlobalRefs) {
+  auto globalRefs = getGlobalRefs(op);
+  if (!globalRefs)
+    return;
+
+  for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
+    // Resolve the GlobalRefOp and get its path.
+    auto refSymbol = globalRef.getGlblSym();
+    auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
+        topLevelSyms.getDefinition(refSymbol));
+    assert(globalRefOp && "symbol must reference a GlobalRefOp");
+    auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
+
+    // Get the module containing the partition and the partition's name.
+    auto partAttr = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    auto partMod = partAttr.getRootReference();
+    auto partName = partAttr.getLeafReference();
+    auto partModName = partOp.verilogNameAttr();
+    assert(partModName);
+
+    // Construct a new path starting from the old path.
+    SmallVector<Attribute> newPath(oldPath);
+    auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
+
+    // If the last element in the path is not pointing at the module
+    // containing the partition, this GlobalRefOp has already been updated.
+    if (lastElement.getModule() != partMod)
+      continue;
+
+    // Split the last element in the path to add the partition.
+    auto partRef = hw::InnerRefAttr::get(partMod, partName);
+    auto leafRef = hw::InnerRefAttr::get(partModName, lastElement.getName());
+    newPath.push_back(partRef);
+    newPath.push_back(leafRef);
+
+    // Update the path on the GlobalRefOp.
+    auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
+    globalRefOp.namepathAttr(newPathAttr);
+
+    // Ensure the part instance will have this GlobalRefAttr.
+    // global refs if not.
+    newGlobalRefs.insert(globalRef);
+  }
 }
 
 void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
@@ -522,12 +673,14 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     for (OpResult res : op->getOpResults()) {
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), res.getType()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          res.getType()));
     }
     for (OpOperand &oper : op->getOpOperands()) {
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
-          StringAttr::get(ctxt, opName + "." + name), oper.get()));
+          StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
+          oper.get()));
       newResTypes.push_back(oper.get().getType());
     }
   }
@@ -548,7 +701,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //     - Construct the new instance operands from the old ones + the cloned
   //     ops' results.
   SmallVector<unsigned> resValues;
-  for (size_t i = 0, e = origType.getNumInputs(); i < e; ++i)
+  for (size_t i = 0, e = origType.getNumResults(); i < e; ++i)
     resValues.push_back(i);
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
@@ -565,6 +718,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       for (Value res : newOp->getResults())
         newOperands.push_back(res);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
+      bubbleUpGlobalRefs(newOp);
     }
   };
   updateInstances(mod, resValues, cloneOpsGetOperands);
@@ -576,7 +730,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
 }
 
 void PartitionPass::partition(DesignPartitionOp partOp,
-                              SmallVectorImpl<Operation *> &toMove) {
+                              ArrayRef<Operation *> toMove) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -596,24 +750,22 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
     StringRef name = ::getOpName(inst);
 
-    for (auto port :
-         llvm::concat<hw::PortInfo>(modPorts.inputs, modPorts.outputs)) {
+    for (auto port : modPorts.inputs) {
+      partInstInputs.push_back(inst->getOperand(port.argNum));
+      inputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::INPUT,
+          /*type*/ port.type,
+          /*argNum*/ inputPorts.size()});
+    }
 
-      if (port.direction == hw::PortDirection::OUTPUT) {
-        partInstOutputs.push_back(inst->getResult(port.argNum));
-        outputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ outputPorts.size()});
-      } else {
-        partInstInputs.push_back(inst->getOperand(port.argNum));
-        inputPorts.push_back(hw::PortInfo{
-            /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-            /*direction*/ port.direction,
-            /*type*/ port.type,
-            /*argNum*/ inputPorts.size()});
-      }
+    for (auto port : modPorts.outputs) {
+      partInstOutputs.push_back(inst->getResult(port.argNum));
+      outputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ port.type,
+          /*argNum*/ outputPorts.size()});
     }
   };
   // Handle all other operators.
@@ -632,12 +784,13 @@ void PartitionPass::partition(DesignPartitionOp partOp,
     }
 
     for (OpResult res : op->getOpResults()) {
-      outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(
-              ctxt, name + "." + getResultName(res, topLevelSyms, nameBuffer)),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ res.getType(),
-          /*argNum*/ outputPorts.size()});
+      StringRef resName = getResultName(res, topLevelSyms, nameBuffer);
+      outputPorts.push_back(
+          hw::PortInfo{/*name*/ StringAttr::get(
+                           ctxt, name + (resName.empty() ? "" : "." + resName)),
+                       /*direction*/ hw::PortDirection::OUTPUT,
+                       /*type*/ res.getType(),
+                       /*argNum*/ outputPorts.size()});
       partInstOutputs.push_back(res);
     }
   };
@@ -677,11 +830,6 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
       SymbolRefAttr());
 
-  // Replace original ops' outputs with partition outputs.
-  assert(partInstOutputs.size() == partInst.getNumResults());
-  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
-    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
-
   //*************
   //   Move the operations!
 
@@ -702,22 +850,188 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Value, 64> outputs(partInstOutputs.size(), Value());
 
   // Clone the ops into the partition block. Map the results into the module
-  // outputs.
+  // outputs. Push down any global refs to include the partition. Update the
+  // partition to include the new set of global refs, and set its inner_sym.
+  DenseSet<Attribute> newGlobalRefs;
   for (Operation *op : toMove) {
     Operation *newOp = partBuilder.insert(op->clone(mapping));
     newOp->removeAttr("targetDesignPartition");
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
-    op->erase();
+    pushDownGlobalRefs(op, partOp, newGlobalRefs);
   }
+  SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),
+                                         newGlobalRefs.end());
+  auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
+  partInst->setAttr("circt.globalRef", newRefsAttr);
+  partInst->setAttr("inner_sym", partInst.sym_nameAttr());
+
   partBuilder.create<OutputOp>(loc, outputs);
+
+  // Replace original ops' outputs with partition outputs.
+  assert(partInstOutputs.size() == partInst.getNumResults());
+  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
+    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
+
+  for (Operation *op : toMove)
+    op->erase();
 }
 
 namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createPartitionPass() {
   return std::make_unique<PartitionPass>();
+}
+} // namespace msft
+} // namespace circt
+
+namespace {
+struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
+  void runOnOperation() override;
+
+private:
+  void bubbleWiresUp(MSFTModuleOp mod);
+  void sinkWiresDown(MSFTModuleOp mod);
+};
+} // anonymous namespace
+
+void WireCleanupPass::runOnOperation() {
+  ModuleOp topMod = getOperation();
+  populateSymbolCache(topMod);
+  SmallVector<MSFTModuleOp> sortedMods;
+  getAndSortModules(topMod, sortedMods);
+
+  for (auto mod : sortedMods)
+    bubbleWiresUp(mod);
+
+  for (auto mod : llvm::reverse(sortedMods))
+    sinkWiresDown(mod);
+}
+
+/// Push up any wires which are simply passed-through.
+void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
+  Block *body = mod.getBodyBlock();
+  Operation *terminator = body->getTerminator();
+  hw::ModulePortInfo ports = mod.getPorts();
+
+  // Find all "passthough" internal wires, filling 'inputPortsToRemove' as a
+  // side-effect.
+  DenseMap<Value, hw::PortInfo> passThroughs;
+  llvm::BitVector inputPortsToRemove(ports.inputs.size());
+  for (hw::PortInfo inputPort : ports.inputs) {
+    BlockArgument portArg = body->getArgument(inputPort.argNum);
+    bool removePort = true;
+    for (OpOperand user : portArg.getUsers()) {
+      if (user.getOwner() == terminator)
+        passThroughs[portArg] = inputPort;
+      else
+        removePort = false;
+    }
+    if (removePort)
+      inputPortsToRemove.set(inputPort.argNum);
+  }
+
+  // Find all output ports which we can remove. Fill in 'outputToInputIdx' to
+  // help rewire instantiations later on.
+  DenseMap<unsigned, unsigned> outputToInputIdx;
+  llvm::BitVector outputPortsToRemove(ports.outputs.size());
+  for (hw::PortInfo outputPort : ports.outputs) {
+    assert(outputPort.argNum < terminator->getNumOperands() && "Invalid IR");
+    Value outputValue = terminator->getOperand(outputPort.argNum);
+    auto inputNumF = passThroughs.find(outputValue);
+    if (inputNumF == passThroughs.end())
+      continue;
+    hw::PortInfo inputPort = inputNumF->second;
+    outputToInputIdx[outputPort.argNum] = inputPort.argNum;
+    outputPortsToRemove.set(outputPort.argNum);
+  }
+
+  // Use MSFTModuleOp's `removePorts` method to remove the ports. It returns a
+  // mapping of the new output port to old output port indices to assist in
+  // updating the instantiations later on.
+  auto newToOldResult =
+      mod.removePorts(inputPortsToRemove, outputPortsToRemove);
+
+  // Update the instantiations.
+  auto setPassthroughsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
+                                        SmallVectorImpl<Value> &newOperands) {
+    // Re-map the passthrough values around the instance.
+    for (auto idxPair : outputToInputIdx) {
+      size_t outputPortNum = idxPair.first;
+      assert(outputPortNum <= oldInst.getNumResults());
+      size_t inputPortNum = idxPair.second;
+      assert(inputPortNum <= oldInst.getNumOperands());
+      oldInst.getResult(outputPortNum)
+          .replaceAllUsesWith(oldInst.getOperand(inputPortNum));
+    }
+    // Use a sort-merge-join approach to figure out the operand mapping on the
+    // fly.
+    for (size_t operNum = 0, e = oldInst.getNumOperands(); operNum < e;
+         ++operNum)
+      if (!inputPortsToRemove.test(operNum))
+        newOperands.push_back(oldInst.getOperand(operNum));
+  };
+  updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
+}
+
+/// Sink all the instance connections which are loops.
+void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
+  auto instantiations = moduleInstantiations[mod];
+  // TODO: remove this limitation. This would involve looking at the common
+  // loopbacks for all the instances.
+  if (instantiations.size() != 1)
+    return;
+  InstanceOp inst = instantiations[0];
+
+  // Find all the "loopback" connections in the instantiation. Populate
+  // 'inputToOutputLoopback' with a mapping of input port to output port which
+  // drives it. Populate 'resultsToErase' with output ports which only drive
+  // input ports.
+  DenseMap<unsigned, unsigned> inputToOutputLoopback;
+  llvm::BitVector resultsToErase(inst.getNumResults());
+  for (unsigned resNum = 0, e = inst.getNumResults(); resNum < e; ++resNum) {
+    bool allLoops = true;
+    for (auto &use : inst.getResult(resNum).getUses()) {
+      if (use.getOwner() != inst.getOperation())
+        allLoops = false;
+      else
+        inputToOutputLoopback[use.getOperandNumber()] = resNum;
+    }
+    if (allLoops)
+      resultsToErase.set(resNum);
+  }
+
+  // Add internal connections to replace the instantiation's loop back
+  // connections.
+  Block *body = mod.getBodyBlock();
+  Operation *terminator = body->getTerminator();
+  llvm::BitVector argsToErase(body->getNumArguments());
+  for (auto resOper : inputToOutputLoopback) {
+    body->getArgument(resOper.first)
+        .replaceAllUsesWith(terminator->getOperand(resOper.second));
+    argsToErase.set(resOper.first);
+  }
+
+  // Remove the ports.
+  SmallVector<unsigned> newToOldResultMap =
+      mod.removePorts(argsToErase, resultsToErase);
+  // and update the instantiations.
+  auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
+                         SmallVectorImpl<Value> &newOperands) {
+    // Use sort-merge-join to compute the new operands;
+    for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
+         ++argNum)
+      if (!argsToErase.test(argNum))
+        newOperands.push_back(oldInst.getOperand(argNum));
+  };
+  updateInstances(mod, newToOldResultMap, getOperands);
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createWireCleanupPass() {
+  return std::make_unique<WireCleanupPass>();
 }
 } // namespace msft
 } // namespace circt

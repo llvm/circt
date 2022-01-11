@@ -38,3 +38,12 @@ module {
     return %ctrl: none  
   }
 }
+
+// -----
+
+// Test multiple use values
+handshake.func @test_mu(%arg0: i32, %arg1 : i1, %arg2: none) -> (i32, i32, none) {
+  // expected-error @+1 {{'handshake.cond_br' op result 1 has multiple uses.}}
+  %true, %false = cond_br %arg1, %arg0 : i32
+  return %true, %arg0, %arg2 : i32, i32, none
+}

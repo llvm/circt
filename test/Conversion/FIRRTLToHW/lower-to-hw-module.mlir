@@ -13,12 +13,13 @@ firrtl.circuit "Simple" {
    // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
    // CHECK-SAME: (%in: i1) -> (out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
-   firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
-      attributes {defname = "name_thing",
-                  parameters = {DEFAULT = 0 : i64,
-                                DEPTH = 3.242000e+01 : f64,
-                                FORMAT = "xyz_timeout=%d\0A",
-                                WIDTH = 32 : i8}}
+   firrtl.extmodule @MyParameterizedExtModule
+     <DEFAULT: i64 = 0,
+      DEPTH: f64 = 3.242000e+01,
+      FORMAT: none = "xyz_timeout=%d\0A",
+      WIDTH: i8 = 32>
+    (in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
+    attributes {defname = "name_thing"}
 
    // CHECK-LABEL: hw.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (out4: i4)
    firrtl.module @Simple(in %in1: !firrtl.uint<4>,

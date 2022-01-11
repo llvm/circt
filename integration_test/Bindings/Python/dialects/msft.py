@@ -43,8 +43,12 @@ with ir.Context() as ctx, ir.Location.unknown():
     path = op.create("inst1")
     minst = msft_mod.create("minst")
 
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>
-  physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
+  # CHECK: #msft.physloc<M20K, 2, 6, 1, "foo_subpath">
+  physAttr = msft.PhysLocationAttr.get(msft.M20K,
+                                       x=2,
+                                       y=6,
+                                       num=1,
+                                       sub_path="foo_subpath")
   print(physAttr)
 
   # CHECK: #msft.physloc<FF, 0, 0, 0>
@@ -85,7 +89,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   place_rc = db.add_placement(physAttr, path, "foo_subpath", resolved_inst)
   assert not place_rc
-  # ERR: error: 'msft.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by msft.instance @ext1 @MyExternMod
+  # ERR: error: 'msft.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1, "foo_subpath">. Position already occupied by msft.instance @ext1 @MyExternMod
 
   devdb = msft.PrimitiveDB()
   assert not devdb.is_valid_location(physAttr)
@@ -124,13 +128,13 @@ with ir.Context() as ctx, ir.Location.unknown():
   print("=== Placements:")
   seeded_pdb.walk_placements(print_placement)
   # CHECK-LABEL: === Placements:
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
+  # CHECK: #msft.physloc<M20K, 2, 6, 1, "foo_subpath">, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2):")
   seeded_pdb.walk_placements(print_placement, bounds=(2, 2, None, None))
   # CHECK-LABEL: === Placements (col 2):
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
+  # CHECK: #msft.physloc<M20K, 2, 6, 1, "foo_subpath">, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2, row > 10):")
