@@ -191,10 +191,10 @@ firrtl.circuit "GCTInterfacePrefix"
 // CHECK: firrtl.circuit "T_NLATop"
 firrtl.circuit "NLATop" {
 
-  firrtl.nla @nla [#hw.innerNameRef<@NLATop::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@Zebra>]
-  firrtl.nla @nla_1 [#hw.innerNameRef<@NLATop::@test>,#hw.innerNameRef<@Aardvark::@test_1>, #hw.innerNameRef<@Zebra::@Zebra>]
-  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@T_NLATop::@test>, #hw.innerNameRef<@T_Aardvark::@test>, #hw.innerNameRef<@T_A_Z_Zebra::@Zebra>]
-  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@T_NLATop::@test>, #hw.innerNameRef<@T_Aardvark::@test_1>, #hw.innerNameRef<@T_A_Z_Zebra::@Zebra>]
+  firrtl.nla @nla [#hw.innerNameRef<@NLATop::@test>, #hw.innerNameRef<@Aardvark::@test>, @Zebra]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@NLATop::@test>,#hw.innerNameRef<@Aardvark::@test_1>, @Zebra]
+  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@T_NLATop::@test>, #hw.innerNameRef<@T_Aardvark::@test>, @T_A_Z_Zebra]
+  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@T_NLATop::@test>, #hw.innerNameRef<@T_Aardvark::@test_1>, @T_A_Z_Zebra]
   // CHECK: firrtl.module @T_NLATop
   firrtl.module @NLATop()
     attributes {annotations = [{

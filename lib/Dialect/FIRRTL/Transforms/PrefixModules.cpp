@@ -179,8 +179,14 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
                         StringAttr::get(context, newTarget), oldMod.getName()));
                   else
                     newMods.push_back(oldMod);
-                } else
-                  newMods.push_back(oldMod);
+                } else {
+                  if (instanceOp.moduleNameAttr() ==
+                      nameRef.cast<FlatSymbolRefAttr>())
+                    newMods.push_back(
+                        FlatSymbolRefAttr::get(context, newTarget));
+                  else
+                    newMods.push_back(nameRef);
+                }
               }
               nlaOp->setAttr("namepath", ArrayAttr::get(context, newMods));
             }

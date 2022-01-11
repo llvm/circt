@@ -57,7 +57,7 @@ firrtl.circuit "Test" {
     firrtl.connect %result3, %nonconstWire : !firrtl.uint<1>, !firrtl.uint<1>
 
     // Constant propagation through instance.
-    %source, %dest = firrtl.instance "" @PassThrough(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>)
+    %source, %dest = firrtl.instance "" sym @dm21 @PassThrough(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>)
 
     // CHECK: firrtl.connect %inst_source, %c0_ui1
     firrtl.connect %source, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -200,9 +200,9 @@ firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module @testDontTouch
   firrtl.module @testDontTouch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>, out %a1: !firrtl.uint<1>, out %a2: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %blockProp1_clock, %blockProp1_a, %blockProp1_b = firrtl.instance blockProp1 @blockProp1(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
-    %allowProp_clock, %allowProp_a, %allowProp_b = firrtl.instance allowProp @allowProp(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
-    %blockProp3_clock, %blockProp3_a, %blockProp3_b = firrtl.instance blockProp3 @blockProp3(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %blockProp1_clock, %blockProp1_a, %blockProp1_b = firrtl.instance blockProp1 sym @a1 @blockProp1(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %allowProp_clock, %allowProp_a, %allowProp_b = firrtl.instance allowProp sym @a2 @allowProp(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
+    %blockProp3_clock, %blockProp3_a, %blockProp3_b = firrtl.instance blockProp3  sym @a3 @blockProp3(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     firrtl.connect %blockProp1_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %allowProp_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %blockProp3_clock, %clock : !firrtl.clock, !firrtl.clock
@@ -238,8 +238,8 @@ firrtl.circuit "OutPortTop" {
     }
   // CHECK-LABEL: firrtl.module @OutPortTop
     firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %zc: !firrtl.uint<1>, out %zn: !firrtl.uint<1>) {
-      %c_out = firrtl.instance c @OutPortChild1(out out: !firrtl.uint<1>)
-      %c_out_0 = firrtl.instance c @OutPortChild2(out out: !firrtl.uint<1>)
+      %c_out = firrtl.instance c  sym @a2 @OutPortChild1(out out: !firrtl.uint<1>)
+      %c_out_0 = firrtl.instance c  sym @a1 @OutPortChild2(out out: !firrtl.uint<1>)
       // CHECK: %0 = firrtl.and %x, %c_out
       %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
       // CHECK: %c0_ui1_1 = firrtl.constant 0 

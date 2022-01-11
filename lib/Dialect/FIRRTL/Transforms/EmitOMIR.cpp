@@ -335,7 +335,7 @@ void EmitOMIRPass::runOnOperation() {
 
   removeTempNLAs.clear();
   // Remove the temp symbol from instances.
-  for (auto op : tempSymInstances)
+  for (auto *op : tempSymInstances)
     cast<InstanceOp>(op)->removeAttr("inner_sym");
   tempSymInstances.clear();
 
