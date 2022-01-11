@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -135,17 +136,20 @@ static FlatSymbolRefAttr
 buildNLA(CircuitOp circuit, size_t nlaSuffix,
          SmallVectorImpl<std::tuple<std::string, StringRef, StringRef>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
-  SmallVector<Attribute> mods;
+  MLIRContext *ctxt = circuit.getContext();
   SmallVector<Attribute> insts;
   for (auto &nla : nlas) {
-    mods.push_back(
-        FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(nla)));
-    insts.push_back(StringAttr::get(circuit.getContext(), std::get<2>(nla)));
+    if (std::get<1>(nla) == std::get<2>(nla))
+      insts.push_back(FlatSymbolRefAttr::get(ctxt, std::get<1>(nla)));
+    else
+      insts.push_back(hw::InnerRefAttr::get(
+          StringAttr::get(ctxt, std::get<1>(nla)) /*module name*/,
+          StringAttr::get(ctxt, std::get<2>(nla)) /*symbol name*/));
+    // Assumption: Symbol name = Operation name.
   }
-  auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
-  auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
+  auto instAttr = ArrayAttr::get(ctxt, insts);
   auto nla = b.create<NonLocalAnchor>(
-      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), modAttr, instAttr);
+      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), instAttr);
   return FlatSymbolRefAttr::get(nla);
 }
 
@@ -324,11 +328,18 @@ static std::string addNLATargets(
   }
 
   for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
-    NamedAttrList pathmetadata;
+    NamedAttrList pathmetadata, dontTouch;
     pathmetadata.append("circt.nonlocal", nlaSym);
     pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
+    dontTouch.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
     mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
         DictionaryAttr::get(context, pathmetadata));
+    // Every op with nonlocal anchor must have a symbol. Hence add the
+    // dontTouch.
+    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
+        DictionaryAttr::get(context, dontTouch));
   }
 
   // Annotations on the element instance.
@@ -1374,8 +1385,10 @@ bool circt::firrtl::scatterCustomAnnotations(
             pathmetadata.append("circt.nonlocal", nlaSym);
             pathmetadata.append("class",
                                 StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+            StringRef tgt = std::get<0>(NLATargets[i]);
+            newAnnotations[tgt].push_back(
                 DictionaryAttr::get(context, pathmetadata));
+            addDontTouch(tgt);
           }
 
           // Port Annotations generation.
@@ -1492,6 +1505,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           buildNLA(circuit, ++nlaNumber, NLATargets);
           foo.append("circt.nonlocal",
                      FlatSymbolRefAttr::get(context, *canonTarget));
+          addDontTouch(leafTarget);
         }
         newAnnotations[leafTarget].push_back(DictionaryAttr::get(context, foo));
 
@@ -1501,8 +1515,10 @@ bool circt::firrtl::scatterCustomAnnotations(
                               FlatSymbolRefAttr::get(context, *canonTarget));
           pathmetadata.append("class",
                               StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(NLATargets[i])].push_back(
+          StringRef tgt = std::get<0>(NLATargets[i]);
+          newAnnotations[tgt].push_back(
               DictionaryAttr::get(context, pathmetadata));
+          addDontTouch(tgt);
         }
       }
       continue;
@@ -1657,8 +1673,9 @@ bool circt::firrtl::scatterCustomAnnotations(
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
             fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-            newAnnotations[std::get<0>(NLATargets[i])].push_back(
-                DictionaryAttr::get(context, fields));
+            StringRef tgt = std::get<0>(NLATargets[i]);
+            newAnnotations[tgt].push_back(DictionaryAttr::get(context, fields));
+            addDontTouch(tgt);
           }
         }
 
@@ -1761,6 +1778,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           buildNLA(circuit, ++nlaNumber, nlaTargets);
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
+          addDontTouch(leafTarget.first);
         }
         newAnnotations[leafTarget.first].push_back(
             DictionaryAttr::get(context, fields));
@@ -1773,6 +1791,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           fields.append("class", StringAttr::get(context, "circt.nonlocal"));
           newAnnotations[std::get<0>(nlaTargets[i])].push_back(
               DictionaryAttr::get(context, fields));
+          addDontTouch(std::get<0>(nlaTargets[i]));
         }
       }
     }

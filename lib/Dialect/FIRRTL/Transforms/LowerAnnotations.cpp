@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringExtras.h"
@@ -410,19 +411,16 @@ static Optional<TokenAnnoTarget> tokenizePath(StringRef origTarget) {
 /// the module and name list in the anchor.
 static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState state) {
   OpBuilder b(state.circuit.getBodyRegion());
-  SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
   for (auto inst : target.instances) {
-    mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
-    insts.push_back(StringAttr::get(state.circuit.getContext(), inst.name()));
+    insts.push_back(hw::InnerRefAttr::get(
+        inst->getParentOfType<FModuleOp>().getNameAttr(), inst.nameAttr()));
   }
-  mods.push_back(FlatSymbolRefAttr::get(target.ref.getModule()));
-  insts.push_back(
-      StringAttr::get(state.circuit.getContext(), getName(target.ref.op)));
-  auto modAttr = ArrayAttr::get(state.circuit.getContext(), mods);
+  insts.push_back(hw::InnerRefAttr::get(
+      target.ref.getModule().getNameAttr(),
+      StringAttr::get(state.circuit.getContext(), getName(target.ref.op))));
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", modAttr,
-                                      instAttr);
+  auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
   return FlatSymbolRefAttr::get(nla);
 }

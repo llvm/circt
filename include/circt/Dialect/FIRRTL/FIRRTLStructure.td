@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
 
 def CircuitOp : FIRRTLOp<"circuit",
@@ -142,8 +143,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     annotations to anchor to in the global scope.  This lets components of the
     path point to a common entity.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name,
-                       FlatSymbolRefArrayAttr:$modpath, StrArrayAttr:$namepath);
+  let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
   let results = (outs);
-  let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
+  let assemblyFormat = [{ $sym_name $namepath attr-dict}];
 }
