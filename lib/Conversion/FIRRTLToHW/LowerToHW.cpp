@@ -1423,6 +1423,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
+  LogicalResult visitStmt(ProbeOp op);
 
 private:
   /// The module we're lowering into.
@@ -3695,6 +3696,24 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
             },
             [&]() { builder.create<sv::AliasOp>(inoutValues); });
       });
+
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(ProbeOp op) {
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    operands.push_back(getLoweredValue(operand));
+    if (!operands.back()) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      operands.back() = getOrCreateIntConstant(1, 0);
+    }
+  }
+
+  builder.create<hw::ProbeOp>(op.inner_sym(), operands);
 
   return success();
 }

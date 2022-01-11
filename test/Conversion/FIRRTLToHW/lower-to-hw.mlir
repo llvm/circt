@@ -581,6 +581,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>) {
+    // CHECK: hw.probe @baz, %io_cpu_flush, %io_cpu_flush : i1, i1
+    firrtl.probe @baz, %io_cpu_flush, %io_cpu_flush  : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module @foo

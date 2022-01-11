@@ -154,10 +154,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, PartialConnectOp, ForceOp, PrintFOp,
-                       SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStmt(opNode, args...);
-            })
+                       SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
+                       ProbeOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStmt(opNode, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -191,6 +191,8 @@ public:
   HANDLE(AssertOp);
   HANDLE(AssumeOp);
   HANDLE(CoverOp);
+  HANDLE(ProbeOp);
+
 #undef HANDLE
 };
 

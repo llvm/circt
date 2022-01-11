@@ -211,6 +211,6 @@ def ProbeOp : FIRRTLOp<"probe"> {
   let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym `(` $operands `)` attr-dict `:` type($operands)";
+  let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` type($operands))?";
 }
 
