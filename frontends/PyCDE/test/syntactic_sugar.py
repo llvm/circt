@@ -70,12 +70,12 @@ top.print()
 # CHECK:  %1 = hw.array_create %c45_i8, %c42_i8 : i8
 # CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 
-# CHECK:  hw.module @Taps() -> (taps: !hw.array<3xi8>)
+# CHECK:  hw.module @Taps()
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
 # CHECK:    %c100_i8 = hw.constant 100 : i8
 # CHECK:    %c23_i8 = hw.constant 23 : i8
 # CHECK:    [[REG0:%.+]] = hw.array_create %c23_i8, %c100_i8, %c-53_i8 : i8
-# CHECK:    hw.output [[REG0]] : !hw.array<3xi8>
+# CHECK:    hw.output
 
 sys = System([ComplexPorts])
 sys.generate()

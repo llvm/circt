@@ -140,13 +140,13 @@ poly.print()
 # CHECK: hw.module @PolynomialSystem
 # CHECK: %[[EXAMPLE_Y:.+]] = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
 # CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
-# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %[[EXAMPLE_Y]]: i32) -> (y: i32)
+# CHECK: hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %[[EXAMPLE_Y]]: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42
 # CHECK: hw.constant 6
-# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5(%x: i32) -> (y: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5(%x: i32)
 # CHECK: hw.constant 1
 # CHECK: hw.constant 2
 # CHECK: hw.constant 3
