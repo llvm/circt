@@ -220,46 +220,6 @@ InnerRefAttr InnerRefAttr::getFromOperation(mlir::Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// InnerFieldRefAttr
-//===----------------------------------------------------------------------===//
-
-Attribute InnerFieldRefAttr::parse(AsmParser &p, Type type) {
-  SymbolRefAttr attr;
-  unsigned fieldID = 0;
-  if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) ||
-      p.parseComma() || p.parseInteger(fieldID) || p.parseGreater())
-    return Attribute();
-  if (attr.getNestedReferences().size() != 1)
-    return Attribute();
-  auto *context = p.getContext();
-  return InnerFieldRefAttr::get(context, attr.getRootReference(),
-                                attr.getLeafReference(), fieldID);
-}
-
-void InnerFieldRefAttr::print(AsmPrinter &p) const {
-  p << "<";
-  p.printSymbolName(getModule().getValue());
-  p << "::";
-  p.printSymbolName(getName().getValue());
-  p << ", " << getFieldID();
-  p << ">";
-}
-
-/// Get an InnerFieldRefAttr, and add the sym to the op if not already
-/// there. Also reponsibility of client to ensure the symName is unique.
-InnerFieldRefAttr InnerFieldRefAttr::getFromOperation(
-    mlir::Operation *op, mlir::StringAttr symName, mlir::StringAttr moduleName,
-    unsigned fieldID) {
-  char attrName[] = "inner_sym";
-  auto attr = op->getAttrOfType<StringAttr>(attrName);
-  if (!attr) {
-    attr = symName;
-    op->setAttr(attrName, attr);
-  }
-  return InnerFieldRefAttr::get(moduleName, attr, fieldID);
-}
-
-//===----------------------------------------------------------------------===//
 // GlobalRefAttr
 //===----------------------------------------------------------------------===//
 

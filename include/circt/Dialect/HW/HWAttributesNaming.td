@@ -29,30 +29,6 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   }];
 }
 
-def InnerFieldRefAttr : AttrDef<HWDialect, "InnerFieldRef"> {
-  let summary = "Refer to a name inside a module";
-  let description = [{
-    This represents an access path from the associated operation to the
-    subelement given by fieldID.
-  }];
-  let mnemonic = "innerFieldRef";
-  let parameters = (ins "::mlir::StringAttr":$module, "::mlir::StringAttr":$name,
-                        "unsigned":$fieldID);
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$module,
-                                        "::mlir::StringAttr":$name,
-                                        "unsigned":$fieldID),[{
-      return get(module.getContext(), module, name, fieldID);
-    }]>
-  ];
-  let extraClassDeclaration = [{
-    /// Get the InnerFieldRefAttr for an operation and add the sym on it.
-    static InnerFieldRefAttr getFromOperation(mlir::Operation *op,
-                  mlir::StringAttr symName, mlir::StringAttr moduleName,
-                  unsigned fieldID);
-  }];
-}
-
 def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
   let summary = "Refer to a non-local symbol";
   let description = [{

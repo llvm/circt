@@ -671,15 +671,6 @@ private:
   /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
   /// to that port.
   hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
-
-  /// Obtain an inner field reference to an operation, possibly adding an
-  /// `inner_sym` to that operation.
-  hw::InnerFieldRefAttr getInnerFieldRefTo(Operation *op, unsigned fieldID);
-
-  /// Obtain an inner field reference to an operation, possibly adding an
-  /// `inner_sym` to that port.
-  hw::InnerFieldRefAttr getInnerFieldRefTo(FModuleLike module, size_t portIdx,
-                                           unsigned fieldID);
 };
 
 } // namespace
@@ -791,19 +782,16 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 
         // Add the leaf value to the path.
         auto uloc = builder.getUnknownLoc();
+        Value pa = getSubelementFromFieldRef(fieldRef);
         path += '.';
-        if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
+        hw::InnerRefAttr attr;
+        if (auto blockArg = pa.dyn_cast<BlockArgument>()) {
           auto module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
-          path += getInnerRefTo(module, blockArg.getArgNumber());
-          if (fieldID)
-            path +=
-                getInnerFieldRefTo(module, blockArg.getArgNumber(), fieldID);
+          attr = getInnerRefTo(module, blockArg.getArgNumber());
         } else {
-          path += getInnerRefTo(leafValue.getDefiningOp());
-          if (fieldID)
-            path += getInnerFieldRefTo(leafValue.getDefiningOp(), fieldID);
+          attr = getInnerRefTo(pa.getDefiningOp());
         }
-
+        path += attr;
         // Assemble the verbatim op.
         builder.create<sv::VerbatimOp>(
             uloc,
@@ -1648,20 +1636,6 @@ hw::InnerRefAttr GrandCentralPass::getInnerRefTo(FModuleLike module,
                                                  size_t portIdx) {
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
                                getOrAddInnerSym(module, portIdx));
-}
-
-hw::InnerFieldRefAttr GrandCentralPass::getInnerFieldRefTo(Operation *op,
-                                                           unsigned fieldID) {
-  return hw::InnerFieldRefAttr::get(
-      SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
-      getOrAddInnerSym(op), fieldID);
-}
-
-hw::InnerFieldRefAttr GrandCentralPass::getInnerFieldRefTo(FModuleLike module,
-                                                           size_t portIdx,
-                                                           unsigned fieldID) {
-  return hw::InnerFieldRefAttr::get(SymbolTable::getSymbolName(module),
-                                    getOrAddInnerSym(module, portIdx), fieldID);
 }
 
 //===----------------------------------------------------------------------===//

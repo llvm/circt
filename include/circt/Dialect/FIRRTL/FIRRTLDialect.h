@@ -33,6 +33,9 @@ namespace firrtl {
 /// location.
 FieldRef getFieldRefFromValue(Value value);
 
+/// Construct and get the subelement which corresponds to fieldRef.
+Value getSubelementFromFieldRef(FieldRef fieldRef);
+
 /// Get a string identifier representing the FieldRef.
 std::string getFieldName(const FieldRef &fieldRef);
 std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);

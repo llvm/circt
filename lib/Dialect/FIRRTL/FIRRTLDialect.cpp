@@ -56,7 +56,39 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
   return {value, id};
 }
 
-/// Get the string name of a value which is a direct child of a declaration op.
+Value circt::firrtl::getSubelementFromFieldRef(FieldRef fieldRef) {
+  unsigned fieldID = fieldRef.getFieldID();
+  Value value = fieldRef.getValue();
+  FIRRTLType tpe = value.getType().cast<FIRRTLType>();
+  if (fieldID > tpe.getMaxFieldID())
+    return Value();
+
+  OpBuilder builder(value.getContext());
+  builder.setInsertionPointAfterValue(value);
+
+  while (fieldID) {
+    TypeSwitch<FIRRTLType>(tpe)
+        .template Case<FVectorType>([&](FVectorType vector) {
+          unsigned index = vector.getIndexForFieldID(fieldID);
+          tpe = vector.getSubTypeByFieldID(fieldID);
+          fieldID -= vector.getFieldID(index);
+          value = builder.create<SubindexOp>(value.getLoc(), value, index);
+        })
+        .template Case<BundleType>([&](BundleType bundle) {
+          unsigned index = bundle.getIndexForFieldID(fieldID);
+          tpe = bundle.getSubTypeByFieldID(fieldID);
+          fieldID -= bundle.getFieldID(index);
+          value = builder.create<SubfieldOp>(value.getLoc(), value, index);
+        })
+        .Default([&](auto op) {
+          llvm_unreachable("fieldID > maxFieldID case must be already handled");
+        });
+  }
+  return value;
+}
+
+/// Get the string name of a value which is a direct child of a declaration
+/// op.
 static void getDeclName(Value value, SmallString<64> &string) {
   if (auto arg = value.dyn_cast<BlockArgument>()) {
     // Get the module ports and get the name.
