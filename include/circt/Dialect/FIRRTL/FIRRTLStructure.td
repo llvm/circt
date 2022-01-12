@@ -146,4 +146,26 @@ def NonLocalAnchor : FIRRTLOp<"nla",
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
   let results = (outs);
   let assemblyFormat = [{ $sym_name $namepath attr-dict}];
+  let extraClassDeclaration = [{
+    /// Drop the module from the namepath. If its a InnerNameRef, then drop
+    /// the Module-Instance pair, else drop the final module from the namepath.
+    /// Return true if any update is made.
+    bool dropModule(StringAttr moduleToDrop);
+
+    /// Inline the module in the namepath.
+    /// Update the symbol name for the inlined module instance, by prepending
+    /// the symbol name of the instance at which the inling was done.
+    /// Return true if any update is made.
+     bool inlineModule(StringAttr moduleToDrop);
+
+    /// Replace the oldMod module with newMod module in the namepath of the NLA.
+    /// Return true if any update is made.
+    bool updateModule(StringAttr oldMod, StringAttr newMod);
+
+    /// Truncate the namepath for this NLA, at atMod module.
+    /// If includeMod is false, drop atMod and beyond, else include it and drop
+    /// everything after it.
+    /// Return true if any update is made.
+    bool truncateAtModule(StringAttr atMod, bool includeMod = true);
+    }];
 }

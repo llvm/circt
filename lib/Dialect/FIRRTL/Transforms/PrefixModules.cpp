@@ -168,28 +168,9 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
               instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
             else {
               auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
-              // Iterate over the modules of the NonLocalAnchor op, and update
-              // it.
-              SmallVector<Attribute, 4> newMods;
-              for (auto nameRef : nlaOp.namepath()) {
-                // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-                if (auto oldMod = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-                  if (instanceOp.moduleNameAttr().getAttr() ==
-                      oldMod.getModule())
-                    newMods.push_back(hw::InnerRefAttr::get(
-                        StringAttr::get(context, newTarget), oldMod.getName()));
-                  else
-                    newMods.push_back(oldMod);
-                } else {
-                  if (instanceOp.moduleNameAttr() ==
-                      nameRef.cast<FlatSymbolRefAttr>())
-                    newMods.push_back(
-                        FlatSymbolRefAttr::get(context, newTarget));
-                  else
-                    newMods.push_back(nameRef);
-                }
-              }
-              nlaOp->setAttr("namepath", ArrayAttr::get(context, newMods));
+              StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
+              nlaOp.updateModule(oldModName,
+                                 StringAttr::get(context, newTarget));
             }
           }
       }
