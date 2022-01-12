@@ -1035,6 +1035,21 @@ void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
     argsToErase.set(resOper.first);
   }
 
+  // De-duplicate input signals.
+  DenseMap<Value, unsigned> valueToInput;
+  for (OpOperand &oper : inst->getOpOperands()) {
+    auto existingValue = valueToInput.find(oper.get());
+    if (existingValue != valueToInput.end()) {
+      unsigned operNum = oper.getOperandNumber();
+      unsigned duplicateInputNum = existingValue->second;
+      body->getArgument(operNum).replaceAllUsesWith(
+          body->getArgument(duplicateInputNum));
+      argsToErase.set(operNum);
+    } else {
+      valueToInput[oper.get()] = valueToInput.size();
+    }
+  }
+
   // Remove the ports.
   SmallVector<unsigned> newToOldResultMap =
       mod.removePorts(argsToErase, resultsToErase);
