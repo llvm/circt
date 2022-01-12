@@ -354,6 +354,52 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   return true;
 }
 
+/// This function create a new wire for the operand of probe op so that
+/// we can attach the name for the probed value.
+static void replaceSingleOperandOfProbeOpWithWire(Block &block,
+                                                  ProbeOp probeOp) {
+  if (probeOp.getNumOperands() != 1)
+    return;
+  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
+  auto operand = probeOp.getOperand(0);
+  // If we are probing WireOp, then skip.
+  if (isa_and_nonnull<WireOp>(operand.getDefiningOp()))
+    return;
+
+  // Find a block to create a placeholder wire.
+  Block *wireBlock = &block;
+
+  // TODO: Consider whether we should care about the procedural region case
+  //       because it is tedious to create a placeholder wire.
+  if (isProceduralRegion)
+    wireBlock = findParentInNonProceduralRegion(probeOp)->getBlock();
+
+  ImplicitLocOpBuilder builder(probeOp.getLoc(), probeOp.getContext());
+  builder.setInsertionPointAfterValue(operand);
+
+  // Read inout values implicitly.
+  if (operand.getType().isa<sv::InOutType>())
+    operand = builder.create<ReadInOutOp>(operand);
+
+  // Create a new wire to associate with ProbeOp.
+  // TODO: Add an useful name to wire.
+  // TODO: Don't create a new wire if the operand can define symbols.
+  builder.setInsertionPointToStart(wireBlock);
+  auto newWire = builder.create<WireOp>(operand.getType());
+
+  builder.setInsertionPoint(probeOp);
+  if (isProceduralRegion) {
+    // TODO: Remove `Force`.
+    builder.create<ForceOp>(newWire, operand);
+  } else
+    builder.create<AssignOp>(newWire, operand);
+
+  // TODO: Check replacing with newWire is semantically correct if an inout type
+  // value is probed.
+  probeOp.setOperand(0, newWire);
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
@@ -376,6 +422,11 @@ void ExportVerilog::prepareHWModule(Block &block,
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
+
+    if (auto probeOp = dyn_cast<ProbeOp>(op)) {
+      replaceSingleOperandOfProbeOpWithWire(block, probeOp);
+      continue;
+    }
 
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple

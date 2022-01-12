@@ -693,6 +693,16 @@ private:
 };
 } // end anonymous namespace
 
+// Return probed value's name generated in prepareForEmission.
+static StringRef getProbedSymOpName(ProbeOp probe) {
+  if (probe.getNumOperands() != 1)
+    return StringRef("");
+  auto wire = probe.getOperand(0).getDefiningOp();
+  assert(isa_and_nonnull<WireOp>(wire) &&
+         "must be converted into a wire in the prepass");
+  return getSymOpName(wire);
+}
+
 void EmitterBase::emitTextWithSubstitutions(
     StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
     ArrayAttr symAttrs, ModuleNameManager &names) {
@@ -710,7 +720,11 @@ void EmitterBase::emitTextWithSubstitutions(
       if (item.hasPort()) {
         return getPortVerilogName(itemOp, item.getPort());
       }
-      StringRef symOpName = getSymOpName(itemOp);
+      StringRef symOpName;
+      if (auto probe = dyn_cast<ProbeOp>(itemOp))
+        symOpName = getProbedSymOpName(probe);
+      else
+        symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
       itemOp->emitError("cannot get name for symbol ") << sym;
