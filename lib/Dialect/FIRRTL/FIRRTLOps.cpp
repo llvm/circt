@@ -3026,6 +3026,83 @@ static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// NonLocalAnchor helpers.
+//===----------------------------------------------------------------------===//
+
+bool NonLocalAnchor::dropModule(StringAttr moduleToDrop) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  for (auto nameRef : namepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == moduleToDrop) {
+        updateMade = true;
+        continue;
+      } else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop) {
+        updateMade = true;
+        break;
+      } else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    namepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool NonLocalAnchor::updateModule(StringAttr oldMod, StringAttr newMod) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  for (auto nameRef : namepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == oldMod) {
+        newPath.push_back(hw::InnerRefAttr::get(newMod, ref.getName()));
+        updateMade = true;
+      } else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == oldMod) {
+        newPath.push_back(FlatSymbolRefAttr::get(newMod));
+        updateMade = true;
+      } else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    namepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  for (auto nameRef : namepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == atMod) {
+        updateMade = true;
+        newPath.push_back(ref);
+        break;
+      } else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod) {
+        updateMade = true;
+        break;
+      } else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    namepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
