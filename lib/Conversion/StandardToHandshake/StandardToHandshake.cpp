@@ -825,8 +825,12 @@ BufferOp
 LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
                                           const std::set<Block *> &backedges,
                                           Backedge &loopPrimingInput) {
-  // Replace control_merge of the loopHeader with the loop mux.
+  // Fetch the control merge of the block; it is assumed that, at this point of
+  // lowering, no other form of control can be used for the loop header block
+  // than a control merge.
   auto cmerge = getControlMerge(loopHeader);
+  assert(fol.getBlockEntryControl(loopHeader) == cmerge->getResult(0) &&
+         "Expected control merge to be the control component of a loop header");
   auto loc = cmerge->getLoc();
 
   // sanity check: cmerge should have >1 input to actually be a loop
