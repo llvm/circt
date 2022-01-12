@@ -74,12 +74,11 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
             COMPONENT circt-cmake-exports)
   endif()
 
-  # FIXME: Figure out what from this directory actually needs be
-  # installed to allow out of tree users.  
-  # install(FILES #${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CIRCTConfig.cmake
-  #   ${CMAKE_CURRENT_SOURCE_DIR}/AddCIRCT.cmake
-  #   DESTINATION ${CIRCT_INSTALL_PACKAGE_DIR}
-  #   COMPONENT circt-cmake-exports)
+  install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CIRCTConfig.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/AddCIRCT.cmake
+    DESTINATION ${CIRCT_INSTALL_PACKAGE_DIR}
+    COMPONENT circt-cmake-exports)
 
   if(NOT LLVM_ENABLE_IDE)
     # Add a dummy target so this can be used with LLVM_DISTRIBUTION_COMPONENTS
