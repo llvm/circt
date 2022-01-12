@@ -172,9 +172,10 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
               // it.
               SmallVector<Attribute, 4> newMods;
               for (auto nameRef : nlaOp.namepath()) {
+                // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
                 if (auto oldMod = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-                  if (instanceOp.moduleName().equals(
-                          oldMod.getModule().getValue()))
+                  if (instanceOp.moduleNameAttr().getAttr() ==
+                      oldMod.getModule())
                     newMods.push_back(hw::InnerRefAttr::get(
                         StringAttr::get(context, newTarget), oldMod.getName()));
                   else
