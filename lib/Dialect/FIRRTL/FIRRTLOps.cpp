@@ -3035,16 +3035,44 @@ bool NonLocalAnchor::dropModule(StringAttr moduleToDrop) {
   for (auto nameRef : namepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-      if (ref.getModule() == moduleToDrop) {
+      if (ref.getModule() == moduleToDrop)
         updateMade = true;
-        continue;
+      else
+        newPath.push_back(ref);
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+        updateMade = true;
+      else
+        newPath.push_back(nameRef);
+    }
+  }
+  if (updateMade)
+    namepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool NonLocalAnchor::inlineModule(StringAttr moduleToDrop) {
+  SmallVector<Attribute, 4> newPath;
+  bool updateMade = false;
+  StringRef inlinedInstanceName = "";
+  for (auto nameRef : namepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == moduleToDrop) {
+        inlinedInstanceName = ref.getName().getValue();
+        updateMade = true;
+      } else if (!inlinedInstanceName.empty()) {
+        newPath.push_back(hw::InnerRefAttr::get(
+            getContext(), ref.getModule(),
+            StringAttr::get(getContext(), inlinedInstanceName + "_" +
+                                              ref.getName().getValue())));
+        inlinedInstanceName = "";
       } else
         newPath.push_back(ref);
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop) {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
         updateMade = true;
-        break;
-      } else
+      else
         newPath.push_back(nameRef);
     }
   }
@@ -3085,17 +3113,18 @@ bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
     if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
       if (ref.getModule() == atMod) {
         updateMade = true;
-        newPath.push_back(ref);
-        break;
+        if (includeMod)
+          newPath.push_back(ref);
       } else
         newPath.push_back(ref);
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod) {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod)
         updateMade = true;
-        break;
-      } else
+      else
         newPath.push_back(nameRef);
     }
+    if (updateMade)
+      break;
   }
   if (updateMade)
     namepathAttr(ArrayAttr::get(getContext(), newPath));
