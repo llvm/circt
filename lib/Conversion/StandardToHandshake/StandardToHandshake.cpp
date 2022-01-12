@@ -814,7 +814,7 @@ static std::vector<Value> getSortedInputs(ControlMergeOp cmerge, MuxOp mux) {
       if (i == j)
         continue;
       assert(sortedOperands[i] != sortedOperands[j] &&
-             "Cannot identical operand from two different blocks!");
+             "Cannot have an identical operand from two different blocks!");
     }
   }
 
