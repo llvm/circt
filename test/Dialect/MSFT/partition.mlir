@@ -11,7 +11,7 @@ hw.globalRef @ref2 [#hw.innerNameRef<@top::@b>, #hw.innerNameRef<@B::@c>, #hw.in
 msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
   msft.partition @part1, "dp"
 
-  %res1 = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2)
+  %res1, %_ = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2, i2)
 
   %c0 = hw.constant 0 : i2
   %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)

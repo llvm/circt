@@ -36,6 +36,19 @@ namespace msft {
 } // namespace msft
 } // namespace circt
 
+/// TODO: Migrate these to some sort of OpInterface shared with hw.
+static bool isAnyModule(Operation *module) {
+  return isa<MSFTModuleOp, MSFTModuleExternOp>(module) ||
+         hw::isAnyModule(module);
+}
+hw::ModulePortInfo getModulePortInfo(Operation *op) {
+  if (auto mod = dyn_cast<MSFTModuleOp>(op))
+    return mod.getPorts();
+  if (auto mod = dyn_cast<MSFTModuleExternOp>(op))
+    return mod.getPorts();
+  return hw::getModulePortInfo(op);
+}
+
 //===----------------------------------------------------------------------===//
 // Lower MSFT to HW.
 //===----------------------------------------------------------------------===//
@@ -281,6 +294,7 @@ protected:
   DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
   void populateSymbolCache(ModuleOp topMod);
+  LogicalResult verifyInstances(ModuleOp topMod);
 
   // Find all the modules and use the partial order of the instantiation DAG
   // to sort them. If we use this order when "bubbling" up operations, we
@@ -328,6 +342,7 @@ void PassCommon::updateInstances(
     for (size_t portNum = 0, e = newToOldResultMap.size(); portNum < e;
          ++portNum) {
       assert(portNum < newInst.getNumResults());
+      assert(newToOldResultMap[portNum] < inst.getNumResults());
       inst.getResult(newToOldResultMap[portNum])
           .replaceAllUsesWith(newInst.getResult(portNum));
     }
@@ -385,6 +400,20 @@ void PassCommon::populateSymbolCache(mlir::ModuleOp mod) {
   topLevelSyms.freeze();
 }
 
+LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
+  WalkResult r = mod.walk([&](InstanceOp inst) {
+    Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
+    if (!isAnyModule(modOp))
+      return WalkResult::interrupt();
+
+    hw::ModulePortInfo ports = getModulePortInfo(modOp);
+    return succeeded(inst.verifySignatureMatch(ports))
+               ? WalkResult::advance()
+               : WalkResult::interrupt();
+  });
+  return failure(r.wasInterrupted());
+}
+
 namespace {
 struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
   void runOnOperation() override;
@@ -406,6 +435,10 @@ private:
 void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   populateSymbolCache(outerMod);
+  if (failed(verifyInstances(outerMod))) {
+    signalPassFailure();
+    return;
+  }
 
   // Get a properly sorted list, then partition the mods in order.
   SmallVector<MSFTModuleOp, 64> sortedMods;
@@ -471,19 +504,6 @@ void PartitionPass::partition(MSFTModuleOp mod) {
       this->partition(part, usersIter->second);
     part.erase();
   }
-}
-
-/// TODO: Migrate these to some sort of OpInterface shared with hw.
-static bool isAnyModule(Operation *module) {
-  return isa<MSFTModuleOp, MSFTModuleExternOp>(module) ||
-         hw::isAnyModule(module);
-}
-hw::ModulePortInfo getModulePortInfo(Operation *op) {
-  if (auto mod = dyn_cast<MSFTModuleOp>(op))
-    return mod.getPorts();
-  if (auto mod = dyn_cast<MSFTModuleExternOp>(op))
-    return mod.getPorts();
-  return hw::getModulePortInfo(op);
 }
 
 /// Heuristics to get the entity name.
@@ -899,6 +919,11 @@ private:
 void WireCleanupPass::runOnOperation() {
   ModuleOp topMod = getOperation();
   populateSymbolCache(topMod);
+  if (failed(verifyInstances(topMod))) {
+    signalPassFailure();
+    return;
+  }
+
   SmallVector<MSFTModuleOp> sortedMods;
   getAndSortModules(topMod, sortedMods);
 

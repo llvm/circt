@@ -42,6 +42,8 @@ def InstanceOp : MSFTOp<"instance", [
     StringAttr instanceNameAttr() {
       return sym_nameAttr();
     }
+    /// Check that the operands and results match the module specified.
+    LogicalResult verifySignatureMatch(const circt::hw::ModulePortInfo&);
 
     // Update the results.
     InstanceOp getWithNewResults(MSFTModuleOp mod,

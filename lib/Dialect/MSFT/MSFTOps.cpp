@@ -60,6 +60,28 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
+LogicalResult
+InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
+  if (ports.inputs.size() != getNumOperands())
+    return emitOpError("wrong number of inputs (expected ")
+           << ports.inputs.size() << ")";
+  if (ports.outputs.size() != getNumResults())
+    return emitOpError("wrong number of outputs (expected ")
+           << ports.outputs.size() << ")";
+  for (auto port : ports.inputs)
+    if (getOperand(port.argNum).getType() != port.type)
+      return emitOpError("in input port ")
+             << port.name << ", expected type " << port.type << " got "
+             << getOperand(port.argNum).getType();
+  for (auto port : ports.outputs)
+    if (getResult(port.argNum).getType() != port.type)
+      return emitOpError("in output port ")
+             << port.name << ", expected type " << port.type << " got "
+             << getResult(port.argNum).getType();
+
+  return success();
+}
+
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
