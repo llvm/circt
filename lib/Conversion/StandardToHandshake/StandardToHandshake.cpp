@@ -853,7 +853,7 @@ LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
 
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
-  // which must be followed by the loop exit network.
+  // must be followed by the loop exit network.
   auto primingRegister =
       rewriter->create<BufferOp>(loc, rewriter->getI1Type(), /*size=*/1,
                                  loopPrimingInput, /*sequential=*/true);
