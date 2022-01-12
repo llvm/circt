@@ -475,6 +475,7 @@ hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
 hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   %false = hw.constant false
   hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
+  hw.probe @__ETC_SiFive_MulDiv_assert, %false, %reset, %clock: i1,i1,i1
   hw.output %false : i1
 }
 
