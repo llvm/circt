@@ -1526,7 +1526,7 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
-                         Namespace modNameSpace)
+                         Namespace &modNameSpace)
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
         builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
             UnknownLoc::get(getContext()), &blockToInsertInto)),
@@ -1619,7 +1619,7 @@ private:
   // Extra information maintained across a module.
   FIRModuleContext &moduleContext;
 
-  Namespace modNameSpace;
+  Namespace &modNameSpace;
 };
 
 } // end anonymous namespace
