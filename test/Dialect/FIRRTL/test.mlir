@@ -153,8 +153,8 @@ firrtl.module @LowerToBind() {
   firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
 }
 
-firrtl.nla @NLA1 [] []
-firrtl.nla @NLA2 [@InstanceLowerToBind] ["foo"]
+firrtl.nla @NLA1 []
+firrtl.nla @NLA2 [#hw.innerNameRef<@InstanceLowerToBind::@foo>]
 
 
 // CHECK-LABEL: @ProbeTest

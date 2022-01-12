@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -170,14 +171,25 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
               // Iterate over the modules of the NonLocalAnchor op, and update
               // it.
               SmallVector<Attribute, 4> newMods;
-              for (auto oldMod : nlaOp.modpath()) {
-                if (instanceOp.moduleNameAttr() ==
-                    oldMod.cast<FlatSymbolRefAttr>())
-                  newMods.push_back(FlatSymbolRefAttr::get(context, newTarget));
-                else
-                  newMods.push_back(oldMod.cast<FlatSymbolRefAttr>());
+              for (auto nameRef : nlaOp.namepath()) {
+                // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+                if (auto oldMod = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+                  if (instanceOp.moduleNameAttr().getAttr() ==
+                      oldMod.getModule())
+                    newMods.push_back(hw::InnerRefAttr::get(
+                        StringAttr::get(context, newTarget), oldMod.getName()));
+                  else
+                    newMods.push_back(oldMod);
+                } else {
+                  if (instanceOp.moduleNameAttr() ==
+                      nameRef.cast<FlatSymbolRefAttr>())
+                    newMods.push_back(
+                        FlatSymbolRefAttr::get(context, newTarget));
+                  else
+                    newMods.push_back(nameRef);
+                }
               }
-              nlaOp->setAttr("modpath", ArrayAttr::get(context, newMods));
+              nlaOp->setAttr("namepath", ArrayAttr::get(context, newMods));
             }
           }
       }
@@ -322,14 +334,15 @@ void PrefixModulesPass::runOnOperation() {
     // Now update all the NLAs that have the top level module symbol.
     for (auto &n : nlaMap) {
       auto nla = cast<NonLocalAnchor>(n.second);
-      auto oldMods = nla.modpath();
+      auto oldMods = nla.namepath();
       if (oldMods.empty())
         continue;
       SmallVector<Attribute, 4> newMods(oldMods.begin(), oldMods.end());
-      if (nla.modpath()[0].cast<FlatSymbolRefAttr>().getValue().equals(
-              mainModule.moduleName()))
-        newMods[0] = FlatSymbolRefAttr::get(context, newMainModuleName);
-      nla->setAttr("modpath", ArrayAttr::get(context, newMods));
+      auto iref = oldMods[0].cast<hw::InnerRefAttr>();
+      if (iref.getModule().getValue().equals(mainModule.moduleName()))
+        newMods[0] = hw::InnerRefAttr::get(
+            StringAttr::get(context, newMainModuleName), iref.getName());
+      nla->setAttr("namepath", ArrayAttr::get(context, newMods));
     }
   }
 

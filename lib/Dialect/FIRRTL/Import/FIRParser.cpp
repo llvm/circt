@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -3841,7 +3842,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
         sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
 
   context->loadDialect<CHIRRTLDialect>();
-  context->loadDialect<FIRRTLDialect>();
+  context->loadDialect<FIRRTLDialect, hw::HWDialect>();
 
   // This is the result module we are parsing into.
   OwningModuleRef module(ModuleOp::create(

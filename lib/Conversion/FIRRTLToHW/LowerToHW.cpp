@@ -949,14 +949,10 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     // new forced name (the bug-compatible behavior of the Chisel
     // implementation) or fixed to duplicate modules such that the naming can
     // be applied.
-    auto mod = nla.modpath()
-                   .getValue()
-                   .take_back(2)[0]
-                   .cast<FlatSymbolRefAttr>()
-                   .getAttr();
-    auto inst = nla.namepath().getValue().take_back(2)[0];
+    auto inst =
+        nla.namepath().getValue().take_back(2)[0].cast<hw::InnerRefAttr>();
     auto inserted = loweringState.instanceForceNames.insert(
-        {{mod, inst}, anno.getMember("name")});
+        {{inst.getModule(), inst.getName()}, anno.getMember("name")});
     if (!inserted.second &&
         (anno.getMember("name") != (inserted.first->second))) {
       auto diag = oldModule.emitError()
@@ -2737,10 +2733,11 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
-  if (auto forceName = circuitState.instanceForceNames.lookup(
-          {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
-           newInstance.getName()}))
-    newInstance->setAttr("hw.verilogName", forceName);
+  if (newInstance.inner_symAttr())
+    if (auto forceName = circuitState.instanceForceNames.lookup(
+            {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
+             newInstance.inner_symAttr()}))
+      newInstance->setAttr("hw.verilogName", forceName);
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.

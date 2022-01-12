@@ -202,13 +202,13 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
     OMReferenceTarget1 = {info = #loc, index = 1, id = "OMID:1", value = {omir.tracker, id = 0, type = "OMReferenceTarget"}}
   }}]
 }]} {
-  firrtl.nla @nla_0 [@NonLocalTrackers, @B, @A] ["b", "a", "A"]
+  firrtl.nla @nla_0 [#hw.innerNameRef<@NonLocalTrackers::@b>, #hw.innerNameRef<@B::@a>, @A]
   firrtl.module @A() attributes {annotations = [{circt.nonlocal = @nla_0, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {}
   firrtl.module @B() {
-    firrtl.instance a {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @A()
+    firrtl.instance a sym @a {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @A()
   }
   firrtl.module @NonLocalTrackers() {
-    firrtl.instance b {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @B()
+    firrtl.instance b sym @b {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @B()
   }
 }
 // CHECK-LABEL: firrtl.circuit "NonLocalTrackers"

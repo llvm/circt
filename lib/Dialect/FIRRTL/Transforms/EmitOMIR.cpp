@@ -125,7 +125,9 @@ private:
   SmallVector<NonLocalAnchor> removeTempNLAs;
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
   /// Lookup table of instances by name and parent module.
-  DenseMap<std::pair<Operation *, StringAttr>, InstanceOp> instancesByName;
+  DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
+  /// Record to remove any temporary symbols added to instances.
+  DenseSet<Operation *> tempSymInstances;
 };
 } // namespace
 
@@ -224,6 +226,17 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
+  // If an OMIR output filename has been specified as a pass parameter, override
+  // whatever the annotations have configured. If neither are specified we just
+  // bail.
+  if (!this->outputFilename.empty())
+    outputFilename = this->outputFilename;
+  if (!outputFilename) {
+    LLVM_DEBUG(llvm::dbgs() << "Not emitting OMIR because no annotation or "
+                               "pass parameter specified an output file\n");
+    markAllAnalysesPreserved();
+    return;
+  }
   // Establish some of the analyses we need throughout the pass.
   SymbolTable currentSymtbl(circuitOp);
   CircuitNamespace currentCircuitNamespace(circuitOp);
@@ -235,9 +248,18 @@ void EmitOMIRPass::runOnOperation() {
   // Traverse the IR and collect all tracker annotations that were previously
   // scattered into the circuit.
   circuitOp.walk([&](Operation *op) {
-    if (auto instOp = dyn_cast<InstanceOp>(op))
+    if (auto instOp = dyn_cast<InstanceOp>(op)) {
+      // This instance does not have a symbol, but we are adding one. Remove it
+      // after the pass.
+      if (!op->getAttrOfType<StringAttr>("inner_sym"))
+        tempSymInstances.insert(instOp);
+
       instancesByName.insert(
-          {{op->getParentOfType<FModuleOp>(), instOp.nameAttr()}, instOp});
+          {hw::InnerRefAttr::getFromOperation(
+               op, instOp.nameAttr(),
+               op->getParentOfType<FModuleOp>().getNameAttr()),
+           instOp});
+    }
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
         return false;
@@ -259,18 +281,6 @@ void EmitOMIRPass::runOnOperation() {
       return true;
     });
   });
-
-  // If an OMIR output filename has been specified as a pass parameter, override
-  // whatever the annotations have configured. If neither are specified we just
-  // bail.
-  if (!this->outputFilename.empty())
-    outputFilename = this->outputFilename;
-  if (!outputFilename) {
-    LLVM_DEBUG(llvm::dbgs() << "Not emitting OMIR because no annotation or "
-                               "pass parameter specified an output file\n");
-    markAllAnalysesPreserved();
-    return;
-  }
 
   // Build the output JSON.
   std::string jsonBuffer;
@@ -297,14 +307,13 @@ void EmitOMIRPass::runOnOperation() {
   for (auto nla : removeTempNLAs) {
     LLVM_DEBUG(llvm::dbgs() << "Removing " << nla << "\n");
     nlaSymNamesToDrop.insert(nla.sym_nameAttr());
-    for (auto modAndName :
-         llvm::zip(nla.modpath().getAsRange<FlatSymbolRefAttr>(),
-                   nla.namepath().getAsRange<StringAttr>())) {
-      Operation *mod = symtbl->lookup(std::get<0>(modAndName).getValue());
-      auto it = instancesByName.find({mod, std::get<1>(modAndName)});
-      if (it == instancesByName.end())
-        continue;
-      instsToModify.insert(it->second);
+    for (auto nameRef : nla.namepath()) {
+      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+        auto it = instancesByName.find(innerRef);
+        if (it == instancesByName.end())
+          continue;
+        instsToModify.insert(it->second);
+      }
     }
     nla->erase();
   }
@@ -325,6 +334,10 @@ void EmitOMIRPass::runOnOperation() {
   }
 
   removeTempNLAs.clear();
+  // Remove the temp symbol from instances.
+  for (auto *op : tempSymInstances)
+    cast<InstanceOp>(op)->removeAttr("inner_sym");
+  tempSymInstances.clear();
 
   // Emit the OMIR JSON as a verbatim op.
   auto builder = OpBuilder(circuitOp);
@@ -378,22 +391,22 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
 
   // Assemble the module and name path for the NLA. Also attach an NLA reference
   // annotation to each instance participating in the path.
-  SmallVector<Attribute> modpath, namepath;
+  SmallVector<Attribute> namepath;
   auto addToPath = [&](Operation *op, StringAttr name) {
     AnnotationSet annos(op);
     annos.addAnnotations(nlaAttr);
     annos.applyToOperation(op);
-    modpath.push_back(FlatSymbolRefAttr::get(op->getParentOfType<FModuleOp>()));
-    namepath.push_back(name);
+    namepath.push_back(hw::InnerRefAttr::getFromOperation(
+        op, name, op->getParentOfType<FModuleOp>().getNameAttr()));
   };
   for (InstanceOp inst : paths[0])
     addToPath(inst, inst.nameAttr());
   addToPath(tracker.op, opName);
 
   // Add the NLA to the tracker and mark it to be deleted later.
-  tracker.nla = builder.create<NonLocalAnchor>(
-      builder.getUnknownLoc(), builder.getStringAttr(nlaName),
-      builder.getArrayAttr(modpath), builder.getArrayAttr(namepath));
+  tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
+                                               builder.getStringAttr(nlaName),
+                                               builder.getArrayAttr(namepath));
   removeTempNLAs.push_back(tracker.nla);
 }
 
@@ -714,11 +727,13 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   if (tracker.nla) {
     bool notFirst = false;
     hw::InnerRefAttr instName;
-    for (auto modAndName : llvm::zip(tracker.nla.modpath().getValue(),
-                                     tracker.nla.namepath().getValue())) {
-      auto symAttr = std::get<0>(modAndName).cast<FlatSymbolRefAttr>();
-      auto nameAttr = std::get<1>(modAndName).cast<StringAttr>();
-      Operation *module = symtbl->lookup(symAttr.getValue());
+    for (auto nameRef : tracker.nla.namepath()) {
+      StringRef modName;
+      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
+        modName = innerRef.getModule().getValue();
+      else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
+        modName = ref.getValue();
+      Operation *module = symtbl->lookup(modName);
       assert(module);
       if (notFirst)
         target.push_back('/');
@@ -729,15 +744,18 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       }
       target.append(addSymbol(module));
 
-      // Find an instance with the given name in this module. Ensure it has a
-      // symbol that we can refer to.
-      auto instOp = instancesByName.lookup({module, nameAttr});
-      if (!instOp)
-        continue;
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Marking NLA-participating instance " << nameAttr
-                 << " in module " << symAttr << " as dont-touch\n");
-      instName = getInnerRefTo(instOp);
+      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+        auto nameAttr = innerRef.getName();
+        // Find an instance with the given name in this module. Ensure it has a
+        // symbol that we can refer to.
+        auto instOp = instancesByName.lookup(innerRef);
+        if (!instOp)
+          continue;
+        LLVM_DEBUG(llvm::dbgs()
+                   << "Marking NLA-participating instance " << nameAttr
+                   << " in module " << modName << " as dont-touch\n");
+        instName = getInnerRefTo(instOp);
+      }
     }
   } else {
     FModuleOp module = dyn_cast<FModuleOp>(tracker.op);
@@ -790,10 +808,12 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 }
 
 StringAttr EmitOMIRPass::getOrAddInnerSym(Operation *op) {
+  tempSymInstances.erase(op);
   auto attr = op->getAttrOfType<StringAttr>("inner_sym");
   if (attr)
     return attr;
   auto module = op->getParentOfType<FModuleOp>();
+  // TODO: Cache the module namespace.
   auto name = getModuleNamespace(module).newName("omir_sym");
   attr = StringAttr::get(op->getContext(), name);
   op->setAttr("inner_sym", attr);
