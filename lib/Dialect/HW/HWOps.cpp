@@ -115,6 +115,36 @@ bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
   return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
+/// Return the symbol (if any, else null) on the corresponding input port
+/// argument.
+StringAttr hw::getArgSym(Operation *op, unsigned i) {
+  assert(isAnyModuleOrInstance(op) &&
+         "Can only get module ports from an instance or module");
+  StringAttr sym = {};
+  auto argAttrs = op->getAttrOfType<ArrayAttr>(
+      mlir::function_like_impl::getArgDictAttrName());
+  if (argAttrs && (i < argAttrs.size()))
+    if (auto s = argAttrs[i].cast<DictionaryAttr>())
+      if (auto symRef = s.get("hw.exportPort"))
+        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+  return sym;
+}
+
+/// Return the symbol (if any, else null) on the corresponding output port
+/// argument.
+StringAttr hw::getResultSym(Operation *op, unsigned i) {
+  assert(isAnyModuleOrInstance(op) &&
+         "Can only get module ports from an instance or module");
+  StringAttr sym = {};
+  auto resAttrs = op->getAttrOfType<ArrayAttr>(
+      mlir::function_like_impl::getResultDictAttrName());
+  if (resAttrs && (i < resAttrs.size()))
+    if (auto s = resAttrs[i].cast<DictionaryAttr>())
+      if (auto symRef = s.get("hw.exportPort"))
+        sym = symRef.cast<FlatSymbolRefAttr>().getAttr();
+  return sym;
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -466,14 +496,15 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
     }
 
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
+    inputs.push_back(
+        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     outputs.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i});
+                       resultTypes[i], i, getResultSym(op, i)});
   }
   return ModulePortInfo(inputs, outputs);
 }
@@ -498,14 +529,15 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
     }
 
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    results.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
+    results.push_back(
+        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i});
+                       resultTypes[i], i, getResultSym(op, i)});
   }
   return results;
 }
@@ -514,7 +546,6 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
 PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   auto argTypes = getModuleType(op).getInputs();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
-
   bool isInOut = false;
   auto type = argTypes[idx];
 
@@ -524,7 +555,8 @@ PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
   }
 
   auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-  return {argNames[idx].cast<StringAttr>(), direction, type, idx};
+  return {argNames[idx].cast<StringAttr>(), direction, type, idx,
+          getArgSym(op, idx)};
 }
 
 /// Return the PortInfo for the specified output port.
@@ -533,7 +565,7 @@ PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
   auto resultTypes = getModuleType(op).getResults();
   assert(idx < resultNames.size() && "invalid result number");
   return {resultNames[idx].cast<StringAttr>(), PortDirection::OUTPUT,
-          resultTypes[idx], idx};
+          resultTypes[idx], idx, getResultSym(op, idx)};
 }
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {

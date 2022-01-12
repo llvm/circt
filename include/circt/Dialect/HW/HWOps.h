@@ -162,6 +162,14 @@ LogicalResult checkParameterInContext(Attribute value, Operation *module,
                                       Operation *usingOp,
                                       bool disallowParamRefs = false);
 
+/// Return the symbol (if exists, else null) on the corresponding input port
+/// argument.
+StringAttr getArgSym(Operation *op, unsigned i);
+
+/// Return the symbol (if any, else null) on the corresponding output port
+/// argument.
+StringAttr getResultSym(Operation *op, unsigned i);
+
 /// This stores lookup tables to make manipulating and working with the IR more
 /// efficient.  There are two phases to this object: the "building" phase in
 /// which it is "write only" and then the "using" phase which is read-only (and
