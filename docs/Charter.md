@@ -161,7 +161,7 @@ internal representation.
 
 [Calyx](https://capra.cs.cornell.edu/calyx) is a new intermediate language
 that combines a software-like control language with a hardware-like structural
-langauge. This intermediate level of representation allows Calyx to optimize
+language. This intermediate level of representation allows Calyx to optimize
 structural programs using control flow information.
 Calyx currently serves as the compilation target for [Dahlia](https://capra.cs.cornell.edu/dahlia)
 and several other domain-specific architectures (systolic array, number 
