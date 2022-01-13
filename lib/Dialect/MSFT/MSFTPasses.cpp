@@ -597,15 +597,19 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
         topLevelSyms.getDefinition(refSymbol));
     assert(globalRefOp && "symbol must reference a GlobalRefOp");
-    auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
+    auto oldPath = globalRefOp.namepath().getValue();
+    assert(!oldPath.empty());
+
+    // All nodes along the path point up to the global ref. Only proceed if we
+    // are at the leaf node.
+    auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
+    auto leafSym = oldPath.back().cast<hw::InnerRefAttr>().getName();
+    if (innerSym != leafSym)
+      return;
+    assert(oldPath.size() > 1);
 
     // Construct a new path starting from the old path.
-    SmallVector<Attribute> newPath(oldPath);
-
-    // If there aren't two elements in the path, this GlobalRefOp has already
-    // been updated.
-    if (newPath.size() < 2)
-      return;
+    SmallVector<Attribute> newPath(oldPath.begin(), oldPath.end());
 
     // Splice the last two elements in the path, using the combined name from
     // the op's attributes, and taking the module from the second to last
@@ -639,7 +643,15 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
     auto globalRefOp = dyn_cast_or_null<hw::GlobalRefOp>(
         topLevelSyms.getDefinition(refSymbol));
     assert(globalRefOp && "symbol must reference a GlobalRefOp");
-    auto oldPath = globalRefOp.namepath().getAsRange<hw::InnerRefAttr>();
+    auto oldPath = globalRefOp.namepath().getValue();
+    assert(!oldPath.empty());
+
+    // All nodes along the path point up to the global ref. Only proceed if we
+    // are at the leaf node.
+    auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
+    auto leafSym = oldPath.back().cast<hw::InnerRefAttr>().getName();
+    if (innerSym != leafSym)
+      continue;
 
     // Get the module containing the partition and the partition's name.
     auto partAttr = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
@@ -649,13 +661,9 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
     assert(partModName);
 
     // Construct a new path starting from the old path.
-    SmallVector<Attribute> newPath(oldPath);
+    SmallVector<Attribute> newPath(oldPath.begin(), oldPath.end());
     auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
-
-    // If the last element in the path is not pointing at the module
-    // containing the partition, this GlobalRefOp has already been updated.
-    if (lastElement.getModule() != partMod)
-      continue;
+    assert(lastElement.getModule() == partMod);
 
     // Split the last element in the path to add the partition.
     auto partRef = hw::InnerRefAttr::get(partMod, partName);
