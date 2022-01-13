@@ -340,4 +340,9 @@ def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createRemoveResetsPass()";
 }
 
+def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+  let summary = "Merge multiple connections into one connection";
+  let constructor = "circt::firrtl::createMergeConnectionsPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

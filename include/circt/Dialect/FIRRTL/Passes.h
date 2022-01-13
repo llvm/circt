@@ -73,6 +73,7 @@ std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 std::unique_ptr<mlir::Pass> createRemoveResetsPass();
 
+std::unique_ptr<mlir::Pass> createMergeConnectionsPass();
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

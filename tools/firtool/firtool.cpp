@@ -197,6 +197,11 @@ static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
                              cl::init(false));
 
+static cl::opt<bool> mergeConnections(
+    "merge-connections",
+    cl::desc("merge expanded connections in aggregate preservation"),
+    cl::init(true));
+
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -407,6 +412,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
+
+  if (preserveAggregate && mergeConnections)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createMergeConnectionsPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
