@@ -591,6 +591,9 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
   if (!globalRefs)
     return;
 
+  // GlobalRefs use the inner_sym attribute, so keep it up to date.
+  op->setAttr("inner_sym", StringAttr::get(op->getContext(), ::getOpName(op)));
+
   for (auto globalRef : globalRefs.getAsRange<hw::GlobalRefAttr>()) {
     // Resolve the GlobalRefOp and get its path.
     auto refSymbol = globalRef.getGlblSym();
@@ -600,11 +603,10 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     auto oldPath = globalRefOp.namepath().getValue();
     assert(!oldPath.empty());
 
-    // All nodes along the path point up to the global ref. Only proceed if we
-    // are at the leaf node.
-    auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
-    auto leafSym = oldPath.back().cast<hw::InnerRefAttr>().getName();
-    if (innerSym != leafSym)
+    // If the path already points to the target design partition, we are done.
+    auto leafModule = oldPath.back().cast<hw::InnerRefAttr>().getModule();
+    auto partAttr = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    if (partAttr.getRootReference() == leafModule)
       return;
     assert(oldPath.size() > 1);
 
@@ -614,15 +616,15 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     // Splice the last two elements in the path, using the combined name from
     // the op's attributes, and taking the module from the second to last
     // element.
-    newPath.pop_back_val().cast<hw::InnerRefAttr>();
+    auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
     auto nextElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
     auto newModule = nextElement.getModule();
-    auto newNameAttr = StringAttr::get(op->getContext(), ::getOpName(op));
+    auto lastName = lastElement.getName().getValue();
+    auto nextName = nextElement.getName().getValue();
+    auto newNameAttr =
+        StringAttr::get(op->getContext(), nextName + "." + lastName);
     auto newLeaf = hw::InnerRefAttr::get(newModule, newNameAttr);
     newPath.push_back(newLeaf);
-
-    // GlobalRefs use the inner_sym attribute, so keep it up to date.
-    op->setAttr("inner_sym", newNameAttr);
 
     // Update the path on the GlobalRefOp.
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
@@ -747,7 +749,8 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       Operation *newOp = b.insert(op->clone(map));
       for (Value res : newOp->getResults())
         newOperands.push_back(res);
-      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
+      auto newName = (oldInst.getName() + "." + ::getOpName(op)).str();
+      setEntityName(newOp, newName);
       bubbleUpGlobalRefs(newOp);
     }
   };
