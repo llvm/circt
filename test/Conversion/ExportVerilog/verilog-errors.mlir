@@ -23,3 +23,16 @@ hw.module @B() {
 
 // expected-error @+1 {{name "parameter" is not allowed in Verilog output}}
 hw.module.extern @parameter ()
+
+// -----
+hw.module @invalid_probe_verbatim(%a: i1) {
+  // expected-error @+2 {{must have exactly one operand to use in verbatim substitution}}
+  // expected-error @+1 {{cannot get name for symbol #hw.innerNameRef<@invalid_probe_verbatim::@probe>}}
+  hw.probe @probe, %a, %a : i1, i1
+}
+
+hw.module @invalid() -> (a: i1) {
+  %0 = sv.verbatim.expr "{{0}}" : () -> i1
+       {symbols = [#hw.innerNameRef<@invalid_probe_verbatim::@probe>]}
+  hw.output %0 : i1
+}

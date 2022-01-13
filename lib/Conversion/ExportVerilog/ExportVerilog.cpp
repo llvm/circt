@@ -693,10 +693,14 @@ private:
 };
 } // end anonymous namespace
 
-// Return probed value's name generated in prepareForEmission.
+// Return probed value's name associated with a wire generated in
+// prepareForEmission.
 static StringRef getProbedSymOpName(ProbeOp probe) {
-  if (probe.getNumOperands() != 1)
+  if (probe.getNumOperands() != 1) {
+    probe.emitError()
+        << "must have exactly one operand to use in verbatim substitution";
     return StringRef("");
+  }
   auto wire = probe.getOperand(0).getDefiningOp();
   assert(isa_and_nonnull<WireOp>(wire) &&
          "must be converted into a wire in the prepass");
