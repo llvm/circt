@@ -8,7 +8,7 @@ import typing
 
 from pycde.support import _obj_to_value
 
-from .pycde_types import types
+from .pycde_types import TypeAliasType, types
 from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
                       create_type_string, create_const_zero)
 from .value import Value
@@ -530,8 +530,11 @@ class _GeneratorPortAccess:
     if not isinstance(value, Value):
       value = _obj_to_value(value, output_port_type)
     if value.type != output_port_type:
-      raise ValueError("Types do not match. Output port type: "
-                       f" '{output_port_type}'. Value type: '{value.type}'")
+      if value.type == output_port_type.strip:
+        value = output_port_type.wrap(value)
+      else:
+        raise ValueError("Types do not match. Output port type: "
+                         f" '{output_port_type}'. Value type: '{value.type}'")
     self._output_values[name] = value
 
   def set_all_ports(self, port_values: dict[str, Value]):
