@@ -381,7 +381,7 @@ if (CIRCT_INCLUDE_DOCS)
   add_subdirectory(docs)
 endif()
 
-install(DIRECTORY include/circt
+install(DIRECTORY include/circt include/circt-c
   DESTINATION include
   COMPONENT circt-headers
   FILES_MATCHING
@@ -393,18 +393,7 @@ install(DIRECTORY include/circt
   PATTERN "LICENSE.TXT"
   )
 
-install(DIRECTORY include/circt-c
-  DESTINATION include
-  COMPONENT circt-headers
-  FILES_MATCHING
-  PATTERN "*.def"
-  PATTERN "*.h"
-  PATTERN "*.inc"
-  PATTERN "*.td"
-  PATTERN "LICENSE.TXT"
-  )
-
-install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt
+install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt ${CIRCT_INCLUDE_DIR}/circt-c
   DESTINATION include
   COMPONENT circt-headers
   FILES_MATCHING
