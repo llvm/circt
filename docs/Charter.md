@@ -78,7 +78,7 @@ points in the design process. These differences in usage often come down
 to a difference in component granularity. For instance early in the
 design process an abstraction may be used with large, coarse-grained
 components. After lowering, perhaps through other abstractions, the same
-abstraction may again appear with smaller, find-grained
+abstraction may again appear with smaller, fine-grained
 components.
 
 Below, we summarize the most important abstractions used in existing
