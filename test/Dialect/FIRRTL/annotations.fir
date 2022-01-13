@@ -1129,13 +1129,13 @@ circuit Top : %[[{
 ; CHECK-SAME: {annotations = ["foo", "bar"], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
 
 ; CHECK: %child_in, %child_out = firrtl.instance child
-; CHECK-SAME: {annotations = [{circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", class = "circt.nonlocal"}]}
+; CHECK-SAME: sym @child {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}
 
 ; CHECK: firrtl.extmodule @Child(
 ; CHECK-SAME:   in in: !firrtl.uint<123> sym @in,
 ; CHECK-SAME:   out out: !firrtl.uint<456> sym @out
 ; CHECK-SAME: )
 ; CHECK-SAME: attributes {annotations = [
-; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/child:Child", id = [[ID]] : i64},
-; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", id = [[ID]] : i64}
+; CHECK-SAME:   {circt.nonlocal = @nla_1, id = [[ID]] : i64},
+; CHECK-SAME:   {circt.nonlocal = @nla_2, id = [[ID]] : i64}
 ; CHECK-SAME: ]}
