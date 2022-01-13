@@ -1,3 +1,5 @@
+# Generate a list of CMake library targets so that other CMake projects can
+# link against them.
 set(CIRCT_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/circt)
 set(circt_cmake_builddir "${CMAKE_BINARY_DIR}/${CIRCT_INSTALL_PACKAGE_DIR}")
 
@@ -25,7 +27,10 @@ get_property(CIRCT_ANALYSIS_LIBS GLOBAL PROPERTY CIRCT_ANALYSIS_LIBS)
 set(CIRCT_CONFIG_CMAKE_DIR "${circt_cmake_builddir}")
 set(CIRCT_CONFIG_LLVM_CMAKE_DIR "${llvm_cmake_builddir}")
 set(CIRCT_CONFIG_MLIR_CMAKE_DIR "${mlir_cmake_builddir}")
-set(CIRCT_CONFIG_EXPORTS_FILE "${circt_cmake_builddir}/CIRCTTargets.cmake")
+set(CIRCT_CONFIG_LIBRARY_DIRS "${CIRCT_LIBRARY_DIR}")
+set(CIRCT_CONFIG_BINARY_DIR "${CIRCT_BINARY_DIR}")
+set(CIRCT_CONFIG_TOOLS_DIR "${CIRCT_TOOLS_DIR}")
+set(CIRCT_CONFIG_INCLUDE_EXPORTS "include(\"\${CIRCT_CMAKE_DIR}/CIRCTTargets.cmake\")")
 set(CIRCT_CONFIG_INCLUDE_DIRS
   "${CIRCT_SOURCE_DIR}/include"
   "${CIRCT_BINARY_DIR}/include"
@@ -36,12 +41,16 @@ configure_file(
   @ONLY)
 set(CIRCT_CONFIG_CMAKE_DIR)
 set(CIRCT_CONFIG_LLVM_CMAKE_DIR)
-set(CIRCT_CONFIG_EXPORTS_FILE)
+set(CIRCT_CONFIG_MLIR_CMAKE_DIR)
+set(CIRCT_CONFIG_LIBRARY_DIRS)
+set(CIRCT_CONFIG_BINARY_DIR)
+set(CIRCT_CONFIG_TOOLS_DIR)
+set(CIRCT_CONFIG_INCLUDE_EXPORTS)
 set(CIRCT_CONFIG_INCLUDE_DIRS)
 
 # Generate CIRCTConfig.cmake for the install tree.
 set(CIRCT_CONFIG_CODE "
-# Compute the installation prefix from this LLVMConfig.cmake file location.
+# Compute the installation prefix from this CIRCTConfig.cmake file location.
 get_filename_component(CIRCT_INSTALL_PREFIX \"\${CMAKE_CURRENT_LIST_FILE}\" PATH)")
 # Construct the proper number of get_filename_component(... PATH)
 # calls to compute the installation prefix.
@@ -52,7 +61,11 @@ get_filename_component(CIRCT_INSTALL_PREFIX \"\${CIRCT_INSTALL_PREFIX}\" PATH)")
 endforeach(p)
 set(CIRCT_CONFIG_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}/${CIRCT_INSTALL_PACKAGE_DIR}")
 set(CIRCT_CONFIG_LLVM_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}/${LLVM_INSTALL_PACKAGE_DIR}")
-set(CIRCT_CONFIG_EXPORTS_FILE "\${CIRCT_CMAKE_DIR}/CIRCTTargets.cmake")
+set(CIRCT_CONFIG_MLIR_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}/${MLIR_INSTALL_PACKAGE_DIR}")
+set(CIRCT_CONFIG_LIBRARY_DIRS "\${CIRCT_INSTALL_PREFIX}/lib")
+set(CIRCT_CONFIG_BINARY_DIR "\${CIRCT_INSTALL_PREFIX}")
+set(CIRCT_CONFIG_TOOLS_DIR "\${CIRCT_INSTALL_PREFIX}/bin")
+set(CIRCT_CONFIG_INCLUDE_EXPORTS "include(\"\${CIRCT_CMAKE_DIR}/CIRCTTargets.cmake\")")
 set(CIRCT_CONFIG_INCLUDE_DIRS
   "\${CIRCT_INSTALL_PREFIX}/include"
   )
@@ -62,7 +75,12 @@ configure_file(
     @ONLY)
 set(CIRCT_CONFIG_CODE)
 set(CIRCT_CONFIG_CMAKE_DIR)
-set(CIRCT_CONFIG_EXPORTS_FILE)
+set(CIRCT_CONFIG_LLVM_CMAKE_DIR)
+set(CIRCT_CONFIG_MLIR_CMAKE_DIR)
+set(CIRCT_CONFIG_LIBRARY_DIRS)
+set(CIRCT_CONFIG_BINARY_DIR)
+set(CIRCT_CONFIG_TOOLS_DIR)
+set(CIRCT_CONFIG_INCLUDE_EXPORTS)
 set(CIRCT_CONFIG_INCLUDE_DIRS)
 
 if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
