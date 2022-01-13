@@ -86,11 +86,8 @@ set(CIRCT_CONFIG_INCLUDE_DIRS)
 if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
   # Not TOOLCHAIN ONLY, so install the CIRCT parts as well
   # Include the cmake files so other tools can use circt-tblgen, etc.
-  get_property(circt_has_exports GLOBAL PROPERTY CIRCT_HAS_EXPORTS)
-  if(circt_has_exports)
-    install(EXPORT CIRCTTargets DESTINATION ${CIRCT_INSTALL_PACKAGE_DIR}
-            COMPONENT circt-cmake-exports)
-  endif()
+  install(EXPORT CIRCTTargets DESTINATION ${CIRCT_INSTALL_PACKAGE_DIR}
+          COMPONENT circt-cmake-exports)
 
   install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CIRCTConfig.cmake
