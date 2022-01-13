@@ -572,7 +572,8 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 /// buffer is required to be inserted for breaking the cycle, which will be
 /// supported in the next patch.
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
-                                   ConversionPatternRewriter &rewriter) {
+                                   ConversionPatternRewriter &rewriter,
+                                   bool setFlattenAttr) {
   llvm::SmallVector<PortInfo, 8> ports;
 
   // Add all inputs of funcOp.
@@ -632,6 +633,15 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   // Create a FIRRTL module and inline the funcOp into the FIRRTL module.
   auto topModuleOp = rewriter.create<FModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
+
+  if (setFlattenAttr) {
+    topModuleOp->setAttr(
+        "annotations",
+        rewriter.getArrayAttr(rewriter.getDictionaryAttr(
+            llvm::SmallVector<NamedAttribute>{rewriter.getNamedAttr(
+                "class", rewriter.getStringAttr(
+                             "firrtl.transforms.FlattenAnnotation"))})));
+  }
 
   rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.body(),
                               topModuleOp.body().end());
@@ -2818,14 +2828,17 @@ static std::string getInstanceName(Operation *op) {
 /// Please refer to test_addi.mlir test case.
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
-  HandshakeFuncOpLowering(MLIRContext *context, CircuitOp circuitOp)
-      : OpConversionPattern<handshake::FuncOp>(context), circuitOp(circuitOp) {}
+  HandshakeFuncOpLowering(MLIRContext *context, CircuitOp circuitOp,
+                          bool enableFlattening)
+      : OpConversionPattern<handshake::FuncOp>(context), circuitOp(circuitOp),
+        setFlattenAttr(enableFlattening) {}
 
   LogicalResult
   matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPointToStart(circuitOp.getBody());
-    auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
+    auto topModuleOp =
+        createTopModuleOp(funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
 
     NameUniquer instanceUniquer = [&](Operation *op) {
       std::string instName = getInstanceName(op);
@@ -2893,6 +2906,10 @@ private:
   /// Top level FIRRTL circuit operation, which we'll emit into. Marked as
   /// mutable due to circuitOp.getBody() being non-const.
   mutable CircuitOp circuitOp;
+
+  /// If true, the top-level module will have the FIRRTL inlining attribute set.
+  /// All module instances will be recursively inlined into the top module.
+  bool setFlattenAttr;
 };
 
 namespace {
@@ -2937,7 +2954,8 @@ public:
     // equivalents are available.
     for (auto funcName : llvm::reverse(sortedFuncs)) {
       RewritePatternSet patterns(op.getContext());
-      patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
+      patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp,
+                                               enableFlattening);
       auto funcOp = op.lookupSymbol(funcName);
       assert(funcOp && "Symbol not found in module!");
       if (failed(applyPartialConversion(funcOp, target, std::move(patterns)))) {
