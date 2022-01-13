@@ -769,7 +769,7 @@ static StringRef getProbedSymOpName(ProbeOp probe) {
         << "must have exactly one operand to use in verbatim substitution";
     return StringRef("");
   }
-  auto* wire = probe.getOperand(0).getDefiningOp();
+  auto *wire = probe.getOperand(0).getDefiningOp();
   assert(isa_and_nonnull<WireOp>(wire) &&
          "must be converted into a wire in the prepass");
   return getSymOpName(wire);
@@ -940,8 +940,6 @@ void EmitterBase::emitComment(StringAttr comment) {
     }
   }
 }
-
-
 
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
