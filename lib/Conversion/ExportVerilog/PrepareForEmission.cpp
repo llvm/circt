@@ -383,10 +383,10 @@ static void replaceSingleOperandOfProbeOpWithWire(Block &block,
     operand = builder.create<ReadInOutOp>(operand);
 
   // Create a new wire to associate with ProbeOp.
-  // TODO: Add an useful name to wire.
   // TODO: Don't create a new wire if the operand can define symbols.
   builder.setInsertionPointToStart(wireBlock);
-  auto newWire = builder.create<WireOp>(operand.getType());
+  auto newWire = builder.create<WireOp>(
+      operand.getType(), inferStructuralNameForTemporary(operand));
 
   builder.setInsertionPoint(probeOp);
   if (isProceduralRegion) {

@@ -1138,45 +1138,45 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
 }
 
 // CHECK-LABEL: module SubstProbeInVerbatim1
-hw.module @SubstProbeInVerbatim1(%a: i1) -> (b: i1) {
-  // CHECK:      wire       [[PROBE_ADD:.+]];
+hw.module @SubstProbeInVerbatim1(%a: i4, %b: i1) -> (c: i1) {
+  // CHECK:      wire [1:0] [[PROBE_EXTRACT:_a_2to1]];
   // CHECK-NEXT: wire       [[PROBE_READ:.+]];
   // CHECK-NEXT: wire       [[PROBE_REG:.+]];
   // CHECK-NEXT: wire [0:0] [[WIRE:.+]];
   // CHECK-NEXT: reg  [0:0] [[REG:.+]];
 
-  // CHECK:      localparam _T_2 = 1'h0;
-  // CHECK-NEXT: assign [[PROBE_READ]] = wire_2[_T_2];
-  // CHECK-NEXT: assign [[PROBE_ADD]] = a + wire_2[_T_2];
+  // CHECK:      localparam _T_1 = 1'h0;
+  // CHECK-NEXT: assign [[PROBE_READ]] = [[WIRE]][_T_1];
+  // CHECK-NEXT: assign [[PROBE_EXTRACT]] = a[2:1];
   // CHECK-NEXT: initial begin
-  // CHECK-NEXT:   force [[PROBE_REG]] = [[REG]][_T_2];
+  // CHECK-NEXT:   force [[PROBE_REG]] = [[REG]][_T_1];
   %wire = sv.wire  : !hw.inout<array<1xi1>>
   %false = hw.constant false
   %0 = sv.array_index_inout %wire[%false] : !hw.inout<array<1xi1>>, i1
   %1 = sv.read_inout %0 : !hw.inout<i1>
-  hw.probe @read_wire, %1 : i1
-  %2 = comb.add %a, %1 : i1
-  hw.probe @read_add, %2 : i1
+  hw.probe @wire_sub, %1 : i1
+  %2 = comb.extract %a from 1 : (i4) -> i2
+  hw.probe @extract, %2 : i2
   %3 = sv.reg  : !hw.inout<array<1xi1>>
   sv.initial  {
     %4 = sv.array_index_inout %3[%false] : !hw.inout<array<1xi1>>, i1
-    hw.probe @read_reg_subfield, %4 : !hw.inout<i1>
+    hw.probe @reg_sub, %4 : !hw.inout<i1>
   }
-  sv.assign %0, %a : i1
+  sv.assign %0, %b : i1
   hw.output %1 : i1
 }
 
 // CHECK-LABEL: module SubstProbeInVerbatim2
 hw.module @SubstProbeInVerbatim2() -> (a: i1, b: i1, c: i1) {
   // CHECK:  assign a = SubstProbeInVerbatim1.[[PROBE_READ]];
-  // CHECK:  assign b = SubstProbeInVerbatim1.[[PROBE_ADD]];
+  // CHECK:  assign b = SubstProbeInVerbatim1.[[PROBE_EXTRACT]];
   // CHECK:  assign c = SubstProbeInVerbatim1.[[PROBE_REG]];
   %0 = sv.verbatim.expr "{{0}}.{{1}}" : () -> i1
-       {symbols = [@SubstProbeInVerbatim1, #hw.innerNameRef<@SubstProbeInVerbatim1::@read_wire>]}
+       {symbols = [@SubstProbeInVerbatim1, #hw.innerNameRef<@SubstProbeInVerbatim1::@wire_sub>]}
   %1 = sv.verbatim.expr "{{0}}.{{1}}" : () -> i1
-       {symbols = [@SubstProbeInVerbatim1, #hw.innerNameRef<@SubstProbeInVerbatim1::@read_add>]}
+       {symbols = [@SubstProbeInVerbatim1, #hw.innerNameRef<@SubstProbeInVerbatim1::@extract>]}
   %2 = sv.verbatim.expr "{{0}}.{{1}}" : () -> i1
-       {symbols = [@SubstProbeInVerbatim1, #hw.innerNameRef<@SubstProbeInVerbatim1::@read_reg_subfield>]}
+       {symbols = [@SubstProbeInVerbatim1, #hw.innerNameRef<@SubstProbeInVerbatim1::@reg_sub>]}
   hw.output %0, %1, %2 : i1, i1, i1
 }
 
