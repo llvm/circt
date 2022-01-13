@@ -272,6 +272,11 @@ static ParseResult parseMergeOp(OpAsmParser &parser, OperationState &result) {
 
 void printMergeOp(OpAsmPrinter &p, MergeOp op) { sost::printOp(p, op, false); }
 
+void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                          MLIRContext *context) {
+  results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
+}
+
 /// Returns a dematerialized version of the value 'v', defined as the source of
 /// the value before passing through a buffer or fork operation.
 static Value getDematerialized(Value v) {
