@@ -3482,7 +3482,8 @@ ParseResult FIRCircuitParser::importSubCircuit(
         builder.clone(op);
       }
     } else {
-      emitError(loc, "Expected module to contain a circuit op: ") << circuitOp << "\n";
+      emitError(loc, "Expected module to contain a circuit op: ")
+          << circuitOp << "\n";
     }
   }
   return success();
