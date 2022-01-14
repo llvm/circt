@@ -1,4 +1,4 @@
-//===- InferReadWrite.cpp - Infer Read Write Memory -------*- C++ -*-===//
+//===- InferReadWrite.cpp - Infer Read Write Memory -----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,7 +19,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/Support/Debug.h"
-#include <set>
 
 #define DEBUG_TYPE "firrtl-infer-read-write"
 
