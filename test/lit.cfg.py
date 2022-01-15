@@ -70,6 +70,10 @@ if config.verilator_path != "":
 if config.esi_capnp != "":
   config.available_features.add('capnp')
 
+# Enable tests for schedulers relying on an external solver from OR-Tools.
+if config.scheduling_or_tools != "":
+  config.available_features.add('or-tools')
+
 # Add llhd-sim if it is built.
 if config.llhd_sim_enabled:
   config.available_features.add('llhd-sim')

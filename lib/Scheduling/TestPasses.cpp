@@ -498,6 +498,55 @@ void TestSimplexSchedulerPass::runOnFunction() {
 }
 
 //===----------------------------------------------------------------------===//
+// LPScheduler
+//===----------------------------------------------------------------------===//
+
+#ifdef SCHEDULING_OR_TOOLS
+
+namespace {
+struct TestLPSchedulerPass
+    : public PassWrapper<TestLPSchedulerPass, FunctionPass> {
+  TestLPSchedulerPass() = default;
+  TestLPSchedulerPass(const TestLPSchedulerPass &) {}
+  Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
+  void runOnFunction() override;
+  StringRef getArgument() const override { return "test-lp-scheduler"; }
+  StringRef getDescription() const override {
+    return "Emit an LP scheduler's solution as attributes";
+  }
+};
+} // anonymous namespace
+
+void TestLPSchedulerPass::runOnFunction() {
+  auto func = getFunction();
+  Operation *lastOp = func.getBlocks().front().getTerminator();
+  OpBuilder builder(func.getContext());
+
+  if (problemToTest == "Problem") {
+    auto prob = Problem::get(func);
+    constructProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleLP(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    emitSchedule(prob, "lpStartTime", builder);
+    return;
+  }
+
+  llvm_unreachable("Unsupported scheduling problem");
+}
+
+#endif // SCHEDULING_OR_TOOLS
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -525,6 +574,11 @@ void registerSchedulingTestPasses() {
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSimplexSchedulerPass>();
   });
+#ifdef SCHEDULING_OR_TOOLS
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestLPSchedulerPass>();
+  });
+#endif
 }
 } // namespace test
 } // namespace circt

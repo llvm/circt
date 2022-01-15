@@ -50,6 +50,11 @@ LogicalResult scheduleSimplex(SharedOperatorsProblem &prob, Operation *lastOp);
 /// that do not include at least one edge with a non-zero distance.
 LogicalResult scheduleSimplex(ModuloProblem &prob, Operation *lastOp);
 
+/// Solve the basic problem using linear programming and an external LP solver.
+/// The objective is to minimize the start time of the given \p lastOp. Fails if
+/// the dependence graph contains cycles.
+LogicalResult scheduleLP(Problem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 
