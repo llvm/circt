@@ -211,7 +211,7 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
                      [&](auto) { return ">>"; })
                  .Case<arith::ShLIOp>([&](auto) { return "<<"; })
                  .Case<arith::CmpIOp>([&](arith::CmpIOp op) {
-                   switch (op.predicate()) {
+                   switch (op.getPredicate()) {
                    case arith::CmpIPredicate::eq:
                      return "==";
                    case arith::CmpIPredicate::ne:

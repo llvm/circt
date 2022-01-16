@@ -24,38 +24,12 @@ using namespace msft;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-// We implement the OpAsmDialectInterface so that MSFT dialect operations
-// automatically interpret the name attribute on operations as their SSA name.
-struct MSFTOpAsmDialectInterface : public OpAsmDialectInterface {
-  using OpAsmDialectInterface::OpAsmDialectInterface;
-
-  /// Get a special name to use when printing the entry block arguments of the
-  /// region contained by an operation in this dialect.
-  void getAsmBlockArgumentNames(Block *block,
-                                OpAsmSetValueNameFn setNameFn) const override {
-    // Assign port names to the bbargs if this is a module.
-    auto modOp = dyn_cast<MSFTModuleOp>(block->getParentOp());
-    if (!modOp)
-      return;
-    ArrayAttr argNames = modOp.argNamesAttr();
-    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      auto name = argNames[i].cast<StringAttr>().getValue();
-      if (!name.empty())
-        setNameFn(block->getArgument(i), name);
-    }
-  }
-};
-} // end anonymous namespace
-
 void MSFTDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/MSFT/MSFT.cpp.inc"
       >();
   registerAttributes();
-  addInterfaces<MSFTOpAsmDialectInterface>();
 }
 
 /// Registered hook to materialize a single constant operation from a given

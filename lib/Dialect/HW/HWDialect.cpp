@@ -41,21 +41,6 @@ struct HWOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {}
-
-  /// Get a special name to use when printing the entry block arguments of the
-  /// region contained by an operation in this dialect.
-  void getAsmBlockArgumentNames(Block *block,
-                                OpAsmSetValueNameFn setNameFn) const override {
-    // Assign port names to the bbargs if this is a module.
-    auto *parentOp = block->getParentOp();
-    if (isAnyModule(parentOp)) {
-      for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-        auto name = getModuleArgumentName(parentOp, i);
-        if (!name.empty())
-          setNameFn(block->getArgument(i), name);
-      }
-    }
-  }
 };
 } // end anonymous namespace
 

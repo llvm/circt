@@ -193,7 +193,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     for (auto i : top->getAttrs())
       old.push_back(i);
     old.emplace_back(
-        StringAttr::get(attrBase, ctx),
+        StringAttr::get(ctx, attrBase),
         hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
     top->setAttrs(old);
   }
@@ -201,7 +201,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);

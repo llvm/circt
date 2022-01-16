@@ -1081,7 +1081,7 @@ scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(ctx, ".");
   FileLineColLoc fileLineColLocCache;
 
   // Convert location from a string to a location attribute.
@@ -1150,7 +1150,7 @@ scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
 
   // Generate an arbitrary identifier to use for caching when using
   // `maybeStringToLocation`.
-  StringAttr locatorFilenameCache = StringAttr::get(".", ctx);
+  StringAttr locatorFilenameCache = StringAttr::get(ctx, ".");
   FileLineColLoc fileLineColLocCache;
 
   // Convert the location from a string to a location attribute.

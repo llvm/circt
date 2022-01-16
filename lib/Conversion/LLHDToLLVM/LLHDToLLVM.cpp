@@ -2516,7 +2516,7 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
     auto aggregate = rewriter
                          .create<LLVM::ConstantOp>(op->getLoc(), type,
                                                    IntegerAttr::get(type, 0))
-                         .res();
+                         .getRes();
 
     for (unsigned i = 0; i < numOperands; i++) {
       nextInsertion -=
@@ -2530,7 +2530,7 @@ struct CombConcatOpConversion : public ConvertToLLVMPattern {
                                                   nextInsValue);
       aggregate =
           rewriter.create<LLVM::OrOp>(op->getLoc(), type, aggregate, shifted)
-              .res();
+              .getRes();
     }
 
     rewriter.replaceOp(op, aggregate);

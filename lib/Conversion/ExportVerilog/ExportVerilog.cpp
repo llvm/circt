@@ -4150,7 +4150,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         }
       }
 
-      auto destFile = StringAttr::get(outputPath, op->getContext());
+      auto destFile = StringAttr::get(op->getContext(), outputPath);
       auto &file = files[destFile];
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;

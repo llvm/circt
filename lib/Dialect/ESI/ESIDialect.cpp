@@ -64,7 +64,7 @@ static void findValidReady(Operation *modOp,
   size_t nameLen = name.size();
   if (trimName && name.endswith("_data")) { // Detect both `foo` and `foo_data`.
     nameLen -= 5;
-    name.set_size(nameLen);
+    name.resize(nameLen);
   }
 
   // Look for a 'valid' port.
@@ -79,7 +79,7 @@ static void findValidReady(Operation *modOp,
   }
 
   // Try to find a corresponding 'ready' port.
-  name.set_size(nameLen);
+  name.resize(nameLen);
   name.append("_ready");
   hw::PortDirection readyDir = dataPort.direction == hw::PortDirection::INPUT
                                    ? hw::PortDirection::OUTPUT

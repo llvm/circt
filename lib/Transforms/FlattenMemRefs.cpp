@@ -162,8 +162,8 @@ struct CondBranchOpConversion : public OpConversionPattern<mlir::CondBranchOp> {
   matchAndRewrite(mlir::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<mlir::CondBranchOp>(
-        op, adaptor.condition(), adaptor.trueDestOperands(),
-        adaptor.falseDestOperands(), op.trueDest(), op.falseDest());
+        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
+        adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };
@@ -174,8 +174,8 @@ struct BranchOpConversion : public OpConversionPattern<mlir::BranchOp> {
   LogicalResult
   matchAndRewrite(mlir::BranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::BranchOp>(op, op.dest(),
-                                                adaptor.destOperands());
+    rewriter.replaceOpWithNewOp<mlir::BranchOp>(op, op.getDest(),
+                                                adaptor.getDestOperands());
     return success();
   }
 };
@@ -196,7 +196,7 @@ struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
     auto newCallOp = rewriter.replaceOpWithNewOp<mlir::CallOp>(
-        op, adaptor.callee(), convResTypes, adaptor.getOperands());
+        op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
 
     if (!rewriteFunctions)
       return success();
@@ -310,7 +310,7 @@ public:
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
                  CallOpConversion>(typeConverter, ctx);
-    populateFuncOpTypeConversionPattern(patterns, typeConverter);
+    populateFunctionLikeTypeConversionPattern<FuncOp>(patterns, typeConverter);
 
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);

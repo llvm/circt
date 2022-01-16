@@ -63,7 +63,8 @@ def ComponentOp : CalyxOp<"component", [
     FunctionLike,
     IsolatedFromAbove,
     SingleBlock,
-    NoTerminator
+    NoTerminator,
+    OpAsmOpInterface
   ]> {
   let summary = "Calyx Component";
   let description = [{
@@ -137,6 +138,8 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Gets the Go port of a Calyx component.
       Value getGoPort();
+      void getAsmBlockArgumentNames(mlir::Region &region,
+                                    mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
   let verifier = "return ::verify$cppClass(*this);";

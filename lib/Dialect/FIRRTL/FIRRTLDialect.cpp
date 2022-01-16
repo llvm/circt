@@ -239,27 +239,8 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       setNameFn(invalid.getResult(), name);
     }
   }
-
-  /// Get a special name to use when printing the entry block arguments of the
-  /// region contained by an operation in this dialect.
-  void getAsmBlockArgumentNames(Block *block,
-                                OpAsmSetValueNameFn setNameFn) const override {
-    // Check to see if the operation containing the arguments has 'firrtl.name'
-    // attributes for them.  If so, use that as the name.
-    auto *parentOp = block->getParentOp();
-    auto argAttr = parentOp->getAttrOfType<ArrayAttr>("portNames");
-
-    // Do not crash on invalid IR.
-    if (!argAttr || argAttr.size() != block->getNumArguments())
-      return;
-
-    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      auto str = argAttr[i].cast<StringAttr>().getValue();
-      if (!str.empty())
-        setNameFn(block->getArgument(i), str);
-    }
-  }
 };
+
 } // end anonymous namespace
 
 void FIRRTLDialect::initialize() {
