@@ -14,7 +14,7 @@
 // Constraint definitions
 //===----------------------------------------------------------------------===//
 
-class SigIndexBitWidthConstraint<string index, string input>
+class SigPtrIndexBitWidthConstraint<string index, string input>
   : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
                    input, index,
                    [{
@@ -23,11 +23,16 @@ class SigIndexBitWidthConstraint<string index, string input>
                    }]>;
 
 class SigArrayElementTypeConstraint<string result, string input>
-  : TypesMatchWith<"must be a signal of the arrays element type",
+  : TypesMatchWith<"result must be a signal of the array element type",
                    input, result,
                    "llhd::SigType::get(llhd::getLLHDElementType($_self))">;
 
-class SameSigArrayElementTypeConstraint<string result, string input>
+class PtrArrayElementTypeConstraint<string result, string input>
+  : TypesMatchWith<"result must be a pointer of the array element type",
+                   input, result,
+                   "llhd::PtrType::get(llhd::getLLHDElementType($_self))">;
+
+class SameSigPtrArrayElementTypeConstraint<string result, string input>
   : PredOpTrait<"arrays element type must match",
                 CPred<"llhd::getLLHDElementType($" # result # ".getType()) == "
                       # "llhd::getLLHDElementType($" # input # ".getType())">>;
@@ -45,7 +50,7 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
     [NoSideEffect,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-     SigIndexBitWidthConstraint<"lowBit", "input">]> {
+     SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
 
   let summary = "Extract a range of bits from an integer signal";
   let description = [{
@@ -72,7 +77,7 @@ def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
 def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
     [NoSideEffect,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-     SigIndexBitWidthConstraint<"lowBit", "input">]> {
+     SigPtrIndexBitWidthConstraint<"lowBit", "input">]> {
 
   let summary = "Extract a range of bits from an integer pointer";
   let description = [{
@@ -103,8 +108,8 @@ def LLHD_PtrExtractOp : LLHD_Op<"ptr.extract",
 def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
     [NoSideEffect,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-     SameSigArrayElementTypeConstraint<"result", "input">,
-     SigIndexBitWidthConstraint<"lowIndex", "input">]> {
+     SameSigPtrArrayElementTypeConstraint<"result", "input">,
+     SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
 
   let summary = "Get a range of consecutive values from a signal of an array";
   let description = [{
@@ -122,7 +127,7 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
     Example:
 
     ```mlir
-    %3 = llhd.sig.array_slice %input at %lowIndex : 
+    %3 = llhd.sig.array_slice %input at %lowIndex :
       (!llhd.sig<!hw.array<4xi8>>) -> !llhd.sig<!hw.array<2xi8>>
     ```
   }];
@@ -154,8 +159,8 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
 def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
     [NoSideEffect,
      SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-     SameSigArrayElementTypeConstraint<"result", "input">,
-     SigIndexBitWidthConstraint<"lowIndex", "input">]> {
+     SameSigPtrArrayElementTypeConstraint<"result", "input">,
+     SigPtrIndexBitWidthConstraint<"lowIndex", "input">]> {
 
   let summary = "Get a range of consecutive values from a pointer to an array";
   let description = [{
@@ -204,7 +209,7 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
 
 def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
     [NoSideEffect,
-     SigIndexBitWidthConstraint<"index", "input">,
+     SigPtrIndexBitWidthConstraint<"index", "input">,
      SigArrayElementTypeConstraint<"result", "input">]> {
 
   let summary = "Extract an element from a signal of an array.";
@@ -237,8 +242,8 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
 
 def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
     [NoSideEffect,
-     SigIndexBitWidthConstraint<"index", "input">,
-     SigArrayElementTypeConstraint<"result", "input">]> {
+     SigPtrIndexBitWidthConstraint<"index", "input">,
+     PtrArrayElementTypeConstraint<"result", "input">]> {
 
   let summary = "Extract an element from a pointer to an array.";
   let description = [{
@@ -277,7 +282,7 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
   let summary = "Extract a field from a signal of a struct.";
   let description = [{
     The `llhd.sig.struct_extract` operation allows access to the field of the
-    `$input` operand given by its name via the `$field` attribute. 
+    `$input` operand given by its name via the `$field` attribute.
     A new subsignal aliasing the field will be returned.
 
     Example:
