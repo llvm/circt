@@ -71,7 +71,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           }
         // End of loop for getting MemOp port users.
       }
-      if (!sameDrive(rClock, wClock))
+      if (!sameDriver(rClock, wClock))
         continue;
 
       rClock = wClock;
@@ -136,6 +136,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto wAddr = builder.create<WireOp>(addr.getType(), "writeAddr");
       auto wEnWire = builder.create<WireOp>(enb.getType(), "writeEnable");
       auto rEnWire = builder.create<WireOp>(enb.getType(), "readEnable");
+      auto writeClock = builder.create<WireOp>(ClockType::get(enb.getContext()));
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
       builder.create<ConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
@@ -168,7 +169,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             else
               repl = llvm::StringSwitch<Value>(fName)
                          .Case("en", wEnWire)
-                         .Case("clk", builder.create<WireOp>(sf.getType()))
+                         .Case("clk", writeClock)
                          .Case("addr", wAddr)
                          .Case("data", writeData)
                          .Case("mask", mask);
