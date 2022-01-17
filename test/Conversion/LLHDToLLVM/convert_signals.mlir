@@ -109,37 +109,14 @@ llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
   llhd.drv %sArr, %cArr after %t : !llhd.sig<!hw.array<3xi5>>
 }
 
-// CHECK-LABEL:   llvm.func @convert_drv_enable(
-// CHECK-SAME:                                  %[[VAL_0:.*]]: !llvm.ptr<i8>,
-// CHECK-SAME:                                  %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
-// CHECK-SAME:                                  %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
-// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:           %[[VAL_4:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_3]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
-// CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:           %[[VAL_6:.*]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK:           %[[VAL_7:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_5]], 0] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<ptr<i8>>
-// CHECK:           %[[VAL_8:.*]] = llvm.load %[[VAL_7]] : !llvm.ptr<ptr<i8>>
-// CHECK:           %[[VAL_9:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_5]], 1] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_10:.*]] = llvm.load %[[VAL_9]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_11:.*]] = llvm.bitcast %[[VAL_8]] : !llvm.ptr<i8> to !llvm.ptr<i16>
-// CHECK:           %[[VAL_12:.*]] = llvm.load %[[VAL_11]] : !llvm.ptr<i16>
-// CHECK:           %[[VAL_13:.*]] = llvm.trunc %[[VAL_10]] : i64 to i16
-// CHECK:           %[[VAL_14:.*]] = llvm.lshr %[[VAL_12]], %[[VAL_13]]  : i16
-// CHECK:           %[[VAL_15:.*]] = llvm.trunc %[[VAL_14]] : i16 to i1
-// CHECK:           %[[VAL_16:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_17:.*]] = llvm.mlir.constant(1 : i64) : i64
+// CHECK-LABEL:   llvm.func @convert_drv_enable
+
 // CHECK:           %[[VAL_18:.*]] = llvm.mlir.constant(1 : i16) : i1
-// CHECK:           %[[VAL_19:.*]] = llvm.icmp "eq" %[[VAL_15]], %[[VAL_18]] : i1
+// CHECK:           %[[VAL_19:.*]] = llvm.icmp "eq" %{{.*}}, %[[VAL_18]] : i1
 // CHECK:           llvm.cond_br %[[VAL_19]], ^bb1, ^bb2
 // CHECK:         ^bb1:
-// CHECK:           %[[VAL_20:.*]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK:           %[[VAL_21:.*]] = llvm.alloca %[[VAL_20]] x i1 {alignment = 4 : i64} : (i32) -> !llvm.ptr<i1>
-// CHECK:           llvm.store %[[VAL_15]], %[[VAL_21]] : !llvm.ptr<i1>
-// CHECK:           %[[VAL_22:.*]] = llvm.bitcast %[[VAL_21]] : !llvm.ptr<i1> to !llvm.ptr<i8>
-// CHECK:           %[[VAL_23:.*]] = llvm.extractvalue %[[VAL_16]][0 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_24:.*]] = llvm.extractvalue %[[VAL_16]][1 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_16]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_4]], %[[VAL_22]], %[[VAL_17]], %[[VAL_23]], %[[VAL_24]], %[[VAL_25]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
+
+// CHECK:           llvm.call @driveSignal
 // CHECK:           llvm.br ^bb2
 // CHECK:         ^bb2:
 // CHECK:           llvm.return
