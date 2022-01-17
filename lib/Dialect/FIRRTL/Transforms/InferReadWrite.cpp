@@ -136,7 +136,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto wAddr = builder.create<WireOp>(addr.getType(), "writeAddr");
       auto wEnWire = builder.create<WireOp>(enb.getType(), "writeEnable");
       auto rEnWire = builder.create<WireOp>(enb.getType(), "readEnable");
-      auto writeClock = builder.create<WireOp>(ClockType::get(enb.getContext()));
+      auto writeClock =
+          builder.create<WireOp>(ClockType::get(enb.getContext()));
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
       builder.create<ConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
