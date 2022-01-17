@@ -187,7 +187,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
 private:
   // Get the source value which is connected to the dst.
   Value getConnectSrc(Value dst) {
-    for (auto c : dst.getUsers())
+    for (auto *c : dst.getUsers())
       if (auto connect = dyn_cast<ConnectOp>(c))
         if (connect.dest() == dst)
           return connect.src();
