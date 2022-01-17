@@ -50,8 +50,8 @@ firrtl.circuit "TLRAM" {
     }
 
 // Test the pattern of enable  with Mux (sel, high, 0)
-// CHECK-LABEL: firrtl.module @sram4t
-  firrtl.module @sram4t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_ren: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
+// CHECK-LABEL: firrtl.module @memTest4t
+  firrtl.module @memTest4t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_ren: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %mem__T_14, %mem__T_22 = firrtl.mem Undefined  {depth = 2048 : i64, name = "mem", portNames = ["_T_14", "_T_22"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
@@ -79,8 +79,8 @@ firrtl.circuit "TLRAM" {
   }
 
 // Test the pattern of enable  with an And tree and Mux (sel, high, 0)
-// CHECK-LABEL: firrtl.module @sram6t
-  firrtl.module @sram6t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_valid: !firrtl.uint<1>, in %io_write: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
+// CHECK-LABEL: firrtl.module @memTest6t
+  firrtl.module @memTest6t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_valid: !firrtl.uint<1>, in %io_write: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %mem__T_14, %mem__T_22 = firrtl.mem Undefined  {depth = 2048 : i64, name = "mem", portNames = ["_T_14", "_T_22"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
@@ -114,8 +114,8 @@ firrtl.circuit "TLRAM" {
   }
 
 // Cannot merge read and write, since the pattern is enable = Mux (sel, high, 1)
-// CHECK-LABEL: firrtl.module @sram7t
-  firrtl.module @sram7t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_valid: !firrtl.uint<1>, in %io_write: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
+// CHECK-LABEL: firrtl.module @memTest7t
+  firrtl.module @memTest7t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_valid: !firrtl.uint<1>, in %io_write: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %mem__T_14, %mem__T_22 = firrtl.mem Undefined  {depth = 2048 : i64, name = "mem", portNames = ["_T_14", "_T_22"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
@@ -146,8 +146,8 @@ firrtl.circuit "TLRAM" {
   }
 
 // Cannot merge, since the clocks are different.
-// CHECK-LABEL: firrtl.module @sram5t
-  firrtl.module @sram5t(in %clk1: !firrtl.clock, in %clk2: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_waddr: !firrtl.uint<8>, in %io_wdata: !firrtl.uint<32>, in %io_raddr: !firrtl.uint<8>, out %io_rdata: !firrtl.uint<32>) {
+// CHECK-LABEL: firrtl.module @memTest5t
+  firrtl.module @memTest5t(in %clk1: !firrtl.clock, in %clk2: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_waddr: !firrtl.uint<8>, in %io_wdata: !firrtl.uint<32>, in %io_raddr: !firrtl.uint<8>, out %io_rdata: !firrtl.uint<32>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %mem_T_3, %mem_T_5 = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["T_3", "T_5"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
     // CHECK:    %mem_T_3, %mem_T_5 = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["T_3", "T_5"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
@@ -176,10 +176,9 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %7, %io_wdata : !firrtl.uint<32>, !firrtl.uint<32>
   }
 
-
 // Check for a complement term in the And expression tree.
-// CHECK-LABEL: firrtl.module @sram3t
-  firrtl.module @sram3t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_waddr: !firrtl.uint<8>, in %io_wdata: !firrtl.uint<32>, in %io_raddr: !firrtl.uint<8>, out %io_rdata: !firrtl.uint<32>) {
+// CHECK-LABEL: firrtl.module @memTest3t
+  firrtl.module @memTest3t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_waddr: !firrtl.uint<8>, in %io_wdata: !firrtl.uint<32>, in %io_raddr: !firrtl.uint<8>, out %io_rdata: !firrtl.uint<32>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %mem_T_3, %mem_T_5 = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["T_3", "T_5"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>
 // CHECK: %mem_rw = firrtl.mem Undefined  {depth = 128 : i64, name = "mem", portNames = ["rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<7>, en: uint<1>, clk: clock, rdata flip: uint<32>, wmode: uint<1>, wdata: uint<32>, wmask: uint<1>>
@@ -209,8 +208,8 @@ firrtl.circuit "TLRAM" {
   }
 
 // Check for indirect connection to clock
-// CHECK-LABEL: firrtl.module @sram2t
-  firrtl.module @sram2t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_ren: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
+// CHECK-LABEL: firrtl.module @memTest2t
+  firrtl.module @memTest2t(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io_addr: !firrtl.uint<11>, in %io_ren: !firrtl.uint<1>, in %io_wen: !firrtl.uint<1>, in %io_dataIn: !firrtl.uint<32>, out %io_dataOut: !firrtl.uint<32>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %mem__T_14, %mem__T_22 = firrtl.mem Undefined  {depth = 2048 : i64, name = "mem", portNames = ["_T_14", "_T_22"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<11>, en: uint<1>, clk: clock, data flip: uint<32>>
