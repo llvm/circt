@@ -26,7 +26,7 @@ def UndefinedOp : CalyxOp<"undef", [
     ```
   }];
   let results = (outs AnyType:$res);
-  let assemblyFormat = "attr-dict `:` type($res)";
+  let assemblyFormat = "attr-dict `:` qualified(type($res))";
 }
 
 def ProgramOp : CalyxContainer<"program", [
@@ -199,7 +199,7 @@ def InstanceOp : CalyxCell<"instance", [
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName `of` $componentName attr-dict (`:` type($results)^)?
+    $instanceName `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
 

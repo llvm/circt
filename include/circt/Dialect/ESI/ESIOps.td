@@ -91,7 +91,7 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
 
   let assemblyFormat = [{
     $clk `,` $rstn `,` $send `,` $endpointID attr-dict
-      `:` type($send) `->` type($recv)
+      `:` qualified(type($send)) `->` qualified(type($recv))
   }];
 }
 
@@ -127,5 +127,5 @@ def NullSourceOp : ESI_Physical_Op<"null", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs ChannelType:$out);
 
-  let assemblyFormat = [{ attr-dict `:` type($out) }];
+  let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
 }

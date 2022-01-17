@@ -36,7 +36,7 @@ def LLHD_VarOp : LLHD_Op<"var", [
   let results = (outs Res<LLHD_AnyPtrType, "the newly allocated reference",
                           [MemAlloc]>: $result);
 
-  let assemblyFormat = "$init attr-dict `:` type($init)";
+  let assemblyFormat = "$init attr-dict `:` qualified(type($init))";
 }
 
 def LLHD_LoadOp : LLHD_Op<"load", [
@@ -66,7 +66,7 @@ def LLHD_LoadOp : LLHD_Op<"load", [
                            [MemRead]>: $pointer);
   let results = (outs LLHD_AnyUnderlyingType: $result);
 
-  let assemblyFormat = "$pointer attr-dict `:` type($pointer)";
+  let assemblyFormat = "$pointer attr-dict `:` qualified(type($pointer))";
 }
 
 def LLHD_StoreOp : LLHD_Op<"store", [
@@ -96,5 +96,5 @@ def LLHD_StoreOp : LLHD_Op<"store", [
                            [MemWrite]>: $pointer,
                        LLHD_AnyUnderlyingType: $value);
 
-  let assemblyFormat = "$pointer `,` $value attr-dict `:` type($pointer)";
+  let assemblyFormat = "$pointer `,` $value attr-dict `:` qualified(type($pointer))";
 }

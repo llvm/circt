@@ -42,7 +42,7 @@ class ImmediateVerifOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = [{
     $expression `,` $defer
     (`label` $label^)?
-    (`message` $message^ (`(` $operands^ `)` `:` type($operands))?)?
+    (`message` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
     attr-dict
   }];
 
@@ -99,7 +99,7 @@ class ConcurrentVerifOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = [{
     $event $clock `,` $property
     (`label` $label^)?
-    (`message` $message^ (`(` $operands^ `)` `:` type($operands))?)?
+    (`message` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
     attr-dict
   }];
 

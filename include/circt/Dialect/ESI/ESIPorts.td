@@ -99,7 +99,7 @@ def WrapSVInterface: ESI_Op<"wrap.iface", [NoSideEffect]> {
   let results = (outs ChannelType:$output);
 
   let assemblyFormat = [{
-    $interfaceSink attr-dict `:` type($interfaceSink) `->` type($output)
+    $interfaceSink attr-dict `:` type($interfaceSink) `->` qualified(type($output))
   }];
 
   let verifier = [{

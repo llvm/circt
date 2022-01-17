@@ -15,7 +15,7 @@ def VariableDeclOp : MIROp<"vardecl", []> {
 
   let arguments = (ins StrAttr:$name, I32Attr:$init);
   let results = (outs MooreLValueType:$result);
-  let assemblyFormat = "$name `=` $init attr-dict `:` type($result)";
+  let assemblyFormat = "$name `=` $init attr-dict `:` qualified(type($result))";
 }
 
 //===----------------------------------------------------------------------===//
@@ -34,6 +34,6 @@ def AssignOp : MIROp<"assign",
   let arguments = (ins MooreLValueType:$dest, MooreRValueType:$src);
   let results = (outs);
   let assemblyFormat = [{
-    $dest `,` $src  attr-dict `:` type($dest) `,` type($src)
+    $dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))
   }];
 }

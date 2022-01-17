@@ -207,7 +207,7 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
     OpBuilder<(ins)>
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 }
 
 def PhysicalRegionOp : MSFTOp<"physical_region",

@@ -216,7 +216,7 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
                        LLHD_AnySigType:$rhs);
 
   let assemblyFormat = [{
-    operands attr-dict `:` type($lhs)
+    operands attr-dict `:` qualified(type($lhs))
   }];
 
   let hasCanonicalizeMethod = 1;
@@ -258,7 +258,7 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
   let successors = (successor AnySuccessor:$dest);
 
   let assemblyFormat = [{
-    (`for` $time^ `,`)? (`(`$obs^ `:` type($obs)`)` `,`)?
+    (`for` $time^ `,`)? (`(`$obs^ `:` qualified(type($obs))`)` `,`)?
     $dest (`(` $destOps^ `:` type($destOps) `)`)? attr-dict
   }];
 }
