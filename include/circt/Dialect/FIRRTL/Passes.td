@@ -340,4 +340,17 @@ def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createRemoveResetsPass()";
 }
 
+def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
+  let summary = "Infer the read-write memory port";
+  let description = [{
+    This pass merges the read and write ports of a memory, based a simple
+    module-scoped heuristic. The heuristic checks if the read and write enable
+    conditions are mutually exclusive.
+    The heuristic tries to break up the read enable and write enable logic into an
+    `AND` expression tree. It then compares the read and write `AND` terms,
+    looking for a situation where the read/write is the complement of the write/read. 
+  }];
+  let constructor = "circt::firrtl::createInferReadWritePass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
