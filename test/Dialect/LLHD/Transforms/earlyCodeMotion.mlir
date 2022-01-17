@@ -4,7 +4,7 @@
 // CHECK-LABEL:   llhd.proc @check_dont_move_sideeffect() -> (
 // CHECK-SAME:                                                %[[VAL_0:.*]] : !llhd.sig<i32>) {
 // CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
-// CHECK:           %[[VAL_2:.*]] = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+// CHECK:           %[[VAL_2:.*]] = llhd.constant_time <1ns, 0d, 0e>
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_3:.*]] = llhd.var %[[VAL_1]] : i32
@@ -18,7 +18,7 @@
 llhd.proc @check_dont_move_sideeffect() -> (%sig : !llhd.sig<i32>) {
   // TR: -1
   %c = hw.constant 4 : i32
-  %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+  %time = llhd.constant_time <1ns, 0d, 0e>
   br ^bb1
 ^bb1:
   // TR: -1
@@ -164,7 +164,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 // CHECK-SAME: %[[VAL_0:.*]] : !llhd.sig<i1>, %[[VAL_1:.*]] : !llhd.sig<i1>, %[[VAL_2:.*]] : !llhd.sig<i1>) -> (%[[VAL_3:.*]] : !llhd.sig<i1>, %[[VAL_4:.*]] : !llhd.sig<i1>) {
 // CHECK:           %[[ALLSET:.*]] = hw.constant true
 // CHECK:           %[[VAL_5:.*]] = hw.constant false
-// CHECK:           %[[VAL_6:.*]] = llhd.constant_time #llhd.time<0s, 1d, 0e>
+// CHECK:           %[[VAL_6:.*]] = llhd.constant_time <0s, 1d, 0e>
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_7:.*]] = llhd.prb %[[VAL_3]] : !llhd.sig<i1>
@@ -239,7 +239,7 @@ llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack
   %8 = comb.icmp ne %rst_ni_prb1, %3 : i1
   %9 = comb.xor %8, %allset : i1
   %10 = comb.icmp ne %9, %3 : i1
-  %11 = llhd.constant_time #llhd.time<0s, 1d, 0e>
+  %11 = llhd.constant_time <0s, 1d, 0e>
   cond_br %10, ^if_true, ^if_false
 ^if_false:
   // TR: 0
