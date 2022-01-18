@@ -753,8 +753,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
       Operation *newOp = b.insert(op->clone(map));
       for (Value res : newOp->getResults())
         newOperands.push_back(res);
-      auto newName = (oldInst.getName() + "." + ::getOpName(op)).str();
-      setEntityName(newOp, newName);
+      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
       bubbleUpGlobalRefs(newOp);
     }
   };
