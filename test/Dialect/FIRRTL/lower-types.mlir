@@ -1406,10 +1406,9 @@ firrtl.module @is1436_FOO() {
 firrtl.module @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl.uint<2>, out %z: !firrtl.uint<10>) {
   %0 = firrtl.subaccess %x[%source] : !firrtl.vector<uint<10>, 5>, !firrtl.uint<2>
   firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
-  // The width of multibit mux index will be converted at LowerToHW,
-  // so it is ok that the type of `%source` is uint<2> here.
-  // CHECK:      %0 = firrtl.multibit_mux %source, %x_0, %x_1, %x_2, %x_3, %x_4 : !firrtl.uint<2>, !firrtl.uint<10>
-  // CHECK-NEXT: firrtl.connect %z, %0 : !firrtl.uint<10>, !firrtl.uint<10>
+  // CHECK:      %0 = firrtl.pad %source, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
+  // CHECK-NEXT: %1 = firrtl.multibit_mux %0, %x_0, %x_1, %x_2, %x_3, %x_4 : !firrtl.uint<3>, !firrtl.uint<10>
+  // CHECK-NEXT: firrtl.connect %z, %1 : !firrtl.uint<10>, !firrtl.uint<10>
 }
 
 } // CIRCUIT

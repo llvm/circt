@@ -1282,7 +1282,13 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   for (unsigned index : llvm::seq(0u, vType.getNumElements()))
     inputs.push_back(builder->create<SubindexOp>(input, index));
 
-  Value multibitMux = builder->create<MultibitMuxOp>(op.index(), inputs);
+  auto selectWidth = llvm::Log2_64_Ceil(vType.getNumElements());
+  auto index = op.index();
+  if (selectWidth >
+      static_cast<unsigned>(*op.index().getType().cast<UIntType>().getWidth()))
+    index = builder->create<PadPrimOp>(index, selectWidth);
+
+  Value multibitMux = builder->create<MultibitMuxOp>(index, inputs);
   op.replaceAllUsesWith(multibitMux);
   return true;
 }
