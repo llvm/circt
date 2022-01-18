@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/FSM/FSMPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/GAA/GAAPasses.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -48,6 +49,7 @@ inline void registerAllPasses() {
   sv::registerPasses();
   handshake::registerPasses();
   hw::registerPasses();
+  gaa::registerPasses();
 }
 
 } // namespace circt
