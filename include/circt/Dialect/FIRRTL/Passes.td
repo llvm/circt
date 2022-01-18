@@ -48,7 +48,10 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
            "Concat all elements of the aggregate data into a single element.">,
     Option<"preserveAggregate", "preserve-aggregate", "bool", "false",
-           "Preserve passive aggregate types in the module.">
+           "Preserve passive aggregate types in the module.">,
+    Option<"preservePublicTypes", "preserve-public-types", "bool",
+           "true", "Force to lower ports of toplevel and external modules even"
+           "when aggregate preservation mode.">
   ];
   let dependentDialects = ["hw::HWDialect"];
 }

@@ -310,8 +310,11 @@ namespace {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool f, bool p)
-      : context(context), flattenAggregateMemData(f), preserveAggregate(p) {}
+  TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
+                      bool preserveAggregate, bool preservePublicTypes)
+      : context(context), flattenAggregateMemData(flattenAggregateMemData),
+        preserveAggregate(preserveAggregate),
+        preservePublicTypes(preservePublicTypes) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -355,6 +358,8 @@ private:
                      llvm::function_ref<Operation *(FlatBundleFieldEntry,
                                                     StringRef, ArrayAttr)>
                          clone);
+
+  bool isModuleAllowedToPreserveAggregate(Operation *moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
@@ -366,10 +371,34 @@ private:
   /// enabled.
   bool preserveAggregate;
 
+  /// Exteranal modules and toplevel modules should have lowered types if this
+  /// flag is enabled.
+  bool preservePublicTypes;
+
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 };
 } // namespace
+
+/// Return true if we can preserve the arguments of the given module.
+/// Exteranal modules and toplevel modules are sometimes assumed to have lowered
+/// types.
+bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
+    Operation *moduleLike) {
+
+  if (!preserveAggregate)
+    return false;
+
+  // If it is not forced to lower toplevel and external modules, it's ok to
+  // preserve.
+  if (!preservePublicTypes)
+    return true;
+
+  if (isa<FExtModuleOp>(moduleLike))
+    return false;
+  auto module = cast<FModuleOp>(moduleLike);
+  return cast<CircuitOp>(module->getParentOp()).getMainModule() != module;
+}
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
   if (BundleType bundle = val.getType().dyn_cast<BundleType>()) {
@@ -531,7 +560,8 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes, preserveAggregate))
+  if (!peelType(srcType, fieldTypes,
+                isModuleAllowedToPreserveAggregate(module)))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
@@ -917,7 +947,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-
   auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
@@ -1193,6 +1222,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
+  bool allowedToPreserveAggregate =
+      isModuleAllowedToPreserveAggregate(op.getReferencedModule());
 
   endFields.push_back(0);
   bool hasDontTouch = false;
@@ -1201,7 +1232,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes, preserveAggregate)) {
+    if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
@@ -1299,9 +1330,11 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
-  LowerTypesPass(bool f, bool p) {
-    flattenAggregateMemData = f;
-    preserveAggregate = p;
+  LowerTypesPass(bool flattenAggregateMemDataFlag, bool preserveAggregateFlag,
+                 bool preservePublicTypesFlag) {
+    flattenAggregateMemData = flattenAggregateMemDataFlag;
+    preserveAggregate = preserveAggregateFlag;
+    preservePublicTypes = preservePublicTypesFlag;
   }
   void runOnOperation() override;
 };
@@ -1315,14 +1348,15 @@ void LowerTypesPass::runOnOperation() {
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
-                        preserveAggregate)
+                        preserveAggregate, preservePublicTypes)
         .lowerModule(ops[index]);
   });
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem,
-                                          bool preserveAggregate) {
-  return std::make_unique<LowerTypesPass>(replSeqMem, preserveAggregate);
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
+    bool replSeqMem, bool preserveAggregate, bool preservePublicTypes) {
+
+  return std::make_unique<LowerTypesPass>(replSeqMem, preserveAggregate,
+                                          preservePublicTypes);
 }
