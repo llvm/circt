@@ -613,9 +613,13 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     // Construct a new path starting from the old path.
     SmallVector<Attribute> newPath(oldPath.begin(), oldPath.end());
 
-    // Splice the last two elements in the path, using the combined name from
-    // the op's attributes, and taking the module from the second to last
-    // element.
+    // Use the elements in the path to construct a name that matches the format
+    // going into inner_ref above. Splice the last two elements in the path,
+    // bulding the name from the two elements' names, and taking the module from
+    // the second to last element. Note that we use the global ref directly so
+    // we can update all paths to an instance the first time it is visited. This
+    // saves on bookkeeping to match up the new inner_ref to the global refs.
+    // TODO: consider adding state to simplify this.
     auto lastElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
     auto nextElement = newPath.pop_back_val().cast<hw::InnerRefAttr>();
     auto newModule = nextElement.getModule();
