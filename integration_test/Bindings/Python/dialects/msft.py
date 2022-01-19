@@ -158,11 +158,11 @@ with ir.Context() as ctx, ir.Location.unknown():
   pdb = msft.PlacementDB(top.operation, devdb)
 
   print("=== Placements ASC, ASC, ASC:")
-  walk_order = {
-      "columns": msft.Direction.ASC,
-      "rows": msft.Direction.ASC,
-      "nums": msft.Direction.ASC
-  }
+  walk_order = msft.WalkOrder(
+      columns=msft.Direction.ASC,
+      rows=msft.Direction.ASC,
+      nums=msft.Direction.ASC,
+  )
   pdb.walk_placements(print_placement, walk_order=walk_order)
   # CHECK-LABEL: === Placements ASC, ASC, ASC:
   # CHECK: #msft.physloc<M20K, 0, 0, 0>
@@ -175,11 +175,11 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: #msft.physloc<M20K, 1, 1, 1>
 
   print("=== Placements DESC, DESC, DESC:")
-  walk_order = {
-      "columns": msft.Direction.DESC,
-      "rows": msft.Direction.DESC,
-      "nums": msft.Direction.DESC
-  }
+  walk_order = msft.WalkOrder(
+      columns=msft.Direction.DESC,
+      rows=msft.Direction.DESC,
+      nums=msft.Direction.DESC,
+  )
   pdb.walk_placements(print_placement, walk_order=walk_order)
   # CHECK-LABEL: === Placements DESC, DESC, DESC:
   # CHECK: #msft.physloc<M20K, 1, 1, 1>
@@ -192,11 +192,11 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: #msft.physloc<M20K, 0, 0, 0>
 
   print("=== Placements ASC, DESC, ASC:")
-  walk_order = {
-      "columns": msft.Direction.ASC,
-      "rows": msft.Direction.DESC,
-      "nums": msft.Direction.ASC
-  }
+  walk_order = msft.WalkOrder(
+      columns=msft.Direction.ASC,
+      rows=msft.Direction.DESC,
+      nums=msft.Direction.ASC,
+  )
   pdb.walk_placements(print_placement, walk_order=walk_order)
   # CHECK-LABEL: === Placements ASC, DESC, ASC:
   # CHECK: #msft.physloc<M20K, 0, 1, 0>
@@ -209,7 +209,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: #msft.physloc<M20K, 1, 0, 1>
 
   print("=== Placements None, Asc, None:")
-  walk_order = {"rows": msft.Direction.DESC, "nums": msft.Direction.NONE}
+  walk_order = msft.WalkOrder(rows=msft.Direction.DESC,
+                              nums=msft.Direction.NONE)
   pdb.walk_placements(print_placement, walk_order=walk_order)
   # CHECK-LABEL: === Placements None, Asc, None:
   # CHECK: #msft.physloc<M20K, {{.+}}, 1, {{.+}}>

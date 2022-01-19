@@ -77,7 +77,9 @@ public:
     Operation *op;
   };
 
-  /// Contains the order to iterate in each dimension for walkPlacements.
+  /// Contains the order to iterate in each dimension for walkPlacements. The
+  /// dimensions are visited with columns first, then rows, then numbers within
+  /// a cell.
   enum Direction { NONE = 0, ASC = 1, DESC = 2 };
   struct WalkOrder {
     Direction columns;

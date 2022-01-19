@@ -95,18 +95,13 @@ public:
     else
       cPrim = prim.cast<CirctMSFTPrimitiveType>();
 
-    CirctMSFTWalkOrder cWalkOrder{CirctMSFTDirection::NONE,
-                                  CirctMSFTDirection::NONE,
-                                  CirctMSFTDirection::NONE};
-    if (!walkOrder.is_none()) {
-      py::dict pyWalkOrder = walkOrder.cast<py::dict>();
-      if (pyWalkOrder.contains("columns"))
-        cWalkOrder.columns = pyWalkOrder["columns"].cast<CirctMSFTDirection>();
-      if (pyWalkOrder.contains("rows"))
-        cWalkOrder.rows = pyWalkOrder["rows"].cast<CirctMSFTDirection>();
-      if (pyWalkOrder.contains("nums"))
-        cWalkOrder.nums = pyWalkOrder["nums"].cast<CirctMSFTDirection>();
-    }
+    CirctMSFTWalkOrder cWalkOrder;
+    if (!walkOrder.is_none())
+      cWalkOrder = walkOrder.cast<CirctMSFTWalkOrder>();
+    else
+      cWalkOrder =
+          CirctMSFTWalkOrder{CirctMSFTDirection::NONE, CirctMSFTDirection::NONE,
+                             CirctMSFTDirection::NONE};
 
     circtMSFTPlacementDBWalkPlacements(
         db,
@@ -236,4 +231,11 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                std::make_tuple(py::none(), py::none(), py::none(), py::none()),
            py::arg("prim_type") = py::none(),
            py::arg("walk_order") = py::none());
+
+  py::class_<CirctMSFTWalkOrder>(m, "WalkOrder")
+      .def(py::init<CirctMSFTDirection, CirctMSFTDirection,
+                    CirctMSFTDirection>(),
+           py::arg("columns") = CirctMSFTDirection::NONE,
+           py::arg("rows") = CirctMSFTDirection::NONE,
+           py::arg("nums") = CirctMSFTDirection::NONE);
 }
