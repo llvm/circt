@@ -28,6 +28,57 @@ using namespace chirrtl;
 // Module Inlining Support
 //===----------------------------------------------------------------------===//
 
+
+/// Rewrite an annotation to remove a member.  No updates are made if the field
+/// doesn't exist.
+///
+/// TODO: Replace this with a future member function defined on Annotation.
+static void removeMember(Annotation &annotation, StringRef name) {
+  auto oldValue = annotation.getMember(name);
+  if (!oldValue)
+    return;
+  NamedAttrList newAnnotation;
+  for (auto pair : annotation.getDict()) {
+    if (pair.getName() == name)
+      continue;
+    newAnnotation.push_back(pair);
+  }
+  auto newDict = DictionaryAttr::getWithSorted(
+      annotation.getDict().getContext(), newAnnotation.getAttrs());
+  auto fieldID = annotation.getFieldID();
+  if (fieldID) {
+    annotation = Annotation(SubAnnotationAttr::get(
+        annotation.getDict().getContext(), fieldID, newDict));
+    return;
+  }
+  annotation = Annotation(newDict);
+}
+
+/// Add or overwrite a member in an annotation.
+///
+/// TODO: Replace this with a future member function defined on Annotation.
+static void setMember(Annotation &annotation, StringRef name, Attribute value) {
+  auto oldValue = annotation.getMember(name);
+  if (value == oldValue)
+    return;
+  NamedAttrList newAnnotation;
+  for (auto pair : annotation.getDict()) {
+    if (pair.getName() == name)
+      continue;
+    newAnnotation.append(pair);
+  }
+  newAnnotation.append(name, value);
+  auto newDict = DictionaryAttr::get(annotation.getDict().getContext(),
+                                     newAnnotation.getAttrs());
+  auto fieldID = annotation.getFieldID();
+  if (fieldID) {
+    annotation = Annotation(SubAnnotationAttr::get(
+        annotation.getDict().getContext(), fieldID, newDict));
+    return;
+  }
+  annotation = Annotation(newDict);
+}
+
 /// If this operation or any child operation has a name, add the prefix to that
 /// operation's name.
 static void rename(StringRef prefix, Operation *op) {
