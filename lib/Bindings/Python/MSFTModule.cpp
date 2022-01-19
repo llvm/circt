@@ -81,7 +81,7 @@ public:
   void walkPlacements(
       py::function pycb,
       std::tuple<py::object, py::object, py::object, py::object> bounds,
-      py::object prim) {
+      py::object prim, py::object walkOrder) {
 
     auto handleNone = [](py::object o) {
       return o.is_none() ? -1 : o.cast<int64_t>();
@@ -94,6 +94,20 @@ public:
       cPrim = -1;
     else
       cPrim = prim.cast<CirctMSFTPrimitiveType>();
+
+    CirctMSFTWalkOrder cWalkOrder{CirctMSFTDirection::NONE,
+                                  CirctMSFTDirection::NONE,
+                                  CirctMSFTDirection::NONE};
+    if (!walkOrder.is_none()) {
+      py::dict pyWalkOrder = walkOrder.cast<py::dict>();
+      if (pyWalkOrder.contains("columns"))
+        cWalkOrder.columns = pyWalkOrder["columns"].cast<CirctMSFTDirection>();
+      if (pyWalkOrder.contains("rows"))
+        cWalkOrder.rows = pyWalkOrder["rows"].cast<CirctMSFTDirection>();
+      if (pyWalkOrder.contains("nums"))
+        cWalkOrder.nums = pyWalkOrder["nums"].cast<CirctMSFTDirection>();
+    }
+
     circtMSFTPlacementDBWalkPlacements(
         db,
         [](MlirAttribute loc, CirctMSFTPlacedInstance p, void *userData) {
@@ -107,7 +121,7 @@ public:
             pycb(physLoc, std::make_tuple(p.path, subpath, p.op));
           }
         },
-        cBounds, cPrim, &pycb);
+        cBounds, cPrim, cWalkOrder, &pycb);
   }
 
 private:
@@ -126,6 +140,12 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("M20K", PrimitiveType::M20K)
       .value("DSP", PrimitiveType::DSP)
       .value("FF", PrimitiveType::FF)
+      .export_values();
+
+  py::enum_<CirctMSFTDirection>(m, "Direction")
+      .value("NONE", CirctMSFTDirection::NONE)
+      .value("ASC", CirctMSFTDirection::ASC)
+      .value("DESC", CirctMSFTDirection::DESC)
       .export_values();
 
   mlir_attribute_subclass(m, "PhysLocationAttr",
@@ -214,5 +234,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("callback"),
            py::arg("bounds") =
                std::make_tuple(py::none(), py::none(), py::none(), py::none()),
-           py::arg("prim_type") = py::none());
+           py::arg("prim_type") = py::none(),
+           py::arg("walk_order") = py::none());
 }
