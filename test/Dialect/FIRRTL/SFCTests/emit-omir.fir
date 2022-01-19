@@ -125,7 +125,7 @@ circuit Foo : %[[
 
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:FIRRTLMem_{{[^"]+}}"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:{{[^"]+}}"
 
 ; CHECK:       "id": "OMID:4"
 ; CHECK:       "name": "containingModule"

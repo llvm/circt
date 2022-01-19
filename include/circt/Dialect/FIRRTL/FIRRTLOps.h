@@ -153,16 +153,17 @@ struct FirMemory {
   size_t readUnderWrite;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
+  std::string namePrefix;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>>
+             size_t, hw::WUW, SmallVector<int32_t>, std::string>
   getTuple() const {
     return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
                     depth, readLatency, writeLatency, maskBits, readUnderWrite,
-                    writeUnderWrite, writeClockIDs);
+                    writeUnderWrite, writeClockIDs, namePrefix);
   }
   bool operator<(const FirMemory &rhs) const {
     return getTuple() < rhs.getTuple();
