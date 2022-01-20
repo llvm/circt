@@ -66,7 +66,7 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
   let results = (outs ArrayType:$result);
 
   let assemblyFormat = [{
-    $inputs attr-dict `:` custom<ArrayConcatTypes>(type($inputs), type($result))
+    $inputs attr-dict `:` custom<ArrayConcatTypes>(type($inputs), qualified(type($result)))
   }];
 
   let builders = [
@@ -114,7 +114,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
 
   let assemblyFormat = [{
     $input `at` $lowIndex attr-dict `:`
-      `(` custom<SliceTypes>(type($input), type($lowIndex)) `)` `->` qualified(type($dst))
+      `(` custom<SliceTypes>(type($input), qualified(type($lowIndex))) `)` `->` qualified(type($dst))
   }];
 }
 

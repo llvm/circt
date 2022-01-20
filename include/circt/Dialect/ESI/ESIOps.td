@@ -106,7 +106,8 @@ def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   let results = (outs AnyType:$decodedData);
 
   let assemblyFormat = [{
-    $clk $valid $capnpBits attr-dict `:` type($capnpBits) `->` type($decodedData)
+    $clk $valid $capnpBits attr-dict `:` qualified(type($capnpBits)) `->`
+                                         qualified(type($decodedData))
   }];
 }
 
@@ -117,7 +118,8 @@ def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   let results = (outs RtlBitArray:$capnpBits);
 
   let assemblyFormat = [{
-    $clk $valid $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
+    $clk $valid $dataToEncode attr-dict `:` qualified(type($dataToEncode))
+                                          `->` qualified(type($capnpBits))
   }];
 }
 

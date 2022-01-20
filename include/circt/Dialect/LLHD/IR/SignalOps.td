@@ -127,7 +127,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
 
   let assemblyFormat = [{
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
-    type($signal)
+    qualified(type($signal))
   }];
 
   let hasFolder = 1;

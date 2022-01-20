@@ -259,7 +259,7 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
 
   let assemblyFormat = [{
     (`for` $time^ `,`)? (`(`$obs^ `:` qualified(type($obs))`)` `,`)?
-    $dest (`(` $destOps^ `:` type($destOps) `)`)? attr-dict
+    $dest (`(` $destOps^ `:` qualified(type($destOps)) `)`)? attr-dict
   }];
 }
 

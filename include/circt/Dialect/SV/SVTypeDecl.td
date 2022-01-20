@@ -313,7 +313,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
 
   let assemblyFormat = [{
     $iface `(` custom<IfaceTypeAndSignal>(type($iface), $signalName) `)`
-        attr-dict `:` type($signalData)
+        attr-dict `:` qualified(type($signalData))
   }];
 
   let builders = [
