@@ -97,7 +97,6 @@ enum CirctMSFTDirection { NONE = 0, ASC = 1, DESC = 2 };
 typedef struct {
   CirctMSFTDirection columns;
   CirctMSFTDirection rows;
-  CirctMSFTDirection nums;
 } CirctMSFTWalkOrder;
 
 MLIR_CAPI_EXPORTED CirctMSFTPlacementDB

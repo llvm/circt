@@ -157,70 +157,60 @@ with ir.Context() as ctx, ir.Location.unknown():
   devdb.add_primitive(msft.PhysLocationAttr.get(msft.M20K, x=1, y=1, num=0))
   pdb = msft.PlacementDB(top.operation, devdb)
 
-  print("=== Placements ASC, ASC, ASC:")
-  walk_order = msft.WalkOrder(
-      columns=msft.Direction.ASC,
-      rows=msft.Direction.ASC,
-      nums=msft.Direction.ASC,
-  )
+  print("=== Placements ASC, ASC:")
+  walk_order = msft.WalkOrder(columns=msft.Direction.ASC,
+                              rows=msft.Direction.ASC)
   pdb.walk_placements(print_placement, walk_order=walk_order)
-  # CHECK-LABEL: === Placements ASC, ASC, ASC:
-  # CHECK: #msft.physloc<M20K, 0, 0, 0>
-  # CHECK: #msft.physloc<M20K, 0, 0, 1>
-  # CHECK: #msft.physloc<M20K, 0, 1, 0>
-  # CHECK: #msft.physloc<M20K, 0, 1, 1>
-  # CHECK: #msft.physloc<M20K, 1, 0, 0>
-  # CHECK: #msft.physloc<M20K, 1, 0, 1>
-  # CHECK: #msft.physloc<M20K, 1, 1, 0>
-  # CHECK: #msft.physloc<M20K, 1, 1, 1>
+  # CHECK-LABEL: === Placements ASC, ASC:
+  # CHECK: #msft.physloc<M20K, 0, 0
+  # CHECK: #msft.physloc<M20K, 0, 0
+  # CHECK: #msft.physloc<M20K, 0, 1
+  # CHECK: #msft.physloc<M20K, 0, 1
+  # CHECK: #msft.physloc<M20K, 1, 0
+  # CHECK: #msft.physloc<M20K, 1, 0
+  # CHECK: #msft.physloc<M20K, 1, 1
+  # CHECK: #msft.physloc<M20K, 1, 1
 
-  print("=== Placements DESC, DESC, DESC:")
-  walk_order = msft.WalkOrder(
-      columns=msft.Direction.DESC,
-      rows=msft.Direction.DESC,
-      nums=msft.Direction.DESC,
-  )
+  print("=== Placements DESC, DESC:")
+  walk_order = msft.WalkOrder(columns=msft.Direction.DESC,
+                              rows=msft.Direction.DESC)
   pdb.walk_placements(print_placement, walk_order=walk_order)
-  # CHECK-LABEL: === Placements DESC, DESC, DESC:
-  # CHECK: #msft.physloc<M20K, 1, 1, 1>
-  # CHECK: #msft.physloc<M20K, 1, 1, 0>
-  # CHECK: #msft.physloc<M20K, 1, 0, 1>
-  # CHECK: #msft.physloc<M20K, 1, 0, 0>
-  # CHECK: #msft.physloc<M20K, 0, 1, 1>
-  # CHECK: #msft.physloc<M20K, 0, 1, 0>
-  # CHECK: #msft.physloc<M20K, 0, 0, 1>
-  # CHECK: #msft.physloc<M20K, 0, 0, 0>
+  # CHECK-LABEL: === Placements DESC, DESC:
+  # CHECK: #msft.physloc<M20K, 1, 1
+  # CHECK: #msft.physloc<M20K, 1, 1
+  # CHECK: #msft.physloc<M20K, 1, 0
+  # CHECK: #msft.physloc<M20K, 1, 0
+  # CHECK: #msft.physloc<M20K, 0, 1
+  # CHECK: #msft.physloc<M20K, 0, 1
+  # CHECK: #msft.physloc<M20K, 0, 0
+  # CHECK: #msft.physloc<M20K, 0, 0
 
-  print("=== Placements ASC, DESC, ASC:")
-  walk_order = msft.WalkOrder(
-      columns=msft.Direction.ASC,
-      rows=msft.Direction.DESC,
-      nums=msft.Direction.ASC,
-  )
+  print("=== Placements ASC, DESC:")
+  walk_order = msft.WalkOrder(columns=msft.Direction.ASC,
+                              rows=msft.Direction.DESC)
   pdb.walk_placements(print_placement, walk_order=walk_order)
-  # CHECK-LABEL: === Placements ASC, DESC, ASC:
-  # CHECK: #msft.physloc<M20K, 0, 1, 0>
-  # CHECK: #msft.physloc<M20K, 0, 1, 1>
-  # CHECK: #msft.physloc<M20K, 0, 0, 0>
-  # CHECK: #msft.physloc<M20K, 0, 0, 1>
-  # CHECK: #msft.physloc<M20K, 1, 1, 0>
-  # CHECK: #msft.physloc<M20K, 1, 1, 1>
-  # CHECK: #msft.physloc<M20K, 1, 0, 0>
-  # CHECK: #msft.physloc<M20K, 1, 0, 1>
+  # CHECK-LABEL: === Placements ASC, DESC:
+  # CHECK: #msft.physloc<M20K, 0, 1
+  # CHECK: #msft.physloc<M20K, 0, 1
+  # CHECK: #msft.physloc<M20K, 0, 0
+  # CHECK: #msft.physloc<M20K, 0, 0
+  # CHECK: #msft.physloc<M20K, 1, 1
+  # CHECK: #msft.physloc<M20K, 1, 1
+  # CHECK: #msft.physloc<M20K, 1, 0
+  # CHECK: #msft.physloc<M20K, 1, 0
 
-  print("=== Placements None, Asc, None:")
-  walk_order = msft.WalkOrder(rows=msft.Direction.DESC,
-                              nums=msft.Direction.NONE)
+  print("=== Placements None, Asc:")
+  walk_order = msft.WalkOrder(rows=msft.Direction.DESC)
   pdb.walk_placements(print_placement, walk_order=walk_order)
-  # CHECK-LABEL: === Placements None, Asc, None:
-  # CHECK: #msft.physloc<M20K, {{.+}}, 1, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 1, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 0, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 0, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 1, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 1, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 0, {{.+}}>
-  # CHECK: #msft.physloc<M20K, {{.+}}, 0, {{.+}}>
+  # CHECK-LABEL: === Placements None, Asc:
+  # CHECK: #msft.physloc<M20K, {{.+}}, 1
+  # CHECK: #msft.physloc<M20K, {{.+}}, 1
+  # CHECK: #msft.physloc<M20K, {{.+}}, 0
+  # CHECK: #msft.physloc<M20K, {{.+}}, 0
+  # CHECK: #msft.physloc<M20K, {{.+}}, 1
+  # CHECK: #msft.physloc<M20K, {{.+}}, 1
+  # CHECK: #msft.physloc<M20K, {{.+}}, 0
+  # CHECK: #msft.physloc<M20K, {{.+}}, 0
 
   print("=== Errors:", file=sys.stderr)
   # TODO: Python's sys.stderr doesn't seem to be shared with C++ errors.

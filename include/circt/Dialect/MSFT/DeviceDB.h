@@ -84,7 +84,6 @@ public:
   struct WalkOrder {
     Direction columns;
     Direction rows;
-    Direction nums;
   };
 
   /// Assign an instance to a primitive. Return false if another instance is

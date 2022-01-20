@@ -124,12 +124,10 @@ void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
 
   Optional<PlacementDB::WalkOrder> walkOrder;
   if (cWalkOrder.columns != CirctMSFTDirection::NONE ||
-      cWalkOrder.rows != CirctMSFTDirection::NONE ||
-      cWalkOrder.nums != CirctMSFTDirection::NONE)
+      cWalkOrder.rows != CirctMSFTDirection::NONE)
     walkOrder = PlacementDB::WalkOrder{
         static_cast<PlacementDB::Direction>(cWalkOrder.columns),
-        static_cast<PlacementDB::Direction>(cWalkOrder.rows),
-        static_cast<PlacementDB::Direction>(cWalkOrder.nums)};
+        static_cast<PlacementDB::Direction>(cWalkOrder.rows)};
 
   db->walkPlacements(
       cb, std::make_tuple(bounds[0], bounds[1], bounds[2], bounds[3]),

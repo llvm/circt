@@ -99,9 +99,8 @@ public:
     if (!walkOrder.is_none())
       cWalkOrder = walkOrder.cast<CirctMSFTWalkOrder>();
     else
-      cWalkOrder =
-          CirctMSFTWalkOrder{CirctMSFTDirection::NONE, CirctMSFTDirection::NONE,
-                             CirctMSFTDirection::NONE};
+      cWalkOrder = CirctMSFTWalkOrder{CirctMSFTDirection::NONE,
+                                      CirctMSFTDirection::NONE};
 
     circtMSFTPlacementDBWalkPlacements(
         db,
@@ -233,9 +232,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("walk_order") = py::none());
 
   py::class_<CirctMSFTWalkOrder>(m, "WalkOrder")
-      .def(py::init<CirctMSFTDirection, CirctMSFTDirection,
-                    CirctMSFTDirection>(),
+      .def(py::init<CirctMSFTDirection, CirctMSFTDirection>(),
            py::arg("columns") = CirctMSFTDirection::NONE,
-           py::arg("rows") = CirctMSFTDirection::NONE,
-           py::arg("nums") = CirctMSFTDirection::NONE);
+           py::arg("rows") = CirctMSFTDirection::NONE);
 }

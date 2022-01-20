@@ -262,12 +262,10 @@ void PlacementDB::walkPlacements(
       DimNumMap numMap = rowF.second;
 
       // Num loop.
-      SmallVector<std::pair<size_t, DimDevType>> nums(numMap.begin(),
-                                                      numMap.end());
-      maybeSort(nums, walkOrder.map([](auto wo) { return wo.nums; }));
-      for (auto numF : nums) {
-        size_t num = numF.first;
-        DimDevType devMap = numF.second;
+      for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
+           ++numF) {
+        size_t num = numF->getFirst();
+        DimDevType devMap = numF->getSecond();
 
         // DevType loop.
         for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
