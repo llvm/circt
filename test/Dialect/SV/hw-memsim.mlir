@@ -74,8 +74,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
 //CHECK-NEXT:  %[[x:.+]] = sv.constantX
 //CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
-//CHECK-NEXT:  %[[rw_wmask_0:.+]] = comb.extract %rw_wmask_0 from 0 : (i1) -> i1
-//CHECK-NEXT:  %[[rw_wdata_0:.+]] = comb.extract %rw_wdata_0 from 0 : (i16) -> i16
+//CHECK-NEXT:  %true = hw.constant true
 //CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
 //CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
 //CHECK-NEXT:  %false = hw.constant false
@@ -87,21 +86,19 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
 //CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
 //CHECK-NEXT:    sv.always posedge %rw_clock_0 {
-//CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %[[rw_wmask_0]], %rw_wmode_0
+//CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %true, %rw_wmode_0
 //CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
 //CHECK-NEXT:      sv.if %[[rwwcond]]  {
 //CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:        sv.passign %[[rwslot]], %[[rw_wdata_0]]
+//CHECK-NEXT:        sv.passign %[[rwslot]], %rw_wdata_0
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
-//CHECK-NEXT:  %[[v14:.+]] = comb.extract %wo_mask_0 from 0 : (i1) -> i1
-//CHECK-NEXT:  %[[v15:.+]] = comb.extract %wo_data_0 from 0 : (i16) -> i16
+//CHECK-NEXT:  %true_1 = hw.constant true
 //CHECK-NEXT:  sv.always posedge %wo_clock_0 {
-//CHECK-NEXT:    %[[wcond:.+]] = comb.and %wo_en_0, %[[v14]]
-//CHECK-NEXT:    sv.if %[[wcond]]  {
+//CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
 //CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:      sv.passign %[[wslot]], %[[v15]]
+//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0 
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]

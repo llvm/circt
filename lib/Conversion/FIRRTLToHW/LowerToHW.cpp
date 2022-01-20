@@ -569,6 +569,9 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     SmallVector<hw::PortInfo> ports;
     size_t inputPin = 0;
     size_t outputPin = 0;
+    // We don't need a single bit mask, it can be combined with enable. Create
+    // an unmasked memory if maskBits = 1.
+    bool isMasked = mem.maskBits > 1;
 
     auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
       ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_addr"),
@@ -599,7 +602,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        bDataType, inputPin++});
       ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"), hw::OUTPUT,
                        bDataType, outputPin++});
-      if (mem.maskBits > 1)
+      // Ignore mask port, if maskBits =1
+      if (isMasked)
         ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"), hw::INPUT,
                          maskType, inputPin++});
     }
@@ -608,15 +612,15 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
       makePortCommon("W", i, bAddrType);
       ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"), hw::INPUT,
                        bDataType, inputPin++});
-      if (mem.maskBits > 1)
+      // Ignore mask port, if maskBits =1
+      if (isMasked)
         ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"), hw::INPUT,
                          maskType, inputPin++});
     }
 
     // Mask granularity is the number of data bits that each mask bit can
     // guard. By default it is equal to the data bitwidth.
-    auto maskGran =
-        mem.maskBits > 1 ? mem.dataWidth / mem.maskBits : mem.dataWidth;
+    auto maskGran = isMasked ? mem.dataWidth / mem.maskBits : mem.dataWidth;
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
@@ -2521,6 +2525,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "to run this.");
 
   FirMemory memSummary = op.getSummary();
+  bool isMasked = memSummary.maskBits > 1;
 
   // Process each port in turn.
   SmallVector<Type, 8> resultTypes;
@@ -2582,6 +2587,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         }
         wire = getReadInOutOp(wire);
         if (!field2.empty()) {
+          // This handles the case, when the single bit mask field is removed,
+          // and the enable is updated after 'And' with mask bit.
           Value wire2 = createTmpWireOp(
               portType, ("." + portName + "." + field2 + ".wire").str());
           auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
@@ -2630,7 +2637,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addOutput("R", "_data", "data", memSummary.dataWidth);
       } else if (memportKind == MemOp::PortKind::ReadWrite) {
         addInput("RW", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        if (memSummary.maskBits > 1)
+        // If maskBits =1, then And the mask field with enable, and update the
+        // enable. Else keep mask port.
+        if (isMasked)
           addInput("RW", "_en", "en", 1);
         else
           addInput("RW", "_en", "en", 1, "wmask");
@@ -2638,17 +2647,21 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addInput("RW", "_wmode", "wmode", 1);
         addInput("RW", "_wdata", "wdata", memSummary.dataWidth);
         addOutput("RW", "_rdata", "rdata", memSummary.dataWidth);
-        if (memSummary.maskBits > 1)
+        // Ignore mask port, if maskBits =1
+        if (isMasked)
           addInput("RW", "_wmask", "wmask", memSummary.maskBits);
       } else {
         addInput("W", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        if (memSummary.maskBits > 1)
+        // If maskBits =1, then And the mask field with enable, and update the
+        // enable. Else keep mask port.
+        if (isMasked)
           addInput("W", "_en", "en", 1);
         else
           addInput("W", "_en", "en", 1, "mask");
         addInput("W", "_clk", "clk", 1);
         addInput("W", "_data", "data", memSummary.dataWidth);
-        if (memSummary.maskBits > 1)
+        // Ignore mask port, if maskBits =1
+        if (isMasked)
           addInput("W", "_mask", "mask", memSummary.maskBits);
       }
 
@@ -2668,7 +2681,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
-
   return success();
 }
 

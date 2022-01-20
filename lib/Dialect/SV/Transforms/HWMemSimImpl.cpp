@@ -156,6 +156,8 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value wmode = op.body().getArgument(inArg++);
     Value wdataIn = op.body().getArgument(inArg++);
     Value wmaskBits;
+    // There are no input mask ports, if maskBits =1. Create a dummy true value
+    // for mask.
     if (isMasked)
       wmaskBits = op.body().getArgument(inArg++);
     else
@@ -173,16 +175,11 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     // For multi-bit mask, extract corresponding write data bits of
     // mask-granularity size each. Each of the extracted data bits will be
     // written to a register, gaurded by the corresponding mask bit.
-    // if (isMasked)
     for (size_t i = 0; i < maskBits; ++i) {
       maskValues[i] = b.createOrFold<comb::ExtractOp>(wmaskBits, i, 1);
       dataValues[i] = b.createOrFold<comb::ExtractOp>(wdataIn, i * mem.maskGran,
                                                       mem.maskGran);
     }
-    // else {
-    //   maskValues[0] = wmaskBits;
-    //   dataValues[0] = wdataIn;
-    // }
 
     // wire to store read result
     auto rWire = b.create<sv::WireOp>(wdataIn.getType());
@@ -225,6 +222,8 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value clock = op.body().getArgument(inArg++);
     Value wdataIn = op.body().getArgument(inArg++);
     Value wmaskBits;
+    // There are no input mask ports, if maskBits =1. Create a dummy true value
+    // for mask.
     if (isMasked)
       wmaskBits = op.body().getArgument(inArg++);
     else
