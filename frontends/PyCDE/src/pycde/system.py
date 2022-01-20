@@ -101,6 +101,11 @@ class System:
       physical_region = PhysicalRegion(name)
     return physical_region
 
+  def create_entity_extern(self, tag: str, metadata=""):
+    with self._get_ip():
+      entity_extern = circt.dialects.msft.EntityExternOp.create(tag, metadata)
+    return entity_extern
+
   def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""

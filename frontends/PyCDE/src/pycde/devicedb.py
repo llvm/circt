@@ -7,7 +7,7 @@ import typing
 
 from circt.dialects import msft
 
-from mlir.ir import StringAttr, ArrayAttr
+from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
 
 PrimitiveType = msft.PrimitiveType
 
@@ -119,3 +119,9 @@ class PlacementDB:
       return None
     # TODO: resolve instance and return it.
     return inst
+
+  def reserve_location(self, loc: PhysLocation, entity: msft.EntityExternOp):
+    ref = FlatSymbolRefAttr.get(entity.sym_name.value)
+    path = ArrayAttr.get([ref])
+    subpath = ""
+    self._db.add_placement(loc._loc, path, subpath, entity)

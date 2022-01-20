@@ -44,6 +44,7 @@ class Test:
 primdb = pycde.PrimitiveDB()
 primdb.add_coords("M20K", 39, 25)
 primdb.add_coords(PrimitiveType.M20K, 15, 25)
+primdb.add_coords(PrimitiveType.M20K, 40, 40)
 primdb.add_coords("DSP", 0, 10)
 primdb.add_coords(PrimitiveType.DSP, 1, 12)
 primdb.add(PhysLocation(PrimitiveType.DSP, 39, 25))
@@ -111,9 +112,14 @@ assert region_explicit._physical_region.sym_name.value == "region_1_1"
 test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
+reserved_loc = PhysLocation(PrimitiveType.M20K, 40, 40, 0)
+entity_extern = t.create_entity_extern("tag")
+test_inst.placedb.reserve_location(reserved_loc, entity_extern)
+
 assert test_inst.placedb.get_instance_at(loc[1]) is not None
 assert test_inst.placedb.get_instance_at(
     PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None
+assert test_inst.placedb.get_instance_at(reserved_loc) is not None
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
@@ -125,6 +131,7 @@ print("=== Final mlir dump")
 t.print()
 
 # OUTPUT-LABEL: proc Test_config { parent }
+# OUTPUT-NOT:  set_location_assignment M20K_X40_Y40
 # OUTPUT-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
 # OUTPUT-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
 # OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
