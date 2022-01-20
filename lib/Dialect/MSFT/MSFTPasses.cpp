@@ -184,36 +184,17 @@ public:
 } // anonymous namespace
 
 namespace {
-/// Simply remove PhysicalRegionOp when done.
-struct PhysicalRegionOpLowering : public OpConversionPattern<PhysicalRegionOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
+/// Simply remove the OpTy op when done.
+template <typename OpTy>
+struct RemoveOpLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(PhysicalRegionOp physicalRegion, OpAdaptor adaptor,
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.eraseOp(physicalRegion);
+    rewriter.eraseOp(op);
     return success();
-  }
-};
-} // anonymous namespace
-
-namespace {
-/// Simply remove hw::GlobalRefOps for placement when done.
-struct GlobalRefOpLowering : public OpConversionPattern<hw::GlobalRefOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::GlobalRefOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    for (auto attr : op->getAttrs()) {
-      if (isa<MSFTDialect>(attr.getValue().getDialect())) {
-        rewriter.eraseOp(op);
-        return success();
-      }
-    }
-    return failure();
   }
 };
 } // anonymous namespace
@@ -259,7 +240,7 @@ void LowerToHWPass::runOnOperation() {
   patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
   patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
-  patterns.insert<GlobalRefOpLowering>(ctxt);
+  patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
@@ -274,7 +255,7 @@ void LowerToHWPass::runOnOperation() {
   // Finally, legalize the rest of the MSFT dialect.
   target.addIllegalDialect<MSFTDialect>();
   RewritePatternSet finalPatterns(ctxt);
-  finalPatterns.insert<PhysicalRegionOpLowering>(ctxt);
+  finalPatterns.insert<RemoveOpLowering<PhysicalRegionOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(finalPatterns))))
     signalPassFailure();
 }
