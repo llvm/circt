@@ -153,25 +153,25 @@ struct FirMemory {
   size_t readUnderWrite;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
-  std::string namePrefix;
+  StringAttr modName;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>, std::string>
+             size_t, hw::WUW, SmallVector<int32_t>, StringAttr>
   getTuple() const {
     return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
                     depth, readLatency, writeLatency, maskBits, readUnderWrite,
-                    writeUnderWrite, writeClockIDs, namePrefix);
+                    writeUnderWrite, writeClockIDs, modName);
   }
   bool operator<(const FirMemory &rhs) const {
-    return getTuple() < rhs.getTuple();
+    return modName.getValue() < rhs.modName.getValue();
   }
   bool operator==(const FirMemory &rhs) const {
-    return getTuple() == rhs.getTuple();
+    return modName.getValue() == rhs.modName.getValue();
   }
-  std::string getFirMemoryName() const;
+  StringAttr getFirMemoryName() const;
 };
 } // namespace firrtl
 } // namespace circt

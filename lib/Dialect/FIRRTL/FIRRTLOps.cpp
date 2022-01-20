@@ -1754,22 +1754,14 @@ FirMemory MemOp::getSummary() {
           op.depth(),        op.readLatency(),
           op.writeLatency(), op.getMaskBits(),
           (size_t)op.ruw(),  hw::WUW::PortOrder,
-          writeClockIDs,     op->getAttrOfType<StringAttr>("name").str(),
+          writeClockIDs, 
+          op->getAttrOfType<StringAttr>("modName"),
           op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
-std::string FirMemory::getFirMemoryName() const {
-  const FirMemory &mem = *this;
-  SmallString<8> clocks;
-  for (auto a : mem.writeClockIDs)
-    clocks.append(Twine((char)(a + 'a')).str());
-  return llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}{11}",
-                       mem.namePrefix, mem.numReadPorts, mem.numWritePorts,
-                       mem.numReadWritePorts, mem.dataWidth, mem.depth,
-                       mem.readLatency, mem.writeLatency, mem.maskBits,
-                       mem.readUnderWrite, (unsigned)mem.writeUnderWrite,
-                       clocks.empty() ? "" : "_" + clocks);
+StringAttr FirMemory::getFirMemoryName() const {
+  return modName;
 }
 
 /// Infer the return types of this operation.

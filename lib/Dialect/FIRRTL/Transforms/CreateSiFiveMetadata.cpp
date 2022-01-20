@@ -105,7 +105,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     }
     if (memSummary.numReadWritePorts)
       portStr = "mrw";
-    auto memExtName = memSummary.getFirMemoryName();
+    auto memExtName = memSummary.getFirMemoryName().str();
     seqMemConfStr += "name " + memExtName + " depth " +
                      std::to_string(memSummary.depth) + " width " +
                      std::to_string(width) + " ports " + portStr +
@@ -161,7 +161,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     bool isDut = dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
       auto firMem = memOp.getSummary();
-      auto name = firMem.getFirMemoryName();
+      auto name = firMem.getFirMemoryName().getValue();
       if (isDut)
         dutMems[name].push_back(memOp);
       else
