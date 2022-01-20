@@ -20,6 +20,8 @@ with ir.Context() as ctx, ir.Location.unknown():
                                      input_ports=[],
                                      output_ports=[])
 
+    entity_extern = msft.EntityExternOp.create("tag", "extra details")
+
     op = msft.MSFTModuleOp(name='MyWidget', input_ports=[], output_ports=[])
     with ir.InsertionPoint(op.add_entry_block()):
       msft.OutputOp([])
@@ -91,10 +93,12 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert not place_rc
   # ERR: error: 'msft.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1, "foo_subpath">. Position already occupied by msft.instance @ext1 @MyExternMod
 
+  physAttr2 = msft.PhysLocationAttr.get(msft.M20K, x=40, y=40, num=1)
   devdb = msft.PrimitiveDB()
   assert not devdb.is_valid_location(physAttr)
   devdb.add_primitive(physAttr)
   devdb.add_primitive(msft.PhysLocationAttr.get(msft.M20K, x=2, y=50, num=1))
+  devdb.add_primitive(physAttr2)
   assert devdb.is_valid_location(physAttr)
 
   seeded_pdb = msft.PlacementDB(top.operation, devdb)
@@ -106,9 +110,15 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   rc = seeded_pdb.add_placement(physAttr, path, "foo_subpath", resolved_inst)
   assert rc
+  external_path = ir.ArrayAttr.get(
+      [ir.FlatSymbolRefAttr.get(entity_extern.sym_name.value)])
+  rc = seeded_pdb.add_placement(physAttr2, external_path, "", entity_extern)
+  assert rc
   with ir.InsertionPoint(m.body):
     global_ref = hw.GlobalRefOp(ir.StringAttr.get("foo"), path)
     global_ref.attributes["loc:foo_subpath"] = physAttr
+    global_ref = hw.GlobalRefOp(ir.StringAttr.get("bar"), external_path)
+    global_ref.attributes["loc"] = physAttr2
 
   nearest = seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4)
   assert isinstance(nearest, msft.PhysLocationAttr)
@@ -128,6 +138,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   print("=== Placements:")
   seeded_pdb.walk_placements(print_placement)
   # CHECK-LABEL: === Placements:
+  # CHECK: #msft.physloc<M20K, 40, 40, 1>, [@tag]
   # CHECK: #msft.physloc<M20K, 2, 6, 1, "foo_subpath">, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 

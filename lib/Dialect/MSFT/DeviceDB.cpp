@@ -120,8 +120,8 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
   ArrayAttr instPath = globalRef.namepath();
 
   // Filter out all paths which aren't related to this DB.
-  auto rootInnerRef = instPath.getValue()[0].cast<hw::InnerRefAttr>();
-  if (rootInnerRef.getModule().getValue() != rootMod.getValue())
+  auto rootInnerRef = instPath.getValue()[0].dyn_cast<hw::InnerRefAttr>();
+  if (rootInnerRef && rootInnerRef.getModule().getValue() != rootMod.getValue())
     return 0;
 
   size_t numFailed = 0;

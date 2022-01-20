@@ -157,6 +157,18 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   emitPath(s, inst);
 }
 
+static bool isEntityExtern(Operation *op) {
+  auto globalRef = cast<hw::GlobalRefOp>(op);
+  auto path = globalRef.namepath().getValue();
+  auto leafRef = path.back().dyn_cast<FlatSymbolRefAttr>();
+  if (!leafRef)
+    return false;
+
+  auto rootMod = op->getParentOfType<mlir::ModuleOp>();
+  auto *leafRefOp = rootMod.lookupSymbol(leafRef);
+  return isa<EntityExternOp>(leafRefOp);
+}
+
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
@@ -175,11 +187,17 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
 
   db.walkPlacements(
       [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
+        // Skip entities which we don't need to emit placements for.
+        if (isEntityExtern(inst.op))
+          return;
         emit(state, inst, loc);
       });
 
   db.walkRegionPlacements([&state](PhysicalRegionRefAttr regionRef,
                                    PlacementDB::PlacedInstance inst) {
+    // Skip entities which we don't need to emit placements for.
+    if (isEntityExtern(inst.op))
+      return;
     emit(state, inst, regionRef);
   });
 
