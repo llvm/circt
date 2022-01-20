@@ -215,7 +215,7 @@ PlacementDB::getLeaf(PhysLocationAttr loc) {
 void PlacementDB::walkPlacements(
     function_ref<void(PhysLocationAttr, PlacedInstance)> callback,
     std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
-    Optional<PrimitiveType> primType) {
+    Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
   uint64_t xmin = std::get<0>(bounds) < 0 ? 0 : std::get<0>(bounds);
   uint64_t xmax = std::get<1>(bounds) < 0 ? std::numeric_limits<uint64_t>::max()
                                           : (uint64_t)std::get<1>(bounds);
@@ -224,23 +224,42 @@ void PlacementDB::walkPlacements(
                                           : (uint64_t)std::get<3>(bounds);
 
   // TODO: Since the data structures we're using aren't sorted, the best we can
-  // do is iterate and filter. Once we get to performance, we'll figure out the
+  // do is iterate and filter. If a specific order is requested, we sort the
+  // keys by that as we go. Once we get to performance, we'll figure out the
   // right data structure.
 
+  auto maybeSort = [](auto &container, auto direction) {
+    if (!direction.hasValue())
+      return;
+    if (*direction == Direction::NONE)
+      return;
+
+    llvm::sort(container, [direction](auto colA, auto colB) {
+      if (*direction == Direction::ASC)
+        return colA.first < colB.first;
+
+      return colA.first > colB.first;
+    });
+  };
+
   // X loop.
-  for (auto colF = placements.begin(), colE = placements.end(); colF != colE;
-       ++colF) {
-    size_t x = colF->getFirst();
+  SmallVector<std::pair<size_t, DimYMap>> cols(placements.begin(),
+                                               placements.end());
+  maybeSort(cols, walkOrder.map([](auto wo) { return wo.columns; }));
+  for (auto colF : cols) {
+    size_t x = colF.first;
     if (x < xmin || x > xmax)
       continue;
-    DimYMap yMap = colF->getSecond();
+    DimYMap yMap = colF.second;
 
     // Y loop.
-    for (auto rowF = yMap.begin(), rowE = yMap.end(); rowF != rowE; ++rowF) {
-      size_t y = rowF->getFirst();
+    SmallVector<std::pair<size_t, DimNumMap>> rows(yMap.begin(), yMap.end());
+    maybeSort(rows, walkOrder.map([](auto wo) { return wo.rows; }));
+    for (auto rowF : rows) {
+      size_t y = rowF.first;
       if (y < ymin || y > ymax)
         continue;
-      DimNumMap numMap = rowF->getSecond();
+      DimNumMap numMap = rowF.second;
 
       // Num loop.
       for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
