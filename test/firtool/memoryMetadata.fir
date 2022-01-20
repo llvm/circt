@@ -175,16 +175,16 @@ circuit test:
 ; CHECK: dutModule2 [[m:.+]] (
 
 ; CHECK-LABEL:      FILE "metadata/tb_seq_mems.json"
-; CHECK:      [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a","depth":16,"width":8,"masked":"true",
+; CHECK:      [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a","depth":16,"width":8,"masked":"false",
 ; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
-; CHECK_SAME: "mask_granularity":8,"extra_ports":[],
+; CHECK_SAME: "extra_ports":[],
 ; CHECK-SAME: hierarchy":["test.[[h2]].[[m]].tbMemoryKind1","test.[[h1]].tbMemoryKind1"
 
 ; CHECK-LABEL:       FILE "metadata/seq_mems.json"
-; CHECK:       [{"module_name":"FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a","depth":32,"width":8,"masked":"true",
+; CHECK:       [{"module_name":"FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a","depth":32,"width":8,"masked":"false",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
-; CHECK_SAME:  "mask_granularity":8,"extra_ports":[],
+; CHECK_SAME:  "extra_ports":[],
 ; CHECK-SAME:  "hierarchy":["test.[[m2]].[[m]].dutMemory"
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"
-; CHECK: name FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a depth 32 width 8 ports mwrite,read mask_gran 8
+; CHECK: name FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a depth 32 width 8 ports write,read 

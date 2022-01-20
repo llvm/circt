@@ -599,22 +599,24 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        bDataType, inputPin++});
       ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"), hw::OUTPUT,
                        bDataType, outputPin++});
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"), hw::INPUT,
-                       maskType, inputPin++});
+      if (mem.maskBits > 1)
+        ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"), hw::INPUT,
+                         maskType, inputPin++});
     }
 
     for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
       makePortCommon("W", i, bAddrType);
       ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"), hw::INPUT,
                        bDataType, inputPin++});
-      ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"), hw::INPUT,
-                       maskType, inputPin++});
+      if (mem.maskBits > 1)
+        ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"), hw::INPUT,
+                         maskType, inputPin++});
     }
 
     // Mask granularity is the number of data bits that each mask bit can
     // guard. By default it is equal to the data bitwidth.
     auto maskGran =
-        mem.maskBits > 0 ? mem.dataWidth / mem.maskBits : mem.dataWidth;
+        mem.maskBits > 1 ? mem.dataWidth / mem.maskBits : mem.dataWidth;
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
@@ -2560,7 +2562,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto portName = op.getPortName(i).getValue();
 
       auto addInput = [&](StringRef portLabel, StringRef portLabel2,
-                          StringRef field, size_t width) {
+                          StringRef field, size_t width,
+                          StringRef field2 = "") {
         auto portType =
             IntegerType::get(op.getContext(), std::max((size_t)1, width));
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
@@ -2577,8 +2580,25 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           else
             a->eraseOperand(0);
         }
+        wire = getReadInOutOp(wire);
+        if (!field2.empty()) {
+          Value wire2 = createTmpWireOp(
+              portType, ("." + portName + "." + field2 + ".wire").str());
+          auto accesses2 = getAllFieldAccesses(op.getResult(i), field2);
 
-        operands.push_back(getReadInOutOp(wire));
+          for (auto a : accesses2) {
+            if (a.getType()
+                    .cast<FIRRTLType>()
+                    .getPassiveType()
+                    .getBitWidthOrSentinel() > 0)
+              (void)setLowering(a, wire2);
+            else
+              a->eraseOperand(0);
+          }
+          wire = builder.createOrFold<comb::AndOp>(wire, getReadInOutOp(wire2));
+        }
+
+        operands.push_back(wire);
         argNames.push_back(
             builder.getStringAttr(portLabel + Twine(portNumber) + portLabel2));
       };
@@ -2610,18 +2630,26 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addOutput("R", "_data", "data", memSummary.dataWidth);
       } else if (memportKind == MemOp::PortKind::ReadWrite) {
         addInput("RW", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("RW", "_en", "en", 1);
+        if (memSummary.maskBits > 1)
+          addInput("RW", "_en", "en", 1);
+        else
+          addInput("RW", "_en", "en", 1, "wmask");
         addInput("RW", "_clk", "clk", 1);
         addInput("RW", "_wmode", "wmode", 1);
         addInput("RW", "_wdata", "wdata", memSummary.dataWidth);
         addOutput("RW", "_rdata", "rdata", memSummary.dataWidth);
-        addInput("RW", "_wmask", "wmask", memSummary.maskBits);
+        if (memSummary.maskBits > 1)
+          addInput("RW", "_wmask", "wmask", memSummary.maskBits);
       } else {
         addInput("W", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("W", "_en", "en", 1);
+        if (memSummary.maskBits > 1)
+          addInput("W", "_en", "en", 1);
+        else
+          addInput("W", "_en", "en", 1, "mask");
         addInput("W", "_clk", "clk", 1);
         addInput("W", "_data", "data", memSummary.dataWidth);
-        addInput("W", "_mask", "mask", memSummary.maskBits);
+        if (memSummary.maskBits > 1)
+          addInput("W", "_mask", "mask", memSummary.maskBits);
       }
 
       ++portNumber;
@@ -2640,6 +2668,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
+
   return success();
 }
 
