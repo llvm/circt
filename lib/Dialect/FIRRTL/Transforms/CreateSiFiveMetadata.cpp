@@ -314,7 +314,8 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   // Put the retime information in a verbatim operation.
   auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
   auto verbatimOp = builder.create<sv::VerbatimOp>(
-      circuitOp.getLoc(), buffer, ValueRange(), builder.getArrayAttr(symbols));
+      builder.getUnknownLoc(), buffer, ValueRange(),
+      builder.getArrayAttr(symbols));
   auto fileAttr = hw::OutputFileAttr::getFromFilename(
       context, filename, /*excludeFromFilelist=*/true);
   verbatimOp->setAttr("output_file", fileAttr);
@@ -416,7 +417,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
     // Put the information in a verbatim operation.
     auto builder = OpBuilder::atBlockEnd(body);
     auto verbatimOp =
-        builder.create<sv::VerbatimOp>(circuitOp.getLoc(), buffer);
+        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), buffer);
     auto fileAttr = hw::OutputFileAttr::getFromFilename(
         context, filename, /*excludeFromFilelist=*/true);
     verbatimOp->setAttr("output_file", fileAttr);
