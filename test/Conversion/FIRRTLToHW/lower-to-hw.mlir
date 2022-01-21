@@ -1590,4 +1590,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      hw.instance "foo" sym @sym_foo {{.+}} {hw.verilogName = "Foo"}
     // CHECK-NEXT: hw.instance "bar" sym @sym_bar {{.+}} {hw.verilogName = "Bar"}
   }
+
+  // CHECK-LABEL: hw.module @PreserveName
+  firrtl.module @PreserveName(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>, out %c : !firrtl.uint<1>) {
+    //CHECK comb.or %a, %b {sv.namehint = "myname"}
+    %foo = firrtl.or %a, %b {name = "myname"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %c, %foo : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
 }
