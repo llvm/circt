@@ -206,6 +206,10 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
 
   // Erase the arguments after setting the new output op operands since the
   // arguments might be used by output op.
+  for (unsigned argNum = 0, e = body->getArguments().size(); argNum < e;
+       ++argNum)
+    if (inputs.test(argNum))
+      body->getArgument(argNum).dropAllUses();
   body->eraseArguments(inputs);
 
   return newToOldResultMap;

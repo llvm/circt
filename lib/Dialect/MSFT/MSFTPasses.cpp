@@ -1047,16 +1047,16 @@ void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
   DenseMap<Value, unsigned> valueToInput;
   llvm::BitVector argsToErase(body->getNumArguments());
   for (OpOperand &oper : inst->getOpOperands()) {
-    // auto existingValue = valueToInput.find(oper.get());
-    // if (existingValue != valueToInput.end()) {
-    //   unsigned operNum = oper.getOperandNumber();
-    //   unsigned duplicateInputNum = existingValue->second;
-    //   body->getArgument(operNum).replaceAllUsesWith(
-    //       body->getArgument(duplicateInputNum));
-    //   argsToErase.set(operNum);
-    // } else {
-    //   valueToInput[oper.get()] = valueToInput.size();
-    // }
+    auto existingValue = valueToInput.find(oper.get());
+    if (existingValue != valueToInput.end()) {
+      unsigned operNum = oper.getOperandNumber();
+      unsigned duplicateInputNum = existingValue->second;
+      body->getArgument(operNum).replaceAllUsesWith(
+          body->getArgument(duplicateInputNum));
+      argsToErase.set(operNum);
+    } else {
+      valueToInput[oper.get()] = oper.getOperandNumber();
+    }
   }
 
   // Remove the ports.
