@@ -909,7 +909,9 @@ struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
 
 private:
   void bubbleWiresUp(MSFTModuleOp mod);
+  void dedupOutputs(MSFTModuleOp mod);
   void sinkWiresDown(MSFTModuleOp mod);
+  void dedupInputs(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
@@ -924,11 +926,47 @@ void WireCleanupPass::runOnOperation() {
   SmallVector<MSFTModuleOp> sortedMods;
   getAndSortModules(topMod, sortedMods);
 
-  for (auto mod : sortedMods)
+  for (auto mod : sortedMods) {
     bubbleWiresUp(mod);
+    dedupOutputs(mod);
+  }
 
-  for (auto mod : llvm::reverse(sortedMods))
+  for (auto mod : llvm::reverse(sortedMods)) {
     sinkWiresDown(mod);
+    dedupInputs(mod);
+  }
+}
+
+/// Remove outputs driven by the same value.
+void WireCleanupPass::dedupOutputs(MSFTModuleOp mod) {
+  Block *body = mod.getBodyBlock();
+  Operation *terminator = body->getTerminator();
+
+  DenseMap<Value, unsigned> valueToOutputIdx;
+  SmallVector<unsigned> outputMap;
+  llvm::BitVector outputPortsToRemove(terminator->getNumOperands());
+  for (OpOperand &outputVal : terminator->getOpOperands()) {
+    auto existing = valueToOutputIdx.find(outputVal.get());
+    if (existing != valueToOutputIdx.end()) {
+      outputMap.push_back(existing->second);
+      outputPortsToRemove.set(outputVal.getOperandNumber());
+    } else {
+      outputMap.push_back(valueToOutputIdx.size());
+      valueToOutputIdx[outputVal.get()] = valueToOutputIdx.size();
+    }
+  }
+
+  mod.removePorts(llvm::BitVector(mod.getNumArguments()), outputPortsToRemove);
+  updateInstances(mod, {},
+                  [&](InstanceOp newInst, InstanceOp oldInst,
+                      SmallVectorImpl<Value> &newOperands) {
+                    // Operands don't change.
+                    llvm::append_range(newOperands, oldInst.getOperands());
+                    // The results have to be remapped.
+                    for (OpResult res : oldInst.getResults())
+                      res.replaceAllUsesWith(
+                          newInst.getResult(outputMap[res.getResultNumber()]));
+                  });
 }
 
 /// Push up any wires which are simply passed-through.
@@ -995,6 +1033,46 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
         newOperands.push_back(oldInst.getOperand(operNum));
   };
   updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
+}
+
+void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
+  auto instantiations = moduleInstantiations[mod];
+  // TODO: remove this limitation. This would involve looking at the common
+  // loopbacks for all the instances.
+  if (instantiations.size() != 1)
+    return;
+  InstanceOp inst = instantiations[0];
+
+  // Find all the arguments which are driven by the same signal. Remap them
+  // appropriately within the module, and mark that input port for deletion.
+  Block *body = mod.getBodyBlock();
+  DenseMap<Value, unsigned> valueToInput;
+  llvm::BitVector argsToErase(body->getNumArguments());
+  for (OpOperand &oper : inst->getOpOperands()) {
+    auto existingValue = valueToInput.find(oper.get());
+    if (existingValue != valueToInput.end()) {
+      unsigned operNum = oper.getOperandNumber();
+      unsigned duplicateInputNum = existingValue->second;
+      body->getArgument(operNum).replaceAllUsesWith(
+          body->getArgument(duplicateInputNum));
+      argsToErase.set(operNum);
+    } else {
+      valueToInput[oper.get()] = oper.getOperandNumber();
+    }
+  }
+
+  // Remove the ports.
+  auto remappedResults =
+      mod.removePorts(argsToErase, llvm::BitVector(inst.getNumResults()));
+  // and update the instantiations.
+  auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
+                         SmallVectorImpl<Value> &newOperands) {
+    for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
+         ++argNum)
+      if (!argsToErase.test(argNum))
+        newOperands.push_back(oldInst.getOperand(argNum));
+  };
+  updateInstances(mod, remappedResults, getOperands);
 }
 
 /// Sink all the instance connections which are loops.
