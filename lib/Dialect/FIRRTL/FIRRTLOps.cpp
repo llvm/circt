@@ -182,6 +182,28 @@ bool firrtl::hasDontTouch(Value value) {
   return (!module.getPortSymbol(arg.getArgNumber()).empty());
 }
 
+/// Get a special name to use when printing the entry block arguments of the
+/// region contained by an operation in this dialect.
+void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
+                                  OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  auto *parentOp = op;
+  auto *block = &region.front();
+  // Check to see if the operation containing the arguments has 'firrtl.name'
+  // attributes for them.  If so, use that as the name.
+  auto argAttr = parentOp->getAttrOfType<ArrayAttr>("portNames");
+  // Do not crash on invalid IR.
+  if (!argAttr || argAttr.size() != block->getNumArguments())
+    return;
+
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    auto str = argAttr[i].cast<StringAttr>().getValue();
+    if (!str.empty())
+      setNameFn(block->getArgument(i), str);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -189,7 +211,7 @@ bool firrtl::hasDontTouch(Value value) {
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayAttr annotations) {
   // Add an attribute for the name.
-  result.addAttribute(builder.getIdentifier("name"), name);
+  result.addAttribute(builder.getStringAttr("name"), name);
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
@@ -964,6 +986,16 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     return failure();
 
   return success();
+}
+
+void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                         mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void FExtModuleOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2883,7 +2915,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return success();
 }
 

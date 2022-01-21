@@ -189,7 +189,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
   );
 
   let assemblyFormat = [{
-    (`when` $when^)? $body (`:` type($results)^)? attr-dict
+    (`when` $when^)? $body (`:` qualified(type($results))^)? attr-dict
   }];
 
   let skipDefaultBuilders = 1;
@@ -217,7 +217,7 @@ def PipelineRegisterOp : Op<StaticLogic_Dialect, "pipeline.register",
   );
 
   let assemblyFormat = [{
-    $operands (`:` type($operands)^)? attr-dict
+    $operands (`:` qualified(type($operands))^)? attr-dict
   }];
 
   let verifier = [{

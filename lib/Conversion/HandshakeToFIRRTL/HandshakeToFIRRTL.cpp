@@ -2392,11 +2392,11 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
   // Helpers to get port identifiers.
   auto loadIdentifier = [&](size_t i) {
-    return rewriter.getIdentifier("load" + std::to_string(i));
+    return rewriter.getStringAttr("load" + std::to_string(i));
   };
 
   auto storeIdentifier = [&](size_t i) {
-    return rewriter.getIdentifier("store" + std::to_string(i));
+    return rewriter.getStringAttr("store" + std::to_string(i));
   };
 
   // Collect the port info for each port.

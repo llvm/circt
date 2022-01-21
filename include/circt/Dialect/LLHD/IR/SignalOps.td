@@ -48,7 +48,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
   let arguments = (ins StrAttr: $name, LLHD_AnyUnderlyingType: $init);
   let results = (outs LLHD_AnySigType: $result);
 
-  let assemblyFormat = "$name $init attr-dict `:` type($init)";
+  let assemblyFormat = "$name $init attr-dict `:` qualified(type($init))";
 }
 
 def LLHD_PrbOp : LLHD_Op<"prb", [
@@ -81,7 +81,7 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
                            [MemRead]>: $signal);
   let results = (outs LLHD_AnyUnderlyingType: $result);
 
-  let assemblyFormat = "$signal attr-dict `:` type($signal)";
+  let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
 }
 
 def LLHD_DrvOp : LLHD_Op<"drv", [
@@ -127,7 +127,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
 
   let assemblyFormat = [{
     $signal `,` $value `after` $time ( `if` $enable^ )? attr-dict `:`
-    type($signal)
+    qualified(type($signal))
   }];
 
   let hasFolder = 1;

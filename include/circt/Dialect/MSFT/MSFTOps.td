@@ -64,7 +64,8 @@ def OneOrNoBlocksRegion : Region<
 def MSFTModuleOp : MSFTOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
        HasParent<"mlir::ModuleOp">,
-       SingleBlockImplicitTerminator<"OutputOp">]>{
+       SingleBlockImplicitTerminator<"OutputOp">,
+       OpAsmOpInterface]>{
   let summary = "MSFT HW Module";
   let description = [{
     A lot like `hw.module`, but with a few differences:
@@ -120,6 +121,8 @@ def MSFTModuleOp : MSFTOp<"module",
     }
 
     Block *getBodyBlock() { return &body().front(); }
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
 
   private:
     // This trait needs access to the hooks defined below.
@@ -204,7 +207,7 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
     OpBuilder<(ins)>
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 }
 
 def PhysicalRegionOp : MSFTOp<"physical_region",

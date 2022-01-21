@@ -729,7 +729,7 @@ FuncOpLowering::connectConstantsToControl(ConversionPatternRewriter &rewriter,
          llvm::make_early_inc_range(f.getOps<arith::ConstantOp>())) {
       rewriter.setInsertionPointAfter(constantOp);
       rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
-          constantOp, constantOp.value(),
+          constantOp, constantOp.getValue(),
           rewriter.create<handshake::SourceOp>(constantOp.getLoc()));
     }
   } else {
@@ -739,7 +739,7 @@ FuncOpLowering::connectConstantsToControl(ConversionPatternRewriter &rewriter,
            llvm::make_early_inc_range(block.getOps<arith::ConstantOp>())) {
         rewriter.setInsertionPointAfter(constantOp);
         rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
-            constantOp, constantOp.value(), blockEntryCtrl);
+            constantOp, constantOp.getValue(), blockEntryCtrl);
       }
     }
   }

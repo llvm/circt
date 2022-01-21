@@ -105,7 +105,7 @@ def MemOp : FIRRTLOp<"mem"> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)?
-    $ruw custom<MemOp>(attr-dict) `:` type($results)
+    $ruw custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
 
   let builders = [
@@ -207,7 +207,7 @@ def NodeOp : FIRRTLOp<"node",
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)?
-    $input custom<ImplicitSSAName>(attr-dict) `:` type($input)
+    $input custom<ImplicitSSAName>(attr-dict) `:` qualified(type($input))
   }];
 
   let hasCanonicalizer = true;
@@ -251,7 +251,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)?
-    operands custom<ImplicitSSAName>(attr-dict) `:` type($result)
+    operands custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -286,7 +286,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
   let assemblyFormat = [{
     (`sym` $inner_sym^)?
     operands custom<ImplicitSSAName>(attr-dict)
-    `:` type($resetSignal) `,` type($resetValue) `,` type($result)
+    `:` qualified(type($resetSignal)) `,` qualified(type($resetValue)) `,` qualified(type($result))
   }];
 
   let hasCanonicalizer = true;
@@ -318,7 +318,7 @@ def WireOp : FIRRTLOp<"wire", []> {
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)?
-    custom<ImplicitSSAName>(attr-dict) `:` type($result)
+    custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
   let hasCanonicalizer = true;
 }

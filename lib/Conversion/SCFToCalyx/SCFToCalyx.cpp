@@ -67,7 +67,7 @@ struct WhileOpInterface {
 
   Block *getBodyBlock() {
     return TypeSwitch<Operation *, Block *>(impl)
-        .Case([](scf::WhileOp op) { return &op.after().front(); })
+        .Case([](scf::WhileOp op) { return &op.getAfter().front(); })
         .Case([](staticlogic::PipelineWhileOp op) {
           return &op.getStagesBlock();
         });
@@ -75,7 +75,7 @@ struct WhileOpInterface {
 
   Block *getConditionBlock() {
     return TypeSwitch<Operation *, Block *>(impl)
-        .Case([](scf::WhileOp op) { return &op.before().front(); })
+        .Case([](scf::WhileOp op) { return &op.getBefore().front(); })
         .Case(
             [](staticlogic::PipelineWhileOp op) { return &op.getCondBlock(); });
   }
@@ -174,7 +174,7 @@ static bool noStoresToMemory(Value memref) {
 /// defining mandatory port attributes for calyx::ComponentOp's.
 static DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name) {
   return DictionaryAttr::get(
-      ctx, {NamedAttribute(Identifier::get(name, ctx), UnitAttr::get(ctx))});
+      ctx, {NamedAttribute(StringAttr::get(ctx, name), UnitAttr::get(ctx))});
 }
 
 /// Adds the mandatory Calyx component I/O ports (->[clk, reset, go], [done]->)
@@ -934,12 +934,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      MulIOp mul) const {
   Location loc = mul.getLoc();
-  Type width = mul.result().getType(), one = rewriter.getI1Type();
+  Type width = mul.getResult().getType(), one = rewriter.getI1Type();
   auto multPipe =
       getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, one});
   // Pass the result from the MulIOp to the Calyx primitive.
-  mul.result().replaceAllUsesWith(multPipe.out());
+  mul.getResult().replaceAllUsesWith(multPipe.out());
   auto reg = createReg(getComponentState(), rewriter, mul.getLoc(),
                        getComponentState().getUniqueName("mult_reg"),
                        width.getIntOrFloatBitWidth());
@@ -948,8 +948,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   getComponentState().addBlockScheduleable(mul->getBlock(), group);
 
   rewriter.setInsertionPointToEnd(group.getBody());
-  rewriter.create<calyx::AssignOp>(loc, multPipe.left(), mul.lhs());
-  rewriter.create<calyx::AssignOp>(loc, multPipe.right(), mul.rhs());
+  rewriter.create<calyx::AssignOp>(loc, multPipe.left(), mul.getLhs());
+  rewriter.create<calyx::AssignOp>(loc, multPipe.right(), mul.getRhs());
   // Write the output to this register.
   rewriter.create<calyx::AssignOp>(loc, reg.in(), multPipe.out());
   // The write enable port is high when the pipeline is done.
@@ -1144,7 +1144,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      CmpIOp op) const {
-  switch (op.predicate()) {
+  switch (op.getPredicate()) {
   case CmpIPredicate::eq:
     return buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter, op);
   case CmpIPredicate::ne:
@@ -1498,8 +1498,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
       /// the same registers.
       if (auto scfWhileOp = dyn_cast<scf::WhileOp>(op)) {
         for (auto barg :
-             enumerate(scfWhileOp.before().front().getArguments())) {
-          auto condOp = scfWhileOp.getConditionOp().args()[barg.index()];
+             enumerate(scfWhileOp.getBefore().front().getArguments())) {
+          auto condOp = scfWhileOp.getConditionOp().getArgs()[barg.index()];
           if (barg.value() != condOp) {
             res = whileOp.getOperation()->emitError()
                   << progState().irName(barg.value())

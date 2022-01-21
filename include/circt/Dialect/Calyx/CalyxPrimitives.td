@@ -13,7 +13,7 @@
 /// Base class for Calyx primitives.
 class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
   CalyxCell<mnemonic, traits> {
-    let assemblyFormat = "$instanceName attr-dict `:` type(results)";
+    let assemblyFormat = "$instanceName attr-dict `:` qualified(type(results))";
     let arguments = (ins FlatSymbolRefAttr:$instanceName);
     let skipDefaultBuilders = 1;
 }
@@ -86,7 +86,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   );
 
   let assemblyFormat = [{
-    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` type($results)
+    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
   }];
 
   let verifier = "return ::verify$cppClass(*this);";

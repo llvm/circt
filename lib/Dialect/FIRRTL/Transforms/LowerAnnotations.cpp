@@ -191,7 +191,7 @@ static void addAnnotation(AnnoTarget ref, ArrayRef<NamedAttribute> anno) {
   if (ref.fieldIdx) {
     SmallVector<NamedAttribute> annoField(anno.begin(), anno.end());
     annoField.emplace_back(
-        StringAttr::get("circt.fieldID", ref.op->getContext()),
+        StringAttr::get(ref.op->getContext(), "circt.fieldID"),
         IntegerAttr::get(
             IntegerType::get(ref.op->getContext(), 32, IntegerType::Signless),
             ref.fieldIdx));
@@ -519,7 +519,7 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
     } else if (!target.isLocal()) {
       auto sym = scatterNonLocalPath(target, state);
       newAnnoAttrs.push_back(
-          {StringAttr::get("circt.nonlocal", anno.getContext()), sym});
+          {StringAttr::get(anno.getContext(), "circt.nonlocal"), sym});
     }
   }
   addAnnotation(target.ref, newAnnoAttrs);

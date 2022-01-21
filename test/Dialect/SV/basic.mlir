@@ -227,10 +227,10 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   hw.output
 }
 
-//CHECK-LABEL: sv.bind #hw.innerNameRef<@AB::@a1>
-//CHECK-NEXT: sv.bind #hw.innerNameRef<@AB::@b1>
-sv.bind #hw.innerNameRef<@AB::@a1>
-sv.bind #hw.innerNameRef<@AB::@b1>
+//CHECK-LABEL: sv.bind <@AB::@a1>
+//CHECK-NEXT: sv.bind <@AB::@b1>
+sv.bind <@AB::@a1>
+sv.bind <@AB::@b1>
 
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2)

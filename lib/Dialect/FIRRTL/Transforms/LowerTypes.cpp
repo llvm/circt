@@ -986,20 +986,20 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portDirections", context),
+      NamedAttribute(StringAttr::get(context, "portDirections"),
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portNames", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
                                           builder.getArrayAttr(newArgNames)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portTypes", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
                                           builder.getArrayAttr(newPortTypes)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portSyms", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
                                           builder.getArrayAttr(newArgSyms)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portAnnotations", context),
+      NamedAttribute(StringAttr::get(context, "portAnnotations"),
                      builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
@@ -1060,18 +1060,18 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portDirections", context),
+      NamedAttribute(StringAttr::get(context, "portDirections"),
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portNames", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
                                           builder->getArrayAttr(newArgNames)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portTypes", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
                                           builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portSyms", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
                                           builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portAnnotations", context),
+      NamedAttribute(StringAttr::get(context, "portAnnotations"),
                      builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.

@@ -66,12 +66,12 @@ static void addBlockOperandToTerminator(Operation *terminator,
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
     wait.destOpsMutable().append(toAppend);
   } else if (auto br = dyn_cast<mlir::BranchOp>(terminator)) {
-    br.destOperandsMutable().append(toAppend);
+    br.getDestOperandsMutable().append(toAppend);
   } else if (auto condBr = dyn_cast<mlir::CondBranchOp>(terminator)) {
-    if (condBr.falseDest() == successsor) {
-      condBr.falseDestOperandsMutable().append(toAppend);
+    if (condBr.getFalseDest() == successsor) {
+      condBr.getFalseDestOperandsMutable().append(toAppend);
     } else {
-      condBr.trueDestOperandsMutable().append(toAppend);
+      condBr.getTrueDestOperandsMutable().append(toAppend);
     }
   } else {
     llvm_unreachable("unsupported terminator op");

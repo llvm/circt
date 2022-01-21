@@ -128,8 +128,8 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
 
   let assemblyFormat = [{
     $sym_name $machine attr-dict `(` $inputs `)` `:`
-    functional-type($inputs, $outputs) (`,` `clock` $clock^ `:` type($clock))?
-    (`,` `reset` $reset^ `:` type($reset))?
+    functional-type($inputs, $outputs) (`,` `clock` $clock^ `:` qualified(type($clock)))?
+    (`,` `reset` $reset^ `:` qualified(type($reset)))?
   }];
 
   let extraClassDeclaration = [{
@@ -172,7 +172,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
 
   let builders = [ OpBuilder<(ins), "build($_builder, $_state, llvm::None);"> ];
 
-  let assemblyFormat = [{ attr-dict ($operands^ `:` type($operands))? }];
+  let assemblyFormat = [{ attr-dict ($operands^ `:` qualified(type($operands)))? }];
 
   let verifier = [{ return ::verify$cppClass(*this); }];
 }
@@ -243,7 +243,7 @@ def VariableOp : FSMOp<"variable", [HasParent<"MachineOp">, HasCustomSSAName,
   let arguments = (ins AnyAttr:$initValue, StrAttr:$name);
   let results = (outs AnyType:$result);
 
-  let assemblyFormat = [{ $name attr-dict `:` type($result) }];
+  let assemblyFormat = [{ $name attr-dict `:` qualified(type($result)) }];
 }
 
 def UpdateOp : FSMOp<"update", [HasParent<"TransitionOp">, SameTypeOperands]> {
@@ -256,7 +256,7 @@ def UpdateOp : FSMOp<"update", [HasParent<"TransitionOp">, SameTypeOperands]> {
 
   let arguments = (ins AnyType:$variable, AnyType:$value);
 
-  let assemblyFormat = [{ attr-dict $variable `,` $value `:` type($value) }];
+  let assemblyFormat = [{ attr-dict $variable `,` $value `:` qualified(type($value)) }];
 
   let extraClassDeclaration = [{
     /// Get the targeted variable operation. This returns null on invalid IR.
