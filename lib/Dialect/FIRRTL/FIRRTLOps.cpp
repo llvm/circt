@@ -1755,10 +1755,10 @@ FirMemory MemOp::getSummary() {
     SmallString<8> clocks;
     for (auto a : writeClockIDs)
       clocks.append(Twine((char)(a + 'a')).str());
-    auto n = op->getAttrOfType<StringAttr>("name").getValue();
+    auto instName = op->getAttrOfType<StringAttr>("name").getValue();
     modName = StringAttr::get(
         op->getContext(),
-        llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", n,
+        llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", instName,
                       numReadPorts, numWritePorts, numReadWritePorts,
                       (size_t)width, op.depth(), op.readLatency(),
                       op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
