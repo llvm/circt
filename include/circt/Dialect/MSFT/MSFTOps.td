@@ -221,3 +221,13 @@ def PhysicalRegionOp : MSFTOp<"physical_region",
     $sym_name `,` $bounds attr-dict
   }];
 }
+
+def EntityExternOp : MSFTOp<"entity.extern",
+    [Symbol, HasParent<"mlir::ModuleOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    AnyAttr:$metadata);
+  let assemblyFormat = [{
+    $sym_name $metadata attr-dict
+  }];
+}

@@ -241,6 +241,7 @@ void LowerToHWPass::runOnOperation() {
   patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
+  patterns.insert<RemoveOpLowering<EntityExternOp>>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
