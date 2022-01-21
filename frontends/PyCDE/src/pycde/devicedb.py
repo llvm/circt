@@ -120,8 +120,16 @@ class PlacementDB:
     # TODO: resolve instance and return it.
     return inst
 
-  def reserve_location(self, loc: PhysLocation, entity: msft.EntityExternOp):
-    ref = FlatSymbolRefAttr.get(entity.sym_name.value)
+  def reserve_location(self, loc: PhysLocation, entity: EntityExtern):
+    sym_name = entity._entity_extern.sym_name.value
+    ref = FlatSymbolRefAttr.get(sym_name)
     path = ArrayAttr.get([ref])
     subpath = ""
-    self._db.add_placement(loc._loc, path, subpath, entity)
+    self._db.add_placement(loc._loc, path, subpath, entity._entity_extern)
+
+
+class EntityExtern:
+  __slots__ = ["_entity_extern"]
+
+  def __init__(self, tag: str, metadata: typing.Any = ""):
+    self._entity_extern = msft.EntityExternOp.create(tag, metadata)

@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde.devicedb import PrimitiveDB, PhysicalRegion
+from pycde.devicedb import EntityExtern, PrimitiveDB, PhysicalRegion
 
 from .module import _SpecializedModule
 from .pycde_types import types
@@ -103,7 +103,7 @@ class System:
 
   def create_entity_extern(self, tag: str, metadata=""):
     with self._get_ip():
-      entity_extern = circt.dialects.msft.EntityExternOp.create(tag, metadata)
+      entity_extern = EntityExtern(tag, metadata)
     return entity_extern
 
   def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
