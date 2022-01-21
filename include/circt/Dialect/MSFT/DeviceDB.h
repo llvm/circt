@@ -77,6 +77,15 @@ public:
     Operation *op;
   };
 
+  /// Contains the order to iterate in each dimension for walkPlacements. The
+  /// dimensions are visited with columns first, then rows, then numbers within
+  /// a cell.
+  enum Direction { NONE = 0, ASC = 1, DESC = 2 };
+  struct WalkOrder {
+    Direction columns;
+    Direction rows;
+  };
+
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
   LogicalResult addPlacement(PhysLocationAttr, PlacedInstance);
@@ -102,7 +111,8 @@ public:
   void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>,
                       std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
                           std::make_tuple(-1, -1, -1, -1),
-                      Optional<PrimitiveType> primType = {});
+                      Optional<PrimitiveType> primType = {},
+                      Optional<WalkOrder> = {});
 
   /// Walk the region placement information.
   void walkRegionPlacements(

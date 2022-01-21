@@ -315,15 +315,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[SEXT:%.+]] = comb.concat {{.*}}, %in3 : i1, i8
     // CHECK: = comb.sub %c0_i9, [[SEXT]] : i9
     %54 = firrtl.neg %in3 : (!firrtl.sint<8>) -> !firrtl.sint<9>
+    // CHECK: hw.output %false, %false : i1, i1
     firrtl.connect %out1, %53 : !firrtl.sint<1>, !firrtl.sint<1>
     %55 = firrtl.neg %in5 : (!firrtl.sint<0>) -> !firrtl.sint<1>
-
-    %61 = firrtl.multibit_mux %17, %55, %55, %55 : !firrtl.uint<1>, !firrtl.sint<1>
-    // CHECK:      %[[ZEXT_INDEX:.+]] = comb.concat %false, {{.*}} : i1, i1
-    // CHECK-NEXT: %[[ARRAY:.+]] = hw.array_create %false, %false, %false
-    // CHECK-NEXT: %[[ARRAY_GET:.+]] = hw.array_get %[[ARRAY]][%[[ZEXT_INDEX]]]
-    // CHECK: hw.output %false, %[[ARRAY_GET]] : i1, i1
-    firrtl.connect %out2, %61 : !firrtl.sint<1>, !firrtl.sint<1>
+    firrtl.connect %out2, %55 : !firrtl.sint<1>, !firrtl.sint<1>
   }
 
 //   module Print :

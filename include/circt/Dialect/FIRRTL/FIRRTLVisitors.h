@@ -31,7 +31,7 @@ public:
         // Basic Expressions
         .template Case<
             ConstantOp, SpecialConstantOp, InvalidValueOp, SubfieldOp,
-            SubindexOp, SubaccessOp, MultibitMuxOp,
+            SubindexOp, SubaccessOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -89,7 +89,6 @@ public:
   HANDLE(SubfieldOp, Unhandled);
   HANDLE(SubindexOp, Unhandled);
   HANDLE(SubaccessOp, Unhandled);
-  HANDLE(MultibitMuxOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
   HANDLE(AddPrimOp, Binary);

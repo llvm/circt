@@ -300,12 +300,16 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
     annos.insert({key, anno});
     auto it = tappedPorts.insert({key, port});
     assert(it.second && "ambiguous tap annotation");
+    if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+      deadNLAs.insert(sym.getAttr());
   }
   void gatherTap(Annotation anno, Operation *op) {
     auto key = getKey(anno);
     annos.insert({key, anno});
     auto it = tappedOps.insert({key, op});
     assert(it.second && "ambiguous tap annotation");
+    if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+      deadNLAs.insert(sym.getAttr());
   }
 
   /// Returns an operation's `inner_sym`, adding one if necessary.
@@ -339,6 +343,10 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
 
   /// Cached module namespaces.
   DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
+
+  /// NLAs which were removed while this pass ran.  These will be garbage
+  /// collected before the pass exits.
+  DenseSet<StringAttr> deadNLAs;
 };
 
 void GrandCentralTapsPass::runOnOperation() {
@@ -610,6 +618,37 @@ void GrandCentralTapsPass::runOnOperation() {
 
     // Drop the original black box module.
     blackBox.extModule.erase();
+  }
+
+  // Garbage collect NLAs which were removed.
+  for (auto &op :
+       llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
+    // Remove NLA anchors whose leaf annotations were removed.
+    if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
+      if (deadNLAs.contains(nla.getNameAttr()))
+        nla.erase();
+      continue;
+    }
+
+    // Remove NLA paths on instances associated with removed NLA
+    // leaves.
+    auto module = dyn_cast<FModuleOp>(op);
+    if (!module)
+      continue;
+    for (auto instance : module.getBody()->getOps<InstanceOp>()) {
+      AnnotationSet annotations(instance);
+      if (annotations.empty())
+        continue;
+      bool modified = false;
+      annotations.removeAnnotations([&](Annotation anno) {
+        if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+          if (deadNLAs.contains(sym.getAttr()))
+            return modified = true;
+        return false;
+      });
+      if (modified)
+        annotations.applyToOperation(instance);
+    }
   }
 }
 
