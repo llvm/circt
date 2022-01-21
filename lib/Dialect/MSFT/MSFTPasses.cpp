@@ -1043,6 +1043,8 @@ void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
     return;
   InstanceOp inst = instantiations[0];
 
+  // Find all the arguments which are driven by the same signal. Remap them
+  // appropriately within the module, and mark that input port for deletion.
   Block *body = mod.getBodyBlock();
   DenseMap<Value, unsigned> valueToInput;
   llvm::BitVector argsToErase(body->getNumArguments());
@@ -1065,7 +1067,6 @@ void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
   // and update the instantiations.
   auto getOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                          SmallVectorImpl<Value> &newOperands) {
-    // Use sort-merge-join to compute the new operands;
     for (unsigned argNum = 0, e = oldInst.getNumOperands(); argNum < e;
          ++argNum)
       if (!argsToErase.test(argNum))
