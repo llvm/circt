@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -38,6 +39,7 @@ class CreateSiFiveMetadataPass
   LogicalResult emitMemoryMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
   void runOnOperation() override;
+  void renameMemory(CircuitOp circuitOp);
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
@@ -53,6 +55,19 @@ public:
   }
 };
 } // end anonymous namespace
+
+void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
+  CircuitNamespace circuitNamespace(circuitOp);
+  for (auto mod : circuitOp.getOps<FModuleOp>()) {
+    for (auto memOp : mod.getBody()->getOps<MemOp>()) {
+      auto name = memOp->getAttrOfType<StringAttr>("name");
+      auto modName = circuitNamespace.newName(name.getValue() + "_ext");
+      auto *ctxt = memOp.getContext();
+      memOp->setAttr(StringAttr::get(ctxt, "modName"),
+                     StringAttr::get(ctxt, modName));
+    }
+  }
+}
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
@@ -105,7 +120,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     }
     if (memSummary.numReadWritePorts)
       portStr = "mrw";
-    auto memExtName = memSummary.getFirMemoryName();
+    auto memExtName = memSummary.getFirMemoryName().str();
     seqMemConfStr += "name " + memExtName + " depth " +
                      std::to_string(memSummary.depth) + " width " +
                      std::to_string(width) + " ports " + portStr +
@@ -161,7 +176,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     bool isDut = dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
       auto firMem = memOp.getSummary();
-      auto name = firMem.getFirMemoryName();
+      auto name = firMem.getFirMemoryName().getValue();
       if (isDut)
         dutMems[name].push_back(memOp);
       else
@@ -437,6 +452,8 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 void CreateSiFiveMetadataPass::runOnOperation() {
   auto circuitOp = getOperation();
   auto *body = circuitOp.getBody();
+
+  renameMemory(circuitOp);
 
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
