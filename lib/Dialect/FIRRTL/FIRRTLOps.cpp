@@ -1748,21 +1748,31 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-
-  return {numReadPorts,      numWritePorts,
-          numReadWritePorts, (size_t)width,
-          op.depth(),        op.readLatency(),
-          op.writeLatency(), op.getMaskBits(),
-          (size_t)op.ruw(),  hw::WUW::PortOrder,
-          writeClockIDs, 
-          op->getAttrOfType<StringAttr>("modName"),
+  StringAttr modName;
+  if (op->hasAttr("modName"))
+    modName = op->getAttrOfType<StringAttr>("modName");
+  else {
+    SmallString<8> clocks;
+    for (auto a : writeClockIDs)
+      clocks.append(Twine((char)(a + 'a')).str());
+    auto n = op->getAttrOfType<StringAttr>("name").getValue();
+    modName = StringAttr::get(
+        op->getContext(),
+        llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", n,
+                      numReadPorts, numWritePorts, numReadWritePorts,
+                      (size_t)width, op.depth(), op.readLatency(),
+                      op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
+                      clocks.empty() ? "" : "_" + clocks));
+  }
+  return {numReadPorts,       numWritePorts,    numReadWritePorts,
+          (size_t)width,      op.depth(),       op.readLatency(),
+          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder, writeClockIDs,    modName,
           op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
-StringAttr FirMemory::getFirMemoryName() const {
-  return modName;
-}
+StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
 /// Infer the return types of this operation.
 LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,

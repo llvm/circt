@@ -60,7 +60,6 @@ private:
                             llvm::json::OStream &jsonStream);
   void emitValue(Attribute node, llvm::json::OStream &jsonStream);
   void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream);
-  void renameMemory(CircuitOp circuitOp );
 
   SmallString<8> addSymbolImpl(Attribute symbol) {
     unsigned id;
@@ -246,7 +245,6 @@ void EmitOMIRPass::runOnOperation() {
   circuitNamespace = &currentCircuitNamespace;
   instancePaths = &currentInstancePaths;
 
-  renameMemory(circuitOp);
   // Traverse the IR and collect all tracker annotations that were previously
   // scattered into the circuit.
   circuitOp.walk([&](Operation *op) {
@@ -350,19 +348,6 @@ void EmitOMIRPass::runOnOperation() {
       context, *outputFilename, /*excludeFromFilelist=*/true, false);
   verbatimOp->setAttr("output_file", fileAttr);
   verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
-}
-
-void EmitOMIRPass::renameMemory(CircuitOp circuitOp ){
-
-
-  for (auto mod : circuitOp.getOps<FModuleOp>()) {
-    for (auto memOp : mod.getBody()->getOps<MemOp>()) {
-      auto name = memOp->getAttrOfType<StringAttr>("name");
-      auto modName = circuitNamespace->newName(name.getValue());
-      auto ctxt = memOp.getContext();
-      memOp->setAttr(StringAttr::get(ctxt, "modName"), StringAttr::get(ctxt,modName));
-    }
-  }
 }
 
 /// Make a tracker absolute by adding an NLA to it which starts at the root
@@ -810,7 +795,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
           target.push_back('/');
           target.append(addSymbol(componentName));
           target.push_back(':');
-          target.append(addSymbol(memOp->getAttrOfType<StringAttr>("modName")));
+          target.append(memOp.getSummary().getFirMemoryName());
           return;
         }
       }

@@ -2628,8 +2628,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr =
-      SymbolRefAttr::get( memSummary.getFirMemoryName());
+  auto memModuleAttr = SymbolRefAttr::get(memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
