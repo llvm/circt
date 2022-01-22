@@ -132,4 +132,21 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
    ];
 }
 
+def HWExportModuleMetadata : Pass<"hw-export-module-metadata",
+                                   "mlir::ModuleOp"> {
+  let summary = "Export module information";
+  let description = [{
+    This pass creates a verbatim op which contains JSON of the list of modules
+    and port information. Gets written out by ExportVerilog.
+  }];
+
+  let constructor = "circt::sv::createHWExportModuleMetadataPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+
+  let options = [
+    Option<"fileName", "file-name", "std::string", "\"metadata.json\"",
+            "File in which to emit the metadata.">
+   ];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
