@@ -18,5 +18,5 @@ def ConstantOp : MIROp<"constant", [NoSideEffect]> {
 
   let arguments = (ins I32Attr:$value);
   let results = (outs MooreRValueType:$result);
-  let assemblyFormat = "$value attr-dict `:` type($result)";
+  let assemblyFormat = "$value attr-dict `:` qualified(type($result))";
 }

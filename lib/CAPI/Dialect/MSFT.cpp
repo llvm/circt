@@ -109,6 +109,7 @@ void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
                                         CirctMSFTPlacementCallback ccb,
                                         int64_t bounds[4],
                                         CirctMSFTPrimitiveType cPrimTypeFilter,
+                                        CirctMSFTWalkOrder cWalkOrder,
                                         void *userData) {
   PlacementDB *db = unwrap(cdb);
   auto cb = [ccb, userData](PhysLocationAttr loc,
@@ -120,9 +121,17 @@ void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
   Optional<PrimitiveType> primTypeFilter;
   if (cPrimTypeFilter >= 0)
     primTypeFilter = static_cast<PrimitiveType>(cPrimTypeFilter);
+
+  Optional<PlacementDB::WalkOrder> walkOrder;
+  if (cWalkOrder.columns != CirctMSFTDirection::NONE ||
+      cWalkOrder.rows != CirctMSFTDirection::NONE)
+    walkOrder = PlacementDB::WalkOrder{
+        static_cast<PlacementDB::Direction>(cWalkOrder.columns),
+        static_cast<PlacementDB::Direction>(cWalkOrder.rows)};
+
   db->walkPlacements(
       cb, std::make_tuple(bounds[0], bounds[1], bounds[2], bounds[3]),
-      primTypeFilter);
+      primTypeFilter, walkOrder);
 }
 
 //===----------------------------------------------------------------------===//

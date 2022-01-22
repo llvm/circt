@@ -21,7 +21,8 @@ def isModuleSymbol : AttrConstraint<
 
 def HWModuleOp : HWOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
+       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">,
+       OpAsmOpInterface]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -87,6 +88,8 @@ def HWModuleOp : HWOp<"module",
     StringRef getName() {
       return getNameAttr().getValue();
     }
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
 
   private:
     // This trait needs access to the hooks defined below.
@@ -117,7 +120,7 @@ def HWModuleOp : HWOp<"module",
 }
 
 def HWModuleExternOp : HWOp<"module.extern",
-      [FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
+      [FunctionLike, Symbol, OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   let summary = "HW external Module";
   let description = [{
     The "hw.module.extern" operation represents an external reference to a
@@ -190,6 +193,9 @@ def HWModuleExternOp : HWOp<"module.extern",
       return getNameAttr().getValue();
     }
 
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<HWModuleExternOp>;
@@ -242,7 +248,8 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
 }
 
 def HWModuleGeneratedOp : HWOp<"module.generated",
-      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, OpAsmOpInterface,
+       HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generated Module";
   let description = [{
     The "hw.module.generated" operation represents a reference to an external
@@ -300,6 +307,8 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     /// invalid IR.
     Operation *getGeneratorKindOp();
 
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<HWModuleGeneratedOp>;
@@ -433,7 +442,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
     OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
   ];
 
-  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+  let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 
   let verifier = "return ::verifyOutputOp(this);";
 }
@@ -471,7 +480,7 @@ def ProbeOp : HWOp<"probe", []> {
                        Variadic<AnyType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` type($operands))?";
+  let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
 
 }
 

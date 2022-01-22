@@ -34,6 +34,23 @@ bool hw::isCombinational(Operation *op) {
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
+/// Get a special name to use when printing the entry block arguments of the
+/// region contained by an operation in this dialect.
+static void getAsmBlockArgumentNamesImpl(mlir::Region &region,
+                                         OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  // Assign port names to the bbargs.
+  auto *module = region.getParentOp();
+
+  auto *block = &region.front();
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    auto name = getModuleArgumentName(module, i);
+    if (!name.empty())
+      setNameFn(block->getArgument(i), name);
+  }
+}
+
 enum class Delimiter {
   None,
   Paren,               // () enclosed list
@@ -342,7 +359,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argNames, resultNames;
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
-  auto exportPortIdent = StringAttr::get("hw.exportPort", builder.getContext());
+  auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.inputs) {
     if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
@@ -837,6 +854,16 @@ static LogicalResult verifyHWModuleExternOp(HWModuleExternOp op) {
   return verifyModuleCommon(op);
 }
 
+void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                          mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(region, setNameFn);
+}
+
+void HWModuleExternOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(region, setNameFn);
+}
+
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
 Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
@@ -870,6 +897,11 @@ static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
   }
 
   return success();
+}
+
+void HWModuleGeneratedOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(region, setNameFn);
 }
 
 //===----------------------------------------------------------------------===//

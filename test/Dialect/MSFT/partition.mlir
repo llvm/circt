@@ -99,7 +99,7 @@ msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
 // CLEANUP:          msft.output
 
 // CLEANUP-LABEL:  msft.module @TopComplex {} (%arr_in: !hw.array<4xi5>) -> (out2: i5)
-// CLEANUP:          %part2.comb.add = msft.instance @part2 @dp_complex(%arr_in, %arr_in, %arr_in, %arr_in) {{.*}} : (!hw.array<4xi5>, !hw.array<4xi5>, !hw.array<4xi5>, !hw.array<4xi5>) -> i5
+// CLEANUP:          %part2.comb.add = msft.instance @part2 @dp_complex(%arr_in) {{.*}} : (!hw.array<4xi5>) -> i5
 // CLEANUP:          msft.instance @b @Array()  : () -> ()
 // CLEANUP:          msft.output %part2.comb.add : i5
 // CLEANUP-LABEL:  msft.module.extern @ExternI5(%foo_a: i5) -> (foo_x: i5)
@@ -117,27 +117,27 @@ msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
 // CLEANUP:          %unit1.foo_x = msft.instance @unit1 @Extern(%c0_i2)  : (i2) -> i2
 // CLEANUP:          msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
 
-// CLEANUP-LABEL:  msft.module @dp_complex {} (%hw.array_get.in0: !hw.array<4xi5>, %hw.array_get.in0_0: !hw.array<4xi5>, %hw.array_get.in0_1: !hw.array<4xi5>, %hw.array_get.in0_2: !hw.array<4xi5>) -> (comb.add: i5) attributes {argNames = ["hw.array_get.in0", "hw.array_get.in0", "hw.array_get.in0", "hw.array_get.in0"]} {
+// CLEANUP-LABEL:  msft.module @dp_complex {} (%hw.array_get.in0: !hw.array<4xi5>) -> (comb.add: i5) {
 // CLEANUP:          %c0_i2 = hw.constant 0 : i2
 // CLEANUP:          %0 = hw.array_get %hw.array_get.in0[%c0_i2] : !hw.array<4xi5>
-// CLEANUP:          %b.unit2.foo_x = msft.instance @b.unit2 @ExternI5(%0)  : (i5) -> i5
+// CLEANUP:          [[A0:%.+]] = msft.instance @b.unit2 @ExternI5(%0)  : (i5) -> i5
 // CLEANUP:          %c1_i2 = hw.constant 1 : i2
-// CLEANUP:          %1 = hw.array_get %hw.array_get.in0_0[%c1_i2] : !hw.array<4xi5>
-// CLEANUP:          %b.unit2.foo_x_3 = msft.instance @b.unit2 @ExternI5(%1)  : (i5) -> i5
+// CLEANUP:          %1 = hw.array_get %hw.array_get.in0[%c1_i2] : !hw.array<4xi5>
+// CLEANUP:          [[A1:%.+]] = msft.instance @b.unit2 @ExternI5(%1)  : (i5) -> i5
 // CLEANUP:          %c-2_i2 = hw.constant -2 : i2
-// CLEANUP:          %2 = hw.array_get %hw.array_get.in0_1[%c-2_i2] : !hw.array<4xi5>
-// CLEANUP:          %b.unit2.foo_x_4 = msft.instance @b.unit2 @ExternI5(%2)  : (i5) -> i5
+// CLEANUP:          %2 = hw.array_get %hw.array_get.in0[%c-2_i2] : !hw.array<4xi5>
+// CLEANUP:          [[A2:%.+]] = msft.instance @b.unit2 @ExternI5(%2)  : (i5) -> i5
 // CLEANUP:          %c-1_i2 = hw.constant -1 : i2
-// CLEANUP:          %3 = hw.array_get %hw.array_get.in0_2[%c-1_i2] : !hw.array<4xi5>
-// CLEANUP:          %b.unit2.foo_x_5 = msft.instance @b.unit2 @ExternI5(%3)  : (i5) -> i5
-// CLEANUP:          %4 = hw.array_create %b.unit2.foo_x, %b.unit2.foo_x_3, %b.unit2.foo_x_4, %b.unit2.foo_x_5 : i5
-// CLEANUP:          %c0_i2_6 = hw.constant 0 : i2
-// CLEANUP:          %5 = hw.array_get %4[%c0_i2_6] : !hw.array<4xi5>
-// CLEANUP:          %c1_i2_7 = hw.constant 1 : i2
-// CLEANUP:          %6 = hw.array_get %4[%c1_i2_7] : !hw.array<4xi5>
-// CLEANUP:          %c-2_i2_8 = hw.constant -2 : i2
-// CLEANUP:          %7 = hw.array_get %4[%c-2_i2_8] : !hw.array<4xi5>
-// CLEANUP:          %c-1_i2_9 = hw.constant -1 : i2
-// CLEANUP:          %8 = hw.array_get %4[%c-1_i2_9] : !hw.array<4xi5>
+// CLEANUP:          %3 = hw.array_get %hw.array_get.in0[%c-1_i2] : !hw.array<4xi5>
+// CLEANUP:          [[A3:%.+]] = msft.instance @b.unit2 @ExternI5(%3)  : (i5) -> i5
+// CLEANUP:          %4 = hw.array_create [[A0]], [[A1]], [[A2]], [[A3]] : i5
+// CLEANUP:          %c0_i2_3 = hw.constant 0 : i2
+// CLEANUP:          %5 = hw.array_get %4[%c0_i2_3] : !hw.array<4xi5>
+// CLEANUP:          %c1_i2_4 = hw.constant 1 : i2
+// CLEANUP:          %6 = hw.array_get %4[%c1_i2_4] : !hw.array<4xi5>
+// CLEANUP:          %c-2_i2_5 = hw.constant -2 : i2
+// CLEANUP:          %7 = hw.array_get %4[%c-2_i2_5] : !hw.array<4xi5>
+// CLEANUP:          %c-1_i2_6 = hw.constant -1 : i2
+// CLEANUP:          %8 = hw.array_get %4[%c-1_i2_6] : !hw.array<4xi5>
 // CLEANUP:          %9 = comb.add %5, %6, %7, %8 : i5
 // CLEANUP:          msft.output %9 : i5

@@ -204,7 +204,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [Symbol]> {
   let results = (outs InterfaceType : $result);
 
   let assemblyFormat =
-    "(`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+    "(`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))";
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{
@@ -249,7 +249,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let results = (outs ModportType:$result);
 
   let assemblyFormat =
-    "$iface $field attr-dict `:` type($iface) `->` type($result)";
+    "$iface $field attr-dict `:` qualified(type($iface)) `->` qualified(type($result))";
 
   let verifier = "return ::verifyGetModportOp(*this);";
 
@@ -286,7 +286,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
 
   let assemblyFormat = [{
     $iface `(` custom<IfaceTypeAndSignal>(type($iface), $signalName) `)`
-        `=` $rhs attr-dict `:` type($rhs)
+        `=` $rhs attr-dict `:` qualified(type($rhs))
   }];
 
   let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
@@ -313,7 +313,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
 
   let assemblyFormat = [{
     $iface `(` custom<IfaceTypeAndSignal>(type($iface), $signalName) `)`
-        attr-dict `:` type($signalData)
+        attr-dict `:` qualified(type($signalData))
   }];
 
   let builders = [

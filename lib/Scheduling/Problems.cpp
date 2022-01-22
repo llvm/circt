@@ -45,7 +45,7 @@ LogicalResult Problem::insertDependence(Dependence dep) {
 }
 
 Problem::OperatorType Problem::getOrInsertOperatorType(StringRef name) {
-  auto opr = OperatorType::get(name, containingOp->getContext());
+  auto opr = OperatorType::get(containingOp->getContext(), name);
   operatorTypes.insert(opr);
   return opr;
 }

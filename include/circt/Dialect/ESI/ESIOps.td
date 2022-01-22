@@ -91,7 +91,7 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
 
   let assemblyFormat = [{
     $clk `,` $rstn `,` $send `,` $endpointID attr-dict
-      `:` type($send) `->` type($recv)
+      `:` qualified(type($send)) `->` qualified(type($recv))
   }];
 }
 
@@ -106,7 +106,8 @@ def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
   let results = (outs AnyType:$decodedData);
 
   let assemblyFormat = [{
-    $clk $valid $capnpBits attr-dict `:` type($capnpBits) `->` type($decodedData)
+    $clk $valid $capnpBits attr-dict `:` qualified(type($capnpBits)) `->`
+                                         qualified(type($decodedData))
   }];
 }
 
@@ -117,7 +118,8 @@ def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
   let results = (outs RtlBitArray:$capnpBits);
 
   let assemblyFormat = [{
-    $clk $valid $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
+    $clk $valid $dataToEncode attr-dict `:` qualified(type($dataToEncode))
+                                          `->` qualified(type($capnpBits))
   }];
 }
 
@@ -127,5 +129,5 @@ def NullSourceOp : ESI_Physical_Op<"null", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs ChannelType:$out);
 
-  let assemblyFormat = [{ attr-dict `:` type($out) }];
+  let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
 }

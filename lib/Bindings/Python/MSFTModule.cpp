@@ -81,7 +81,7 @@ public:
   void walkPlacements(
       py::function pycb,
       std::tuple<py::object, py::object, py::object, py::object> bounds,
-      py::object prim) {
+      py::object prim, py::object walkOrder) {
 
     auto handleNone = [](py::object o) {
       return o.is_none() ? -1 : o.cast<int64_t>();
@@ -94,6 +94,14 @@ public:
       cPrim = -1;
     else
       cPrim = prim.cast<CirctMSFTPrimitiveType>();
+
+    CirctMSFTWalkOrder cWalkOrder;
+    if (!walkOrder.is_none())
+      cWalkOrder = walkOrder.cast<CirctMSFTWalkOrder>();
+    else
+      cWalkOrder = CirctMSFTWalkOrder{CirctMSFTDirection::NONE,
+                                      CirctMSFTDirection::NONE};
+
     circtMSFTPlacementDBWalkPlacements(
         db,
         [](MlirAttribute loc, CirctMSFTPlacedInstance p, void *userData) {
@@ -107,7 +115,7 @@ public:
             pycb(physLoc, std::make_tuple(p.path, subpath, p.op));
           }
         },
-        cBounds, cPrim, &pycb);
+        cBounds, cPrim, cWalkOrder, &pycb);
   }
 
 private:
@@ -126,6 +134,12 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("M20K", PrimitiveType::M20K)
       .value("DSP", PrimitiveType::DSP)
       .value("FF", PrimitiveType::FF)
+      .export_values();
+
+  py::enum_<CirctMSFTDirection>(m, "Direction")
+      .value("NONE", CirctMSFTDirection::NONE)
+      .value("ASC", CirctMSFTDirection::ASC)
+      .value("DESC", CirctMSFTDirection::DESC)
       .export_values();
 
   mlir_attribute_subclass(m, "PhysLocationAttr",
@@ -214,5 +228,11 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("callback"),
            py::arg("bounds") =
                std::make_tuple(py::none(), py::none(), py::none(), py::none()),
-           py::arg("prim_type") = py::none());
+           py::arg("prim_type") = py::none(),
+           py::arg("walk_order") = py::none());
+
+  py::class_<CirctMSFTWalkOrder>(m, "WalkOrder")
+      .def(py::init<CirctMSFTDirection, CirctMSFTDirection>(),
+           py::arg("columns") = CirctMSFTDirection::NONE,
+           py::arg("rows") = CirctMSFTDirection::NONE);
 }

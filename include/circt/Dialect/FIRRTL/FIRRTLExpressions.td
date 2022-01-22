@@ -142,7 +142,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
   let results = (outs FIRRTLType:$result);
 
   let hasFolder = 1;
-  let assemblyFormat = "attr-dict `:` type($result)";
+  let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 
 def SubfieldOp : FIRRTLExprOp<"subfield"> {
@@ -209,7 +209,7 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` type($input)";
+     "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
@@ -237,7 +237,7 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` type($input) `,` type($index)";
+     "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 
   let hasCanonicalizeMethod = true;
 }
@@ -264,7 +264,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
-       `(` type($lhs) `,` type($rhs) `)` `->` type($result)
+       `(` qualified(type($lhs)) `,` qualified(type($rhs)) `)` `->` qualified(type($result))
   }];
 
   // Give concrete operations a chance to set a type inference callback. If left

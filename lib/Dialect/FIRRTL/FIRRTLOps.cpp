@@ -182,6 +182,28 @@ bool firrtl::hasDontTouch(Value value) {
   return (!module.getPortSymbol(arg.getArgNumber()).empty());
 }
 
+/// Get a special name to use when printing the entry block arguments of the
+/// region contained by an operation in this dialect.
+void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
+                                  OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  auto *parentOp = op;
+  auto *block = &region.front();
+  // Check to see if the operation containing the arguments has 'firrtl.name'
+  // attributes for them.  If so, use that as the name.
+  auto argAttr = parentOp->getAttrOfType<ArrayAttr>("portNames");
+  // Do not crash on invalid IR.
+  if (!argAttr || argAttr.size() != block->getNumArguments())
+    return;
+
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    auto str = argAttr[i].cast<StringAttr>().getValue();
+    if (!str.empty())
+      setNameFn(block->getArgument(i), str);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -189,7 +211,7 @@ bool firrtl::hasDontTouch(Value value) {
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayAttr annotations) {
   // Add an attribute for the name.
-  result.addAttribute(builder.getIdentifier("name"), name);
+  result.addAttribute(builder.getStringAttr("name"), name);
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
@@ -964,6 +986,16 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     return failure();
 
   return success();
+}
+
+void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                         mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void FExtModuleOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1748,25 +1780,31 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
+  StringAttr modName;
+  if (op->hasAttr("modName"))
+    modName = op->getAttrOfType<StringAttr>("modName");
+  else {
+    SmallString<8> clocks;
+    for (auto a : writeClockIDs)
+      clocks.append(Twine((char)(a + 'a')).str());
+    auto instName = op->getAttrOfType<StringAttr>("name").getValue();
+    modName = StringAttr::get(
+        op->getContext(),
+        llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", instName,
+                      numReadPorts, numWritePorts, numReadWritePorts,
+                      (size_t)width, op.depth(), op.readLatency(),
+                      op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
+                      clocks.empty() ? "" : "_" + clocks));
+  }
+  return {numReadPorts,         numWritePorts,    numReadWritePorts,
+          (size_t)width,        op.depth(),       op.readLatency(),
+          op.writeLatency(),    op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder,   writeClockIDs,    modName,
+          op.getMaskBits() > 1, op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
-std::string FirMemory::getFirMemoryName() const {
-  const FirMemory &mem = *this;
-  SmallString<8> clocks;
-  for (auto a : mem.writeClockIDs)
-    clocks.append(Twine((char)(a + 'a')).str());
-  return llvm::formatv(
-      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", mem.numReadPorts,
-      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
-      mem.readLatency, mem.writeLatency, mem.maskBits, mem.readUnderWrite,
-      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
-}
+StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
 /// Infer the return types of this operation.
 LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
@@ -2883,7 +2921,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return success();
 }
 

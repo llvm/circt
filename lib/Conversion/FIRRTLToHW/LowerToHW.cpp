@@ -193,7 +193,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     for (auto i : top->getAttrs())
       old.push_back(i);
     old.emplace_back(
-        StringAttr::get(attrBase, ctx),
+        StringAttr::get(ctx, attrBase),
         hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
     top->setAttrs(old);
   }
@@ -201,7 +201,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);
@@ -231,6 +231,14 @@ mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
 
 static unsigned getBitWidthFromVectorSize(unsigned size) {
   return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+}
+
+// Try moving a name from an firrtl expression to a hw expression as a name
+// hint.  Dont' overwrite an existing name.
+static void tryCopyName(Operation *dst, Operation *src) {
+  if (auto attr = src->getAttrOfType<StringAttr>("name"))
+    if (!dst->hasAttr("sv.namehint") && !dst->hasAttr("name"))
+      dst->setAttr("sv.namehint", attr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -571,7 +579,6 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     size_t outputPin = 0;
     // We don't need a single bit mask, it can be combined with enable. Create
     // an unmasked memory if maskBits = 1.
-    bool isMasked = mem.maskBits > 1;
 
     auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
       ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_addr"),
@@ -603,7 +610,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
       ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"), hw::OUTPUT,
                        bDataType, outputPin++});
       // Ignore mask port, if maskBits =1
-      if (isMasked)
+      if (mem.isMasked)
         ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"), hw::INPUT,
                          maskType, inputPin++});
     }
@@ -613,14 +620,14 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
       ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"), hw::INPUT,
                        bDataType, inputPin++});
       // Ignore mask port, if maskBits =1
-      if (isMasked)
+      if (mem.isMasked)
         ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"), hw::INPUT,
                          maskType, inputPin++});
     }
 
     // Mask granularity is the number of data bits that each mask bit can
     // guard. By default it is equal to the data bitwidth.
-    auto maskGran = isMasked ? mem.dataWidth / mem.maskBits : mem.dataWidth;
+    auto maskGran = mem.isMasked ? mem.dataWidth / mem.maskBits : mem.dataWidth;
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
@@ -639,7 +646,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
-    auto memoryName = b.getStringAttr(mem.getFirMemoryName());
+    auto memoryName = mem.getFirMemoryName();
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), ArrayAttr(), genAttrs);
   }
@@ -1920,6 +1927,8 @@ template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
   auto result = builder.createOrFold<ResultOpType>(args...);
+  if (auto *op = result.getDefiningOp())
+    tryCopyName(op, orig);
   return setPossiblyFoldedLowering(orig->getResult(0), result);
 }
 
@@ -2525,7 +2534,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "to run this.");
 
   FirMemory memSummary = op.getSummary();
-  bool isMasked = memSummary.maskBits > 1;
 
   // Process each port in turn.
   SmallVector<Type, 8> resultTypes;
@@ -2639,7 +2647,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addInput("RW", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
         // If maskBits =1, then And the mask field with enable, and update the
         // enable. Else keep mask port.
-        if (isMasked)
+        if (memSummary.isMasked)
           addInput("RW", "_en", "en", 1);
         else
           addInput("RW", "_en", "en", 1, "wmask");
@@ -2648,20 +2656,20 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addInput("RW", "_wdata", "wdata", memSummary.dataWidth);
         addOutput("RW", "_rdata", "rdata", memSummary.dataWidth);
         // Ignore mask port, if maskBits =1
-        if (isMasked)
+        if (memSummary.isMasked)
           addInput("RW", "_wmask", "wmask", memSummary.maskBits);
       } else {
         addInput("W", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
         // If maskBits =1, then And the mask field with enable, and update the
         // enable. Else keep mask port.
-        if (isMasked)
+        if (memSummary.isMasked)
           addInput("W", "_en", "en", 1);
         else
           addInput("W", "_en", "en", 1, "mask");
         addInput("W", "_clk", "clk", 1);
         addInput("W", "_data", "data", memSummary.dataWidth);
         // Ignore mask port, if maskBits =1
-        if (isMasked)
+        if (memSummary.isMasked)
           addInput("W", "_mask", "mask", memSummary.maskBits);
       }
 
@@ -2669,8 +2677,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr =
-      SymbolRefAttr::get(op.getContext(), memSummary.getFirMemoryName());
+  auto memModuleAttr = SymbolRefAttr::get(memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(

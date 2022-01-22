@@ -137,3 +137,12 @@ class PhysicalRegionOp:
     existing_bounds.append(bounds)
     new_bounds = _ir.ArrayAttr.get(existing_bounds)
     self.attributes["bounds"] = new_bounds
+
+
+class EntityExternOp:
+
+  @staticmethod
+  def create(symbol, metadata=""):
+    symbol_attr = support.var_to_attribute(symbol)
+    metadata_attr = support.var_to_attribute(metadata)
+    return _msft.EntityExternOp(symbol_attr, metadata_attr)
