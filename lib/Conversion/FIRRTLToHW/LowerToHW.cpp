@@ -641,7 +641,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
-    auto memoryName = mem.getFirMemoryName();
+    auto memoryName = b.getStringAttr(mem.getFirMemoryName());
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), ArrayAttr(), genAttrs);
   }
@@ -2638,7 +2638,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr = SymbolRefAttr::get(memSummary.getFirMemoryName());
+  auto memModuleAttr =
+      SymbolRefAttr::get(op.getContext(), memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
