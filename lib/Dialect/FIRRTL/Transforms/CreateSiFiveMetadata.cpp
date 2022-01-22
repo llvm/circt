@@ -58,15 +58,24 @@ public:
 
 void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
   CircuitNamespace circuitNamespace(circuitOp);
-  for (auto mod : circuitOp.getOps<FModuleOp>()) {
+  SmallVector<MemOp> memOpList;
+  std::map<FirMemory, StringAttr> memNameMap;
+  auto *ctxt = circuitOp.getContext();
+  auto modNameAttr = StringAttr::get(ctxt, "modName");
+  for (auto mod : circuitOp.getOps<FModuleOp>())
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
-      auto name = memOp->getAttrOfType<StringAttr>("name");
-      auto modName = circuitNamespace.newName(name.getValue() + "_ext");
-      auto *ctxt = memOp.getContext();
-      memOp->setAttr(StringAttr::get(ctxt, "modName"),
-                     StringAttr::get(ctxt, modName));
+      memOpList.push_back(memOp);
+      auto firMem = memOp.getSummary();
+      auto insert = memNameMap.find(firMem);
+      if (insert == memNameMap.end()) {
+        auto name = memOp->getAttrOfType<StringAttr>("name");
+        auto modName = circuitNamespace.newName(name.getValue() + "_ext");
+        name = StringAttr::get(ctxt, modName);
+        memOp->setAttr(modNameAttr, name);
+        memNameMap[firMem] = name;
+      } else
+        memOp->setAttr(modNameAttr, insert->second);
     }
-  }
 }
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
@@ -183,7 +192,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     bool isDut = dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
       auto firMem = memOp.getSummary();
-      auto name = firMem.getFirMemoryName().getValue();
+      auto name = firMem.getFirMemoryName();
       if (isDut)
         dutMems[name].push_back(memOp);
       else

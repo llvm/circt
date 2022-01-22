@@ -160,17 +160,17 @@ struct FirMemory {
   Location loc;
 
   std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
-             size_t, hw::WUW, SmallVector<int32_t>, StringAttr>
+             size_t, hw::WUW, SmallVector<int32_t>>
   getTuple() const {
     return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
                     depth, readLatency, writeLatency, maskBits, readUnderWrite,
-                    writeUnderWrite, writeClockIDs, modName);
+                    writeUnderWrite, writeClockIDs);
   }
   bool operator<(const FirMemory &rhs) const {
-    return modName.getValue() < rhs.modName.getValue();
+    return getTuple() < rhs.getTuple();
   }
   bool operator==(const FirMemory &rhs) const {
-    return modName.getValue() == rhs.modName.getValue();
+    return getTuple() == rhs.getTuple();
   }
   StringAttr getFirMemoryName() const;
 };
