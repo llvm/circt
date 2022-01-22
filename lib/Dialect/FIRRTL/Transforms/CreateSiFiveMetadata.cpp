@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -38,6 +39,7 @@ class CreateSiFiveMetadataPass
   LogicalResult emitMemoryMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
   void runOnOperation() override;
+  void renameMemory(CircuitOp circuitOp);
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
@@ -53,6 +55,28 @@ public:
   }
 };
 } // end anonymous namespace
+
+void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
+  CircuitNamespace circuitNamespace(circuitOp);
+  SmallVector<MemOp> memOpList;
+  std::map<FirMemory, StringAttr> memNameMap;
+  auto *ctxt = circuitOp.getContext();
+  auto modNameAttr = StringAttr::get(ctxt, "modName");
+  for (auto mod : circuitOp.getOps<FModuleOp>())
+    for (auto memOp : mod.getBody()->getOps<MemOp>()) {
+      memOpList.push_back(memOp);
+      auto firMem = memOp.getSummary();
+      auto insert = memNameMap.find(firMem);
+      if (insert == memNameMap.end()) {
+        auto name = memOp->getAttrOfType<StringAttr>("name");
+        auto modName = circuitNamespace.newName(name.getValue() + "_ext");
+        name = StringAttr::get(ctxt, modName);
+        memOp->setAttr(modNameAttr, name);
+        memNameMap[firMem] = name;
+      } else
+        memOp->setAttr(modNameAttr, insert->second);
+    }
+}
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
@@ -105,7 +129,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     }
     if (memSummary.numReadWritePorts)
       portStr = "mrw";
-    auto memExtName = memSummary.getFirMemoryName();
+    auto memExtName = memSummary.getFirMemoryName().str();
     seqMemConfStr += "name " + memExtName + " depth " +
                      std::to_string(memSummary.depth) + " width " +
                      std::to_string(width) + " ports " + portStr +
@@ -437,6 +461,8 @@ void CreateSiFiveMetadataPass::getDependentDialects(
 void CreateSiFiveMetadataPass::runOnOperation() {
   auto circuitOp = getOperation();
   auto *body = circuitOp.getBody();
+
+  renameMemory(circuitOp);
 
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
