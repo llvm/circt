@@ -116,13 +116,13 @@ struct ApplyState {
 } // namespace
 
 /// Abstraction over namable things.  Get a name in a generic way.
-static StringRef getName(Operation *op) {
-  return TypeSwitch<Operation *, StringRef>(op)
+static StringAttr getName(Operation *op) {
+  return TypeSwitch<Operation *, StringAttr>(op)
       .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
-            SeqMemOp, MemoryPortOp>([&](auto nop) { return nop.name(); })
+            SeqMemOp, MemoryPortOp>([&](auto nop) { return nop.nameAttr(); })
       .Default([](auto &) {
         llvm_unreachable("unnamable op");
-        return "";
+        return StringAttr();
       });
 }
 
@@ -416,9 +416,8 @@ static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState state) {
     insts.push_back(hw::InnerRefAttr::get(
         inst->getParentOfType<FModuleOp>().getNameAttr(), inst.nameAttr()));
   }
-  insts.push_back(hw::InnerRefAttr::get(
-      target.ref.getModule().getNameAttr(),
-      StringAttr::get(state.circuit.getContext(), getName(target.ref.op))));
+  insts.push_back(hw::InnerRefAttr::get(target.ref.getModule().getNameAttr(),
+                                        getName(target.ref.op)));
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
   auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", instAttr);
   state.symTbl.insert(nla);
@@ -514,7 +513,7 @@ static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
     return failure();
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno) {
-    if (na.getName() != "target") {
+    if (na.getName().getValue() != "target") {
       newAnnoAttrs.push_back(na);
     } else if (!target.isLocal()) {
       auto sym = scatterNonLocalPath(target, state);
