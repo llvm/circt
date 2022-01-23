@@ -1692,8 +1692,7 @@ size_t MemOp::getMaskBits() {
       continue;
 
     FIRRTLType mType;
-    for (auto t :
-         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+    for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }

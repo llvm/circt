@@ -105,7 +105,7 @@ static void getBlackBoxPortsForMemOp(MemOp op,
     // every field in the bundle to the exter module's port list.  All memory
     // ports have an outer flip, so we just strip this.
     auto type = op.getResult(i).getType();
-    for (auto bundleElement : type.cast<BundleType>().getElements()) {
+    for (auto bundleElement : type.cast<BundleType>()) {
       auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
       auto direction = Direction::In;
@@ -208,8 +208,7 @@ static FModuleOp createWrapperModule(MemOp op,
   auto extResultIt = instanceOp.result_begin();
   for (auto memPort : moduleOp.getArguments()) {
     auto memPortType = memPort.getType().cast<FIRRTLType>();
-    for (auto field :
-         llvm::enumerate(memPortType.cast<BundleType>().getElements())) {
+    for (auto field : llvm::enumerate(memPortType.cast<BundleType>())) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.index());
       // Create the connection between module arguments and the external module,
@@ -243,8 +242,7 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
     // Connect each wire to the corresponding ports in the external module
     auto wireBundle = memPort.getType().cast<FIRRTLType>();
-    for (auto field :
-         llvm::enumerate(wireBundle.cast<BundleType>().getElements())) {
+    for (auto field : llvm::enumerate(wireBundle.cast<BundleType>())) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), wireOp, field.index());
       // Create the connection between module arguments and the external module,

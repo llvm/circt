@@ -72,7 +72,7 @@ static Type lowerType(Type type) {
 
   if (BundleType bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-    for (auto element : bundle.getElements()) {
+    for (auto element : bundle) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
@@ -1701,7 +1701,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           if (destStructType.getNumElements() != srcStructType.getNumElements())
             return failure();
 
-          for (auto elem : enumerate(destStructType.getElements())) {
+          for (auto elem : llvm::enumerate(destStructType)) {
             auto structExtract =
                 builder.create<hw::StructExtractOp>(src, elem.value().name);
             if (failed(recurse(structExtract,

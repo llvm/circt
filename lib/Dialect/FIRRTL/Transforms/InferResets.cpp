@@ -128,7 +128,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type,
           })
           .Case<BundleType>([&](auto type) {
             auto wireOp = builder.create<WireOp>(type);
-            for (auto &field : llvm::enumerate(type.getElements())) {
+            for (auto &field : llvm::enumerate(type)) {
               auto zero = createZeroValue(builder, field.value().type, cache);
               auto acc = builder.create<SubfieldOp>(field.value().type, wireOp,
                                                     field.index());
@@ -966,8 +966,8 @@ static FIRRTLType updateType(FIRRTLType oldType, unsigned fieldID,
   // If this is a bundle type, update the corresponding field.
   if (auto bundleType = oldType.dyn_cast<BundleType>()) {
     unsigned index = bundleType.getIndexForFieldID(fieldID);
-    SmallVector<BundleType::BundleElement> fields(
-        bundleType.getElements().begin(), bundleType.getElements().end());
+    SmallVector<BundleType::BundleElement> fields(bundleType.begin(),
+                                                  bundleType.end());
     fields[index].type = updateType(
         fields[index].type, fieldID - bundleType.getFieldID(index), fieldType);
     return BundleType::get(fields, oldType.getContext());
