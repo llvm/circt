@@ -71,6 +71,10 @@ public:
     return getDict().getAs<AttrClass>(name);
   }
 
+  using iterator = llvm::ArrayRef<NamedAttribute>::iterator;
+  iterator begin() const { return getDict().begin(); }
+  iterator end() const { return getDict().end(); }
+
   bool operator==(const Annotation &other) const { return attr == other.attr; }
   bool operator!=(const Annotation &other) const { return !(*this == other); }
   explicit operator bool() const { return bool(attr); }
