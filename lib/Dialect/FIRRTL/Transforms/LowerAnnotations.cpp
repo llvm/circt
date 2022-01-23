@@ -65,9 +65,9 @@ struct AnnoTarget {
       return mod;
     return op->getParentOfType<FModuleOp>();
   }
-  FIRRTLType getType() const {
+  std::pair<FIRRTLType, unsigned> getType() const {
     if (!op)
-      return FIRRTLType();
+      return {FIRRTLType(), 0};
     if (portNum != ~0UL) {
       if (auto mod = dyn_cast<FModuleLike>(op))
         return mod.getPortType(portNum).getSubTypeByFieldID(fieldIdx);
@@ -79,7 +79,7 @@ struct AnnoTarget {
       llvm_unreachable("Unknown port instruction");
     }
     if (op->getNumResults() == 0)
-      return FIRRTLType();
+      return {FIRRTLType(), 0};
     return op->getResult(0).getType().cast<FIRRTLType>().getSubTypeByFieldID(
         fieldIdx);
   }
@@ -246,7 +246,8 @@ static LogicalResult updateStruct(StringRef field, AnnoTarget &entity) {
   if (isa<MemOp, InstanceOp>(entity.op) && entity.portNum == ~0UL)
     return updateExpandedPort(field, entity);
 
-  auto bundle = entity.getType().dyn_cast<BundleType>();
+  auto [type, nextID] = entity.getType();
+  auto bundle = type.dyn_cast<BundleType>();
   if (!bundle)
     return entity.op->emitError("field access '")
            << field << "' into non-bundle type '" << bundle << "'";
@@ -267,7 +268,8 @@ static LogicalResult updateArray(StringRef indexStr, AnnoTarget &entity) {
     return failure();
   }
 
-  auto vec = entity.getType().dyn_cast<FVectorType>();
+  auto [type, nextID] = entity.getType();
+  auto vec = type.dyn_cast<FVectorType>();
   if (!vec)
     return entity.op->emitError("index access '")
            << index << "' into non-vector type '" << vec << "'";
