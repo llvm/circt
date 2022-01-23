@@ -122,6 +122,36 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
   return name.str().str();
 }
 
+Type circt::firrtl::getTypeFromFieldRef(FieldRef fieldRef) {
+  unsigned fieldID = fieldRef.getFieldID();
+  Value value = fieldRef.getValue();
+  FIRRTLType tpe = value.getType().cast<FIRRTLType>();
+  if (fieldID > tpe.getMaxFieldID())
+    return Type();
+
+  while (fieldID) {
+    TypeSwitch<FIRRTLType>(tpe)
+        .template Case<FVectorType>([&](FVectorType vector) {
+          unsigned index = vector.getIndexForFieldID(fieldID);
+          tpe = vector.getSubTypeByFieldID(fieldID);
+          fieldID -= vector.getFieldID(index);
+        })
+        .template Case<BundleType>([&](BundleType bundle) {
+          unsigned index = bundle.getIndexForFieldID(fieldID);
+          tpe = bundle.getSubTypeByFieldID(fieldID);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Default([&](auto op) {
+          // If we reach here, the field ref is pointing inside some aggregate
+          // type that isn't a bundle or a vector. If the type is a ground type,
+          // then the localID should be 0 at this point, and we should have
+          // broken from the loop.
+          llvm_unreachable("unsupported type");
+        });
+  }
+  return tpe;
+}
+
 //===----------------------------------------------------------------------===//
 // Dialect specification.
 //===----------------------------------------------------------------------===//

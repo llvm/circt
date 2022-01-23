@@ -24,6 +24,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include <queue>
@@ -34,260 +35,172 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-// Return ture if it might be fine to merge the connect.
-static bool okToPeel(ConnectOp connect) {
-  // Ignore connections between different types.
-  if (connect.src().getType() != connect.dest().getType())
-    return false;
-  // Ignore if either source or destination is an argument.
-  if (!connect.dest().getDefiningOp() || !connect.src().getDefiningOp())
-    return false;
-  return true;
-}
-
-// Return the constant value if value is essentially constant.
-static Value getConstant(Value value) {
-  if (auto constant = value.getDefiningOp<ConstantOp>())
-    return constant;
-  if (auto constant = value.getDefiningOp<InvalidValueOp>())
-    return constant;
-  if (auto bitcast = value.getDefiningOp<BitCastOp>())
-    return getConstant(bitcast.input());
-
-  // TODO: Add unrealized_conversion, asUInt, asSInt
-  return {};
-}
-
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
 // A helper struct to merge connections.
 struct MergeConnection {
+  MergeConnection(FModuleOp moduleOp) : moduleOp(moduleOp) {}
 
-  // This function peels a pair of src and dest which might be possible to
-  // merge. More specifically, this function recognizes these patterns and
-  // push %a and %b to the worklist.
-  //    connect: subfield %a <= subfield %b
-  //    connect: subindex %a <= subindex %b
-  bool peelFullyConnect(ConnectOp connect);
+  // Return true if something is changed.
+  bool run();
+  bool changed = false;
 
-  // This function peels a destination which might be possible to
-  // merge to constant. More specifically, this function recognizes these
-  // patterns and push %a to the worklist.
-  //    connect: subfield %a <= constant
-  //    connect: subindex %a <= constant
-  bool peelConstantConnect(ConnectOp connect);
-
-  template <class AggregateType>
-  void tryFullyConnect(AggregateType type, Value src, Value dest);
-
-  template <class AggregateType>
-  void tryConstantConnect(AggregateType type, Value dest);
-
-  // Return true if a connection is removed.
-  bool run(FModuleOp moduleOp);
-
-  // A set to track investigated destinations.
-  DenseSet<FieldRef> visitedDestination;
+  void peelConnect(ConnectOp connect);
 
   // A map from a destination FieldRef to connect op.
   DenseMap<FieldRef, ConnectOp> fieldRefToConnect;
 
-  // A map from a destination FieldRef to fieldRef of its connected source
-  // value.
-  DenseMap<FieldRef, FieldRef> connectedSource;
+  // Return a merged value which is connecting to `dest` if exists.
+  Value getMergedConnectedValue(FieldRef dest);
 
-  // A map from a destination FieldRef to Constant-like value for its
-  // connecetd source value.
-  DenseMap<FieldRef, Value> connectedConstant;
+  // Set of root values which can be merged.
+  llvm::SetVector<Value> peeledRoot;
 
-  // A work list for fully connection merging. We use a queue to traverse leafs
-  // first.
-  std::queue<std::pair<Value, Value>> fullyConnectWorklist;
-
-  // A work list for constant connection merging. We use a queue to traverse
-  // leafs first.
-  std::queue<Value> constantConnectWorklist;
-
-  // Container for unused connections to erase in the post-process.
+  // Vector which tracks dead connections.
   SmallVector<ConnectOp> shouldBeRemoved;
+
+  FModuleOp moduleOp;
 };
 
-// Peel if the connect might be a part of full connections.
-bool MergeConnection::peelFullyConnect(ConnectOp connect) {
-  if (!okToPeel(connect))
-    return false;
-  auto *dest = connect.dest().getDefiningOp();
-  auto *src = connect.src().getDefiningOp();
-  if (!((isa<SubindexOp>(dest) && isa<SubindexOp>(src)) ||
-        (isa<SubfieldOp>(dest) && isa<SubfieldOp>(src))))
-    return false;
-  auto destFieldRef = getFieldRefFromValue(connect.dest());
-  auto srcFieldRef = getFieldRefFromValue(connect.dest());
+Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
+  LLVM_DEBUG(llvm::dbgs() << "Merging ... " << fieldRef.getValue()
+                          << ", fieldID=" << fieldRef.getFieldID() << "\n");
 
-  connectedSource[destFieldRef] = srcFieldRef;
-  fieldRefToConnect[destFieldRef] = connect;
+  // If there is a connection on this level, just return connected value and
+  // erase the connection.
+  auto it = fieldRefToConnect.find(fieldRef);
+  if (it != fieldRefToConnect.end()) {
+    auto src = it->second.src();
+    shouldBeRemoved.push_back(it->second);
+    return src;
+  }
 
-  fullyConnectWorklist.push({src->getOperand(0), dest->getOperand(0)});
-  return true;
+  auto type = getTypeFromFieldRef(fieldRef);
+  auto builder = OpBuilder::atBlockEnd(moduleOp.getBody());
+
+  auto getMergedValue = [&](auto aggregateType) {
+    SmallVector<Value> operands;
+
+    // This flag tracks whether we can use aggregate value as merged value.
+    bool canUseSourceAggregate = true;
+    Value sourceAggregate;
+
+    auto checkSourceAggregate = [&](auto subelement, unsigned destIndex,
+                                    unsigned sourceIndex) {
+      // In the first iteration, register the source aggregate value.
+      if (destIndex == 0) {
+        if (subelement.input().getType() == type)
+          sourceAggregate = subelement.input();
+        else {
+          // If the types are not same, it is not possible to use the source
+          // aggregate.
+          canUseSourceAggregate = false;
+        }
+      }
+
+      // Check that input is the same as `sourceAggregate` and indexes match.
+      canUseSourceAggregate &=
+          subelement.input() == sourceAggregate && destIndex == sourceIndex;
+    };
+
+    for (auto idx : llvm::seq(0u, (unsigned)aggregateType.getNumElements())) {
+      auto offset = aggregateType.getFieldID(idx);
+      auto value = getMergedConnectedValue(fieldRef.getSubField(offset));
+      if (!value)
+        return Value();
+
+      operands.push_back(value);
+
+      if (!canUseSourceAggregate)
+        continue;
+
+      if (!value.getDefiningOp()) {
+        canUseSourceAggregate = false;
+        continue;
+      }
+
+      TypeSwitch<Operation *>(value.getDefiningOp())
+          .template Case<SubfieldOp>([&](SubfieldOp subfield) {
+            checkSourceAggregate(subfield, idx, subfield.fieldIndex());
+          })
+          .template Case<SubindexOp>([&](SubindexOp subindex) {
+            checkSourceAggregate(subindex, idx, subindex.index());
+          })
+          .Default([&](auto) { canUseSourceAggregate = false; });
+    }
+
+    if (canUseSourceAggregate) {
+      LLVM_DEBUG(llvm::dbgs() << "Success to merge " << fieldRef.getValue()
+                              << " ,fieldID= " << fieldRef.getFieldID() << "to"
+                              << sourceAggregate << "\n";);
+      return sourceAggregate;
+    }
+
+    // Here, we concat all inputs and cast them into aggregate type.
+    Value accumulate;
+    for (auto value : operands) {
+      value = builder.createOrFold<BitCastOp>(
+          value.getLoc(),
+          UIntType::get(value.getContext(),
+                        *firrtl::getBitWidth(
+                            value.getType().template cast<FIRRTLType>())),
+          value);
+      accumulate = (accumulate ? builder.createOrFold<CatPrimOp>(
+                                     accumulate.getLoc(), accumulate, value)
+                               : value);
+    }
+    return builder.createOrFold<BitCastOp>(accumulate.getLoc(), type,
+                                           accumulate);
+  };
+
+  if (auto bundle = type.dyn_cast_or_null<BundleType>())
+    return getMergedValue(bundle);
+  else if (auto vector = type.dyn_cast_or_null<FVectorType>())
+    return getMergedValue(vector);
+
+  return Value();
 }
 
-// Push the connection to worklists if the connect might be a part of full
-// connections.
-bool MergeConnection::peelConstantConnect(ConnectOp connect) {
-  if (!okToPeel(connect))
-    return false;
-  auto *dest = connect.dest().getDefiningOp();
-  if (!(isa<SubindexOp>(dest) || (isa<SubfieldOp>(dest))))
-    return false;
-  auto constant = getConstant(connect.src());
-  if (!constant)
-    return false;
-
-  auto destFieldRef = getFieldRefFromValue(connect.dest());
-  connectedConstant[destFieldRef] = constant;
-  fieldRefToConnect[destFieldRef] = connect;
-  constantConnectWorklist.push(dest->getOperand(0));
-  return true;
-}
-
-// Connect src and dest directly if src and dest are fully connected.
-template <class AggregateType>
-void MergeConnection::tryFullyConnect(AggregateType type, Value src,
-                                      Value dest) {
-  auto srcFieldRef = getFieldRefFromValue(src);
-  auto destFieldRef = getFieldRefFromValue(dest);
-
-  // Skip if we have already looked at the dest.
-  if (!visitedDestination.insert(destFieldRef).second)
+void MergeConnection::peelConnect(ConnectOp connect) {
+  // Ignore connections between different types because it will produce a
+  // partial connect.
+  if (connect.src().getType() != connect.dest().getType())
     return;
 
-  // Check all sub elements are connected.
-  for (auto idx : llvm::seq(0u, (unsigned)type.getNumElements())) {
-    auto offset = type.getFieldID(idx);
-    auto it = connectedSource.find(destFieldRef.getSubField(offset));
-    if (it == connectedSource.end() ||
-        it->second != srcFieldRef.getSubField(offset)) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Fail to merge because they are not fully connected\n");
-      return;
-    }
-  }
+  auto destFieldRef = getFieldRefFromValue(connect.dest());
+  auto destRoot = destFieldRef.getValue();
 
-  LLVM_DEBUG(llvm::dbgs() << "Merge Success\n";);
-
-  // Ok, all subelements of `src` and `dest` are connected properly. Therefore,
-  // it is fine to connect `src` to `dest`. So remove all existing conections
-  // between them.
-  for (auto idx : llvm::seq(0u, (unsigned)type.getNumElements())) {
-    auto offset = type.getFieldID(idx);
-    auto connect = fieldRefToConnect[destFieldRef.getSubField(offset)];
-    LLVM_DEBUG(llvm::dbgs() << "Erase:" << connect << "\n";);
-    shouldBeRemoved.push_back(connect);
-  }
-
-  auto builder =
-      ImplicitLocOpBuilder::atBlockEnd(dest.getLoc(), src.getParentBlock());
-
-  auto newConnection = builder.create<ConnectOp>(dest, src);
-  LLVM_DEBUG(llvm::dbgs() << "New connection:" << newConnection << "\n";);
-
-  // New connection might be merged as well.
-  peelFullyConnect(newConnection);
-}
-
-template <class AggregateType>
-void MergeConnection::tryConstantConnect(AggregateType type, Value dest) {
-  auto destFieldRef = getFieldRefFromValue(dest);
-
-  // Skip if we have already looked at the dest.
-  if (!visitedDestination.insert(destFieldRef).second)
+  // If dest is derived from mem op or has a ground type, we cannot merge them.
+  if (destRoot.getDefiningOp<MemOp>() ||
+      destRoot.getType().cast<FIRRTLType>().isGround())
     return;
 
-  // Check all sub elements are connected to constants.
-  for (auto idx : llvm::seq(0u, (unsigned)type.getNumElements())) {
-    auto offset = type.getFieldID(idx);
-    if (!connectedConstant.count(destFieldRef.getSubField(offset))) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Fail to merge because they are not fully connected\n");
-      return;
-    }
-  }
-
-  LLVM_DEBUG(llvm::dbgs() << "Merge Success\n";);
-
-  // Ok, all subelements are connected to constant so let's connect dest to
-  // concatnation {c1, c2, c3, c4, ..., cn}. For simplicity, we first bitcast
-  // each constant to uint with same bitwidth, and then bitcast the concatnation
-  // into the type of destination.
-  Value accumulate;
-  auto builder =
-      ImplicitLocOpBuilder::atBlockEnd(dest.getLoc(), dest.getParentBlock());
-  for (auto idx : llvm::seq(0u, (unsigned)type.getNumElements())) {
-    auto offset = type.getFieldID(idx);
-    auto constant = connectedConstant[destFieldRef.getSubField(offset)];
-
-    constant = builder.createOrFold<BitCastOp>(
-        UIntType::get(constant.getContext(),
-                      *firrtl::getBitWidth(
-                          constant.getType().template cast<FIRRTLType>())),
-        constant);
-
-    accumulate =
-        (accumulate ? builder.createOrFold<CatPrimOp>(accumulate, constant)
-                    : constant);
-
-    auto connnect = fieldRefToConnect[destFieldRef.getSubField(offset)];
-    LLVM_DEBUG(llvm::dbgs() << "Erase:" << connnect << "\n";);
-    shouldBeRemoved.push_back(connnect);
-  }
-
-  accumulate = builder.createOrFold<BitCastOp>(dest.getType(), accumulate);
-  auto newConnection = builder.create<ConnectOp>(dest, accumulate);
-  LLVM_DEBUG(llvm::dbgs() << "New connection:" << newConnection << "\n";);
-  // New connection might be merged as well.
-  peelConstantConnect(newConnection);
+  fieldRefToConnect[destFieldRef] = connect;
+  peeledRoot.insert(destRoot);
+  return;
 }
 
-bool MergeConnection::run(FModuleOp moduleOp) {
-  // Peel all connects.
-  moduleOp.walk([&](ConnectOp connect) {
-    LLVM_DEBUG(llvm::dbgs() << "Trying to peel: " << connect << "\n");
-    if (peelFullyConnect(connect) || peelConstantConnect(connect))
-      return;
-  });
+bool MergeConnection::run() {
+  // Peel all connections.
+  moduleOp.walk([&](ConnectOp connect) { peelConnect(connect); });
 
-  // Run fully connection merging.
-  while (!fullyConnectWorklist.empty()) {
-    auto [src, dest] = fullyConnectWorklist.front();
-    fullyConnectWorklist.pop();
+  // Iterate over roots.
+  for (auto root : peeledRoot) {
+    // If the root has a ground type, there is no connection to merge.
+    if (root.getType().cast<FIRRTLType>().isGround())
+      continue;
 
-    LLVM_DEBUG(llvm::dbgs() << "=== Trying fully connect merging:\nSRC: " << src
-                            << "\nDEST: " << dest << "\n");
-    // We cannot merge if the type is not same.
-    if (src.getType() != dest.getType()) {
-      LLVM_DEBUG(llvm::dbgs() << "Fail to merge because of type mismatch\n");
+    unsigned size = shouldBeRemoved.size();
+    auto value = getMergedConnectedValue({root, 0});
+    if (!value) {
+      // If we failed to get merged value, revert dead connections.
+      shouldBeRemoved.resize(size);
       continue;
     }
-
-    if (auto bundle = src.getType().dyn_cast<BundleType>())
-      tryFullyConnect(bundle, src, dest);
-    else if (auto vector = src.getType().dyn_cast<FVectorType>())
-      tryFullyConnect(vector, src, dest);
-  }
-
-  // Run constant connection merging.
-  while (!constantConnectWorklist.empty()) {
-    auto dest = constantConnectWorklist.front();
-    constantConnectWorklist.pop();
-    LLVM_DEBUG(llvm::dbgs() << "=== Trying constant connect merging:"
-                            << "\nDEST: " << dest << "\n");
-
-    if (auto bundle = dest.getType().dyn_cast<BundleType>())
-      tryConstantConnect(bundle, dest);
-    else if (auto vector = dest.getType().dyn_cast<FVectorType>())
-      tryConstantConnect(vector, dest);
+    auto builder = OpBuilder::atBlockEnd(moduleOp.getBody());
+    builder.create<ConnectOp>(root.getLoc(), root, value);
   }
 
   if (shouldBeRemoved.empty())
@@ -297,12 +210,14 @@ bool MergeConnection::run(FModuleOp moduleOp) {
   for (auto connect : shouldBeRemoved)
     connect.erase();
 
-  // Clean up subfield/subindex.
+  // Clean up.
   auto *body = moduleOp.getBody();
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
     if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp>(op))
-      if (op.use_empty())
+      if (op.use_empty()) {
+        changed = true;
         op.erase();
+      }
 
   return true;
 }
@@ -311,6 +226,7 @@ struct MergeConnectionsPass
     : public MergeConnectionsBase<MergeConnectionsPass> {
   void runOnOperation() override;
 };
+
 } // namespace
 
 void MergeConnectionsPass::runOnOperation() {
@@ -318,8 +234,8 @@ void MergeConnectionsPass::runOnOperation() {
                              "--------------------------------------===\n"
                           << "Module: '" << getOperation().getName() << "'\n";);
 
-  MergeConnection mergeConnection;
-  bool changed = mergeConnection.run(getOperation());
+  MergeConnection mergeConnection(getOperation());
+  bool changed = mergeConnection.run();
 
   if (!changed)
     return markAllAnalysesPreserved();

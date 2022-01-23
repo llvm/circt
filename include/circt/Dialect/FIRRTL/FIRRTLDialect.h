@@ -33,6 +33,9 @@ namespace firrtl {
 /// location.
 FieldRef getFieldRefFromValue(Value value);
 
+/// Get the type specified by fieldRef.
+Type getTypeFromFieldRef(FieldRef fieldRef);
+
 /// Get a string identifier representing the FieldRef.
 std::string getFieldName(const FieldRef &fieldRef);
 std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
