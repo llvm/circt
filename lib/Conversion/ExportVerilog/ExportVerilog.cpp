@@ -2174,8 +2174,8 @@ static bool isExpressionUnableToInline(Operation *op) {
   for (auto user : op->getUsers()) {
     // If the user is in a different block and the op shouldn't be inlined, then
     // we emit this as an out-of-line declaration into its block and the user
-    // can refer to it.
-    if (user->getBlock() != opBlock)
+    // can refer to it unless the operation is nullary and duplicable.
+    if (user->getBlock() != opBlock && !isDuplicatableNullaryExpression(op))
       return true;
 
     // Verilog bit selection is required by the standard to be:

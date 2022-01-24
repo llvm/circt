@@ -562,11 +562,10 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // CHECK-EMPTY:
 // CHECK-NEXT:   reg memory_r_en_pipe[0:0];
 // CHECK-EMPTY:
-// CHECK-NEXT:   localparam _T = 1'h0;
 // CHECK-NEXT:   always_ff @(posedge clock)
-// CHECK-NEXT:     memory_r_en_pipe[_T] <= _T;
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
 // CHECK-NEXT:   initial
-// CHECK-NEXT:     memory_r_en_pipe[_T] = _T;
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] = 1'h0;
 // CHECK-NEXT: endmodule
 hw.module @ArrayLHS(%clock: i1) {
   %false = hw.constant false
