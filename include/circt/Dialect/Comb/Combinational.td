@@ -30,7 +30,7 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
 class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type($result))";
 }
 
 // Base class for variadic operators.
@@ -48,7 +48,7 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
   let hasFolder = true;
   let verifier =  "return ::verifyUTVariadicOp(*this);";
 
-  let assemblyFormat = "$inputs attr-dict `:` type($result)";
+  let assemblyFormat = "$inputs attr-dict `:` qualified(type($result))";
 
   let builders = [
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
@@ -122,7 +122,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
                    HWIntegerType:$lhs, HWIntegerType:$rhs);
   let results = (outs I1:$result);
 
-  let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
+  let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` qualified(type($lhs))";
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
@@ -160,7 +160,7 @@ class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
   let results = (outs I1:$result);
   let hasFolder = 1;
 
-  let assemblyFormat = "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
 def ParityOp : UnaryI1ReductionOp<"parity">;
@@ -206,7 +206,7 @@ def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
   let hasCanonicalizeMethod = true;
   let verifier = "return ::verifyConcatOp(*this);";
 
-  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
 
   let builders = [
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
@@ -271,7 +271,7 @@ def MuxOp : CombOp<"mux",
   let results = (outs AnyType:$result);
 
   let assemblyFormat =
-    "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
+    "$cond `,` $trueValue `,` $falseValue attr-dict `:` qualified(type($result))";
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;

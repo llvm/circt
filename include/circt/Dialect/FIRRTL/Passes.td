@@ -121,6 +121,19 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
+  let summary = "Wires test enables to clock gates for DFT infrastructure";
+  let description = [{
+    This pass will take a 1-bit signal targeted by
+    `DFTTestModeEnableAnnotation` and wires it to the `test_en` port of every
+    module named `EICG_wrapper`. This will create ports in any intermediate
+    module on the path from the signal to the `EICG_wrapper` modules.  This
+    pass is used to enable the "Design For Testing" style of design when the
+    intermediate modules were not originally built with DFT in mind.
+  }];
+  let constructor = "circt::firrtl::createWireDFTPass()";
+}
+
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let summary = "Emit OMIR annotations";
   let description = [{

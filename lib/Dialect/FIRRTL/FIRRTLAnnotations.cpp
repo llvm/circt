@@ -140,7 +140,7 @@ static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
   newAttrs.append(attrs.begin(), it);
   if (!annoSet.empty())
     newAttrs.push_back(
-        {StringAttr::get(key, annoSet.getContext()), annoSet.getArrayAttr()});
+        {StringAttr::get(annoSet.getContext(), key), annoSet.getArrayAttr()});
   if (it != attrs.end())
     newAttrs.append(it + 1, attrs.end());
   return sorted ? DictionaryAttr::getWithSorted(annoSet.getContext(), newAttrs)
@@ -213,7 +213,7 @@ bool AnnotationSet::addDontTouch() {
   if (hasDontTouch())
     return false;
   addAnnotations(DictionaryAttr::get(
-      getContext(), {{StringAttr::get("class", getContext()),
+      getContext(), {{StringAttr::get(getContext(), "class"),
                       StringAttr::get(getContext(), dontTouchAnnoClass)}}));
   return true;
 }

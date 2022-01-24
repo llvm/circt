@@ -54,7 +54,8 @@ def CircuitOp : FIRRTLOp<"circuit",
 
 def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
                                     NoTerminator, HasParent<"CircuitOp">,
-                                    DeclareOpInterfaceMethods<FModuleLike>]> {
+                                    DeclareOpInterfaceMethods<FModuleLike>,
+                                    OpAsmOpInterface]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -99,6 +100,9 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
     void erasePorts(ArrayRef<unsigned> portIndices);
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
   let printer = "return ::print$cppClass(p, *this);";
@@ -107,7 +111,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
       [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
-       DeclareOpInterfaceMethods<FModuleLike>]> {
+       DeclareOpInterfaceMethods<FModuleLike>, OpAsmOpInterface]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
@@ -129,6 +133,11 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                       CArg<"ArrayAttr", "ArrayAttr()">:$parameters)>
   ];
+
+  let extraClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";

@@ -63,7 +63,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<BundleType>([&](auto bundleType) {
         os << "bundle<";
-        llvm::interleaveComma(bundleType.getElements(), os,
+        llvm::interleaveComma(bundleType, os,
                               [&](BundleType::BundleElement element) {
                                 os << element.name.getValue();
                                 if (element.isFlip)
@@ -366,7 +366,7 @@ FIRRTLType FIRRTLType::getMaskType() {
       .Case<BundleType>([&](BundleType bundleType) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
-        for (auto elt : bundleType.getElements())
+        for (auto elt : bundleType)
           newElements.push_back(
               {elt.name, false /* FIXME */, elt.type.getMaskType()});
         return BundleType::get(newElements, this->getContext());
@@ -391,7 +391,7 @@ FIRRTLType FIRRTLType::getWidthlessType() {
       .Case<BundleType>([&](auto a) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
-        for (auto elt : a.getElements())
+        for (auto elt : a)
           newElements.push_back(
               {elt.name, elt.isFlip, elt.type.getWidthlessType()});
         return BundleType::get(newElements, this->getContext());
@@ -559,7 +559,7 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
   auto srcBundleType = srcType.dyn_cast<BundleType>();
   if (destBundleType && srcBundleType)
     return llvm::all_of(
-        destBundleType.getElements(), [&](auto destElt) -> bool {
+        destBundleType, [&](auto destElt) -> bool {
           auto destField = destElt.name.getValue();
           auto srcElt = srcBundleType.getElement(destField);
           // If the src doesn't contain the destination's field, that's okay.
@@ -736,7 +736,7 @@ FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
   return Base::get(context, elements);
 }
 
-auto BundleType::getElements() -> ArrayRef<BundleElement> {
+auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
 
@@ -966,7 +966,7 @@ llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
     return TypeSwitch<FIRRTLType, llvm::Optional<int32_t>>(type)
         .Case<BundleType>([&](BundleType bundle) {
           int32_t width = 0;
-          for (auto &elt : bundle.getElements()) {
+          for (auto &elt : bundle) {
             if (elt.isFlip)
               return llvm::Optional<int32_t>(None);
             auto w = getBitWidth(elt.type);

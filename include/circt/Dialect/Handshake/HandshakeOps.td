@@ -205,7 +205,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
 
   let verifier = "return ::verify(*this);";
-  let assemblyFormat = [{ operands attr-dict `:` type(operands) }];
+  let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
 }
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
@@ -571,7 +571,7 @@ def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
   }];
 
   let results = (outs AnyType:$result);
-  let assemblyFormat = [{ attr-dict `:` type($result)}];
+  let assemblyFormat = [{ attr-dict `:` qualified(type($result))}];
 }
 
 def ConstantOp : Handshake_Op<"constant", [
@@ -601,7 +601,7 @@ def ConstantOp : Handshake_Op<"constant", [
   let extraClassDeclaration = [{
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
-  let assemblyFormat = [{ $ctrl attr-dict `:` type($result)}];
+  let assemblyFormat = [{ $ctrl attr-dict `:` qualified(type($result))}];
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -618,7 +618,7 @@ def EndOp
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Value":$operand)>];
-  let assemblyFormat = [{ operands attr-dict `:` type($control) `,` type($operands)}];
+  let assemblyFormat = [{ operands attr-dict `:` qualified(type($control)) `,` qualified(type($operands))}];
 }
 
 def StartOp : Handshake_Op<"start", [
@@ -635,7 +635,7 @@ def StartOp : Handshake_Op<"start", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins)>];
-  let assemblyFormat = [{ attr-dict `:` type($result)}];
+  let assemblyFormat = [{ attr-dict `:` qualified(type($result))}];
 }
 
 def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
@@ -722,7 +722,7 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
       ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ldCount, "int":$stCount,
       "int":$id)>
   ];
-  let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` type($memref) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+  let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
 }
 
 def LoadOp : Handshake_Op<"load", [

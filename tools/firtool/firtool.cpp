@@ -168,6 +168,9 @@ static cl::opt<bool>
                  cl::desc("lower CHIRRTL memories to FIRRTL memories"),
                  cl::init(true));
 
+static cl::opt<bool> wireDFT("wire-dft", cl::desc("wire the DFT ports"),
+                             cl::init(true));
+
 static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
@@ -352,6 +355,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (wireDFT)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
   if (prefixModules)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());

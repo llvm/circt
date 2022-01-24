@@ -72,7 +72,7 @@ static Type lowerType(Type type) {
 
   if (BundleType bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-    for (auto element : bundle.getElements()) {
+    for (auto element : bundle) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
@@ -193,7 +193,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     for (auto i : top->getAttrs())
       old.push_back(i);
     old.emplace_back(
-        StringAttr::get(attrBase, ctx),
+        StringAttr::get(ctx, attrBase),
         hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
     top->setAttrs(old);
   }
@@ -201,7 +201,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);
@@ -641,7 +641,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
-    auto memoryName = b.getStringAttr(mem.getFirMemoryName());
+    auto memoryName = mem.getFirMemoryName();
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), ArrayAttr(), genAttrs);
   }
@@ -1701,7 +1701,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           if (destStructType.getNumElements() != srcStructType.getNumElements())
             return failure();
 
-          for (auto elem : enumerate(destStructType.getElements())) {
+          for (auto elem : llvm::enumerate(destStructType)) {
             auto structExtract =
                 builder.create<hw::StructExtractOp>(src, elem.value().name);
             if (failed(recurse(structExtract,
@@ -2638,8 +2638,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr =
-      SymbolRefAttr::get(op.getContext(), memSummary.getFirMemoryName());
+  auto memModuleAttr = SymbolRefAttr::get(memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(

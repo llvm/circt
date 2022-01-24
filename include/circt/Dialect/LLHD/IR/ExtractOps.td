@@ -224,7 +224,7 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
   let arguments = (ins LLHD_SigType<[ArrayType]>:$input, HWIntegerType:$index);
   let results = (outs LLHD_SigType<[HWNonInOutType]>: $result);
 
-  let assemblyFormat = "$input `[` $index `]` attr-dict `:` type($input)";
+  let assemblyFormat = "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
@@ -257,7 +257,7 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
   let arguments = (ins LLHD_PtrType<[ArrayType]>:$input, HWIntegerType:$index);
   let results = (outs LLHD_PtrType<[HWNonInOutType]>: $result);
 
-  let assemblyFormat = "$input `[` $index `]` attr-dict `:` type($input)";
+  let assemblyFormat = "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
@@ -292,7 +292,7 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [NoSideEffect,
   let arguments = (ins LLHD_SigType<[StructType]>:$input, StrAttr:$field);
   let results = (outs LLHD_SigType<[HWNonInOutType]>:$result);
 
-  let assemblyFormat = "$input `[` $field `]` attr-dict `:` type($input)";
+  let assemblyFormat = "$input `[` $field `]` attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
@@ -322,7 +322,7 @@ def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [NoSideEffect,
   let arguments = (ins LLHD_PtrType<[StructType]>:$input, StrAttr:$field);
   let results = (outs LLHD_PtrType<[HWNonInOutType]>:$result);
 
-  let assemblyFormat = "$input `[` $field `]` attr-dict `:` type($input)";
+  let assemblyFormat = "$input `[` $field `]` attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {

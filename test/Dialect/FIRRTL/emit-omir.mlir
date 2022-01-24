@@ -319,7 +319,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-SAME:      \22OMString:OMSRAM\22
 // CHECK-SAME:    ]
 // CHECK-SAME:    \22name\22: \22finalPath\22
-// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]5[}][}]}}:FIRRTLMem_{{[^\\]+}}\22
+// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}/{{[{][{]5[}][}]}}:{{[^\\]+}}\22
 
 // CHECK-SAME:  symbols = [
 // CHECK-SAME:    @SRAMPaths,

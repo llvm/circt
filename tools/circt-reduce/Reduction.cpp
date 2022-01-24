@@ -105,7 +105,7 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
 }
 
 bool PassReduction::match(Operation *op) {
-  return op->getName().getIdentifier() == pm->getOpName(*context);
+  return op->getName().getStringRef() == pm->getOpName(*context);
 }
 
 LogicalResult PassReduction::rewrite(Operation *op) { return pm->run(op); }
@@ -259,7 +259,7 @@ struct InstanceStubber : public Reduction {
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
     instOp->erase();
-    if (symbols.getSymbolUserMap(tableOp).use_empty(moduleOp)) {
+    if (symbols.getSymbolUserMap(tableOp).useEmpty(moduleOp)) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
                               << moduleOp.moduleName() << "`\n");
       moduleOp->erase();
@@ -472,7 +472,7 @@ struct OperationPruner : public Reduction {
     return !isa<ModuleOp>(op) &&
            (op->getNumResults() == 0 || op->use_empty()) &&
            (!op->hasAttr(SymbolTable::getSymbolAttrName()) ||
-            symbols.getNearestSymbolUserMap(op).use_empty(op));
+            symbols.getNearestSymbolUserMap(op).useEmpty(op));
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));

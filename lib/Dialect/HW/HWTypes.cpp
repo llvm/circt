@@ -231,7 +231,7 @@ static ParseResult parseFields(AsmParser &p,
         if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
           return failure();
         parameters.push_back(
-            FieldInfo{StringAttr::get(name, p.getContext()), type});
+            FieldInfo{StringAttr::get(p.getContext(), name), type});
         return success();
       });
 }

@@ -38,7 +38,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
   ];
 
   let assemblyFormat = [{ (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-                          `:` type($result) }];
+                          `:` qualified(type($result)) }];
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
@@ -68,7 +68,7 @@ def RegOp : SVOp<"reg", [
 
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = [{ (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
-                          `:` type($result) }];
+                          `:` qualified(type($result)) }];
   let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
@@ -96,7 +96,7 @@ def XMROp : SVOp<"xmr", []> {
   }];
   let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
   let results = (outs InOutType:$result);
-  let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` type($result)"; 
+  let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` qualified(type($result))";
 }
 
 def ReadInOutOp
@@ -111,7 +111,7 @@ def ReadInOutOp
     OpBuilder<(ins "Value":$input)>
   ];
 
-  let assemblyFormat = "$input attr-dict `:` type($input)";
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
 def InOutArrayType
@@ -138,7 +138,7 @@ def ArrayIndexInOutOp
   ];
 
   let assemblyFormat =
-    "$input`[`$index`]` attr-dict `:` type($input) `,` type($index)";
+    "$input`[`$index`]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 }
 
 def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
@@ -174,7 +174,7 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
 
   let hasFolder = true;
   let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
-                        " attr-dict `:` type($input) `,` type($base)";
+                        " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
 
 def InOutStructType
@@ -190,7 +190,7 @@ def StructFieldInOutOp : SVOp<"struct_field_inout",
   let results = (outs InOutType:$result);
 
   let assemblyFormat =
-    "$input `[` $field `]` attr-dict `:` type($input)";
+    "$input `[` $field `]` attr-dict `:` qualified(type($input))";
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.

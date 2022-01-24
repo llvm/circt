@@ -26,7 +26,7 @@ def UndefinedOp : CalyxOp<"undef", [
     ```
   }];
   let results = (outs AnyType:$res);
-  let assemblyFormat = "attr-dict `:` type($res)";
+  let assemblyFormat = "attr-dict `:` qualified(type($res))";
 }
 
 def ProgramOp : CalyxContainer<"program", [
@@ -63,7 +63,8 @@ def ComponentOp : CalyxOp<"component", [
     FunctionLike,
     IsolatedFromAbove,
     SingleBlock,
-    NoTerminator
+    NoTerminator,
+    OpAsmOpInterface
   ]> {
   let summary = "Calyx Component";
   let description = [{
@@ -137,6 +138,8 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Gets the Go port of a Calyx component.
       Value getGoPort();
+      void getAsmBlockArgumentNames(mlir::Region &region,
+                                    mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -196,7 +199,7 @@ def InstanceOp : CalyxCell<"instance", [
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName `of` $componentName attr-dict (`:` type($results)^)?
+    $instanceName `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
 

@@ -97,7 +97,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       SmallVector<Attribute, 4> portAnnotations;
       // Create the merged rw port for the new memory.
       resultNames.push_back(
-          StringAttr::get(modNamespace.newName("rw"), mem.getContext()));
+          StringAttr::get(mem.getContext(), modNamespace.newName("rw")));
       // Set the type of the rw port.
       resultTypes.push_back(
           MemOp::getTypeForPort(mem.depth(), mem.getDataType(),

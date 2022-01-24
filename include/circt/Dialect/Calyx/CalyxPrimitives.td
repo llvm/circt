@@ -13,7 +13,7 @@
 /// Base class for Calyx primitives.
 class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
   CalyxCell<mnemonic, traits> {
-    let assemblyFormat = "$instanceName attr-dict `:` type(results)";
+    let assemblyFormat = "$instanceName attr-dict `:` qualified(type(results))";
     let arguments = (ins FlatSymbolRefAttr:$instanceName);
     let skipDefaultBuilders = 1;
 }
@@ -86,7 +86,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   );
 
   let assemblyFormat = [{
-    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` type($results)
+    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -217,7 +217,10 @@ def PadLibOp : UnaryLibraryOp<"pad"> {
   let verifier = [{
     unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    return success(inBits < outBits);
+    if (inBits >= outBits)
+      return emitOpError("expected input bits (") << inBits << ')' <<
+                         " to be less than output bits (" << outBits << ')';
+    return success();
   }];
 }
 
@@ -225,7 +228,10 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
   let verifier = [{
     unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    return success(inBits > outBits);
+    if (inBits <= outBits)
+      return emitOpError("expected input bits (") << inBits << ')' <<
+                         " to be greater than output bits (" << outBits << ')';
+    return success();
   }];
 }
 def NotLibOp  : UnaryLibraryOp<"not"> {}

@@ -91,7 +91,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
 
   let arguments = (ins);
   let results = (outs HWValueType:$result);
-  let assemblyFormat = " attr-dict `:` type($result)";
+  let assemblyFormat = " attr-dict `:` qualified(type($result))";
   let verifier = "return ::verify$cppClass(*this);";
   let extraClassDeclaration = [{
     int64_t getWidth() {
@@ -109,7 +109,7 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
 
   let arguments = (ins);
   let results = (outs HWValueType:$result);
-  let assemblyFormat = " attr-dict `:` type($result)";
+  let assemblyFormat = " attr-dict `:` qualified(type($result))";
   let verifier = "return ::verify$cppClass(*this);";
   let extraClassDeclaration = [{
     int64_t getWidth() {
@@ -130,7 +130,7 @@ def LocalParamOp : SVOp<"localparam",
   let results = (outs HWValueType:$result);
 
   let assemblyFormat = [{
-    `:` type($result) custom<ImplicitSSAName>(attr-dict)
+    `:` qualified(type($result)) custom<ImplicitSSAName>(attr-dict)
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -168,5 +168,5 @@ def IndexedPartSelectOp
   }];
 
   let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
-                        " attr-dict `:` type($input) `,` type($base)";
+                        " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
