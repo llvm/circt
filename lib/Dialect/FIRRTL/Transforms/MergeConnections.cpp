@@ -68,7 +68,7 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
   LLVM_DEBUG(llvm::dbgs() << "Merging ... " << fieldRef.getValue()
                           << ", fieldID=" << fieldRef.getFieldID() << "\n");
 
-  // If there is a connection on this level, just return connected value and
+  // If there is a connection on this level, just return the connected value and
   // erase the connection.
   auto it = fieldRefToConnect.find(fieldRef);
   if (it != fieldRefToConnect.end()) {
@@ -83,8 +83,10 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
   auto getMergedValue = [&](auto aggregateType) {
     SmallVector<Value> operands;
 
-    // This flag tracks whether we can use aggregate value as merged value.
+    // This flag tracks whether we can use an aggregate value as merged value.
     bool canUseSourceAggregate = true;
+
+    // The value which might be used as a merged value.
     Value sourceAggregate;
 
     auto checkSourceAggregate = [&](auto subelement, unsigned destIndex,
@@ -94,8 +96,7 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
         if (subelement.input().getType() == type)
           sourceAggregate = subelement.input();
         else {
-          // If the types are not same, it is not possible to use the source
-          // aggregate.
+          // If types are not same, it is not possible to use it.
           canUseSourceAggregate = false;
         }
       }
@@ -113,9 +114,14 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
 
       operands.push_back(value);
 
+      // From here, check whether the value is derived from the same aggregate
+      // value.
+
+      // If canUseSourceAggregate is aldready false, abort.
       if (!canUseSourceAggregate)
         continue;
 
+      // If the value is an argument, it is not derived from an aggregate value.
       if (!value.getDefiningOp()) {
         canUseSourceAggregate = false;
         continue;
@@ -131,6 +137,8 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
           .Default([&](auto) { canUseSourceAggregate = false; });
     }
 
+    // If it is fine to use `sourceAggregate` as a merged value, we just
+    // return it.
     if (canUseSourceAggregate) {
       LLVM_DEBUG(llvm::dbgs() << "Success to merge " << fieldRef.getValue()
                               << " ,fieldID= " << fieldRef.getFieldID() << "to"
@@ -138,7 +146,7 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
       return sourceAggregate;
     }
 
-    // Here, we concat all inputs and cast them into aggregate type.
+    // Otherwise, we concat all values and cast them into the aggregate type.
     Value accumulate;
     changed = true;
     for (auto value : operands) {
@@ -202,6 +210,7 @@ bool MergeConnection::run() {
     }
     auto builder = OpBuilder::atBlockEnd(moduleOp.getBody());
     builder.create<ConnectOp>(root.getLoc(), root, value);
+    changed = true;
   }
 
   // Remove dead connections.
@@ -211,7 +220,8 @@ bool MergeConnection::run() {
   // Clean up.
   auto *body = moduleOp.getBody();
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
-    if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp>(op))
+    if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
+            CatPrimOp>(op))
       if (op.use_empty()) {
         changed = true;
         op.erase();
