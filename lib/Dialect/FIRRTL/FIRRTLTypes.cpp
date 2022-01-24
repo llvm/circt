@@ -772,6 +772,16 @@ FIRRTLType BundleType::getPassiveType() {
   return passiveType;
 }
 
+llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
+  for (auto it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return None;
+}
+
 llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   for (auto it : llvm::enumerate(getElements())) {
     auto element = it.value();
@@ -788,8 +798,13 @@ StringRef BundleType::getElementName(size_t index) {
   return getElements()[index].name.getValue();
 }
 
-/// Look up an element by name.  This returns a BundleElement.
-auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
+Optional<BundleType::BundleElement> BundleType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return None;
+}
+
+Optional<BundleType::BundleElement> BundleType::getElement(StringRef name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return None;
@@ -800,6 +815,11 @@ BundleType::BundleElement BundleType::getElement(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
   return getElements()[index];
+}
+
+FIRRTLType BundleType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {

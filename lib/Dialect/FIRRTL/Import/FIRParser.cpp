@@ -936,15 +936,14 @@ Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
       }
 
       // Token should point to valid sub-field.
-      auto subField = subFieldAttr.getValue();
-      auto index = bundleType.getElementIndex(subField);
+      auto index = bundleType.getElementIndex(subFieldAttr);
       if (!index) {
         emitError(loc, getMessage(tokenIdx) + " is not found in the bundle");
         return None;
       }
 
       id += bundleType.getFieldID(index.getValue());
-      currentType = bundleType.getElementType(subField);
+      currentType = bundleType.getElementType(index.getValue());
       continue;
     }
 

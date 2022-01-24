@@ -686,7 +686,7 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
     auto srcBundle = srcType.cast<BundleType>();
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
          ++dstIdx) {
-      auto dstField = dstBundle.getElements()[dstIdx].name.getValue();
+      auto dstField = dstBundle.getElements()[dstIdx].name;
       auto srcIdx = srcBundle.getElementIndex(dstField);
       if (!srcIdx)
         continue;

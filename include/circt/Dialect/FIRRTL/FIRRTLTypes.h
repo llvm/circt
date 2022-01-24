@@ -300,18 +300,21 @@ public:
   size_t getNumElements() { return getElements().size(); }
 
   /// Look up an element's index by name.  This returns None on failure.
+  llvm::Optional<unsigned> getElementIndex(StringAttr name);
   llvm::Optional<unsigned> getElementIndex(StringRef name);
 
   /// Look up an element's name by index. This asserts if index is invalid.
   StringRef getElementName(size_t index);
 
   /// Look up an element by name.  This returns None on failure.
+  llvm::Optional<BundleElement> getElement(StringAttr name);
   llvm::Optional<BundleElement> getElement(StringRef name);
 
   /// Look up an element by index.  This asserts if index is invalid.
   BundleElement getElement(size_t index);
 
   /// Look up an element type by name.
+  FIRRTLType getElementType(StringAttr name);
   FIRRTLType getElementType(StringRef name);
 
   /// Look up an element type by index.
