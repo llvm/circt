@@ -1573,7 +1573,7 @@ struct foldNodeName : public mlir::RewritePattern {
     auto name = node.nameAttr();
     if (node.inner_sym() || !node.annotations().empty())
       return failure();
-    auto* expr = node.input().getDefiningOp();
+    auto *expr = node.input().getDefiningOp();
     if (expr && !expr->hasAttr("name") && !isUselessName(name))
       rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
     rewriter.replaceOp(node, node.input());
