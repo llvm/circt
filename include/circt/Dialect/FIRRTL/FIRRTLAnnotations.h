@@ -45,6 +45,9 @@ public:
   /// Get the data dictionary of this attribute.
   DictionaryAttr getDict() const;
 
+  /// Set the data dictionary of this attribute.
+  void setDict(DictionaryAttr dict);
+
   /// Get the field id this attribute targets.
   unsigned getFieldID() const;
 
@@ -70,6 +73,14 @@ public:
   AttrClass getMember(StringRef name) const {
     return getDict().getAs<AttrClass>(name);
   }
+  
+  /// Add or set a member of the annotation to a value.
+  void setMember(StringAttr name, Attribute value);
+  void setMember(StringRef name, Attribute value);
+
+  /// Remove a member of the annotation.
+  void removeMember(StringAttr name);
+  void removeMember(StringRef name);
 
   using iterator = llvm::ArrayRef<NamedAttribute>::iterator;
   iterator begin() const { return getDict().begin(); }

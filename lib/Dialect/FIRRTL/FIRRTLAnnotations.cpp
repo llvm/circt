@@ -407,6 +407,14 @@ DictionaryAttr Annotation::getDict() const {
   return attr.cast<DictionaryAttr>();
 }
 
+void Annotation::setDict(DictionaryAttr dict) {
+  if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
+    attr = SubAnnotationAttr::get(subAnno.getContext(), subAnno.getFieldID(),
+                                  dict);
+  else
+    attr = dict;
+}
+
 unsigned Annotation::getFieldID() const {
   if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
     return subAnno.getFieldID();
@@ -423,6 +431,68 @@ StringRef Annotation::getClass() const {
   if (auto classAttr = getClassAttr())
     return classAttr.getValue();
   return {};
+}
+
+void Annotation::setMember(StringAttr name, Attribute value) {
+  setMember(name.getValue(), value);
+}
+
+void Annotation::setMember(StringRef name, Attribute value) {
+  // Binary search for the matching field.
+  auto dict = getDict();
+  auto [it, found] = mlir::impl::findAttrSorted(dict.begin(), dict.end(), name);
+  auto index = std::distance(dict.begin(), it);
+  // Create an array for the new members.
+  SmallVector<NamedAttribute> attributes;
+  attributes.reserve(dict.size() + 1);
+  // Copy over the leading annotations.
+  for (auto field : dict.getValue().take_front(index))
+    attributes.push_back(field);
+  // Push the new member.
+  auto nameAttr = StringAttr::get(dict.getContext(), name);
+  attributes.push_back(NamedAttribute(nameAttr, value));
+  // Copy remaining members, skipping the old field value.
+  for (auto field : dict.getValue().drop_front(index + found))
+    attributes.push_back(field);
+  // Commit the dictionary.
+  setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
+}
+
+void Annotation::removeMember(StringAttr name) {
+  auto dict = getDict();
+  SmallVector<NamedAttribute> attributes;
+  attributes.reserve(dict.size() - 1);
+  auto i = dict.begin();
+  auto e = dict.end();
+  while (i != e && i->getValue() != name)
+    attributes.push_back(*(i++));
+  // If the member was not here, just return.
+  if (i == e)
+    return;
+  // Copy the rest of the members over.
+  attributes.append(++i, e);
+  // Commit the dictionary.
+  setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
+}
+
+void Annotation::removeMember(StringRef name) {
+  // Binary search for the matching field.
+  auto dict = getDict();
+  auto [it, found] = mlir::impl::findAttrSorted(dict.begin(), dict.end(), name);
+  auto index = std::distance(dict.begin(), it);
+  if (!found)
+    return;
+  // Create an array for the new members.
+  SmallVector<NamedAttribute> attributes;
+  attributes.reserve(dict.size() - 1);
+  // Copy over the leading annotations.
+  for (auto field : dict.getValue().take_front(index))
+    attributes.push_back(field);
+  // Copy remaining members, skipping the old field value.
+  for (auto field : dict.getValue().drop_front(index + 1))
+    attributes.push_back(field);
+  // Commit the dictionary.
+  setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
 }
 
 //===----------------------------------------------------------------------===//
