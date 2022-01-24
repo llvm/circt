@@ -73,7 +73,7 @@ public:
   AttrClass getMember(StringRef name) const {
     return getDict().getAs<AttrClass>(name);
   }
-  
+
   /// Add or set a member of the annotation to a value.
   void setMember(StringAttr name, Attribute value);
   void setMember(StringRef name, Attribute value);
