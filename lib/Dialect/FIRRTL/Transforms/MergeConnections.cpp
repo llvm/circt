@@ -157,7 +157,7 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
 
   if (auto bundle = type.dyn_cast_or_null<BundleType>())
     return getMergedValue(bundle);
-  else if (auto vector = type.dyn_cast_or_null<FVectorType>())
+  if (auto vector = type.dyn_cast_or_null<FVectorType>())
     return getMergedValue(vector);
 
   return Value();
