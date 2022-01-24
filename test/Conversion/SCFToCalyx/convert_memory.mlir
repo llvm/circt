@@ -481,3 +481,16 @@ module {
     return %1 : i32
   }
 }
+
+// -----
+
+// Load from memory with more elements than index width (32 bits).
+
+// CHECK: calyx.std_pad
+module {
+  func @main(%mem : memref<33xi32>) -> i32 {
+    %c0 = arith.constant 0 : index
+    %0 = memref.load %mem[%c0] : memref<33xi32>
+    return %0 : i32
+  }
+}
