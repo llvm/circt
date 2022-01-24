@@ -1070,11 +1070,12 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
 
-  return build(builder, result, resultTypes,
-               SymbolRefAttr::get(builder.getContext(), module.moduleName()),
-               builder.getStringAttr(name), module.getPortDirectionsAttr(),
-               module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+  return build(
+      builder, result, resultTypes,
+      SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
+      builder.getStringAttr(name), module.getPortDirectionsAttr(),
+      module.getPortNamesAttr(), builder.getArrayAttr(annotations),
+      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1692,8 +1693,7 @@ size_t MemOp::getMaskBits() {
       continue;
 
     FIRRTLType mType;
-    for (auto t :
-         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+    for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
@@ -1780,25 +1780,31 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
+  StringAttr modName;
+  if (op->hasAttr("modName"))
+    modName = op->getAttrOfType<StringAttr>("modName");
+  else {
+    SmallString<8> clocks;
+    for (auto a : writeClockIDs)
+      clocks.append(Twine((char)(a + 'a')).str());
+    modName = StringAttr::get(
+        op->getContext(),
+        llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}",
+                      numReadPorts, numWritePorts, numReadWritePorts,
+                      (size_t)width, op.depth(), op.readLatency(),
+                      op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
+                      (unsigned)hw::WUW::PortOrder,
+                      clocks.empty() ? "" : "_" + clocks));
+  }
+  return {numReadPorts,         numWritePorts,    numReadWritePorts,
+          (size_t)width,        op.depth(),       op.readLatency(),
+          op.writeLatency(),    op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder,   writeClockIDs,    modName,
+          op.getMaskBits() > 1, op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
-std::string FirMemory::getFirMemoryName() const {
-  const FirMemory &mem = *this;
-  SmallString<8> clocks;
-  for (auto a : mem.writeClockIDs)
-    clocks.append(Twine((char)(a + 'a')).str());
-  return llvm::formatv(
-      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", mem.numReadPorts,
-      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
-      mem.readLatency, mem.writeLatency, mem.maskBits, mem.readUnderWrite,
-      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
-}
+StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
 /// Infer the return types of this operation.
 LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,

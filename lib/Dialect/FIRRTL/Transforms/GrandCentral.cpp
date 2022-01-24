@@ -795,13 +795,13 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           TypeSwitch<FIRRTLType>(tpe)
               .template Case<FVectorType>([&](FVectorType vector) {
                 unsigned index = vector.getIndexForFieldID(fieldID);
-                tpe = vector.getSubTypeByFieldID(fieldID);
+                tpe = vector.getElementType();
                 fieldID -= vector.getFieldID(index);
                 path.append("[" + Twine(index) + "]");
               })
               .template Case<BundleType>([&](BundleType bundle) {
                 unsigned index = bundle.getIndexForFieldID(fieldID);
-                tpe = bundle.getSubTypeByFieldID(fieldID);
+                tpe = bundle.getElementType(index);
                 fieldID -= bundle.getFieldID(index);
                 // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
                 // be renamed at ExportVerilog so the path constructed here

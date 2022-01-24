@@ -239,7 +239,7 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
     }
 
     NamedAttrList newAnno;
-    for (auto attr : anno.getDict()) {
+    for (auto attr : anno) {
       if (attr.getName() == "name") {
         newAnno.append(attr.getName(),
                        (Attribute)builder.getStringAttr(
