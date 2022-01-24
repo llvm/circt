@@ -217,7 +217,7 @@ bool MergeConnection::run() {
   for (auto connect : shouldBeRemoved)
     connect.erase();
 
-  // Clean up.
+  // Clean up dead operations introduced by this pass.
   auto *body = moduleOp.getBody();
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
     if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,

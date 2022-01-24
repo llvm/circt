@@ -45,4 +45,31 @@ firrtl.circuit "Test"   {
     firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
+
+  // CHECK: firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
+  // CHECK-NEXT: %0 = firrtl.cat %s1, %s2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK-NEXT: %1 = firrtl.bitcast %0 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: firrtl.connect %sink, %1 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: }
+  firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
+    %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.subindex %sink[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %1, %s1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %s2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  // Check that we don't use %s1 as a source value.
+  // CHECK: firrtl.module @FailedToUseAggregate(in %s1: !firrtl.vector<uint<1>, 2>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>)
+  // CHECK-NEXT:  %0 = firrtl.subindex %s1[0] : !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT:  %1 = firrtl.cat %0, %s2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK-NEXT:  %2 = firrtl.bitcast %1 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT:  firrtl.connect %sink, %2 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: }
+  firrtl.module @FailedToUseAggregate(in %s1: !firrtl.vector<uint<1>, 2>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
+    %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
+    %1 = firrtl.subindex %s1[0] : !firrtl.vector<uint<1>, 2>
+    %2 = firrtl.subindex %sink[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %s2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }
