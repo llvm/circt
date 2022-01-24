@@ -36,7 +36,7 @@ static ArrayAttr getAnnotationsFrom(ArrayRef<Annotation> annotations,
   SmallVector<Attribute> attrs;
   attrs.reserve(annotations.size());
   for (auto anno : annotations)
-    attrs.push_back(anno.getDict());
+    attrs.push_back(anno.getAttr());
   return ArrayAttr::get(context, attrs);
 }
 
