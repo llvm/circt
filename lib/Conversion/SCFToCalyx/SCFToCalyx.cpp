@@ -1360,7 +1360,8 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
   for (auto dim : enumerate(memrefType.getShape())) {
     outPorts.push_back(calyx::PortInfo{
         rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
-        rewriter.getIntegerType(dim.value()), calyx::Direction::Output,
+        rewriter.getIntegerType(llvm::Log2_64_Ceil(dim.value())),
+        calyx::Direction::Output,
         DictionaryAttr::get(rewriter.getContext(), {})});
   }
 
