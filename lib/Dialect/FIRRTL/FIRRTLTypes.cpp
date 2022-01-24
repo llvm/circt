@@ -831,7 +831,7 @@ unsigned BundleType::getFieldID(unsigned index) {
 unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
   assert(getElements().size() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
-  auto it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
 }
 
