@@ -749,7 +749,7 @@ static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
   std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
     return TypeSwitch<FIRRTLType, bool>(type)
         .Case<BundleType>([&](auto bundle) {
-          for (auto &elt : bundle.getElements())
+          for (auto &elt : bundle)
             if (!flatten(elt.type))
               return false;
           return true;
