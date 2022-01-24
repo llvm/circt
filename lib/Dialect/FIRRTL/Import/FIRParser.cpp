@@ -1491,33 +1491,42 @@ private:
 
 /// Remove the DontTouch annotation and return true, if it exists.
 /// Ignore DontTouch that will apply only to a subfield.
-static bool removeDontTouch(ArrayAttr &annotations) {
+/// Return true if a "circt.nonlocal" annotation found and the checkNonLocal is
+/// set.
+static bool removeDontTouch(ArrayAttr &annotations, bool checkNonLocal = true) {
   SmallVector<Attribute> filteredAnnos;
-  bool hasDontTouch = false;
+  bool hasDontTouch = false, hasNonLocal = false;
   // Only check for DontTouch annotation that applies to the entire op.
   // Then drop it and return true.
   // We cannot use AnnotationSet::removeDontTouch, because it does not ignore
   // Subfield annotations.
   for (Attribute anno : annotations) {
-    DictionaryAttr dict = {};
+    DictionaryAttr dict = {}, nonLocalDict = {};
     // If subfield annotation, then field must be 0.
     if (auto subAnno = anno.dyn_cast<SubAnnotationAttr>()) {
       if (subAnno.getFieldID() == 0)
         dict = subAnno.getAnnotations();
-    } else
+      if (checkNonLocal)
+        nonLocalDict = subAnno.getAnnotations();
+    } else {
       dict = anno.dyn_cast<DictionaryAttr>();
-    if (dict)
+      nonLocalDict = dict;
+    }
+    if (nonLocalDict && checkNonLocal && !hasNonLocal)
+      hasNonLocal = nonLocalDict.contains("circt.nonlocal");
+    if (dict) {
       if (auto cls = dict.get("class"))
         if (cls.cast<StringAttr>().getValue().equals(
                 "firrtl.transforms.DontTouchAnnotation")) {
           hasDontTouch = true;
           continue;
         }
+    }
     filteredAnnos.push_back(anno);
   }
   if (hasDontTouch)
     annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
-  return hasDontTouch;
+  return hasDontTouch || hasNonLocal;
 }
 namespace {
 /// This class implements logic and state for parsing statements, suites, and
