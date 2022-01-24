@@ -23,6 +23,12 @@ using mlir::function_like_impl::setAllArgAttrDicts;
 using namespace circt;
 using namespace firrtl;
 
+static size_t getPortCount(Operation *op) {
+  if (auto module = dyn_cast<FModuleLike>(op))
+    return module.getNumPorts();
+  return op->getNumResults();
+}
+
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
     return annots;
@@ -58,12 +64,11 @@ AnnotationSet::AnnotationSet(ArrayAttr annotations, MLIRContext *context)
 AnnotationSet::AnnotationSet(Operation *op)
     : AnnotationSet(getAnnotationsFrom(op)) {}
 
-/// Get an annotation set for the specified module port.
-AnnotationSet AnnotationSet::forPort(FModuleLike module, size_t portNo) {
-  auto ports = module->getAttr("portAnnotations").dyn_cast_or_null<ArrayAttr>();
+AnnotationSet AnnotationSet::forPort(Operation *op, size_t portNo) {
+  auto ports = op->getAttrOfType<ArrayAttr>("portAnnotations");
   if (ports && !ports.empty())
     return AnnotationSet(ports[portNo].cast<ArrayAttr>());
-  return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
+  return AnnotationSet(ArrayAttr::get(op->getContext(), {}));
 }
 
 /// Get an annotation set for the specified value.
@@ -81,6 +86,21 @@ AnnotationSet AnnotationSet::get(Value v) {
 bool AnnotationSet::applyToOperation(Operation *op) const {
   auto before = op->getAttrDictionary();
   op->setAttr(getAnnotationAttrName(), getArrayAttr());
+  return op->getAttrDictionary() != before;
+}
+
+bool AnnotationSet::applyToPort(Operation *op, size_t portNo) const {
+  auto before = op->getAttrDictionary();
+  auto *context = op->getContext();
+  auto oldAttrs = op->getAttrOfType<ArrayAttr>(getPortAnnotationAttrName());
+  SmallVector<Attribute> portAnnotations;
+  if (!oldAttrs || oldAttrs.empty())
+    portAnnotations.assign(getPortCount(op), ArrayAttr::get(context, {}));
+  else
+    portAnnotations.append(oldAttrs.begin(), oldAttrs.end());
+  portAnnotations[portNo] = getArrayAttr();
+  auto after = ArrayAttr::get(context, portAnnotations);
+  op->setAttr(getPortAnnotationAttrName(), after);
   return op->getAttrDictionary() != before;
 }
 

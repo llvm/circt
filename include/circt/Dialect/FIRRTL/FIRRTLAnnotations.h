@@ -123,8 +123,8 @@ public:
   /// Get an annotation set for the specified operation.
   explicit AnnotationSet(Operation *op);
 
-  /// Get an annotation set for the specified module port.
-  static AnnotationSet forPort(FModuleLike module, size_t portNo);
+  /// Get an annotation set for the specified port.
+  static AnnotationSet forPort(Operation *op, size_t portNo);
 
   /// Get an annotation set for the specified value.
   static AnnotationSet get(Value v);
@@ -140,6 +140,11 @@ public:
   /// attribute if the set is empty. Returns true if the operation was modified,
   /// false otherwise.
   bool applyToOperation(Operation *op) const;
+
+  /// Store the annotations in this set in an operation's `portAnnotations`
+  /// attribute, overwriting any existing annotations for this port. Returns
+  /// true if the operation was modified, false otherwise.
+  bool applyToPort(Operation *op, size_t portNo) const;
 
   /// Store the annotations in this set in a `NamedAttrList` as an array
   /// attribute with the name `annotations`. Overwrites existing annotations.
