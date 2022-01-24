@@ -140,6 +140,7 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
 
     // Here, we concat all inputs and cast them into aggregate type.
     Value accumulate;
+    changed = true;
     for (auto value : operands) {
       value = builder.createOrFold<BitCastOp>(
           value.getLoc(),
@@ -203,9 +204,6 @@ bool MergeConnection::run() {
     builder.create<ConnectOp>(root.getLoc(), root, value);
   }
 
-  if (shouldBeRemoved.empty())
-    return false;
-
   // Remove dead connections.
   for (auto connect : shouldBeRemoved)
     connect.erase();
@@ -219,7 +217,7 @@ bool MergeConnection::run() {
         op.erase();
       }
 
-  return true;
+  return changed;
 }
 
 struct MergeConnectionsPass
