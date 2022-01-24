@@ -1564,8 +1564,8 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
 
 // Remove private nodes.  If they have an interesting names, move the name to
 // the source expression.
-struct foldNodeName : public mlir::RewritePattern {
-  foldNodeName(MLIRContext *context)
+struct FoldNodeName : public mlir::RewritePattern {
+  FoldNodeName(MLIRContext *context)
       : RewritePattern(NodeOp::getOperationName(), 0, context) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
@@ -1583,7 +1583,7 @@ struct foldNodeName : public mlir::RewritePattern {
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<foldNodeName, patterns::DropNameNode>(context);
+  results.insert<FoldNodeName, patterns::DropNameNode>(context);
 }
 
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
