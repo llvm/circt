@@ -94,12 +94,6 @@ def MuxSameCondHigh : Pat<
     (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
 
-// node(x) -> x
-def EmptyNode : Pat<
-  (NodeOp $x, $name, $annotations, $inner_sym),
-  (replaceWithValue $x),
-  [(EmptyAttrDict $annotations), (uselessNameAttr $name), (NullAttr $inner_sym)]>;
-
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegResetWithInvalidReset : Pat<
   (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations, $inner_sym),
