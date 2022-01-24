@@ -217,7 +217,10 @@ def PadLibOp : UnaryLibraryOp<"pad"> {
   let verifier = [{
     unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    return success(inBits < outBits);
+    if (inBits >= outBits)
+      return emitOpError("expected input bits (") << inBits << ')' <<
+                         " to be less than output bits (" << outBits << ')';
+    return success();
   }];
 }
 
@@ -225,7 +228,10 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
   let verifier = [{
     unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    return success(inBits > outBits);
+    if (inBits <= outBits)
+      return emitOpError("expected input bits (") << inBits << ')' <<
+                         " to be greater than output bits (" << outBits << ')';
+    return success();
   }];
 }
 def NotLibOp  : UnaryLibraryOp<"not"> {}
