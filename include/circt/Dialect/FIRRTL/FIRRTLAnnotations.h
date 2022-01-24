@@ -310,7 +310,8 @@ private:
 // Iteration over the annotation set.
 class AnnotationSetIterator
     : public llvm::indexed_accessor_iterator<AnnotationSetIterator,
-                                             AnnotationSet, Annotation> {
+                                             AnnotationSet, Annotation,
+                                             Annotation, Annotation> {
 public:
   // Index into this iterator.
   Annotation operator*() const;
@@ -318,9 +319,10 @@ public:
 private:
   AnnotationSetIterator(AnnotationSet owner, ptrdiff_t curIndex)
       : llvm::indexed_accessor_iterator<AnnotationSetIterator, AnnotationSet,
-                                        Annotation>(owner, curIndex) {}
+                                        Annotation, Annotation, Annotation>(
+            owner, curIndex) {}
   friend llvm::indexed_accessor_iterator<AnnotationSetIterator, AnnotationSet,
-                                         Annotation>;
+                                         Annotation, Annotation, Annotation>;
   friend class AnnotationSet;
 };
 
