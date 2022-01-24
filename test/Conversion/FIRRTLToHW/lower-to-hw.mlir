@@ -13,7 +13,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // same clock.
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa,
-  // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8, %W1_mask: i1)
+  // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
   // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
@@ -24,7 +24,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // by a different clock.
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab,
-  // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8, %W1_mask: i1)
+  // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
   // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
@@ -45,10 +45,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+
+  // CHECK:    hw.module.generated @tbMemoryKind1_ext, @FIRRTLMem
+  // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8)
+
   // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a,
   // CHECK-SAME:  @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40)
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a,
-  // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i1) -> (R0_data: i42, RW0_rdata: i42)
+  // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
@@ -834,7 +838,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-  // CHECK: %_M.R0_data, %_M.RW0_rdata = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i42, RW0_wmask: %true: i1, W0_addr: %c0_i4_1: i4, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i42, W0_mask: %true: i1) -> (R0_data: i42, RW0_rdata: i42)
+  // CHECK: %[[v2:.+]] = comb.and %inpred, %true : i1
+  // CHECK: %_M.R0_data, %_M.RW0_rdata = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %0: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %1: i42, W0_addr: %c0_i4_1: i4, W0_en: %[[v2]]: i1, W0_clk: %clock2: i1, W0_data: %indata: i42) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK: hw.output %_M.R0_data, %_M.RW0_rdata : i42, i42
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.sint<42>
@@ -1598,4 +1603,29 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %c, %foo : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  firrtl.module @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
+    %tbMemoryKind1_r, %tbMemoryKind1_w = firrtl.mem Undefined  {depth = 16 : i64, modName = "tbMemoryKind1_ext", name = "tbMemoryKind1", portNames = ["r", "w"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %0 = firrtl.subfield %tbMemoryKind1_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<8>
+    %1 = firrtl.subfield %tbMemoryKind1_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %tbMemoryKind1_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<4>
+    %3 = firrtl.subfield %tbMemoryKind1_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<1>
+    %4 = firrtl.subfield %tbMemoryKind1_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %5 = firrtl.subfield %tbMemoryKind1_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<8>
+    %6 = firrtl.subfield %tbMemoryKind1_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<4>
+    %7 = firrtl.subfield %tbMemoryKind1_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<1>
+    %8 = firrtl.subfield %tbMemoryKind1_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.clock
+    firrtl.connect %8, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %7, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %6, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.connect %rData, %5 : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %4, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %3, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %2, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.connect %1, %wMask : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %wData : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+  // CHECK-LABEL: hw.module @inferUnmaskedMemory
+  // CHECK-NEXT:   %[[v0:.+]] = comb.and %rEn, %wMask : i1
+  // CHECK-NEXT:   %tbMemoryKind1.R0_data = hw.instance "tbMemoryKind1" @tbMemoryKind1_ext(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, W0_addr: %rAddr: i4, W0_en: %[[v0]]: i1, W0_clk: %clock: i1, W0_data: %wData: i8) -> (R0_data: i8)
+  // CHECK-NEXT:   hw.output %tbMemoryKind1.R0_data : i8
 }

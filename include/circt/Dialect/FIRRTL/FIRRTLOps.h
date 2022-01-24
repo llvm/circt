@@ -154,6 +154,7 @@ struct FirMemory {
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
   StringAttr modName;
+  bool isMasked;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;

@@ -176,15 +176,15 @@ circuit test:
 
 ; CHECK-LABEL:      FILE "metadata/tb_seq_mems.json"
 ; CHECK: [{"module_name":"tbMemoryKind1_ext","depth":16,"width":8,
-; CHECK:          "masked":"true","read":"true","write":"true","readwrite":"false"
-; CHECK:          ,"mask_granularity":8,"extra_ports":[],"hierarchy":
+; CHECK:          "masked":"false","read":"true","write":"true","readwrite":"false"
+; CHECK:          "extra_ports":[],"hierarchy":
 ; CHECK:          ["test.h2.m.tbMemoryKind1","test.h1.tbMemoryKind1"]}
 
 ; CHECK-LABEL:       FILE "metadata/seq_mems.json"
-; CHECK:  [{"module_name":"dutMemory_ext","depth":32,"width":8,"masked":"true","read":"true",
-; CHECK:  "write":"true","readwrite":"false","mask_granularity":8,"extra_ports":[],
+; CHECK:  [{"module_name":"dutMemory_ext","depth":32,"width":8,"masked":"false","read":"true",
+; CHECK:  "write":"true","readwrite":"false","extra_ports":[],
 ; CHECK:  "hierarchy":["test.m2.m.dutMemory"]}]
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"
-; CHECK: name dutMemory_ext depth 32 width 8 ports mwrite,read mask_gran 8
-; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports mwrite,read mask_gran 8
+; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
+; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports write,read

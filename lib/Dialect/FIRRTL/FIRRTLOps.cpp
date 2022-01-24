@@ -1796,11 +1796,11 @@ FirMemory MemOp::getSummary() {
                       (unsigned)hw::WUW::PortOrder,
                       clocks.empty() ? "" : "_" + clocks));
   }
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    modName,
-          op.getLoc()};
+  return {numReadPorts,         numWritePorts,    numReadWritePorts,
+          (size_t)width,        op.depth(),       op.readLatency(),
+          op.writeLatency(),    op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder,   writeClockIDs,    modName,
+          op.getMaskBits() > 1, op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
