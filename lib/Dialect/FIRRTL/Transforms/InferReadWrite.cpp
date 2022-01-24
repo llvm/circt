@@ -192,7 +192,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // All uses for all results of mem removed, now erase the memOp.
       opsToErase.push_back(memOp);
     }
-    for (auto o : opsToErase)
+    for (auto *o : opsToErase)
       o->erase();
   }
 
