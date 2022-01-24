@@ -34,20 +34,21 @@ firrtl.circuit "Test"   {
   //     a.b <= UInt<1>(1)
   //     a.c <= UInt<1>(1)
   // CHECK-LABEL: firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
-  // CHECK-NEXT:    %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-  // CHECK-NEXT:    %0 = firrtl.bitcast %c3_ui2 : (!firrtl.uint<2>) -> !firrtl.bundle<b: uint<1>, c: uint<1>>
+  // CHECK-NEXT:    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+  // CHECK-NEXT:    %0 = firrtl.bitcast %c2_ui2 : (!firrtl.uint<2>) -> !firrtl.bundle<b: uint<1>, c: uint<1>>
   // CHECK-NEXT:    firrtl.connect %a, %0 : !firrtl.bundle<b: uint<1>, c: uint<1>>, !firrtl.bundle<b: uint<1>, c: uint<1>>
   // CHECK-NEXT:  }
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %0 = firrtl.subfield %a(1) : (!firrtl.bundle<b: uint<1>, c: uint<1>>) -> !firrtl.uint<1>
-    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<b: uint<1>, c: uint<1>>) -> !firrtl.uint<1>
+    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<b: uint<1>, c: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %a(1) : (!firrtl.bundle<b: uint<1>, c: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   // CHECK: firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
-  // CHECK-NEXT: %0 = firrtl.cat %s1, %s2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK-NEXT: %0 = firrtl.cat %s2, %s1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK-NEXT: %1 = firrtl.bitcast %0 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
   // CHECK-NEXT: firrtl.connect %sink, %1 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   // CHECK-NEXT: }
@@ -61,7 +62,7 @@ firrtl.circuit "Test"   {
   // Check that we don't use %s1 as a source value.
   // CHECK: firrtl.module @FailedToUseAggregate(in %s1: !firrtl.vector<uint<1>, 2>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>)
   // CHECK-NEXT:  %0 = firrtl.subindex %s1[0] : !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT:  %1 = firrtl.cat %0, %s2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // CHECK-NEXT:  %1 = firrtl.cat %s2, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK-NEXT:  %2 = firrtl.bitcast %1 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
   // CHECK-NEXT:  firrtl.connect %sink, %2 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   // CHECK-NEXT: }

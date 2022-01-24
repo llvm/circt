@@ -157,7 +157,7 @@ Value MergeConnection::getMergedConnectedValue(FieldRef fieldRef) {
                             value.getType().template cast<FIRRTLType>())),
           value);
       accumulate = (accumulate ? builder.createOrFold<CatPrimOp>(
-                                     accumulate.getLoc(), accumulate, value)
+                                     accumulate.getLoc(), value, accumulate)
                                : value);
     }
     return builder.createOrFold<BitCastOp>(accumulate.getLoc(), type,
