@@ -242,6 +242,26 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
   let hasCanonicalizeMethod = true;
 }
 
+def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
+  let summary = "Multibit multiplexer";
+  let description = [{
+    The multibit mux expression dynamically selects operands. The
+    index must be an expression with an unsigned integer type.
+    ```
+      %result = firrtl.multibit_mux %index, %0, %1, %2, ...  : t1, t2
+    ```
+    }];
+
+  let arguments = (ins FIRRTLType:$index, Variadic<FIRRTLType>:$inputs);
+  let results = (outs FIRRTLType:$result);
+
+  // Need a custom parser/printer to emit operands type only once.
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+}
+
 //===----------------------------------------------------------------------===//
 // Primitive Operations
 //===----------------------------------------------------------------------===//

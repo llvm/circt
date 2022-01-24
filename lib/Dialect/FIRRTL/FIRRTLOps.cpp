@@ -2221,6 +2221,55 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   return {};
 }
 
+static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
+                                      OperationState &result) {
+  OpAsmParser::OperandType index;
+  llvm::SmallVector<OpAsmParser::OperandType, 16> inputs;
+  Type indexType, elemType;
+
+  if (parser.parseOperand(index) || parser.parseComma() ||
+      parser.parseOperandList(inputs) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(indexType) || parser.parseComma() ||
+      parser.parseType(elemType))
+    return failure();
+
+  if (parser.resolveOperand(index, indexType, result.operands))
+    return failure();
+
+  result.addTypes(elemType);
+
+  return parser.resolveOperands(inputs, elemType, result.operands);
+}
+
+static void printMultibitMuxOp(OpAsmPrinter &p, MultibitMuxOp op) {
+  p << " " << op.index() << ", ";
+  p.printOperands(op.inputs());
+  p.printOptionalAttrDict(op->getAttrs());
+  p << " : " << op.index().getType() << ", " << op.getType();
+}
+
+FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
+                                          ArrayRef<NamedAttribute> attrs,
+                                          Optional<Location> loc) {
+  if (operands.size() < 2) {
+    if (loc)
+      mlir::emitError(*loc, "at least one input is required");
+    return FIRRTLType();
+  }
+
+  // Check all mux inputs have the same type.
+  if (!llvm::all_of(operands.drop_front(2), [&](auto op) {
+        return operands[1].getType() == op.getType();
+      })) {
+    if (loc)
+      mlir::emitError(*loc, "all inputs must have the same type");
+    return FIRRTLType();
+  }
+
+  return operands[1].getType().cast<FIRRTLType>();
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Primitives
 //===----------------------------------------------------------------------===//
