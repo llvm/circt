@@ -142,7 +142,7 @@ void BlackBoxReaderPass::runOnOperation() {
         // indicate that this extmodule was provided by one of the black box
         // annotations. This is useful for metadata generation.
         filteredAnnos.push_back(builder.getDictionaryAttr(
-            {{builder.getIdentifier("class"),
+            {{builder.getStringAttr("class"),
               builder.getStringAttr("firrtl.transforms.BlackBox")}}));
       else
         filteredAnnos.push_back(anno.getDict());

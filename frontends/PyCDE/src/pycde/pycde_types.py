@@ -4,6 +4,8 @@
 
 from collections import OrderedDict
 
+from .value import RegularValue, ListValue, StructValue, BitVectorValue
+
 import mlir.ir
 from circt.dialects import hw, sv
 import circt.support
@@ -100,40 +102,143 @@ class _Types:
 types = _Types()
 
 
-def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> hw.ArrayType:
+# Parameterized class to subclass 'type'.
+def PyCDEType(type):
+  if isinstance(type, Type):
+    return type
+  type = circt.support.type_to_pytype(type)
+  if isinstance(type, hw.ArrayType):
+    return ArrayType(type)
+  if isinstance(type, hw.StructType):
+    return StructType(type)
+  if isinstance(type, hw.TypeAliasType):
+    return TypeAliasType(type)
+  if isinstance(type, mlir.ir.IntegerType):
+    return BitVectorType(type)
+  return Type(type)
+
+
+class Type(mlir.ir.Type):
+  """PyCDE type hierarchy root class. Can wrap any MLIR/CIRCT type, but can only
+  do anything useful with types for which subclasses exist."""
+  __slots__ = ["_type"]
+
+  def __init__(self, type):
+    super().__init__(type)
+    self._type = circt.support.type_to_pytype(type)
+
+  @property
+  def strip(self):
+    return self
+
+  def __call__(self, value_obj, name: str = None):
+    """Create a Value of this type from a python object."""
+    from .support import _obj_to_value
+    v = _obj_to_value(value_obj, self._type, self._type)
+    if name is not None:
+      v.name = name
+    return v
+
+  def _get_value_class(self):
+    """Return the class which should be instantiated to create a Value."""
+    return RegularValue
+
+  def get_value(self, value):
+    """Get a pycde.Value."""
+    # Separating out the instantiation from figuring out which Value class to
+    # instantiate allows us to support type aliases. They need to construct the
+    # Value class for their inner type, but with the type of the typealias.
+    return self._get_value_class()(value, self)
+
+
+class TypeAliasType(Type):
+
+  @property
+  def name(self):
+    return self._type.name
+
+  @property
+  def inner_type(self):
+    return PyCDEType(self._type.inner_type)
+
+  def __str__(self):
+    return self.name
+
+  @property
+  def strip(self):
+    return PyCDEType(self._type.inner_type)
+
+  def _get_value_class(self):
+    return self.strip._get_value_class()
+
+  def wrap(self, value):
+    return self(value)
+
+
+class ArrayType(Type):
+
+  @property
+  def element_type(self):
+    return PyCDEType(self._type.element_type)
+
+  @property
+  def size(self):
+    return self._type.size
+
+  def __len__(self):
+    return self.size
+
+  def _get_value_class(self):
+    return ListValue
+
+  def __str__(self) -> str:
+    return f"[{self.size}]{self.element_type}"
+
+
+class StructType(Type):
+
+  @property
+  def fields(self):
+    return self._type.get_fields()
+
+  def __getattr__(self, attrname: str):
+    for field in self.fields:
+      if field[0] == attrname:
+        return PyCDEType(self._type.get_field(attrname))
+    return super().__getattribute__(attrname)
+
+  def _get_value_class(self):
+    return StructValue
+
+  def __str__(self) -> str:
+    ret = "struct { "
+    first = True
+    for field in self.fields:
+      if first:
+        first = False
+      else:
+        ret += ", "
+      ret += field[0] + ": " + str(field[1])
+    ret += "}"
+    return ret
+
+
+class BitVectorType(Type):
+
+  @property
+  def width(self):
+    return self._type.width
+
+  def _get_value_class(self):
+    return BitVectorValue
+
+
+def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:
   """Creates a multidimensional array from innermost to outermost dimension."""
   if isinstance(inner_type_or_bitwidth, int):
-    ret = types.int(inner_type_or_bitwidth)
+    ret = PyCDEType(mlir.ir.IntegerType.get_signless(inner_type_or_bitwidth))
   else:
     ret = inner_type_or_bitwidth
   for s in size:
-    ret = hw.ArrayType.get(ret, s)
+    ret = PyCDEType(hw.ArrayType.get(ret, s))
   return types.wrap(ret, name)
-
-
-# Parameterized class to subclass 'type'.
-def PyCDEType(type):
-  if type.__class__.__name__ == "_PyCDEType":
-    return type
-  type = circt.support.type_to_pytype(type)
-
-  class _PyCDEType(type.__class__):
-    """Add methods to an MLIR type class."""
-
-    @property
-    def strip(self):
-      """Return self or inner type."""
-      if isinstance(type, hw.TypeAliasType):
-        return PyCDEType(self.inner_type)
-      else:
-        return self
-
-    def __call__(self, value_obj, name: str = None):
-      """Create a Value of this type from a python object."""
-      from .support import _obj_to_value
-      v = _obj_to_value(value_obj, self, self)
-      if name is not None:
-        v.name = name
-      return v
-
-  return _PyCDEType(type)

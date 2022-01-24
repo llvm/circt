@@ -20,8 +20,7 @@
 #include "circt/Scheduling/DependenceIterator.h"
 #include "circt/Support/LLVM.h"
 
-#include "mlir/IR/Identifier.h"
-
+#include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"

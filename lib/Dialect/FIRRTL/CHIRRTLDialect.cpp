@@ -47,7 +47,7 @@ static ParseResult parseCHIRRTLOp(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return result;
 }
 

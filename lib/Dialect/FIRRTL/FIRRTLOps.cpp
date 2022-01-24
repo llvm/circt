@@ -182,6 +182,28 @@ bool firrtl::hasDontTouch(Value value) {
   return (!module.getPortSymbol(arg.getArgNumber()).empty());
 }
 
+/// Get a special name to use when printing the entry block arguments of the
+/// region contained by an operation in this dialect.
+void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
+                                  OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  auto *parentOp = op;
+  auto *block = &region.front();
+  // Check to see if the operation containing the arguments has 'firrtl.name'
+  // attributes for them.  If so, use that as the name.
+  auto argAttr = parentOp->getAttrOfType<ArrayAttr>("portNames");
+  // Do not crash on invalid IR.
+  if (!argAttr || argAttr.size() != block->getNumArguments())
+    return;
+
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    auto str = argAttr[i].cast<StringAttr>().getValue();
+    if (!str.empty())
+      setNameFn(block->getArgument(i), str);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -189,7 +211,7 @@ bool firrtl::hasDontTouch(Value value) {
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayAttr annotations) {
   // Add an attribute for the name.
-  result.addAttribute(builder.getIdentifier("name"), name);
+  result.addAttribute(builder.getStringAttr("name"), name);
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
@@ -966,6 +988,16 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
   return success();
 }
 
+void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                         mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void FExtModuleOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -1660,8 +1692,7 @@ size_t MemOp::getMaskBits() {
       continue;
 
     FIRRTLType mType;
-    for (auto t :
-         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+    for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
@@ -1748,25 +1779,31 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-
+  StringAttr modName;
+  if (op->hasAttr("modName"))
+    modName = op->getAttrOfType<StringAttr>("modName");
+  else {
+    SmallString<8> clocks;
+    for (auto a : writeClockIDs)
+      clocks.append(Twine((char)(a + 'a')).str());
+    modName = StringAttr::get(
+        op->getContext(),
+        llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}",
+                      numReadPorts, numWritePorts, numReadWritePorts,
+                      (size_t)width, op.depth(), op.readLatency(),
+                      op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
+                      (unsigned)hw::WUW::PortOrder,
+                      clocks.empty() ? "" : "_" + clocks));
+  }
   return {numReadPorts,       numWritePorts,    numReadWritePorts,
           (size_t)width,      op.depth(),       op.readLatency(),
           op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
+          hw::WUW::PortOrder, writeClockIDs,    modName,
+          op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
-std::string FirMemory::getFirMemoryName() const {
-  const FirMemory &mem = *this;
-  SmallString<8> clocks;
-  for (auto a : mem.writeClockIDs)
-    clocks.append(Twine((char)(a + 'a')).str());
-  return llvm::formatv(
-      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", mem.numReadPorts,
-      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
-      mem.readLatency, mem.writeLatency, mem.maskBits, mem.readUnderWrite,
-      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
-}
+StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
 /// Infer the return types of this operation.
 LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
@@ -2187,55 +2224,6 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   if (loc)
     mlir::emitError(*loc, "subaccess requires vector operand, not ") << inType;
   return {};
-}
-
-static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
-                                      OperationState &result) {
-  OpAsmParser::OperandType index;
-  llvm::SmallVector<OpAsmParser::OperandType, 16> inputs;
-  Type indexType, elemType;
-
-  if (parser.parseOperand(index) || parser.parseComma() ||
-      parser.parseOperandList(inputs) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(indexType) || parser.parseComma() ||
-      parser.parseType(elemType))
-    return failure();
-
-  if (parser.resolveOperand(index, indexType, result.operands))
-    return failure();
-
-  result.addTypes(elemType);
-
-  return parser.resolveOperands(inputs, elemType, result.operands);
-}
-
-static void printMultibitMuxOp(OpAsmPrinter &p, MultibitMuxOp op) {
-  p << " " << op.index() << ", ";
-  p.printOperands(op.inputs());
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.index().getType() << ", " << op.getType();
-}
-
-FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
-                                          ArrayRef<NamedAttribute> attrs,
-                                          Optional<Location> loc) {
-  if (operands.size() < 2) {
-    if (loc)
-      mlir::emitError(*loc, "at least one input is required");
-    return FIRRTLType();
-  }
-
-  // Check all mux inputs have the same type.
-  if (!llvm::all_of(operands.drop_front(2), [&](auto op) {
-        return operands[1].getType() == op.getType();
-      })) {
-    if (loc)
-      mlir::emitError(*loc, "all inputs must have the same type");
-    return FIRRTLType();
-  }
-
-  return operands[1].getType().cast<FIRRTLType>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2932,7 +2920,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return success();
 }
 

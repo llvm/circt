@@ -626,6 +626,16 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   builder.create<ControlOp>(result.location);
 }
 
+void ComponentOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  auto ports = portNames();
+  auto *block = &getRegion()->front();
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
+    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
+}
+
 //===----------------------------------------------------------------------===//
 // ControlOp
 //===----------------------------------------------------------------------===//

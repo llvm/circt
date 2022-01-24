@@ -20,6 +20,12 @@ hw.globalRef @ref4 [#hw.innerNameRef<@reg::@reg>] {
 
 hw.module.extern @Foo()
 
+// CHECK: msft.entity.extern @entity1 "some tag"
+msft.entity.extern @entity1 "some tag"
+
+// CHECK: msft.entity.extern @entity2 {name = "foo", number = 1 : i64}
+msft.entity.extern @entity2 {name = "foo", number = 1 : i64}
+
 // CHECK-LABEL: msft.module @leaf
 // LOWER-LABEL: hw.module @leaf
 msft.module @leaf {} () -> () {

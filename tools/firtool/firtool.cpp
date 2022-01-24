@@ -118,6 +118,12 @@ static cl::opt<bool>
     preserveAggregate("preserve-aggregate",
                       cl::desc("preserve aggregate types in lower types"),
                       cl::init(false));
+
+static cl::opt<bool> preservePublicTypes(
+    "preserve-public-types",
+    cl::desc("force to lower ports of toplevel and external modules"),
+    cl::init(true));
+
 static cl::opt<std::string>
     replSeqMemCircuit("repl-seq-mem-circuit",
                       cl::desc("circuit root for seq mem metadata"),
@@ -201,6 +207,13 @@ static cl::opt<bool> mergeConnections(
     "merge-connections",
     cl::desc("merge expanded connections in aggregate preservation"),
     cl::init(true));
+
+/// Enable the pass to merge the read and write ports of a memory, if their
+/// enable conditions are mutually exclusive.
+static cl::opt<bool>
+    inferMemReadWrite("infer-rw",
+                      cl::desc("enable infer read write ports for memory"),
+                      cl::init(true));
 
 enum OutputFormatKind {
   OutputParseOnly,
@@ -354,8 +367,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(
-        firrtl::createLowerFIRRTLTypesPass(replSeqMem, preserveAggregate));
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
+        replSeqMem, preserveAggregate, preservePublicTypes));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
@@ -371,6 +384,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+
+  // Run the infer-rw pass, which merges read and write ports of a memory with
+  // mutually exclusive enables.
+  if (inferMemReadWrite)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createInferReadWritePass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());

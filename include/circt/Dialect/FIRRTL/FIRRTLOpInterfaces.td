@@ -25,6 +25,10 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     "StringRef", "moduleName", (ins),
     /*methodBody=*/[{ return $_op.getName(); }]>,
 
+    InterfaceMethod<"Get the module name",
+    "StringAttr", "moduleNameAttr", (ins),
+    /*methodBody=*/[{ return $_op.getNameAttr(); }]>,
+
     //===------------------------------------------------------------------===//
     // Port Directions
     //===------------------------------------------------------------------===//

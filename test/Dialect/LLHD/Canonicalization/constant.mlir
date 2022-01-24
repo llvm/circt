@@ -4,13 +4,13 @@
 // CHECK-SAME: %[[SIG:.*]]: !llhd.sig<i32>
 func @const_hoisting(%sig : !llhd.sig<i32>) {
   // CHECK-DAG: %[[C0:.*]] = hw.constant -1 : i32
-  // CHECK-DAG: %[[TIME:.*]] = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+  // CHECK-DAG: %[[TIME:.*]] = llhd.constant_time <1ns, 0d, 0e>
   // CHECK-NEXT: br ^[[BB:.*]]
   br ^bb1
 // CHECK-NEXT: ^[[BB]]
 ^bb1:
   %0 = hw.constant -1 : i32
-  %1 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+  %1 = llhd.constant_time <1ns, 0d, 0e>
   // CHECK-NEXT: llhd.drv %[[SIG]], %[[C0]] after %[[TIME]] : !llhd.sig<i32>
   llhd.drv %sig, %0 after %1 : !llhd.sig<i32>
   br ^bb1

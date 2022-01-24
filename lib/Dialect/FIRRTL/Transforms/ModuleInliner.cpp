@@ -49,7 +49,7 @@ static void rename(StringRef prefix, Operation *op) {
 /// insert point of the builder.
 static void cloneAndRename(StringRef prefix, OpBuilder &b,
                            BlockAndValueMapping &mapper, Operation &op) {
-  auto newOp = b.clone(op, mapper);
+  auto *newOp = b.clone(op, mapper);
   rename(prefix, newOp);
 }
 
@@ -176,7 +176,7 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
     }
 
     // If its not a regular module we can't inline it. Mark is as live.
-    auto module = symbolTable.lookup(instance.moduleName());
+    auto *module = symbolTable.lookup(instance.moduleName());
     auto target = dyn_cast<FModuleOp>(module);
     if (!target) {
       liveModules.insert(module);
@@ -202,7 +202,7 @@ void Inliner::flattenInstances(FModuleOp module) {
       continue;
 
     // If its not a regular module we can't inline it. Mark is as live.
-    auto module = symbolTable.lookup(instance.moduleName());
+    auto *module = symbolTable.lookup(instance.moduleName());
     auto target = dyn_cast<FModuleOp>(module);
     if (!target) {
       liveModules.insert(module);
@@ -237,7 +237,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     }
 
     // If its not a regular module we can't inline it. Mark is as live.
-    auto module = symbolTable.lookup(instance.moduleName());
+    auto *module = symbolTable.lookup(instance.moduleName());
     auto target = dyn_cast<FModuleOp>(module);
     if (!target) {
       liveModules.insert(module);
@@ -276,7 +276,7 @@ void Inliner::inlineInstances(FModuleOp module) {
       continue;
 
     // If its not a regular module we can't inline it. Mark is as live.
-    auto module = symbolTable.lookup(instance.moduleName());
+    auto *module = symbolTable.lookup(instance.moduleName());
     auto target = dyn_cast<FModuleOp>(module);
     if (!target) {
       liveModules.insert(module);
@@ -316,7 +316,7 @@ Inliner::Inliner(CircuitOp circuit)
     : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
 
 void Inliner::run() {
-  auto topModule = circuit.getMainModule();
+  auto *topModule = circuit.getMainModule();
   // Mark the top module as live, so it doesn't get deleted.
   liveModules.insert(topModule);
 

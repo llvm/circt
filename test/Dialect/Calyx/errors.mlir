@@ -797,3 +797,27 @@ calyx.program "main" {
     calyx.control { calyx.enable @A }
   }
 }
+
+// -----
+
+calyx.program "main" {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    // expected-error @+1 {{'calyx.std_slice' op expected input bits (32) to be greater than output bits (64)}}
+    %std_slice.in, %std_slice.out = calyx.std_slice @std_slice : i32, i64
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program "main" {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    // expected-error @+1 {{'calyx.std_pad' op expected input bits (64) to be less than output bits (32)}}
+    %std_pad.in, %std_pad.out = calyx.std_pad @std_pad : i64, i32
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}

@@ -1,5 +1,5 @@
 // RUN: circt-opt -split-input-file --flatten-memref-calls %s | FileCheck %s
-
+// XFAIL: *
 
 // CHECK-LABEL:   func private @foo(memref<900xi32>) -> i32
 

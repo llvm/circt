@@ -55,8 +55,8 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
     return nullptr;
 
   // Look for a symbol with the given name.
-  StringAttr symbolNameId = StringAttr::get(SymbolTable::getSymbolAttrName(),
-                                            symbolTableOp->getContext());
+  StringAttr symbolNameId = StringAttr::get(symbolTableOp->getContext(),
+                                            SymbolTable::getSymbolAttrName());
   for (Block &block : region)
     for (Operation &nestedOp : block) {
       auto nameAttr = nestedOp.getAttrOfType<StringAttr>(symbolNameId);
@@ -99,7 +99,7 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
     resultName = "";
   auto nameAttr = parser.getBuilder().getStringAttr(resultName);
   auto *context = parser.getBuilder().getContext();
-  resultAttrs.push_back({StringAttr::get("name", context), nameAttr});
+  resultAttrs.push_back({StringAttr::get(context, "name"), nameAttr});
   return success();
 }
 

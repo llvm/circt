@@ -19,6 +19,9 @@ include "circt/Dialect/Handshake/Handshake.td"
 def HasOneOperand : Constraint<CPred<"$_self.size() == 1">, "has one operand">;
 def HasOneResult : Constraint<CPred<"$_self.size() == 1">, "has one result">;
 
+def EliminateSimpleMergesPattern : Pat<(MergeOp $dataType, $size, $arg), (replaceWithValue $arg),
+                                       [(HasOneOperand:$arg)]>;
+
 def EliminateSimpleBranchesPattern
     : Pat<(BranchOp $dataType, $a), (replaceWithValue $a)>;
 

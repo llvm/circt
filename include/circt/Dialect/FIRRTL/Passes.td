@@ -48,7 +48,10 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
            "Concat all elements of the aggregate data into a single element.">,
     Option<"preserveAggregate", "preserve-aggregate", "bool", "false",
-           "Preserve passive aggregate types in the module.">
+           "Preserve passive aggregate types in the module.">,
+    Option<"preservePublicTypes", "preserve-public-types", "bool",
+           "true", "Force to lower ports of toplevel and external modules even"
+           "when aggregate preservation mode.">
   ];
   let dependentDialects = ["hw::HWDialect"];
 }
@@ -343,6 +346,19 @@ def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   let summary = "Merge field-level connections into full bundle connections";
   let constructor = "circt::firrtl::createMergeConnectionsPass()";
+}
+
+def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
+  let summary = "Infer the read-write memory port";
+  let description = [{
+    This pass merges the read and write ports of a memory, based a simple
+    module-scoped heuristic. The heuristic checks if the read and write enable
+    conditions are mutually exclusive.
+    The heuristic tries to break up the read enable and write enable logic into an
+    `AND` expression tree. It then compares the read and write `AND` terms,
+    looking for a situation where the read/write is the complement of the write/read. 
+  }];
+  let constructor = "circt::firrtl::createInferReadWritePass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -72,7 +72,7 @@ static Type lowerType(Type type) {
 
   if (BundleType bundle = firType.dyn_cast<BundleType>()) {
     mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
-    for (auto element : bundle.getElements()) {
+    for (auto element : bundle) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
@@ -193,7 +193,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     for (auto i : top->getAttrs())
       old.push_back(i);
     old.emplace_back(
-        StringAttr::get(attrBase, ctx),
+        StringAttr::get(ctx, attrBase),
         hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
     top->setAttrs(old);
   }
@@ -201,7 +201,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     SmallVector<NamedAttribute> old;
     for (auto i : top->getAttrs())
       old.push_back(i);
-    old.emplace_back(StringAttr::get(attrBase + ".bindfile", ctx),
+    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
                      hw::OutputFileAttr::getFromFilename(
                          ctx, file.getValue(), /*excludeFromFileList=*/true));
     top->setAttrs(old);
@@ -231,6 +231,14 @@ mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
 
 static unsigned getBitWidthFromVectorSize(unsigned size) {
   return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+}
+
+// Try moving a name from an firrtl expression to a hw expression as a name
+// hint.  Dont' overwrite an existing name.
+static void tryCopyName(Operation *dst, Operation *src) {
+  if (auto attr = src->getAttrOfType<StringAttr>("name"))
+    if (!dst->hasAttr("sv.namehint") && !dst->hasAttr("name"))
+      dst->setAttr("sv.namehint", attr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -633,7 +641,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
-    auto memoryName = b.getStringAttr(mem.getFirMemoryName());
+    auto memoryName = mem.getFirMemoryName();
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), ArrayAttr(), genAttrs);
   }
@@ -1400,7 +1408,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
-  LogicalResult visitExpr(MultibitMuxOp op);
   LogicalResult visitExpr(VerbatimExprOp op);
 
   // Statements
@@ -1694,7 +1701,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
           if (destStructType.getNumElements() != srcStructType.getNumElements())
             return failure();
 
-          for (auto elem : enumerate(destStructType.getElements())) {
+          for (auto elem : llvm::enumerate(destStructType)) {
             auto structExtract =
                 builder.create<hw::StructExtractOp>(src, elem.value().name);
             if (failed(recurse(structExtract,
@@ -1915,6 +1922,8 @@ template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
   auto result = builder.createOrFold<ResultOpType>(args...);
+  if (auto *op = result.getDefiningOp())
+    tryCopyName(op, orig);
   return setPossiblyFoldedLowering(orig->getResult(0), result);
 }
 
@@ -2629,8 +2638,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr =
-      SymbolRefAttr::get(op.getContext(), memSummary.getFirMemoryName());
+  auto memModuleAttr = SymbolRefAttr::get(memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
@@ -3156,27 +3164,6 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,
                                     ifFalse);
-}
-
-LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
-  // Lower and resize to the index width.
-  auto index = getLoweredAndExtOrTruncValue(
-      op.index(), UIntType::get(op.getContext(),
-                                getBitWidthFromVectorSize(op.inputs().size())));
-
-  if (!index)
-    return failure();
-  SmallVector<Value> loweredInputs;
-  loweredInputs.reserve(op.inputs().size());
-
-  for (auto input : op.inputs()) {
-    auto lowered = getLoweredAndExtendedValue(input, op.getType());
-    if (!lowered)
-      return failure();
-    loweredInputs.push_back(lowered);
-  }
-  Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
-  return setLoweringTo<hw::ArrayGetOp>(op, array, index);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {

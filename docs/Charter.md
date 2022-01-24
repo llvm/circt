@@ -78,7 +78,7 @@ points in the design process. These differences in usage often come down
 to a difference in component granularity. For instance early in the
 design process an abstraction may be used with large, coarse-grained
 components. After lowering, perhaps through other abstractions, the same
-abstraction may again appear with smaller, find-grained
+abstraction may again appear with smaller, fine-grained
 components.
 
 Below, we summarize the most important abstractions used in existing
@@ -161,7 +161,7 @@ internal representation.
 
 [Calyx](https://capra.cs.cornell.edu/calyx) is a new intermediate language
 that combines a software-like control language with a hardware-like structural
-langauge. This intermediate level of representation allows Calyx to optimize
+language. This intermediate level of representation allows Calyx to optimize
 structural programs using control flow information.
 Calyx currently serves as the compilation target for [Dahlia](https://capra.cs.cornell.edu/dahlia)
 and several other domain-specific architectures (systolic array, number 

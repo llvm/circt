@@ -23,7 +23,7 @@ def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
   let storageType = [{ ::mlir::IntegerAttr }];
   let returnType = [{ ::llvm::APSInt }];
   let constBuilderCall = "IntegerAttr::get($_builder.getContext(), $0)";
-  let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
+  let convertFromStorage = "$_self.getAPSInt()";
 }
 
 #endif // CIRCT_TYPES

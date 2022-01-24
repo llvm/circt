@@ -310,8 +310,11 @@ namespace {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool f, bool p)
-      : context(context), flattenAggregateMemData(f), preserveAggregate(p) {}
+  TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
+                      bool preserveAggregate, bool preservePublicTypes)
+      : context(context), flattenAggregateMemData(flattenAggregateMemData),
+        preserveAggregate(preserveAggregate),
+        preservePublicTypes(preservePublicTypes) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -339,7 +342,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitDecl(RegResetOp op);
   bool visitExpr(InvalidValueOp op);
   bool visitExpr(SubaccessOp op);
-  bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
@@ -356,6 +358,8 @@ private:
                      llvm::function_ref<Operation *(FlatBundleFieldEntry,
                                                     StringRef, ArrayAttr)>
                          clone);
+
+  bool isModuleAllowedToPreserveAggregate(Operation *moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
@@ -367,10 +371,34 @@ private:
   /// enabled.
   bool preserveAggregate;
 
+  /// Exteranal modules and toplevel modules should have lowered types if this
+  /// flag is enabled.
+  bool preservePublicTypes;
+
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 };
 } // namespace
+
+/// Return true if we can preserve the arguments of the given module.
+/// Exteranal modules and toplevel modules are sometimes assumed to have lowered
+/// types.
+bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
+    Operation *moduleLike) {
+
+  if (!preserveAggregate)
+    return false;
+
+  // If it is not forced to lower toplevel and external modules, it's ok to
+  // preserve.
+  if (!preservePublicTypes)
+    return true;
+
+  if (isa<FExtModuleOp>(moduleLike))
+    return false;
+  auto module = cast<FModuleOp>(moduleLike);
+  return cast<CircuitOp>(module->getParentOp()).getMainModule() != module;
+}
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
   if (BundleType bundle = val.getType().dyn_cast<BundleType>()) {
@@ -532,7 +560,8 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
-  if (!peelType(srcType, fieldTypes, preserveAggregate))
+  if (!peelType(srcType, fieldTypes,
+                isModuleAllowedToPreserveAggregate(module)))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
@@ -720,7 +749,7 @@ static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
   std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
     return TypeSwitch<FIRRTLType, bool>(type)
         .Case<BundleType>([&](auto bundle) {
-          for (auto &elt : bundle.getElements())
+          for (auto &elt : bundle)
             if (!flatten(elt.type))
               return false;
           return true;
@@ -918,7 +947,6 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-
   auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
@@ -958,20 +986,20 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portDirections", context),
+      NamedAttribute(StringAttr::get(context, "portDirections"),
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portNames", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
                                           builder.getArrayAttr(newArgNames)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portTypes", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
                                           builder.getArrayAttr(newPortTypes)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portSyms", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
                                           builder.getArrayAttr(newArgSyms)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portAnnotations", context),
+      NamedAttribute(StringAttr::get(context, "portAnnotations"),
                      builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
@@ -1032,18 +1060,18 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portDirections", context),
+      NamedAttribute(StringAttr::get(context, "portDirections"),
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portNames", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
                                           builder->getArrayAttr(newArgNames)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portTypes", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
                                           builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get("portSyms", context),
+  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
                                           builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get("portAnnotations", context),
+      NamedAttribute(StringAttr::get(context, "portAnnotations"),
                      builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
@@ -1194,6 +1222,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
+  bool allowedToPreserveAggregate =
+      isModuleAllowedToPreserveAggregate(op.getReferencedModule());
 
   endFields.push_back(0);
   bool hasDontTouch = false;
@@ -1202,7 +1232,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes, preserveAggregate)) {
+    if (!peelType(srcType, fieldTypes, allowedToPreserveAggregate)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
@@ -1276,29 +1306,22 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     return true;
   }
 
-  // Construct a multibit mux
-  SmallVector<Value> inputs;
-  inputs.reserve(vType.getNumElements());
-  for (unsigned index : llvm::seq(0u, vType.getNumElements()))
-    inputs.push_back(builder->create<SubindexOp>(input, index));
+  // Reads.  All writes have been eliminated before now
+  auto selectWidth = llvm::Log2_64_Ceil(vType.getNumElements());
 
-  Value multibitMux = builder->create<MultibitMuxOp>(op.index(), inputs);
-  op.replaceAllUsesWith(multibitMux);
+  // We have at least one element
+  Value mux = builder->create<SubindexOp>(input, 0);
+  // Build up the mux
+  for (size_t index = 1, e = vType.getNumElements(); index < e; ++index) {
+    auto cond = builder->create<EQPrimOp>(
+        op.index(), builder->createOrFold<ConstantOp>(
+                        UIntType::get(op.getContext(), selectWidth),
+                        APInt(selectWidth, index)));
+    auto access = builder->create<SubindexOp>(input, index);
+    mux = builder->create<MuxPrimOp>(cond, access, mux);
+  }
+  op.replaceAllUsesWith(mux);
   return true;
-}
-
-bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
-    SmallVector<Value> newInputs;
-    newInputs.reserve(op.inputs().size());
-    for (auto input : op.inputs()) {
-      auto inputSub = getSubWhatever(input, field.index);
-      newInputs.push_back(inputSub);
-    }
-    return builder->create<MultibitMuxOp>(op.index(), newInputs);
-  };
-  return lowerProducer(op, clone);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1307,9 +1330,11 @@ bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
-  LowerTypesPass(bool f, bool p) {
-    flattenAggregateMemData = f;
-    preserveAggregate = p;
+  LowerTypesPass(bool flattenAggregateMemDataFlag, bool preserveAggregateFlag,
+                 bool preservePublicTypesFlag) {
+    flattenAggregateMemData = flattenAggregateMemDataFlag;
+    preserveAggregate = preserveAggregateFlag;
+    preservePublicTypes = preservePublicTypesFlag;
   }
   void runOnOperation() override;
 };
@@ -1323,14 +1348,15 @@ void LowerTypesPass::runOnOperation() {
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
-                        preserveAggregate)
+                        preserveAggregate, preservePublicTypes)
         .lowerModule(ops[index]);
   });
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem,
-                                          bool preserveAggregate) {
-  return std::make_unique<LowerTypesPass>(replSeqMem, preserveAggregate);
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
+    bool replSeqMem, bool preserveAggregate, bool preservePublicTypes) {
+
+  return std::make_unique<LowerTypesPass>(replSeqMem, preserveAggregate,
+                                          preservePublicTypes);
 }

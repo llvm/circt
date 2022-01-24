@@ -19,19 +19,17 @@ class Value:
   @staticmethod
   def get(value, type=None):
     from .pycde_types import PyCDEType
-    value = support.get_value(value)
-    if type is None:
-      type = value.type
-    type = PyCDEType(type)
 
-    from .dialects import hw
-    if isinstance(type.strip, hw.ArrayType):
-      return ListValue(value, type)
-    if isinstance(type.strip, hw.StructType):
-      return StructValue(value, type)
-    if isinstance(type.strip, ir.IntegerType):
-      return BitVectorValue(value, type)
-    return RegularValue(value, type)
+    if value is None or isinstance(value, Value):
+      return value
+    resvalue = support.get_value(value)
+    if resvalue is None:
+      return None
+
+    if type is None:
+      type = resvalue.type
+    type = PyCDEType(type)
+    return type.get_value(value)
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
@@ -158,8 +156,7 @@ class StructValue(Value):
     self.type = type
 
   def __getitem__(self, sub):
-    fields = self.type.strip.get_fields()
-    if sub not in [name for name, _ in fields]:
+    if sub not in [name for name, _ in self.type.strip.fields]:
       raise ValueError(f"Struct field '{sub}' not found in {self.type}")
     from .dialects import hw
     with get_user_loc():
@@ -167,8 +164,7 @@ class StructValue(Value):
 
   def __getattr__(self, attr):
     ty = self.type.strip
-    fields = ty.get_fields()
-    if attr in [name for name, _ in fields]:
+    if attr in [name for name, _ in ty.fields]:
       from .dialects import hw
       with get_user_loc():
         v = hw.StructExtractOp(self.value, attr)
@@ -204,26 +200,15 @@ def wrap_opviews_with_values(dialect, module_name):
           assert len(created.results) == 1
           value = created.results[0]
           type = PyCDEType(value.type)
-
-          if isinstance(type.strip, hw.ArrayType):
-            constructor = ListValue
-          elif isinstance(type.strip, hw.StructType):
-            constructor = StructValue
-          elif isinstance(type.strip, ir.IntegerType):
-            constructor = BitVectorValue
-          else:
-            constructor = RegularValue
-
-          self._inst = constructor(value, type)
+          self._inst = type.get_value(value)
+          if hasattr(self._inst, "__len__"):
+            setattr(self, "__len__", lambda x: len(x._inst))
 
         def __getitem__(self, sub):
           return self._inst[sub]
 
         def __getattr__(self, attr):
           return getattr(self._inst, attr)
-
-        def __len__(self):
-          return len(self._inst)
 
       wrapped_class = ValueOpView
       setattr(module, attr, wrapped_class)

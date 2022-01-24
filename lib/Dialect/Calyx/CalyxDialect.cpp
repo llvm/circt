@@ -34,27 +34,9 @@ struct CalyxOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {}
-
-  /// Get a special name to use when printing the entry block arguments of the
-  /// region contained by an operation in this dialect.
-  void getAsmBlockArgumentNames(Block *block,
-                                OpAsmSetValueNameFn setNameFn) const override;
 };
 
 } // end anonymous namespace
-
-void CalyxOpAsmDialectInterface::getAsmBlockArgumentNames(
-    Block *block, OpAsmSetValueNameFn setNameFn) const {
-  auto *parentOp = block->getParentOp();
-  auto component = dyn_cast<ComponentOp>(parentOp);
-  // Currently only support named block arguments for components.
-  if (component == nullptr)
-    return;
-
-  auto ports = component.portNames();
-  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
-    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
-}
 
 void CalyxDialect::initialize() {
   // Register operations.
