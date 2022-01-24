@@ -342,56 +342,6 @@ public:
 };
 } // namespace
 
-/// Rewrite an annotation to remove a member.  No updates are made if the field
-/// doesn't exist.
-///
-/// TODO: Replace this with a future member function defined on Annotation.
-static void removeMember(Annotation &annotation, StringRef name) {
-  auto oldValue = annotation.getMember(name);
-  if (!oldValue)
-    return;
-  NamedAttrList newAnnotation;
-  for (auto pair : annotation.getDict()) {
-    if (pair.getName() == name)
-      continue;
-    newAnnotation.push_back(pair);
-  }
-  auto newDict = DictionaryAttr::getWithSorted(
-      annotation.getDict().getContext(), newAnnotation.getAttrs());
-  auto fieldID = annotation.getFieldID();
-  if (fieldID) {
-    annotation = Annotation(SubAnnotationAttr::get(
-        annotation.getDict().getContext(), fieldID, newDict));
-    return;
-  }
-  annotation = Annotation(newDict);
-}
-
-/// Add or overwrite a member in an annotation.
-///
-/// TODO: Replace this with a future member function defined on Annotation.
-static void setMember(Annotation &annotation, StringRef name, Attribute value) {
-  auto oldValue = annotation.getMember(name);
-  if (value == oldValue)
-    return;
-  NamedAttrList newAnnotation;
-  for (auto pair : annotation.getDict()) {
-    if (pair.getName() == name)
-      continue;
-    newAnnotation.append(pair);
-  }
-  newAnnotation.append(name, value);
-  auto newDict = DictionaryAttr::get(annotation.getDict().getContext(),
-                                     newAnnotation.getAttrs());
-  auto fieldID = annotation.getFieldID();
-  if (fieldID) {
-    annotation = Annotation(SubAnnotationAttr::get(
-        annotation.getDict().getContext(), fieldID, newDict));
-    return;
-  }
-  annotation = Annotation(newDict);
-}
-
 /// If this operation or any child operation has a name, add the prefix to that
 /// operation's name.
 static void rename(StringRef prefix, Operation *op) {
@@ -528,7 +478,7 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         if (nlaMap[sym.getAttr()].isLocal() ||
             localSymbols.count(sym.getAttr())) {
-          removeMember(anno, "circt.nonlocal");
+          anno.removeMember("circt.nonlocal");
           newAnnotations.push_back(anno);
           return true;
         }
@@ -566,7 +516,7 @@ void Inliner::cloneAndRename(
         // The NLA is local, rewrite it to be local.
         if (nlaMap[sym.getAttr()].isLocal() ||
             localSymbols.count(sym.getAttr())) {
-          removeMember(anno, "circt.nonlocal");
+          anno.removeMember("circt.nonlocal");
           newAnnotations.push_back(anno);
           return true;
         }
@@ -576,7 +526,7 @@ void Inliner::cloneAndRename(
         NamedAttrList newAnnotation;
         if (auto newSym =
                 symbolRenames.lookup(sym.getAttr()).cast<StringAttr>()) {
-          setMember(anno, "circt.nonlocal", FlatSymbolRefAttr::get(newSym));
+          anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newSym));
           newAnnotations.push_back(anno);
           return true;
         }
