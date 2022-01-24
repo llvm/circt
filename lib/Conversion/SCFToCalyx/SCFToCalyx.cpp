@@ -1085,7 +1085,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     return success();
 
   std::string groupName = getComponentState().getUniqueName("ret_assign");
-  Value anyRegDone;
   auto groupOp = createGroup<calyx::GroupOp>(rewriter, *getComponent(),
                                              retOp.getLoc(), groupName);
   for (auto op : enumerate(retOp.getOperands())) {
