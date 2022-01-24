@@ -42,6 +42,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
     LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
                             << getOperation().getName());
     ModuleNamespace modNamespace(getOperation());
+    SmallVector<Operation *> opsToErase;
     for (MemOp op : llvm::make_early_inc_range(
              getOperation().getBody()->getOps<MemOp>())) {
       // Using a MemOp*, because the memop can be updated twice here.
@@ -125,11 +126,10 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             } else
               oldRes->replaceAllUsesWith(sf);
 
-            oldRes->erase();
+            opsToErase.push_back(oldRes);
           }
         }
-        memOp->erase();
-
+        opsToErase.push_back(*memOp);
         memOp = &newMem;
       }
       size_t nReads, nWrites, nRWs;
@@ -272,12 +272,14 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
                          .Case("mask", mask);
             sf.replaceAllUsesWith(repl);
             // Once all the uses of the subfield op replaced, delete it.
-            sf.erase();
+            opsToErase.push_back(sf);
           }
       }
       // All uses for all results of mem removed, now erase the memOp->
-      memOp->erase();
+      opsToErase.push_back(*memOp);
     }
+    for (auto o : opsToErase)
+      o->erase();
   }
 
 private:
