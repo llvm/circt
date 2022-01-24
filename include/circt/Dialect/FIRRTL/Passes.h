@@ -30,7 +30,8 @@ createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
 
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLTypesPass(bool replSeqMem = false,
-                           bool preserveAggregate = false);
+                           bool preserveAggregate = false,
+                           bool preservePublicTypes = true);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
@@ -39,6 +40,8 @@ std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
 std::unique_ptr<mlir::Pass> createInlinerPass();
+
+std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 

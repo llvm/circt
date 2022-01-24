@@ -66,27 +66,33 @@ class OpOperandConnect(support.OpOperand):
   """An OpOperand pycde extension which adds a connect method."""
 
   def connect(self, obj, result_type=None):
+    if result_type is None:
+      result_type = self.type
     val = _obj_to_value(obj, self.type, result_type)
     support.connect(self, val)
 
 
 def _obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
-  assert x is not None
+  if x is None:
+    raise ValueError(
+        "Encountered 'None' when trying to build hardware for python value.")
   from .value import Value
   from .dialects import hw
+  from .pycde_types import (TypeAliasType, ArrayType, StructType, BitVectorType,
+                            PyCDEType)
 
-  type = support.type_to_pytype(type)
-  if isinstance(type, hw.TypeAliasType):
+  type = PyCDEType(type)
+  if isinstance(type, TypeAliasType):
     return _obj_to_value(x, type.inner_type, type)
 
   if result_type is None:
     result_type = type
   else:
-    result_type = support.type_to_pytype(result_type)
-    assert isinstance(result_type, hw.TypeAliasType) or result_type == type
+    result_type = PyCDEType(result_type)
+    assert isinstance(result_type, TypeAliasType) or result_type == type
 
-  val = support.get_value(x)
+  val = Value.get(x)
   # If x is already a valid value, just return it.
   if val is not None:
     if val.type != result_type:
@@ -94,15 +100,15 @@ def _obj_to_value(x, type, result_type=None):
     return Value.get(val)
 
   if isinstance(x, int):
-    if not isinstance(type, ir.IntegerType):
+    if not isinstance(type, BitVectorType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
     with get_user_loc():
       return hw.ConstantOp(type, x)
 
   if isinstance(x, list):
-    if not isinstance(type, hw.ArrayType):
+    if not isinstance(type, ArrayType):
       raise ValueError(f"List is only convertable to hw array, not '{type}'")
-    elemty = type.element_type
+    elemty = result_type.element_type
     if len(x) != type.size:
       raise ValueError("List must have same size as array "
                        f"{len(x)} vs {type.size}")
@@ -112,11 +118,10 @@ def _obj_to_value(x, type, result_type=None):
       return hw.ArrayCreateOp(reversed(list_of_vals))
 
   if isinstance(x, dict):
-    if not isinstance(type, hw.StructType):
+    if not isinstance(type, StructType):
       raise ValueError(f"Dict is only convertable to hw struct, not '{type}'")
-    fields = type.get_fields()
     elem_name_values = []
-    for (fname, ftype) in fields:
+    for (fname, ftype) in type.fields:
       if fname not in x:
         raise ValueError(f"Could not find expected field: {fname}")
       elem_name_values.append((fname, _obj_to_value(x[fname], ftype)))
@@ -124,7 +129,7 @@ def _obj_to_value(x, type, result_type=None):
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")
     with get_user_loc():
-      return hw.StructCreateOp(elem_name_values, result_type=result_type)
+      return hw.StructCreateOp(elem_name_values, result_type=result_type._type)
 
   raise ValueError(f"Unable to map object '{x}' to MLIR Value")
 

@@ -31,12 +31,12 @@ circuit test:
     memory.w.mask <= wMask
     memory.w.data <= wData
 
-; CHECK: external module FIRRTLMem_1_1_0_32_16_1_1_4_0_1_a
+; CHECK: external module memory_ext
 
 ; CHECK: metadata/seq_mems.json
 
-; CHECK: [{"module_name":"FIRRTLMem_1_1_0_32_16_1_1_4_0_1_a","depth":16,"width":32,"masked":"true","read":"true","write":"true","readwrite":"false","mask_granularity":8,"extra_ports":[],"hierarchy":[]}]
+; CHECK: [{"module_name":"memory_ext","depth":16,"width":32,"masked":"true","read":"true","write":"true","readwrite":"false","mask_granularity":8,"extra_ports":[],"hierarchy":[]}]
 
 ; CHECK: metadata/test.conf
 
-; CHECK: name FIRRTLMem_1_1_0_32_16_1_1_4_0_1_a depth 16 width 32 ports mwrite,read mask_gran 8
+; CHECK: name memory_ext depth 16 width 32 ports mwrite,read mask_gran 8

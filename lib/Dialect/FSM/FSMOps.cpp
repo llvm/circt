@@ -265,7 +265,7 @@ bool TransitionOp::isAlwaysTaken() {
 
   if (auto constantOp =
           guardReturn.getOperand(0).getDefiningOp<mlir::ConstantOp>())
-    return constantOp.value().cast<BoolAttr>().getValue();
+    return constantOp.getValue().cast<BoolAttr>().getValue();
 
   return false;
 }
@@ -277,7 +277,7 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
     if (auto constantOp =
             guardReturn.getOperand(0).getDefiningOp<mlir::ConstantOp>()) {
       // Simplify when the guard region returns a constant value.
-      if (constantOp.value().cast<BoolAttr>().getValue()) {
+      if (constantOp.getValue().cast<BoolAttr>().getValue()) {
         // Replace the original return op with a new one without any operands
         // if the constant is TRUE.
         rewriter.setInsertionPoint(guardReturn);

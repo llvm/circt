@@ -115,7 +115,8 @@ set(CIRCT_MAIN_INCLUDE_DIR ${CIRCT_MAIN_SRC_DIR}/include)
 
 set(CIRCT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
-set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
+set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
+set(CIRCT_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 set(CIRCT_UTILS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/utils)
 set(CIRCT_PYTHON_PACKAGES_DIR ${CIRCT_BINARY_DIR}/python_packages)
@@ -295,6 +296,26 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# OR-Tools Configuration
+#-------------------------------------------------------------------------------
+
+option(OR_TOOLS_DISABLE "Disable OR-Tools.")
+if (OR_TOOLS_DISABLE)
+  message(STATUS "Disabling OR-Tools.")
+else()
+  if(DEFINED OR_TOOLS_PATH)
+    list(APPEND CMAKE_PREFIX_PATH ${OR_TOOLS_PATH}/lib/cmake)
+  endif()
+
+  find_package(ortools CONFIG)
+
+  if (ortools_FOUND)
+    list(APPEND CMAKE_INSTALL_RPATH ${ortools_LIBDIR})
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # llhd-sim Configuration
 #-------------------------------------------------------------------------------
 
@@ -381,7 +402,7 @@ if (CIRCT_INCLUDE_DOCS)
   add_subdirectory(docs)
 endif()
 
-install(DIRECTORY include/circt
+install(DIRECTORY include/circt include/circt-c
   DESTINATION include
   COMPONENT circt-headers
   FILES_MATCHING
@@ -393,18 +414,7 @@ install(DIRECTORY include/circt
   PATTERN "LICENSE.TXT"
   )
 
-install(DIRECTORY include/circt-c
-  DESTINATION include
-  COMPONENT circt-headers
-  FILES_MATCHING
-  PATTERN "*.def"
-  PATTERN "*.h"
-  PATTERN "*.inc"
-  PATTERN "*.td"
-  PATTERN "LICENSE.TXT"
-  )
-
-install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt
+install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt ${CIRCT_INCLUDE_DIR}/circt-c
   DESTINATION include
   COMPONENT circt-headers
   FILES_MATCHING

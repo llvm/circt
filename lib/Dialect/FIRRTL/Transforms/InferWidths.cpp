@@ -1543,7 +1543,7 @@ void InferenceMapping::declareVars(Value value, Location loc) {
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Bundle types recursively declare all bundle elements.
       fieldID++;
-      for (auto &element : bundleType.getElements()) {
+      for (auto &element : bundleType) {
         declare(element.type);
       }
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
@@ -1689,7 +1689,7 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
       fieldID++;
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       fieldID++;
-      for (auto &element : bundleType.getElements()) {
+      for (auto &element : bundleType) {
         unify(element.type);
       }
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
@@ -1923,7 +1923,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       // Bundle types recursively update all bundle elements.
       fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
-      for (auto &element : bundleType.getElements()) {
+      for (auto &element : bundleType) {
         elements.emplace_back(element.name, element.isFlip,
                               update(element.type));
       }

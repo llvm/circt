@@ -32,6 +32,7 @@ endfunction()
 # Adds a CIRCT library target for installation.  This should normally only be
 # called from add_circt_library().
 function(add_circt_library_install name)
+  install(TARGETS ${name} COMPONENT ${name} EXPORT CIRCTTargets)
   set_property(GLOBAL APPEND PROPERTY CIRCT_ALL_LIBS ${name})
   set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS ${name})
 endfunction()

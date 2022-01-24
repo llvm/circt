@@ -1,9 +1,9 @@
 ; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" --verilog |  FileCheck %s
 
-; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a
 
-; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a
+; CHECK-LABEL: external module tbMemoryKind1_ext
 
+; CHECK-LABEL: external module dutMemory_ext
 
 circuit test:
   module tbMemModule1:
@@ -34,7 +34,7 @@ circuit test:
     tbMemoryKind1.w.data <= wData
 
 ; CHECK-LABEL: module tbMemModule1
-; CHECK:  FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a tbMemoryKind1
+; CHECK:   tbMemoryKind1_ext tbMemoryKind1
 
   module dutModule2:
     input clock: Clock
@@ -64,7 +64,7 @@ circuit test:
     dutMemory.w.data <= wData
 
 ; CHECK-LABEL: module dutModule2
-; CHECK:  FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a
+; CHECK:  dutMemory_ext dutMemory
 
   module hier1: 
     input clock: Clock
@@ -94,7 +94,7 @@ circuit test:
     tbMemoryKind1.w.data <= wData
 
 ; CHECK=LABEL: module hier1
-; CHECK:  FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a tbMemoryKind1
+; CHECK:  tbMemoryKind1_ext tbMemoryKind1
 
 
   module hier2: 
@@ -175,16 +175,16 @@ circuit test:
 ; CHECK: dutModule2 [[m:.+]] (
 
 ; CHECK-LABEL:      FILE "metadata/tb_seq_mems.json"
-; CHECK:      [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a","depth":16,"width":8,"masked":"true",
-; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
-; CHECK_SAME: "mask_granularity":8,"extra_ports":[],
-; CHECK-SAME: hierarchy":["test.[[h2]].[[m]].tbMemoryKind1","test.[[h1]].tbMemoryKind1"
+; CHECK: [{"module_name":"tbMemoryKind1_ext","depth":16,"width":8,
+; CHECK:          "masked":"true","read":"true","write":"true","readwrite":"false"
+; CHECK:          ,"mask_granularity":8,"extra_ports":[],"hierarchy":
+; CHECK:          ["test.h2.m.tbMemoryKind1","test.h1.tbMemoryKind1"]}
 
 ; CHECK-LABEL:       FILE "metadata/seq_mems.json"
-; CHECK:       [{"module_name":"FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a","depth":32,"width":8,"masked":"true",
-; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
-; CHECK_SAME:  "mask_granularity":8,"extra_ports":[],
-; CHECK-SAME:  "hierarchy":["test.[[m2]].[[m]].dutMemory"
+; CHECK:  [{"module_name":"dutMemory_ext","depth":32,"width":8,"masked":"true","read":"true",
+; CHECK:  "write":"true","readwrite":"false","mask_granularity":8,"extra_ports":[],
+; CHECK:  "hierarchy":["test.m2.m.dutMemory"]}]
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"
-; CHECK: name FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a depth 32 width 8 ports mwrite,read mask_gran 8
+; CHECK: name dutMemory_ext depth 32 width 8 ports mwrite,read mask_gran 8
+; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports mwrite,read mask_gran 8

@@ -153,7 +153,7 @@ static StringAttr getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
   StringRef bufferName = mainBuffer->getBufferIdentifier();
   if (bufferName.empty())
     bufferName = "<unknown>";
-  return StringAttr::get(bufferName, context);
+  return StringAttr::get(context, bufferName);
 }
 
 FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)

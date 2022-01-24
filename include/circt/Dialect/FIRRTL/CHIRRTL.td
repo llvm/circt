@@ -103,7 +103,7 @@ def CombMemOp : CHIRRTLOp<"combmem"> {
   let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations,
                               OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` type($result)";
+  let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
                    "mlir::StringRef":$name, "ArrayAttr":$annotations,
@@ -121,7 +121,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem"> {
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs CMemoryType:$result);
-  let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
+  let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
     OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
@@ -192,7 +192,7 @@ def MemoryPortAccessOp : CHIRRTLOp<"memoryport.access"> {
                    ClockType:$clock);
 
   let assemblyFormat = [{
-    $port `[` $index `]` `,` $clock attr-dict `:` type(operands)
+    $port `[` $index `]` `,` $clock attr-dict `:` qualified(type(operands))
   }];
 }
 

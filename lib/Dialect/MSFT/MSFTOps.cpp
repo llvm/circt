@@ -206,6 +206,10 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
 
   // Erase the arguments after setting the new output op operands since the
   // arguments might be used by output op.
+  for (unsigned argNum = 0, e = body->getArguments().size(); argNum < e;
+       ++argNum)
+    if (inputs.test(argNum))
+      body->getArgument(argNum).dropAllUses();
   body->eraseArguments(inputs);
 
   return newToOldResultMap;
@@ -223,7 +227,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Attribute> argNames, resultNames;
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs;
-  auto exportPortIdent = StringAttr::get("hw.exportPort", builder.getContext());
+  auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
 
   for (auto elt : ports.inputs) {
     if (elt.direction == hw::PortDirection::INOUT &&
@@ -280,6 +284,19 @@ void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
     body->addArgument(elt.type);
 
   MSFTModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+}
+
+void MSFTModuleOp::getAsmBlockArgumentNames(Region &region,
+                                            OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  Block *block = getBodyBlock();
+  ArrayAttr argNames = argNamesAttr();
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    auto name = argNames[i].cast<StringAttr>().getValue();
+    if (!name.empty())
+      setNameFn(block->getArgument(i), name);
+  }
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {

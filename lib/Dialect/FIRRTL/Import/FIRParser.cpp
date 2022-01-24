@@ -111,7 +111,7 @@ std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
     StringAttr filenameId = locatorFilenameCache;
     if (filenameId.str() != filename) {
       // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId = StringAttr::get(filename, context);
+      locatorFilenameCache = filenameId = StringAttr::get(context, filename);
 
       // If we miss in the filename cache, we also miss in the FileLineColLoc
       // cache.
@@ -185,11 +185,11 @@ struct SharedParserConstants {
   SharedParserConstants(MLIRContext *context, FIRParserOptions options)
       : context(context), options(options),
         emptyArrayAttr(ArrayAttr::get(context, {})),
-        loIdentifier(StringAttr::get("lo", context)),
-        hiIdentifier(StringAttr::get("hi", context)),
-        amountIdentifier(StringAttr::get("amount", context)),
-        fieldIndexIdentifier(StringAttr::get("fieldIndex", context)),
-        indexIdentifier(StringAttr::get("index", context)) {}
+        loIdentifier(StringAttr::get(context, "lo")),
+        hiIdentifier(StringAttr::get(context, "hi")),
+        amountIdentifier(StringAttr::get(context, "amount")),
+        fieldIndexIdentifier(StringAttr::get(context, "fieldIndex")),
+        indexIdentifier(StringAttr::get(context, "index")) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -3577,7 +3577,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       break;
     }
 
-    auto nameId = builder.getIdentifier(paramName);
+    auto nameId = builder.getStringAttr(paramName);
     if (!seenNames.insert(nameId).second)
       return emitError(loc, "redefinition of parameter '" + paramName + "'");
     parameters.push_back(ParamDeclAttr::get(nameId, value));

@@ -14,7 +14,7 @@
 #define FIRTOMLIR_FIRLEXER_H
 
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/Identifier.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace mlir {

@@ -93,6 +93,12 @@ typedef struct {
   MlirOperation op;
 } CirctMSFTPlacedInstance;
 
+enum CirctMSFTDirection { NONE = 0, ASC = 1, DESC = 2 };
+typedef struct {
+  CirctMSFTDirection columns;
+  CirctMSFTDirection rows;
+} CirctMSFTWalkOrder;
+
 MLIR_CAPI_EXPORTED CirctMSFTPlacementDB
 circtMSFTCreatePlacementDB(MlirOperation top, CirctMSFTPrimitiveDB seed);
 MLIR_CAPI_EXPORTED void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
@@ -114,7 +120,8 @@ typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
 /// on all sides), with -1 meaning unbounded.
 MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
     CirctMSFTPlacementDB, CirctMSFTPlacementCallback, int64_t bounds[4],
-    CirctMSFTPrimitiveType primTypeFilter, void *userData);
+    CirctMSFTPrimitiveType primTypeFilter, CirctMSFTWalkOrder walkOrder,
+    void *userData);
 
 #ifdef __cplusplus
 }

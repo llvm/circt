@@ -16,7 +16,7 @@ def AttachOp : FIRRTLOp<"attach"> {
   let arguments = (ins Variadic<AnalogType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = "$operands attr-dict `:` type($operands)";
+  let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
 
   let hasCanonicalizeMethod = true;
 }
@@ -34,7 +34,7 @@ def ConnectOp : FIRRTLOp<"connect"> {
   let results = (outs);
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 
   let verifier = "return ::verifyConnectOp(*this);";
   let hasCanonicalizeMethod = true;
@@ -56,7 +56,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
   let verifier = "return ::verifyPartialConnectOp(*this);";
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
+    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 }
 
 def PrintFOp : FIRRTLOp<"printf"> {
@@ -68,7 +68,7 @@ def PrintFOp : FIRRTLOp<"printf"> {
 
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString custom<PrintfAttrs>(attr-dict)
-    (`(` $operands^ `)` `:` type($operands))?
+    (`(` $operands^ `)` `:` qualified(type($operands)))?
   }];
 }
 
@@ -124,7 +124,7 @@ class VerifOp<string mnemonic, list<OpTrait> traits = []> :
 
   let assemblyFormat = [{
     $clock `,` $predicate `,` $enable `,`
-    $message (`(` $operands^ `)` `:` type($operands))?
+    $message (`(` $operands^ `)` `:` qualified(type($operands)))?
     custom<VerifAttrs>(attr-dict)
   }];
 }
@@ -200,7 +200,7 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
   let assemblyFormat =
-    "$dest `,` $src attr-dict `:` type($dest) `,` type($src)";
+    "$dest `,` $src attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 }
 
 def ProbeOp : FIRRTLOp<"probe"> {
@@ -211,6 +211,6 @@ def ProbeOp : FIRRTLOp<"probe"> {
   let arguments = (ins SymbolNameAttr:$inner_sym, Variadic<FIRRTLType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` type($operands))?";
+  let assemblyFormat = "$inner_sym attr-dict ( `,` $operands^  `:` qualified(type($operands)))?";
 }
 

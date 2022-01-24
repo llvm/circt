@@ -45,10 +45,17 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.array_get [[ARRAY1]][%c-2_i2] : !hw.array<3xi32>
       hw.ArrayGetOp.create(array1, 2)
 
+      # CHECK: [[ARRAY2:%.+]] = hw.array_create %[[CONST]] : i32
+      array2 = hw.ArrayCreateOp.create([constI32])
+
+      # CHECK: %false = hw.constant false
+      # CHECK: hw.array_get [[ARRAY2]][%false] : !hw.array<1xi32>
+      hw.ArrayGetOp.create(array2, 0)
+
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
       struct1 = hw.StructCreateOp.create([('a', constI32), ('b', constI1)])
 
-      # CHECK: %4 = hw.struct_extract [[STRUCT1]]["a"] : !hw.struct<a: i32, b: i1>
+      # CHECK: hw.struct_extract [[STRUCT1]]["a"] : !hw.struct<a: i32, b: i1>
       hw.StructExtractOp.create(struct1, 'a')
 
     hw.HWModuleOp(name="test", body_builder=build)

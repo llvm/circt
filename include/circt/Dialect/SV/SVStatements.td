@@ -331,7 +331,7 @@ def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
 }
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
@@ -344,7 +344,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
   let verifier = "return ::verifyBPAssignOp(*this);";
 }
 
@@ -359,7 +359,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
   let verifier = "return ::verifyPAssignOp(*this);";
 }
 
@@ -384,7 +384,7 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
 }
 
 def ReleaseOp : SVOp<"release", [ProceduralOp]> {
@@ -401,7 +401,7 @@ def ReleaseOp : SVOp<"release", [ProceduralOp]> {
   }];
   let arguments = (ins InOutType:$dest);
   let results = (outs);
-  let assemblyFormat = "$dest attr-dict `:` type($dest)";
+  let assemblyFormat = "$dest attr-dict `:` qualified(type($dest))";
 }
 
 def AliasOp : SVOp<"alias"> {
@@ -414,7 +414,7 @@ def AliasOp : SVOp<"alias"> {
   let arguments = (ins Variadic<InOutType>:$operands);
   let results = (outs);
 
-  let assemblyFormat = "$operands attr-dict `:` type($operands)";
+  let assemblyFormat = "$operands attr-dict `:` qualified(type($operands))";
 
   // Verify that we have at least two operands.
   let verifier = "return ::verifyAliasOp(*this);";
@@ -429,7 +429,7 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let results = (outs);
 
   let assemblyFormat =
-    "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
+    "$string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
@@ -443,7 +443,7 @@ def VerbatimOp : SVOp<"verbatim"> {
                   DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
 
   let assemblyFormat =
-    "$string (`(` $operands^ `)` `:` type($operands))? attr-dict";
+    "$string (`(` $operands^ `)` `:` qualified(type($operands)))? attr-dict";
 
   let builders = [
     OpBuilder<(ins "Twine":$string),
@@ -581,7 +581,7 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
     OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
   let assemblyFormat = [{
     $verbosity
-    (`,` $message^ (`(` $operands^ `)` `:` type($operands))?)?
+    (`,` $message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
     attr-dict
   }];
   let builders = [
@@ -603,7 +603,7 @@ class NonfatalMessageOp<string mnemonic, list<OpTrait> traits = []> :
   let arguments = (ins
     OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
   let assemblyFormat = [{
-    ($message^ (`(` $operands^ `)` `:` type($operands))?)?
+    ($message^ (`(` $operands^ `)` `:` qualified(type($operands)))?)?
     attr-dict
   }];
   let builders = [

@@ -315,15 +315,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[SEXT:%.+]] = comb.concat {{.*}}, %in3 : i1, i8
     // CHECK: = comb.sub %c0_i9, [[SEXT]] : i9
     %54 = firrtl.neg %in3 : (!firrtl.sint<8>) -> !firrtl.sint<9>
+    // CHECK: hw.output %false, %false : i1, i1
     firrtl.connect %out1, %53 : !firrtl.sint<1>, !firrtl.sint<1>
     %55 = firrtl.neg %in5 : (!firrtl.sint<0>) -> !firrtl.sint<1>
-
-    %61 = firrtl.multibit_mux %17, %55, %55, %55 : !firrtl.uint<1>, !firrtl.sint<1>
-    // CHECK:      %[[ZEXT_INDEX:.+]] = comb.concat %false, {{.*}} : i1, i1
-    // CHECK-NEXT: %[[ARRAY:.+]] = hw.array_create %false, %false, %false
-    // CHECK-NEXT: %[[ARRAY_GET:.+]] = hw.array_get %[[ARRAY]][%[[ZEXT_INDEX]]]
-    // CHECK: hw.output %false, %[[ARRAY_GET]] : i1, i1
-    firrtl.connect %out2, %61 : !firrtl.sint<1>, !firrtl.sint<1>
+    firrtl.connect %out2, %55 : !firrtl.sint<1>, !firrtl.sint<1>
   }
 
 //   module Print :
@@ -600,9 +595,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind #hw.innerNameRef<@bindTest::@[[bazSymbol:.+]]>
+  // CHECK: sv.bind <@bindTest::@[[bazSymbol:.+]]>
   // CHECK-NOT: output_file
-  // CHECK-NEXT: sv.bind #hw.innerNameRef<@bindTest::@[[quxSymbol:.+]]> {
+  // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
@@ -1595,4 +1590,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      hw.instance "foo" sym @sym_foo {{.+}} {hw.verilogName = "Foo"}
     // CHECK-NEXT: hw.instance "bar" sym @sym_bar {{.+}} {hw.verilogName = "Bar"}
   }
+
+  // CHECK-LABEL: hw.module @PreserveName
+  firrtl.module @PreserveName(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>, out %c : !firrtl.uint<1>) {
+    //CHECK comb.or %a, %b {sv.namehint = "myname"}
+    %foo = firrtl.or %a, %b {name = "myname"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %c, %foo : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
 }

@@ -138,6 +138,11 @@ def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createHandshakeToFIRRTLPass()";
   let dependentDialects = ["firrtl::FIRRTLDialect"];
+  let options = [
+    Option<"enableFlattening", "flatten", "bool", "false",
+    "Flattens the generated FIRRTL component by inlining all dataflow component"
+    " instantiations into the top module.">,
+  ];
 }
 
 //===----------------------------------------------------------------------===//

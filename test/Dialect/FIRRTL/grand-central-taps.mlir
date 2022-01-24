@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --firrtl-grand-central-taps | FileCheck %s
+// RUN: circt-opt %s --firrtl-grand-central-taps --split-input-file | FileCheck %s
 
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
@@ -297,5 +297,96 @@ firrtl.circuit "TestHarness" attributes {
     %DataTap_10, %DataTap_9, %DataTap_8, %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance dataTap @DataTap(out _10: !firrtl.uint<4>, out _9: !firrtl.uint<1>, out _8: !firrtl.sint<8>, out _7: !firrtl.uint<1>, out _6: !firrtl.uint<1>, out _5: !firrtl.uint<1>, out _4: !firrtl.uint<1>, out _3: !firrtl.uint<1>, out _2: !firrtl.uint<1>, out _1: !firrtl.clock, out _0: !firrtl.uint<1>)
     // CHECK: firrtl.instance memTap @[[MT]]
     %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance memTap @MemTap(out mem_0: !firrtl.uint<1>, out mem_1: !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// Test that NLAs are properly garbage collected.  After this runs, no NLAs
+// should exist in the circuit.
+//
+// CHECK-LABEL: firrtl.circuit "NLAGarbageCollection"
+firrtl.circuit "NLAGarbageCollection" {
+  // CHECK-NOT: @nla_1
+  // CHECK-NOT: @nla_2
+  // CHECK-NOT: @nla_3
+  firrtl.nla @nla_1 [#hw.innerNameRef<@NLAGarbageCollection::@dut>, #hw.innerNameRef<@DUT::@submodule>, #hw.innerNameRef<@Submodule::@foo>]
+  firrtl.nla @nla_2 [#hw.innerNameRef<@NLAGarbageCollection::@dut>, #hw.innerNameRef<@DUT::@submodule>, #hw.innerNameRef<@Submodule::@port>]
+  firrtl.nla @nla_3 [#hw.innerNameRef<@NLAGarbageCollection::@dut>, #hw.innerNameRef<@DUT::@submodule>, #hw.innerNameRef<@Submodule::@bar>]
+  firrtl.module @Submodule(
+    in %port: !firrtl.uint<1> sym @port [
+      {circt.nonlocal = @nla_2,
+       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+       id = 1 : i64,
+       portID = 3 : i64,
+       type = "source"}]
+  ) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %foo = firrtl.wire sym @foo {
+      annotations = [
+        {circt.nonlocal = @nla_1,
+         class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+         id = 1 : i64,
+         portID = 2 : i64,
+         type = "source"}]} : !firrtl.uint<1>
+    %bar_out_MPORT = firrtl.mem sym @bar Undefined {
+      annotations = [
+        {circt.nonlocal = @nla_3,
+         class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64}],
+      depth = 1 : i64,
+      name = "bar",
+      portNames = ["out_MPORT"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+  }
+  firrtl.extmodule @MemTap(
+    out mem_0: !firrtl.uint<1> [
+      {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
+       id = 0 : i64,
+       word = 0 : i64}]
+  ) attributes {
+    annotations = [
+      {class = "firrtl.transforms.NoDedupAnnotation"}],
+    defname = "MemTap"
+  }
+  firrtl.extmodule @DataTap_1(
+    out _1: !firrtl.uint<1> sym @_1 [
+      {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+       id = 1 : i64,
+       portID = 3 : i64,
+       type = "portName"}],
+    out _0: !firrtl.uint<1> sym @_0 [
+      {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+       id = 1 : i64,
+       portID = 2 : i64,
+       type = "portName"}]
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.DataTapsAnnotation"},
+      {class = "firrtl.transforms.DontTouchAnnotation"},
+      {class = "firrtl.transforms.NoDedupAnnotation"}],
+    defname = "DataTap_1"}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {
+    %submodule_port = firrtl.instance submodule sym @submodule  {
+      annotations = [
+        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
+    } @Submodule(in port : !firrtl.uint<1>)
+    %MemTap_0 = firrtl.instance mem_tap_MemTap  @MemTap(out mem_0: !firrtl.uint<1>)
+    %DataTap_0, %DataTap_1 = firrtl.instance DataTap_1  @DataTap_1(out _1: !firrtl.uint<1>, out _0: !firrtl.uint<1>)
+  }
+  firrtl.module @NLAGarbageCollection() {
+    firrtl.instance dut sym @dut {
+      annotations = [
+        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_2, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]
+    } @DUT()
   }
 }

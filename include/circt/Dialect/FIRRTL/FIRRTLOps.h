@@ -153,6 +153,7 @@ struct FirMemory {
   size_t readUnderWrite;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
+  StringAttr modName;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -170,7 +171,7 @@ struct FirMemory {
   bool operator==(const FirMemory &rhs) const {
     return getTuple() == rhs.getTuple();
   }
-  std::string getFirMemoryName() const;
+  StringAttr getFirMemoryName() const;
 };
 } // namespace firrtl
 } // namespace circt
