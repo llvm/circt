@@ -1070,11 +1070,12 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
 
-  return build(builder, result, resultTypes,
-               SymbolRefAttr::get(builder.getContext(), module.moduleName()),
-               builder.getStringAttr(name), module.getPortDirectionsAttr(),
-               module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+  return build(
+      builder, result, resultTypes,
+      SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
+      builder.getStringAttr(name), module.getPortDirectionsAttr(),
+      module.getPortNamesAttr(), builder.getArrayAttr(annotations),
+      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and

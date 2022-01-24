@@ -331,7 +331,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
       // We use symbol substitution to make sure we output the correct thing
       // when the module goes through renaming.
       j.value(("{{" + Twine(index++) + "}}").str());
-      symbols.push_back(SymbolRefAttr::get(context, module.moduleName()));
+      symbols.push_back(SymbolRefAttr::get(module.moduleNameAttr()));
     }
   });
 
