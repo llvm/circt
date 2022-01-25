@@ -3,6 +3,19 @@
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
 
+firrtl.circuit "Aggregates" attributes {annotations = [
+  {class = "circt.test", target = "~Aggregates|Aggregates>vector[1][1][1]"},
+  {class = "circt.test", target = "~Aggregates|Aggregates>bundle.a.b.c"}
+  ]} {
+  firrtl.module @Aggregates() {
+    // CHECK: {annotations = [{circt.fieldID = 14 : i32, class = "circt.test"}]}
+    %vector = firrtl.wire  : !firrtl.vector<vector<vector<uint<1>, 2>, 2>, 2>
+    // CHECK: {annotations = [{circt.fieldID = 3 : i32, class = "circt.test"}]}
+    %bundle = firrtl.wire  : !firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>
+  }
+}
+  
+// -----
 
 // A non-local annotation should work.
 
@@ -36,5 +49,3 @@ firrtl.circuit "FooNL"  attributes {annotations = [
     %w3 = firrtl.wire: !firrtl.uint
   }
 }
-
-

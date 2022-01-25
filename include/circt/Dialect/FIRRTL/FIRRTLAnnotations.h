@@ -24,6 +24,8 @@ namespace firrtl {
 class AnnotationSetIterator;
 class FModuleLike;
 class MemOp;
+struct ModuleNamespace;
+class FIRRTLType;
 
 /// Return the name of the attribute used for annotations on FIRRTL ops.
 inline StringRef getAnnotationAttrName() { return "annotations"; }
@@ -340,6 +342,134 @@ inline auto AnnotationSet::begin() const -> iterator {
 inline auto AnnotationSet::end() const -> iterator {
   return iterator(*this, annotations.size());
 }
+
+//===----------------------------------------------------------------------===//
+// AnnoTarget
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+struct AnnoTargetImpl {
+  /* implicit */ AnnoTargetImpl(Operation *op) : op(op), portNo(~0UL) {}
+
+  AnnoTargetImpl(Operation *op, unsigned portNo) : op(op), portNo(portNo) {}
+
+  operator bool() const { return getOp(); }
+  bool operator==(const AnnoTargetImpl &other) const {
+    return op == other.op && portNo == other.portNo;
+  }
+  bool operator!=(const AnnoTargetImpl &other) const {
+    return !(*this == other);
+  }
+
+  bool isPort() const { return op && portNo != ~0UL; }
+  bool isOp() const { return op && portNo == ~0UL; }
+
+  Operation *getOp() const { return op; }
+  void setOp(Operation *op) { this->op = op; }
+
+  unsigned getPortNo() const { return portNo; }
+  void setPortNo(unsigned portNo) { this->portNo = portNo; }
+
+protected:
+  Operation *op;
+  size_t portNo;
+};
+} // namespace detail
+
+/// An annotation target is used to keep track of something that is targeted by
+/// an Annotation.
+struct AnnoTarget {
+  AnnoTarget(detail::AnnoTargetImpl impl = nullptr) : impl(impl){};
+
+  template <typename U>
+  bool isa() const { // NOLINT(readability-identifier-naming)
+    assert(*this && "isa<> used on a null type.");
+    return U::classof(*this);
+  }
+  template <typename U>
+  U dyn_cast() const { // NOLINT(readability-identifier-naming)
+    return isa<U>() ? U(impl) : U(nullptr);
+  }
+  template <typename U>
+  U dyn_cast_or_null() const { // NOLINT(readability-identifier-naming)
+    return (*this && isa<U>()) ? U(impl) : U(nullptr);
+  }
+  template <typename U>
+  U cast() const {
+    assert(isa<U>());
+    return U(impl);
+  }
+
+  operator bool() const { return impl; }
+  bool operator==(const AnnoTarget &other) const { return impl == other.impl; }
+  bool operator!=(const AnnoTarget &other) const { return !(*this == other); }
+
+  Operation *getOp() const { return getImpl().getOp(); }
+  void setOp(Operation *op) { getImpl().setOp(op); }
+
+  /// Get the annotations associated with the target.
+  AnnotationSet getAnnotations() const;
+
+  /// Set the annotations associated with the target.
+  void setAnnotations(AnnotationSet annotations) const;
+
+  /// Get the parent module of the target.
+  FModuleLike getModule() const;
+
+  /// Get the inner_sym attribute of an op.  If there is no attached inner_sym,
+  /// then one will be created and attached to the op.
+  StringAttr getInnerSym(ModuleNamespace &moduleNamespace) const;
+
+  /// Get a reference to this target suitable for use in an NLA.
+  Attribute getNLAReference(ModuleNamespace &moduleNamespace) const;
+
+  /// Get the type of the target.
+  FIRRTLType getType() const;
+
+  detail::AnnoTargetImpl getImpl() const { return impl; }
+
+protected:
+  detail::AnnoTargetImpl impl;
+};
+
+/// This represents an annotation targeting a specific operation.
+struct OpAnnoTarget : public AnnoTarget {
+  using AnnoTarget::AnnoTarget;
+
+  OpAnnoTarget(Operation *op) : AnnoTarget(op) {}
+
+  AnnotationSet getAnnotations() const;
+  void setAnnotations(AnnotationSet annotations) const;
+  StringAttr getInnerSym(ModuleNamespace &moduleNamespace) const;
+  Attribute getNLAReference(ModuleNamespace &moduleNamespace) const;
+  FIRRTLType getType() const;
+
+  static bool classof(const AnnoTarget &annoTarget) {
+    return annoTarget.getImpl().isOp();
+  }
+};
+
+/// This represents an annotation targeting a specific port of a module, memory,
+/// or instance.
+struct PortAnnoTarget : public AnnoTarget {
+  using AnnoTarget::AnnoTarget;
+
+  PortAnnoTarget(FModuleLike op, unsigned portNo);
+  PortAnnoTarget(MemOp op, unsigned portNo);
+
+  unsigned getPortNo() const { return getImpl().getPortNo(); }
+  void setPortNo(unsigned portNo) { getImpl().setPortNo(portNo); }
+
+  AnnotationSet getAnnotations() const;
+  void setAnnotations(AnnotationSet annotations) const;
+  StringAttr getInnerSym(ModuleNamespace &moduleNamespace) const;
+  Attribute getNLAReference(ModuleNamespace &moduleNamespace) const;
+  FIRRTLType getType() const;
+
+  static bool classof(const AnnoTarget &annoTarget) {
+    return annoTarget.getImpl().isPort();
+  }
+};
 
 } // namespace firrtl
 } // namespace circt
