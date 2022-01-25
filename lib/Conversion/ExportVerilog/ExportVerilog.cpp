@@ -2174,13 +2174,17 @@ static bool isExpressionUnableToInline(Operation *op) {
 
   auto *opBlock = op->getBlock();
 
+  // If the parent op is not a module op, it is defined locally.
+  bool isLocalDefinition = !isa_and_nonnull<HWModuleOp>(op->getParentOp());
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
-    // If the user is in a different block and the op shouldn't be inlined, then
+    // If the op is defined locally and the user is in a different block, then
     // we emit this as an out-of-line declaration into its block and the user
     // can refer to it unless the operation is nullary and duplicable.
-    if (user->getBlock() != opBlock && !isDuplicatableNullaryExpression(op))
+    if (isLocalDefinition && user->getBlock() != opBlock &&
+        !isDuplicatableNullaryExpression(op))
       return true;
 
     // Verilog bit selection is required by the standard to be:

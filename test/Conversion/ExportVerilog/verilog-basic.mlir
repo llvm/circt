@@ -355,10 +355,9 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
 
-  // CHECK: wire [4:0] _T = {1'h0, a} << 5'h1;
   // CHECK: always @(posedge clock) begin
   // CHECK:   if (`PRINTF_COND_ & reset)
-  // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", _T, b);
+  // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", {1'h0, a} << 5'h1, b);
   // CHECK: end // always @(posedge)
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
@@ -377,9 +376,8 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
   %count = sv.reg  : !hw.inout<i2>
 
-  // CHECK: wire [1:0] _T = ~{2{reset}} & (cond ? value : count);
-  // CHECK-NEXT: always_ff @(posedge clock)
-  // CHECK-NEXT:   count <= _T;
+  // CHECK: always_ff @(posedge clock)
+  // CHECK-NEXT:   count <= ~{2{reset}} & (cond ? value : count);
 
   %0 = sv.read_inout %count : !hw.inout<i2>
   %1 = comb.mux %cond, %value, %0 : i2
