@@ -176,5 +176,20 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// everything after it.
     /// Return true if any update is made.
     bool truncateAtModule(StringAttr atMod, bool includeMod = true);
+
+    /// Return just the module part of the namepath at a specific index.
+    StringAttr modPart(unsigned i);
+
+    /// Return the root module.
+    StringAttr root();
+
+    /// Return just the reference part of the namepath at a specific index.
+    /// This will return an empty attribute if this is the leaf and the leaf is
+    /// a module.
+    StringAttr refPart(unsigned i);
+
+    /// Return the leaf reference.  This returns an empty attribute if the leaf
+    /// reference is a module.
+    StringRef ref();
     }];
 }

@@ -3120,6 +3120,34 @@ bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
   return updateMade;
 }
 
+/// Return just the module part of the namepath at a specific index.
+StringAttr NonLocalAnchor::modPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(namepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
+/// Return the root module.
+StringAttr NonLocalAnchor::root() {
+  assert(!namepath().empty());
+  return modPart(0);
+}
+
+/// Return just the reference part of the namepath at a specific index.  This
+/// will return an empty attribute if this is the leaf and the leaf is a module.
+StringAttr NonLocalAnchor::refPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(namepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
+}
+
+/// Return the leaf reference.  This returns an empty attribute if the leaf
+/// reference is a module.
+StringRef NonLocalAnchor::ref() {
+  assert(!namepath().empty());
+  return refPart(namepath().size() - 1);
+}
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
