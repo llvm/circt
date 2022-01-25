@@ -165,7 +165,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// Update the symbol name for the inlined module instance, by prepending
     /// the symbol name of the instance at which the inling was done.
     /// Return true if any update is made.
-     bool inlineModule(StringAttr moduleToDrop);
+    bool inlineModule(StringAttr moduleToDrop);
 
     /// Replace the oldMod module with newMod module in the namepath of the NLA.
     /// Return true if any update is made.
