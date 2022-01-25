@@ -23,6 +23,7 @@ namespace firrtl {
 
 class AnnotationSetIterator;
 class FModuleLike;
+class MemOp;
 
 /// Return the name of the attribute used for annotations on FIRRTL ops.
 inline StringRef getAnnotationAttrName() { return "annotations"; }
@@ -124,7 +125,8 @@ public:
   explicit AnnotationSet(Operation *op);
 
   /// Get an annotation set for the specified port.
-  static AnnotationSet forPort(Operation *op, size_t portNo);
+  static AnnotationSet forPort(FModuleLike op, size_t portNo);
+  static AnnotationSet forPort(MemOp op, size_t portNo);
 
   /// Get an annotation set for the specified value.
   static AnnotationSet get(Value v);
@@ -144,7 +146,8 @@ public:
   /// Store the annotations in this set in an operation's `portAnnotations`
   /// attribute, overwriting any existing annotations for this port. Returns
   /// true if the operation was modified, false otherwise.
-  bool applyToPort(Operation *op, size_t portNo) const;
+  bool applyToPort(FModuleLike op, size_t portNo) const;
+  bool applyToPort(MemOp op, size_t portNo) const;
 
   /// Store the annotations in this set in a `NamedAttrList` as an array
   /// attribute with the name `annotations`. Overwrites existing annotations.

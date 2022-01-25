@@ -23,12 +23,6 @@ using mlir::function_like_impl::setAllArgAttrDicts;
 using namespace circt;
 using namespace firrtl;
 
-static size_t getPortCount(Operation *op) {
-  if (auto module = dyn_cast<FModuleLike>(op))
-    return module.getNumPorts();
-  return op->getNumResults();
-}
-
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
     return annots;
@@ -64,11 +58,19 @@ AnnotationSet::AnnotationSet(ArrayAttr annotations, MLIRContext *context)
 AnnotationSet::AnnotationSet(Operation *op)
     : AnnotationSet(getAnnotationsFrom(op)) {}
 
-AnnotationSet AnnotationSet::forPort(Operation *op, size_t portNo) {
-  auto ports = op->getAttrOfType<ArrayAttr>("portAnnotations");
+static AnnotationSet forPort(Operation *op, size_t portNo) {
+  auto ports = op->getAttrOfType<ArrayAttr>(getPortAnnotationAttrName());
   if (ports && !ports.empty())
     return AnnotationSet(ports[portNo].cast<ArrayAttr>());
   return AnnotationSet(ArrayAttr::get(op->getContext(), {}));
+}
+
+AnnotationSet AnnotationSet::forPort(FModuleLike op, size_t portNo) {
+  return ::forPort(op.getOperation(), portNo);
+}
+
+AnnotationSet AnnotationSet::forPort(MemOp op, size_t portNo) {
+  return ::forPort(op.getOperation(), portNo);
 }
 
 /// Get an annotation set for the specified value.
@@ -89,19 +91,28 @@ bool AnnotationSet::applyToOperation(Operation *op) const {
   return op->getAttrDictionary() != before;
 }
 
-bool AnnotationSet::applyToPort(Operation *op, size_t portNo) const {
-  auto before = op->getAttrDictionary();
+static bool applyToPort(AnnotationSet annos, Operation *op, size_t portCount,
+                        size_t portNo) {
+  assert(portNo < portCount && "port index out of range.");
   auto *context = op->getContext();
-  auto oldAttrs = op->getAttrOfType<ArrayAttr>(getPortAnnotationAttrName());
+  auto before = op->getAttrOfType<ArrayAttr>(getPortAnnotationAttrName());
   SmallVector<Attribute> portAnnotations;
-  if (!oldAttrs || oldAttrs.empty())
-    portAnnotations.assign(getPortCount(op), ArrayAttr::get(context, {}));
+  if (!before || before.empty())
+    portAnnotations.assign(portCount, ArrayAttr::get(context, {}));
   else
-    portAnnotations.append(oldAttrs.begin(), oldAttrs.end());
-  portAnnotations[portNo] = getArrayAttr();
+    portAnnotations.append(before.begin(), before.end());
+  portAnnotations[portNo] = annos.getArrayAttr();
   auto after = ArrayAttr::get(context, portAnnotations);
   op->setAttr(getPortAnnotationAttrName(), after);
-  return op->getAttrDictionary() != before;
+  return before != after;
+}
+
+bool AnnotationSet::applyToPort(FModuleLike op, size_t portNo) const {
+  return ::applyToPort(*this, op.getOperation(), op.getNumPorts(), portNo);
+}
+
+bool AnnotationSet::applyToPort(MemOp op, size_t portNo) const {
+  return ::applyToPort(*this, op.getOperation(), op->getNumResults(), portNo);
 }
 
 static bool applyToAttrListImpl(const AnnotationSet &annoSet, StringRef key,
