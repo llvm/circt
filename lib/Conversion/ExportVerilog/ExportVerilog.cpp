@@ -120,7 +120,7 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   // inline.
   if (isa<VerbatimExprOp>(op)) {
     if (op->getNumOperands() == 0 &&
-        op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
+        op->getAttrOfType<StringAttr>("string").getValue().size() <= 32)
       return true;
   }
 
@@ -2166,6 +2166,11 @@ static bool isExpressionUnableToInline(Operation *op) {
   // are inferred properly by verilog
   if (isa<StructCreateOp>(op))
     return true;
+
+  // Verbatim with a long string should be emitted as an out-of-line declration.
+  if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
+    if (verbatim.string().size() > 32)
+      return true;
 
   auto *opBlock = op->getBlock();
 
