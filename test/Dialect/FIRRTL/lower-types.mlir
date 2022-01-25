@@ -1432,4 +1432,26 @@ firrtl.module @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl
   // CHECK-NEXT: firrtl.mux([[EQ]], %x_4,
 }
 
+  // Check if the NLA is updated with the new lowered symbol on a field element.
+  // CHECK-LABEL: firrtl.nla @nla
+  firrtl.nla @nla [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b>]
+  // CHECK-SAME: [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@bbundle_ready>]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@fallBackName::@test>,#hw.innerNameRef<@Aardvark::@test_1>, @Zebra]
+  firrtl.module @fallBackName() {
+    firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
+    firrtl.instance test2 @Zebra()
+  }
+
+  firrtl.module @Aardvark() {
+    firrtl.instance test sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
+    firrtl.instance test1 sym @test_1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
+  }
+
+  // CHECK-LABEL: firrtl.module @Zebra()
+  firrtl.module @Zebra(){
+    %bundle = firrtl.wire sym @b {annotations = [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"test\" }>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+   // CHECK:   %bundle_valid = firrtl.wire sym @bbundle_valid : !firrtl.uint<1>
+   // CHECK-NEXT:   %bundle_ready = firrtl.wire sym @bbundle_ready {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+   // CHECK-NEXT:   %bundle_data = firrtl.wire sym @bbundle_data : !firrtl.uint<64>
+  }
 } // CIRCUIT
