@@ -275,6 +275,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: initial begin
   sv.initial {
     sv.verbatim "`define THING 1"
+    // CHECK-NEXT: automatic logic _T;
+    // CHECK-EMPTY:
     // CHECK-NEXT: `define THING
     %thing = sv.verbatim.expr "`THING" : () -> i42
     // CHECK-NEXT: wire42 = `THING;
@@ -287,6 +289,10 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       sv.fwrite "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
+      %c2 = sv.verbatim.expr "\"VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE\"" : () -> i1
+      // CHECK-NEXT: _T = "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", _T);
+      sv.fwrite "%d" (%c2) : i1
       // CHECK-NEXT: `endif
     }
 
