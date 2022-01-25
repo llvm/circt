@@ -27,7 +27,7 @@
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     } {toplevel}
+// CHECK-NEXT:     }
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -66,7 +66,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     } {toplevel}
+// CHECK-NEXT:     }
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {

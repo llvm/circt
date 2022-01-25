@@ -56,8 +56,8 @@ constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.
-constexpr std::array<StringRef, 7> CalyxBooleanAttributes{
-  "clk", "done", "go", "reset", "generated", "precious", "toplevel"
+constexpr std::array<StringRef, 6> CalyxBooleanAttributes{
+  "clk", "done", "go", "reset", "generated", "precious"
 };
 // clang-format on
 
@@ -229,12 +229,7 @@ private:
     if (attr.isa<UnitAttr>()) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
-      if (isGroupOrComponentAttr) {
-        buffer << LAngleBracket() << delimiter() << identifier << delimiter()
-               << equals() << "1" << RAngleBracket();
-      } else {
-        buffer << addressSymbol() << identifier << space();
-      }
+      buffer << addressSymbol() << identifier << space();
     } else if (auto intAttr = attr.dyn_cast<IntegerAttr>()) {
       APInt value = intAttr.getValue();
       if (isGroupOrComponentAttr) {

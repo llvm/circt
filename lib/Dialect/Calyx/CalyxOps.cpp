@@ -397,10 +397,6 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
-
-  ArrayRef<StringRef> elidedAttrs = {"portAttributes", "portNames",
-                                     "portDirections", "sym_name", "type"};
-  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
 
 /// Parses the ports of a Calyx component signature, and adds the corresponding

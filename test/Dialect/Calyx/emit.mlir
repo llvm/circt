@@ -13,7 +13,7 @@ calyx.program "main" {
     calyx.control {}
   } {static = 1}
 
-  // CHECK-LABEL: component B<"toplevel"=1>(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
+  // CHECK-LABEL: component B(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
     %s.in, %s.write_en, %s.clk, %s.reset, %s.out, %s.done = calyx.register @s : i32, i1, i1, i1, i32, i1
@@ -58,7 +58,7 @@ calyx.program "main" {
         }
       }
     }
-  } {toplevel}
+  }
 
   // CHECK-LABEL: component main(@go go: 1, @clk clk: 1, @reset reset: 1) -> (@done done: 1) {
   calyx.component @main(%go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%done: i1 {done = 1}) {
