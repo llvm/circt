@@ -1034,6 +1034,15 @@ hw.module @replicate(%arg0: i7) -> (r1: i9, r2: i7) {
   hw.output %r1, %r2 : i9, i7
 }
 
+// CHECK-LABEL: hw.module @bitcast_canonicalization
+hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) {
+  %id = hw.bitcast %arg0 : (i4) -> i4
+  %a = hw.bitcast %arg0 : (i4) -> !hw.struct<a:i2, b:i2>
+  %b = hw.bitcast %a : (!hw.struct<a:i2, b:i2>) -> !hw.array<2xi2>
+  // CHECK-NEXT: %0 = hw.bitcast %arg0 : (i4) -> !hw.array<2xi2>
+  // CHECK-NEXT: hw.output %arg0, %0
+  hw.output %id, %b : i4, !hw.array<2xi2>
+}
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
