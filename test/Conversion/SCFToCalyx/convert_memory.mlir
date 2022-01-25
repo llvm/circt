@@ -52,7 +52,7 @@
 // CHECK-NEXT:           }
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -120,7 +120,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -178,7 +178,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -242,7 +242,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -283,7 +283,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -318,7 +318,7 @@ module {
 // CHECH-NEXT:           calyx.enable @ret_assign_0
 // CHECH-NEXT:         }
 // CHECH-NEXT:       }
-// CHECH-NEXT:     }
+// CHECH-NEXT:     } {toplevel}
 // CHECH-NEXT:   }
 // CHECH-NEXT: }
 module {
@@ -351,7 +351,7 @@ module {
 // CHECK-NEXT:           calyx.enable @bb0_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -386,7 +386,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -443,7 +443,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
