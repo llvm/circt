@@ -105,31 +105,46 @@ struct HandshakeOpCountPass
     ModuleOp m = getOperation();
 
     for (auto func : m.getOps<handshake::FuncOp>()) {
-      int count = 0;
-      int forkCount = 0;
-      int mergeCount = 0;
-      int branchCount = 0;
-      int joinCount = 0;
+      std::map<std::string, int> cnts;
       for (Operation &op : func.getOps()) {
-        if (isa<ForkOp>(op))
-          forkCount++;
-        else if (isa<MergeLikeOpInterface>(op))
-          mergeCount++;
-        else if (isa<ConditionalBranchOp>(op))
-          branchCount++;
-        else if (isa<JoinOp>(op))
-          joinCount++;
-        else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
-                 !isa<TerminatorOp>(op))
-          count++;
+        llvm::TypeSwitch<Operation *, void>(&op)
+            .Case<handshake::ConstantOp>([&](auto) { cnts["Constant"]++; })
+            .Case<handshake::MuxOp>([&](auto) { cnts["Mux"]++; })
+            .Case<handshake::LoadOp>([&](auto) { cnts["Load"]++; })
+            .Case<handshake::StoreOp>([&](auto) { cnts["Store"]++; })
+            .Case<handshake::MergeOp>([&](auto) { cnts["Merge"]++; })
+            .Case<handshake::ForkOp>([&](auto) { cnts["Fork"]++; })
+            .Case<handshake::BranchOp>([&](auto) { cnts["Branch"]++; })
+            .Case<handshake::MemoryOp, handshake::ExternalMemoryOp>(
+                [&](auto) { cnts["Memory"]++; })
+            .Case<handshake::ControlMergeOp>(
+                [&](auto) { cnts["CntrlMerge"]++; })
+            .Case<handshake::SinkOp>([&](auto) { cnts["Sink"]++; })
+            .Case<handshake::SourceOp>([&](auto) { cnts["Source"]++; })
+            .Case<handshake::JoinOp>([&](auto) { cnts["Join"]++; })
+            .Case<handshake::BufferOp>([&](auto) { cnts["Buffer"]++; })
+            .Case<handshake::ConditionalBranchOp>(
+                [&](auto) { cnts["Branch"]++; })
+            .Case<arith::AddIOp>([&](auto) { cnts["Add"]++; })
+            .Case<arith::SubIOp>([&](auto) { cnts["Sub"]++; })
+            .Case<arith::AddIOp>([&](auto) { cnts["Add"]++; })
+            .Case<arith::MulIOp>([&](auto) { cnts["Mul"]++; })
+            .Case<arith::CmpIOp>([&](auto) { cnts["Cmp"]++; })
+            .Case<arith::IndexCastOp, arith::ShLIOp, arith::ShRSIOp,
+                  arith::ShRUIOp>([&](auto) { cnts["Ext/Sh"]++; })
+            .Case<handshake::ReturnOp>([&](auto) {})
+            .Default([&](auto op) {
+              llvm::outs() << "Unhandled operation: " << *op << "\n";
+              assert(false);
+            });
       }
 
-      llvm::outs() << "// Fork count: " << forkCount << "\n";
-      llvm::outs() << "// Merge count: " << mergeCount << "\n";
-      llvm::outs() << "// Branch count: " << branchCount << "\n";
-      llvm::outs() << "// Join count: " << joinCount << "\n";
-      int total = count + forkCount + mergeCount + branchCount;
-      llvm::outs() << "// Total op count: " << total << "\n";
+      llvm::outs() << "// RESOURCES"
+                   << "\n";
+      for (auto it : cnts)
+        llvm::outs() << it.first << "\t" << it.second << "\n";
+      llvm::outs() << "// END"
+                   << "\n";
     }
   }
 };
