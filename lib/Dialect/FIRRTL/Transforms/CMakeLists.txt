@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   PrefixModules.cpp
   PrintInstanceGraph.cpp
   RemoveResets.cpp
+  RemoveUnusedPorts.cpp
   WireDFT.cpp
 
   DEPENDS
