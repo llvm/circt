@@ -1436,6 +1436,9 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     auto compOp = rewriter.create<calyx::ComponentOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.sym_name()), ports);
 
+    /// Mark this component as the toplevel.
+    compOp->setAttr("toplevel", rewriter.getUnitAttr());
+
     /// Store the function-to-component mapping.
     funcMap[funcOp] = compOp;
     auto &compState = progState().compLoweringState(compOp);

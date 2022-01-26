@@ -107,9 +107,14 @@ public:
   /// nested under another type.
   unsigned getMaxFieldID();
 
-  /// Get the sub-type of a type for a field ID.  This is the identity function
-  /// for ground types.
-  FIRRTLType getSubTypeByFieldID(unsigned fieldID);
+  /// Get the sub-type of a type for a field ID, and the subfield's ID. Strip
+  /// off a single layer of this type and return the sub-type and a field ID
+  /// targeting the same field, but rebased on the sub-type.
+  std::pair<FIRRTLType, unsigned> getSubTypeByFieldID(unsigned fieldID);
+
+  /// Return the final type targeted by this field ID by recursively walking all
+  /// nested aggregate types. This is the identity function for ground types.
+  FIRRTLType getFinalTypeByFieldID(unsigned fieldID);
 
   /// Returns the effective field id when treating the index field as the
   /// root of the type.  Essentially maps a fieldID to a fieldID after a
@@ -338,7 +343,9 @@ public:
   /// index of the parent field.
   unsigned getIndexForFieldID(unsigned fieldID);
 
-  FIRRTLType getSubTypeByFieldID(unsigned fieldID);
+  /// Strip off a single layer of this type and return the sub-type and a field
+  /// ID targeting the same field, but rebased on the sub-type.
+  std::pair<FIRRTLType, unsigned> getSubTypeByFieldID(unsigned fieldID);
 
   /// Get the maximum field ID in this bundle.  This is helpful for constructing
   /// field IDs when this BundleType is nested in another aggregate type.
@@ -385,7 +392,9 @@ public:
   /// the index of the parent element.
   unsigned getIndexForFieldID(unsigned fieldID);
 
-  FIRRTLType getSubTypeByFieldID(unsigned fieldID);
+  /// Strip off a single layer of this type and return the sub-type and a field
+  /// ID targeting the same field, but rebased on the sub-type.
+  std::pair<FIRRTLType, unsigned> getSubTypeByFieldID(unsigned fieldID);
 
   /// Get the maximum field ID in this vector.  This is helpful for constructing
   /// field IDs when this VectorType is nested in another aggregate type.

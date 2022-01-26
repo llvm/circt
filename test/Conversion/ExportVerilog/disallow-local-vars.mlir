@@ -12,7 +12,6 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
   // DISALLOW: `ifdef FOO_MACRO
   sv.ifdef "FOO_MACRO" {
     // DISALLOW: {{^    }}reg [[SE_REG:[_A-Za-z0-9]+]];
-    // DISALLOW: {{^    }}wire [[COND:[_A-Za-z0-9]+]] = INLINE_OK;
 
     // CHECK:    always @(posedge clock)
     // DISALLOW: always @(posedge clock)
@@ -21,7 +20,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 
       // This shouldn't be pushed into a reg.
       // CHECK: if (INLINE_OK)
-      // DISALLOW: if ([[COND]])
+      // DISALLOW: if (INLINE_OK)
       sv.if %0  {
         sv.fatal 1
       }
@@ -166,10 +165,9 @@ hw.module @ReadInoutAggregate(%clock: i1) {
     %4 = comb.concat %c0_i16, %3 : i16, i16
     sv.passign %1, %4 : i32
   }
-  // DISALLOW: localparam [[T:.+]] = 1'h0;
-  // DISALLOW-NEXT: wire [31:0] [[READ:.+]] = register{{\[}}[[T]]{{\]}}.a;
+  // DISALLOW:      wire [31:0] [[READ:.+]] = register[1'h0].a;
   // DISALLOW-NEXT: wire [31:0] [[CONCAT:.+]] = {16'h0, [[READ]][15:0]};
   // DISALLOW-NEXT: always @(
-  // DISALLOW-NEXT:  register{{\[}}[[T]]{{\]}}.a <= [[CONCAT]];
+  // DISALLOW-NEXT:  register[1'h0].a <= [[CONCAT]];
   hw.output
 }

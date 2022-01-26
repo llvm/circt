@@ -63,6 +63,8 @@ def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
 
   let arguments = (ins KnownBitWidthType:$input);
   let results = (outs KnownBitWidthType:$result);
+  let hasCanonicalizeMethod = true;
+  let hasFolder = true;
   let verifier = [{
     if (getBitWidth(input().getType()) !=
         getBitWidth(result().getType()))

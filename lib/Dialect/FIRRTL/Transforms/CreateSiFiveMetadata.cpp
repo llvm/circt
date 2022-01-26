@@ -145,12 +145,10 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       jsonStream.attribute("module_name", memExtName);
       jsonStream.attribute("depth", (int64_t)memSummary.depth);
       jsonStream.attribute("width", (int64_t)width);
-      jsonStream.attribute("masked", !memSummary.isMasked ? "false" : "true");
-      jsonStream.attribute("read", memSummary.numReadPorts ? "true" : "false");
-      jsonStream.attribute("write",
-                           memSummary.numWritePorts ? "true" : "false");
-      jsonStream.attribute("readwrite",
-                           memSummary.numReadWritePorts ? "true" : "false");
+      jsonStream.attribute("masked", memSummary.isMasked);
+      jsonStream.attribute("read", memSummary.numReadPorts > 0);
+      jsonStream.attribute("write", memSummary.numWritePorts > 0);
+      jsonStream.attribute("readwrite", memSummary.numReadWritePorts > 0);
       if (memSummary.isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {});

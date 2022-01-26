@@ -51,13 +51,15 @@ static constexpr std::string_view addressSymbol() { return "@"; }
 
 // clang-format off
 /// A list of integer attributes supported by the native Calyx compiler.
+// NOLINTNEXTLINE(readability-identifier-naming)
 constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
   "external", "static", "share", "bound", "write_together", "read_together"
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.
-constexpr std::array<StringRef, 6> CalyxBooleanAttributes{
-  "clk", "done", "go", "reset", "generated", "precious"
+// NOLINTNEXTLINE(readability-identifier-naming)
+constexpr std::array<StringRef, 7> CalyxBooleanAttributes{
+  "clk", "done", "go", "reset", "generated", "precious", "toplevel"
 };
 // clang-format on
 
@@ -229,7 +231,12 @@ private:
     if (attr.isa<UnitAttr>()) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
-      buffer << addressSymbol() << identifier << space();
+      if (isGroupOrComponentAttr) {
+        buffer << LAngleBracket() << delimiter() << identifier << delimiter()
+               << equals() << "1" << RAngleBracket();
+      } else {
+        buffer << addressSymbol() << identifier << space();
+      }
     } else if (auto intAttr = attr.dyn_cast<IntegerAttr>()) {
       APInt value = intAttr.getValue();
       if (isGroupOrComponentAttr) {

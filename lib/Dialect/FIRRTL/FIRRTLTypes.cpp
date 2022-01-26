@@ -447,16 +447,27 @@ unsigned FIRRTLType::getMaxFieldID() {
       });
 }
 
-FIRRTLType FIRRTLType::getSubTypeByFieldID(unsigned fieldID) {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+std::pair<FIRRTLType, unsigned>
+FIRRTLType::getSubTypeByFieldID(unsigned fieldID) {
+  return TypeSwitch<FIRRTLType, std::pair<FIRRTLType, unsigned>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
-            UIntType>([](FIRRTLType t) { return t; })
+            UIntType>([&](FIRRTLType t) {
+        assert(!fieldID && "non-aggregate types must have a field id of 0");
+        return std::pair(t, 0);
+      })
       .Case<BundleType, FVectorType>(
-          [fieldID](auto type) { return type.getSubTypeByFieldID(fieldID); })
+          [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLType();
+        return std::pair(FIRRTLType(), 0);
       });
+}
+
+FIRRTLType FIRRTLType::getFinalTypeByFieldID(unsigned fieldID) {
+  std::pair<FIRRTLType, unsigned> pair(*this, fieldID);
+  while (pair.second)
+    pair = pair.first.getSubTypeByFieldID(pair.second);
+  return pair.first;
 }
 
 std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
@@ -840,18 +851,19 @@ unsigned BundleType::getFieldID(unsigned index) {
 unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
   assert(getElements().size() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
-  auto it =
-      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
 }
 
-FIRRTLType BundleType::getSubTypeByFieldID(unsigned fieldID) {
+std::pair<FIRRTLType, unsigned>
+BundleType::getSubTypeByFieldID(unsigned fieldID) {
   if (fieldID == 0)
-    return *this;
+    return {*this, 0};
   auto fieldIDs = getImpl()->fieldIDs;
-  auto it =
-      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
-  return getElementType(std::distance(fieldIDs.begin(), it));
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType, subfieldID};
 }
 
 unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
@@ -945,10 +957,12 @@ unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
 }
 
-FIRRTLType FVectorType::getSubTypeByFieldID(unsigned fieldID) {
+std::pair<FIRRTLType, unsigned>
+FVectorType::getSubTypeByFieldID(unsigned fieldID) {
   if (fieldID == 0)
-    return *this;
-  return getElementType();
+    return {*this, 0};
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  return {getElementType(), fieldID - getFieldID(subfieldIndex)};
 }
 
 unsigned FVectorType::getMaxFieldID() {
