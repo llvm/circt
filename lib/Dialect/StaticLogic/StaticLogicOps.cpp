@@ -175,10 +175,11 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 //===----------------------------------------------------------------------===//
 
 void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
-                            TypeRange resultTypes) {
+                            TypeRange resultTypes, IntegerAttr start) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
+  state.addAttribute("start", start);
 
   Region *region = state.addRegion();
   Block &block = region->emplaceBlock();

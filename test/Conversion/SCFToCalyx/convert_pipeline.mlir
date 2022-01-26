@@ -42,7 +42,7 @@ func @minimal() {
     %0 = arith.cmpi ult, %arg0, %c10_i64 : i64
     staticlogic.pipeline.register %0 : i1
   } do {
-    %0 = staticlogic.pipeline.stage  {
+    %0 = staticlogic.pipeline.stage start = 0 {
       %1 = arith.addi %arg0, %c1_i64 : i64
       staticlogic.pipeline.register %1 : i64
     } : i64
