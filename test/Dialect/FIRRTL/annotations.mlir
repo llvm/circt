@@ -20,16 +20,18 @@ firrtl.circuit "Aggregates" attributes {annotations = [
 // A non-local annotation should work.
 
 // CHECK-LABEL: firrtl.circuit "FooNL"
+// CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@FooNL::@baz>, #hw.innerNameRef<@BazNL::@bar>, @BarNL]
 // CHECK: firrtl.nla @nla_0 [#hw.innerNameRef<@FooNL::@baz>, #hw.innerNameRef<@BazNL::@bar>, #hw.innerNameRef<@BarNL::@w>]
 // CHECK: firrtl.nla @nla [#hw.innerNameRef<@FooNL::@baz>, #hw.innerNameRef<@BazNL::@bar>, #hw.innerNameRef<@BarNL::@w2>]
 // CHECK: firrtl.module @BarNL
-// CHECK: %w = firrtl.wire {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]}
-// CHECK: %w2 = firrtl.wire {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
-// CHECK: firrtl.instance bar {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BarNL()
-// CHECK: firrtl.instance baz {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BazNL()
+// CHECK: %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]}
+// CHECK: %w2 = firrtl.wire sym @w2 {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>>
+// CHECK: firrtl.instance bar sym @bar {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BarNL()
+// CHECK: firrtl.instance baz sym @baz {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BazNL()
 // CHECK: firrtl.module @FooL
 // CHECK: %w3 = firrtl.wire {annotations = [{class = "circt.test", nl = "nl3"}]}
 firrtl.circuit "FooNL"  attributes {annotations = [
+  {class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL"},
   {class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w"},
   {class = "circt.test", nl = "nl2", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w2.b[2]"},
   {class = "circt.test", nl = "nl3", target = "~FooNL|FooL>w3"}
@@ -47,5 +49,61 @@ firrtl.circuit "FooNL"  attributes {annotations = [
   }
   firrtl.module @FooL() {
     %w3 = firrtl.wire: !firrtl.uint
+  }
+}
+
+// -----
+
+// Annotations on ports should work.
+firrtl.circuit "Test" attributes {annotations = [
+  {class = "circt.test", target = "~Test|PortTest>in"}
+  ]} {
+  firrtl.module @PortTest(in %in : !firrtl.uint<1>) {}
+  firrtl.module @Test() {
+    %portttest_in = firrtl.instance porttest @PortTest(in in : !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// Subannotations on ports should work.
+firrtl.circuit "Test" attributes {annotations = [
+  {class = "circt.test", target = "~Test|PortTest>in.a"}
+  ]} {
+  // CHECK: firrtl.module @PortTest(in %in: !firrtl.bundle<a: uint<1>> [{circt.fieldID = 1 : i32, class = "circt.test"}])
+  firrtl.module @PortTest(in %in : !firrtl.bundle<a: uint<1>>) {}
+  firrtl.module @Test() {
+    %portttest_in = firrtl.instance porttest @PortTest(in in : !firrtl.bundle<a: uint<1>>)
+  }
+}
+// -----
+
+// Annotations on instances should be moved to the target module.
+firrtl.circuit "Test" attributes {annotations = [
+  {class = "circt.test", target = "~Test|Test>exttest"}
+  ]} {
+  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@Test::@exttest>, @ExtTest]
+  // CHECK: firrtl.extmodule @ExtTest() attributes {annotations = [{circt.nonlocal = @nla, class = "circt.test"}]}
+  firrtl.extmodule @ExtTest()
+  
+  firrtl.module @Test() {
+    // CHECK: firrtl.instance exttest sym @exttest  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @ExtTest()
+    firrtl.instance exttest @ExtTest()
+  }
+}
+
+// -----
+
+// Annotations on instances should be moved to the target module.
+firrtl.circuit "Test" attributes {annotations = [
+  {class = "circt.test", target = "~Test|Test>exttest.in"}
+  ]} {
+  // CHECK: firrtl.nla @nla [#hw.innerNameRef<@Test::@exttest>, #hw.innerNameRef<@ExtTest::@in>]
+  // CHECK: firrtl.extmodule @ExtTest(in in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla, class = "circt.test"}])
+  firrtl.extmodule @ExtTest(in in: !firrtl.uint<1>)
+
+  firrtl.module @Test() {
+    // CHECK: %exttest_in = firrtl.instance exttest sym @exttest  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @ExtTest(in in: !firrtl.uint<1>)
+    firrtl.instance exttest @ExtTest(in in : !firrtl.uint<1>)
   }
 }
