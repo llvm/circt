@@ -54,7 +54,9 @@ firrtl.module @test2()
 // CHECK-NEXT: }
 
 
-// Test basic flattening
+// Test basic flattening:
+//   1. All instances under the flattened module are inlined.
+//   2. The flatten annotation is removed.
 firrtl.circuit "flattening" {
 firrtl.module @flattening()
   attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
@@ -68,12 +70,13 @@ firrtl.module @test2() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
 }
 }
-// CHECK-LABEL: firrtl.circuit "flattening" {
-// CHECK-NEXT:   firrtl.module @flattening() attributes {
+// CHECK-LABEL: firrtl.circuit "flattening"
+// CHECK-NEXT:   firrtl.module @flattening()
+// CHECK-NOT:      annotations
 // CHECK-NEXT:     %test1_test_wire = firrtl.wire : !firrtl.uint<2>
 // CHECK-NEXT:     %test1_test2_test_wire = firrtl.wire : !firrtl.uint<2>
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
+// CHECK-NOT:    firrtl.module @test1
+// CHECK-NOT:    firrtl.module @test2
 
 
 // Test that inlining and flattening compose well.

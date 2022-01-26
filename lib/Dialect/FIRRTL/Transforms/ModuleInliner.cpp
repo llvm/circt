@@ -393,7 +393,9 @@ private:
                                      FModuleOp target,
                                      const DenseSet<Attribute> &localSymbols);
 
-  /// Returns true if the operation is annotated to be flattened.
+  /// Returns true if the operation is annotated to be flattened.  This removes
+  /// the flattened annotation (hence, this should only be called once on a
+  /// module).
   bool shouldFlatten(Operation *op);
 
   /// Returns true if the operation is annotated to be inlined.
@@ -526,7 +528,9 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet(op).hasAnnotation("firrtl.transforms.FlattenAnnotation");
+  return AnnotationSet::removeAnnotations(op, [](Annotation a) {
+    return a.isClass("firrtl.transforms.FlattenAnnotation");
+  });
 }
 
 bool Inliner::shouldInline(Operation *op) {
@@ -651,11 +655,12 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     // Preorder update of any non-local annotations this instance participates
     // in.  This needs ot happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
+    auto toBeFlattened = shouldFlatten(target);
     AnnotationSet annotations(instance);
     for (auto anno : annotations) {
       if (anno.isClass("circt.nonlocal")) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (shouldFlatten(target))
+        if (toBeFlattened)
           nlaMap[sym.getAttr()].flattenModule(target);
         else
           nlaMap[sym.getAttr()].inlineModule(target);
@@ -684,7 +689,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     }
 
     // Inline the module, it can be marked as flatten and inline.
-    if (shouldFlatten(target)) {
+    if (toBeFlattened) {
       flattenInto(nestedPrefix, b, mapper, target);
     } else {
       inlineInto(nestedPrefix, b, mapper, target, symbolRenames);
@@ -718,11 +723,12 @@ void Inliner::inlineInstances(FModuleOp parent) {
     // Preorder update of any non-local annotations this instance participates
     // in.  This needs ot happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
+    auto toBeFlattened = shouldFlatten(target);
     AnnotationSet annotations(instance);
     for (auto anno : annotations) {
       if (anno.isClass("circt.nonlocal")) {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (shouldFlatten(target))
+        if (toBeFlattened)
           nlaMap[sym.getAttr()].flattenModule(target);
         else
           nlaMap[sym.getAttr()].inlineModule(target);
@@ -751,7 +757,7 @@ void Inliner::inlineInstances(FModuleOp parent) {
     }
 
     // Inline the module, it can be marked as flatten and inline.
-    if (shouldFlatten(target)) {
+    if (toBeFlattened) {
       flattenInto(nestedPrefix, b, mapper, target);
     } else {
       inlineInto(nestedPrefix, b, mapper, target, symbolRenames);
