@@ -515,20 +515,19 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
 // https://github.com/llvm/circt/issues/595
 // CHECK-LABEL: module issue595
 hw.module @issue595(%arr: !hw.array<128xi1>) {
-  // CHECK: wire [31:0] _T;
-  // CHECK: wire _T_0 = _T == 32'h0;
+  // CHECK: wire [31:0] [[TEMP1:.+]];
   %c0_i32 = hw.constant 0 : i32
   %c0_i7 = hw.constant 0 : i7
   %c0_i6 = hw.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T_0);
+    // CHECK: assert([[TEMP1]] == 32'h0);
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
-  // CHECK: assign _T = _T_1[6'h0 +: 32];
+  // CHECK: wire [63:0] [[TEMP2:.+]] = arr[7'h0 +: 64];
+  // CHECK: assign [[TEMP1]] = [[TEMP2:.+]][6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -538,20 +537,19 @@ hw.module @issue595(%arr: !hw.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant1
 hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
-  // CHECK: wire [31:0] _T;
-  // CHECK: wire _T_0 = |_T;
+  // CHECK: wire [31:0] [[TEMP1:.+]];
   %c0_i32 = hw.constant 0 : i32
   %c0_i7 = hw.constant 0 : i7
   %c0_i6 = hw.constant 0 : i6
   %0 = comb.icmp ne %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T_0);
+    // CHECK: assert(|[[TEMP1]]);
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
-  // CHECK: assign _T = _T_1[6'h0 +: 32];
+  // CHECK: wire [63:0] [[TEMP2:.+]] = arr[7'h0 +: 64];
+  // CHECK: assign [[TEMP1]] = [[TEMP2]][6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -560,20 +558,19 @@ hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant2_checkRedunctionAnd
 hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
-  // CHECK: wire [31:0] _T;
-  // CHECK: wire _T_0 = &_T;
+  // CHECK: wire [31:0] [[TEMP1:.+]];
   %c0_i32 = hw.constant -1 : i32
   %c0_i7 = hw.constant 0 : i7
   %c0_i6 = hw.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T_0);
+    // CHECK: assert(&[[TEMP1]]);
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
-  // CHECK: assign _T = _T_1[6'h0 +: 32];
+  // CHECK: wire [63:0] [[TEMP2:.+]] = arr[7'h0 +: 64];
+  // CHECK: assign _T = [[TEMP2]][6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -638,13 +635,11 @@ hw.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) {
   %signs = comb.replicate %sign : (i1) -> i14
   %0 = comb.concat %signs, %really_long_port : i14, i11
   %1 = comb.and %0, %c12345_i25 : i25
-  // CHECK:   wire [24:0] _T = {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
-
 
   // CHECK:      if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
   // CHECK-NEXT: else
-  // CHECK-NEXT:   tmp6 <= _T;
+  // CHECK-NEXT:   tmp6 <= {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
   sv.alwaysff(posedge %clock)  {
     sv.passign %tmp6, %1 : i25
   }(syncreset : posedge %reset)  {

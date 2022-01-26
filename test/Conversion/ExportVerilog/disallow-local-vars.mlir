@@ -53,8 +53,6 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 // DISALLOW-LABEL: module hoist_expressions
 hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
   // DISALLOW: wire [7:0] [[ADD:[_A-Za-z0-9]+]] = x + y;
-  // DISALLOW: wire [[EQ:[_A-Za-z0-9]+]] = [[ADD]] == z;
-  // DISALLOW: wire [7:0] [[MUL:[_A-Za-z0-9]+]] = [[ADD]] * z;
 
   // CHECK:    always @(posedge clock)
   // DISALLOW: always @(posedge clock)
@@ -64,10 +62,10 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
 
     // This shouldn't be touched.
     // CHECK: if (_T == z) begin
-    // DISALLOW: if ([[EQ]]) begin
+    // DISALLOW: if (_T == z) begin
     sv.if %1  {
       // CHECK: $fwrite(32'h80000002, "Hi %x\n", _T * z);
-      // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", [[MUL]]);
+      // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _T * z);
       %2 = comb.mul %0, %z : i8
       sv.fwrite "Hi %x\0A"(%2) : i8
       sv.fatal 1
@@ -80,8 +78,6 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
   %myWire = sv.wire : !hw.inout<i8>
   sv.assign %myWire, %x : i8
 
- // DISALLOW: wire [[COND:[_A-Za-z0-9]+]] = x + myWire == z;
-
   // CHECK: always @(posedge clock)
   // DISALLOW: always @(posedge clock)
   sv.always posedge %clock  {
@@ -89,7 +85,7 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
     %3 = comb.add %x, %wireout: i8
     %4 = comb.icmp eq %3, %z : i8
     // CHECK: if (x + myWire == z)
-    // DISALLOW: if ([[COND]])
+    // DISALLOW: if (x + myWire == z)
     sv.if %4  {
       sv.fatal 1
     }
@@ -110,7 +106,7 @@ hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo
   sv.alwaysff(posedge %wo_clock_0)  {
     %3 = comb.and %wo_en_0, %wo_mask_0 : i1
     // CHECK: if (wo_en_0 & wo_mask_0)
-    // DISALLOW: if (_T)
+    // DISALLOW: if (wo_en_0 & wo_mask_0)
     sv.if %3  {
       // CHECK: Memory[wo_addr_0] <= wo_data_0;
       // DISALLOW: Memory[wo_addr_0] <= wo_data_0;
@@ -129,10 +125,8 @@ hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
   %counter_value = sv.reg  : !hw.inout<i1>
 
   // Temporary reg gets introduced.
-  // DISALLOW: reg [1:0] _T;
+  // DISALLOW: reg [1:0] [[TEMP:.+]];
 
-  // DISALLOW: wire _T_0 = _T[0];
-  // DISALLOW: wire _T_1 = _T[1];
   // DISALLOW: initial begin
   sv.initial {
     // CHECK: automatic logic [1:0] _magic = magic;
@@ -140,12 +134,12 @@ hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
     %RANDOM = sv.verbatim.expr.se "magic" : () -> i2 {symbols = []}
 
     // CHECK: tick_value_2 = _magic[0];
-    // DISALLOW-NEXT: tick_value_2 = _T_0;
+    // DISALLOW-NEXT: tick_value_2 = [[TEMP]][0];
     %1 = comb.extract %RANDOM from 0 : (i2) -> i1
     sv.bpassign %tick_value_2, %1 : i1
 
     // CHECK: counter_value = _magic[1];
-    // DISALLOW-NEXT: counter_value = _T_1;
+    // DISALLOW-NEXT: counter_value = [[TEMP]][1];
     %2 = comb.extract %RANDOM from 1 : (i2) -> i1
     sv.bpassign %counter_value, %2 : i1
   }
@@ -166,8 +160,7 @@ hw.module @ReadInoutAggregate(%clock: i1) {
     sv.passign %1, %4 : i32
   }
   // DISALLOW:      wire [31:0] [[READ:.+]] = register[1'h0].a;
-  // DISALLOW-NEXT: wire [31:0] [[CONCAT:.+]] = {16'h0, [[READ]][15:0]};
   // DISALLOW-NEXT: always @(
-  // DISALLOW-NEXT:  register[1'h0].a <= [[CONCAT]];
+  // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, [[READ]][15:0]};
   hw.output
 }

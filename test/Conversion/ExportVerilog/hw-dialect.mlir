@@ -584,10 +584,9 @@ hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: 
   // CHECK: wire _T;
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %0 = comb.and %1, %x : i1
-  // CHECK: wire _T_0 = _T & x;
   // CHECK: always_ff @(posedge clock) begin
   sv.alwaysff(posedge %clock) {
-    // CHECK: if (_T_0) begin
+    // CHECK: if (_T & x) begin
     sv.if %0  {
       sv.verbatim "// hello"
     }
