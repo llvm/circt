@@ -623,7 +623,7 @@ OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
 
 FIRRTLType OpAnnoTarget::getType() const {
   auto *op = getOp();
-  if (op->getNumResults() == 0)
+  if (op->getNumResults() != 1)
     return {};
   return op->getResult(0).getType().cast<FIRRTLType>();
 }
