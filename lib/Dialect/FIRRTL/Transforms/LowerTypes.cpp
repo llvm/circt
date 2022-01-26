@@ -37,6 +37,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -266,12 +267,14 @@ namespace {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
-                      bool preserveAggregate, bool preservePublicTypes,
-                      llvm::DenseMap<StringAttr, StringAttr> &symMap)
+  TypeLoweringVisitor(
+      MLIRContext *context, bool flattenAggregateMemData,
+      bool preserveAggregate, bool preservePublicTypes,
+      SmallVector<std::pair<StringAttr, StringAttr>> &nlaSymList)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
-        preservePublicTypes(preservePublicTypes), nlaNameToNewSymMap(symMap) {}
+        preservePublicTypes(preservePublicTypes),
+        nlaNameToNewSymList(nlaSymList) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -344,9 +347,9 @@ private:
   // After a bundle type is lowered to its field elements, they can have a
   // reference to a NonLocalAnchor. This new lowered field element will get a
   // new symbol, and the corresponding NLA needs to be updatd with this symbol.
-  // This is a map of the NLA name  which needs to be updated, to the new
+  // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
-  llvm::DenseMap<StringAttr, StringAttr> &nlaNameToNewSymMap;
+  SmallVector<std::pair<StringAttr, StringAttr>> &nlaNameToNewSymList;
 };
 } // namespace
 
@@ -453,7 +456,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           // lowering.
           if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
                   "circt.nonlocal")) {
-            nlaNameToNewSymMap[nla.getAttr()] = sym;
+            nlaNameToNewSymList.push_back({nla.getAttr(), sym});
             hasDontTouch = true;
           }
           retval.push_back(subAnno.getAnnotations());
@@ -1372,55 +1375,55 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
   std::vector<Operation *> ops;
-  // Record of each module, to the map of NonLocalAnchors which need to be
-  // updated with the lowered inner_sym name.
-  DenseMap<Operation *, DenseMap<StringAttr, StringAttr>>
-      modToNlaNameToNewSymMap;
   // Map of name of the NonLocalAnchor to the operation.
   DenseMap<StringAttr, Operation *> nlaMap;
   // Record all operations in the circuit.
   llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
-    ops.push_back(&op);
     // Creating a map of all ops in the circt, but only modules are relevant.
-    modToNlaNameToNewSymMap.insert(
-        std::make_pair<Operation *, DenseMap<StringAttr, StringAttr>>(
-            &op, /*An empty map*/ DenseMap<StringAttr, StringAttr>()));
+    ops.push_back(&op);
     // Record the NonLocalAnchor and its name.
     if (auto nla = dyn_cast<NonLocalAnchor>(op))
       nlaMap[nla.sym_nameAttr()] = nla;
   });
 
-  // Each parallel module worker updates the map to the corresponding module.
-  // After this statement runs, modToNlaNameToNewSymMap[ops[index]] will be
-  // updated with all NonLocalAnchors that need to be updated with the lowerd
-  // symbols.
-  mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
+  // Merge two lists and return it.
+  auto mergeList =
+      [&](const SmallVector<std::pair<StringAttr, StringAttr>> &lhs,
+          SmallVector<std::pair<StringAttr, StringAttr>> rhs) {
+        rhs.append(lhs);
+        return rhs;
+      };
+  // Lower each module and return a list of Nlas which need to be updated with
+  // the new symbol names.
+  auto lowerModules = [&](auto op) {
+    SmallVector<std::pair<StringAttr, StringAttr>> modNlaToNewSymList;
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
                         preserveAggregate, preservePublicTypes,
-                        modToNlaNameToNewSymMap[ops[index]])
-        .lowerModule(ops[index]);
-  });
+                        modNlaToNewSymList)
+        .lowerModule(op);
+    return modNlaToNewSymList;
+  };
+  SmallVector<std::pair<StringAttr, StringAttr>> nlaToNewSymList =
+      llvm::parallelTransformReduce(
+          ops.begin(), ops.end(),
+          SmallVector<std::pair<StringAttr, StringAttr>>(), mergeList,
+          lowerModules);
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
   // element cannot be a module.
-  for (auto modMap : modToNlaNameToNewSymMap) {
-    for (auto nlaToSym : modMap.second) {
-      // Get the nla with the corresponding name. This is guaranteed to exist.
-      // nlaToSym.first is the NLA name.
-      auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.first]);
-      auto namepath = nla.namepath();
-      SmallVector<Attribute> updatedPath;
-      // Copy the namepath
-      for (auto n : namepath.getValue())
-        updatedPath.push_back(n);
-      // Update the final element, which must be an InnerRefAttr.
-      auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
-      // nlaToSym.second is the updated symbol name of the lowered field.
-      updatedPath[namepath.size() - 1] = hw::InnerRefAttr::get(
-          &getContext(), leaf.getModule(), nlaToSym.second);
-      nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
-    }
+  for (auto nlaToSym : nlaToNewSymList) {
+    // Get the nla with the corresponding name. This is guaranteed to exist.
+    // nlaToSym.first is the NLA name.
+    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.first]);
+    auto namepath = nla.namepath();
+    SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
+    // Update the final element, which must be an InnerRefAttr.
+    auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
+    // nlaToSym.second is the updated symbol name of the lowered field.
+    updatedPath[namepath.size() - 1] =
+        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.second);
+    nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
   }
 }
 
