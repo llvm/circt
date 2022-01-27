@@ -300,6 +300,11 @@ protected:
                hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
                hw::ConstantOp>(op);
   }
+
+  void bubbleWiresUp(MSFTModuleOp mod);
+  void dedupOutputs(MSFTModuleOp mod);
+  void sinkWiresDown(MSFTModuleOp mod);
+  void dedupInputs(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
@@ -402,15 +407,15 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
+  MSFTModuleOp partition(DesignPartitionOp part, ArrayRef<Operation *> users);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
   void bubbleUpGlobalRefs(Operation *op);
   void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
                           DenseSet<Attribute> &newGlobalRefs);
 
-  // Tag wire manipulation ops connected to this potentially tagged op.
-  static void markWireOps(Operation *op);
+  // Tag wire manipulation ops in this module.
+  static void markWireOps(MSFTModuleOp);
 };
 } // anonymous namespace
 
@@ -425,21 +430,26 @@ void PartitionPass::runOnOperation() {
   // Get a properly sorted list, then partition the mods in order.
   SmallVector<MSFTModuleOp, 64> sortedMods;
   getAndSortModules(outerMod, sortedMods);
-  for (auto mod : sortedMods)
+
+  for (auto mod : sortedMods) {
     partition(mod);
+    bubbleWiresUp(mod);
+    dedupOutputs(mod);
+  }
 }
 
-void PartitionPass::markWireOps(Operation *taggedOp) {
-  auto partRef =
-      taggedOp->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
-  if (!partRef)
-    return;
+void PartitionPass::markWireOps(MSFTModuleOp mod) {
   SmallVector<Operation *, 8> opQueue;
-  opQueue.push_back(taggedOp);
+  mod.walk([&](Operation *op) {
+    if (op->hasAttrOfType<SymbolRefAttr>("targetDesignPartition"))
+      opQueue.push_back(op);
+  });
 
   while (!opQueue.empty()) {
     Operation *op = opQueue.back();
     opQueue.pop_back();
+    auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    assert(partRef);
 
     for (auto *user : op->getUsers()) {
       if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
@@ -463,7 +473,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
   SmallVector<Operation *, 64> nonLocalTaggedOps;
 
-  mod.walk(&markWireOps);
+  markWireOps(mod);
 
   mod.walk([&](Operation *op) {
     auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
@@ -482,8 +492,11 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
     auto usersIter = localPartMembers.find(part.sym_nameAttr());
-    if (usersIter != localPartMembers.end())
-      this->partition(part, usersIter->second);
+    if (usersIter != localPartMembers.end()) {
+      MSFTModuleOp newPartMod = this->partition(part, usersIter->second);
+      dedupInputs(newPartMod);
+      sinkWiresDown(newPartMod);
+    }
     part.erase();
   }
 }
@@ -747,8 +760,8 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
     op->erase();
 }
 
-void PartitionPass::partition(DesignPartitionOp partOp,
-                              ArrayRef<Operation *> toMove) {
+MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
+                                      ArrayRef<Operation *> toMove) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -847,6 +860,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
       loc, instRetTypes, partOp.getNameAttr(),
       SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
       SymbolRefAttr());
+  moduleInstantiations[partMod].push_back(partInst);
 
   //*************
   //   Move the operations!
@@ -873,7 +887,7 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   DenseSet<Attribute> newGlobalRefs;
   for (Operation *op : toMove) {
     Operation *newOp = partBuilder.insert(op->clone(mapping));
-    newOp->removeAttr("targetDesignPartition");
+    // newOp->removeAttr("targetDesignPartition");
     for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
       for (int outputNum : resultOutputConnections[op->getResult(resNum)])
         outputs[outputNum] = newOp->getResult(resNum);
@@ -894,6 +908,8 @@ void PartitionPass::partition(DesignPartitionOp partOp,
 
   for (Operation *op : toMove)
     op->erase();
+
+  return partMod;
 }
 
 namespace circt {
@@ -907,12 +923,6 @@ std::unique_ptr<Pass> createPartitionPass() {
 namespace {
 struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
   void runOnOperation() override;
-
-private:
-  void bubbleWiresUp(MSFTModuleOp mod);
-  void dedupOutputs(MSFTModuleOp mod);
-  void sinkWiresDown(MSFTModuleOp mod);
-  void dedupInputs(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
@@ -939,7 +949,7 @@ void WireCleanupPass::runOnOperation() {
 }
 
 /// Remove outputs driven by the same value.
-void WireCleanupPass::dedupOutputs(MSFTModuleOp mod) {
+void PassCommon::dedupOutputs(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
 
@@ -971,7 +981,7 @@ void WireCleanupPass::dedupOutputs(MSFTModuleOp mod) {
 }
 
 /// Push up any wires which are simply passed-through.
-void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
+void PassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
   hw::ModulePortInfo ports = mod.getPorts();
@@ -1036,7 +1046,7 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
   updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
 }
 
-void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
+void PassCommon::dedupInputs(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
@@ -1077,7 +1087,7 @@ void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
 }
 
 /// Sink all the instance connections which are loops.
-void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
+void PassCommon::sinkWiresDown(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
