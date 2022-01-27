@@ -40,7 +40,7 @@ class System:
   ]
 
   PASSES = """
-    msft-partition, msft-wire-cleanup,
+    msft-partition, canonicalize,
     lower-msft-to-hw{{tops={tops} verilog-file={verilog_file} tcl-file={tcl_file}}},
     lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup),
     hw-export-module-metadata
