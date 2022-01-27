@@ -61,8 +61,10 @@ private:
                    llvm::json::OStream &jsonStream);
   void emitOptionalRTLPorts(DictionaryAttr node,
                             llvm::json::OStream &jsonStream);
-  void emitValue(Attribute node, llvm::json::OStream &jsonStream);
-  void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream);
+  void emitValue(Attribute node, llvm::json::OStream &jsonStream,
+                 bool dutInstance);
+  void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream,
+                         bool dutInstance);
 
   SmallString<8> addSymbolImpl(Attribute symbol) {
     unsigned id;
@@ -527,7 +529,8 @@ void EmitOMIRPass::emitOMField(StringAttr fieldName, DictionaryAttr field,
     jsonStream.attribute("info", info);
     jsonStream.attribute("name", fieldName.strref());
     jsonStream.attributeBegin("value");
-    emitValue(field.get("value"), jsonStream);
+    emitValue(field.get("value"), jsonStream,
+              fieldName.strref().equals("dutInstance"));
     jsonStream.attributeEnd();
   });
 }
@@ -598,7 +601,8 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
   });
 }
 
-void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
+void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream,
+                             bool dutInstance) {
   // Handle the null case.
   if (!node || node.isa<UnitAttr>())
     return jsonStream.value(nullptr);
@@ -630,7 +634,7 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
   if (auto attr = node.dyn_cast<ArrayAttr>()) {
     jsonStream.array([&] {
       for (auto element : attr.getValue()) {
-        emitValue(element, jsonStream);
+        emitValue(element, jsonStream, dutInstance);
         if (anyFailures)
           return;
       }
@@ -640,13 +644,13 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
   if (auto attr = node.dyn_cast<DictionaryAttr>()) {
     // Handle targets that have a corresponding tracker annotation in the IR.
     if (attr.getAs<UnitAttr>("omir.tracker"))
-      return emitTrackedTarget(attr, jsonStream);
+      return emitTrackedTarget(attr, jsonStream, dutInstance);
 
     // Handle regular dictionaries.
     jsonStream.object([&] {
       for (auto field : attr.getValue()) {
         jsonStream.attributeBegin(field.getName());
-        emitValue(field.getValue(), jsonStream);
+        emitValue(field.getValue(), jsonStream, dutInstance);
         jsonStream.attributeEnd();
         if (anyFailures)
           return;
@@ -671,7 +675,8 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
 }
 
 void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
-                                     llvm::json::OStream &jsonStream) {
+                                     llvm::json::OStream &jsonStream,
+                                     bool dutInstance) {
   // Extract the `id` field.
   auto idAttr = node.getAs<IntegerAttr>("id");
   if (!idAttr) {
@@ -734,19 +739,20 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     bool notFirst = false;
     hw::InnerRefAttr instName;
     StringRef dutModName;
-    for (auto nameRef : tracker.nla.namepath()) {
-      StringRef modName;
-      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
-        modName = innerRef.getModule().getValue();
-      else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
-        modName = ref.getValue();
-      Operation *module = symtbl->lookup(modName);
-      AnnotationSet annos(dyn_cast<FModuleOp>(module).annotations());
-      if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation")) {
-        dutModName = modName;
-        break;
+    if (!dutInstance)
+      for (auto nameRef : tracker.nla.namepath()) {
+        StringRef modName;
+        if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
+          modName = innerRef.getModule().getValue();
+        else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
+          modName = ref.getValue();
+        Operation *module = symtbl->lookup(modName);
+        AnnotationSet annos(dyn_cast<FModuleOp>(module).annotations());
+        if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation")) {
+          dutModName = modName;
+          break;
+        }
       }
-    }
     target.append(":~");
     if (dutModName.empty())
       target.append(getOperation().name());
