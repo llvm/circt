@@ -87,21 +87,32 @@ circuit Foo: %[[
 ; // -----
 
 ; Test result annotations of InstanceOp.
+; Must add inner_sym, if any subfield of a bundle type has nonlocal anchor.
+; Otherwise, the nla will be illegal, without any inner_sym.
+; Test on port and wire.
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
                 {"two":null,"target":"~Foo|Foo>bar.b.baz"},
                 {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"},
-                {"four":null,"target":"Foo.Foo.bar.c"}]]
+                {"five":null,"target":"~Foo|Foo/bar:Bar>d.qux"},
+                {"four":null,"target":"Foo.Foo.bar.c"}
+                
+                ]]
   module Bar:
     input a: UInt<1>
     output b: {baz: UInt<1>, qux: UInt<1>}
     output c: UInt<1>
+    wire d: {baz: UInt<1>, qux: UInt<1>}
   module Foo:
     inst bar of Bar
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@d>] 
     ; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
     ; CHECK: firrtl.module @Bar
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
+    ; CHECK-SAME: sym @b [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
+    ; CHECK-NEXT:  %d = firrtl.wire sym @d  
+    ; CHECK-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, five}>]}
+    ; CHECK-SAME: : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
     ; CHECK-SAME: [{one}],
     ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
