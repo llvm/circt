@@ -1734,7 +1734,9 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
     return nullptr;
 
   uint64_t idx = constIdx.value().getLimitedValue();
-  return inputCreate.inputs()[idx];
+  auto createInputs = inputCreate.inputs();
+  assert(idx < createInputs.size());
+  return createInputs[createInputs.size() - idx - 1];
 }
 
 //===----------------------------------------------------------------------===//
