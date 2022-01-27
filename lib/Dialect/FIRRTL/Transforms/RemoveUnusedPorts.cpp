@@ -131,11 +131,19 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       // If the port is input, replace the port with an unwritten wire
       // so that we can remove use-chains in SV dialect canonicalization.
       if (ports[index].isInput()) {
-        WireOp wire =
-            builder.create<WireOp>(instance.getLoc(), result.getType());
+        WireOp wire = builder.create<WireOp>(result.getType());
+
+        // Check that the input port is only written. Sometimes input ports are
+        // used as temporary wires. In that case, we cannot erase connections.
+        bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
+          if (auto connect = dyn_cast<ConnectOp>(op))
+            return connect.dest() == result;
+          return false;
+        });
+
         result.replaceUsesWithIf(wire, [&](OpOperand &op) -> bool {
           // Connects can be deleted directly.
-          if (isa<ConnectOp>(op.getOwner())) {
+          if (onlyWritten && isa<ConnectOp>(op.getOwner())) {
             op.getOwner()->erase();
             return false;
           }
