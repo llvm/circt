@@ -1034,6 +1034,15 @@ hw.module @replicate(%arg0: i7) -> (r1: i9, r2: i7) {
   hw.output %r1, %r2 : i9, i7
 }
 
+// CHECK-LABEL: hw.module @array_get1(%a0: i3, %a1: i3) -> (r0: i3)
+// CHECK-NEXT:    hw.output %a0 : i3
+hw.module @array_get1(%a0: i3, %a1: i3) -> (r0: i3) {
+  %c0 = hw.constant 0 : i1
+  %arr = hw.array_create %a0, %a1 : i3
+  %r0 = hw.array_get %arr[%c0] : !hw.array<2xi3>
+  hw.output %r0 : i3
+}
+
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
@@ -1272,4 +1281,3 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (data: i32) {
 }
 
 // == End: test cases from LowerToHW ==
-

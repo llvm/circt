@@ -1719,6 +1719,21 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
   build(builder, result, resultType, input, index);
 }
 
+// An array_get of an array_create with a constant index can just be the
+// array_create operand at the constant index.
+OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
+  auto inputCreate = dyn_cast_or_null<ArrayCreateOp>(input().getDefiningOp());
+  if (!inputCreate)
+    return nullptr;
+
+  auto constIdx = dyn_cast_or_null<ConstantOp>(index().getDefiningOp());
+  if (!constIdx || constIdx.value().getBitWidth() > 64)
+    return nullptr;
+
+  uint64_t idx = constIdx.value().getLimitedValue();
+  return inputCreate.inputs()[idx];
+}
+
 //===----------------------------------------------------------------------===//
 // TypedeclOp
 //===----------------------------------------------------------------------===//
