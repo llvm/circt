@@ -1150,3 +1150,19 @@ circuit Top : %[[{
 ; CHECK-SAME:   {circt.nonlocal = @nla_1, id = [[ID]] : i64},
 ; CHECK-SAME:   {circt.nonlocal = @nla_2, id = [[ID]] : i64}
 ; CHECK-SAME: ]}
+
+; // -----
+;
+; A numeric "class" shouldn't crash the parser.
+
+circuit Top : %[[
+  {
+    "class":"0",
+    "target":"~Top|Top>a"
+  }
+]]
+  module Top :
+    wire a: UInt<1>
+    a is invalid
+
+; CHECK-LABEL: firrtl.circuit
