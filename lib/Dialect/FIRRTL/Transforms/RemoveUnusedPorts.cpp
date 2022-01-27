@@ -11,6 +11,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/Support/Debug.h"
 
@@ -72,34 +73,35 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     if (port.isInput() && !arg.use_empty())
       continue;
 
-    // If the port is output, then check that the port is only connected to
-    // invalid or constant.
+    // Output port.
     if (port.isOutput()) {
       if (arg.use_empty()) {
+        // Sometimes the connection is already removed possibly by IMCP.
+        // In that case, regard the port value as an invalid value.
         outputPortConstants.push_back(None);
       } else if (arg.hasOneUse()) {
+        // If the port has a single use, check the port is only connected to
+        // invalid or constant
         auto connect = dyn_cast<ConnectOp>(*arg.user_begin());
         if (!connect || !isa_and_nonnull<InvalidValueOp, ConstantOp>(
                             connect.src().getDefiningOp()))
           continue;
 
-        Operation *srcOp;
-        if (auto constant =
-                dyn_cast<ConstantOp>(connect.src().getDefiningOp())) {
+        Operation *srcOp = connect.src().getDefiningOp();
+        if (auto constant = dyn_cast<ConstantOp>(srcOp))
           outputPortConstants.push_back(constant.value());
-          srcOp = constant;
-        } else {
-          assert(isa<InvalidValueOp>(connect.src().getDefiningOp()) &&
-                 "only expect invalid");
-          srcOp = connect.src().getDefiningOp();
+        else {
+          assert(isa<InvalidValueOp>(srcOp) && "only expect invalid");
           outputPortConstants.push_back(None);
         }
+
         // Erase connect op because we are going to remove this output ports.
         connect.erase();
+
         if (srcOp->use_empty())
           srcOp->erase();
-
       } else {
+        // Otherwise, we cannot remove the port.
         continue;
       }
     }
@@ -111,8 +113,8 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   if (removalPortIndexes.empty())
     return;
 
+  // Delete ports from the module.
   module.erasePorts(removalPortIndexes);
-
   LLVM_DEBUG(llvm::for_each(removalPortIndexes, [&](unsigned index) {
                llvm::dbgs() << "Delete port: " << ports[index].name << "\n";
              }););
@@ -120,7 +122,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   // Rewrite all uses.
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = use->getInstance();
-    OpBuilder builder(instance);
+    ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     unsigned outputPortIndex = 0;
     for (auto index : removalPortIndexes) {
       auto result = instance.getResult(index);
@@ -143,17 +145,18 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // If the wire doesn't have an user, just erase it.
         if (wire.use_empty())
           wire.erase();
+
         continue;
       }
-      auto portConstant = outputPortConstants[outputPortIndex++];
-      // Output case. Replace with the output port with an invalid or constant
+
+      // Output port.  Replace with the output port with an invalid or constan
       // value.
+      auto portConstant = outputPortConstants[outputPortIndex++];
       Value value;
       if (portConstant)
-        value = builder.create<ConstantOp>(instance.getLoc(), *portConstant);
+        value = builder.create<ConstantOp>(*portConstant);
       else
-        value =
-            builder.create<InvalidValueOp>(instance.getLoc(), result.getType());
+        value = builder.create<InvalidValueOp>(result.getType());
 
       result.replaceAllUsesWith(value);
     }
