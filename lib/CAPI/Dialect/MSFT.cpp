@@ -81,6 +81,18 @@ circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
 
   return wrap(failure());
 }
+MlirLogicalResult circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
+                                                      MlirAttribute cLoc) {
+  auto loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return wrap(unwrap(db)->removePlacement(loc));
+}
+MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
+                                                    MlirAttribute cOldLoc,
+                                                    MlirAttribute cNewLoc) {
+  auto oldLoc = unwrap(cOldLoc).cast<PhysLocationAttr>();
+  auto newLoc = unwrap(cNewLoc).cast<PhysLocationAttr>();
+  return wrap(unwrap(db)->movePlacement(oldLoc, newLoc));
+}
 bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
                                           MlirAttribute cLoc,
                                           CirctMSFTPlacedInstance *out) {
