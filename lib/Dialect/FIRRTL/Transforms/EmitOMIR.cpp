@@ -728,20 +728,43 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
   // Serialize the target circuit first.
   SmallString<64> target(type);
-  target.append(":~");
-  target.append(getOperation().name());
-  target.push_back('|');
 
   // Serialize the local or non-local module/instance hierarchy path.
   if (tracker.nla) {
     bool notFirst = false;
     hw::InnerRefAttr instName;
+    StringRef dutModName;
     for (auto nameRef : tracker.nla.namepath()) {
       StringRef modName;
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
         modName = innerRef.getModule().getValue();
       else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
         modName = ref.getValue();
+      Operation *module = symtbl->lookup(modName);
+      AnnotationSet annos(dyn_cast<FModuleOp>(module).annotations());
+      if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation")) {
+        dutModName = modName;
+        break;
+      }
+    }
+    target.append(":~");
+    if (dutModName.empty())
+      target.append(getOperation().name());
+    else
+      target.append(dutModName);
+    target.push_back('|');
+
+    for (auto nameRef : tracker.nla.namepath()) {
+      StringRef modName;
+      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
+        modName = innerRef.getModule().getValue();
+      else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
+        modName = ref.getValue();
+      if (!dutModName.empty() && dutModName.equals(modName))
+        dutModName = "";
+      else if (!dutModName.empty())
+        continue;
+
       Operation *module = symtbl->lookup(modName);
       assert(module);
       if (notFirst)
@@ -771,6 +794,13 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     if (!module)
       module = tracker.op->getParentOfType<FModuleOp>();
     assert(module);
+    target.append(":~");
+    AnnotationSet annos(module.annotations());
+    if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
+      target.append(module.getName());
+    else
+      target.append(getOperation().name());
+    target.push_back('|');
     target.append(addSymbol(module));
   }
 
