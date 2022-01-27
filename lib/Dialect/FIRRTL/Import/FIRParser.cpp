@@ -1493,7 +1493,7 @@ private:
 /// DontTouch and circt.nonlocal annotations require a symbol.
 /// Also remove the DontTouch annotation, if it exists.
 /// But ignore DontTouch that will apply only to a subfield.
-static bool needsSymbol(ArrayAttr &annotations, bool checkNonLocal = true) {
+static bool needsSymbol(ArrayAttr &annotations) {
   SmallVector<Attribute> filteredAnnos;
   bool needsSymbol = false;
   // Only check for DontTouch annotation that applies to the entire op.

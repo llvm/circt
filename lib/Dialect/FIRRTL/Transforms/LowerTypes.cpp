@@ -68,6 +68,11 @@ struct FlatBundleFieldEntry {
                  << isOutput << ">}\n";
   }
 };
+
+struct nlaNameNewSym {
+  StringAttr nlaName;
+  StringAttr newSym;
+};
 } // end anonymous namespace
 
 /// Return true if the type has more than zero bitwidth.
@@ -267,10 +272,9 @@ namespace {
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
-  TypeLoweringVisitor(
-      MLIRContext *context, bool flattenAggregateMemData,
-      bool preserveAggregate, bool preservePublicTypes,
-      SmallVector<std::pair<StringAttr, StringAttr>> &nlaSymList)
+  TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
+                      bool preserveAggregate, bool preservePublicTypes,
+                      SmallVector<nlaNameNewSym> &nlaSymList)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
         preservePublicTypes(preservePublicTypes),
@@ -349,7 +353,7 @@ private:
   // new symbol, and the corresponding NLA needs to be updatd with this symbol.
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
-  SmallVector<std::pair<StringAttr, StringAttr>> &nlaNameToNewSymList;
+  SmallVector<nlaNameNewSym> &nlaNameToNewSymList;
 };
 } // namespace
 
@@ -428,43 +432,46 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
-    if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
-      // Apply annotations to all elements if fieldID is equal to zero.
-      if (subAnno.getFieldID() == 0) {
-        retval.push_back(subAnno.getAnnotations());
-        continue;
-      }
-
-      // Check whether the annotation falls into the range of the current field.
-      if (subAnno.getFieldID() >= field.fieldID &&
-          subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()) {
-        if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
-          // If the target is a subfield/subindex of the current field, create a
-          // new sub-annotation with a new field ID.
-          retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID,
-                                                  subAnno.getAnnotations()));
-        } else {
-          // Otherwise, if the current field is exactly the target, degenerate
-          // the sub-annotation to a normal annotation.
-          if (Annotation(opAttr).getClass() ==
-              "firrtl.transforms.DontTouchAnnotation") {
-            hasDontTouch = true;
-            continue;
-          }
-          // If this subfield has a nonlocal anchor, then we need to update the
-          // NLA with the new symbol that would be added to the field after
-          // lowering.
-          if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
-                  "circt.nonlocal")) {
-            nlaNameToNewSymList.push_back({nla.getAttr(), sym});
-            hasDontTouch = true;
-          }
-          retval.push_back(subAnno.getAnnotations());
-        }
-      }
-    } else {
+    auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>();
+    if (!subAnno) {
       retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
+      continue;
     }
+    /* subAnno handling... */
+    // Apply annotations to all elements if fieldID is equal to zero.
+    if (subAnno.getFieldID() == 0) {
+      retval.push_back(subAnno.getAnnotations());
+      continue;
+    }
+
+    // Check whether the annotation falls into the range of the current field.
+    if (!(subAnno.getFieldID() >= field.fieldID &&
+          subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()))
+      continue;
+
+    if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
+      // If the target is a subfield/subindex of the current field, create a
+      // new sub-annotation with a new field ID.
+      retval.push_back(
+          SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
+      continue;
+    }
+    // Otherwise, if the current field is exactly the target, degenerate
+    // the sub-annotation to a normal annotation.
+    if (Annotation(opAttr).getClass() ==
+        "firrtl.transforms.DontTouchAnnotation") {
+      hasDontTouch = true;
+      continue;
+    }
+    // If this subfield has a nonlocal anchor, then we need to update the
+    // NLA with the new symbol that would be added to the field after
+    // lowering.
+    if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
+            "circt.nonlocal")) {
+      nlaNameToNewSymList.push_back({nla.getAttr(), sym});
+      hasDontTouch = true;
+    }
+    retval.push_back(subAnno.getAnnotations());
   }
   return ArrayAttr::get(ctxt, retval);
 }
@@ -498,7 +505,7 @@ bool TypeLoweringVisitor::lowerProducer(
     bool hasDontTouch = false;
     StringAttr sName;
     if (innerSym)
-      sName = StringAttr::get(context, innerSym.getValue() + loweredName);
+      sName = StringAttr::get(context, innerSym.getValue() + "_" + loweredName);
     else
       sName = StringAttr::get(context, loweredName);
 
@@ -1387,42 +1394,37 @@ void LowerTypesPass::runOnOperation() {
   });
 
   // Merge two lists and return it.
-  auto mergeList =
-      [&](const SmallVector<std::pair<StringAttr, StringAttr>> &lhs,
-          SmallVector<std::pair<StringAttr, StringAttr>> rhs) {
-        rhs.append(lhs);
-        return rhs;
-      };
+  auto mergeList = [&](const SmallVector<nlaNameNewSym> &lhs,
+                       SmallVector<nlaNameNewSym> rhs) {
+    rhs.append(lhs);
+    return rhs;
+  };
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
   auto lowerModules = [&](auto op) {
-    SmallVector<std::pair<StringAttr, StringAttr>> modNlaToNewSymList;
+    SmallVector<nlaNameNewSym> modNlaToNewSymList;
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
                         preserveAggregate, preservePublicTypes,
                         modNlaToNewSymList)
         .lowerModule(op);
     return modNlaToNewSymList;
   };
-  SmallVector<std::pair<StringAttr, StringAttr>> nlaToNewSymList =
-      llvm::parallelTransformReduce(
-          ops.begin(), ops.end(),
-          SmallVector<std::pair<StringAttr, StringAttr>>(), mergeList,
-          lowerModules);
+  SmallVector<nlaNameNewSym> nlaToNewSymList = llvm::parallelTransformReduce(
+      ops.begin(), ops.end(), SmallVector<nlaNameNewSym>(), mergeList,
+      lowerModules);
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
   // element cannot be a module.
   for (auto nlaToSym : nlaToNewSymList) {
     // Get the nla with the corresponding name. This is guaranteed to exist.
-    // nlaToSym.first is the NLA name.
-    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.first]);
+    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.nlaName]);
     auto namepath = nla.namepath();
     SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
     // Update the final element, which must be an InnerRefAttr.
     auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
-    // nlaToSym.second is the updated symbol name of the lowered field.
     updatedPath[namepath.size() - 1] =
-        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.second);
+        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.newSym);
     nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
   }
 }
