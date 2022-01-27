@@ -69,7 +69,7 @@ struct FlatBundleFieldEntry {
   }
 };
 
-struct nlaNameNewSym {
+struct NlaNameNewSym {
   StringAttr nlaName;
   StringAttr newSym;
 };
@@ -274,7 +274,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
                       bool preserveAggregate, bool preservePublicTypes,
-                      SmallVector<nlaNameNewSym> &nlaSymList)
+                      SmallVector<NlaNameNewSym> &nlaSymList)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
         preservePublicTypes(preservePublicTypes),
@@ -353,7 +353,7 @@ private:
   // new symbol, and the corresponding NLA needs to be updatd with this symbol.
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
-  SmallVector<nlaNameNewSym> &nlaNameToNewSymList;
+  SmallVector<NlaNameNewSym> &nlaNameToNewSymList;
 };
 } // namespace
 
@@ -1394,23 +1394,23 @@ void LowerTypesPass::runOnOperation() {
   });
 
   // Merge two lists and return it.
-  auto mergeList = [&](const SmallVector<nlaNameNewSym> &lhs,
-                       SmallVector<nlaNameNewSym> rhs) {
+  auto mergeList = [&](const SmallVector<NlaNameNewSym> &lhs,
+                       SmallVector<NlaNameNewSym> rhs) {
     rhs.append(lhs);
     return rhs;
   };
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
   auto lowerModules = [&](auto op) {
-    SmallVector<nlaNameNewSym> modNlaToNewSymList;
+    SmallVector<NlaNameNewSym> modNlaToNewSymList;
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
                         preserveAggregate, preservePublicTypes,
                         modNlaToNewSymList)
         .lowerModule(op);
     return modNlaToNewSymList;
   };
-  SmallVector<nlaNameNewSym> nlaToNewSymList = llvm::parallelTransformReduce(
-      ops.begin(), ops.end(), SmallVector<nlaNameNewSym>(), mergeList,
+  SmallVector<NlaNameNewSym> nlaToNewSymList = llvm::parallelTransformReduce(
+      ops.begin(), ops.end(), SmallVector<NlaNameNewSym>(), mergeList,
       lowerModules);
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
