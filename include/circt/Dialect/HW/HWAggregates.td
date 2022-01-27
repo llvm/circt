@@ -147,6 +147,8 @@ def ArrayGetOp : HWOp<"array_get",
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
