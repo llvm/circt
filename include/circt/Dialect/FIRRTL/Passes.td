@@ -68,6 +68,19 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   ];
 }
 
+def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
+  let summary = "Remove unused ports";
+  let description = [{
+    This pass removes unused ports without annotations or symbols. Implementation
+    wise, this pass iterates over the instance graph in a topological order from
+    leaves to the top so that we can remove unused ports optimally.
+  }];
+  let constructor = "circt::firrtl::createRemoveUnusedPortsPass()";
+  let statistics = [
+    Statistic<"numRemovedPorts", "num-removed-ports", "Number of ports erased">,
+  ];
+}
+
 def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let summary = "Performs inlining, flattening, and dead module elimination";
   let description = [{
