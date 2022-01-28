@@ -25,10 +25,11 @@ using namespace circt::sv;
 Type circt::sv::getAnyHWArrayElementType(Type type) {
   if (!type)
     return {};
-  if (auto array = type.dyn_cast<hw::ArrayType>())
+  if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
-  if (auto array = type.dyn_cast<hw::UnpackedArrayType>())
+  if (auto array = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return array.getElementType();
+
   return {};
 }
 

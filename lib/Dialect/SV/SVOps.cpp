@@ -1204,7 +1204,7 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
   if (!field)
     return failure();
   auto structType =
-      getInOutElementType(operands[0].getType()).cast<hw::StructType>();
+      hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
   auto resultType = structType.getFieldType(field.cast<StringAttr>());
   if (!resultType)
     return failure();
