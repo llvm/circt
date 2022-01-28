@@ -178,7 +178,7 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
 }
 
 def InOutStructType
-  : Type<CPred<"getInOutElementType($_self).isa<hw::StructType>()">,
+  : Type<CPred<"hw::type_isa_and_nonnull<hw::StructType>(getInOutElementType($_self))">,
          "an inout type with struct field", "::circt::hw::InOutType">;
 
 def StructFieldInOutOp : SVOp<"struct_field_inout",
