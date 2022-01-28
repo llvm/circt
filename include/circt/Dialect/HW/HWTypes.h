@@ -77,7 +77,7 @@ bool type_isa(Type type) {
 
 // type_isa for a nullable argument.
 template <typename BaseTy>
-bool type_isa_and_nonnull(Type type) {
+bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
   if (!type)
     return false;
   return type_isa<BaseTy>(type);
