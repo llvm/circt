@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --msft-partition --msft-wire-cleanup -verify-diagnostics -split-input-file | FileCheck --check-prefix=CLEANUP %s
+// RUN: circt-opt %s --msft-partition -verify-diagnostics | FileCheck --check-prefix=CLEANUP %s
 
 hw.globalRef @ref1 [#hw.innerNameRef<@top::@b>, #hw.innerNameRef<@B::@unit1>] {
   "loc" = #msft.physloc<M20K, 0, 0, 0>

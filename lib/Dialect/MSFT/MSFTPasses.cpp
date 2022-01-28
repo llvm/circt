@@ -445,11 +445,14 @@ void PartitionPass::markWireOps(MSFTModuleOp mod) {
       opQueue.push_back(op);
   });
 
+  DenseMap<SymbolRefAttr, DenseMap<Value, Value>> perPartitionCopies;
   while (!opQueue.empty()) {
     Operation *op = opQueue.back();
     opQueue.pop_back();
     auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    auto &partCopies = perPartitionCopies[partRef];
     assert(partRef);
+    bool isWireOp = isWireManipulationOp(op);
 
     for (auto *user : op->getUsers()) {
       if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
@@ -458,13 +461,24 @@ void PartitionPass::markWireOps(MSFTModuleOp mod) {
       opQueue.push_back(user);
     }
 
-    for (auto operValue : op->getOperands()) {
+    for (auto &opOper : op->getOpOperands()) {
+      Value operValue = opOper.get();
       Operation *defOp = operValue.getDefiningOp();
       if (!defOp || !isWireManipulationOp(defOp) ||
           defOp->hasAttr("targetDesignPartition"))
         continue;
-      defOp->setAttr("targetDesignPartition", partRef);
-      opQueue.push_back(defOp);
+      auto valueExistingCopyIT = partCopies.find(operValue);
+      if (valueExistingCopyIT != partCopies.end()) {
+        opOper.set(valueExistingCopyIT->second);
+        continue;
+      }
+      Operation *opCopy = defOp->clone();
+      defOp->getBlock()->getOperations().insert(Block::iterator(defOp), opCopy);
+      opCopy->setAttr("targetDesignPartition", partRef);
+      for (size_t resultNum = 0, e = defOp->getNumResults(); resultNum < e;
+           ++resultNum)
+        partCopies[defOp->getResult(resultNum)] = opCopy->getResult(resultNum);
+      opQueue.push_back(opCopy);
     }
   }
 }
