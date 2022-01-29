@@ -125,6 +125,13 @@ assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
 assert (len(instance_attrs.find_unused()) == 1)
 
+test_inst.placedb.remove_placement(loc[1])
+
+print("=== After applying placements")
+t.print()
+# CHECK-LABEL: === After applying placements
+# CHECK-NOT: hw.globalRef {{.*}} #hw.innerNameRef<@UnParameterized::@Nothing> {{.*}} #msft.physloc<DSP, 39, 25, 0, "memory|bank">
+
 t.run_passes()
 
 print("=== Final mlir dump")
@@ -132,8 +139,8 @@ t.print()
 
 # OUTPUT-LABEL: proc Test_config { parent }
 # OUTPUT-NOT:  set_location_assignment M20K_X40_Y40
+# OUTPUT-NOT:  set_location_assignment MPDSP_X39_Y25_N0
 # OUTPUT-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
-# OUTPUT-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
 # OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
 # OUTPUT-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
 # OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank

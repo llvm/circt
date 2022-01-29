@@ -5,7 +5,7 @@
 from __future__ import annotations
 import typing
 
-from circt.dialects import msft
+from circt.dialects import hw, msft
 
 from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
 
@@ -100,11 +100,12 @@ class PrimitiveDB:
 
 
 class PlacementDB:
-  __slots__ = ["_db"]
+  __slots__ = ["_db", "_circt_mod"]
 
   def __init__(self, _circt_mod, seed: typing.Union[PrimitiveDB, None]):
     self._db = msft.PlacementDB(_circt_mod, seed._db if seed else None)
     self._db.add_design_placements()
+    self._circt_mod = _circt_mod
 
   def get_instance_at_coords(self,
                              prim_type: typing.Union[str, PrimitiveType],
@@ -126,6 +127,43 @@ class PlacementDB:
     path = ArrayAttr.get([ref])
     subpath = ""
     self._db.add_placement(loc._loc, path, subpath, entity._entity_extern)
+
+  def remove_placement(self, loc: PhysLocation):
+    # Remove the location from the PlacementDB.
+    self._db.remove_placement(loc._loc)
+
+    # Find the top-level module.
+    top_mod = self._circt_mod.operation.parent
+    assert top_mod.parent is None
+
+    # Remove the location from any global ref(s) in the top-level module.
+    refs_to_remove = set([])
+    for op in top_mod.regions[0].blocks[0]:
+      if isinstance(op, hw.GlobalRefOp):
+        for nvp in op.attributes:
+          if nvp.attr == loc._loc:
+            del op.attributes[nvp.name]
+        if len(op.attributes) == 2:
+          refs_to_remove.add(op)
+
+    ref_attrs_to_remove = set(
+        hw.GlobalRefAttr.get(op.sym_name) for op in refs_to_remove)
+
+    # Remove the references to any global ref(s) now empty of placement info.
+    for mod in top_mod.regions[0].blocks[0]:
+      if isinstance(mod, msft.MSFTModuleOp):
+        for op in mod.entry_block:
+          if "circt.globalRef" in op.attributes:
+            ref_attrs = set(
+                hw.GlobalRefAttr(a)
+                for a in ArrayAttr(op.attributes["circt.globalRef"]))
+            if ref_attrs & ref_attrs_to_remove:
+              op.attributes["circt.globalRef"] = ArrayAttr.get(
+                  list(ref_attrs - ref_attrs_to_remove))
+
+    # Remove the global ref(s).
+    for op in refs_to_remove:
+      op.operation.erase()
 
 
 class EntityExtern:
