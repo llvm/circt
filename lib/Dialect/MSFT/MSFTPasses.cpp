@@ -20,6 +20,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
@@ -432,7 +433,11 @@ void PartitionPass::runOnOperation() {
   getAndSortModules(outerMod, sortedMods);
 
   for (auto mod : sortedMods) {
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
     partition(mod);
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
     bubbleWiresUp(mod);
     dedupOutputs(mod);
   }
@@ -485,25 +490,23 @@ void PartitionPass::markWireOps(MSFTModuleOp mod) {
     // Go through the operands and copy/tag any which we can.
     for (auto &opOper : op->getOpOperands()) {
       Value operValue = opOper.get();
-      Operation *defOp = operValue.getDefiningOp();
-      if (!defOp)
-        continue;
 
-      SymbolRefAttr defOpPart = getPart(defOp);
-      if (defOpPart != nullptr && defOpPart != partRef)
-        // 'defOp' is in a different partition.
-        continue;
-      if (defOpPart != nullptr) {
-        // 'defOp' is already in the same partition.
-        Value existingValue = partOps.lookupOrNull(operValue);
+      // Check if there's already a copied op for this value.
+      Value existingValue = partOps.lookupOrNull(operValue);
+      if (existingValue) {
         assert(existingValue &&
                "Anything in partition should already be in the mapping.");
         opOper.set(existingValue);
         continue;
       }
 
+      // Determine if we can copy the op into our partition.
+      Operation *defOp = operValue.getDefiningOp();
+      if (!defOp)
+        continue;
+
+      // We don't copy anything which isn't "free".
       if (!isWireManipulationOp(defOp))
-        // We can't copy this op, so bail.
         continue;
 
       Operation *opCopy = defOp->clone(partOps);
