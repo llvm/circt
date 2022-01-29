@@ -294,19 +294,19 @@ protected:
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
 
-  static bool isWireManipulationOp(Operation *op) {
-    return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
-               hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
-               hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
-               hw::ConstantOp>(op);
-  }
-
   void bubbleWiresUp(MSFTModuleOp mod);
   void dedupOutputs(MSFTModuleOp mod);
   void sinkWiresDown(MSFTModuleOp mod);
   void dedupInputs(MSFTModuleOp mod);
 };
 } // anonymous namespace
+
+static bool isWireManipulationOp(Operation *op) {
+  return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
+             hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
+             hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
+             hw::ConstantOp>(op);
+}
 
 /// Update all the instantiations of 'mod' to match the port list. For any
 /// output ports which survived, automatically map the result according to
@@ -438,47 +438,99 @@ void PartitionPass::runOnOperation() {
   }
 }
 
+static SymbolRefAttr getPart(Operation *op) {
+  return op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+}
+
+static bool isDrivenByPartOpsOnly(Operation *op,
+                                  const BlockAndValueMapping &partOps,
+                                  DenseSet<Operation *> &seen) {
+  if (seen.contains(op))
+    return true;
+  seen.insert(op);
+
+  for (Value oper : op->getOperands()) {
+    if (partOps.contains(oper))
+      continue;
+    if (oper.isa<BlockArgument>())
+      continue;
+    Operation *defOp = oper.getDefiningOp();
+    if (!isWireManipulationOp(defOp))
+      return false;
+    if (!isDrivenByPartOpsOnly(defOp, partOps, seen))
+      return false;
+  }
+  return true;
+}
+
 void PartitionPass::markWireOps(MSFTModuleOp mod) {
   SmallVector<Operation *, 8> opQueue;
+  DenseMap<SymbolRefAttr, BlockAndValueMapping> perPartitionOps;
   mod.walk([&](Operation *op) {
-    if (op->hasAttrOfType<SymbolRefAttr>("targetDesignPartition"))
-      opQueue.push_back(op);
+    auto partRef = getPart(op);
+    if (!partRef)
+      return;
+    opQueue.push_back(op);
+    auto &partOps = perPartitionOps[partRef];
+    for (Value result : op->getResults())
+      partOps.map(result, result);
   });
 
-  DenseMap<SymbolRefAttr, DenseMap<Value, Value>> perPartitionCopies;
-  while (!opQueue.empty()) {
-    Operation *op = opQueue.back();
-    opQueue.pop_back();
-    auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
-    auto &partCopies = perPartitionCopies[partRef];
+  for (size_t i = 0; i < opQueue.size(); ++i) {
+    Operation *op = opQueue[i];
+    auto partRef = getPart(op);
+    auto &partOps = perPartitionOps[partRef];
     assert(partRef);
-    bool isWireOp = isWireManipulationOp(op);
 
-    for (auto *user : op->getUsers()) {
-      if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
-        continue;
-      user->setAttr("targetDesignPartition", partRef);
-      opQueue.push_back(user);
-    }
-
+    // Go through the operands and copy/tag any which we can.
     for (auto &opOper : op->getOpOperands()) {
       Value operValue = opOper.get();
       Operation *defOp = operValue.getDefiningOp();
-      if (!defOp || !isWireManipulationOp(defOp) ||
-          defOp->hasAttr("targetDesignPartition"))
+      if (!defOp)
         continue;
-      auto valueExistingCopyIT = partCopies.find(operValue);
-      if (valueExistingCopyIT != partCopies.end()) {
-        opOper.set(valueExistingCopyIT->second);
+
+      SymbolRefAttr defOpPart = getPart(defOp);
+      if (defOpPart != nullptr && defOpPart != partRef)
+        // 'defOp' is in a different partition.
+        continue;
+      if (defOpPart != nullptr) {
+        // 'defOp' is already in the same partition.
+        Value existingValue = partOps.lookupOrNull(operValue);
+        assert(existingValue &&
+               "Anything in partition should already be in the mapping.");
+        opOper.set(existingValue);
         continue;
       }
-      Operation *opCopy = defOp->clone();
+
+      if (!isWireManipulationOp(defOp))
+        // We can't copy this op, so bail.
+        continue;
+
+      Operation *opCopy = defOp->clone(partOps);
       defOp->getBlock()->getOperations().insert(Block::iterator(defOp), opCopy);
       opCopy->setAttr("targetDesignPartition", partRef);
-      for (size_t resultNum = 0, e = defOp->getNumResults(); resultNum < e;
-           ++resultNum)
-        partCopies[defOp->getResult(resultNum)] = opCopy->getResult(resultNum);
+      opOper.set(partOps.lookup(opOper.get()));
       opQueue.push_back(opCopy);
+    }
+
+    // Tag any "free" consumers which we can move.
+    for (auto *user : op->getUsers()) {
+      // Stop if it's not "free" or already in a partition.
+      if (!isWireManipulationOp(user) || getPart(user))
+        continue;
+      // Op must also only have its operands driven (or indirectly driven) by
+      // ops in the partition.
+      DenseSet<Operation *> seen;
+      if (!isDrivenByPartOpsOnly(user, partOps, seen))
+        continue;
+
+      // All the conditions are met, so tag it!
+      user->setAttr("targetDesignPartition", partRef);
+      for (OpOperand &oper : user->getOpOperands())
+        oper.set(partOps.lookupOrDefault(oper.get()));
+      for (Value result : user->getResults())
+        partOps.map(result, result);
+      opQueue.push_back(user);
     }
   }
 }
