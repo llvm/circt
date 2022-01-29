@@ -1063,6 +1063,14 @@ hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
   hw.output %r0 : i3
 }
 
+// CHECK-LABEL: hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3)
+// CHECK-NEXT:    hw.output %a0 : i3
+hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
+  %s = hw.struct_create (%a0, %a1) : !hw.struct<foo: i3, bar: i5>
+  %r0 = hw.struct_extract %s["foo"] : !hw.struct<foo: i3, bar: i5>
+  hw.output %r0 : i3
+}
+
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
