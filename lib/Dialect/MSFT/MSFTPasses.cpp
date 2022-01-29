@@ -290,7 +290,7 @@ protected:
                                 SmallVectorImpl<MSFTModuleOp> &mods,
                                 DenseSet<MSFTModuleOp> &modsSeen);
 
-  void updateInstances(
+  SmallVector<InstanceOp, 1> &updateInstances(
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
@@ -316,7 +316,7 @@ static bool isWireManipulationOp(Operation *op) {
 /// `getOperandsFunc` can (and often does) modify other operations. The update
 /// call deletes the original instance op, so all references are invalidated
 /// after this call.
-void PassCommon::updateInstances(
+SmallVector<InstanceOp, 1> &PassCommon::updateInstances(
     MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
         getOperandsFunc) {
@@ -344,6 +344,7 @@ void PassCommon::updateInstances(
     inst->erase();
   }
   moduleInstantiations[mod].swap(newInstances);
+  return moduleInstantiations[mod];
 }
 
 // Run a post-order DFS.
@@ -563,8 +564,8 @@ void PartitionPass::partition(MSFTModuleOp mod) {
     auto usersIter = localPartMembers.find(part.sym_nameAttr());
     if (usersIter != localPartMembers.end()) {
       MSFTModuleOp newPartMod = this->partition(part, usersIter->second);
-      dedupInputs(newPartMod);
       sinkWiresDown(newPartMod);
+      dedupInputs(newPartMod);
     }
     part.erase();
   }
@@ -588,33 +589,45 @@ static void setEntityName(Operation *op, Twine name) {
   if (op->hasAttrOfType<StringAttr>("sym_name"))
     op->setAttr("sym_name", nameAttr);
 }
-/// Heuristics to get the output name.
-static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
-                               std::string &buff) {
-  Operation *op = res.getDefiningOp();
-  if (auto inst = dyn_cast<InstanceOp>(op)) {
+
+static StringRef getValueName(Value v, const hw::SymbolCache &syms,
+                              std::string &buff) {
+  Operation *defOp = v.getDefiningOp();
+  if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
     Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
-    assert(modOp && "Invalid IR");
-    assert(isAnyModule(modOp) && "Instance must point to a module");
-    hw::ModulePortInfo ports = getModulePortInfo(modOp);
-    return ports.outputs[res.getResultNumber()].name;
+    if (modOp) { // If modOp isn't in the cache, it's probably a new module;
+      assert(isAnyModule(modOp) && "Instance must point to a module");
+      OpResult instResult = v.cast<OpResult>();
+      hw::ModulePortInfo ports = getModulePortInfo(modOp);
+      buff.clear();
+      llvm::raw_string_ostream(buff)
+          << inst.sym_name() << "."
+          << ports.outputs[instResult.getResultNumber()].name;
+      return buff;
+    }
   }
-  if (auto asmInterface = dyn_cast<mlir::OpAsmOpInterface>(op)) {
-    StringRef retName;
-    asmInterface.getAsmResultNames([&](Value v, StringRef name) {
-      if (v == res && !name.empty())
-        retName = StringAttr::get(op->getContext(), name).getValue();
-    });
-    if (!retName.empty())
-      return retName;
+  if (auto blockArg = v.dyn_cast<BlockArgument>()) {
+    auto portInfo =
+        getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
+    return portInfo.inputs[blockArg.getArgNumber()].getName();
   }
-  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+  if (auto constOp = dyn_cast<hw::ConstantOp>(defOp)) {
     buff.clear();
     llvm::raw_string_ostream(buff) << "c" << constOp.value();
     return buff;
   }
 
-  if (res.getDefiningOp()->getNumResults() == 1)
+  return "";
+}
+
+/// Heuristics to get the output name.
+static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
+                               std::string &buff) {
+
+  StringRef valName = getValueName(res, syms, buff);
+  if (!valName.empty())
+    return valName;
+  if (res.getOwner()->getNumResults() == 1)
     return {};
 
   // Fallback. Not ideal.
@@ -629,10 +642,16 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
     Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
-    assert(modOp && "Invalid IR");
-    assert(isAnyModule(modOp) && "Instance must point to a module");
-    hw::ModulePortInfo ports = getModulePortInfo(modOp);
-    return ports.inputs[oper.getOperandNumber()].name;
+    if (modOp) { // If modOp isn't in the cache, it's probably a new module;
+      assert(isAnyModule(modOp) && "Instance must point to a module");
+      hw::ModulePortInfo ports = getModulePortInfo(modOp);
+      return ports.inputs[oper.getOperandNumber()].name;
+    }
+  }
+  if (auto blockArg = oper.get().dyn_cast<BlockArgument>()) {
+    auto portInfo =
+        getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
+    return portInfo.inputs[blockArg.getArgNumber()].getName();
   }
 
   if (oper.getOwner()->getNumOperands() == 1)
@@ -769,7 +788,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   SmallVector<Type, 64> newResTypes;
 
   for (Operation *op : ops) {
-    StringRef opName = ::getOpName(op);
+    StringRef opName = ""; //::getOpName(op);
     for (OpResult res : op->getOpResults()) {
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
@@ -1152,7 +1171,16 @@ void PassCommon::dedupInputs(MSFTModuleOp mod) {
       if (!argsToErase.test(argNum))
         newOperands.push_back(oldInst.getOperand(argNum));
   };
-  updateInstances(mod, remappedResults, getOperands);
+  instantiations = updateInstances(mod, remappedResults, getOperands);
+  inst = instantiations[0];
+
+  SmallVector<Attribute, 32> newArgNames;
+  std::string buff;
+  for (Value oper : inst->getOperands()) {
+    newArgNames.push_back(StringAttr::get(
+        mod.getContext(), getValueName(oper, topLevelSyms, buff)));
+  }
+  mod.argNamesAttr(ArrayAttr::get(mod.getContext(), newArgNames));
 }
 
 /// Sink all the instance connections which are loops.
