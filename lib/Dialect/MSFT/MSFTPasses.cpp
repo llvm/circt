@@ -50,6 +50,10 @@ hw::ModulePortInfo getModulePortInfo(Operation *op) {
   return hw::getModulePortInfo(op);
 }
 
+static SymbolRefAttr getPart(Operation *op) {
+  return op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+}
+
 //===----------------------------------------------------------------------===//
 // Lower MSFT to HW.
 //===----------------------------------------------------------------------===//
@@ -243,6 +247,7 @@ void LowerToHWPass::runOnOperation() {
   patterns.insert<OutputOpLowering>(ctxt);
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
   patterns.insert<RemoveOpLowering<EntityExternOp>>(ctxt);
+  patterns.insert<RemoveOpLowering<DesignPartitionOp>>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
@@ -442,10 +447,6 @@ void PartitionPass::runOnOperation() {
     bubbleWiresUp(mod);
     dedupOutputs(mod);
   }
-}
-
-static SymbolRefAttr getPart(Operation *op) {
-  return op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
 }
 
 static bool isDrivenByPartOpsOnly(Operation *op,
