@@ -106,6 +106,10 @@ MLIR_CAPI_EXPORTED
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
 MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPlacementDBAddPlacement(
     CirctMSFTPlacementDB, MlirAttribute loc, CirctMSFTPlacedInstance inst);
+MLIR_CAPI_EXPORTED MlirLogicalResult
+circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB, MlirAttribute loc);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPlacementDBMovePlacement(
+    CirctMSFTPlacementDB, MlirAttribute oldLoc, MlirAttribute newLoc);
 MLIR_CAPI_EXPORTED bool
 circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB, MlirAttribute loc,
                                      CirctMSFTPlacedInstance *out);
