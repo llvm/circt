@@ -422,7 +422,9 @@ private:
                           DenseSet<Attribute> &newGlobalRefs);
 
   // Tag wire manipulation ops in this module.
-  static void markWireOps(MSFTModuleOp);
+  static void
+  copyWireOps(MSFTModuleOp,
+              DenseMap<SymbolRefAttr, DenseSet<Operation *>> &perPartOpsToMove);
 };
 } // anonymous namespace
 
@@ -470,34 +472,28 @@ static bool isDrivenByPartOpsOnly(Operation *op,
   return true;
 }
 
-void PartitionPass::markWireOps(MSFTModuleOp mod) {
-  SmallVector<Operation *, 8> opQueue;
-  DenseMap<SymbolRefAttr, BlockAndValueMapping> perPartitionOps;
-  mod.walk([&](Operation *op) {
-    auto partRef = getPart(op);
-    if (!partRef)
-      return;
-    opQueue.push_back(op);
-    auto &partOps = perPartitionOps[partRef];
+void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
+                  bool extendMaximal) {
+  BlockAndValueMapping map;
+  if (taggedOps.empty())
+    return;
+  OpBuilder b(taggedOps[0]->getContext());
+  for (Operation *op : taggedOps) {
+    op->moveBefore(partBlock, partBlock->end());
     for (Value result : op->getResults())
-      partOps.map(result, result);
-  });
+      map.map(result, result);
+  }
 
-  for (size_t i = 0; i < opQueue.size(); ++i) {
-    Operation *op = opQueue[i];
-    auto partRef = getPart(op);
-    auto &partOps = perPartitionOps[partRef];
-    assert(partRef);
+  for (Operation *op : llvm::make_pointer_range(*partBlock)) {
+    b.setInsertionPointToEnd(partBlock);
 
-    // Go through the operands and copy/tag any which we can.
+    // Go through the operands and copy any which we can.
     for (auto &opOper : op->getOpOperands()) {
       Value operValue = opOper.get();
 
       // Check if there's already a copied op for this value.
-      Value existingValue = partOps.lookupOrNull(operValue);
+      Value existingValue = map.lookupOrNull(operValue);
       if (existingValue) {
-        assert(existingValue &&
-               "Anything in partition should already be in the mapping.");
         opOper.set(existingValue);
         continue;
       }
@@ -511,63 +507,92 @@ void PartitionPass::markWireOps(MSFTModuleOp mod) {
       if (!isWireManipulationOp(defOp))
         continue;
 
-      Operation *opCopy = defOp->clone(partOps);
-      defOp->getBlock()->getOperations().insert(Block::iterator(defOp), opCopy);
-      opCopy->setAttr("targetDesignPartition", partRef);
-      opOper.set(partOps.lookup(opOper.get()));
-      opQueue.push_back(opCopy);
+      DenseSet<Operation *> seen;
+      if (!extendMaximal && !isDrivenByPartOpsOnly(defOp, map, seen))
+        continue;
+
+      b.insert(defOp->clone(map));
+      opOper.set(map.lookup(opOper.get()));
     }
 
-    // Tag any "free" consumers which we can move.
+    if (!extendMaximal)
+      continue;
+
+    // Move any "free" consumers which we can.
     for (auto *user : op->getUsers()) {
       // Stop if it's not "free" or already in a partition.
-      if (!isWireManipulationOp(user) || getPart(user))
+      if (!isWireManipulationOp(user) || getPart(user) ||
+          user->getBlock() == partBlock)
         continue;
       // Op must also only have its operands driven (or indirectly driven) by
       // ops in the partition.
       DenseSet<Operation *> seen;
-      if (!isDrivenByPartOpsOnly(user, partOps, seen))
+      if (!isDrivenByPartOpsOnly(user, map, seen))
         continue;
 
-      // All the conditions are met, so tag it!
-      user->setAttr("targetDesignPartition", partRef);
-      for (OpOperand &oper : user->getOpOperands())
-        oper.set(partOps.lookupOrDefault(oper.get()));
+      // All the conditions are met, move it!
+      user->moveBefore(partBlock, partBlock->end());
       for (Value result : user->getResults())
-        partOps.map(result, result);
-      opQueue.push_back(user);
+        map.map(result, result);
+      for (OpOperand &oper : user->getOpOperands())
+        oper.set(map.lookupOrDefault(oper.get()));
     }
   }
 }
 
-void PartitionPass::partition(MSFTModuleOp mod) {
-  DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
-  SmallVector<Operation *, 64> nonLocalTaggedOps;
-
-  markWireOps(mod);
+void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
+              Block *nonLocalBlock) {
+  DenseMap<SymbolRefAttr, SmallVector<Operation *, 8>> perPartTaggedOps;
+  SmallVector<Operation *, 16> nonLocalTaggedOps;
 
   mod.walk([&](Operation *op) {
-    auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    auto partRef = getPart(op);
     if (!partRef)
       return;
-
-    if (partRef.getRootReference() == SymbolTable::getSymbolName(mod))
-      localPartMembers[partRef.getLeafReference()].push_back(op);
+    auto partBlockF = perPartBlocks.find(partRef);
+    if (partBlockF != perPartBlocks.end())
+      perPartTaggedOps[partRef].push_back(op);
     else
       nonLocalTaggedOps.push_back(op);
   });
 
+  for (auto &partOpQueuePair : perPartTaggedOps) {
+    copyIntoPart(partOpQueuePair.second, perPartBlocks[partOpQueuePair.first],
+                 false);
+  }
+  copyIntoPart(nonLocalTaggedOps, nonLocalBlock, true);
+}
+
+void PartitionPass::partition(MSFTModuleOp mod) {
+
+  Block *nonLocal = new Block();
+  DenseMap<SymbolRefAttr, Block *> perPartBlocks;
+
+  auto modSymbol = SymbolTable::getSymbolName(mod);
+  mod.walk([&](DesignPartitionOp part) {
+    SymbolRefAttr partRef =
+        SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
+    perPartBlocks[partRef] = new Block();
+  });
+
+  copyInto(mod, perPartBlocks, nonLocal);
+
+  SmallVector<Operation *, 64> nonLocalTaggedOps(
+      llvm::make_pointer_range(*nonLocal));
   if (!nonLocalTaggedOps.empty())
     bubbleUp(mod, nonLocalTaggedOps);
+  delete nonLocal;
 
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
-    auto usersIter = localPartMembers.find(part.sym_nameAttr());
-    if (usersIter != localPartMembers.end()) {
-      MSFTModuleOp newPartMod = this->partition(part, usersIter->second);
-      sinkWiresDown(newPartMod);
-      dedupInputs(newPartMod);
-    }
+    SymbolRefAttr partRef =
+        SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
+    Block *partBlock = perPartBlocks[partRef];
+    SmallVector<Operation *> toMove(llvm::make_pointer_range(*partBlock));
+    MSFTModuleOp partMod = partition(part, toMove);
+    sinkWiresDown(partMod);
+    dedupInputs(partMod);
+    delete partBlock;
     part.erase();
   }
 }
@@ -601,9 +626,11 @@ static StringRef getValueName(Value v, const hw::SymbolCache &syms,
       OpResult instResult = v.cast<OpResult>();
       hw::ModulePortInfo ports = getModulePortInfo(modOp);
       buff.clear();
-      llvm::raw_string_ostream(buff)
-          << inst.sym_name() << "."
-          << ports.outputs[instResult.getResultNumber()].name;
+      llvm::raw_string_ostream os(buff);
+      os << inst.sym_name() << ".";
+      StringAttr name = ports.outputs[instResult.getResultNumber()].name;
+      if (name)
+        os << name.getValue();
       return buff;
     }
   }
