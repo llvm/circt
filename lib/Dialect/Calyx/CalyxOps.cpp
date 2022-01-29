@@ -59,8 +59,8 @@ IntegerAttr direction::packAttribute(MLIRContext *ctx, size_t nIns,
 /// Verify that the value is not a "complex" value. For example, the source
 /// of an AssignOp should be a constant or port, e.g.
 /// %and = comb.and %a, %b : i1
-/// calyx.assign %port = %and, %c1_i1 ? : i1   // Incorrect
-/// calyx.assign %port = %c1_i1, %and ? : i1   // Correct
+/// calyx.assign %port = %c1_i1 ? %and   : i1   // Incorrect
+/// calyx.assign %port = %and   ? %c1_i1 : i1   // Correct
 /// TODO(Calyx): This is useful to verify current MLIR can be lowered to the
 /// native compiler. Remove this when Calyx supports wire declarations.
 /// See: https://github.com/llvm/circt/pull/1774 for context.
@@ -397,6 +397,10 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
+
+  SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
+                                        "portDirections", "sym_name", "type"};
+  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
 
 /// Parses the ports of a Calyx component signature, and adds the corresponding

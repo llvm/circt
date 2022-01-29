@@ -275,6 +275,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: initial begin
   sv.initial {
     sv.verbatim "`define THING 1"
+    // CHECK-NEXT: automatic logic _T;
+    // CHECK-EMPTY:
     // CHECK-NEXT: `define THING
     %thing = sv.verbatim.expr "`THING" : () -> i42
     // CHECK-NEXT: wire42 = `THING;
@@ -287,6 +289,10 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       sv.fwrite "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
+      %c2 = sv.verbatim.expr "\"VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE\"" : () -> i1
+      // CHECK-NEXT: _T = "VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE_VERY_LONG_LINE";
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", _T);
+      sv.fwrite "%d" (%c2) : i1
       // CHECK-NEXT: `endif
     }
 
@@ -343,14 +349,13 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: `ifdef FOO
   sv.ifdef "FOO" {
-    // CHECK-NEXT: wire {{.+}} = "THING";
     %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
 
     // CHECK-NEXT: initial begin
     sv.initial {
-      // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       sv.fwrite "%d" (%c1) : i1
-      // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       sv.fwrite "%d" (%c1) : i1
 
     // CHECK-NEXT: end // initial
@@ -450,9 +455,8 @@ hw.module @PartSelectInoutInline(%v:i40) {
   %r = sv.reg : !hw.inout<i42>
   %c2_i3 = hw.constant 2 : i3
   %a = sv.indexed_part_select_inout %r[%c2_i3 : 40] : !hw.inout<i42>, i3
-  // CHECK:      localparam [2:0] _T = 3'h2;
-  // CHECK-NEXT: initial
-  // CHECK-NEXT:   r[_T +: 40] = v;
+  // CHECK: initial
+  // CHECK-NEXT:   r[3'h2 +: 40] = v;
   sv.initial {
     sv.bpassign %a, %v : i40
   }
@@ -511,20 +515,19 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
 // https://github.com/llvm/circt/issues/595
 // CHECK-LABEL: module issue595
 hw.module @issue595(%arr: !hw.array<128xi1>) {
-  // CHECK: wire [31:0] _T;
-  // CHECK: wire _T_0 = _T == 32'h0;
+  // CHECK: wire [31:0] [[TEMP1:.+]];
   %c0_i32 = hw.constant 0 : i32
   %c0_i7 = hw.constant 0 : i7
   %c0_i6 = hw.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T_0);
+    // CHECK: assert([[TEMP1]] == 32'h0);
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
-  // CHECK: assign _T = _T_1[6'h0 +: 32];
+  // CHECK: wire [63:0] [[TEMP2:.+]] = arr[7'h0 +: 64];
+  // CHECK: assign [[TEMP1]] = [[TEMP2:.+]][6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -534,20 +537,19 @@ hw.module @issue595(%arr: !hw.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant1
 hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
-  // CHECK: wire [31:0] _T;
-  // CHECK: wire _T_0 = |_T;
+  // CHECK: wire [31:0] [[TEMP1:.+]];
   %c0_i32 = hw.constant 0 : i32
   %c0_i7 = hw.constant 0 : i7
   %c0_i6 = hw.constant 0 : i6
   %0 = comb.icmp ne %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T_0);
+    // CHECK: assert(|[[TEMP1]]);
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
-  // CHECK: assign _T = _T_1[6'h0 +: 32];
+  // CHECK: wire [63:0] [[TEMP2:.+]] = arr[7'h0 +: 64];
+  // CHECK: assign [[TEMP1]] = [[TEMP2]][6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -556,20 +558,19 @@ hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant2_checkRedunctionAnd
 hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
-  // CHECK: wire [31:0] _T;
-  // CHECK: wire _T_0 = &_T;
+  // CHECK: wire [31:0] [[TEMP1:.+]];
   %c0_i32 = hw.constant -1 : i32
   %c0_i7 = hw.constant 0 : i7
   %c0_i6 = hw.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T_0);
+    // CHECK: assert(&[[TEMP1]]);
     sv.assert %0, immediate
   }
 
-  // CHECK: wire [63:0] _T_1 = arr[7'h0 +: 64];
-  // CHECK: assign _T = _T_1[6'h0 +: 32];
+  // CHECK: wire [63:0] [[TEMP2:.+]] = arr[7'h0 +: 64];
+  // CHECK: assign _T = [[TEMP2]][6'h0 +: 32];
   %1 = hw.array_slice %arr at %c0_i7 : (!hw.array<128xi1>) -> !hw.array<64xi1>
   %2 = hw.array_slice %1 at %c0_i6 : (!hw.array<64xi1>) -> !hw.array<32xi1>
   %3 = hw.bitcast %2 : (!hw.array<32xi1>) -> i32
@@ -634,13 +635,11 @@ hw.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) {
   %signs = comb.replicate %sign : (i1) -> i14
   %0 = comb.concat %signs, %really_long_port : i14, i11
   %1 = comb.and %0, %c12345_i25 : i25
-  // CHECK:   wire [24:0] _T = {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
-
 
   // CHECK:      if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
   // CHECK-NEXT: else
-  // CHECK-NEXT:   tmp6 <= _T;
+  // CHECK-NEXT:   tmp6 <= {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
   sv.alwaysff(posedge %clock)  {
     sv.passign %tmp6, %1 : i25
   }(syncreset : posedge %reset)  {
@@ -828,10 +827,9 @@ hw.module @ifdef_beginend(%clock: i1, %cond: i1, %val: i8) {
 hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (q: i42) {
   %c0_i42 = hw.constant 0 : i42
   %tmp = sv.reg : !hw.inout<i42>
-  // CHECK:      localparam [41:0] _T = 42'h0;
-  // CHECK-NEXT: always_ff @(posedge clock or posedge reset) begin
+  // CHECK: always_ff @(posedge clock or posedge reset) begin
   // CHECK-NEXT:   if (reset)
-  // CHECK-NEXT:     tmp <= _T;
+  // CHECK-NEXT:     tmp <= 42'h0;
   sv.alwaysff(posedge %clock) {
     sv.passign %tmp, %d : i42
   } (asyncreset : posedge %reset)  {
@@ -867,9 +865,8 @@ hw.module @TooLongConstExpr() {
 // CHECK-LABEL: module ConstantDefBeforeUse
 hw.module @ConstantDefBeforeUse() {
   %myreg = sv.reg : !hw.inout<i32>
-  // CHECK:      localparam [31:0] _T = 32'h2A;
-  // CHECK-NEXT: always @*
-  // CHECK-NEXT:   myreg <= _T
+  // CHECK: always @*
+  // CHECK-NEXT:   myreg <= 32'h2A;
   %0 = hw.constant 42 : i32
   sv.always {
     sv.passign %myreg, %0 : i32
@@ -881,9 +878,8 @@ hw.module @ConstantDefBeforeUse() {
 // CHECK-LABEL: module ConstantDefAfterUse
 hw.module @ConstantDefAfterUse() {
   %myreg = sv.reg : !hw.inout<i32>
-  // CHECK:      localparam [31:0] _T = 32'h2A;
-  // CHECK-NEXT: always @*
-  // CHECK-NEXT:   myreg <= _T
+  // CHECK: always @*
+  // CHECK-NEXT:   myreg <= 32'h2A;
   sv.always {
     sv.passign %myreg, %0 : i32
   }
@@ -896,8 +892,8 @@ hw.module @ConstantDefAfterUse() {
 hw.module @ConstantEmissionAtTopOfBlock() {
   %myreg = sv.reg : !hw.inout<i32>
   // CHECK:      always @* begin
-  // CHECK-NEXT:   localparam [31:0] _T = 32'h2A;
-  // CHECK:          myreg <= _T;
+  // CHECK-NEXT:   if (1'h1)
+  // CHECK-NEXT:     myreg <= 32'h2A;
   sv.always {
     %0 = hw.constant 42 : i32
     %1 = hw.constant 1 : i1

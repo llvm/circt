@@ -18,6 +18,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallPtrSet.h"
 
 using namespace circt;
@@ -1725,6 +1726,33 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 
 StringRef TypedeclOp::getPreferredName() {
   return verilogName().getValueOr(getName());
+}
+
+//===----------------------------------------------------------------------===//
+// BitcastOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult BitcastOp::fold(ArrayRef<Attribute> operands) {
+  // Identity.
+  // bitcast(%a) : A -> A ==> %a
+  if (getOperand().getType() == getType())
+    return getOperand();
+
+  return {};
+}
+
+LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
+  // Composition.
+  // %b = bitcast(%a) : A -> B
+  //      bitcast(%b) : B -> C
+  // ===> bitcast(%a) : A -> C
+  auto inputBitcast = dyn_cast_or_null<BitcastOp>(op.input().getDefiningOp());
+  if (!inputBitcast)
+    return failure();
+  auto bitcast = rewriter.createOrFold<BitcastOp>(op.getLoc(), op.getType(),
+                                                  inputBitcast.input());
+  rewriter.replaceOp(op, bitcast);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

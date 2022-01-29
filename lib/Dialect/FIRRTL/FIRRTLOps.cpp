@@ -1070,11 +1070,12 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
 
-  return build(builder, result, resultTypes,
-               SymbolRefAttr::get(builder.getContext(), module.moduleName()),
-               builder.getStringAttr(name), module.getPortDirectionsAttr(),
-               module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+  return build(
+      builder, result, resultTypes,
+      SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
+      builder.getStringAttr(name), module.getPortDirectionsAttr(),
+      module.getPortNamesAttr(), builder.getArrayAttr(annotations),
+      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1692,8 +1693,7 @@ size_t MemOp::getMaskBits() {
       continue;
 
     FIRRTLType mType;
-    for (auto t :
-         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+    for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
@@ -1787,20 +1787,20 @@ FirMemory MemOp::getSummary() {
     SmallString<8> clocks;
     for (auto a : writeClockIDs)
       clocks.append(Twine((char)(a + 'a')).str());
-    auto instName = op->getAttrOfType<StringAttr>("name").getValue();
     modName = StringAttr::get(
         op->getContext(),
-        llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", instName,
+        llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}",
                       numReadPorts, numWritePorts, numReadWritePorts,
                       (size_t)width, op.depth(), op.readLatency(),
                       op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
+                      (unsigned)hw::WUW::PortOrder,
                       clocks.empty() ? "" : "_" + clocks));
   }
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    modName,
-          op.getLoc()};
+  return {numReadPorts,         numWritePorts,    numReadWritePorts,
+          (size_t)width,        op.depth(),       op.readLatency(),
+          op.writeLatency(),    op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder,   writeClockIDs,    modName,
+          op.getMaskBits() > 1, op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
@@ -3118,6 +3118,34 @@ bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
   if (updateMade)
     namepathAttr(ArrayAttr::get(getContext(), newPath));
   return updateMade;
+}
+
+/// Return just the module part of the namepath at a specific index.
+StringAttr NonLocalAnchor::modPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(namepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
+/// Return the root module.
+StringAttr NonLocalAnchor::root() {
+  assert(!namepath().empty());
+  return modPart(0);
+}
+
+/// Return just the reference part of the namepath at a specific index.  This
+/// will return an empty attribute if this is the leaf and the leaf is a module.
+StringAttr NonLocalAnchor::refPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(namepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
+}
+
+/// Return the leaf reference.  This returns an empty attribute if the leaf
+/// reference is a module.
+StringRef NonLocalAnchor::ref() {
+  assert(!namepath().empty());
+  return refPart(namepath().size() - 1);
 }
 
 //===----------------------------------------------------------------------===//

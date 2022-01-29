@@ -77,6 +77,8 @@ static bool isUInt1(Type type) {
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
 static bool isUselessName(StringRef name) {
+  if (name.empty())
+    return true;
   // Ignore _T and _T_123
   if (name.startswith("_T")) {
     if (name.size() == 2)
@@ -1560,9 +1562,28 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   return failure();
 }
 
+// Remove private nodes.  If they have an interesting names, move the name to
+// the source expression.
+struct FoldNodeName : public mlir::RewritePattern {
+  FoldNodeName(MLIRContext *context)
+      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto node = cast<NodeOp>(op);
+    auto name = node.nameAttr();
+    if (node.inner_sym() || !node.annotations().empty())
+      return failure();
+    auto *expr = node.input().getDefiningOp();
+    if (expr && !expr->hasAttr("name") && !isUselessName(name))
+      rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
+    rewriter.replaceOp(node, node.input());
+    return success();
+  }
+};
+
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<patterns::EmptyNode, patterns::DropNameNode>(context);
+  results.insert<FoldNodeName, patterns::DropNameNode>(context);
 }
 
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,

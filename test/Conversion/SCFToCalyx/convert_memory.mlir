@@ -52,7 +52,7 @@
 // CHECK-NEXT:           }
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -120,7 +120,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -178,7 +178,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -242,7 +242,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -283,7 +283,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -318,7 +318,7 @@ module {
 // CHECH-NEXT:           calyx.enable @ret_assign_0
 // CHECH-NEXT:         }
 // CHECH-NEXT:       }
-// CHECH-NEXT:     }
+// CHECH-NEXT:     } {toplevel}
 // CHECH-NEXT:   }
 // CHECH-NEXT: }
 module {
@@ -334,13 +334,13 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i8, %ext_mem0_write_en: i1, %done: i1 {done}) {
+// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i3, %ext_mem0_write_en: i1, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
-// CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i8
+// CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.group @bb0_0  {
 // CHECK-NEXT:           calyx.assign %std_slice_0.in = %in2 : i32
-// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_0.out : i8
+// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_0.out : i3
 // CHECK-NEXT:           calyx.assign %ext_mem0_write_data = %in0 : i32
 // CHECK-NEXT:           calyx.assign %ext_mem0_write_en = %true : i1
 // CHECK-NEXT:           calyx.group_done %ext_mem0_done : i1
@@ -351,7 +351,7 @@ module {
 // CHECK-NEXT:           calyx.enable @bb0_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -367,9 +367,9 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i8, %ext_mem0_write_en: i1, %out0: i32, %done: i1 {done}) {
+// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i3, %ext_mem0_write_en: i1, %out0: i32, %done: i1 {done}) {
 // CHECK:            %true = hw.constant true
-// CHECK:            %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i8
+// CHECK:            %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
 // CHECK:            %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
@@ -377,7 +377,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_slice_0.in = %in0 : i32
 // CHECK-NEXT:           calyx.assign %ret_arg0_reg.in = %ext_mem0_read_data : i32
 // CHECK-NEXT:           calyx.assign %ret_arg0_reg.write_en = %true : i1
-// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_0.out : i8
+// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_0.out : i3
 // CHECK-NEXT:           calyx.group_done %ret_arg0_reg.done : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
@@ -386,7 +386,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -402,10 +402,10 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK:        calyx.component @main(%in0: i32, %in1: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i8, %ext_mem0_write_en: i1, %out0: i32, %out1: i32, %done: i1 {done}) {
+// CHECK:        calyx.component @main(%in0: i32, %in1: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i3, %ext_mem0_write_en: i1, %out0: i32, %out1: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
-// CHECK-DAG:        %std_slice_1.in, %std_slice_1.out = calyx.std_slice @std_slice_1 : i32, i8
-// CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i8
+// CHECK-DAG:        %std_slice_1.in, %std_slice_1.out = calyx.std_slice @std_slice_1 : i32, i3
+// CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
 // CHECK-DAG:        %load_1_reg.in, %load_1_reg.write_en, %load_1_reg.clk, %load_1_reg.reset, %load_1_reg.out, %load_1_reg.done = calyx.register @load_1_reg : i32, i1, i1, i1, i32, i1
 // CHECK-DAG:        %load_0_reg.in, %load_0_reg.write_en, %load_0_reg.clk, %load_0_reg.reset, %load_0_reg.out, %load_0_reg.done = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-DAG:        %ret_arg1_reg.in, %ret_arg1_reg.write_en, %ret_arg1_reg.clk, %ret_arg1_reg.reset, %ret_arg1_reg.out, %ret_arg1_reg.done = calyx.register @ret_arg1_reg : i32, i1, i1, i1, i32, i1
@@ -415,14 +415,14 @@ module {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
 // CHECK-NEXT:         calyx.group @bb0_0  {
 // CHECK-NEXT:           calyx.assign %std_slice_1.in = %in0 : i32
-// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_1.out : i8
+// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_1.out : i3
 // CHECK-NEXT:           calyx.assign %load_0_reg.in = %ext_mem0_read_data : i32
 // CHECK-NEXT:           calyx.assign %load_0_reg.write_en = %true : i1
 // CHECK-NEXT:           calyx.group_done %load_0_reg.done : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @bb0_1  {
 // CHECK-NEXT:           calyx.assign %std_slice_0.in = %in1 : i32
-// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_0.out : i8
+// CHECK-NEXT:           calyx.assign %ext_mem0_addr0 = %std_slice_0.out : i3
 // CHECK-NEXT:           calyx.assign %load_1_reg.in = %ext_mem0_read_data : i32
 // CHECK-NEXT:           calyx.assign %load_1_reg.write_en = %true : i1
 // CHECK-NEXT:           calyx.group_done %load_1_reg.done : i1
@@ -443,7 +443,7 @@ module {
 // CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
-// CHECK-NEXT:     }
+// CHECK-NEXT:     } {toplevel}
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
@@ -479,5 +479,18 @@ module {
     %1 = memref.load %0[%i] : memref<1xi32>
     memref.store %c1_32, %0[%i] : memref<1xi32>
     return %1 : i32
+  }
+}
+
+// -----
+
+// Load from memory with more elements than index width (32 bits).
+
+// CHECK: calyx.std_slice {{.*}} i32, i6
+module {
+  func @main(%mem : memref<33xi32>) -> i32 {
+    %c0 = arith.constant 0 : index
+    %0 = memref.load %mem[%c0] : memref<33xi32>
+    return %0 : i32
   }
 }

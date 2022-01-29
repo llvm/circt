@@ -1085,7 +1085,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     return success();
 
   std::string groupName = getComponentState().getUniqueName("ret_assign");
-  Value anyRegDone;
   auto groupOp = createGroup<calyx::GroupOp>(rewriter, *getComponent(),
                                              retOp.getLoc(), groupName);
   for (auto op : enumerate(retOp.getOperands())) {
@@ -1230,13 +1229,19 @@ public:
 
     SmallVector<Type> types = {rewriter.getIntegerType(srcBits),
                                rewriter.getIntegerType(dstBits)};
-    auto sliceOp = state.getNewLibraryOpInstance<calyx::SliceLibOp>(
-        rewriter, assignOp.getLoc(), types);
+    Operation *newOp;
+    if (srcBits > dstBits) {
+      newOp = state.getNewLibraryOpInstance<calyx::SliceLibOp>(
+          rewriter, assignOp.getLoc(), types);
+    } else {
+      newOp = state.getNewLibraryOpInstance<calyx::PadLibOp>(
+          rewriter, assignOp.getLoc(), types);
+    }
     rewriter.setInsertionPoint(assignOp->getBlock(),
                                assignOp->getBlock()->begin());
-    rewriter.create<calyx::AssignOp>(assignOp->getLoc(), sliceOp.getResult(0),
+    rewriter.create<calyx::AssignOp>(assignOp->getLoc(), newOp->getResult(0),
                                      src);
-    assignOp.setOperand(1, sliceOp.getResult(1));
+    assignOp.setOperand(1, newOp->getResult(1));
 
     return success();
   }
@@ -1354,7 +1359,8 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
   for (auto dim : enumerate(memrefType.getShape())) {
     outPorts.push_back(calyx::PortInfo{
         rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
-        rewriter.getIntegerType(dim.value()), calyx::Direction::Output,
+        rewriter.getIntegerType(llvm::Log2_64_Ceil(dim.value())),
+        calyx::Direction::Output,
         DictionaryAttr::get(rewriter.getContext(), {})});
   }
 
@@ -1429,6 +1435,9 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
     auto compOp = rewriter.create<calyx::ComponentOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.sym_name()), ports);
+
+    /// Mark this component as the toplevel.
+    compOp->setAttr("toplevel", rewriter.getUnitAttr());
 
     /// Store the function-to-component mapping.
     funcMap[funcOp] = compOp;
