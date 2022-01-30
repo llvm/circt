@@ -177,7 +177,7 @@ def ParOp : CalyxContainer<"par", [
       region->push_back(new Block());
     }]>
   ];
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
   let verifier = "return ::verify$cppClass(*this);";
 }
 

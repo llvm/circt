@@ -248,6 +248,15 @@ static LogicalResult collapseControl(OpTy controlOp,
   return failure();
 }
 
+template <typename OpTy>
+static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
+  if (controlOp.getBody()->empty()) {
+    rewriter.eraseOp(controlOp);
+    return success();
+  }
+  return failure();
+}
+
 /// A helper function to check whether the conditional and group (if it exists)
 /// needs to be erased to maintain a valid state of a Calyx program. If these
 /// have no more uses, they will be erased.
@@ -684,16 +693,30 @@ static LogicalResult verifyParOp(ParOp parOp) {
   return success();
 }
 
-LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
-  if (parOp.getBody()->empty()) {
+/// This pattern canonicalizes away a ParOp in cases where
+/// 1. it is nested within a seq structure
+/// 2. it enables only a single group.
+struct SimpleParInSeq : mlir::OpRewritePattern<ParOp> {
+  using mlir::OpRewritePattern<ParOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(ParOp parOp,
+                                PatternRewriter &rewriter) const override {
+    if (!isa<SeqOp>(parOp->getParentOp()))
+      return failure();
+    auto &ops = parOp.getBody()->getOperations();
+    if (ops.size() != 1 || !isa<EnableOp>(ops.front()))
+      return failure();
+
+    ops.front().moveBefore(parOp);
     rewriter.eraseOp(parOp);
     return success();
   }
+};
 
-  if (succeeded(collapseControl(parOp, rewriter)))
-    return success();
-
-  return failure();
+void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add(collapseControl<ParOp>);
+  patterns.add(emptyControl<ParOp>);
+  patterns.insert<SimpleParInSeq>(context);
 }
 
 //===----------------------------------------------------------------------===//
