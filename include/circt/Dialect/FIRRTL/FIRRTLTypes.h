@@ -131,7 +131,8 @@ protected:
 /// that it only compares passive types. Because of how the FIRRTL dialect uses
 /// flip types in module ports and aggregates, this definition, unlike the spec,
 /// ignores flips.
-bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                        bool checkWidth = false);
 
 /// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
 /// Section 4.6, for a full definition of this.  Roughly, the oriented types
