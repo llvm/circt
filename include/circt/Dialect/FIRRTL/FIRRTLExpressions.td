@@ -74,6 +74,12 @@ class FIRRTLExprOp<string mnemonic, list<OpTrait> traits = []> :
         return {};
       return inferReturnType(operands, attrs, loc);
     }
+
+    /// Returns when two result types are compatible for this op; method used
+    /// by InferTypeOpInterface, this allows FIRRTL accept unknown width type.
+    static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
+      return areTypesEquivalent(l[0].cast<FIRRTLType>(), r[0].cast<FIRRTLType>());
+    }
   }];
 }
 
