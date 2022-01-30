@@ -97,9 +97,9 @@ private:
 struct WhileScheduleable {
   /// While operation to schedule.
   WhileOpInterface whileOp;
-  /// The group to schedule before the while operation This group should set the
-  /// initial values of the loop init_args registers.
-  calyx::GroupOp initGroup;
+  /// The group(s) to schedule before the while operation These groups should
+  /// set the initial value(s) of the loop init_args register(s).
+  SmallVector<calyx::GroupOp> initGroups;
 };
 
 /// A variant of types representing scheduleable operations.
@@ -580,9 +580,11 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
 
 /// Creates a new group that assigns the 'ops' values to the iter arg registers
 /// of the 'whileOp'.
-static calyx::GroupOp buildWhileIterArgAssignments(
-    PatternRewriter &rewriter, ComponentLoweringState &state, Location loc,
-    WhileOpInterface whileOp, Twine uniqueSuffix, ValueRange ops) {
+static calyx::GroupOp
+buildWhileIterArgAssignments(PatternRewriter &rewriter,
+                             ComponentLoweringState &state, Location loc,
+                             WhileOpInterface whileOp, Twine uniqueSuffix,
+                             MutableArrayRef<OpOperand> ops) {
   assert(whileOp.getOperation());
   /// Pass iteration arguments through registers. This follows closely
   /// to what is done for branch ops.
@@ -592,10 +594,9 @@ static calyx::GroupOp buildWhileIterArgAssignments(
   /// Create register assignment for each iter_arg. a calyx::GroupDone signal
   /// is created for each register. These will be &'ed together in
   /// MultipleGroupDonePattern.
-  for (auto arg : enumerate(ops)) {
-    auto reg = state.getWhileIterReg(whileOp, arg.index());
-    buildAssignmentsForRegisterWrite(state, rewriter, groupOp, reg,
-                                     arg.value());
+  for (auto &arg : ops) {
+    auto reg = state.getWhileIterReg(whileOp, arg.getOperandNumber());
+    buildAssignmentsForRegisterWrite(state, rewriter, groupOp, reg, arg.get());
   }
   return groupOp;
 }
@@ -1011,7 +1012,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto assignGroup = buildWhileIterArgAssignments(
       rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
       getComponentState().getUniqueName(whileOp) + "_latch",
-      yieldOp.getOperands());
+      yieldOp->getOpOperands());
   getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
   return success();
 }
@@ -1026,7 +1027,7 @@ BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto assignGroup = buildWhileIterArgAssignments(
       rewriter, getComponentState(), term.getLoc(), whileOpInterface,
       getComponentState().getUniqueName(whileOp) + "_latch",
-      term.getOperands());
+      term->getOpOperands());
   getComponentState().setWhileLatchGroup(whileOpInterface, assignGroup);
   return success();
 }
@@ -1542,18 +1543,24 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
             .replaceAllUsesWith(reg.out());
       }
 
-      /// Create iter args initial value assignment group
-      auto initGroupOp = buildWhileIterArgAssignments(
-          rewriter, getComponentState(), whileOp.getOperation()->getLoc(),
-          whileOp,
-          getComponentState().getUniqueName(whileOp.getOperation()) + "_init",
-          whileOp.getOperation()->getOperands());
+      /// Create iter args initial value assignment group(s), one per register.
+      SmallVector<calyx::GroupOp> initGroups;
+      auto numOperands = whileOp.getOperation()->getNumOperands();
+      for (size_t i = 0; i < numOperands; ++i) {
+        auto initGroupOp = buildWhileIterArgAssignments(
+            rewriter, getComponentState(), whileOp.getOperation()->getLoc(),
+            whileOp,
+            getComponentState().getUniqueName(whileOp.getOperation()) +
+                "_init_" + std::to_string(i),
+            whileOp.getOperation()->getOpOperand(i));
+        initGroups.push_back(initGroupOp);
+      }
 
       /// Add the while op to the list of scheduleable things in the current
       /// block.
       getComponentState().addBlockScheduleable(
           whileOp.getOperation()->getBlock(),
-          WhileScheduleable{whileOp, initGroupOp});
+          WhileScheduleable{whileOp, initGroups});
       return WalkResult::advance();
     });
     return res;
@@ -1701,9 +1708,15 @@ private:
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
-        /// Insert while iter arg initialization group.
-        rewriter.create<calyx::EnableOp>(loc,
-                                         whileSchedPtr->initGroup.getName());
+        /// Insert while iter arg initialization group(s). Emit a
+        /// parallel group to assign one or more registers all at once.
+        {
+          PatternRewriter::InsertionGuard g(rewriter);
+          auto parOp = rewriter.create<calyx::ParOp>(loc);
+          rewriter.setInsertionPointToStart(parOp.getBody());
+          for (auto group : whileSchedPtr->initGroups)
+            rewriter.create<calyx::EnableOp>(loc, group.getName());
+        }
 
         auto cond = whileOp.getConditionValue();
         auto condGroup =

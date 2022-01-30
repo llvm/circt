@@ -15,7 +15,7 @@
 // CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
 // CHECK-DAG:        %while_0_arg0_reg.in, %while_0_arg0_reg.write_en, %while_0_arg0_reg.clk, %while_0_arg0_reg.reset, %while_0_arg0_reg.out, %while_0_arg0_reg.done = calyx.register @while_0_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
-// CHECK-NEXT:         calyx.group @assign_while_0_init  {
+// CHECK-NEXT:         calyx.group @assign_while_0_init_0  {
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.in = %c0_i32 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.write_en = %true : i1
 // CHECK-NEXT:           calyx.group_done %while_0_arg0_reg.done : i1
@@ -43,7 +43,9 @@
 // CHECK-NEXT:       }
 // CHECK-NEXT:       calyx.control  {
 // CHECK-NEXT:         calyx.seq  {
-// CHECK-NEXT:           calyx.enable @assign_while_0_init
+// CHECK-NEXT:           calyx.par  {
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_0
+// CHECK-NEXT:           }
 // CHECK-NEXT:           calyx.while %std_lt_0.out with @bb0_0  {
 // CHECK-NEXT:             calyx.seq  {
 // CHECK-NEXT:               calyx.enable @bb0_2
