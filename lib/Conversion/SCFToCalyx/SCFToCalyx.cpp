@@ -1708,13 +1708,9 @@ private:
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
-        /// Insert while iter arg initialization group. For a single iter arg
-        /// initialization, just emit an enable, but for multiple, emit a
-        /// parallel group to assign them all at once.
-        if (whileSchedPtr->initGroups.size() == 1) {
-          rewriter.create<calyx::EnableOp>(
-              loc, whileSchedPtr->initGroups[0].getName());
-        } else {
+        /// Insert while iter arg initialization group(s). Emit a
+        /// parallel group to assign one or more registers all at once.
+        {
           PatternRewriter::InsertionGuard g(rewriter);
           auto parOp = rewriter.create<calyx::ParOp>(loc);
           rewriter.setInsertionPointToStart(parOp.getBody());

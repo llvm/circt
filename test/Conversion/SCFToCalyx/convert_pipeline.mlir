@@ -24,7 +24,9 @@
 // CHECK-DAG:         calyx.group_done %[[ITER_ARG_DONE]] : i1
 // CHECK:         calyx.control
 // CHECK-NEXT:      calyx.seq
-// CHECK-NEXT:        calyx.enable @[[INIT_GROUP]]
+// CHECK-NEXT:        calyx.par
+// CHECK-NEXT:          calyx.enable @[[INIT_GROUP]]
+// CHECK-NEXT:        }
 // CHECK-NEXT:        calyx.while %[[LT_OUT]] with @[[COND_GROUP]]
 // CHECK-NEXT:          calyx.par
 // CHECK-NEXT:            calyx.enable @[[COMPUTE_GROUP]]
