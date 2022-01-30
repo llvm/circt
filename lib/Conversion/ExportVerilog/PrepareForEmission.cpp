@@ -184,6 +184,48 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   return;
 }
 
+/// Inline an operand by cloning everything in its fan-in and moving it into the
+/// region where the operand is used.  This has the effect of making the value
+/// associate with the operand have exactly one use.  If the operand already has
+/// one use, then this makes no modifications.  Any newOps created will be added
+/// to the newOps vector.
+static void lowerAlwaysInlineOperand(OpOperand &operand,
+                                     SmallVector<Operation *> &newOps) {
+  auto value = operand.get();
+  auto *opOrig = value.getDefiningOp();
+  if (!opOrig || isa<RegOp, WireOp>(opOrig))
+    return;
+
+  auto *owner = operand.getOwner();
+  // llvm::errs() << "lowerAlwaysInlineOperand:\n"
+  //              << "  owner: " << *owner << "\n"
+  //              << "  operand: " << value << "\n"
+  //              << "  changes:\n";
+
+  OpBuilder builder(owner);
+  SmallVector<std::pair<Operation *, OpOperand *>> wlist({{opOrig, &operand}});
+  while (!wlist.empty()) {
+    auto [op, use] = wlist.pop_back_val();
+
+    if (isa<RegOp, WireOp>(op))
+      continue;
+
+    if (!op->hasOneUse() || op->getParentRegion() != owner->getParentRegion()) {
+      op = builder.clone(*op);
+      newOps.push_back(op);
+      use->set(op->getResult(0));
+    }
+    builder.setInsertionPoint(op);
+
+    for (auto pair : llvm::enumerate(op->getOperands())) {
+      auto *valueDef = pair.value().getDefiningOp();
+      if (!valueDef)
+        continue;
+      wlist.push_back({valueDef, &op->getOpOperand(pair.index())});
+    }
+  }
+}
+
 /// Lower a variadic fully-associative operation into an expression tree.  This
 /// enables long-line splitting to work with them.
 static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
@@ -377,6 +419,8 @@ void ExportVerilog::prepareHWModule(Block &block,
        opIterator != e;) {
     auto &op = *opIterator++;
 
+    // llvm::errs() << "visit: " << op << "\n";
+
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple
     // statements.
@@ -395,6 +439,7 @@ void ExportVerilog::prepareHWModule(Block &block,
 
       // Make sure we revisit the newly inserted operations.
       opIterator = Block::iterator(newOps.front());
+
       continue;
     }
 
@@ -421,6 +466,18 @@ void ExportVerilog::prepareHWModule(Block &block,
       // Anchor ports of bound instances
       if (instance->hasAttr("doNotPrint"))
         lowerBoundInstance(instance);
+    }
+
+    // Concurrent asserts should have conditions inlined.  Duplicate expressions
+    // in their fan in to do this.
+    if (isa<AssertConcurrentOp, AssumeConcurrentOp, CoverConcurrentOp>(&op)) {
+      SmallVector<Operation *> newOps;
+      // llvm::errs() << "  is verification op w/ operand: "
+      //              << op.getOpOperand(1).get() << "\n";
+      lowerAlwaysInlineOperand(op.getOpOperand(1), newOps);
+      if (!newOps.empty())
+        opIterator = Block::iterator(newOps.front());
+      continue;
     }
 
     // Force any expression used in the event control of an always process to be

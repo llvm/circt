@@ -73,24 +73,21 @@ circuit Foo:
 
 
     ; assert emitted as SVA
-    ; CHECK-NEXT: wire [[TMP1:.+]] = ~enable | predicate5 | reset;
-    ; CHECK-NEXT: assert__verif_library: assert property (@(posedge clock) [[TMP1]])
+    ; CHECK-NEXT: assert__verif_library: assert property (@(posedge clock) ~enable | predicate5 | reset)
     ; CHECK-SAME:   else $error("Assertion failed (verification library): SVA assert example");
     when not(or(predicate5, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): SVA assert example\"}</extraction-summary> bar")
       stop(clock, enable, 1)
 
     ; assert with custom label
-    ; CHECK-NEXT: wire [[TMP2:.+]] = ~enable | predicate6 | reset;
-    ; CHECK-NEXT: assert__verif_library_hello_world: assert property (@(posedge clock) [[TMP2]])
+    ; CHECK-NEXT: assert__verif_library_hello_world: assert property (@(posedge clock) ~enable | predicate6 | reset)
     ; CHECK-SAME:   else $error("Assertion failed (verification library): Custom label example");
     when not(or(predicate6, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"sva\"},\"labelExts\":[\"hello\",\"world\"],\"baseMsg\":\"Assertion failed (verification library): Custom label example\"}</extraction-summary> bar")
       stop(clock, enable, 1)
 
     ; assert with predicate option for X-passing
-    ; CHECK-NEXT: wire [[TMP3:.+]] = ~enable | ~(~predicate7 | ~predicate7 === 1'bx);
-    ; CHECK-NEXT: assert__verif_library_2: assert property (@(posedge clock) [[TMP3]])
+    ; CHECK-NEXT: assert__verif_library_0: assert property (@(posedge clock) ~enable | ~(~predicate7 | ~predicate7 === 1'bx))
     ; CHECK-SAME:   else $error("Assertion failed (verification library): X-passing assert example");
     when not(predicate7) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): X-passing assert example\"}</extraction-summary> bar")
@@ -98,19 +95,18 @@ circuit Foo:
 
     ; The companion assumes get bunched up in an ifdef block.
     ; CHECK-NEXT: `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:   assume__verif_library: assume property (@(posedge clock) [[TMP1]]);
-    ; CHECK-NEXT:   assume__verif_library_hello_world: assume property (@(posedge clock) [[TMP2]]);
-    ; CHECK-NEXT:   assume__verif_library_3: assume property (@(posedge clock) [[TMP3]]);
+    ; CHECK-NEXT:   assume__verif_library: assume property (@(posedge clock) ~enable | predicate5 | reset);
+    ; CHECK-NEXT:   assume__verif_library_hello_world: assume property (@(posedge clock) ~enable | predicate6 | reset);
+    ; CHECK-NEXT:   assume__verif_library_1: assume property (@(posedge clock) ~enable | ~(~predicate7 | ~predicate7 === 1'bx));
     ; CHECK-NEXT: `endif
 
 
     ; assert with toggle option e.g. UNROnly
     ; CHECK-NEXT: `ifdef USE_UNR_ONLY_CONSTRAINTS
-    ; CHECK-NEXT:   wire [[TMP4:.+]] = ~enable | predicate8 | reset;
-    ; CHECK-NEXT:   assert__verif_library_5: assert property (@(posedge clock) [[TMP4]])
+    ; CHECK-NEXT:   assert__verif_library_2: assert property (@(posedge clock) ~enable | predicate8 | reset)
     ; CHECK-SAME:     else $error("Assertion failed (verification library): Conditional compilation example for UNR-only assert");
     ; CHECK-NEXT:   `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:     assume__verif_library_6: assume property (@(posedge clock) [[TMP4]]);
+    ; CHECK-NEXT:     assume__verif_library_3: assume property (@(posedge clock) ~enable | predicate8 | reset);
     ; CHECK-NEXT:   `endif
     when not(or(predicate8, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"}],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): Conditional compilation example for UNR-only assert\"}</extraction-summary> bar")
@@ -135,11 +131,10 @@ circuit Foo:
     ; assert with multiple toggle options
     ; CHECK-NEXT: `ifdef USE_FORMAL_ONLY_CONSTRAINTS
     ; CHECK-NEXT:   `ifdef USE_UNR_ONLY_CONSTRAINTS
-    ; CHECK-NEXT:     wire [[TMP5:.+]] = ~enable | predicate10 | reset;
-    ; CHECK-NEXT:     assert__verif_library_8: assert property (@(posedge clock) [[TMP5]])
+    ; CHECK-NEXT:     assert__verif_library_4: assert property (@(posedge clock) ~enable | predicate10 | reset)
     ; CHECK-SAME:       else $error("Assertion failed (verification library): Conditional compilation example for UNR-only and formal-only assert");
     ; CHECK-NEXT:     `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:       assume__verif_library_9: assume property (@(posedge clock) [[TMP5]]);
+    ; CHECK-NEXT:       assume__verif_library_5: assume property (@(posedge clock) ~enable | predicate10 | reset);
     ; CHECK-NEXT:     `endif
     ; CHECK-NEXT:   `endif
     ; CHECK-NEXT: `endif
