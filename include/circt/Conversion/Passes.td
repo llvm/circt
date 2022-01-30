@@ -123,7 +123,10 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
     Option<"nonConstAsyncResetValueIsError",
            "error-on-non-const-async-reset-values", "bool", "false",
-    "Emit errors instead of warnings on non-constant async reset values">
+    "Emit errors instead of warnings on non-constant async reset values">,
+    Option<"createTypeDeclarations", "create-type-declarations",
+           "bool", "false",
+    "Create type scope and type declarations for bundle types">
   ];
 }
 

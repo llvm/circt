@@ -28,6 +28,10 @@ def TypeScopeOp : HWOp<"type_scope",
   let arguments = (ins SymbolNameAttr:$sym_name);
 
   let assemblyFormat = "$sym_name $body attr-dict";
+  let builders = [
+    OpBuilder<(ins "StringAttr":$sym_name,
+                   CArg<"std::function<void()>">:$bodyCtor)>
+  ];
 
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }

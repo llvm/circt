@@ -209,6 +209,11 @@ static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
                                        cl::desc("enable unused ports pruning"),
                                        cl::init(true));
 
+static cl::opt<bool> createTypeDeclarations(
+    "create-type-declarations",
+    cl::desc("create type declarations for bundle types at LowerToHW"),
+    cl::init(false));
+
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
 static cl::opt<bool>
@@ -443,7 +448,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
-                                         nonConstAsyncResetValueIsError));
+                                         nonConstAsyncResetValueIsError,
+                                         createTypeDeclarations));
     pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
     if (extractTestCode)
