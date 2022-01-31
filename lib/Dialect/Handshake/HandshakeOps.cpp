@@ -664,8 +664,8 @@ struct EliminateSimpleControlMergesPattern
 
 LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
     ControlMergeOp op, PatternRewriter &rewriter) const {
-  auto dataResult = op.getResult(0);
-  auto choiceResult = op.getResult(1);
+  auto dataResult = op.result();
+  auto choiceResult = op.index();
   auto choiceUnused = choiceResult.use_empty();
   if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
