@@ -21,6 +21,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
+#include <functional>
 
 #define DEBUG_TYPE "omir"
 
@@ -42,6 +43,8 @@ struct Tracker {
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
   NonLocalAnchor nla;
+  /// If this is a port, then set the portIdx, else initialized to -1.
+  int portNo = -1;
 };
 
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
@@ -260,12 +263,13 @@ void EmitOMIRPass::runOnOperation() {
                op->getParentOfType<FModuleOp>().getNameAttr()),
            instOp});
     }
-    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+    auto setTracker = [&](int portNo, Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
         return false;
       Tracker tracker;
       tracker.op = op;
       tracker.id = anno.getMember<IntegerAttr>("id");
+      tracker.portNo = portNo;
       if (!tracker.id) {
         op->emitError(omirTrackerAnnoClass)
             << " annotation missing `id` integer attribute";
@@ -279,7 +283,10 @@ void EmitOMIRPass::runOnOperation() {
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
-    });
+    };
+    AnnotationSet::removePortAnnotations(op, setTracker);
+    AnnotationSet::removeAnnotations(
+        op, std::bind(setTracker, -1, std::placeholders::_1));
   });
 
   // Build the output JSON.
@@ -772,6 +779,9 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     componentName = getInnerRefTo(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
+  } else if (auto mod = dyn_cast<FModuleOp>(tracker.op)) {
+    if (tracker.portNo >= 0)
+      componentName = getInnerRefTo(mod, tracker.portNo);
   } else if (!isa<FModuleOp>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;
