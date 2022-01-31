@@ -21,6 +21,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
+#include <functional>
 
 #define DEBUG_TYPE "omir"
 
@@ -262,7 +263,7 @@ void EmitOMIRPass::runOnOperation() {
                op->getParentOfType<FModuleOp>().getNameAttr()),
            instOp});
     }
-    auto setTracker = [&](Annotation anno, int portNo = -1) {
+    auto setTracker = [&](int portNo, Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
         return false;
       Tracker tracker;
@@ -283,12 +284,9 @@ void EmitOMIRPass::runOnOperation() {
       trackers.insert({tracker.id, tracker});
       return true;
     };
-    AnnotationSet::removePortAnnotations(
-        op, [&](unsigned int portNo, Annotation anno) {
-          return setTracker(anno, portNo);
-        });
+    AnnotationSet::removePortAnnotations(op, setTracker);
     AnnotationSet::removeAnnotations(
-        op, [&](Annotation anno) { return setTracker(anno); });
+        op, std::bind(setTracker, -1, std::placeholders::_1));
   });
 
   // Build the output JSON.
