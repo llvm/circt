@@ -3214,17 +3214,11 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
 
   if (!index)
     return failure();
-  SmallVector<Value> loweredInputs(op.inputs().size());
-  // Note: operands of multibit_mux must be reveresed while lowering.
-  // multibit_mux i, [v_0, v_1, .., v_{n-1}]
-  // => array_get[v_{n-1}, .., v_2, v_1][i]
-  unsigned i = op.inputs().size();
+  SmallVector<Value> loweredInputs;
+  loweredInputs.reserve(op.inputs().size());
   for (auto input : op.inputs()) {
     auto lowered = getLoweredAndExtendedValue(input, op.getType());
-    if (!lowered)
-      return failure();
-    --i;
-    loweredInputs[i] = lowered;
+    loweredInputs.push_back(lowered);
   }
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
   return setLoweringTo<hw::ArrayGetOp>(op, array, index);

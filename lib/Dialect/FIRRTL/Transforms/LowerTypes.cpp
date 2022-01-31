@@ -1310,7 +1310,7 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   // Construct a multibit mux
   SmallVector<Value> inputs;
   inputs.reserve(vType.getNumElements());
-  for (unsigned index : llvm::seq(0u, vType.getNumElements()))
+  for (int index = vType.getNumElements() - 1; index >= 0; index--)
     inputs.push_back(builder->create<SubindexOp>(input, index));
 
   Value multibitMux = builder->create<MultibitMuxOp>(op.index(), inputs);

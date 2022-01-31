@@ -1369,9 +1369,8 @@ OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
 
   if (auto constIndex = getConstant(operands[0])) {
     auto index = constIndex->getExtValue();
-    // operands[0] is index so (index + 1) is the index we want.
-    if (index >= 0 && index + 1 < static_cast<int64_t>(operands.size()))
-      return getOperand(index + 1);
+    if (index >= 0 && index < static_cast<int>(inputs().size()))
+      return inputs()[inputs().size() - 1 - index];
   }
 
   return {};
@@ -1392,11 +1391,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
   if (op.inputs().size() != 2)
     return failure();
 
-  // multibit_mux(index, {lhs, rhs}) -> mux(index==0, lhs, rhs)
-  Value zero = rewriter.create<ConstantOp>(
-      op.getLoc(), op.index().getType().cast<IntType>(), APInt(1, 0));
-  Value cond = rewriter.createOrFold<EQPrimOp>(op.getLoc(), op.index(), zero);
-  rewriter.replaceOpWithNewOp<MuxPrimOp>(op, cond, op.inputs()[0],
+  // multibit_mux(index, {lhs, rhs}) -> mux(index, lhs, rhs)
+  rewriter.replaceOpWithNewOp<MuxPrimOp>(op, op.index(), op.inputs()[0],
                                          op.inputs()[1]);
   return success();
 }

@@ -470,12 +470,11 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   firrtl.connect %out, %8 : !firrtl.uint<4>, !firrtl.uint<4>
 
   %9 = firrtl.multibit_mux %c1_ui1, %c0_ui1, %cond : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK-NEXT: firrtl.connect %out1, %cond
+  // CHECK-NEXT: firrtl.connect %out1, %c0_ui1
   firrtl.connect %out1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
 
   %10 = firrtl.multibit_mux %cond, %val1, %val2 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK-NEXT: %[[NOT_COND:.+]] = firrtl.not %cond
-  // CHECK-NEXT: %[[MUX:.+]] = firrtl.mux(%0, %val1, %val2)
+  // CHECK-NEXT: %[[MUX:.+]] = firrtl.mux(%cond, %val1, %val2)
   // CHECK-NEXT: firrtl.connect %out1, %[[MUX]]
   firrtl.connect %out1, %10 : !firrtl.uint<1>, !firrtl.uint<1>
 
