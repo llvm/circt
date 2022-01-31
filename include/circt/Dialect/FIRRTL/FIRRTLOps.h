@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
@@ -173,6 +174,99 @@ struct FirMemory {
     return getTuple() == rhs.getTuple();
   }
   StringAttr getFirMemoryName() const;
+};
+
+// Record of the inner sym name, the module name and the corresponding
+// operation. Also the port index, if the symbol is on a module port.
+struct InnerRefRecord {
+  mlir::StringAttr mod, innerSym;
+  mlir::Operation *op = nullptr;
+  unsigned portIdx = 0;
+  InnerRefRecord(StringAttr mod, StringAttr innerSym, Operation *op)
+      : mod(mod), innerSym(innerSym), op(op) {}
+  InnerRefRecord(StringAttr mod, StringAttr innerSym, Operation *op,
+                 unsigned portIdx)
+      : mod(mod), innerSym(innerSym), op(op), portIdx(portIdx) {}
+  InnerRefRecord(hw::InnerRefAttr ref)
+      : mod(ref.getModule()), innerSym(ref.getName()) {}
+  bool operator<(const InnerRefRecord &rhs) const {
+    return (innerSym.getValue() < rhs.innerSym.getValue() ||
+            (innerSym == rhs.innerSym && mod.getValue() < rhs.mod));
+  }
+  bool operator==(const InnerRefRecord &rhs) const {
+    return (innerSym == rhs.innerSym && mod == rhs.mod);
+  }
+};
+// A list of inner sym and the corresponding operations. Can be used for
+// efficient insertion and then searching. It can be used when the pattern is
+// first all the records are inserted, and then searched for. After insertion,
+// the list must be sorted, and then binary search is used.
+struct InnerRefList {
+  void sort() {
+    llvm::sort(list);
+    sorted = true;
+  }
+  int search(const InnerRefRecord &key) const {
+    assert(sorted && "Sort the list before search");
+    if (!sorted || list.empty())
+      return -1;
+    unsigned lo = 0, hi = list.size() - 1;
+    while (lo <= hi) {
+      unsigned mid = (lo + hi) / 2;
+      if (key == list[mid])
+        return mid;
+      if (key < list[mid])
+        hi = mid - 1;
+      else
+        lo = mid + 1;
+    }
+    return -1;
+  }
+  bool exists(const InnerRefRecord &key) const { return search(key) != -1; }
+  Operation *getOpIfExists(const hw::InnerRefAttr ref) const {
+    auto index = search(InnerRefRecord(ref));
+    if (index != -1 && list[index].op != nullptr)
+      return list[index].op;
+    return nullptr;
+  }
+  const InnerRefRecord *getRecordIfExists(const hw::InnerRefAttr ref) const {
+    auto index = search(InnerRefRecord(ref));
+    if (index != -1)
+      return &list[index];
+    return nullptr;
+  }
+  void pushBack(InnerRefRecord &key) {
+    list.push_back(key);
+    sorted = false;
+  }
+  // Inesrt the op with the module modName, if it has an inner sym.
+  bool insert(Operation *op, StringAttr modName) {
+    if (op == nullptr)
+      return false;
+    auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
+    if (!innerSym)
+      return false;
+    list.emplace_back(modName, innerSym, op);
+    sorted = false;
+    return true;
+  }
+  // Insert all the ports for the op, if they have the inner sym.
+  bool insert(FModuleLike op) {
+    StringAttr modName = op.moduleNameAttr();
+    bool inserted = false;
+    for (auto sym : llvm::enumerate(op.getPortSymbols()))
+      if (sym.value()) {
+        list.emplace_back(modName, sym.value().cast<StringAttr>(), op,
+                          sym.index());
+        inserted = true;
+      }
+    sorted = !inserted;
+    return inserted;
+  }
+
+private:
+  SmallVector<InnerRefRecord> list;
+  bool sorted = false;
 };
 } // namespace firrtl
 } // namespace circt
