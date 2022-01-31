@@ -37,15 +37,15 @@ firrtl.circuit "FooNL"  attributes {annotations = [
   {class = "circt.test", nl = "nl3", target = "~FooNL|FooL>w3"}
   ]}  {
   firrtl.module @BarNL() {
-    %w = firrtl.wire  : !firrtl.uint
-    %w2 = firrtl.wire  : !firrtl.bundle<a: uint, b: vector<uint, 4>>
+    %w = firrtl.wire  sym @w : !firrtl.uint
+    %w2 = firrtl.wire sym @w2 : !firrtl.bundle<a: uint, b: vector<uint, 4>>
     firrtl.skip
   }
   firrtl.module @BazNL() {
-    firrtl.instance bar @BarNL()
+    firrtl.instance bar sym @bar @BarNL()
   }
   firrtl.module @FooNL() {
-    firrtl.instance baz @BazNL()
+    firrtl.instance baz sym @baz @BazNL()
   }
   firrtl.module @FooL() {
     %w3 = firrtl.wire: !firrtl.uint
