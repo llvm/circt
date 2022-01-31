@@ -199,7 +199,7 @@ def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
             "If true, will connect constants to source operations instead of "
             "to the control network. May reduce the size of the final circuit.">,
      Option<"disableTaskPipelining", "disable-task-pipelining", "bool", "false",
-            "If true, will disable support for task pipelining. This lessens the "
+            "If true, will disable support for task pipelining. This relaxes the "
             "restrictions put on the structure of the input CDFG. Disabling "
             "task pipelining may severely reduce kernel II.">];
 }
