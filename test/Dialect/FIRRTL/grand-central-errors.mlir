@@ -221,11 +221,9 @@ firrtl.circuit "multiInstance2" attributes {
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @multiInstance2() {
-    firrtl.instance dut @DUTE() // expected-note {{parent is instantiated here}}
-    firrtl.instance dut1 @DUTE() // expected-note {{parent is instantiated here}}
+    firrtl.instance dut sym @s1 @DUTE() // expected-note {{parent is instantiated here}}
+    firrtl.instance dut1 sym @s2 @DUTE() // expected-note {{parent is instantiated here}}
   }
-  firrtl.nla @nla1 [#hw.innerNameRef<@multiInstance1::@dut>]
-  firrtl.nla @nla2 [#hw.innerNameRef<@multiInstance1::@dut1>]
 }
 
 // -----
