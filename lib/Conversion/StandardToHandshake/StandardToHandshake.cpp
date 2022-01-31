@@ -1883,9 +1883,6 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
   // op.
   returnOnError(fol.runPartialLowering(&FuncOpLowering::finalize, argTypes,
                                        resTypes, funcOp));
-
-  newFuncOp.dump();
-
   return success();
 }
 
