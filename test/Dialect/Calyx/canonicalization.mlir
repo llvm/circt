@@ -461,7 +461,7 @@ calyx.program "main" {
 
 // -----
 
-// Par ops with a single calyx.enable nested within a seq group is collapsed.
+// Unary control operations are collapsed.
 calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
@@ -489,7 +489,9 @@ calyx.program "main" {
       calyx.seq {
         calyx.enable @B
         calyx.par {
-          calyx.enable @A
+          calyx.seq {
+            calyx.enable @A
+          }
         }
         calyx.enable @B
       }

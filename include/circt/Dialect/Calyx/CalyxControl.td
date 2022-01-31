@@ -148,8 +148,7 @@ def SeqOp : CalyxContainer<"seq", [
       region->push_back(new Block());
     }]>
   ];
-  let hasCanonicalizeMethod = true;
-
+  let hasCanonicalizer = true;
 }
 
 def ParOp : CalyxContainer<"par", [

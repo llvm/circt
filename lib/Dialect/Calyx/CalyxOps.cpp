@@ -56,6 +56,26 @@ IntegerAttr direction::packAttribute(MLIRContext *ctx, size_t nIns,
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// This pattern collapses a calyx.seq or calyx.par operation when it
+/// contains exactly one calyx.enable operation.
+template <typename CtrlOp>
+struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
+  using mlir::OpRewritePattern<CtrlOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(CtrlOp ctrlOp,
+                                PatternRewriter &rewriter) const override {
+    auto &ops = ctrlOp.getBody()->getOperations();
+    if (ops.size() != 1 || !isa<EnableOp>(ops.front()))
+      return failure();
+
+    if (!isa<SeqOp, ParOp>(ctrlOp->getParentOp()))
+      return failure();
+
+    ops.front().moveBefore(ctrlOp);
+    rewriter.eraseOp(ctrlOp);
+    return success();
+  }
+};
+
 /// Verify that the value is not a "complex" value. For example, the source
 /// of an AssignOp should be a constant or port, e.g.
 /// %and = comb.and %a, %b : i1
@@ -660,16 +680,11 @@ static LogicalResult verifyControlOp(ControlOp control) {
 // SeqOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
-  if (seqOp.getBody()->empty()) {
-    rewriter.eraseOp(seqOp);
-    return success();
-  }
-
-  if (succeeded(collapseControl(seqOp, rewriter)))
-    return success();
-
-  return failure();
+void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add(collapseControl<SeqOp>);
+  patterns.add(emptyControl<SeqOp>);
+  patterns.insert<CollapseUnaryControl<SeqOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -693,30 +708,11 @@ static LogicalResult verifyParOp(ParOp parOp) {
   return success();
 }
 
-/// This pattern canonicalizes away a ParOp in cases where
-/// 1. it is nested within a seq structure
-/// 2. it enables only a single group.
-struct SimpleParInSeq : mlir::OpRewritePattern<ParOp> {
-  using mlir::OpRewritePattern<ParOp>::OpRewritePattern;
-  LogicalResult matchAndRewrite(ParOp parOp,
-                                PatternRewriter &rewriter) const override {
-    if (!isa<SeqOp>(parOp->getParentOp()))
-      return failure();
-    auto &ops = parOp.getBody()->getOperations();
-    if (ops.size() != 1 || !isa<EnableOp>(ops.front()))
-      return failure();
-
-    ops.front().moveBefore(parOp);
-    rewriter.eraseOp(parOp);
-    return success();
-  }
-};
-
 void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
   patterns.add(collapseControl<ParOp>);
   patterns.add(emptyControl<ParOp>);
-  patterns.insert<SimpleParInSeq>(context);
+  patterns.insert<CollapseUnaryControl<ParOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
