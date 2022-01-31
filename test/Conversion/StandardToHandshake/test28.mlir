@@ -21,24 +21,24 @@
 // CHECK:           %[[VAL_22:.*]] = buffer [1] %[[VAL_23:.*]] {initValues = [0], sequential = true} : i1
 // CHECK:           %[[VAL_24:.*]]:5 = fork [5] %[[VAL_22]] : i1
 // CHECK:           %[[VAL_25:.*]] = mux %[[VAL_24]]#4 {{\[}}%[[VAL_19]], %[[VAL_26:.*]]] : i1, none
-// CHECK:           %[[VAL_27:.*]] = mux %[[VAL_21]]#3 {{\[}}%[[VAL_18]]] : index, index
+// CHECK:           %[[VAL_27:.*]] = mux %[[VAL_21]]#3 {{\[}}%[[VAL_17]]] : index, index
 // CHECK:           %[[VAL_28:.*]] = mux %[[VAL_24]]#3 {{\[}}%[[VAL_27]], %[[VAL_29:.*]]] : i1, index
-// CHECK:           %[[VAL_30:.*]] = mux %[[VAL_21]]#2 {{\[}}%[[VAL_14]]] : index, index
-// CHECK:           %[[VAL_31:.*]] = mux %[[VAL_24]]#2 {{\[}}%[[VAL_30]], %[[VAL_32:.*]]] : i1, index
-// CHECK:           %[[VAL_33:.*]] = mux %[[VAL_21]]#1 {{\[}}%[[VAL_17]]] : index, index
-// CHECK:           %[[VAL_34:.*]] = mux %[[VAL_24]]#1 {{\[}}%[[VAL_33]], %[[VAL_35:.*]]] : i1, index
-// CHECK:           %[[VAL_36:.*]]:2 = fork [2] %[[VAL_34]] : index
+// CHECK:           %[[VAL_30:.*]]:2 = fork [2] %[[VAL_28]] : index
+// CHECK:           %[[VAL_31:.*]] = mux %[[VAL_21]]#2 {{\[}}%[[VAL_14]]] : index, index
+// CHECK:           %[[VAL_32:.*]] = mux %[[VAL_24]]#2 {{\[}}%[[VAL_31]], %[[VAL_33:.*]]] : i1, index
+// CHECK:           %[[VAL_34:.*]] = mux %[[VAL_21]]#1 {{\[}}%[[VAL_18]]] : index, index
+// CHECK:           %[[VAL_35:.*]] = mux %[[VAL_24]]#1 {{\[}}%[[VAL_34]], %[[VAL_36:.*]]] : i1, index
 // CHECK:           %[[VAL_37:.*]] = mux %[[VAL_21]]#0 {{\[}}%[[VAL_16]]] : index, index
 // CHECK:           %[[VAL_38:.*]] = mux %[[VAL_24]]#0 {{\[}}%[[VAL_37]], %[[VAL_39:.*]]] : i1, index
 // CHECK:           %[[VAL_40:.*]]:2 = fork [2] %[[VAL_38]] : index
 // CHECK:           %[[VAL_23]] = merge %[[VAL_41:.*]]#0 : i1
-// CHECK:           %[[VAL_42:.*]] = arith.cmpi slt, %[[VAL_40]]#0, %[[VAL_36]]#0 : index
+// CHECK:           %[[VAL_42:.*]] = arith.cmpi slt, %[[VAL_40]]#0, %[[VAL_30]]#0 : index
 // CHECK:           %[[VAL_41]]:6 = fork [6] %[[VAL_42]] : i1
-// CHECK:           %[[VAL_43:.*]], %[[VAL_44:.*]] = cond_br %[[VAL_41]]#5, %[[VAL_36]]#1 : index
+// CHECK:           %[[VAL_43:.*]], %[[VAL_44:.*]] = cond_br %[[VAL_41]]#5, %[[VAL_30]]#1 : index
 // CHECK:           sink %[[VAL_44]] : index
-// CHECK:           %[[VAL_45:.*]], %[[VAL_46:.*]] = cond_br %[[VAL_41]]#4, %[[VAL_31]] : index
+// CHECK:           %[[VAL_45:.*]], %[[VAL_46:.*]] = cond_br %[[VAL_41]]#4, %[[VAL_32]] : index
 // CHECK:           sink %[[VAL_46]] : index
-// CHECK:           %[[VAL_47:.*]], %[[VAL_48:.*]] = cond_br %[[VAL_41]]#3, %[[VAL_28]] : index
+// CHECK:           %[[VAL_47:.*]], %[[VAL_48:.*]] = cond_br %[[VAL_41]]#3, %[[VAL_35]] : index
 // CHECK:           sink %[[VAL_48]] : index
 // CHECK:           %[[VAL_49:.*]], %[[VAL_50:.*]] = cond_br %[[VAL_41]]#2, %[[VAL_25]] : none
 // CHECK:           %[[VAL_51:.*]], %[[VAL_52:.*]] = cond_br %[[VAL_41]]#1, %[[VAL_40]]#1 : index
@@ -65,9 +65,9 @@
 // CHECK:           %[[VAL_72:.*]] = arith.addf %[[VAL_69]], %[[VAL_71]] : f32
 // CHECK:           %[[VAL_73:.*]] = join %[[VAL_62]]#0, %[[VAL_6]]#0 : none
 // CHECK:           %[[VAL_3]], %[[VAL_4]] = store {{\[}}%[[VAL_68]]#0] %[[VAL_72]], %[[VAL_73]] : index, f32
-// CHECK:           %[[VAL_32]] = br %[[VAL_56]]#0 : index
-// CHECK:           %[[VAL_29]] = br %[[VAL_58]]#0 : index
-// CHECK:           %[[VAL_35]] = br %[[VAL_59]] : index
+// CHECK:           %[[VAL_33]] = br %[[VAL_56]]#0 : index
+// CHECK:           %[[VAL_36]] = br %[[VAL_58]]#0 : index
+// CHECK:           %[[VAL_29]] = br %[[VAL_59]] : index
 // CHECK:           %[[VAL_26]] = br %[[VAL_64]] : none
 // CHECK:           %[[VAL_39]] = br %[[VAL_70]] : index
 // CHECK:           %[[VAL_74:.*]], %[[VAL_75:.*]] = control_merge %[[VAL_50]] : none
