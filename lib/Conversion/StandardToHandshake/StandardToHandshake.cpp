@@ -766,7 +766,7 @@ LoopNetworkRewriter::processFunction(handshake::FuncOp f,
     } else {
       // Figure out which predecessors are loop latches
       std::set<Block *> loopLatches;
-      for (auto backedge : currBlock->getPredecessors()) {
+      for (auto *backedge : currBlock->getPredecessors()) {
         bool dominates = domInfo.dominates(currBlock, backedge);
         bool isLoop = isReachable(currBlock, backedge);
         if (isLoop) {
@@ -818,7 +818,7 @@ static Value getOperandFromBlock(MuxOp mux, Block *block) {
 static std::vector<Value> getSortedInputs(ControlMergeOp cmerge, MuxOp mux) {
   std::vector<Value> sortedOperands;
   for (auto in : cmerge.getOperands()) {
-    auto srcBlock = in.getParentBlock();
+    auto *srcBlock = in.getParentBlock();
     sortedOperands.push_back(getOperandFromBlock(mux, srcBlock));
   }
 
@@ -848,7 +848,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // Fetch the control merge of the block; it is assumed that, at this point of
   // lowering, no other form of control can be used for the loop header block
   // than a control merge.
-  auto cmerge = getControlMerge(loopHeader);
+  auto *cmerge = getControlMerge(loopHeader);
   assert(fol.getBlockEntryControl(loopHeader) == cmerge->getResult(0) &&
          "Expected control merge to be the control component of a loop header");
   auto loc = cmerge->getLoc();
@@ -1003,10 +1003,9 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
     if (isReachable(currBlock, loopHeader)) {
       inLoop.insert(currBlock);
       return BFSNextState::Continue;
-    } else {
-      exitBlocks.insert(currBlock);
-      return BFSNextState::SkipSuccessors;
     }
+    exitBlocks.insert(currBlock);
+    return BFSNextState::SkipSuccessors;
   });
 
   assert(inLoop.size() >= 2 && "A loop must have at least 2 blocks");
@@ -1015,8 +1014,8 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
   // Then we determine the exit pairs of the loop; this is the in-loop nodes
   // which branch off to the exit nodes.
   std::set<ExitPair> exitPairs;
-  for (auto exitNode : exitBlocks) {
-    for (auto pred : exitNode->getPredecessors()) {
+  for (auto *exitNode : exitBlocks) {
+    for (auto *pred : exitNode->getPredecessors()) {
       // is the predecessor inside the loop?
       if (!inLoop.contains(pred))
         continue;
