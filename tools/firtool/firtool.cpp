@@ -205,6 +205,9 @@ static cl::opt<bool>
 static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
                              cl::init(false));
+static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
+                                       cl::desc("enable unused ports pruning"),
+                                       cl::init(true));
 
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
@@ -421,9 +424,13 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
-  if (!disableOptimization)
+  if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+    if (removeUnusedPorts)
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createRemoveUnusedPortsPass());
+  }
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(

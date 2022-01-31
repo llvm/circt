@@ -81,15 +81,20 @@ module {
 // CHECK-DAG:        %bb3_arg0_reg.in, %bb3_arg0_reg.write_en, %bb3_arg0_reg.clk, %bb3_arg0_reg.reset, %bb3_arg0_reg.out, %bb3_arg0_reg.done = calyx.register @bb3_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
-// CHECK-NEXT:         calyx.group @assign_while_0_init  {
+// CHECK-NEXT:         calyx.group @assign_while_0_init_0  {
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.in = %in0 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.write_en = %true : i1
+// CHECK-NEXT:           calyx.group_done %while_0_arg0_reg.done : i1
+// CHECK-NEXT:         }
+// CHECK-NEXT:         calyx.group @assign_while_0_init_1  {
 // CHECK-NEXT:           calyx.assign %while_0_arg1_reg.in = %c0_i32 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg1_reg.write_en = %true : i1
+// CHECK-NEXT:           calyx.group_done %while_0_arg1_reg.done : i1
+// CHECK-NEXT:         }
+// CHECK-NEXT:         calyx.group @assign_while_0_init_2  {
 // CHECK-NEXT:           calyx.assign %while_0_arg2_reg.in = %c0_i32 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg2_reg.write_en = %true : i1
-// CHECK-NEXT:           %0 = comb.and %while_0_arg0_reg.done, %while_0_arg1_reg.done, %while_0_arg2_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
+// CHECK-NEXT:           calyx.group_done %while_0_arg2_reg.done : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.comb_group @bb0_0  {
 // CHECK-NEXT:           calyx.assign %std_slt_0.left = %while_0_arg0_reg.out : i32
@@ -139,7 +144,11 @@ module {
 // CHECK-NEXT:       }
 // CHECK-NEXT:       calyx.control  {
 // CHECK-NEXT:         calyx.seq  {
-// CHECK-NEXT:           calyx.enable @assign_while_0_init
+// CHECK-NEXT:           calyx.par {
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_0
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_1
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_2
+// CHECK-NEXT:           }
 // CHECK-NEXT:           calyx.while %std_slt_0.out with @bb0_0  {
 // CHECK-NEXT:             calyx.seq  {
 // CHECK-NEXT:               calyx.if %std_slt_1.out with @bb0_1  {
@@ -207,15 +216,20 @@ module {
 // CHECK-DAG:        %bb3_arg0_reg.in, %bb3_arg0_reg.write_en, %bb3_arg0_reg.clk, %bb3_arg0_reg.reset, %bb3_arg0_reg.out, %bb3_arg0_reg.done = calyx.register @bb3_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
-// CHECK-NEXT:         calyx.group @assign_while_0_init  {
+// CHECK-NEXT:         calyx.group @assign_while_0_init_0  {
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.in = %in0 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.write_en = %true : i1
+// CHECK-NEXT:           calyx.group_done %while_0_arg0_reg.done : i1
+// CHECK-NEXT:         }
+// CHECK-NEXT:         calyx.group @assign_while_0_init_1  {
 // CHECK-NEXT:           calyx.assign %while_0_arg1_reg.in = %c0_i32 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg1_reg.write_en = %true : i1
+// CHECK-NEXT:           calyx.group_done %while_0_arg1_reg.done : i1
+// CHECK-NEXT:         }
+// CHECK-NEXT:         calyx.group @assign_while_0_init_2  {
 // CHECK-NEXT:           calyx.assign %while_0_arg2_reg.in = %c0_i32 : i32
 // CHECK-NEXT:           calyx.assign %while_0_arg2_reg.write_en = %true : i1
-// CHECK-NEXT:           %0 = comb.and %while_0_arg0_reg.done, %while_0_arg1_reg.done, %while_0_arg2_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
+// CHECK-NEXT:           calyx.group_done %while_0_arg2_reg.done : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.comb_group @bb0_0  {
 // CHECK-NEXT:           calyx.assign %std_slt_0.left = %while_0_arg0_reg.out : i32
@@ -265,7 +279,11 @@ module {
 // CHECK-NEXT:       }
 // CHECK-NEXT:       calyx.control  {
 // CHECK-NEXT:         calyx.seq  {
-// CHECK-NEXT:           calyx.enable @assign_while_0_init
+// CHECK-NEXT:           calyx.par  {
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_0
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_1
+// CHECK-NEXT:             calyx.enable @assign_while_0_init_2
+// CHECK-NEXT:           }
 // CHECK-NEXT:           calyx.while %std_slt_0.out with @bb0_0  {
 // CHECK-NEXT:             calyx.seq  {
 // CHECK-NEXT:               calyx.if %std_slt_1.out with @bb0_1  {

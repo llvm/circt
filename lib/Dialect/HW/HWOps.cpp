@@ -1606,7 +1606,7 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
                             Value input, StringAttr fieldAttr) {
-  auto structType = input.getType().cast<StructType>();
+  auto structType = type_cast<StructType>(input.getType());
   auto resultType = structType.getFieldType(fieldAttr);
   build(builder, odsState, resultType, input, fieldAttr);
 }
