@@ -58,10 +58,10 @@ void addAttributes(OperationState &result, int size, Type dataType,
                    bool alwaysControl = false) {
   result.addAttribute(
       "size",
-      IntegerAttr::get(IntegerType::get(dataType.getContext(), 32), size));
+      IntegerAttr::get(IntegerType::get(result.getContext(), 32), size));
   result.addAttribute("dataType", TypeAttr::get(dataType));
   if (dataType.isa<NoneType>() || alwaysControl)
-    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+    result.addAttribute("control", BoolAttr::get(result.getContext(), true));
 }
 
 static ParseResult parseIntInSquareBrackets(OpAsmParser &parser, int &v) {
@@ -334,12 +334,13 @@ void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
 }
 
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value selOperand,
-                  ValueRange dataOprnds) {
-  Type dataType = dataOprnds[0].getType();
+                  ValueRange _dataOperands) {
+  assert(_dataOperands.size() != 0 && "Building mux with no inputs?");
+  Type dataType = _dataOperands[0].getType();
   result.addTypes({dataType});
   result.addOperands({selOperand});
-  result.addOperands(dataOprnds);
-  sost::addAttributes(result, dataOprnds.size(), dataType);
+  result.addOperands(_dataOperands);
+  sost::addAttributes(result, _dataOperands.size(), dataType);
 }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
@@ -766,7 +767,7 @@ static ParseResult parseConditionalBranchOp(OpAsmParser &parser,
     return failure();
 
   if (dataType.isa<NoneType>())
-    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+    result.addAttribute("control", BoolAttr::get(parser.getContext(), true));
 
   return success();
 }
@@ -831,7 +832,7 @@ static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   if (dataType.isa<NoneType>())
-    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+    result.addAttribute("control", BoolAttr::get(parser.getContext(), true));
 
   return success();
 }
@@ -865,8 +866,8 @@ void handshake::SelectOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(trueOperand);
   result.addOperands(falseOperand);
   result.addAttribute("dataType", TypeAttr::get(type));
-  result.addAttribute("control",
-                      BoolAttr::get(type.getContext(), type.isa<NoneType>()));
+  result.addAttribute(
+      "control", BoolAttr::get(builder.getContext(), type.isa<NoneType>()));
 }
 
 void StartOp::build(OpBuilder &builder, OperationState &result) {
