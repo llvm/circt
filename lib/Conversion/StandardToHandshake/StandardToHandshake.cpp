@@ -712,17 +712,17 @@ private:
   // An exit pair is a pair of <in loop block, outside loop block> that
   // indicates where control leaves a loop.
   using ExitPair = std::pair<Block *, Block *>;
-  void processOuterLoop(Block *loopHeader, const std::set<Block *> &backedges);
+  LogicalResult processOuterLoop(Location loc, Block *loopHeader,
+                                 Block *loopLatch);
 
-  // Builds the loop continue network in between the loop header and its
-  // backedges. The loop continuation network will replace the existing control
+  // Builds the loop continue network in between the loop header and its loop
+  // latch. The loop continuation network will replace the existing control
   // merge in the loop header with a mux + loop priming register.
   // The 'loopPrimingInput' is a backedge that will later be assigned by
   // 'buildExitNetwork'. The value is to be used as the input to the loop
   // priming buffer.
   // Returns a reference to the loop priming register.
-  BufferOp buildContinueNetwork(Block *loopHeader,
-                                const std::set<Block *> &backedges,
+  BufferOp buildContinueNetwork(Block *loopHeader, Block *loopLatch,
                                 Backedge &loopPrimingInput);
 
   // Builds the loop exit network. This detects the conditional operands used in
@@ -764,14 +764,14 @@ LoopNetworkRewriter::processFunction(handshake::FuncOp f,
       llvm::copy_if(currBlock->getSuccessors(), std::back_inserter(queue),
                     [&](Block *block) { return !visited.count(block); });
     } else {
-      // Figure out which predecessors are loop backedges
-      std::set<Block *> loopBackedges;
+      // Figure out which predecessors are loop latches
+      std::set<Block *> loopLatches;
       for (auto backedge : currBlock->getPredecessors()) {
         bool dominates = domInfo.dominates(currBlock, backedge);
         bool isLoop = isReachable(currBlock, backedge);
         if (isLoop) {
           if (dominates)
-            loopBackedges.insert(backedge);
+            loopLatches.insert(backedge);
           else
             return f.emitError()
                    << "Non-canonical loop structures detected; a potential "
@@ -782,14 +782,34 @@ LoopNetworkRewriter::processFunction(handshake::FuncOp f,
         }
       }
 
-      if (!loopBackedges.empty()) {
+      if (!loopLatches.empty()) {
+        if (loopLatches.size() > 1)
+          return emitError(f.getLoc()) << "Multiple loop latches detected "
+                                          "(backedges from within the loop "
+                                          "to the loop header). Loop task "
+                                          "pipelining is only supported for "
+                                          "loops with unified loop latches.";
+
         // This is the start of an outer loop - go process!
-        processOuterLoop(currBlock, loopBackedges);
+        if (failed(
+                processOuterLoop(f.getLoc(), currBlock, *loopLatches.begin())))
+          return failure();
       }
     }
   }
 
   return success();
+}
+
+// Returns the operand of the 'mux' operation which originated from 'block'.
+static Value getOperandFromBlock(MuxOp mux, Block *block) {
+  auto inValueIt = llvm::find_if(mux.dataOperands(), [&](Value operand) {
+    return block == operand.getParentBlock();
+  });
+  assert(
+      inValueIt != mux.getOperands().end() &&
+      "Expected mux to have an operand originating from the requested block.");
+  return *inValueIt;
 }
 
 // Returns a list of operands from 'mux' which corresponds to the inputs of the
@@ -799,13 +819,7 @@ static std::vector<Value> getSortedInputs(ControlMergeOp cmerge, MuxOp mux) {
   std::vector<Value> sortedOperands;
   for (auto in : cmerge.getOperands()) {
     auto srcBlock = in.getParentBlock();
-    auto inValueIt = llvm::find_if(mux.dataOperands(), [&](Value operand) {
-      return srcBlock == operand.getParentBlock();
-    });
-    assert(inValueIt != mux.getOperands().end() &&
-           "Expected mux to have an operand originating from the cmerge input "
-           "block");
-    sortedOperands.push_back(*inValueIt);
+    sortedOperands.push_back(getOperandFromBlock(mux, srcBlock));
   }
 
   // Sanity check: ensure that operands are unique
@@ -821,10 +835,9 @@ static std::vector<Value> getSortedInputs(ControlMergeOp cmerge, MuxOp mux) {
   return sortedOperands;
 }
 
-BufferOp
-LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
-                                          const std::set<Block *> &backedges,
-                                          Backedge &loopPrimingInput) {
+BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
+                                                   Block *loopLatch,
+                                                   Backedge &loopPrimingInput) {
   // Fetch the control merge of the block; it is assumed that, at this point of
   // lowering, no other form of control can be used for the loop header block
   // than a control merge.
@@ -840,16 +853,18 @@ LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // and those originating elsewhere.
   SmallVector<Value> externalCtrls, loopCtrls;
   for (auto cval : cmerge->getOperands()) {
-    if (backedges.count(cval.getParentBlock()))
+    if (cval.getParentBlock() == loopLatch)
       loopCtrls.push_back(cval);
     else
       externalCtrls.push_back(cval);
   }
+  assert(loopCtrls.size() == 1 &&
+         "Expected a single loop control value to match the single loop latch");
+  Value loopCtrl = loopCtrls.front();
 
   // Merge all of the controls in each partition
   rewriter->setInsertionPointToStart(loopHeader);
   auto externalCtrlMerge = rewriter->create<ControlMergeOp>(loc, externalCtrls);
-  auto loopCtrlMerge = rewriter->create<ControlMergeOp>(loc, loopCtrls);
 
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
@@ -860,15 +875,11 @@ LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 
-  // Since multiple exit nodes can have written to the priming register during
-  // execution of the loop body, the register needs to be overwriteable (such
-  // that it is able to accept new values).
-  primingRegister->setAttr("overwritable", rewriter->getUnitAttr());
-
+  // The loop control mux will deterministically select between control entering
+  // the loop from any external block or the single loop backedge.
   auto loopCtrlMux = rewriter->create<MuxOp>(
       loc, primingRegister.getResult(),
-      llvm::SmallVector<Value>{externalCtrlMerge.result(),
-                               loopCtrlMerge.result()});
+      llvm::SmallVector<Value>{externalCtrlMerge.result(), loopCtrl});
 
   // Replace the existing control merge 'result' output with the loop control
   // mux.
@@ -881,40 +892,42 @@ LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // used to drive input selection to the block.
 
   // Inputs to the loop header will be sourced from muxes with inputs from both
-  // loop backedges as well as external blocks. Iterate through these and sort
+  // the loop latch as well as external blocks. Iterate through these and sort
   // based on the input ordering to the external/internal control merge.
   // We do this by maintaining a mapping between the external and loop data
   // inputs for each data mux in the design. The key of these maps is the
-  // original mux (that is to be replaced).
-  DenseMap<Value, std::vector<Value>> externalDataInputs, loopDataInputs;
+  // original mux output (that is to be replaced).
+  DenseMap<Value, std::vector<Value>> externalDataInputs;
+  DenseMap<Value, Value> loopDataInputs;
   for (auto muxOp : loopHeader->getOps<MuxOp>()) {
     if (muxOp == loopCtrlMux)
       continue;
 
     auto muxres = muxOp.getResult();
     externalDataInputs[muxres] = getSortedInputs(externalCtrlMerge, muxOp);
-    loopDataInputs[muxres] = getSortedInputs(loopCtrlMerge, muxOp);
-    assert((externalDataInputs[muxres].size() +
-            loopDataInputs[muxres].size()) == muxOp.dataOperands().size() &&
+    loopDataInputs[muxres] = getOperandFromBlock(muxOp, loopLatch);
+    assert(/*loop latch input*/ 1 + externalDataInputs[muxres].size() ==
+               muxOp.dataOperands().size() &&
            "Expected all mux operands to be partitioned between loop and "
            "external data inputs");
   }
 
   // With this, we now replace each of the data input muxes in the loop header.
-  // We instantiate two muxes, one for driven by the external control merge and
-  // one for the backedge control merge. These will then be selected between by
-  // a 3rd mux, based on the priming register.
+  // We instantiate a single mux driven by the external control merge.
+  // This, as well as the corresponding data input coming from within the single
+  // loop latch, will then be selected between by a 3rd mux, based on the
+  // priming register.
   for (auto &[muxval, _] : externalDataInputs) {
     auto externalDataMux = rewriter->create<MuxOp>(
         loc, externalCtrlMerge.index(), externalDataInputs[muxval]);
-    auto loopDataMux = rewriter->create<MuxOp>(loc, externalCtrlMerge.index(),
-                                               loopDataInputs[muxval]);
-    rewriter->replaceOp(muxval.getDefiningOp(),
-                        rewriter
-                            ->create<MuxOp>(loc, primingRegister,
-                                            llvm::SmallVector<Value>{
-                                                externalDataMux, loopDataMux})
-                            .getResult());
+
+    rewriter->replaceOp(
+        muxval.getDefiningOp(),
+        rewriter
+            ->create<MuxOp>(loc, primingRegister,
+                            llvm::SmallVector<Value>{externalDataMux,
+                                                     loopDataInputs[muxval]})
+            .getResult());
   }
 
   // Now all values defined by the original cmerge should have been replaced,
@@ -971,32 +984,33 @@ void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
   loopPrimingInput.setValue(exitMerge);
 }
 
-void LoopNetworkRewriter::processOuterLoop(Block *loopHeader,
-                                           const std::set<Block *> &backedges) {
-  assert(backedges.size() > 0 && "expected at least 1 backedge block");
+LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
+                                                    Block *loopHeader,
+                                                    Block *loopLatch) {
   // To build the exit network, we need to determine the exit blocks of the
-  // loop, as well as all blocks contained within the loop.
-  // This is essentially determining the strongly connected components with the
-  // loop header. we perform a BFS from the loop header, and if the loop header
-  // is reachable the block, it is within the loop.
-  SetVector<Block *> inLoop, exitNodes;
+  // loop, as well as all blocks contained within the loop. Exit blocks are the
+  // blocks that control is transfered to after exiting the loop. This is
+  // essentially determining the strongly connected components with the loop
+  // header. we perform a BFS from the loop header, and if the loop header is
+  // reachable the block, it is within the loop.
+  SetVector<Block *> inLoop, exitBlocks;
   blockBFS(loopHeader, [&](Block *currBlock) {
     if (isReachable(currBlock, loopHeader)) {
       inLoop.insert(currBlock);
       return BFSNextState::Continue;
     } else {
-      exitNodes.insert(currBlock);
+      exitBlocks.insert(currBlock);
       return BFSNextState::SkipSuccessors;
     }
   });
 
   assert(inLoop.size() >= 2 && "A loop must have at least 2 blocks");
-  assert(exitNodes.size() >= 1 && "A loop must have at least 1 exit block2");
+  assert(exitBlocks.size() != 0 && "No exit blocks in the loop...?");
 
   // Then we determine the exit pairs of the loop; this is the in-loop nodes
   // which branch off to the exit nodes.
   std::set<ExitPair> exitPairs;
-  for (auto exitNode : exitNodes) {
+  for (auto exitNode : exitBlocks) {
     for (auto pred : exitNode->getPredecessors()) {
       // is the predecessor inside the loop?
       if (!inLoop.contains(pred))
@@ -1010,13 +1024,20 @@ void LoopNetworkRewriter::processOuterLoop(Block *loopHeader,
   }
   assert(exitPairs.size() > 0 && "No exits from loop?");
 
+  // The first precondition to our loop transformation is that only a single
+  // exit pair exists in the loop.
+  if (exitPairs.size() > 1)
+    return emitError(loc)
+           << "Multiple exits detected within a loop. Loop task pipelining is "
+              "only supported for loops with unified loop exit blocks.";
+
   BackedgeBuilder bebuilder(*rewriter, loopHeader->front().getLoc());
 
   // Build the loop continue network. Loop continuation is triggered solely by
   // backedges to the header.
   auto loopPrimingRegisterInput = bebuilder.get(rewriter->getI1Type());
   auto loopPrimingRegister =
-      buildContinueNetwork(loopHeader, backedges, loopPrimingRegisterInput);
+      buildContinueNetwork(loopHeader, loopLatch, loopPrimingRegisterInput);
 
   // Build the loop exit network. Loop exiting is driven solely by exit pairs
   // from the loop.
@@ -1025,12 +1046,13 @@ void LoopNetworkRewriter::processOuterLoop(Block *loopHeader,
 
   // Finally, we must reprime the BFS in processFunction; it must skip all
   // of the inLoop nodes - since they have now been captured within the loop
-  // network that we just built- and restart from the exitNodes - since they
+  // network that we just built- and restart from the exitBlocks - since they
   // are guaranteed to be outside of the loop, but more loops may be
   // downstream of these blocks.
   llvm::copy(inLoop, std::inserter(visited, visited.begin()));
-  llvm::copy_if(exitNodes, std::back_inserter(queue),
+  llvm::copy_if(exitBlocks, std::back_inserter(queue),
                 [&](Block *exitBlock) { return !visited.count(exitBlock); });
+  return success();
 }
 
 // Return the appropriate branch result based on successor block which uses it
@@ -1780,7 +1802,7 @@ LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
 }
 
 LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
-                          bool sourceConstants) {
+                          bool sourceConstants, bool disableTaskPipelining) {
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
@@ -1821,7 +1843,8 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
 
   FuncOpLowering fol(newFuncOp);
 
-  // Perform dataflow conversion
+  // Perform initial dataflow conversion. This process allows for the use of
+  // non-deterministic merge-like operations.
   MemRefToMemoryAccessOp memOps;
   returnOnError(
       fol.runPartialLowering(&FuncOpLowering::replaceMemoryOps, memOps));
@@ -1830,7 +1853,19 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
   returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
   returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
   returnOnError(fol.runPartialLowering(&FuncOpLowering::addBranchOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::loopNetworkRewriting));
+
+  // The following passes modifies the dataflow graph to being safe for task
+  // pipelining. In doing so, non-deterministic merge structures are replaced
+  // for deterministic structures.
+  if (!disableTaskPipelining) {
+    returnOnError(
+        fol.runPartialLowering(&FuncOpLowering::loopNetworkRewriting));
+  }
+
+  // Fork/sink materialization. @todo: this should be removed and
+  // materialization should be run as a separate pass afterward initial dataflow
+  // conversion! However, connectToMemory has some hard-coded assumptions on the
+  // existence of fork/sink operations...
   returnOnError(
       partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
   returnOnError(fol.runPartialLowering(
@@ -1848,6 +1883,8 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
   // op.
   returnOnError(fol.runPartialLowering(&FuncOpLowering::finalize, argTypes,
                                        resTypes, funcOp));
+
+  newFuncOp.dump();
 
   return success();
 }
@@ -1877,7 +1914,8 @@ struct StandardToHandshakePass
     ModuleOp m = getOperation();
 
     for (auto funcOp : llvm::make_early_inc_range(m.getOps<mlir::FuncOp>())) {
-      if (failed(lowerFuncOp(funcOp, &getContext(), sourceConstants))) {
+      if (failed(lowerFuncOp(funcOp, &getContext(), sourceConstants,
+                             disableTaskPipelining))) {
         signalPassFailure();
         return;
       }
