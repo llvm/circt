@@ -204,9 +204,9 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
 bool MergeConnection::run() {
   ImplicitLocOpBuilder theBuilder(moduleOp.getLoc(), moduleOp.getContext());
   builder = &theBuilder;
-  auto block = moduleOp.getBody();
+  auto *body = moduleOp.getBody();
   // Merge connections by forward iterations.
-  for (auto it = block->begin(), e = block->end(); it != e;) {
+  for (auto it = body->begin(), e = body->end(); it != e;) {
     auto connectOp = dyn_cast<ConnectOp>(*it);
     if (!connectOp) {
       it++;
@@ -221,7 +221,6 @@ bool MergeConnection::run() {
   }
 
   // Clean up dead operations introduced by this pass.
-  auto *body = moduleOp.getBody();
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
     if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
             CatPrimOp>(op))
