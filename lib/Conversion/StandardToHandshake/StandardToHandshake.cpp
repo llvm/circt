@@ -835,6 +835,22 @@ static std::vector<Value> getSortedInputs(ControlMergeOp cmerge, MuxOp mux) {
   return sortedOperands;
 }
 
+// Returns a list of values which represent the keys of 'map' ordered with
+// respect to the operations that define them.
+template <typename T>
+static llvm::SmallVector<Value>
+getSortedValueKeys(const DenseMap<Value, T> &map) {
+  llvm::SmallVector<Value> keys;
+  llvm::transform(map, std::back_inserter(keys),
+                  [](auto it) { return it.first; });
+  llvm::sort(keys, [&](Value lhs, Value rhs) {
+    assert(lhs.getDefiningOp() && rhs.getDefiningOp() &&
+           "Values must be defined by an operation for this sorting to apply.");
+    return std::distance(lhs.getDefiningOp(), rhs.getDefiningOp()) > 0;
+  });
+  return keys;
+}
+
 BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
                                                    Block *loopLatch,
                                                    Backedge &loopPrimingInput) {
@@ -912,12 +928,19 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
            "external data inputs");
   }
 
+  // Sort the keys of the externalDataInputs to ensure that we get a
+  // deterministic ordering of the muxes that we are replacing. If
+  // we do not do this, subsequent runs on the same input file may yield
+  // differently ordered outputs.
+  llvm::SmallVector<Value> externalDataInputKeys =
+      getSortedValueKeys(externalDataInputs);
+
   // With this, we now replace each of the data input muxes in the loop header.
   // We instantiate a single mux driven by the external control merge.
   // This, as well as the corresponding data input coming from within the single
   // loop latch, will then be selected between by a 3rd mux, based on the
   // priming register.
-  for (auto &[muxval, _] : externalDataInputs) {
+  for (auto &muxval : externalDataInputKeys) {
     auto externalDataMux = rewriter->create<MuxOp>(
         loc, externalCtrlMerge.index(), externalDataInputs[muxval]);
 
