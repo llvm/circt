@@ -215,7 +215,7 @@ public:
   }
 
   // Returns the entry control value for operations contained within this block.
-  Value getBlockEntryControl(Block *block);
+  Value getBlockEntryControl(Block *block) const;
   void setBlockEntryControl(Block *block, Value v);
 
 private:
@@ -223,7 +223,7 @@ private:
   handshake::FuncOp f;
 };
 
-Value FuncOpLowering::getBlockEntryControl(Block *block) {
+Value FuncOpLowering::getBlockEntryControl(Block *block) const {
   auto it = blockEntryControlMap.find(block);
   assert(it != blockEntryControlMap.end() &&
          "No block entry control value registerred for this block!");
@@ -835,25 +835,16 @@ static std::vector<Value> getSortedInputs(ControlMergeOp cmerge, MuxOp mux) {
   return sortedOperands;
 }
 
-// Returns a list of values which represent the keys of 'map' ordered with
-// respect to the operations that define them.
-template <typename T>
-static llvm::SmallVector<Value>
-getSortedValueKeys(const DenseMap<Value, T> &map) {
-  llvm::SmallVector<Value> keys;
-  llvm::transform(map, std::back_inserter(keys),
-                  [](auto it) { return it.first; });
-  llvm::sort(keys, [&](Value lhs, Value rhs) {
-    assert(lhs.getDefiningOp() && rhs.getDefiningOp() &&
-           "Values must be defined by an operation for this sorting to apply.");
-    return std::distance(lhs.getDefiningOp(), rhs.getDefiningOp()) > 0;
-  });
-  return keys;
-}
-
 BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
                                                    Block *loopLatch,
                                                    Backedge &loopPrimingInput) {
+  // Gather the muxes to replace before modifying block internals; it's been
+  // found that if this is not done, we have determinism issues wrt. generating
+  // the same order of replaced muxes on repeated runs of an identical
+  // conversion.
+  llvm::SmallVector<MuxOp> muxesToReplace;
+  llvm::copy(loopHeader->getOps<MuxOp>(), std::back_inserter(muxesToReplace));
+
   // Fetch the control merge of the block; it is assumed that, at this point of
   // lowering, no other form of control can be used for the loop header block
   // than a control merge.
@@ -912,45 +903,36 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // based on the input ordering to the external/internal control merge.
   // We do this by maintaining a mapping between the external and loop data
   // inputs for each data mux in the design. The key of these maps is the
-  // original mux output (that is to be replaced).
-  DenseMap<Value, std::vector<Value>> externalDataInputs;
-  DenseMap<Value, Value> loopDataInputs;
-  for (auto muxOp : loopHeader->getOps<MuxOp>()) {
+  // original mux (that is to be replaced).
+  DenseMap<MuxOp, std::vector<Value>> externalDataInputs;
+  DenseMap<MuxOp, Value> loopDataInputs;
+  for (auto muxOp : muxesToReplace) {
     if (muxOp == loopCtrlMux)
       continue;
 
-    auto muxres = muxOp.getResult();
-    externalDataInputs[muxres] = getSortedInputs(externalCtrlMerge, muxOp);
-    loopDataInputs[muxres] = getOperandFromBlock(muxOp, loopLatch);
-    assert(/*loop latch input*/ 1 + externalDataInputs[muxres].size() ==
+    externalDataInputs[muxOp] = getSortedInputs(externalCtrlMerge, muxOp);
+    loopDataInputs[muxOp] = getOperandFromBlock(muxOp, loopLatch);
+    assert(/*loop latch input*/ 1 + externalDataInputs[muxOp].size() ==
                muxOp.dataOperands().size() &&
            "Expected all mux operands to be partitioned between loop and "
            "external data inputs");
   }
-
-  // Sort the keys of the externalDataInputs to ensure that we get a
-  // deterministic ordering of the muxes that we are replacing. If
-  // we do not do this, subsequent runs on the same input file may yield
-  // differently ordered outputs.
-  llvm::SmallVector<Value> externalDataInputKeys =
-      getSortedValueKeys(externalDataInputs);
 
   // With this, we now replace each of the data input muxes in the loop header.
   // We instantiate a single mux driven by the external control merge.
   // This, as well as the corresponding data input coming from within the single
   // loop latch, will then be selected between by a 3rd mux, based on the
   // priming register.
-  for (auto &muxval : externalDataInputKeys) {
+  for (MuxOp mux : muxesToReplace) {
     auto externalDataMux = rewriter->create<MuxOp>(
-        loc, externalCtrlMerge.index(), externalDataInputs[muxval]);
+        loc, externalCtrlMerge.index(), externalDataInputs[mux]);
 
     rewriter->replaceOp(
-        muxval.getDefiningOp(),
-        rewriter
-            ->create<MuxOp>(loc, primingRegister,
-                            llvm::SmallVector<Value>{externalDataMux,
-                                                     loopDataInputs[muxval]})
-            .getResult());
+        mux, rewriter
+                 ->create<MuxOp>(loc, primingRegister,
+                                 llvm::SmallVector<Value>{externalDataMux,
+                                                          loopDataInputs[mux]})
+                 .getResult());
   }
 
   // Now all values defined by the original cmerge should have been replaced,
