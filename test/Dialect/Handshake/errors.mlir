@@ -16,14 +16,6 @@ handshake.func @invalid_merge_like_wrong_type(%arg0: i1, %arg1: i32, %arg2: i64)
 
 // -----
 
-handshake.func @invalid_mux_single_operand(%arg0: i1, %arg1: i32) {
-  // expected-error @+1 {{need at least two inputs to mux}}
-  %0 = mux %arg0 [%arg1] : i1, i32
-  return %0 : i32
-}
-
-// -----
-
 handshake.func @invalid_mux_unsupported_select(%arg0: tensor<i1>, %arg1: i32, %arg2: i32) {
   // expected-error @+1 {{unsupported type for select operand: 'tensor<i1>'}}
   %0 = mux %arg0 [%arg1, %arg2] : tensor<i1>, i32
