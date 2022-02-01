@@ -179,7 +179,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
   }];
 
   let arguments = (ins
-    I64Attr:$start,
+    SI64Attr:$start,
     Optional<I1>:$when
   );
 
@@ -193,6 +193,10 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
 
   let assemblyFormat = [{
     `start` `=` $start (`when` $when^)? $body (`:` qualified(type($results))^)? attr-dict
+  }];
+
+  let verifier = [{
+    return ::verify$cppClass(*this);
   }];
 
   let skipDefaultBuilders = 1;
