@@ -1796,9 +1796,9 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       getComponentState().addBlockScheduleable(stage->getBlock(), group);
 
       // Add the group to the prologue or epilogue as necessary.
-      if (stage.start() <= whileOp.II())
+      if (static_cast<uint64_t>(stage.start()) <= whileOp.II())
         prologueGroups.push_back(group.sym_nameAttr());
-      if (stage.start() >= whileOp.II())
+      if (static_cast<uint64_t>(stage.start()) >= whileOp.II())
         epilogueGroups.push_back(group.sym_nameAttr());
     }
 
