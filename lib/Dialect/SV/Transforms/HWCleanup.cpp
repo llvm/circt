@@ -16,8 +16,10 @@
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "llvm/ADT/MapVector.h"
 
 using namespace circt;
+using namespace comb;
 
 //===----------------------------------------------------------------------===//
 // Helper utilities
@@ -65,6 +67,11 @@ struct AlwaysLikeOpInfo : public llvm::DenseMapInfo<Operation *> {
 
 } // end anonymous namespace
 
+static void eraseOpWithoutUse(Operation *op) {
+  if (op && op->use_empty())
+    op->erase();
+}
+
 // Merge two regions together. These regions must only have a one block.
 static void mergeRegions(Region *region1, Region *region2) {
   assert(region1->getBlocks().size() <= 1 && region2->getBlocks().size() <= 1 &&
@@ -98,6 +105,7 @@ struct HWCleanupPass : public sv::HWCleanupBase<HWCleanupPass> {
   void runOnRegionsInOp(Operation &op);
   void runOnGraphRegion(Region &region);
   void runOnProceduralRegion(Region &region);
+  void runIfOpsToCasezOnBlock(Block &block);
 
 private:
   /// Inline all regions from the second operation into the first and delete the
@@ -238,6 +246,9 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
       lastSideEffectingOp = &op;
   }
 
+  // Convert if ops into casez.
+  runIfOpsToCasezOnBlock(body);
+
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Recursively process any regions in the op.
     if (op.getNumRegions() != 0)
@@ -245,6 +256,97 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
   }
 }
 
+// This function converts successive if ops into casez satatements by
+// pattern matching.
+void HWCleanupPass::runIfOpsToCasezOnBlock(Block &body) {
+  // This indicates the value which might be used as a condition of casez.
+  Value comparedValue;
+  llvm::MapVector<APInt, SmallVector<sv::IfOp>> caseIntegerToIfOps;
+
+  auto tryConstructingCaseZ = [&](Operation *op) {
+    // If there is only one case, or `comparedValue` is not set yet, we don't
+    // create casez.
+    if (caseIntegerToIfOps.size() <= 1 || !comparedValue) {
+      caseIntegerToIfOps.clear();
+      comparedValue = nullptr;
+      return;
+    }
+
+    auto caseIntegerAndIfOps = caseIntegerToIfOps.takeVector();
+    // Renew the map since `takeVector` moves the underlying vector.
+    caseIntegerToIfOps = llvm::MapVector<APInt, SmallVector<sv::IfOp>>();
+
+    OpBuilder builder(op->getContext());
+    builder.setInsertionPoint(op);
+    // Create casez op with `caseValueAndIfOps.size()` cases.
+    auto casez = builder.create<sv::CaseZOp>(
+        comparedValue.getLoc(), comparedValue, caseIntegerAndIfOps.size(),
+        [&](size_t caseIdx) -> circt::sv::CaseZPattern {
+          auto constant = caseIntegerAndIfOps[caseIdx].first;
+
+          circt::sv::CaseZPattern thePattern =
+              circt::sv::CaseZPattern(constant, op->getContext());
+          return thePattern;
+        });
+
+    for (unsigned idx : llvm::seq(0ul, caseIntegerAndIfOps.size())) {
+      auto block = casez.getCases()[idx].block;
+      auto &ifOps = caseIntegerAndIfOps[idx].second;
+      // Append all blocks of registered ifOps.
+      for (auto ifOp : ifOps) {
+        block->getOperations().splice(block->end(),
+                                      ifOp.getThenBlock()->getOperations());
+        comb::ICmpOp icmp = cast<ICmpOp>(ifOp.cond().getDefiningOp());
+        ifOp.erase();
+        eraseOpWithoutUse(icmp.rhs().getDefiningOp());
+        eraseOpWithoutUse(icmp);
+      }
+    }
+
+    comparedValue = nullptr;
+  };
+
+  Operation *op = nullptr;
+  for (auto it = body.begin(), end = body.end(); it != end; it++) {
+    op = &*it;
+
+    // This function checks that it is possible to merge the op into the current
+    // casez. TODO: Consider to use mlir::PatternMatch utils.
+    auto patternMatchIfOp = [&](Operation *op) {
+      auto ifOp = dyn_cast<sv::IfOp>(op);
+      if (!ifOp || ifOp.hasElse())
+        return false;
+
+      // Check that condition is ICmpOp.
+      auto icmpOp = dyn_cast_or_null<comb::ICmpOp>(ifOp.cond().getDefiningOp());
+      if (!icmpOp || icmpOp.predicate() != comb::ICmpPredicate::eq)
+        return false;
+      auto constant =
+          dyn_cast_or_null<circt::hw::ConstantOp>(icmpOp.rhs().getDefiningOp());
+      if (!constant)
+        return false;
+
+      // Check that the comaparison is consistent with the casez we are
+      // creating.
+      if (!comparedValue)
+        comparedValue = icmpOp.lhs();
+      else if (comparedValue != icmpOp.lhs())
+        return false;
+
+      // Register the if op.
+      caseIntegerToIfOps[constant.getValue()].push_back(ifOp);
+      return true;
+    };
+
+    bool success = patternMatchIfOp(op);
+    if (!success && !mlir::MemoryEffectOpInterface::hasNoEffect(op))
+      tryConstructingCaseZ(op);
+  }
+
+  // We also have to construct casez in the end.
+  if (op)
+    tryConstructingCaseZ(op);
+}
 std::unique_ptr<Pass> circt::sv::createHWCleanupPass() {
   return std::make_unique<HWCleanupPass>();
 }

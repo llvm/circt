@@ -306,3 +306,60 @@ hw.module @nested_regions() {
   // CHECK-NEXT:    }
   // CHECK-NEXT:  }
 }
+
+hw.module @casez_gen(%sel1: i2, %sel2: i2) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c3_i2 = hw.constant 3 : i2
+  %0 = comb.icmp eq %sel1, %c0_i2 : i2
+  %1 = comb.icmp eq %sel1, %c1_i2 : i2
+  %2 = comb.icmp eq %sel1, %c3_i2 : i2
+  %3 = comb.icmp eq %sel2, %c3_i2 : i2
+
+  // CHECK: sv.initial
+  sv.initial {
+    // CHECK-NEXT:   sv.casez %sel1 : i2
+    // CHECK-NEXT:   case b00: {
+    // CHECK-NEXT:     sv.fwrite "sel1 = 0"
+    // CHECK-NEXT:     sv.fwrite "sel1 = 0 again"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   case b01: {
+    // CHECK-NEXT:     sv.fwrite "sel1 = 1"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   case b11: {
+    // CHECK-NEXT:     sv.fwrite "sel1 = 3"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.if %0  {
+    // CHECK-NEXT:     sv.fwrite "it should not be merged"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.casez %sel1 : i2
+    // CHECK-NEXT:   case b00: {
+    // CHECK-NEXT:     sv.fwrite "sel1 = 0"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   case b01: {
+    // CHECK-NEXT:     sv.fwrite "sel1 = 1"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    sv.if %0 {
+      sv.fwrite "sel1 = 0"
+    }
+    sv.if %1 {
+      sv.fwrite "sel1 = 1"
+    }
+    sv.if %2 {
+      sv.fwrite "sel1 = 3"
+    }
+    sv.if %0 {
+      sv.fwrite "sel1 = 0 again"
+    }
+    sv.if %3 {
+      sv.fwrite "it should not be merged"
+    }
+    sv.if %0 {
+      sv.fwrite "sel1 = 0"
+    }
+    sv.if %1 {
+      sv.fwrite "sel1 = 1"
+    }
+  }
+}
