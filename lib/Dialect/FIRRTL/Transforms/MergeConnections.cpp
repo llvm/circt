@@ -102,6 +102,8 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
   if (count != subConnections.size())
     return false;
 
+  changed = true;
+
   auto parentType = parent.getType();
 
   auto getMergedValue = [&](auto aggregateType) {
@@ -175,7 +177,6 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
 
     // Otherwise, we concat all values and cast them into the aggregate type.
     Value accumulate;
-    changed = true;
     for (auto value : operands) {
       value = builder->createOrFold<BitCastOp>(
           value.getLoc(),
