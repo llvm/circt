@@ -447,7 +447,11 @@ void PartitionPass::runOnOperation() {
     (void)mlir::applyPatternsAndFoldGreedily(mod,
                                              mlir::FrozenRewritePatternSet());
     bubbleWiresUp(mod);
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
     dedupOutputs(mod);
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
   }
 }
 
@@ -473,7 +477,7 @@ static bool isDrivenByPartOpsOnly(Operation *op,
 }
 
 void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
-                  bool extendMaximal) {
+                  bool extendMaximalUp) {
   BlockAndValueMapping map;
   if (taggedOps.empty())
     return;
@@ -508,15 +512,12 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
         continue;
 
       DenseSet<Operation *> seen;
-      if (!extendMaximal && !isDrivenByPartOpsOnly(defOp, map, seen))
+      if (!(extendMaximalUp || isDrivenByPartOpsOnly(defOp, map, seen)))
         continue;
 
       b.insert(defOp->clone(map));
       opOper.set(map.lookup(opOper.get()));
     }
-
-    if (!extendMaximal)
-      continue;
 
     // Move any "free" consumers which we can.
     for (auto *user : op->getUsers()) {

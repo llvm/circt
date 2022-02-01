@@ -1,100 +1,101 @@
 // RUN: circt-opt %s --msft-partition -verify-diagnostics | FileCheck --check-prefix=CLEANUP %s
 
-// hw.globalRef @ref1 [#hw.innerNameRef<@top::@b>, #hw.innerNameRef<@B::@unit1>] {
-//   "loc" = #msft.physloc<M20K, 0, 0, 0>
-// }
+hw.globalRef @ref1 [#hw.innerNameRef<@top::@b>, #hw.innerNameRef<@B::@unit1>] {
+  "loc" = #msft.physloc<M20K, 0, 0, 0>
+}
 
-// hw.globalRef @ref2 [#hw.innerNameRef<@top::@b>, #hw.innerNameRef<@B::@c>, #hw.innerNameRef<@C::@unit3>] {
-//   "loc" = #msft.physloc<M20K, 0, 0, 1>
-// }
+hw.globalRef @ref2 [#hw.innerNameRef<@top::@b>, #hw.innerNameRef<@B::@c>, #hw.innerNameRef<@C::@unit3>] {
+  "loc" = #msft.physloc<M20K, 0, 0, 1>
+}
 
-// hw.globalRef @ref3 [#hw.innerNameRef<@top::@b2>, #hw.innerNameRef<@B2::@unit1>] {
-//   "loc" = #msft.physloc<M20K, 0, 0, 0>
-// }
+hw.globalRef @ref3 [#hw.innerNameRef<@top::@b2>, #hw.innerNameRef<@B2::@unit1>] {
+  "loc" = #msft.physloc<M20K, 0, 0, 0>
+}
 
-// msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
-//   msft.partition @part1, "dp"
+msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
+  msft.partition @part1, "dp"
 
-//   %res1, %_ = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2, i2)
-//   %res3 = msft.instance @b2 @B2(%clk) { circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "b2" } : (i1) -> (i2)
+  %res1, %_ = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2, i2)
+  %res3 = msft.instance @b2 @B2(%clk) { circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "b2" } : (i1) -> (i2)
 
-//   %c0 = hw.constant 0 : i2
-//   %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+  %c0 = hw.constant 0 : i2
+  %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
 
-//   msft.output %res1, %res2 : i2, i2
-// }
+  msft.output %res1, %res2 : i2, i2
+}
 
-// msft.module.extern @Extern (%foo_a: i2) -> (foo_x: i2)
+msft.module.extern @Extern (%foo_a: i2) -> (foo_x: i2)
 
-// msft.module @B {} (%clk : i1) -> (x: i2, y: i2)  {
-//   %c1 = hw.constant 1 : i2
-//   %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "unit1" }: (i2) -> (i2)
-//   %1 = seq.compreg %0, %clk { targetDesignPartition = @top::@part1 } : i2
+msft.module @B {} (%clk : i1) -> (x: i2, y: i2)  {
+  %c1 = hw.constant 1 : i2
+  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "unit1" }: (i2) -> (i2)
+  %1 = seq.compreg %0, %clk { targetDesignPartition = @top::@part1 } : i2
 
-//   %2 = msft.instance @unit2 @Extern(%1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+  %2 = msft.instance @unit2 @Extern(%1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
 
-//   %3 = msft.instance @c @C(%2) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "c" }: (i2) -> (i2)
+  %3 = msft.instance @c @C(%2) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "c" }: (i2) -> (i2)
 
-//   msft.output %2, %3: i2, i2
-// }
+  msft.output %2, %3: i2, i2
+}
 
-// msft.module @B2 {} (%clk : i1) -> (x: i2) {
-//   %c1 = hw.constant 1 : i2
-//   %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "unit1" }: (i2) -> (i2)
-//   msft.output %0 : i2
-// }
+msft.module @B2 {} (%clk : i1) -> (x: i2) {
+  %c1 = hw.constant 1 : i2
+  %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "unit1" }: (i2) -> (i2)
+  msft.output %0 : i2
+}
 
-// msft.module @C {} (%in : i2) -> (out: i2)  {
-//   %0 = msft.instance @unit3 @Extern(%in) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "unit3" } : (i2) -> (i2)
-//   msft.output %0 : i2
-// }
+msft.module @C {} (%in : i2) -> (out: i2)  {
+  %0 = msft.instance @unit3 @Extern(%in) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "unit3" } : (i2) -> (i2)
+  msft.output %0 : i2
+}
 
-msft.module @TopComplex {} (%clk : i1, %arr_in: !hw.array<4xi5>, %datain: i5, %valid: i1) -> (out2: i5) {
+msft.module @TopComplex {} (%clk : i1, %arr_in: !hw.array<4xi5>, %datain: i5, %valid: i1) -> (out2: !hw.struct<data: i5, valid: i1>, out2: i5) {
   msft.partition @part2, "dp_complex"
 
-  // %mut_arr = msft.instance @b @Array(%arr_in) : (!hw.array<4xi5>) -> (!hw.array<4xi5>)
-  // %c0 = hw.constant 0 : i2
-  // %a0 = hw.array_get %mut_arr[%c0] : !hw.array<4xi5>
-  // %c1 = hw.constant 1 : i2
-  // %a1 = hw.array_get %mut_arr[%c1] : !hw.array<4xi5>
-  // %c2 = hw.constant 2 : i2
-  // %a2 = hw.array_get %mut_arr[%c2] : !hw.array<4xi5>
-  // %c3 = hw.constant 3 : i2
-  // %a3 = hw.array_get %mut_arr[%c3] : !hw.array<4xi5>
+  %mut_arr = msft.instance @b @Array(%arr_in) : (!hw.array<4xi5>) -> (!hw.array<4xi5>)
+  %c0 = hw.constant 0 : i2
+  %a0 = hw.array_get %mut_arr[%c0] : !hw.array<4xi5>
+  %c1 = hw.constant 1 : i2
+  %a1 = hw.array_get %mut_arr[%c1] : !hw.array<4xi5>
+  %c2 = hw.constant 2 : i2
+  %a2 = hw.array_get %mut_arr[%c2] : !hw.array<4xi5>
+  %c3 = hw.constant 3 : i2
+  %a3 = hw.array_get %mut_arr[%c3] : !hw.array<4xi5>
 
-  // %res1 = comb.add %a0, %a1 { targetDesignPartition = @TopComplex::@part2 } : i5
+  %res1 = comb.add %a0, %a1 { targetDesignPartition = @TopComplex::@part2 } : i5
 
   %din_struct = hw.struct_create (%datain, %valid) : !hw.struct<data: i5, valid: i1>
   %out = msft.instance @structMod @Struct (%din_struct) : (!hw.struct<data: i5, valid: i1>) -> (!hw.struct<data: i5, valid: i1>) 
 
-  msft.output %datain: i5
+  msft.output %out, %res1 : !hw.struct<data: i5, valid: i1>, i5
 }
 
 msft.module.extern @ExternI5 (%foo_a: i5) -> (foo_x: i5)
 
-// msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
-//   %c0 = hw.constant 0 : i2
-//   %in0 = hw.array_get %arr_in[%c0] : !hw.array<4xi5>
-//   %out0 = msft.instance @unit2 @ExternI5(%in0) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
-//   %c1 = hw.constant 1 : i2
-//   %in1 = hw.array_get %arr_in[%c1] : !hw.array<4xi5>
-//   %out1 = msft.instance @unit2 @ExternI5(%in1) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
-//   // %c2 = hw.constant 2 : i2
-//   // %in2 = hw.array_get %arr_in[%c2] : !hw.array<4xi5>
-//   // %out2 = msft.instance @unit2 @ExternI5(%in2) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
-//   // %c3 = hw.constant 3 : i2
-//   // %in3 = hw.array_get %arr_in[%c3] : !hw.array<4xi5>
-//   // %out3 = msft.instance @unit2 @ExternI5(%in3) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
-//   %arr_out = hw.array_create %out0, %out1, %out0, %out1 : i5
-//   msft.output %arr_out : !hw.array<4xi5>
-// }
+msft.module @Array {} (%arr_in: !hw.array<4xi5>) -> (arr_out: !hw.array<4xi5>) {
+  %c0 = hw.constant 0 : i2
+  %in0 = hw.array_get %arr_in[%c0] : !hw.array<4xi5>
+  %out0 = msft.instance @unit2 @ExternI5(%in0) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  %c1 = hw.constant 1 : i2
+  %in1 = hw.array_get %arr_in[%c1] : !hw.array<4xi5>
+  %out1 = msft.instance @unit2 @ExternI5(%in1) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  // %c2 = hw.constant 2 : i2
+  // %in2 = hw.array_get %arr_in[%c2] : !hw.array<4xi5>
+  // %out2 = msft.instance @unit2 @ExternI5(%in2) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  // %c3 = hw.constant 3 : i2
+  // %in3 = hw.array_get %arr_in[%c3] : !hw.array<4xi5>
+  // %out3 = msft.instance @unit2 @ExternI5(%in3) { targetDesignPartition = @TopComplex::@part2 }: (i5) -> (i5)
+  %arr_out = hw.array_create %out0, %out1, %out0, %out1 : i5
+  msft.output %arr_out : !hw.array<4xi5>
+}
 
 msft.module @Struct {} (%in: !hw.struct<data: i5, valid: i1>) -> (out: !hw.struct<data: i5, valid: i1>) {
   %d = hw.struct_extract %in["data"] : !hw.struct<data: i5, valid: i1>
   // %valid = hw.struct_extract %in["valid"] : !hw.struct<data: i5, valid: i1>
   %valid = hw.constant 1 : i1
   %dprime = msft.instance @dataModif @ExternI5(%d) { targetDesignPartition = @TopComplex::@part2 } : (i5) -> (i5)
-  %inprime = hw.struct_create (%dprime, %valid) : !hw.struct<data: i5, valid: i1>
+  %dpp = msft.instance @dataModif @ExternI5(%dprime) { targetDesignPartition = @TopComplex::@part2 } : (i5) -> (i5)
+  %inprime = hw.struct_create (%dpp, %valid) : !hw.struct<data: i5, valid: i1>
   msft.output %inprime : !hw.struct<data: i5, valid: i1>
 }
 
