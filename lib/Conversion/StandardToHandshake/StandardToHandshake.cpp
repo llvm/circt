@@ -655,11 +655,11 @@ enum class BFSNextState { Halt, SkipSuccessors, Continue };
 using BFSCallback = llvm::function_ref<BFSNextState(Block *)>;
 
 static void blockBFS(Block *start, BFSCallback callback) {
-  std::set<Block *> visited;
-  std::list<Block *> queue = {start};
+  DenseSet<Block *> visited;
+  SmallVector<Block *> queue = {start};
   while (!queue.empty()) {
     Block *currBlock = queue.front();
-    queue.pop_front();
+    queue.erase(queue.begin());
     visited.insert(currBlock);
 
     switch (callback(currBlock)) {
@@ -671,8 +671,8 @@ static void blockBFS(Block *start, BFSCallback callback) {
       break;
     }
     case BFSNextState::SkipSuccessors:
-      llvm::copy(currBlock->getSuccessors(),
-                 std::inserter(visited, visited.begin()));
+      for (auto *succ : currBlock->getSuccessors())
+        visited.insert(succ);
       continue;
     }
   }
@@ -996,7 +996,7 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
   // loop, as well as all blocks contained within the loop. Exit blocks are the
   // blocks that control is transfered to after exiting the loop. This is
   // essentially determining the strongly connected components with the loop
-  // header. we perform a BFS from the loop header, and if the loop header is
+  // header. We perform a BFS from the loop header, and if the loop header is
   // reachable the block, it is within the loop.
   SetVector<Block *> inLoop, exitBlocks;
   blockBFS(loopHeader, [&](Block *currBlock) {
@@ -1009,7 +1009,7 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
   });
 
   assert(inLoop.size() >= 2 && "A loop must have at least 2 blocks");
-  assert(exitBlocks.size() != 0 && "No exit blocks in the loop...?");
+  assert(exitBlocks.size() != 0 && "A loop must have an exit block...?");
 
   // Then we determine the exit pairs of the loop; this is the in-loop nodes
   // which branch off to the exit nodes.
@@ -1215,7 +1215,8 @@ LogicalResult checkSuccessorBlocks(Operation *op, Value res) {
 }
 
 // Checks if merge predecessors are in appropriate block
-LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp) {
+LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
+                            bool disableTaskPipelining) {
   Block *block = mergeOp->getBlock();
   unsigned operand_count = mergeOp.dataOperands().size();
 
@@ -1232,6 +1233,23 @@ LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp) {
              << getBlockPredecessorCount(block) << " predecessor blocks";
   }
 
+  if (disableTaskPipelining) {
+    // There must be a predecessor from each predecessor block
+    for (auto *predBlock : block->getPredecessors()) {
+      bool found = false;
+      for (auto operand : mergeOp.dataOperands()) {
+        auto *operandOp = operand.getDefiningOp();
+        if (operandOp->getBlock() == predBlock) {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        return mergeOp->emitOpError(
+            "missing predecessor from predecessor block");
+    }
+  }
+
   // Select operand must come from same block
   if (auto muxOp = dyn_cast<MuxOp>(mergeOp.getOperation())) {
     auto *operand = muxOp.selectOperand().getDefiningOp();
@@ -1241,7 +1259,8 @@ LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp) {
   return success();
 }
 
-LogicalResult checkDataflowConversion(handshake::FuncOp f) {
+LogicalResult checkDataflowConversion(handshake::FuncOp f,
+                                      bool disableTaskPipelining) {
   for (Operation &op : f.getOps()) {
     if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
             arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
@@ -1256,7 +1275,7 @@ LogicalResult checkDataflowConversion(handshake::FuncOp f) {
       }
     }
     if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
-      if (checkMergeOps(mergeOp).failed())
+      if (checkMergeOps(mergeOp, disableTaskPipelining).failed())
         return failure();
   }
   return success();
@@ -1876,7 +1895,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
       &FuncOpLowering::connectConstantsToControl, sourceConstants));
   returnOnError(
       partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
-  returnOnError(checkDataflowConversion(newFuncOp));
+  returnOnError(checkDataflowConversion(newFuncOp, disableTaskPipelining));
 
   bool lsq = false;
   returnOnError(
