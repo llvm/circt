@@ -435,8 +435,8 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
       stageTypes.push_back(lowerBound.getType());
 
     // Create the stage itself.
-    auto startTimeAttr =
-        builder.getIntegerAttr(builder.getI64Type(), startTime);
+    auto startTimeAttr = builder.getIntegerAttr(
+        builder.getIntegerType(64, /*isSigned=*/true), startTime);
     auto stage = builder.create<PipelineStageOp>(stageTypes, startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();

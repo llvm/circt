@@ -156,3 +156,60 @@ func @invalid_results() {
   }
   return
 }
+
+// -----
+
+func @negative_start() {
+  %false = arith.constant 0 : i1
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
+    staticlogic.pipeline.register %arg0 : i1
+  } do {
+    // expected-error @+1 {{'staticlogic.pipeline.stage' op 'start' must be non-negative}}
+    %0 = staticlogic.pipeline.stage start = -1 {
+      staticlogic.pipeline.register %arg0 : i1
+    } : i1
+    staticlogic.pipeline.terminator iter_args(%0), results() : (i1) -> ()
+  }
+  return
+}
+
+// -----
+
+func @non_monotonic_start0() {
+  %false = arith.constant 0 : i1
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
+    staticlogic.pipeline.register %arg0 : i1
+  } do {
+    %0 = staticlogic.pipeline.stage start = 0 {
+      staticlogic.pipeline.register %arg0 : i1
+    } : i1
+    // expected-error @+1 {{'staticlogic.pipeline.stage' op 'start' must be after previous 'start' (0)}}
+    %1 = staticlogic.pipeline.stage start = 0 {
+      staticlogic.pipeline.register %0 : i1
+    } : i1
+    staticlogic.pipeline.terminator iter_args(%1), results() : (i1) -> ()
+  }
+  return
+}
+
+// -----
+
+func @non_monotonic_start1() {
+  %false = arith.constant 0 : i1
+  staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
+    staticlogic.pipeline.register %arg0 : i1
+  } do {
+    %0 = staticlogic.pipeline.stage start = 0 {
+      staticlogic.pipeline.register %arg0 : i1
+    } : i1
+    %1 = staticlogic.pipeline.stage start = 1 {
+      staticlogic.pipeline.register %0 : i1
+    } : i1
+    // expected-error @+1 {{'staticlogic.pipeline.stage' op 'start' must be after previous 'start' (1)}}
+    %2 = staticlogic.pipeline.stage start = 0 {
+      staticlogic.pipeline.register %1 : i1
+    } : i1
+    staticlogic.pipeline.terminator iter_args(%2), results() : (i1) -> ()
+  }
+  return
+}
