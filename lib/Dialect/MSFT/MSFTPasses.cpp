@@ -414,7 +414,7 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  MSFTModuleOp partition(DesignPartitionOp part, ArrayRef<Operation *> users);
+  MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
   void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
   void bubbleUpGlobalRefs(Operation *op);
@@ -425,11 +425,14 @@ private:
   static void
   copyWireOps(MSFTModuleOp,
               DenseMap<SymbolRefAttr, DenseSet<Operation *>> &perPartOpsToMove);
+
+  MLIRContext *ctxt;
 };
 } // anonymous namespace
 
 void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
+  ctxt = outerMod.getContext();
   populateSymbolCache(outerMod);
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
@@ -589,11 +592,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
     SymbolRefAttr partRef =
         SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
     Block *partBlock = perPartBlocks[partRef];
-    SmallVector<Operation *> toMove(llvm::make_pointer_range(*partBlock));
-    MSFTModuleOp partMod = partition(part, toMove);
-    sinkWiresDown(partMod);
-    dedupInputs(partMod);
-    delete partBlock;
+    MSFTModuleOp partMod = partition(part, partBlock);
     part.erase();
   }
 }
@@ -878,7 +877,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
 }
 
 MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
-                                      ArrayRef<Operation *> toMove) {
+                                      Block *partBlock) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -888,72 +887,47 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   //   Determine the partition module's interface. Keep some bookkeeping around.
   SmallVector<hw::PortInfo> inputPorts;
   SmallVector<hw::PortInfo> outputPorts;
-  SmallVector<Value, 64> partInstInputs;
-  SmallVector<Value, 64> partInstOutputs;
+  DenseMap<Value, size_t> newInputMap;
+  SmallVector<Value, 32> instInputs;
+  SmallVector<Value, 32> newOutputs;
 
-  // Handle module-like operations. Not strictly necessary, but we can base the
-  // new portnames on the portnames of the instance being moved and the instance
-  // name.
-  auto addModuleLike = [&](Operation *inst, Operation *modOp) {
-    hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
-    StringRef name = ::getOpName(inst);
+  for (Operation &op : *partBlock) {
+    for (OpOperand &oper : op.getOpOperands()) {
+      Value v = oper.get();
+      if (v.getParentBlock() == partBlock)
+        continue;
+      auto existingF = newInputMap.find(v);
+      if (existingF == newInputMap.end()) {
+        auto arg = partBlock->addArgument(v.getType());
+        oper.set(arg);
 
-    for (auto port : modPorts.inputs) {
-      partInstInputs.push_back(inst->getOperand(port.argNum));
-      inputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-          /*direction*/ hw::PortDirection::INPUT,
-          /*type*/ port.type,
-          /*argNum*/ inputPorts.size()});
+        newInputMap[v] = inputPorts.size();
+        StringRef portName = getValueName(v, topLevelSyms, nameBuffer);
+
+        instInputs.push_back(v);
+        inputPorts.push_back(
+            hw::PortInfo{/*name*/ StringAttr::get(ctxt, portName),
+                         /*direction*/ hw::PortDirection::INPUT,
+                         /*type*/ v.getType(),
+                         /*argNum*/ inputPorts.size()});
+      } else {
+        oper.set(partBlock->getArgument(existingF->second));
+      }
     }
 
-    for (auto port : modPorts.outputs) {
-      partInstOutputs.push_back(inst->getResult(port.argNum));
-      outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ port.type,
-          /*argNum*/ outputPorts.size()});
-    }
-  };
-  // Handle all other operators.
-  auto addOther = [&](Operation *op) {
-    StringRef name = ::getOpName(op);
+    for (OpResult res : op.getResults()) {
+      if (llvm::all_of(res.getUsers(), [partBlock](Operation *op) {
+            return op->getBlock() == partBlock;
+          }))
+        continue;
 
-    for (OpOperand &oper : op->getOpOperands()) {
-      inputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(
-              ctxt,
-              name + "." + getOperandName(oper, topLevelSyms, nameBuffer)),
-          /*direction*/ hw::PortDirection::INPUT,
-          /*type*/ oper.get().getType(),
-          /*argNum*/ inputPorts.size()});
-      partInstInputs.push_back(oper.get());
-    }
-
-    for (OpResult res : op->getOpResults()) {
-      StringRef resName = getResultName(res, topLevelSyms, nameBuffer);
+      newOutputs.push_back(res);
+      StringRef portName = getResultName(res, topLevelSyms, nameBuffer);
       outputPorts.push_back(
-          hw::PortInfo{/*name*/ StringAttr::get(
-                           ctxt, name + (resName.empty() ? "" : "." + resName)),
+          hw::PortInfo{/*name*/ StringAttr::get(ctxt, portName),
                        /*direction*/ hw::PortDirection::OUTPUT,
                        /*type*/ res.getType(),
                        /*argNum*/ outputPorts.size()});
-      partInstOutputs.push_back(res);
-    }
-  };
-
-  // Aggregate the args/results into partition module ports.
-  for (Operation *op : toMove) {
-    if (auto inst = dyn_cast<InstanceOp>(op)) {
-      Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
-      assert(modOp && "Module instantiated should exist. Verifier should have "
-                      "caught this.");
-
-      if (isAnyModule(modOp))
-        addModuleLike(inst, modOp);
-    } else {
-      addOther(op);
     }
   }
 
@@ -966,65 +940,38 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
       OpBuilder::atBlockEnd(getOperation().getBody())
           .create<MSFTModuleOp>(loc, partOp.verilogNameAttr(), modPortInfo,
                                 ArrayRef<NamedAttribute>{});
-  Block *partBlock = partMod.getBodyBlock();
-  partBlock->clear();
-  auto partBuilder = OpBuilder::atBlockEnd(partBlock);
+  Region &partRegion = partMod->getRegion(0);
+  partRegion.getBlocks().clear();
+  partRegion.getBlocks().push_back(partBlock);
+
+  OpBuilder::atBlockEnd(partBlock).create<OutputOp>(partOp.getLoc(),
+                                                    newOutputs);
 
   // Replace partOp with an instantion of the partition.
   SmallVector<Type> instRetTypes(
-      llvm::map_range(partInstOutputs, [](Value v) { return v.getType(); }));
+      llvm::map_range(newOutputs, [](Value v) { return v.getType(); }));
   auto partInst = OpBuilder(partOp).create<InstanceOp>(
       loc, instRetTypes, partOp.getNameAttr(),
-      SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
+      SymbolTable::getSymbolName(partMod), instInputs, ArrayAttr(),
       SymbolRefAttr());
   moduleInstantiations[partMod].push_back(partInst);
 
-  //*************
-  //   Move the operations!
+  // And set the outputs properly.
+  for (size_t outputNum = 0, e = newOutputs.size(); outputNum < e; ++outputNum)
+    for (OpOperand &oper : newOutputs[outputNum].getUses())
+      if (oper.getOwner()->getBlock() != partBlock)
+        oper.set(partInst.getResult(outputNum));
 
-  // Map the original operation's inputs to block arguments.
-  mlir::BlockAndValueMapping mapping;
-  assert(partInstInputs.size() == partBlock->getNumArguments());
-  for (size_t argNum = 0, e = partInstInputs.size(); argNum < e; ++argNum) {
-    mapping.map(partInstInputs[argNum], partBlock->getArgument(argNum));
-  }
-
-  // Since the same value can map to multiple outputs, compute the 1-N mapping
-  // here.
-  DenseMap<Value, SmallVector<int, 1>> resultOutputConnections;
-  for (size_t outNum = 0, e = partInstOutputs.size(); outNum < e; ++outNum)
-    resultOutputConnections[partInstOutputs[outNum]].push_back(outNum);
-
-  // Hold the block outputs.
-  SmallVector<Value, 64> outputs(partInstOutputs.size(), Value());
-
-  // Clone the ops into the partition block. Map the results into the module
-  // outputs. Push down any global refs to include the partition. Update the
+  // Push down any global refs to include the partition. Update the
   // partition to include the new set of global refs, and set its inner_sym.
   DenseSet<Attribute> newGlobalRefs;
-  for (Operation *op : toMove) {
-    Operation *newOp = partBuilder.insert(op->clone(mapping));
-    // newOp->removeAttr("targetDesignPartition");
-    for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
-      for (int outputNum : resultOutputConnections[op->getResult(resNum)])
-        outputs[outputNum] = newOp->getResult(resNum);
-    pushDownGlobalRefs(op, partOp, newGlobalRefs);
-  }
+  for (Operation &op : *partBlock)
+    pushDownGlobalRefs(&op, partOp, newGlobalRefs);
   SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),
                                          newGlobalRefs.end());
   auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
   partInst->setAttr("circt.globalRef", newRefsAttr);
   partInst->setAttr("inner_sym", partInst.sym_nameAttr());
-
-  partBuilder.create<OutputOp>(loc, outputs);
-
-  // Replace original ops' outputs with partition outputs.
-  assert(partInstOutputs.size() == partInst.getNumResults());
-  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
-    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
-
-  for (Operation *op : toMove)
-    op->erase();
 
   return partMod;
 }
