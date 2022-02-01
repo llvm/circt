@@ -277,7 +277,7 @@ void WireDFTPass::runOnOperation() {
   while (node != lca) {
     // If there is more than one parent the we are in trouble. We can't handle
     // more than one enable signal to wire everywhere else.
-    if (node->getNumUses() != 1) {
+    if (!node->hasOneUse()) {
       auto diag = emitError(enableSignal.getLoc(),
                             "mutliple instantiations of the DFT enable signal");
       auto it = node->uses_begin();
