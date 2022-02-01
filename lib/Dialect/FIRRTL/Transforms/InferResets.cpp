@@ -1247,7 +1247,7 @@ void InferResetsPass::buildDomains(FModuleOp module,
 
   // Traverse the child instances.
   InstancePathVec childPath = instPath;
-  for (auto record : *instGraph[module]) {
+  for (auto *record : *instGraph[module]) {
     auto submodule = dyn_cast<FModuleOp>(record->getTarget()->getModule());
     if (!submodule)
       continue;

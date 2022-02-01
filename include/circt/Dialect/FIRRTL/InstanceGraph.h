@@ -100,7 +100,7 @@ public:
   bool hasOneUse() { return llvm::hasSingleElement(uses()); }
 
   /// Get the number of direct instantiations of this module.
-  size_t getNumUses() { return std::distance(uses_begin(), uses_end()); }
+  size_t getNumUses() { return std::distance(usesBegin(), usesEnd()); }
 
   /// Iterator for module uses.
   struct UseIterator
@@ -125,10 +125,10 @@ public:
   };
 
   /// Iterate the instance records which instantiate this module.
-  UseIterator uses_begin() { return {this}; }
-  UseIterator uses_end() { return {}; }
+  UseIterator usesBegin() { return {this}; }
+  UseIterator usesEnd() { return {}; }
   llvm::iterator_range<UseIterator> uses() {
-    return llvm::make_range(uses_begin(), uses_end());
+    return llvm::make_range(usesBegin(), usesEnd());
   }
 
   /// Record a new instance op in the body of this module. Returns a newly
@@ -344,10 +344,10 @@ struct GraphTraits<Inverse<circt::firrtl::InstanceGraphNode *>> {
     return inverse.Graph;
   }
   static ChildIteratorType child_begin(NodeRef node) {
-    return {node->uses_begin(), &getParent};
+    return {node->usesBegin(), &getParent};
   }
   static ChildIteratorType child_end(NodeRef node) {
-    return {node->uses_end(), &getParent};
+    return {node->usesEnd(), &getParent};
   }
 };
 

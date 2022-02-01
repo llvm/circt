@@ -26,7 +26,7 @@ void InstanceRecord::erase() {
 
 InstanceRecord *InstanceGraphNode::addInstance(InstanceOp instance,
                                                InstanceGraphNode *target) {
-  auto instanceRecord = new InstanceRecord(this, instance, target);
+  auto *instanceRecord = new InstanceRecord(this, instance, target);
   target->recordUse(instanceRecord);
   instances.push_back(instanceRecord);
   return instanceRecord;
@@ -63,7 +63,7 @@ InstanceGraph::InstanceGraph(Operation *operation) {
     if (!module)
       continue;
     auto name = module.moduleNameAttr();
-    auto currentNode = getOrAddNode(name);
+    auto *currentNode = getOrAddNode(name);
     currentNode->module = module;
     if (name == topModuleName)
       topLevelNode = currentNode;
@@ -115,7 +115,7 @@ void InstanceGraph::replaceInstance(InstanceOp inst, InstanceOp newInst) {
   auto it = llvm::find_if(node->uses(), [&](InstanceRecord *record) {
     return record->getInstance() == inst;
   });
-  assert(it != node->uses_end() && "Instance of module not recorded in graph");
+  assert(it != node->usesEnd() && "Instance of module not recorded in graph");
 
   // We can just replace the instance op in the InstanceRecord without updating
   // any instance lists.
