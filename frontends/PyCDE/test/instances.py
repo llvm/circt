@@ -47,6 +47,7 @@ primdb.add_coords(PrimitiveType.M20K, 15, 25)
 primdb.add_coords(PrimitiveType.M20K, 40, 40)
 primdb.add_coords("DSP", 0, 10)
 primdb.add_coords(PrimitiveType.DSP, 1, 12)
+primdb.add_coords(PrimitiveType.DSP, 1, 13)
 primdb.add(PhysLocation(PrimitiveType.DSP, 39, 25))
 
 print(PhysLocation(PrimitiveType.DSP, 39, 25))
@@ -127,10 +128,16 @@ assert (len(instance_attrs.find_unused()) == 1)
 
 test_inst.placedb.remove_placement(loc[1])
 
+old_loc = PhysLocation(PrimitiveType.DSP, 1, 12, sub_path="dsp_inst")
+new_loc = PhysLocation(PrimitiveType.DSP, 1, 13, sub_path="dsp_inst")
+test_inst.placedb.move_placement(old_loc, new_loc)
+
 print("=== After applying placements")
 t.print()
 # CHECK-LABEL: === After applying placements
 # CHECK-NOT: hw.globalRef {{.*}} #hw.innerNameRef<@UnParameterized::@Nothing> {{.*}} #msft.physloc<DSP, 39, 25, 0, "memory|bank">
+# CHECK-NOT: hw.globalRef {{.*}} #hw.innerNameRef<@UnParameterized::@Nothing>] {{.*}} #msft.physloc<DSP, 1, 12, 0, "dsp_inst">
+# CHECK: hw.globalRef {{.*}} #hw.innerNameRef<@UnParameterized::@Nothing>] {{.*}} #msft.physloc<DSP, 1, 13, 0, "dsp_inst">
 
 t.run_passes()
 
@@ -140,9 +147,10 @@ t.print()
 # OUTPUT-LABEL: proc Test_config { parent }
 # OUTPUT-NOT:  set_location_assignment M20K_X40_Y40
 # OUTPUT-NOT:  set_location_assignment MPDSP_X39_Y25_N0
+# OUTPUT-NOT:  set_location_assignment MPDSP_X1_Y13_N0
 # OUTPUT-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
 # OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
-# OUTPUT-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
+# OUTPUT-DAG:  set_location_assignment MPDSP_X1_Y13_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
 # OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
 # OUTPUT-DAG:  set_instance_assignment -name PLACE_REGION "X0 Y0 X10 Y10;X10 Y10 X20 Y20" -to $parent|UnParameterized|Nothing
 # OUTPUT-DAG:  set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|UnParameterized|Nothing

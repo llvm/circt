@@ -129,12 +129,19 @@ class PlacementDB:
     self._db.add_placement(loc._loc, path, subpath, entity._entity_extern)
 
   def remove_placement(self, loc: PhysLocation):
-    # Remove the location from the PlacementDB.
     success = self._db.remove_placement(loc._loc)
     if not success:
       raise RuntimeError(f"Unable to remove placement at: {loc}")
 
     self._mutate_global_ref_placement(loc)
+
+  def move_placement(self, old_loc: PhysLocation, new_loc: PhysLocation):
+    success = self._db.move_placement(old_loc._loc, new_loc._loc)
+    if not success:
+      raise RuntimeError(
+          f"Unable to move placement from: {old_loc._loc}, to: {new_loc._loc}")
+
+    self._mutate_global_ref_placement(old_loc, new_loc)
 
   # Mutate the IR to reflect a placement that is being removed or moved. The old
   # location is used to scan for the relevant global ref. If the new location is
