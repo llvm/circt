@@ -29,6 +29,24 @@ using HandleOpFn = std::function<LogicalResult(Operation *)>;
 /// Fails if the dependence graph contains cycles.
 LogicalResult handleOperationsInTopologicalOrder(Problem &prob, HandleOpFn fun);
 
+/// Analyse combinational chains in \p prob's dependence graph and determine
+/// pairs of operations that must be separated by at least one time step in
+/// order to prevent the accumulated delays exceeding the given \p cycleTime.
+/// The dependences in the \p result vector require special handling in the
+/// concrete scheduling algorithm.
+///
+/// Fails if \p prob contains operator types with incoming/outgoing delays
+/// greater than \p cycleTime, or if the dependence graph contains cycles.
+LogicalResult
+computeChainBreakingDependences(ChainingProblem &prob, float cycleTime,
+                                SmallVectorImpl<Problem::Dependence> &result);
+
+/// Assuming \p prob is scheduled and contains (integer) start times, this
+/// method fills in the start times in cycle in an ASAP fashion.
+///
+/// Fails if the dependence graph contains cycles.
+LogicalResult computeStartTimesInCycle(ChainingProblem &prob);
+
 } // namespace scheduling
 } // namespace circt
 
