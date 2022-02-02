@@ -211,7 +211,7 @@ struct InnerRefList {
     assert(sorted && "Sort the list before search");
     if (!sorted || list.empty())
       return -1;
-    auto iter = std::lower_bound(list.begin(), list.end(), key);
+    const auto *iter = std::lower_bound(list.begin(), list.end(), key);
     if (iter == list.end())
       return -1;
     return (iter - list.begin());
