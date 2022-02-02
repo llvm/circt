@@ -1930,15 +1930,12 @@ class BuildControl : public FuncOpPartialLoweringPattern {
   }
 
 private:
-  /// Schedules the groups that registered themselves with 'block'. If
-  /// sequential is true (the default for CFGs), the schedule is wrapped in a
-  /// sequential block. If sequential is false (in the case of pipelines), no
-  /// wrapper is generated.
+  /// Sequentially schedules the groups that registered themselves with
+  /// 'block'.
   LogicalResult scheduleBasicBlock(PatternRewriter &rewriter,
                                    const DenseSet<Block *> &path,
                                    mlir::Block *parentCtrlBlock,
-                                   mlir::Block *block,
-                                   bool sequential = true) const {
+                                   mlir::Block *block) const {
     auto compBlockScheduleables =
         getComponentState().getBlockScheduleables(block);
     auto loc = block->front().getLoc();
@@ -1965,9 +1962,8 @@ private:
 
         /// Only schedule the 'after' block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
-        LogicalResult res =
-            buildCFGControl(path, rewriter, whileBodyOpBlock, block,
-                            whileOp.getBodyBlock(), sequential);
+        LogicalResult res = buildCFGControl(path, rewriter, whileBodyOpBlock,
+                                            block, whileOp.getBodyBlock());
 
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
@@ -2031,8 +2027,8 @@ private:
   LogicalResult buildCFGControl(DenseSet<Block *> path,
                                 PatternRewriter &rewriter,
                                 mlir::Block *parentCtrlBlock,
-                                mlir::Block *preBlock, mlir::Block *block,
-                                bool sequential = true) const {
+                                mlir::Block *preBlock,
+                                mlir::Block *block) const {
     if (path.count(block) != 0)
       return preBlock->getTerminator()->emitError()
              << "CFG backedge detected. Loops must be raised to 'scf.while' or "
@@ -2040,7 +2036,7 @@ private:
 
     rewriter.setInsertionPointToEnd(parentCtrlBlock);
     LogicalResult bbSchedResult =
-        scheduleBasicBlock(rewriter, path, parentCtrlBlock, block, sequential);
+        scheduleBasicBlock(rewriter, path, parentCtrlBlock, block);
     if (bbSchedResult.failed())
       return bbSchedResult;
 
