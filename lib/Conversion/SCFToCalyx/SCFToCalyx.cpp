@@ -1737,6 +1737,9 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     SmallVector<StringAttr> prologueGroups;
     SmallVector<StringAttr> epilogueGroups;
 
+    // Get the number of pipeline stages, excluding the termina
+    size_t numStages = whileOp.getStagesBlock().getOperations().size() - 1;
+
     // For each registered stage result value.
     for (auto &operand :
          stage.getBodyBlock().getTerminator()->getOpOperands()) {
@@ -1769,9 +1772,10 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       getComponentState().addBlockScheduleable(stage->getBlock(), group);
 
       // Add the group to the prologue or epilogue as necessary.
-      if (static_cast<uint64_t>(stage.start()) <= whileOp.II())
+      unsigned stageNumber = stage.getStageNumber();
+      if (stageNumber < numStages - 1)
         prologueGroups.push_back(group.sym_nameAttr());
-      if (static_cast<uint64_t>(stage.start()) >= whileOp.II())
+      if (stageNumber > 0)
         epilogueGroups.push_back(group.sym_nameAttr());
     }
 
