@@ -381,7 +381,7 @@ public:
     pipelineRegs[stage][idx] = reg;
   }
 
-  /// Return a mapping of block argument indices to block argument registers.
+  /// Return a mapping of stage result indices to pipeline registers.
   const DenseMap<unsigned, calyx::RegisterOp> &
   getPipelineRegs(Operation *stage) {
     return pipelineRegs[stage];
@@ -1666,7 +1666,8 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         return;
 
       // Create a register for each stage.
-      for (size_t i = 0; i < op.getNumOperands(); ++i) {
+      for (auto &operand : op->getOpOperands()) {
+        unsigned i = operand.getOperandNumber();
         // Iter args are created in BuildWhileGroups, so just mark the iter arg
         // register as the appropriate pipeline register.
         Value stageResult = stage.getResult(i);
@@ -1687,7 +1688,7 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
           continue;
 
         // Create a register for passing this result to later stages.
-        Value value = op.getOperand(i);
+        Value value = operand.get();
         Type resultType = value.getType();
         assert(resultType.isa<IntegerType>() &&
                "unsupported pipeline result type");
@@ -1700,9 +1701,10 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
                              name, width);
         getComponentState().addPipelineReg(stage, reg, i);
 
-        // Note that we do not RAUW here as in BuildBBRegs. Instead, we wait
-        // until after BuildOpGroups, and RAUW inside BuildPipelineGroups, once
-        // the pipeline register created here has been assigned.
+        // Note that we do not use replace all uses with here as in BuildBBRegs.
+        // Instead, we wait until after BuildOpGroups, and replace all uses
+        // inside BuildPipelineGroups, once the pipeline register created here
+        // has been assigned to.
       }
     });
     return success();
@@ -1736,9 +1738,10 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     SmallVector<StringAttr> epilogueGroups;
 
     // For each registered stage result value.
-    auto stageResults = stage.getBodyBlock().getTerminator()->getOperands();
-    for (size_t i = 0, e = stageResults.size(); i < e; ++i) {
-      auto value = stageResults[i];
+    for (auto &operand :
+         stage.getBodyBlock().getTerminator()->getOpOperands()) {
+      unsigned i = operand.getOperandNumber();
+      Value value = operand.get();
 
       // Get the pipeline register for that result.
       auto pipelineRegister = pipelineRegisters[i];
@@ -1782,7 +1785,7 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
         for (auto assign : group.getOps<calyx::AssignOp>()) {
           if (assign.dest() == tempIn)
             assign.destMutable().assign(pipelineRegister.in());
-          if (assign.dest() == tempWriteEn)
+          else if (assign.dest() == tempWriteEn)
             assign.destMutable().assign(pipelineRegister.write_en());
         }
         doneOp.srcMutable().assign(pipelineRegister.done());
