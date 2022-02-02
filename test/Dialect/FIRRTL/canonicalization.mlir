@@ -440,6 +440,8 @@ firrtl.module @Head(in %in4u: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    in %cond: !firrtl.uint<1>,
+                   in %val1: !firrtl.uint<1>,
+                   in %val2: !firrtl.uint<1>,
                    out %out: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<1>) {
   // CHECK: firrtl.connect %out, %in
@@ -466,6 +468,19 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   %8 = firrtl.mux (%invalid_ui1, %in, %c7_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %8 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  %9 = firrtl.multibit_mux %c1_ui1, %c0_ui1, %cond : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %out1, %c0_ui1
+  firrtl.connect %out1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %10 = firrtl.multibit_mux %cond, %val1, %val2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: %[[MUX:.+]] = firrtl.mux(%cond, %val1, %val2)
+  // CHECK-NEXT: firrtl.connect %out1, %[[MUX]]
+  firrtl.connect %out1, %10 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %11 = firrtl.multibit_mux %cond, %val1, %val1, %val1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %out1, %val1
+  firrtl.connect %out1, %11 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
