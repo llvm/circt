@@ -2102,7 +2102,7 @@ private:
         rewriter.create<calyx::EnableOp>(loc, group.getName());
     }
 
-    /// Insert the while op itself, with the insertion point set to its body.
+    /// Insert the while op itself.
     auto cond = whileOp.getConditionValue();
     auto condGroup =
         getComponentState().getEvaluatingGroup<calyx::CombGroupOp>(cond);
