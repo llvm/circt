@@ -416,7 +416,7 @@ private:
   void partition(MSFTModuleOp mod);
   MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
-  void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
+  void bubbleUp(MSFTModuleOp mod, Block *ops);
   void bubbleUpGlobalRefs(Operation *op);
   void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
                           DenseSet<Attribute> &newGlobalRefs);
@@ -449,12 +449,12 @@ void PartitionPass::runOnOperation() {
     partition(mod);
     (void)mlir::applyPatternsAndFoldGreedily(mod,
                                              mlir::FrozenRewritePatternSet());
-    bubbleWiresUp(mod);
-    (void)mlir::applyPatternsAndFoldGreedily(mod,
-                                             mlir::FrozenRewritePatternSet());
-    dedupOutputs(mod);
-    (void)mlir::applyPatternsAndFoldGreedily(mod,
-                                             mlir::FrozenRewritePatternSet());
+    // bubbleWiresUp(mod);
+    // (void)mlir::applyPatternsAndFoldGreedily(mod,
+    //                                          mlir::FrozenRewritePatternSet());
+    // dedupOutputs(mod);
+    // (void)mlir::applyPatternsAndFoldGreedily(mod,
+    //                                          mlir::FrozenRewritePatternSet());
   }
 }
 
@@ -581,10 +581,8 @@ void PartitionPass::partition(MSFTModuleOp mod) {
 
   copyInto(mod, perPartBlocks, nonLocal);
 
-  SmallVector<Operation *, 64> nonLocalTaggedOps(
-      llvm::make_pointer_range(*nonLocal));
-  if (!nonLocalTaggedOps.empty())
-    bubbleUp(mod, nonLocalTaggedOps);
+  if (!nonLocal->empty())
+    bubbleUp(mod, nonLocal);
   delete nonLocal;
 
   for (auto part :
@@ -800,7 +798,7 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
   }
 }
 
-void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
+void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   // This particular implementation is _very_ sensitive to iteration order. It
   // assumes that the order in which the ops, operands, and results are the same
   // _every_ time it runs through them. Doing this saves on bookkeeping.
@@ -812,18 +810,34 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //   Figure out all the new ports 'mod' is going to need. The outputs need to
   //   know where they're being driven from, which'll be the outputs of 'ops'.
   SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
+  SmallVector<Value, 64> newInputOldValue;
   SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
+  DenseMap<Value, size_t> oldValueNewResultNum;
   SmallVector<Type, 64> newResTypes;
 
-  for (Operation *op : ops) {
-    StringRef opName = ""; //::getOpName(op);
-    for (OpResult res : op->getOpResults()) {
+  for (Operation &op : *partBlock) {
+    StringRef opName = ::getOpName(&op);
+    for (OpResult res : op.getOpResults()) {
+      if (llvm::all_of(res.getUsers(), [partBlock](Operation *op) {
+            return op->getBlock() == partBlock;
+          }))
+        continue;
+
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
           res.getType()));
+      newInputOldValue.push_back(res);
     }
-    for (OpOperand &oper : op->getOpOperands()) {
+
+    for (OpOperand &oper : op.getOpOperands()) {
+      Operation *defOp = oper.get().getDefiningOp();
+      if (defOp && defOp->getBlock() == partBlock)
+        continue;
+      if (oldValueNewResultNum.count(oper.get()))
+        continue;
+
+      oldValueNewResultNum[oper.get()] = newOutputs.size();
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
@@ -836,10 +850,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   //   Add them to 'mod' and replace all of the old 'ops' results with the new
   //   ports.
   SmallVector<BlockArgument> newBlockArgs = mod.addPorts(newInputs, newOutputs);
-  size_t blockArgNum = 0;
-  for (Operation *op : ops)
-    for (OpResult res : op->getResults())
-      res.replaceAllUsesWith(newBlockArgs[blockArgNum++]);
+  for (size_t inputNum = 0, e = newBlockArgs.size(); inputNum < e; ++inputNum)
+    for (OpOperand &use : newInputOldValue[inputNum].getUses())
+      if (use.getOwner()->getBlock() != partBlock)
+        use.set(newBlockArgs[inputNum]);
 
   //*************
   //   For all of the instantiation sites (for 'mod'):
@@ -850,30 +864,41 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
   SmallVector<unsigned> resValues;
   for (size_t i = 0, e = origType.getNumResults(); i < e; ++i)
     resValues.push_back(i);
+
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
     OpBuilder b(newInst);
+    BlockAndValueMapping map;
 
-    size_t resultNum = origType.getNumResults();
-    auto oldOperands = oldInst->getOperands();
-    newOperands.append(oldOperands.begin(), oldOperands.end());
-    for (Operation *op : ops) {
-      BlockAndValueMapping map;
-      for (Value oper : op->getOperands())
-        map.map(oper, newInst->getResult(resultNum++));
-      Operation *newOp = b.insert(op->clone(map));
-      for (Value res : newOp->getResults())
-        newOperands.push_back(res);
-      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
+    size_t origNumResults = origType.getNumResults();
+    llvm::SmallVector<Operation *, 32> newOps;
+    for (Operation &op : *partBlock) {
+      for (Value oper : op.getOperands()) {
+        auto newResultF = oldValueNewResultNum.find(oper);
+        if (newResultF != oldValueNewResultNum.end())
+          map.map(oper,
+                  newInst->getResult(origNumResults + newResultF->second));
+      }
+
+      Operation *newOp = b.insert(op.clone(map));
+      newOps.push_back(newOp);
+      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
       bubbleUpGlobalRefs(newOp);
     }
+
+    // Fix up operands of cloned ops (backedges didn't exist in the map so they
+    // didn't get mapped during the initial clone).
+    for (Operation *newOp : newOps)
+      for (OpOperand &oper : newOp->getOpOperands())
+        oper.set(map.lookupOrDefault(oper.get()));
+
+    // Gather new operands for new instance.
+    auto oldOperands = oldInst->getOperands();
+    newOperands.append(oldOperands.begin(), oldOperands.end());
+    for (Value oldValue : newInputOldValue)
+      newOperands.push_back(map.lookup(oldValue));
   };
   updateInstances(mod, resValues, cloneOpsGetOperands);
-
-  //*************
-  //   Done.
-  for (Operation *op : ops)
-    op->erase();
 }
 
 MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
