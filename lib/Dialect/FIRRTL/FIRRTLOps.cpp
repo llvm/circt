@@ -383,13 +383,14 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         else
           leafInnerSyms.insert(op, modName);
       });
-    }
-    if (auto mod = dyn_cast<FModuleLike>(op))
       leafInnerSyms.insert(mod);
+    }
     // Verify external modules.
-    if (auto extModule = dyn_cast<FExtModuleOp>(op))
+    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
+      leafInnerSyms.insert(extModule);
       if (verifyExtModule(extModule).failed())
         return failure();
+    }
   }
   leafInnerSyms.sort();
   instanceSyms.sort();
