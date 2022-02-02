@@ -136,34 +136,30 @@ class PlacementDB:
     top_mod = self._circt_mod.operation.parent
     assert top_mod.parent is None
 
-    # Remove the location from any global ref(s) in the top-level module.
-    refs_to_remove = set([])
+    # Remove the location from any global ref(s) in the top-level module. In the
+    # case of an external entity, there will be none, and in the case of a PyCDE
+    # entity, there should be exactly one global ref.
+    global_ref_to_remove = None
     for op in top_mod.regions[0].blocks[0]:
+      if global_ref_to_remove:
+        break
       if isinstance(op, hw.GlobalRefOp):
         for nvp in op.attributes:
+          # If the global ref had an attribute for this location, remove it.
           if nvp.attr == loc._loc:
             del op.attributes[nvp.name]
-        if len(op.attributes) == 2:
-          refs_to_remove.add(op)
+            # If the global ref only has its inherent attributes, erase it.
+            if len(op.attributes) == 2:
+              global_ref_to_remove = op
 
-    ref_attrs_to_remove = set(
-        hw.GlobalRefAttr.get(op.sym_name) for op in refs_to_remove)
+    if global_ref_to_remove:
+      global_ref_to_remove.operation.erase()
 
-    # Remove the references to any global ref(s) now empty of placement info.
-    for mod in top_mod.regions[0].blocks[0]:
-      if isinstance(mod, msft.MSFTModuleOp):
-        for op in mod.entry_block:
-          if "circt.globalRef" in op.attributes:
-            ref_attrs = set(
-                hw.GlobalRefAttr(a)
-                for a in ArrayAttr(op.attributes["circt.globalRef"]))
-            if ref_attrs & ref_attrs_to_remove:
-              op.attributes["circt.globalRef"] = ArrayAttr.get(
-                  list(ref_attrs - ref_attrs_to_remove))
-
-    # Remove the global ref(s).
-    for op in refs_to_remove:
-      op.operation.erase()
+    # Note: at this point, there is a dangling reference to this global ref in
+    # the IR. It will be scrubbed out when MSFT is lowered to HW, but it would
+    # be good to garbage collect anyway. Unfortunately, with current APIs this
+    # requires an IR traversal. We would need to have an efficient way to lookup
+    # an entity by an AppID or another means.
 
 
 class EntityExtern:
