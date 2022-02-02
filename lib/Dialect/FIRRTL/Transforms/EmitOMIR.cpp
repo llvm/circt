@@ -276,9 +276,11 @@ void EmitOMIRPass::runOnOperation() {
         anyFailures = true;
         return true;
       }
-      if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+      if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         tracker.nla =
             dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
+        removeTempNLAs.push_back(tracker.nla);
+      }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
