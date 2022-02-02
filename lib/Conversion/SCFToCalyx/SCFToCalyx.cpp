@@ -1989,6 +1989,9 @@ private:
         for (auto &group : bodyBlockScheduleables)
           if (auto *groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr)
             rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name());
+          else
+            return whileOp.getOperation()->emitError(
+                "Unsupported block schedulable");
 
         // Add any prologue or epilogue.
         PatternRewriter::InsertionGuard g(rewriter);
