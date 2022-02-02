@@ -4,12 +4,14 @@ set(LLVM_OPTIONAL_SOURCES
   Problems.cpp
   SimplexSchedulers.cpp
   TestPasses.cpp
+  Utilities.cpp
   )
 
 set(SCHEDULING_SOURCES
   ASAPScheduler.cpp
   Problems.cpp
   SimplexSchedulers.cpp
+  Utilities.cpp
   )
 
 set(SCHEDULING_LIBS
