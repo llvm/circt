@@ -1391,6 +1391,11 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
   if (op.inputs().size() != 2)
     return failure();
 
+  // TODO: Handle even when `index` doesn't have uint<1>.
+  auto uintType = op.index().getType().cast<FIRRTLType>().dyn_cast<UIntType>();
+  if (!uintType || uintType.getBitWidthOrSentinel() != 1)
+    return failure();
+
   // multibit_mux(index, {lhs, rhs}) -> mux(index, lhs, rhs)
   rewriter.replaceOpWithNewOp<MuxPrimOp>(op, op.index(), op.inputs()[0],
                                          op.inputs()[1]);
