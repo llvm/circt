@@ -482,17 +482,16 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         auto diag = nla.emitOpError()
                     << " operation with symbol: " << innerRef
                     << " does not contain a reference to the NonLocalAnchor";
-        diag.attachNote(rec->op->getLoc()) << "the symbol was defined here";
-        return failure();
+        return diag.attachNote(rec->op->getLoc())
+               << "the symbol was defined here";
       }
     } else if (expectedModuleName !=
-               leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+               leafRef.cast<FlatSymbolRefAttr>().getAttr())
       // This is the case when the nla is applied to a module.
-      nla.emitOpError() << "instance path is incorrect. Expected module: "
-                        << expectedModuleName << " instead found: "
-                        << leafRef.cast<FlatSymbolRefAttr>().getAttr();
-      return failure();
-    }
+      return nla.emitOpError()
+             << "instance path is incorrect. Expected module: "
+             << expectedModuleName << " instead found: "
+             << leafRef.cast<FlatSymbolRefAttr>().getAttr();
   }
 
   return success();
