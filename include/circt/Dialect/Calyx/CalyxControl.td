@@ -148,8 +148,7 @@ def SeqOp : CalyxContainer<"seq", [
       region->push_back(new Block());
     }]>
   ];
-  let hasCanonicalizeMethod = true;
-
+  let hasCanonicalizer = true;
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -177,7 +176,7 @@ def ParOp : CalyxContainer<"par", [
       region->push_back(new Block());
     }]>
   ];
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
   let verifier = "return ::verify$cppClass(*this);";
 }
 

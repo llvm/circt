@@ -311,11 +311,24 @@ struct EliminateSimpleMuxesPattern : mlir::OpRewritePattern<MuxOp> {
   }
 };
 
+struct EliminateUnaryMuxesPattern : OpRewritePattern<MuxOp> {
+  using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(MuxOp op,
+                                PatternRewriter &rewriter) const override {
+    if (op.dataOperands().size() != 1)
+      return failure();
+
+    rewriter.replaceOp(op, op.dataOperands()[0]);
+    return success();
+  }
+};
+
 } // namespace
 
 void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<EliminateSimpleMuxesPattern>(context);
+  results.insert<EliminateSimpleMuxesPattern, EliminateUnaryMuxesPattern>(
+      context);
 }
 
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
@@ -388,9 +401,6 @@ static void printMuxOp(OpAsmPrinter &p, MuxOp op) {
 
 static LogicalResult verify(MuxOp op) {
   unsigned numDataOperands = static_cast<int>(op.dataOperands().size());
-  if (numDataOperands < 2)
-    return op.emitError("need at least two inputs to mux");
-
   auto selectType = op.selectOperand().getType();
 
   unsigned selectBits;
@@ -433,6 +443,16 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
     result.addOperands(operand);
 
   sost::addAttributes(result, inputs, type);
+}
+
+void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
+                           ValueRange operands) {
+  auto type = operands[0].getType();
+  result.types.push_back(type);
+  // Selected index.
+  result.types.push_back(builder.getIndexType());
+  result.addOperands(operands);
+  sost::addAttributes(result, operands.size(), type);
 }
 
 static ParseResult parseControlMergeOp(OpAsmParser &parser,

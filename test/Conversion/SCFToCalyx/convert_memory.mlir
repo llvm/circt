@@ -43,9 +43,7 @@
 // CHECK-NEXT:       }
 // CHECK-NEXT:       calyx.control  {
 // CHECK-NEXT:         calyx.seq  {
-// CHECK-NEXT:           calyx.par  {
-// CHECK-NEXT:             calyx.enable @assign_while_0_init_0
-// CHECK-NEXT:           }
+// CHECK-NEXT:           calyx.enable @assign_while_0_init_0
 // CHECK-NEXT:           calyx.while %std_lt_0.out with @bb0_0  {
 // CHECK-NEXT:             calyx.seq  {
 // CHECK-NEXT:               calyx.enable @bb0_2
