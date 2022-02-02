@@ -197,6 +197,7 @@ struct InnerRefRecord {
     return (innerSym == rhs.innerSym && mod == rhs.mod);
   }
 };
+
 // A list of inner sym and the corresponding operations. Can be used for
 // efficient insertion and then searching. It can be used when the pattern is
 // first all the records are inserted, and then searched for. After insertion,
@@ -210,17 +211,10 @@ struct InnerRefList {
     assert(sorted && "Sort the list before search");
     if (!sorted || list.empty())
       return -1;
-    unsigned lo = 0, hi = list.size() - 1;
-    while (lo <= hi) {
-      unsigned mid = (lo + hi) / 2;
-      if (key == list[mid])
-        return mid;
-      if (key < list[mid])
-        hi = mid - 1;
-      else
-        lo = mid + 1;
-    }
-    return -1;
+    auto iter = std::lower_bound(list.begin(), list.end(), key);
+    if (iter == list.end())
+      return -1;
+    return (iter - list.begin());
   }
   bool exists(const InnerRefRecord &key) const { return search(key) != -1; }
   Operation *getOpIfExists(const hw::InnerRefAttr ref) const {
