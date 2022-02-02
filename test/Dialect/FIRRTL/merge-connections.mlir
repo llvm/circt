@@ -31,11 +31,11 @@ firrtl.circuit "Test"   {
   // circuit Bar :
   //   module Bar :
   //     output a : {b: UInt<1>, c:UInt<1>}
-  //     a.b <= UInt<1>(1)
+  //     a.b <= UInt<1>(0)
   //     a.c <= UInt<1>(1)
   // CHECK-LABEL: firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
-  // CHECK-NEXT:    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-  // CHECK-NEXT:    %0 = firrtl.bitcast %c2_ui2 : (!firrtl.uint<2>) -> !firrtl.bundle<b: uint<1>, c: uint<1>>
+  // CHECK-NEXT:    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  // CHECK-NEXT:    %0 = firrtl.bitcast %c1_ui2 : (!firrtl.uint<2>) -> !firrtl.bundle<b: uint<1>, c: uint<1>>
   // CHECK-NEXT:    firrtl.connect %a, %0 : !firrtl.bundle<b: uint<1>, c: uint<1>>, !firrtl.bundle<b: uint<1>, c: uint<1>>
   // CHECK-NEXT:  }
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {

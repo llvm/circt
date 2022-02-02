@@ -184,9 +184,17 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
                         *firrtl::getBitWidth(
                             value.getType().template cast<FIRRTLType>())),
           value);
-      accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
-                                     accumulate.getLoc(), value, accumulate)
-                               : value);
+
+      if (parentType.isa<FVectorType>())
+        accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
+                                       accumulate.getLoc(), value, accumulate)
+                                 : value);
+      else {
+        // Bundle subfields are filled from MSB to LSB.
+        accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
+                                       accumulate.getLoc(), accumulate, value)
+                                 : value);
+      }
     }
     return builder->createOrFold<BitCastOp>(accumulate.getLoc(), parentType,
                                             accumulate);
