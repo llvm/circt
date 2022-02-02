@@ -1755,44 +1755,12 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       // Stitch the register in, depending on whether the group was
       // combinational or sequential.
       if (auto combGroup =
-              dyn_cast<calyx::CombGroupOp>(evaluatingGroup.getOperation())) {
-        // Create a sequential group and replace the comb group.
-        PatternRewriter::InsertionGuard g(rewriter);
-        rewriter.setInsertionPoint(combGroup);
-        group = rewriter.create<calyx::GroupOp>(combGroup.getLoc(),
-                                                combGroup.getName());
-        rewriter.cloneRegionBefore(combGroup.getBodyRegion(), group.getBody());
-        group.getBodyRegion().back().erase();
-        rewriter.eraseOp(combGroup);
-
-        // Stitch evaluating group to register.
-        buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group,
-                                         pipelineRegister, value);
-
-        // Mark the new group as the evaluating group.
-        for (auto assign : group.getOps<calyx::AssignOp>())
-          getComponentState().registerEvaluatingGroup(assign.src(), group);
-      } else {
-        // Get the group and register that is temporarily being written to.
-        group = cast<calyx::GroupOp>(evaluatingGroup.getOperation());
-        auto doneOp = group.getDoneOp();
-        auto tempReg =
-            cast<calyx::RegisterOp>(doneOp.src().cast<OpResult>().getOwner());
-        auto tempIn = tempReg.in();
-        auto tempWriteEn = tempReg.write_en();
-
-        // Replace the register write with a write to the pipeline register.
-        for (auto assign : group.getOps<calyx::AssignOp>()) {
-          if (assign.dest() == tempIn)
-            assign.destMutable().assign(pipelineRegister.in());
-          else if (assign.dest() == tempWriteEn)
-            assign.destMutable().assign(pipelineRegister.write_en());
-        }
-        doneOp.srcMutable().assign(pipelineRegister.done());
-
-        // Remove the old register completely.
-        rewriter.eraseOp(tempReg);
-      }
+              dyn_cast<calyx::CombGroupOp>(evaluatingGroup.getOperation()))
+        group =
+            convertCombToSeqGroup(combGroup, pipelineRegister, value, rewriter);
+      else
+        group =
+            replaceGroupRegister(evaluatingGroup, pipelineRegister, rewriter);
 
       // Replace the stage result uses with the register out.
       stage.getResult(i).replaceAllUsesWith(pipelineRegister.out());
@@ -1814,6 +1782,57 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       getComponentState().addPipelineEpilogue(whileOp, epilogueGroups);
 
     return success();
+  }
+
+  calyx::GroupOp convertCombToSeqGroup(calyx::CombGroupOp combGroup,
+                                       calyx::RegisterOp pipelineRegister,
+                                       Value value,
+                                       PatternRewriter &rewriter) const {
+    // Create a sequential group and replace the comb group.
+    PatternRewriter::InsertionGuard g(rewriter);
+    rewriter.setInsertionPoint(combGroup);
+    auto group = rewriter.create<calyx::GroupOp>(combGroup.getLoc(),
+                                                 combGroup.getName());
+    rewriter.cloneRegionBefore(combGroup.getBodyRegion(), group.getBody());
+    group.getBodyRegion().back().erase();
+    rewriter.eraseOp(combGroup);
+
+    // Stitch evaluating group to register.
+    buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group,
+                                     pipelineRegister, value);
+
+    // Mark the new group as the evaluating group.
+    for (auto assign : group.getOps<calyx::AssignOp>())
+      getComponentState().registerEvaluatingGroup(assign.src(), group);
+
+    return group;
+  }
+
+  calyx::GroupOp replaceGroupRegister(calyx::GroupInterface evaluatingGroup,
+                                      calyx::RegisterOp pipelineRegister,
+                                      PatternRewriter &rewriter) const {
+    auto group = cast<calyx::GroupOp>(evaluatingGroup.getOperation());
+
+    // Get the group and register that is temporarily being written to.
+    auto doneOp = group.getDoneOp();
+    auto tempReg =
+        cast<calyx::RegisterOp>(doneOp.src().cast<OpResult>().getOwner());
+    auto tempIn = tempReg.in();
+    auto tempWriteEn = tempReg.write_en();
+
+    // Replace the register write with a write to the pipeline register.
+    for (auto assign : group.getOps<calyx::AssignOp>()) {
+      if (assign.dest() == tempIn)
+        assign.destMutable().assign(pipelineRegister.in());
+      else if (assign.dest() == tempWriteEn)
+        assign.destMutable().assign(pipelineRegister.write_en());
+    }
+    doneOp.srcMutable().assign(pipelineRegister.done());
+
+    // Remove the old register completely.
+    rewriter.eraseOp(tempReg);
+
+    return group;
   }
 };
 
