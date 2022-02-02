@@ -3324,6 +3324,14 @@ StringAttr NonLocalAnchor::ref() {
   return refPart(namepath().size() - 1);
 }
 
+/// Returns true if this NLA targets an instance of a module (as opposed to
+/// an instance's port or something inside an instance).
+bool NonLocalAnchor::isModule() { return !ref(); }
+
+/// Returns true if this NLA targets something inside a module (as opposed
+/// to a module or an instance of a module);
+bool NonLocalAnchor::isComponent() { return (bool)ref(); };
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//

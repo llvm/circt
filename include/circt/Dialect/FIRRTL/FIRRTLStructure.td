@@ -191,5 +191,13 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// Return the leaf reference.  This returns an empty attribute if the leaf
     /// reference is a module.
     StringAttr ref();
+
+    /// Returns true if this NLA targets a module or instance of a module (as
+    /// opposed to an instance's port or something inside an instance).
+    bool isModule();
+
+    /// Returns true if this NLA targets something inside a module (as opposed
+    /// to a module or an instance of a module);
+    bool isComponent();
     }];
 }
