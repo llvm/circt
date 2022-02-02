@@ -417,12 +417,6 @@ public:
     }
   }
 
-  /// Register a value as being part of a sequential group.
-  void addSeqGroupValue(Value value) { seqGroupValues.insert(value); }
-
-  /// Check if a value is part of a sequential group.
-  bool isSeqGroupValue(Value value) { return seqGroupValues.contains(value); }
-
   /// Register reg as being the idx'th iter_args register for 'whileOp'.
   void addWhileIterReg(WhileOpInterface whileOp, calyx::RegisterOp reg,
                        unsigned idx) {
@@ -551,9 +545,6 @@ private:
   /// constitute the pipeline epilogue. Each inner vector consists of the groups
   /// for one stage.
   DenseMap<Operation *, SmallVector<SmallVector<StringAttr>>> pipelineEpilogue;
-
-  /// A set of comb ops that were moved to sequential groups in a pipeline.
-  DenseSet<Value> seqGroupValues;
 
   /// Block arg groups is a list of groups that should be sequentially
   /// executed when passing control from the source to destination block.
@@ -1764,9 +1755,9 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
         buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group,
                                          pipelineRegister, value);
 
-        // Register all sources as having been made sequential.
+        // Mark the new group as the evaluating group.
         for (auto assign : group.getOps<calyx::AssignOp>())
-          getComponentState().addSeqGroupValue(assign.src());
+          getComponentState().registerEvaluatingGroup(assign.src(), group);
       } else {
         // Get the group and register that is temporarily being written to.
         group = cast<calyx::GroupOp>(evaluatingGroup.getOperation());
@@ -2141,13 +2132,10 @@ private:
               staticlogic::PipelineWhileOp>(src.getDefiningOp()))
         continue;
 
-      /// Things which were previously combinational but were moved into a
-      /// sequential group as part of a pipeline also stop inlining.
-      if (state.isSeqGroupValue(src))
+      auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
+          state.getEvaluatingGroup(src).getOperation());
+      if (!srcCombGroup)
         continue;
-
-      auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
-      assert(srcCombGroup && "expected combinational group");
       if (inlinedGroups.count(srcCombGroup))
         continue;
 
