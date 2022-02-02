@@ -267,40 +267,21 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   // that defines it or, preferentially, the first external module
   // that defines it and has no parameters.
   llvm::DenseMap<Attribute, FExtModuleOp> defnameMap;
-  InnerRefList instanceSyms;
-  InnerRefList leafInnerSyms;
-  SmallVector<NonLocalAnchor> nlaList;
 
-  // Verify external modules.
-  for (auto &op : *circuit.getBody()) {
-    // Record all the NLAs.
-    if (auto nla = dyn_cast<NonLocalAnchor>(op))
-      nlaList.push_back(nla);
-    else if (auto mod = dyn_cast<FModuleOp>(op)) {
-      auto modName = mod.getNameAttr();
-      mod.walk([&](Operation *op) {
-        if (isa<InstanceOp>(op))
-          instanceSyms.insert(op, modName);
-        else
-          leafInnerSyms.insert(op, modName);
-      });
-    }
-    if (auto mod = dyn_cast<FModuleLike>(op))
-      leafInnerSyms.insert(mod);
-    auto extModule = dyn_cast<FExtModuleOp>(op);
+  auto verifyExtModule = [&](FExtModuleOp extModule) {
     if (!extModule)
-      continue;
+      return success();
 
     auto defname = extModule.defnameAttr();
     if (!defname)
-      continue;
+      return success();
 
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
     auto collidingModule = circuit.lookupSymbol(defname.getValue());
     if (isa_and_nonnull<FModuleOp>(collidingModule)) {
       auto diag =
-          op.emitOpError()
+          extModule.emitOpError()
           << "attribute 'defname' with value " << defname
           << " conflicts with the name of another module in the circuit";
       diag.attachNote(collidingModule->getLoc())
@@ -323,7 +304,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
       value = extModule;
       // Go to the next extmodule if no extmodule with the same
       // defname was found.
-      continue;
+      return success();
     }
 
     // Check that the number of ports is exactly the same.
@@ -331,7 +312,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     SmallVector<PortInfo> collidingPorts = collidingExtModule.getPorts();
 
     if (ports.size() != collidingPorts.size()) {
-      auto diag = op.emitOpError()
+      auto diag = extModule.emitOpError()
                   << "with 'defname' attribute " << defname << " has "
                   << ports.size()
                   << " ports which is different from a previously defined "
@@ -356,7 +337,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         bType = bType.getWidthlessType();
       }
       if (aName != bName) {
-        auto diag = op.emitOpError()
+        auto diag = extModule.emitOpError()
                     << "with 'defname' attribute " << defname
                     << " has a port with name " << aName
                     << " which does not match the name of the port "
@@ -369,7 +350,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         return failure();
       }
       if (aType != bType) {
-        auto diag = op.emitOpError()
+        auto diag = extModule.emitOpError()
                     << "with 'defname' attribute " << defname
                     << " has a port with name " << aName
                     << " which has a different type " << aType
@@ -383,6 +364,32 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         return failure();
       }
     }
+    return success();
+  };
+
+  InnerRefList instanceSyms;
+  InnerRefList leafInnerSyms;
+  SmallVector<NonLocalAnchor> nlaList;
+
+  for (auto &op : *circuit.getBody()) {
+    // Record all the NLAs.
+    if (auto nla = dyn_cast<NonLocalAnchor>(op))
+      nlaList.push_back(nla);
+    else if (auto mod = dyn_cast<FModuleOp>(op)) {
+      auto modName = mod.getNameAttr();
+      mod.walk([&](Operation *op) {
+        if (isa<InstanceOp>(op))
+          instanceSyms.insert(op, modName);
+        else
+          leafInnerSyms.insert(op, modName);
+      });
+    }
+    if (auto mod = dyn_cast<FModuleLike>(op))
+      leafInnerSyms.insert(mod);
+    // Verify external modules.
+    if (auto extModule = dyn_cast<FExtModuleOp>(op))
+      if (verifyExtModule(extModule).failed())
+        return failure();
   }
   leafInnerSyms.sort();
   instanceSyms.sort();
@@ -430,9 +437,9 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         return failure();
       }
       if (expectedModuleName && expectedModuleName != innerRef.getModule()) {
-        nla.emitOpError() << "instance path is incorrect. Expected module:"
+        nla.emitOpError() << "instance path is incorrect. Expected module: "
                           << expectedModuleName
-                          << " instead found:" << innerRef.getModule();
+                          << " instead found: " << innerRef.getModule();
         return failure();
       }
       if (InstanceOp instOp = dyn_cast_or_null<InstanceOp>(
@@ -442,27 +449,27 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         bool instFound = hasNonLocal(annos, nlaName);
         if (!instFound) {
           auto diag = nla.emitOpError()
-                      << " instance with symbol:" << innerRef
+                      << " instance with symbol: " << innerRef
                       << " does not contain a reference to the NonLocalAnchor";
           diag.attachNote(instOp.getLoc()) << "the instance was defined here";
           return failure();
         }
       } else {
-        nla.emitOpError() << " module:" << innerRef.getModule()
-                          << " does not contain any instance with symbol::"
+        nla.emitOpError() << " module: " << innerRef.getModule()
+                          << " does not contain any instance with symbol: "
                           << innerRef.getName();
         return failure();
       }
     }
-    // The instnace path has been verified. Now verify the last element.
+    // The instance path has been verified. Now verify the last element.
     auto leafRef = namepath[namepath.size() - 1];
     bool leafFound = false;
     if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
       if (auto *rec = leafInnerSyms.getRecordIfExists(innerRef)) {
         if (expectedModuleName != innerRef.getModule()) {
-          nla.emitOpError() << "instance path is incorrect. Expected module:"
+          nla.emitOpError() << "instance path is incorrect. Expected module: "
                             << expectedModuleName
-                            << " instead found:" << innerRef.getModule();
+                            << " instead found: " << innerRef.getModule();
           return failure();
         }
         if (auto mod = dyn_cast_or_null<FModuleLike>(rec->op)) {
@@ -474,21 +481,21 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         }
         if (!leafFound) {
           auto diag = nla.emitOpError()
-                      << " operation with symbol:" << innerRef
+                      << " operation with symbol: " << innerRef
                       << " does not contain a reference to the NonLocalAnchor";
           diag.attachNote(rec->op->getLoc()) << "the symbol was defined here";
           return failure();
         }
       } else {
-        nla.emitOpError() << " operation with symbol:" << innerRef
+        nla.emitOpError() << " operation with symbol: " << innerRef
                           << " was not found ";
         return failure();
       }
     } else if (expectedModuleName !=
                leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
       // This is the case when the nla is applied to a module.
-      nla.emitOpError() << "instance path is incorrect. Expected module:"
-                        << expectedModuleName << " instead found:"
+      nla.emitOpError() << "instance path is incorrect. Expected module: "
+                        << expectedModuleName << " instead found: "
                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
       return failure();
     }

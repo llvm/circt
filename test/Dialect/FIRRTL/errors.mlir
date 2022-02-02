@@ -694,7 +694,7 @@ firrtl.circuit "NLATop" {
 // -----
 
 firrtl.circuit "NLATop1" {
-  // expected-error @+1 {{instance path is incorrect. Expected module:"Aardvark" instead found:"Zebra"}}
+  // expected-error @+1 {{instance path is incorrect. Expected module: "Aardvark" instead found: "Zebra"}}
   firrtl.nla @nla [#hw.innerNameRef<@NLATop1::@test>, #hw.innerNameRef<@Zebra::@test>,#hw.innerNameRef<@Aardvark::@test>]
   firrtl.nla @nla_1 [#hw.innerNameRef<@NLATop1::@test>,#hw.innerNameRef<@Aardvark::@test_1>, @Zebra]
   firrtl.module @NLATop1() {
@@ -741,7 +741,7 @@ firrtl.circuit "fallBackName" {
 // -----
 
 firrtl.circuit "Foo"   {
-  // expected-error @+1 {{operation with symbol:#hw.innerNameRef<@Bar::@b> was not found}}
+  // expected-error @+1 {{operation with symbol: #hw.innerNameRef<@Bar::@b> was not found}}
   firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
   firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>], out %c: !firrtl.uint<1>) {
   }
@@ -755,7 +755,7 @@ firrtl.circuit "Foo"   {
 firrtl.circuit "Top"   {
  // Legal nla would be:
 //firrtl.nla @nla [#hw.innerNameRef<@Top::@mid>, #hw.innerNameRef<@Mid::@leaf>, #hw.innerNameRef<@Leaf::@w>]
-  // expected-error @+1 {{instance path is incorrect. Expected module:"Middle" instead found:"Leaf"}}
+  // expected-error @+1 {{instance path is incorrect. Expected module: "Middle" instead found: "Leaf"}}
   firrtl.nla @nla [#hw.innerNameRef<@Top::@mid>, #hw.innerNameRef<@Leaf::@w>]
   firrtl.module @Leaf() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla, class = "fake1"}]} : !firrtl.uint<3>
