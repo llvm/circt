@@ -130,36 +130,51 @@ class PlacementDB:
 
   def remove_placement(self, loc: PhysLocation):
     # Remove the location from the PlacementDB.
-    self._db.remove_placement(loc._loc)
+    success = self._db.remove_placement(loc._loc)
+    if not success:
+      raise RuntimeError(f"Unable to remove placement at: {loc}")
 
+    self._mutate_global_ref_placement(loc)
+
+  # Mutate the IR to reflect a placement that is being removed or moved. The old
+  # location is used to scan for the relevant global ref. If the new location is
+  # None, the old location is removed. Otherwise, the new location replaces the
+  # old location. It would be best to accept an AppID or some other pointer to
+  # indicate which op needs to have its global ref updated, but we currently
+  # have no way to find an entity without walking the IR, so we just scan for
+  # the relevant global ref.
+  def _mutate_global_ref_placement(self,
+                                   old_loc: PhysLocation,
+                                   new_loc: PhysLocation = None):
     # Find the top-level module.
     top_mod = self._circt_mod.operation.parent
     assert top_mod.parent is None
 
-    # Remove the location from any global ref(s) in the top-level module. In the
-    # case of an external entity, there will be none, and in the case of a PyCDE
-    # entity, there should be exactly one global ref.
+    # Find the global ref in question.
     global_ref_to_remove = None
     for op in top_mod.regions[0].blocks[0]:
+      # If we already found it break.
       if global_ref_to_remove:
         break
       if isinstance(op, hw.GlobalRefOp):
         for nvp in op.attributes:
-          # If the global ref had an attribute for this location, remove it.
-          if nvp.attr == loc._loc:
-            del op.attributes[nvp.name]
+          if nvp.attr == old_loc._loc:
+            # If the global ref specified this location, remove or update it.
+            if new_loc is None:
+              del op.attributes[nvp.name]
+            else:
+              op.attributes[nvp.name] = new_loc._loc
+
             # If the global ref only has its inherent attributes, erase it.
             if len(op.attributes) == 2:
               global_ref_to_remove = op
 
+    # Erase the global ref if necessary. Note that this leaves a dangling
+    # reference in the IR. This is not ideal, but as mentioned above it would
+    # currently require a full walk of the IR to find and remove the reference.
+    # The reference is ultimately dropped regardless when MSFT lowers to HW.
     if global_ref_to_remove:
       global_ref_to_remove.operation.erase()
-
-    # Note: at this point, there is a dangling reference to this global ref in
-    # the IR. It will be scrubbed out when MSFT is lowered to HW, but it would
-    # be good to garbage collect anyway. Unfortunately, with current APIs this
-    # requires an IR traversal. We would need to have an efficient way to lookup
-    # an entity by an AppID or another means.
 
 
 class EntityExtern:
