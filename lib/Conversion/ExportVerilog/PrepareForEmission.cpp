@@ -188,6 +188,8 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 /// enables long-line splitting to work with them.
 static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
                                      SmallVector<Operation *> &newOps) {
+  // save the top level name
+  auto name = op.getAttr("sv.namehint");
   Value lhs, rhs;
   switch (operands.size()) {
   case 0:
@@ -212,6 +214,8 @@ static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
   newOps.push_back(newOp);
+  if (name)
+    newOp->setAttr("sv.namehint", name);
   return newOp->getResult(0);
 }
 
@@ -386,7 +390,8 @@ void ExportVerilog::prepareHWModule(Block &block,
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
         op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        op.getAttrs().empty()) {
+        (op.getAttrs().empty() ||
+         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
       // Lower this operation to a balanced binary tree of the same operation.
       SmallVector<Operation *> newOps;
       auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
