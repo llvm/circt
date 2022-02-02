@@ -178,6 +178,12 @@ struct FirMemory {
 
 // Record of the inner sym name, the module name and the corresponding
 // operation. Also the port index, if the symbol is on a module port.
+// This is used to record the operations or ports, that have an inner sym.
+// The operation and portIdx, can be null, when we have an InnerRefAttr, that is
+// the module name and sym name, but we don't yet have a handle to the operation
+// which has the Reference. So, InnerRefRecord can be used to construct illegal
+// InnerRefAttr, which do not exist in the circt. That is the reason, the
+// comparison operators here, only care for module name and symbol name.
 struct InnerRefRecord {
   mlir::StringAttr mod, innerSym;
   mlir::Operation *op = nullptr;
@@ -198,10 +204,13 @@ struct InnerRefRecord {
   }
 };
 
-// A list of inner sym and the corresponding operations. Can be used for
-// efficient insertion and then searching. It can be used when the pattern is
-// first all the records are inserted, and then searched for. After insertion,
-// the list must be sorted, and then binary search is used.
+// A data structure to record and lookup an InnerSym and the corresponding
+// operation. Can be used when the list is populated first, then sorted and then
+// only used for lookup. This does not handle duplicate entries explicitly. The
+// list must be sorted, before any lookup. This is based on an observation that
+// Dense arrays can be efficient lookup structures. Especially when we have
+// insert-phase and lookup-phase based code.
+// TODO: Generalize this data structure.
 struct InnerRefList {
   void sort() {
     llvm::sort(list);
