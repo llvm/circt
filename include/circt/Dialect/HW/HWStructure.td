@@ -20,7 +20,7 @@ def isModuleSymbol : AttrConstraint<
     >, "is module like">;
 
 def HWModuleOp : HWOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
+      [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">,
        OpAsmOpInterface]>{
   let summary = "HW Module";
@@ -48,8 +48,8 @@ def HWModuleOp : HWOp<"module",
   ];
 
   let extraClassDeclaration = [{
-    using FunctionLike::front;
-    using FunctionLike::getBody;
+    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
+    using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
@@ -74,7 +74,7 @@ def HWModuleOp : HWOp<"module",
       return getModuleOutputPort(*this, i);
     }
 
-    // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
+    // TODO(mlir): FunctionOpInterface shouldn't produce a getBody() helper, it is
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
 
@@ -91,19 +91,19 @@ def HWModuleOp : HWOp<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<HWModuleOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -111,7 +111,6 @@ def HWModuleOp : HWOp<"module",
                            "' attribute of function type");
       return success();
     }
-  public:
   }];
 
   let printer = "return ::print$cppClass(p, *this);";
@@ -120,7 +119,8 @@ def HWModuleOp : HWOp<"module",
 }
 
 def HWModuleExternOp : HWOp<"module.extern",
-      [FunctionLike, Symbol, OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
+      [FunctionOpInterface, Symbol, OpAsmOpInterface,
+       HasParent<"mlir::ModuleOp">]> {
   let summary = "HW external Module";
   let description = [{
     The "hw.module.extern" operation represents an external reference to a
@@ -196,19 +196,19 @@ def HWModuleExternOp : HWOp<"module.extern",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<HWModuleExternOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -216,7 +216,6 @@ def HWModuleExternOp : HWOp<"module.extern",
                            "' attribute of function type");
       return success();
     }
-  public:
   }];
 
   let printer = "return ::print$cppClass(p, *this);";
@@ -248,7 +247,7 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
 }
 
 def HWModuleGeneratedOp : HWOp<"module.generated",
-      [IsolatedFromAbove, FunctionLike, Symbol, OpAsmOpInterface,
+      [IsolatedFromAbove, FunctionOpInterface, Symbol, OpAsmOpInterface,
        HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generated Module";
   let description = [{
@@ -309,19 +308,20 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
 
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<HWModuleGeneratedOp>;
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -329,7 +329,6 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
                            "' attribute of function type");
       return success();
     }
-  public:
   }];
 
   let printer = "return ::print$cppClass(p, *this);";

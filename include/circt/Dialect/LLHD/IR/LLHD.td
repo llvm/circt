@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHD
 #define CIRCT_DIALECT_LLHD_IR_LLHD
 
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"

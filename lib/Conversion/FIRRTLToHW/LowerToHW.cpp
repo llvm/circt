@@ -1497,7 +1497,7 @@ void FIRRTLLowering::run() {
   // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
   // through each operation, lowering each in turn if we can, introducing
   // casts if we cannot.
-  auto &body = theModule.getBody();
+  auto &body = theModule.body();
   randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;

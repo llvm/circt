@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_FSM_TD
 #define CIRCT_DIALECT_FSM_TD
 
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpBase.td"
 
 def FSMDialect : Dialect {

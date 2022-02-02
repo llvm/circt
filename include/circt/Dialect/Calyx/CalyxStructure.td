@@ -60,7 +60,7 @@ def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
     SymbolTable, /* contains Cell names. */
     Symbol,
-    FunctionLike,
+    FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
@@ -97,49 +97,62 @@ def ComponentOp : CalyxOp<"component", [
   ];
 
   let extraClassDeclaration = [{
-    // Necessary to avoid name clashing with `front`.
-    using FunctionLike::front;
+    using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::front;
+    using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getBody;
 
-    private:
-      // This trait needs access to the hooks defined below.
-      friend class OpTrait::FunctionLike<ComponentOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-      /// Hooks for the input/output type enumeration in FunctionLike.
-      unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-      unsigned getNumFuncResults() { return getType().getNumResults(); }
-    public:
-      /// Returns the body of a Calyx component.
-      Block *getBody() {
-        Region* region = &getOperation()->getRegion(0);
-        assert(region->hasOneBlock() && "The body should have one Block.");
-        return &region->front();
-      }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-      /// Returns the region of a Calyx component.
-      Region *getRegion() { return &getOperation()->getRegion(0); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
 
-      /// Returns the port information for this component.
-      SmallVector<PortInfo> getPortInfo();
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
+    LogicalResult verifyType() {
+      auto type = getTypeAttr().getValue();
+      if (!type.isa<FunctionType>())
+        return emitOpError("requires '" + getTypeAttrName() +
+                           "' attribute of function type");
+      return success();
+    }
 
-      /// Returns the input port information for this component.
-      SmallVector<PortInfo> getInputPortInfo();
+    /// Returns the body of a Calyx component.
+    Block *getBody() {
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The body should have one Block.");
+      return &region->front();
+    }
 
-      /// Returns the input port information for this component.
-      SmallVector<PortInfo> getOutputPortInfo();
+    /// Returns the region of a Calyx component.
+    Region *getRegion() { return &getOperation()->getRegion(0); }
 
-      /// Returns the WiresOp of a Calyx Component.
-      WiresOp getWiresOp();
+    /// Returns the port information for this component.
+    SmallVector<PortInfo> getPortInfo();
 
-      /// Returns the ControlOp of a Calyx Component.
-      ControlOp getControlOp();
+    /// Returns the input port information for this component.
+    SmallVector<PortInfo> getInputPortInfo();
 
-      /// Gets the Done port of a Calyx component.
-      Value getDonePort();
+    /// Returns the input port information for this component.
+    SmallVector<PortInfo> getOutputPortInfo();
 
-      /// Gets the Go port of a Calyx component.
-      Value getGoPort();
-      void getAsmBlockArgumentNames(mlir::Region &region,
-                                    mlir::OpAsmSetValueNameFn setNameFn);
+    /// Returns the WiresOp of a Calyx Component.
+    WiresOp getWiresOp();
+
+    /// Returns the ControlOp of a Calyx Component.
+    ControlOp getControlOp();
+
+    /// Gets the Done port of a Calyx component.
+    Value getDonePort();
+
+    /// Gets the Go port of a Calyx component.
+    Value getGoPort();
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
   let verifier = "return ::verify$cppClass(*this);";

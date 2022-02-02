@@ -1305,7 +1305,9 @@ class InlineExecuteRegionOpPattern
     auto *sinkBlock = rewriter.splitBlock(
         execOp->getBlock(),
         execOp.getOperation()->getIterator()->getNextNode()->getIterator());
-    sinkBlock->addArguments(yieldTypes);
+    sinkBlock->addArguments(
+        yieldTypes,
+        SmallVector<Location, 4>(yieldTypes.size(), rewriter.getUnknownLoc()));
     for (auto res : enumerate(execOp.getResults()))
       res.value().replaceAllUsesWith(sinkBlock->getArgument(res.index()));
 

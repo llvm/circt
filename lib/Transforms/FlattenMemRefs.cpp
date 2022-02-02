@@ -310,7 +310,8 @@ public:
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
                  CallOpConversion>(typeConverter, ctx);
-    populateFunctionLikeTypeConversionPattern<FuncOp>(patterns, typeConverter);
+    populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
+                                                             typeConverter);
 
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);

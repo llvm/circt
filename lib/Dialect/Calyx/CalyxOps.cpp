@@ -509,7 +509,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
 
 static ParseResult parseComponentOp(OpAsmParser &parser,
                                     OperationState &result) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   StringAttr componentName;
   if (parser.parseSymbolName(componentName, SymbolTable::getSymbolAttrName(),
@@ -609,7 +609,7 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -650,7 +650,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   region->push_back(body);
 
   // Add all ports to the body.
-  body->addArguments(portTypes);
+  body->addArguments(portTypes, SmallVector<Location, 4>(
+                                    portTypes.size(), builder.getUnknownLoc()));
 
   // Insert the WiresOp and ControlOp.
   IRRewriter::InsertionGuard guard(builder);

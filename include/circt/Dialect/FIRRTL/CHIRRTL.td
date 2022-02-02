@@ -90,11 +90,14 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 // CHIRRTL Operations
 //===----------------------------------------------------------------------===//
 
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
+
 // Base class for the operation in this dialect.
 class CHIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
-def CombMemOp : CHIRRTLOp<"combmem"> {
+def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
@@ -111,7 +114,7 @@ def CombMemOp : CHIRRTLOp<"combmem"> {
   ];
 }
 
-def SeqMemOp : CHIRRTLOp<"seqmem"> {
+def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
   let summary = "Define a new sequential memory";
   let description = [{
     Define a new behavioral sequential memory.  Sequential memories have a
@@ -131,7 +134,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem"> {
 }
 
 def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
-         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+      HasCustomSSAName]> {
   let summary = "Declares a memory port on a memory";
 
   let summary = "Defines a memory port on CHIRRTL memory";

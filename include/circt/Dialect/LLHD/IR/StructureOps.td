@@ -12,7 +12,7 @@
 
 def LLHD_EntityOp : LLHD_Op<"entity", [
     Symbol,
-    FunctionLike,
+    FunctionOpInterface,
     IsolatedFromAbove,
     SingleBlock,
     NoTerminator,
@@ -55,16 +55,22 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
   let verifier = [{ return ::verify(*this); }];
 
   let extraClassDeclaration = [{
-    friend class OpTrait::FunctionLike<EntityOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    // use FunctionLike traits's getBody method
-    using OpTrait::FunctionLike<EntityOp>::getBody;
+    // Use FunctionOpInterface traits's getBody method.
+    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getBody;
 
-    /// Hooks for the input/output type enumeration in FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-    unsigned getNumFuncResults() { return getType().getNumResults(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Hook for FunctionLike verifier.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType();
 
     /// Verifies the body of the function.
@@ -76,7 +82,7 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
 
 def LLHD_ProcOp : LLHD_Op<"proc", [
     Symbol,
-    FunctionLike,
+    FunctionOpInterface,
     IsolatedFromAbove,
     DeclareOpInterfaceMethods<CallableOpInterface>
   ]> {
@@ -122,13 +128,19 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
   let regions = (region AnyRegion: $body);
 
   let extraClassDeclaration = [{
-    friend class OpTrait::FunctionLike<ProcOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Hooks for the input/output type enumeration in FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-    unsigned getNumFuncResults() { return getType().getNumResults(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Hook for FunctionLike verifier.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType();
 
     /// Verifies the body of the function.

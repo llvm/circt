@@ -17,8 +17,9 @@
 #include "mlir/Dialect/Affine/Analysis/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/LoopUtils.h"
+#include "mlir/Dialect/SCF/Utils.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Transforms/LoopUtils.h"
 
 using namespace mlir;
 using namespace circt::analysis;

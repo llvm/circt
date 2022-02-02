@@ -176,13 +176,17 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 
   Region *condRegion = state.addRegion();
   Block &condBlock = condRegion->emplaceBlock();
-  condBlock.addArguments(iterArgs.getTypes());
+
+  SmallVector<Location, 4> argLocs;
+  for (auto arg : iterArgs)
+    argLocs.push_back(arg.getLoc());
+  condBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&condBlock);
   builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 
   Region *stagesRegion = state.addRegion();
   Block &stagesBlock = stagesRegion->emplaceBlock();
-  stagesBlock.addArguments(iterArgs.getTypes());
+  stagesBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&stagesBlock);
   builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
                                        ValueRange());

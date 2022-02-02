@@ -140,7 +140,7 @@ StringAttr hw::getArgSym(Operation *op, unsigned i) {
          "Can only get module ports from an instance or module");
   StringAttr sym = {};
   auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getArgDictAttrName());
+      mlir::function_interface_impl::getArgDictAttrName());
   if (argAttrs && (i < argAttrs.size()))
     if (auto s = argAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
@@ -155,7 +155,7 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
          "Can only get module ports from an instance or module");
   StringAttr sym = {};
   auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getResultDictAttrName());
+      mlir::function_interface_impl::getResultDictAttrName());
   if (resAttrs && (i < resAttrs.size()))
     if (auto s = resAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
@@ -352,7 +352,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                         ArrayAttr parameters,
                         ArrayRef<NamedAttribute> attributes,
                         StringAttr comment) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
@@ -397,9 +397,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute(mlir::function_like_impl::getArgDictAttrName(),
+  result.addAttribute(mlir::function_interface_impl::getArgDictAttrName(),
                       builder.getArrayAttr(argAttrs));
-  result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
+  result.addAttribute(mlir::function_interface_impl::getResultDictAttrName(),
                       builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
@@ -423,7 +423,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports.inputs)
-    body->addArgument(elt.type);
+    body->addArgument(elt.type, builder.getUnknownLoc());
 
   HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -626,7 +626,7 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
 
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   auto loc = parser.getCurrentLocation();
 
@@ -634,6 +634,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
+  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -657,8 +658,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> resultNames;
   if (parseOptionalParameters(parser, parameters) ||
       module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames) ||
+          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
+          resultTypes, resultAttrs, resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
@@ -750,7 +751,7 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
 
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   FunctionType fnType = getHWModuleOpType(op);
   auto argTypes = fnType.getInputs();
@@ -1331,8 +1332,8 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
       // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
       // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
-        if (auto argAttrs =
-                mod->getAttr(mlir::function_like_impl::getArgDictAttrName()))
+        if (auto argAttrs = mod->getAttr(
+                mlir::function_interface_impl::getArgDictAttrName()))
           for (auto attr :
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))
@@ -1340,8 +1341,8 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
                 if (hasGlobalRef(attr.get(globalRefStr)))
                   return success();
 
-        if (auto resAttrs =
-                mod->getAttr(mlir::function_like_impl::getResultDictAttrName()))
+        if (auto resAttrs = mod->getAttr(
+                mlir::function_interface_impl::getResultDictAttrName()))
           for (auto attr :
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))

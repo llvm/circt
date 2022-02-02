@@ -35,7 +35,6 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
-#include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -1810,7 +1809,8 @@ LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
 
   auto funcType = rewriter.getFunctionType(newArgTypes, resTypes);
   f.setType(funcType);
-  auto ctrlArg = f.front().addArgument(rewriter.getNoneType());
+  auto ctrlArg =
+      f.front().addArgument(rewriter.getNoneType(), rewriter.getUnknownLoc());
 
   // We've now added all types to the handshake.funcOp; resolve arg- and
   // res names to ensure they are up to date with the final type
@@ -1830,7 +1830,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
     if (attr.getName() == SymbolTable::getSymbolAttrName() ||
-        attr.getName() == function_like_impl::getTypeAttrName())
+        attr.getName() == function_interface_impl::getTypeAttrName())
       continue;
     attributes.push_back(attr);
   }

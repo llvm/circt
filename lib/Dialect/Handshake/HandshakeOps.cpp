@@ -529,8 +529,8 @@ static ParseResult verifyFuncOp(handshake::FuncOp op) {
 }
 
 /// Parses a FuncOp signature using
-/// mlir::function_like_impl::parseFunctionSignature while getting access to the
-/// parsed SSA names to store as attributes.
+/// mlir::function_interface_impl::parseFunctionSignature while getting access
+/// to the parsed SSA names to store as attributes.
 static ParseResult parseFuncOpArgs(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Attribute> &argNames,
@@ -538,10 +538,14 @@ static ParseResult parseFuncOpArgs(
     SmallVectorImpl<NamedAttrList> &resAttrs) {
   auto *context = parser.getContext();
 
+  SmallVector<Location, 4> argLocs(
+      entryArgs.size(),
+      parser.getEncodedSourceLoc(parser.getCurrentLocation()));
+
   bool isVariadic;
-  if (mlir::function_like_impl::parseFunctionSignature(
+  if (mlir::function_interface_impl::parseFunctionSignature(
           parser, /*allowVariadic=*/true, entryArgs, argTypes, argAttrs,
-          isVariadic, resTypes, resAttrs)
+          argLocs, isVariadic, resTypes, resAttrs)
           .failed())
     return failure();
 
@@ -639,8 +643,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
       parseFuncOpArgs(parser, args, argTypes, argNames, argAttributes, resTypes,
                       resAttributes))
     return failure();
-  mlir::function_like_impl::addArgAndResultAttrs(builder, result, argAttributes,
-                                                 resAttributes);
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      builder, result, argAttributes, resAttributes);
 
   // Set function type
   result.addAttribute(
@@ -667,9 +671,9 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
 
 static void printFuncOp(OpAsmPrinter &p, handshake::FuncOp op) {
   FunctionType fnType = op.getType();
-  mlir::function_like_impl::printFunctionLikeOp(p, op, fnType.getInputs(),
-                                                /*isVariadic=*/true,
-                                                fnType.getResults());
+  mlir::function_interface_impl::printFunctionOp(p, op, fnType.getInputs(),
+                                                 /*isVariadic=*/true,
+                                                 fnType.getResults());
 }
 
 namespace {

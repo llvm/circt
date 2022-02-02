@@ -13,6 +13,7 @@
 #ifndef MSFT_TD
 #define MSFT_TD
 
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"

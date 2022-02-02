@@ -667,7 +667,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
   }
 
   // Check that all operands are of signal type
-  for (int i = 0, e = getNumFuncArguments(); i < e; ++i) {
+  for (int i = 0, e = getNumArguments(); i < e; ++i) {
     if (!getArgument(i).getType().isa<llhd::SigType>()) {
       return emitOpError("usage of invalid argument type, was ")
              << getArgument(i).getType() << ", expected LLHD signal type";
@@ -785,7 +785,8 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
       p << body.front().getArgument(i) << " : " << types[i];
-      p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
+      p.printOptionalAttrDict(
+          ::mlir::function_interface_impl::getArgAttrs(op, i));
 
       if (i < max - 1)
         p << ", ";

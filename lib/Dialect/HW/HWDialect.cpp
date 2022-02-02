@@ -36,11 +36,6 @@ namespace {
 // automatically interpret the name attribute on operations as their SSA name.
 struct HWOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
-
-  /// Get a special name to use when printing the given operation. See
-  /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
-  void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {}
 };
 } // end anonymous namespace
 

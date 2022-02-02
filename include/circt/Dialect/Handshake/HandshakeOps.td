@@ -17,7 +17,7 @@ include "mlir/IR/OpAsmInterface.td"
 // only have a single use.  Also, it defines a Dominance-Free Scope
 def FuncOp : Op<Handshake_Dialect, "func", [
    IsolatedFromAbove,
-   FunctionLike,
+   FunctionOpInterface,
    Symbol,
    RegionKindInterface,
    OpAsmOpInterface
@@ -51,18 +51,14 @@ def FuncOp : Op<Handshake_Dialect, "func", [
           .cast<FunctionType>();
     }
 
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<handshake::FuncOp>;
-
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
-    /// Returns the number of arguments. This is a hook for
-    /// OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
 
     /// Returns the names of the arguments to this function.
     ArrayAttr getArgNames() {
@@ -89,7 +85,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// operation fulfills the name requirements of the handshake function.
     void resolveArgAndResNames();
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// Hook for FunctionOpInterface, called after verifying that the 'type'
     /// attribute is present and checks if it holds a function type.  Ensures
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     /// safely.

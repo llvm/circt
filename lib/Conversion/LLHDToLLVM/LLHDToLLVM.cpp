@@ -1646,9 +1646,11 @@ struct RegOpConversion : public ConvertToLLVMPattern {
     auto continueBlock = block->splitBlock(op);
 
     auto drvBlock = rewriter.createBlock(continueBlock);
-    auto valArg = drvBlock->addArgument(transformed.values()[0].getType());
-    auto delayArg = drvBlock->addArgument(transformed.delays()[0].getType());
-    auto gateArg = drvBlock->addArgument(i1Ty);
+    auto valArg = drvBlock->addArgument(transformed.values()[0].getType(),
+                                        transformed.values()[0].getLoc());
+    auto delayArg = drvBlock->addArgument(transformed.delays()[0].getType(),
+                                          transformed.delays()[0].getLoc());
+    auto gateArg = drvBlock->addArgument(i1Ty, rewriter.getUnknownLoc());
 
     // Create a drive with the block arguments.
     rewriter.setInsertionPointToStart(drvBlock);

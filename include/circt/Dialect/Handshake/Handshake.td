@@ -13,6 +13,7 @@
 #ifndef HANDSHAKE_TD
 #define HANDSHAKE_TD
 
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
