@@ -190,6 +190,6 @@ def NonLocalAnchor : FIRRTLOp<"nla",
 
     /// Return the leaf reference.  This returns an empty attribute if the leaf
     /// reference is a module.
-    StringRef ref();
+    StringAttr ref();
     }];
 }

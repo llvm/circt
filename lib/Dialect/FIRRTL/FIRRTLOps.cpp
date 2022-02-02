@@ -3319,7 +3319,7 @@ StringAttr NonLocalAnchor::refPart(unsigned i) {
 
 /// Return the leaf reference.  This returns an empty attribute if the leaf
 /// reference is a module.
-StringRef NonLocalAnchor::ref() {
+StringAttr NonLocalAnchor::ref() {
   assert(!namepath().empty());
   return refPart(namepath().size() - 1);
 }
