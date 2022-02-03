@@ -1617,15 +1617,13 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
   auto structCreate = dyn_cast_or_null<StructCreateOp>(input().getDefiningOp());
   if (!structCreate)
-    return nullptr;
-  StructType ty = input().getType().cast<StructType>();
-  ArrayRef<hw::StructType::FieldInfo> elems = ty.getElements();
-  unsigned idx = 0, numElems = elems.size();
-  for (; idx < numElems; ++idx)
-    if (elems[idx].name == fieldAttr())
-      break;
-  assert(idx < numElems);
-  return structCreate.getOperand(idx);
+    return {};
+  StructType ty = input().getType().dyn_cast<StructType>();
+  if (!ty)
+    return {};
+  if (auto idx = ty.getFieldIndex(field()))
+    return structCreate.getOperand(*idx);
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
