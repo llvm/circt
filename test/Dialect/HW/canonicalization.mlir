@@ -1053,6 +1053,16 @@ hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) 
   // CHECK-NEXT: hw.output %arg0, %0
   hw.output %id, %b : i4, !hw.array<2xi2>
 }
+
+// CHECK-LABEL: hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3)
+// CHECK-NEXT:    hw.output %a0 : i3
+hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
+  %c0 = hw.constant 0 : i2
+  %arr = hw.array_create %a2, %a1, %a0 : i3
+  %r0 = hw.array_get %arr[%c0] : !hw.array<3xi3>
+  hw.output %r0 : i3
+}
+
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
@@ -1291,4 +1301,3 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (data: i32) {
 }
 
 // == End: test cases from LowerToHW ==
-
