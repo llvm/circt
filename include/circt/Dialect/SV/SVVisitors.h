@@ -51,7 +51,9 @@ public:
             // Simulator control tasks
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
-            FatalOp, ErrorOp, WarningOp, InfoOp>([&](auto expr) -> ResultType {
+            FatalOp, ErrorOp, WarningOp, InfoOp,
+            // Sampled value functiions
+            SampledOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -143,6 +145,9 @@ public:
   HANDLE(ErrorOp, Unhandled);
   HANDLE(WarningOp, Unhandled);
   HANDLE(InfoOp, Unhandled);
+
+  // Sampled Value Functions
+  HANDLE(SampledOp, Unhandled);
 #undef HANDLE
 };
 

@@ -203,7 +203,8 @@ StringRef getPortVerilogName(Operation *module, PortInfo port) {
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
-          StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp>(op))
+          StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
+          SampledOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1486,6 +1487,9 @@ private:
   SubExprInfo visitSV(IndexedPartSelectOp op);
   SubExprInfo visitSV(StructFieldInOutOp op);
 
+  // Sampled value functions
+  SubExprInfo visitSV(SampledOp op);
+
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
@@ -2089,6 +2093,13 @@ SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
   return {Selection, prec.signedness};
 }
 
+SubExprInfo ExprEmitter::visitSV(SampledOp op) {
+  os << "$sampled(";
+  auto info = emitSubExpr(op.expression(), LowestPrecedence, OOLTopLevel);
+  os << ")";
+  return info;
+}
+
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // The ?: operator is right associative.
   emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1), OOLBinary);
@@ -2445,7 +2456,8 @@ private:
 
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
-                            SmallPtrSet<Operation *, 8> &ops);
+                            SmallPtrSet<Operation *, 8> &ops,
+                            bool isConcurrent);
   template <typename Op>
   LogicalResult emitImmediateAssertion(Op op, StringRef opName);
   LogicalResult visitSV(AssertOp op);
@@ -2919,7 +2931,8 @@ void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
 /// Emit the optional ` else $error(...)` portion of an immediate or concurrent
 /// verification operation.
 void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
-                                       SmallPtrSet<Operation *, 8> &ops) {
+                                       SmallPtrSet<Operation *, 8> &ops,
+                                       bool isConcurrent = false) {
   if (!message)
     return;
   os << " else $error(\"";
@@ -2981,7 +2994,7 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   os << ") ";
   emitExpression(op.property(), ops);
   os << ")";
-  emitAssertionMessage(op.messageAttr(), op.operands(), ops);
+  emitAssertionMessage(op.messageAttr(), op.operands(), ops, true);
   os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
