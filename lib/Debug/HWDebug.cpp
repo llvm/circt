@@ -166,6 +166,11 @@ public:
         value = moduleOp->getArgument(port.argNum);
         portNames[value] = n;
       }
+      // also add to the generator variables
+      if (port.debugAttr) {
+        variables.emplace_back(HWDebugVarDef{
+            .name = port.debugAttr.strref(), .value = n, .rtl = true});
+      }
     }
   }
 

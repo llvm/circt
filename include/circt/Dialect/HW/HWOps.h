@@ -48,6 +48,9 @@ struct PortInfo {
   /// The optional symbol for this port.
   StringAttr sym = {};
 
+  // The optional debug attribute for this port
+  StringAttr debugAttr = {};
+
   StringRef getName() const { return name.getValue(); }
   bool isOutput() const { return direction == OUTPUT; }
 

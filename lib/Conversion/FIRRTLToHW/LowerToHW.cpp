@@ -790,6 +790,17 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hwPort.type = lowerType(firrtlPort.type);
     hwPort.sym = firrtlPort.sym;
 
+    // Pass down the debug attr if any
+    // Notice that hasAnnotation does not work since the debug attribute
+    // is not inserted as a class
+    for (auto anno : firrtlPort.annotations) {
+      auto annoDict = anno.getDict();
+      if (auto debugAttr = annoDict.get("hw.debug.name")) {
+        hwPort.debugAttr = debugAttr.cast<StringAttr>();
+        firrtlPort.annotations.removeAnnotation(anno);
+        break;
+      }
+    }
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
       moduleOp->emitError("cannot lower this port type to HW");
@@ -3341,19 +3352,19 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal || !resetSignal)
       return failure();
 
-    addToAlwaysBlock(
-        sv::EventControl::AtPosEdge, clockVal,
-        regResetOp.resetSignal().getType().isa<AsyncResetType>()
-            ? ::ResetType::AsyncReset
-            : ::ResetType::SyncReset,
-        sv::EventControl::AtPosEdge, resetSignal, [&]() {
-          auto assignOp = builder.create<sv::PAssignOp>(destVal, srcVal);
-          if (auto debugAttr = op->getAttr("hw.debug.name")) {
-            assignOp->setAttr("hw.debug.name", debugAttr);
-          }
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     regResetOp.resetSignal().getType().isa<AsyncResetType>()
+                         ? ::ResetType::AsyncReset
+                         : ::ResetType::SyncReset,
+                     sv::EventControl::AtPosEdge, resetSignal, [&]() {
+                       auto assignOp =
+                           builder.create<sv::PAssignOp>(destVal, srcVal);
+                       if (auto debugAttr = op->getAttr("hw.debug.name")) {
+                         assignOp->setAttr("hw.debug.name", debugAttr);
+                       }
 
-          return assignOp;
-        });
+                       return assignOp;
+                     });
     return success();
   }
 
@@ -3416,15 +3427,15 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
                           ? ::ResetType::AsyncReset
                           : ::ResetType::SyncReset;
-    addToAlwaysBlock(
-        sv::EventControl::AtPosEdge, clockVal, resetStyle,
-        sv::EventControl::AtPosEdge, resetSignal, [&]() {
-          auto assignOp = builder.create<sv::PAssignOp>(destVal, srcVal);
-          if (auto debugAttr = op->getAttr("hw.debug.name")) {
-            assignOp->setAttr("hw.debug.name", debugAttr);
-          }
-          return assignOp;
-        });
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
+                     sv::EventControl::AtPosEdge, resetSignal, [&]() {
+                       auto assignOp =
+                           builder.create<sv::PAssignOp>(destVal, srcVal);
+                       if (auto debugAttr = op->getAttr("hw.debug.name")) {
+                         assignOp->setAttr("hw.debug.name", debugAttr);
+                       }
+                       return assignOp;
+                     });
     return success();
   }
 
