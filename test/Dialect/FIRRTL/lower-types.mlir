@@ -242,20 +242,20 @@ firrtl.circuit "TopLevel" {
     //
     // ---------------------------------------------------------------------------------
     // Read ports
-    // FLATTEN:  %[[v4:.+]] = firrtl.bits %[[v3]] 7 to 0 :
-    // FLATTEN:  %[[v5:.+]] = firrtl.bits %[[v3]] 15 to 8 :
-    // FLATTEN:  firrtl.connect %[[memory_r_data_a:.+]], %[[v4]] :
-    // FLATTEN:  firrtl.connect %[[memory_r_data_b:.+]], %[[v5]] :
+    // FLATTEN:  %[[v4:.+]] = firrtl.bits %[[v3]] 15 to 8 :
+    // FLATTEN-NEXT:  %[[v5:.+]] = firrtl.bits %[[v3]] 7 to 0 :
+    // FLATTEN-NEXT:  firrtl.connect %[[memory_r_data_a:.+]], %[[v4]] :
+    // FLATTEN-NEXT:  firrtl.connect %[[memory_r_data_b:.+]], %[[v5]] :
     // --------------------------------------------------------------------------------
     // Write Ports
     // FLATTEN:  %[[v9:.+]] = firrtl.subfield %[[memory_w]](3)
-    // FLATTEN:  %[[v10:.+]] = firrtl.cat %[[memory_w_data_b:.+]], %[[memory_w_data_a:.+]] :
+    // FLATTEN:  %[[v10:.+]] = firrtl.cat %[[memory_w_data_a:.+]], %[[memory_w_data_b:.+]] :
     // FLATTEN:  firrtl.connect %[[v9]], %[[v10]]
     //
     // --------------------------------------------------------------------------------
     // Mask Ports
     //  FLATTEN: %[[v11:.+]] = firrtl.subfield %[[memory_w]](4)
-    //  FLATTEN: %[[v12:.+]] = firrtl.cat %[[memory_w_mask_b:.+]], %[[memory_w_mask_a:.+]] :
+    //  FLATTEN: %[[v12:.+]] = firrtl.cat %[[memory_w_mask_a:.+]], %[[memory_w_mask_b:.+]] :
     //  FLATTEN: firrtl.connect %[[v11]], %[[v12]]
     // --------------------------------------------------------------------------------
     // Connections to module ports
@@ -269,7 +269,7 @@ firrtl.circuit "TopLevel" {
     // FLATTEN:  firrtl.connect %[[memory_w_data_a]], %wData_a : !firrtl.uint<8>, !firrtl.uint<8>
     // FLATTEN:  firrtl.connect %[[memory_w_data_b]], %wData_b : !firrtl.uint<8>, !firrtl.uint<8>
   }
-
+  // CHECK-LABEL: @Mem2_flatten
   firrtl.module @Mem2_flatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out
   %rData: !firrtl.bundle<a: uint<8>, b: uint<16>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask:
   !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<16>>) {
@@ -302,8 +302,8 @@ firrtl.circuit "TopLevel" {
     // FLATTENsss  %[[v12:.+]] = firrtl.cat %[[memory_w_mask_b]], %[[memory_w_mask_a]] :
     // FLATTEN:  %[[v13:.+]] = firrtl.bits %[[v12]] 0 to 0
     // FLATTEN:  %[[v14:.+]] = firrtl.bits %[[v12]] 1 to 1
-    // FLATTEN:  %[[v15:.+]] = firrtl.cat %[[v14]], %[[v13]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    // FLATTEN:  %[[v16:.+]] = firrtl.cat %[[v14]], %[[v15]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+    // FLATTEN:  %[[v15:.+]] = firrtl.cat %[[v13]], %[[v14]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // FLATTEN:  %[[v16:.+]] = firrtl.cat %[[v15]], %[[v14]] : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<3>
     // FLATTEN:  firrtl.connect %[[v11]], %[[v16]] : !firrtl.uint<3>, !firrtl.uint<3>
     // FLATTEN:  firrtl.connect %[[memory_w_mask_b]], %wMask_b : !firrtl.uint<1>, !firrtl.uint<1>
     // FLATTEN:  firrtl.connect %[[memory_w_data_a]], %wData_a : !firrtl.uint<8>, !firrtl.uint<8>
@@ -1285,9 +1285,9 @@ firrtl.module @is1436_FOO() {
     // CHECK-NEXT:  %[[v1:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
     // CHECK-NEXT:  %[[v2:.+]] = firrtl.cat %[[v1]], %[[v0]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
     %c = firrtl.bitcast %b : (!firrtl.vector<uint<2>, 2>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>)
-    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 1 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
     %d = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>
     // CHECK-NEXT:  %d_valid = firrtl.wire  : !firrtl.uint<1>
     // CHECK-NEXT:  %d_ready = firrtl.wire  : !firrtl.uint<1>
@@ -1297,32 +1297,31 @@ firrtl.module @is1436_FOO() {
     // CHECK-NEXT:  firrtl.connect %d_ready, %[[v4]] : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT:  firrtl.connect %d_data, %[[v5]] : !firrtl.uint<2>, !firrtl.uint<2>
     %e = firrtl.bitcast %d : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>) -> (!firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>)
-    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_ready, %d_valid : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %d_data, %[[v6]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
-    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_valid, %d_ready : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %[[v6]], %d_data : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   %o1 = firrtl.subfield %e(1) : (!firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>,2>
    %c2 = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>)
     %d2 = firrtl.wire : !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
     firrtl.connect %d2 , %c2: !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data:
     uint<1>>, !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
-   //CHECK: %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v12:.+]] = firrtl.bits %a1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v16:.+]] = firrtl.bits %a1 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-   //CHECK: %[[v17:.+]] = firrtl.bits %a1 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-   //CHECK: %[[d2_valid_re_a:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: %[[d2_valid_aa:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: %[[d2_ready:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: %[[d2_data:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_valid_re_a]], %[[v14]] : !firrtl.uint<1>, !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_valid_aa]], %[[v15]] : !firrtl.uint<1>, !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_ready]], %[[v16]] : !firrtl.uint<1>, !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_data]], %[[v17]] : !firrtl.uint<1>, !firrtl.uint<1>
-
+   //CHECK:      %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[v12:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+   //CHECK-NEXT: %[[v13:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[v15:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[v16:.+]] = firrtl.bits %a1 1 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[v17:.+]] = firrtl.bits %a1 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK-NEXT: %[[d2_valid_re_a:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK-NEXT: %[[d2_valid_aa:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK-NEXT: %[[d2_ready:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK-NEXT: %[[d2_data:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK-NEXT: firrtl.connect %[[d2_valid_re_a]], %[[v14]] : !firrtl.uint<1>, !firrtl.uint<1>
+   //CHECK-NEXT: firrtl.connect %[[d2_valid_aa]], %[[v15]] : !firrtl.uint<1>, !firrtl.uint<1>
+   //CHECK-NEXT: firrtl.connect %[[d2_ready]], %[[v16]] : !firrtl.uint<1>, !firrtl.uint<1>
+   //CHECK-NEXT: firrtl.connect %[[d2_data]], %[[v17]] : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   firrtl.module @VecMemFlatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.vector<uint<8>, 4>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.vector<uint<1>, 4>, in %wData: !firrtl.vector<uint<8>, 4>) {
@@ -1389,14 +1388,14 @@ firrtl.module @is1436_FOO() {
     %SiFive_ram_MPORT, %SiFive_ram_io_deq_bits_MPORT = firrtl.mem Undefined  {depth = 2 : i64, name = "SiFive_ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, addr: uint<31>, len: uint<8>, size: uint<3>, burst: uint<2>, lock: uint<1>, cache: uint<4>, prot: uint<3>, qos: uint<4>, user: bundle<>, echo: bundle<>>, mask: bundle<id: uint<1>, addr: uint<1>, len: uint<1>, size: uint<1>, burst: uint<1>, lock: uint<1>, cache: uint<1>, prot: uint<1>, qos: uint<1>, user: bundle<>, echo: bundle<>>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, addr: uint<31>, len: uint<8>, size: uint<3>, burst: uint<2>, lock: uint<1>, cache: uint<4>, prot: uint<3>, qos: uint<4>, user: bundle<>, echo: bundle<>>>
     // FLATTEN: %SiFive_ram_MPORT, %SiFive_ram_io_deq_bits_MPORT = firrtl.mem Undefined  {depth = 2 : i64, name = "SiFive_ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<60>, mask: uint<60>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<60>>
    // FLATTEN:   %[[v3:.+]] = firrtl.subfield %SiFive_ram_MPORT(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<60>, mask: uint<60>>) -> !firrtl.uint<60>
-   // FLATTEN:   %[[v4:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_addr:.+]], %[[SiFive_ram_MPORT_data_id:.+]] : (!firrtl.uint<31>, !firrtl.uint<4>) -> !firrtl.uint<35>
-   // FLATTEN:   %[[v5:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_len:.+]], %[[v4]] : (!firrtl.uint<8>, !firrtl.uint<35>) -> !firrtl.uint<43>
-   // FLATTEN:   %[[v6:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_size:.+]], %[[v5]] : (!firrtl.uint<3>, !firrtl.uint<43>) -> !firrtl.uint<46>
-   // FLATTEN:   %[[v7:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_burst:.+]], %[[v6]] : (!firrtl.uint<2>, !firrtl.uint<46>) -> !firrtl.uint<48>
-   // FLATTEN:   %[[v8:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_lock:.+]], %[[v7]] : (!firrtl.uint<1>, !firrtl.uint<48>) -> !firrtl.uint<49>
-   // FLATTEN:   %[[v9:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_cache:.+]], %[[v8]] : (!firrtl.uint<4>, !firrtl.uint<49>) -> !firrtl.uint<53>
-   // FLATTEN:   %[[v10:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_prot:.+]], %[[v9]] : (!firrtl.uint<3>, !firrtl.uint<53>) -> !firrtl.uint<56>
-   // FLATTEN:   %[[v11:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_qos:.+]], %[[v10]] : (!firrtl.uint<4>, !firrtl.uint<56>) -> !firrtl.uint<60>
+   // FLATTEN:   %[[v4:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_id:.+]], %[[SiFive_ram_MPORT_data_addr:.+]] : (!firrtl.uint<4>, !firrtl.uint<31>) -> !firrtl.uint<35>
+   // FLATTEN:   %[[v5:.+]] = firrtl.cat %[[v4]], %[[SiFive_ram_MPORT_data_len:.+]] : (!firrtl.uint<35>, !firrtl.uint<8>) -> !firrtl.uint<43>
+   // FLATTEN:   %[[v6:.+]] = firrtl.cat %[[v5]], %[[SiFive_ram_MPORT_data_size:.+]] : (!firrtl.uint<43>, !firrtl.uint<3>) -> !firrtl.uint<46>
+   // FLATTEN:   %[[v7:.+]] = firrtl.cat %[[v6]], %[[SiFive_ram_MPORT_data_burst:.+]] : (!firrtl.uint<46>, !firrtl.uint<2>) -> !firrtl.uint<48>
+   // FLATTEN:   %[[v8:.+]] = firrtl.cat %[[v7]], %[[SiFive_ram_MPORT_data_lock:.+]] : (!firrtl.uint<48>, !firrtl.uint<1>) -> !firrtl.uint<49>
+   // FLATTEN:   %[[v9:.+]] = firrtl.cat %[[v8]], %[[SiFive_ram_MPORT_data_cache:.+]] : (!firrtl.uint<49>, !firrtl.uint<4>) -> !firrtl.uint<53>
+   // FLATTEN:   %[[v10:.+]] = firrtl.cat %[[v9]], %[[SiFive_ram_MPORT_data_prot:.+]] : (!firrtl.uint<53>, !firrtl.uint<3>) -> !firrtl.uint<56>
+   // FLATTEN:   %[[v11:.+]] = firrtl.cat %[[v10]], %[[SiFive_ram_MPORT_data_qos:.+]] : (!firrtl.uint<56>, !firrtl.uint<4>) -> !firrtl.uint<60>
    // FLATTEN:   firrtl.connect %[[v3]], %[[v11]] : !firrtl.uint<60>, !firrtl.uint<60>
   }
 
