@@ -797,9 +797,11 @@ static void printHWModuleOp(OpAsmPrinter &p, HWModuleOp op) {
 
   // Print the body if this is not an external function.
   Region &body = op.getBody();
-  if (!body.empty())
+  if (!body.empty()) {
+    p << " ";
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+  }
 }
 
 static LogicalResult verifyModuleCommon(Operation *module) {

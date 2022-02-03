@@ -9,12 +9,12 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo
     inst bar of Bar
     bar.bar <= foo
 
-; CHECK-LABEL: "firrtl.extmodule"() ( {
+; CHECK-LABEL: "firrtl.extmodule"() ({
 ; CHECK: }) {
 ; CHECK-SAME: portAnnotations = {{['[']['[']}}{a = "a"}]]
 ; CHECK-SAME: sym_name = "Bar"
 
-; CHECK-LABEL: "firrtl.module"() ( {
+; CHECK-LABEL: "firrtl.module"() ({
 ; CHECK: }) {
 ; CHECK-SAME: portAnnotations = {{['[']['[']}}{b = "b"}]]
 ; CHECK-SAME: sym_name = "Foo"
