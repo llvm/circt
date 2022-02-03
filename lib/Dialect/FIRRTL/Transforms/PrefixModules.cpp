@@ -128,8 +128,42 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   // changed yet.
   if (!prefix.empty())
     anythingChanged = true;
+  StringAttr thisMod = module.getNameAttr();
+  // A predicate to check if an annotation can be removed. If there is a
+  // refernece to a NLA, the NLA should either contain this module in its path,
+  // if its an InstanceOp. Else, it must exist at the leaf of the NLA. Otherwise
+  // the NLA reference can be removed, since its a spurious annotation, result
+  // of cloning the original module.
+  auto canRemoveAnno = [&](Annotation anno, Operation *op) -> bool {
+    auto nla = anno.getMember("circt.nonlocal");
+    if (!nla)
+      return false;
+    auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
+    auto nlaIter = nlaMap.find(nlaName);
+    if (nlaIter == nlaMap.end()) {
+      op->emitError("cannot find NonLocalAnchor :" + nlaName);
+      return true;
+    }
 
+    auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
+    bool isValid = false;
+    if (isa<InstanceOp>(op))
+      isValid = nlaOp.hasModule(thisMod);
+    else
+      isValid = nlaOp.leafMod() == thisMod;
+    return !isValid;
+  };
+  // Remove spurious NLA references from the module ports and the module itself.
+  // Some of the NLA references become invalid after a module is cloned, based
+  // on the instnace.
+  AnnotationSet::removePortAnnotations(
+      module, std::bind(canRemoveAnno, std::placeholders::_2, module));
+  AnnotationSet::removeAnnotations(
+      module, std::bind(canRemoveAnno, std::placeholders::_1, module));
   module.body().walk([&](Operation *op) {
+    // Remove spurious NLA references either on a leaf op, or the InstanceOp.
+    AnnotationSet::removeAnnotations(
+        op, std::bind(canRemoveAnno, std::placeholders::_1, op));
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
@@ -160,19 +194,17 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // There can be multiple NonLocalAnchors attached to the instance op.
 
       for (Annotation anno : instAnnos) {
-        if (anno.isClass("circt.nonlocal"))
-          if (auto nla = anno.getMember("circt.nonlocal")) {
-            auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-            auto f = nlaMap.find(nlaName);
-            if (f == nlaMap.end())
-              instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
-            else {
-              auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
-              StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
-              nlaOp.updateModule(oldModName,
-                                 StringAttr::get(context, newTarget));
-            }
+        if (auto nla = anno.getMember("circt.nonlocal")) {
+          auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
+          auto f = nlaMap.find(nlaName);
+          if (f == nlaMap.end())
+            instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
+          else {
+            auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
+            StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
+            nlaOp.updateModule(oldModName, StringAttr::get(context, newTarget));
           }
+        }
       }
 
       instanceOp.moduleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
