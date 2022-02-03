@@ -1618,7 +1618,7 @@ OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
   auto structCreate = dyn_cast_or_null<StructCreateOp>(input().getDefiningOp());
   if (!structCreate)
     return {};
-  StructType ty = input().getType().dyn_cast<StructType>();
+  auto ty = type_dyn_cast<StructType>(input().getType());
   if (!ty)
     return {};
   if (auto idx = ty.getFieldIndex(field()))
