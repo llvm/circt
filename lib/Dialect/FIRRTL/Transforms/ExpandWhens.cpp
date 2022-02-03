@@ -203,7 +203,16 @@ public:
       newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
     else if (trueIsInvalid)
       newValue = whenFalse;
-    return b.create<ConnectOp>(loc, dest, newValue);
+    auto connectOp = b.create<ConnectOp>(loc, dest, newValue);
+
+    if (auto debugAttr = whenTrueConn->getAttr("hw.debug.name")) {
+      connectOp->setAttr("hw.debug.name", debugAttr);
+    } else if (whenFalseConn && whenFalseConn->hasAttr("hw.debug.name")) {
+      connectOp->setAttr("hw.debug.name",
+                         whenFalseConn->getAttr("hw.debug.name"));
+    }
+
+    return connectOp;
   }
 
   void visitDecl(WireOp op) { declareSinks(op.result(), Flow::Duplex); }
@@ -247,6 +256,9 @@ public:
     auto builder = OpBuilder(op->getBlock(), ++Block::iterator(op));
     auto fn = [&](Value value) {
       auto connect = builder.create<ConnectOp>(value.getLoc(), value, value);
+      if (auto debugAttr = op->getAttr("hw.debug.name")) {
+        connect->setAttr("hw.debug.name", debugAttr);
+      }
       driverMap[getFieldRefFromValue(value)] = connect;
     };
     foreachSubelement(builder, op.result(), fn);

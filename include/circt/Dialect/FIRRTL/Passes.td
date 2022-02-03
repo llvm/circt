@@ -51,7 +51,9 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
            "Preserve passive aggregate types in the module.">,
     Option<"preservePublicTypes", "preserve-public-types", "bool",
            "true", "Force to lower ports of toplevel and external modules even"
-           "when aggregate preservation mode.">
+           "when aggregate preservation mode.">,
+    Option<"insertDebugInfo", "insert-debug-info", "bool", "false",
+           "Insert debug information.">
   ];
   let dependentDialects = ["hw::HWDialect"];
 }
