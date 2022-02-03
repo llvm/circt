@@ -53,27 +53,6 @@ mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/SV/SVTypes.cpp.inc"
 
-/// Parses a type registered to this dialect
-Type SVDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  auto loc = parser.getCurrentLocation();
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  Type type;
-  auto parseResult = generatedTypeParser(parser, mnemonic, type);
-  if (parseResult.hasValue())
-    return type;
-  parser.emitError(loc, "Failed to parse type sv.") << mnemonic << "\n";
-  return Type();
-}
-
-/// Print a type registered to this dialect
-void SVDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'hw' type kind");
-}
-
 void SVDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

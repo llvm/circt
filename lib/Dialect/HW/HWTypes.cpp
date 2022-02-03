@@ -446,27 +446,6 @@ TypedeclOp TypeAliasType::getTypeDecl(const SymbolCache &cache) {
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
-/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
-/// the tblgen'd type parser dispatcher.
-Type HWDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  Type type;
-  auto parseResult = generatedTypeParser(parser, mnemonic, type);
-  if (parseResult.hasValue())
-    return type;
-  return Type();
-}
-
-/// Print a type registered to this dialect. Try the tblgen'd type printer
-/// dispatcher then fail since all HW types are defined via ODS.
-void HWDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'hw' type");
-}
-
 void HWDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
