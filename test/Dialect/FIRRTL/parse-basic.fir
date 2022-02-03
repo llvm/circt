@@ -538,7 +538,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; Subfields always get emitted by their declarations.
     ; CHECK: [[SUB:%.+]] = firrtl.subfield %i(0)
-    
+
     ; CHECK: %n3 = firrtl.node [[SUB]]
     node n3 = i.x
 
@@ -547,7 +547,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       ; CHECK: %n4 = firrtl.node [[SUB]]
       node n4 = i.x
     ; CHECK: }
-    
+
     ; Check that invalidation reuses subfields
     wire w: {a: UInt<1>}[1]
     ; CHECK: %1 = firrtl.subindex %w[0]
