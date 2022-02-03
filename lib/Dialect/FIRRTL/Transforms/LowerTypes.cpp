@@ -524,7 +524,7 @@ bool TypeLoweringVisitor::lowerProducer(
     // attribute.
     ArrayAttr loweredAttrs = filterAnnotations(context, oldAnno, srcType, field,
                                                needsSym, loweredSymName);
-    auto newOp = clone(field, loweredAttrs);
+    auto* newOp = clone(field, loweredAttrs);
     // Carry over the name, if present.
     if (!loweredName.empty())
       newOp->setAttr("name", StringAttr::get(context, loweredName));
