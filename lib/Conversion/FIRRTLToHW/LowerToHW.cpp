@@ -3621,6 +3621,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       event = circt::sv::EventControl::AtNegEdge;
       break;
     }
+
     buildConcurrentVerifOp(
         builder, opName,
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
