@@ -78,56 +78,6 @@ LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,
 // Register attributes and types to the LLHD Dialect
 //===----------------------------------------------------------------------===//
 
-/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
-/// the tblgen'd type parser dispatcher.
-Type LLHDDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return {};
-
-  Type type;
-  if (generatedTypeParser(parser, mnemonic, type).hasValue())
-    return type;
-
-  emitError(parser.getEncodedSourceLoc(parser.getCurrentLocation()),
-            "Invalid LLHD type!");
-  return {};
-}
-
-/// Print a type registered to this dialect. Try the tblgen'd type printer
-/// dispatcher then fail since all LLHD types are defined via ODS.
-void LLHDDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'llhd' type");
-}
-
-/// Parses an attribute registered to this dialect. Parse out the mnemonic then
-/// invoke the tblgen'd attribute parser dispatcher.
-Attribute LLHDDialect::parseAttribute(DialectAsmParser &parser,
-                                      Type type) const {
-  llvm::StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return {};
-
-  Attribute value;
-  if (generatedAttributeParser(parser, mnemonic, type, value).hasValue())
-    return value;
-
-  emitError(parser.getEncodedSourceLoc(parser.getCurrentLocation()),
-            "Invalid LLHD attribute!");
-  return {};
-}
-
-/// Print an attribute registered to this dialect. Try the tblgen'd attribute
-/// printer dispatcher then fail since all LLHD attributes are defined via ODS.
-void LLHDDialect::printAttribute(Attribute attr,
-                                 DialectAsmPrinter &printer) const {
-  if (succeeded(generatedAttributePrinter(attr, printer)))
-    return;
-  llvm_unreachable("unexpected 'llhd' type");
-}
-
 void LLHDDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

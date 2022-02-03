@@ -6,7 +6,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
   %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
   %partSelectReg = sv.reg : !hw.inout<i42>
- 
+
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'd11;
   %param_x = sv.localparam : i42 { value = 11: i42 }
@@ -584,7 +584,7 @@ hw.module @slice_inline_ports(%arr: !hw.array<128xi1>, %x: i3, %y: i7)
   // array_create cannot be inlined into the slice.
   %c1_i2 = hw.constant 1 : i2
   %0 = hw.array_create %x, %x, %x, %x : i3
-  // CHECK: wire [3:0][2:0] _T = 
+  // CHECK: wire [3:0][2:0] _T =
   %1 = hw.array_slice %0 at %c1_i2 : (!hw.array<4xi3>) -> !hw.array<2xi3>
   // CHECK: assign o1 = _T[2'h1 +: 2];
 
@@ -984,9 +984,9 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   %xor = comb.xor %val, %c42_2 : i8
   hw.instance "aa1" sym @verbatim_b1 @verbatim_inout_2() ->()
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, aa1,reg2 = reg2 )
-  sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}},reg2 = {{6}} )" 
+  sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}},reg2 = {{6}} )"
           (%add, %xor)  : i8,i8
-          {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_reg1>, @verbatim_M2, 
+          {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_reg1>, @verbatim_M2,
           @verbatim_inout_2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>, #hw.innerNameRef<@verbatim_M1::@verbatim_reg2>]}
   // CHECK: Wire : wire25
   sv.verbatim " Wire : {{0}}" {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_wireSym1>]}
@@ -999,8 +999,8 @@ hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
   %c42_2 = hw.constant 42 : i8
   %xor = comb.xor %val, %c42_2 : i8
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
-  sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
-                (%add, %xor)  : i8,i8 
+  sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})"
+                (%add, %xor)  : i8,i8
                 {symbols = [@verbatim_M1, @verbatim_M2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>]}
 }
 
@@ -1053,7 +1053,7 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
 
   // Check that inline initializer things can have too-long-line-length
   // temporaries and that they are generated correctly.
-  
+
   // CHECK: initial begin
   sv.initial {
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;

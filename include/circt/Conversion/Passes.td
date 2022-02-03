@@ -19,7 +19,7 @@ include "mlir/Pass/PassBase.td"
 // AffineToStaticLogic
 //===----------------------------------------------------------------------===//
 
-def AffineToStaticLogic : FunctionPass<"convert-affine-to-staticlogic"> {
+def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> {
   let summary = "Convert Affine dialect to StaticLogic pipelines";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling

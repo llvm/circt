@@ -35,19 +35,19 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
     $string (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result) attr-dict 
+      `:` functional-type($operands, $result) attr-dict
   }];
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "Twine":$string,
                 CArg<"ValueRange", "{}">:$operands),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), operands," 
+               "odsBuilder.getStringAttr(string), operands,"
                "odsBuilder.getArrayAttr({}));">,
     OpBuilder<(ins "Type":$resultType, "StringAttr":$string,
                 CArg<"ValueRange", "{}">:$operands),
                "build(odsBuilder, odsState, resultType, "
-               "string, operands," 
+               "string, operands,"
                "odsBuilder.getArrayAttr({}));">
   ];
 }
@@ -71,7 +71,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
   let results = (outs HWValueOrInOutType:$result);
   let assemblyFormat = [{
     $string (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result) attr-dict 
+      `:` functional-type($operands, $result) attr-dict
   }];
 
   let builders = [

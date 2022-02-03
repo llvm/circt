@@ -31,27 +31,6 @@ using namespace circt::moore;
 // Register types to dialect
 //===----------------------------------------------------------------------===//
 
-/// Parses a type registered to this dialect
-Type MooreDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  auto loc = parser.getCurrentLocation();
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  Type type;
-  auto parseResult = generatedTypeParser(parser, mnemonic, type);
-  if (parseResult.hasValue())
-    return type;
-  parser.emitError(loc, "Failed to parse type moore.") << mnemonic << "\n";
-  return Type();
-}
-
-/// Print a type registered to this dialect
-void MooreDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'moore' type kind");
-}
-
 void MooreDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

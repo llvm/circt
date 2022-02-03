@@ -951,9 +951,11 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   // not have terminators, printing the terminator actually just prints the last
   // operation.
   Region &body = op.body();
-  if (!body.empty())
+  if (!body.empty()) {
+    p << " ";
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+  }
 }
 
 /// Parse an parameter list if present.
@@ -3309,6 +3311,21 @@ StringAttr NonLocalAnchor::root() {
   return modPart(0);
 }
 
+/// Return true if the NLA has the module in its path.
+bool NonLocalAnchor::hasModule(StringAttr modName) {
+  for (auto nameRef : namepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == modName)
+        return true;
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == modName)
+        return true;
+    }
+  }
+  return false;
+}
+
 /// Return just the reference part of the namepath at a specific index.  This
 /// will return an empty attribute if this is the leaf and the leaf is a module.
 StringAttr NonLocalAnchor::refPart(unsigned i) {
@@ -3319,10 +3336,24 @@ StringAttr NonLocalAnchor::refPart(unsigned i) {
 
 /// Return the leaf reference.  This returns an empty attribute if the leaf
 /// reference is a module.
-StringRef NonLocalAnchor::ref() {
+StringAttr NonLocalAnchor::ref() {
   assert(!namepath().empty());
   return refPart(namepath().size() - 1);
 }
+
+/// Return the leaf module.
+StringAttr NonLocalAnchor::leafMod() {
+  assert(!namepath().empty());
+  return modPart(namepath().size() - 1);
+}
+
+/// Returns true if this NLA targets an instance of a module (as opposed to
+/// an instance's port or something inside an instance).
+bool NonLocalAnchor::isModule() { return !ref(); }
+
+/// Returns true if this NLA targets something inside a module (as opposed
+/// to a module or an instance of a module);
+bool NonLocalAnchor::isComponent() { return (bool)ref(); };
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.

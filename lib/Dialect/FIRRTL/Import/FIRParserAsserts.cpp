@@ -413,24 +413,40 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
 
     // TODO: Sanitize the label by replacing whitespace with "_" as done in the
     // Scala impl of ExtractTestCode.
+    ValueRange args;
+    if (printOp.operands().size())
+      args = printOp.operands().drop_front();
+    if (args.size())
+      printOp.emitWarning()
+          << "printf-encoded assertion has format string arguments which may "
+             "cause lint warnings";
     if (flavor == VerifFlavor::Assert || flavor == VerifFlavor::AssertNotX)
       builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
-                               message, printOp.operands(), label, true);
+                               message, args, label, true);
     else if (flavor == VerifFlavor::Assume)
       builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
-                               message, printOp.operands(), label, true);
+                               message, args, label, true);
     else // VerifFlavor::Cover
       builder.create<CoverOp>(printOp.clock(), predicate, printOp.cond(),
-                              message, printOp.operands(), label, true);
+                              message, args, label, true);
     printOp.erase();
     break;
   }
 
     // Handle the case of builtin Chisel assertions.
+    //
+    // These are historically emitted as non-concurrent assertions and are
+    // expected to have format string arguments.  Parsing these as
+    // non-concurrent assertions works around two VCS lint warnings that arise
+    // if these are emitted as concurrent assertions:
+    //   1. VCS warns about non-sampled values used in the pass/fail statements
+    //      of concurrent assertions.
+    //   2. VCS warns if you sample the values ($sample) indicating that the
+    //      assertion has side effects.
   case VerifFlavor::ChiselAssert: {
     builder.create<AssertOp>(
         printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
-        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
+        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", false);
     printOp.erase();
     break;
   }

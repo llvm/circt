@@ -3218,6 +3218,8 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   loweredInputs.reserve(op.inputs().size());
   for (auto input : op.inputs()) {
     auto lowered = getLoweredAndExtendedValue(input, op.getType());
+    if (!lowered)
+      return failure();
     loweredInputs.push_back(lowered);
   }
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
@@ -3619,6 +3621,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       event = circt::sv::EventControl::AtNegEdge;
       break;
     }
+
     buildConcurrentVerifOp(
         builder, opName,
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
