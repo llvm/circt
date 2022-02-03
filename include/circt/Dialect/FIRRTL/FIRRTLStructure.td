@@ -192,6 +192,12 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// reference is a module.
     StringAttr ref();
 
+    /// Return the leaf Module.
+    StringAttr leafMod();
+
+    /// Returns true, if the NLA path contains the module.
+    bool hasModule(StringAttr modName);
+
     /// Returns true if this NLA targets a module or instance of a module (as
     /// opposed to an instance's port or something inside an instance).
     bool isModule();
