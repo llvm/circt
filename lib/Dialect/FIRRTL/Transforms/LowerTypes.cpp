@@ -1362,8 +1362,7 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 }
 
 bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     SmallVector<Value> newInputs;
     newInputs.reserve(op.inputs().size());
     for (auto input : op.inputs()) {
