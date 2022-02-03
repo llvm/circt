@@ -1727,15 +1727,16 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   auto inputCreate = dyn_cast_or_null<ArrayCreateOp>(input().getDefiningOp());
   if (!inputCreate)
-    return nullptr;
+    return {};
 
-  auto constIdx = dyn_cast_or_null<ConstantOp>(index().getDefiningOp());
-  if (!constIdx || constIdx.value().getBitWidth() > 64)
-    return nullptr;
+  IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
+  if (!constIdx || constIdx.getValue().getBitWidth() > 64)
+    return {};
 
-  uint64_t idx = constIdx.value().getLimitedValue();
+  uint64_t idx = constIdx.getValue().getLimitedValue();
   auto createInputs = inputCreate.inputs();
-  assert(idx < createInputs.size());
+  if (idx >= createInputs.size())
+    return {};
   return createInputs[createInputs.size() - idx - 1];
 }
 
