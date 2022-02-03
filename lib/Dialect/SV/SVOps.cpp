@@ -732,7 +732,7 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
                        /*isVerilog=*/false);
     }
 
-    p << ':';
+    p << ": ";
     p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
   }

@@ -422,6 +422,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   p << " -> ";
   printPortDefList(op.getOutputPortInfo());
 
+  p << " ";
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);

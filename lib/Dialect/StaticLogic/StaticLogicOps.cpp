@@ -84,10 +84,12 @@ static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
   p.printType(type);
 
   // Print condition region.
+  p << ' ';
   p.printRegion(op.condition(), /*printEntryBlockArgs=*/false);
   p << " do";
 
   // Print stages region.
+  p << ' ';
   p.printRegion(op.stages(), /*printEntryBlockArgs=*/false);
 }
 

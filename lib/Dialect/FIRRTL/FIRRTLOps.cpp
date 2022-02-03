@@ -951,9 +951,11 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   // not have terminators, printing the terminator actually just prints the last
   // operation.
   Region &body = op.body();
-  if (!body.empty())
+  if (!body.empty()) {
+    p << " ";
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+  }
 }
 
 /// Parse an parameter list if present.

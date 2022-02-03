@@ -431,9 +431,11 @@ static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
 
   // Print the body if this is not an external function.
   Region &body = mod.getBody();
-  if (!body.empty())
+  if (!body.empty()) {
+    p << ' ';
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+  }
 }
 
 /// Parse an parameter list if present. Same format as HW dialect.

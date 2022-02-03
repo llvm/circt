@@ -23,12 +23,16 @@ def HWDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
+  let useDefaultAttributePrinterParser = 0;
   let cppNamespace = "::circt::hw";
   let extraClassDeclaration = [{
     /// Register all HW types.
     void registerTypes();
     /// Register all HW attributes.
     void registerAttributes();
+
+    Attribute parseAttribute(DialectAsmParser &p, Type type) const override;
+    void printAttribute(Attribute attr, DialectAsmPrinter &p) const override;
   }];
 }
 

@@ -37,27 +37,6 @@ void ChannelPort::print(AsmPrinter &p) const {
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"
 
-/// Parses a type registered to this dialect
-Type ESIDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  Type genType;
-  auto parseResult = generatedTypeParser(parser, mnemonic, genType);
-  if (parseResult.hasValue())
-    return genType;
-  parser.emitError(parser.getCurrentLocation(), "Could not parse esi.")
-      << mnemonic << "!\n";
-  return Type();
-}
-
-/// Print a type registered to this dialect
-void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'esi' type kind");
-}
-
 void ESIDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
