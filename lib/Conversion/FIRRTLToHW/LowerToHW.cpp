@@ -3218,6 +3218,8 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
   loweredInputs.reserve(op.inputs().size());
   for (auto input : op.inputs()) {
     auto lowered = getLoweredAndExtendedValue(input, op.getType());
+    if (!lowered)
+      return failure();
     loweredInputs.push_back(lowered);
   }
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
