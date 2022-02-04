@@ -31,6 +31,8 @@
     "cmake.generator": "Ninja",
     "cmake.configureArgs": [
       // LLVM
+      "-DCMAKE_C_COMPILER=clang",
+      "-DCMAKE_CXX_COMPILER=clang++",
       "-DLLVM_ENABLE_PROJECTS=mlir",
       "-DLLVM_TARGETS_TO_BUILD=X86;RISCV",
       "-DLLVM_ENABLE_ASSERTIONS=ON",
