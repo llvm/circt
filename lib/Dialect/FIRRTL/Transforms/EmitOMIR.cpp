@@ -133,6 +133,8 @@ private:
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
   /// Record to remove any temporary symbols added to instances.
   DenseSet<Operation *> tempSymInstances;
+  /// The Design Under Test module.
+  StringAttr dutModuleName;
 };
 } // namespace
 
@@ -249,6 +251,7 @@ void EmitOMIRPass::runOnOperation() {
   symtbl = &currentSymtbl;
   circuitNamespace = &currentCircuitNamespace;
   instancePaths = &currentInstancePaths;
+  dutModuleName = {};
 
   // Traverse the IR and collect all tracker annotations that were previously
   // scattered into the circuit.
@@ -291,6 +294,12 @@ void EmitOMIRPass::runOnOperation() {
     AnnotationSet::removePortAnnotations(op, setTracker);
     AnnotationSet::removeAnnotations(
         op, std::bind(setTracker, -1, std::placeholders::_1));
+    if (auto modOp = dyn_cast<FModuleOp>(op)) {
+      AnnotationSet annos(modOp.annotations());
+      if (!annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
+        return;
+      dutModuleName = modOp.getNameAttr();
+    }
   });
 
   // Build the output JSON.
@@ -733,50 +742,32 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
 
   // Serialize the target circuit first.
   SmallString<64> target(type);
+  target.append(":~");
+  target.append(getOperation().name());
+  target.push_back('|');
 
   // Serialize the local or non-local module/instance hierarchy path.
   if (tracker.nla) {
     bool notFirst = false;
     hw::InnerRefAttr instName;
-    StringAttr dutModName = {};
-    // Check if the DUT module occurs in the instance path.
-    // Print the path relative to the DUT, if the nla is inside the DUT.
-    // Keep the path for dutInstance relative to test harness. (SFC
-    // implementation in TestHarnessOMPhase.scala)
-    if (!dutInstance)
-      for (auto nameRef : tracker.nla.namepath()) {
-        StringAttr modName;
-        if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
-          modName = innerRef.getModule();
-        else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
-          modName = ref.getAttr();
-        Operation *module = symtbl->lookup(modName);
-        AnnotationSet annos(dyn_cast<FModuleOp>(module).annotations());
-        if (!annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
-          continue;
-
-        dutModName = modName;
-        break;
-      }
-    target.append(":~");
-    // If a valid dutModName found in the instance path, then root the target
-    // relative to the DUT.
-    if (dutModName)
-      target.append(dutModName);
-    else
-      target.append(getOperation().name());
-    target.push_back('|');
-
     for (auto nameRef : tracker.nla.namepath()) {
       StringAttr modName;
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
         modName = innerRef.getModule();
       else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
         modName = ref.getAttr();
-      if (dutModName && dutModName == modName)
-        dutModName = {};
-      else if (dutModName)
-        continue;
+      if (!dutInstance && modName == dutModuleName) {
+        // Check if the DUT module occurs in the instance path.
+        // Print the path relative to the DUT, if the nla is inside the DUT.
+        // Keep the path for dutInstance relative to test harness. (SFC
+        // implementation in TestHarnessOMPhase.scala)
+        target = type;
+        target.append(":~");
+        target.append(dutModuleName);
+        target.push_back('|');
+        notFirst = false;
+        instName = {};
+      }
 
       Operation *module = symtbl->lookup(modName);
       assert(module);
@@ -807,14 +798,13 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     if (!module)
       module = tracker.op->getParentOfType<FModuleOp>();
     assert(module);
-    target.append(":~");
-    // If module is DUT, then root the target relative to the DUT.
-    AnnotationSet annos(module.annotations());
-    if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
-      target.append(module.getName());
-    else
-      target.append(getOperation().name());
-    target.push_back('|');
+    if (module.getNameAttr() == dutModuleName) {
+      // If module is DUT, then root the target relative to the DUT.
+      target = type;
+      target.append(":~");
+      target.append(dutModuleName);
+      target.push_back('|');
+    }
     target.append(addSymbol(module));
   }
 
