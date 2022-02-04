@@ -45,9 +45,8 @@ mlir::StringRef toString(HWDebugScopeType type) {
     return "module";
   case HWDebugScopeType::Block:
     return "block";
-  default:
-    llvm_unreachable("unknown type");
   }
+  llvm_unreachable("unknown scope type");
 }
 
 struct HWDebugScope {
@@ -78,6 +77,8 @@ public:
     return scopes.empty() ? HWDebugScopeType::None : HWDebugScopeType::Block;
   }
 
+  virtual ~HWDebugScope() = default;
+
 protected:
   // NOLINTNEXTLINE
   [[nodiscard]] llvm::json::Object getScopeJSON(bool includeScope) const {
@@ -104,7 +105,7 @@ protected:
     array.reserve(scopes.size());
     for (auto const *scope : scopes) {
       if (scope)
-        array.emplace_back(std::move(scope->toJSON()));
+        array.emplace_back(scope->toJSON());
     }
     obj["scope"] = std::move(array);
   }
@@ -345,7 +346,7 @@ public:
     auto frontEndName =
         op->getAttr("hw.debug.name").cast<mlir::StringAttr>().strref();
     auto rtlName = ::getSymOpName(op);
-    HWDebugVarDef var{.name = frontEndName, .value = rtlName, .rtl = true};
+    HWDebugVarDef var{frontEndName, rtlName, true};
     return var;
   }
 

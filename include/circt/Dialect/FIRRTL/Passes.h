@@ -28,11 +28,9 @@ std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false);
 
-std::unique_ptr<mlir::Pass>
-createLowerFIRRTLTypesPass(bool replSeqMem = false,
-                           bool preserveAggregate = false,
-                           bool preservePublicTypes = true,
-                           bool insertDebugInfo = false);
+std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
+    bool replSeqMem = false, bool preserveAggregate = false,
+    bool preservePublicTypes = true, bool insertDebugInfo = false);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
