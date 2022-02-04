@@ -361,6 +361,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallVector<Type, 4> argTypes, resultTypes;
   SmallVector<Attribute> argAttrs, resultAttrs, debugAttrs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
+  bool hasDebugAttr = true;
 
   for (auto elt : ports.inputs) {
     if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
@@ -375,6 +376,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       attr = builder.getDictionaryAttr({});
     argAttrs.push_back(attr);
     debugAttrs.push_back(elt.debugAttr);
+    if (!elt.debugAttr)
+      hasDebugAttr = false;
   }
 
   for (auto elt : ports.outputs) {
@@ -388,6 +391,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       attr = builder.getDictionaryAttr({});
     resultAttrs.push_back(attr);
     debugAttrs.push_back(elt.debugAttr);
+    if (!elt.debugAttr)
+      hasDebugAttr = false;
   }
 
   // Allow clients to pass in null for the parameters list.
@@ -399,7 +404,6 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute("hw.debug.name", builder.getArrayAttr(debugAttrs));
   result.addAttribute(mlir::function_like_impl::getArgDictAttrName(),
                       builder.getArrayAttr(argAttrs));
   result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
@@ -409,6 +413,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     comment = builder.getStringAttr("");
   result.addAttribute("comment", comment);
   result.addAttributes(attributes);
+  if (hasDebugAttr && !debugAttrs.empty())
+    result.addAttribute("hw.debug.name", builder.getArrayAttr(debugAttrs));
   result.addRegion();
 }
 
