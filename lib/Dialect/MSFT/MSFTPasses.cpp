@@ -825,6 +825,8 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
 
   for (Operation &op : *partBlock) {
     StringRef opName = ::getOpName(&op);
+    if (opName.empty())
+      opName = op.getName().getIdentifier().getValue();
 
     // Tagged operation might need new inputs ports to drive its consumers.
     for (OpResult res : op.getOpResults()) {
@@ -977,6 +979,10 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Value, 32> newOutputs;
 
   for (Operation &op : *partBlock) {
+    StringRef opName = ::getOpName(&op);
+    if (opName.empty())
+      opName = op.getName().getIdentifier().getValue();
+
     for (OpOperand &oper : op.getOpOperands()) {
       Value v = oper.get();
       if (v.getParentBlock() == partBlock)
@@ -990,11 +996,12 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
         StringRef portName = getValueName(v, topLevelSyms, nameBuffer);
 
         instInputs.push_back(v);
-        inputPorts.push_back(
-            hw::PortInfo{/*name*/ StringAttr::get(ctxt, portName),
-                         /*direction*/ hw::PortDirection::INPUT,
-                         /*type*/ v.getType(),
-                         /*argNum*/ inputPorts.size()});
+        inputPorts.push_back(hw::PortInfo{
+            /*name*/ StringAttr::get(
+                ctxt, opName + (portName.empty() ? "" : "." + portName)),
+            /*direction*/ hw::PortDirection::INPUT,
+            /*type*/ v.getType(),
+            /*argNum*/ inputPorts.size()});
       } else {
         oper.set(partBlock->getArgument(existingF->second));
       }
@@ -1008,11 +1015,12 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
 
       newOutputs.push_back(res);
       StringRef portName = getResultName(res, topLevelSyms, nameBuffer);
-      outputPorts.push_back(
-          hw::PortInfo{/*name*/ StringAttr::get(ctxt, portName),
-                       /*direction*/ hw::PortDirection::OUTPUT,
-                       /*type*/ res.getType(),
-                       /*argNum*/ outputPorts.size()});
+      outputPorts.push_back(hw::PortInfo{
+          /*name*/ StringAttr::get(
+              ctxt, opName + (portName.empty() ? "" : "." + portName)),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ res.getType(),
+          /*argNum*/ outputPorts.size()});
     }
   }
 
