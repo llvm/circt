@@ -738,37 +738,44 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   if (tracker.nla) {
     bool notFirst = false;
     hw::InnerRefAttr instName;
-    StringRef dutModName;
+    StringAttr dutModName = {};
+    // Check if the DUT module occurs in the instance path.
+    // Print the path relative to the DUT, if the nla is inside the DUT.
+    // Keep the path for dutInstance relative to test harness. (SFC
+    // implementation in TestHarnessOMPhase.scala)
     if (!dutInstance)
       for (auto nameRef : tracker.nla.namepath()) {
-        StringRef modName;
+        StringAttr modName;
         if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
-          modName = innerRef.getModule().getValue();
+          modName = innerRef.getModule();
         else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
-          modName = ref.getValue();
+          modName = ref.getAttr();
         Operation *module = symtbl->lookup(modName);
         AnnotationSet annos(dyn_cast<FModuleOp>(module).annotations());
-        if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation")) {
-          dutModName = modName;
-          break;
-        }
+        if (!annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
+          continue;
+
+        dutModName = modName;
+        break;
       }
     target.append(":~");
-    if (dutModName.empty())
-      target.append(getOperation().name());
-    else
+    // If a valid dutModName found in the instance path, then root the target
+    // relative to the DUT.
+    if (dutModName)
       target.append(dutModName);
+    else
+      target.append(getOperation().name());
     target.push_back('|');
 
     for (auto nameRef : tracker.nla.namepath()) {
-      StringRef modName;
+      StringAttr modName;
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
-        modName = innerRef.getModule().getValue();
+        modName = innerRef.getModule();
       else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
-        modName = ref.getValue();
-      if (!dutModName.empty() && dutModName.equals(modName))
-        dutModName = "";
-      else if (!dutModName.empty())
+        modName = ref.getAttr();
+      if (dutModName && dutModName == modName)
+        dutModName = {};
+      else if (dutModName)
         continue;
 
       Operation *module = symtbl->lookup(modName);
@@ -801,6 +808,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       module = tracker.op->getParentOfType<FModuleOp>();
     assert(module);
     target.append(":~");
+    // If module is DUT, then root the target relative to the DUT.
     AnnotationSet annos(module.annotations());
     if (annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
       target.append(module.getName());
