@@ -223,6 +223,30 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: #msft.physloc<M20K, {{.+}}, 0
   # CHECK: #msft.physloc<M20K, {{.+}}, 0
 
+  print("=== Mutations:")
+  old_location = msft.PhysLocationAttr.get(msft.M20K, x=0, y=0, num=0)
+  new_location = msft.PhysLocationAttr.get(msft.M20K, x=1, y=1, num=1)
+
+  pdb.add_placement(old_location, path, "", resolved_inst)
+  assert pdb.get_instance_at(old_location)[2] == resolved_inst
+  rc = pdb.remove_placement(new_location)
+  assert rc == False
+  rc = pdb.remove_placement(old_location)
+  assert rc == True
+  assert pdb.get_instance_at(old_location) is None
+
+  rc = pdb.move_placement(old_location, new_location)
+  assert rc == False
+  pdb.add_placement(old_location, path, "", resolved_inst)
+  pdb.add_placement(new_location, path, "", resolved_inst)
+  rc = pdb.move_placement(old_location, new_location)
+  assert rc == False
+  pdb.remove_placement(new_location)
+  rc = pdb.move_placement(old_location, new_location)
+  assert rc == True
+  assert pdb.get_instance_at(old_location) is None
+  assert pdb.get_instance_at(new_location)[2] == resolved_inst
+
   print("=== Errors:", file=sys.stderr)
   # TODO: Python's sys.stderr doesn't seem to be shared with C++ errors.
   # See https://github.com/llvm/circt/issues/1983 for more info.

@@ -56,6 +56,25 @@ IntegerAttr direction::packAttribute(MLIRContext *ctx, size_t nIns,
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// This pattern collapses a calyx.seq or calyx.par operation when it
+/// contains exactly one calyx.enable operation.
+template <typename CtrlOp>
+struct CollapseUnaryControl : mlir::OpRewritePattern<CtrlOp> {
+  using mlir::OpRewritePattern<CtrlOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(CtrlOp ctrlOp,
+                                PatternRewriter &rewriter) const override {
+    auto &ops = ctrlOp.getBody()->getOperations();
+    bool isUnaryControl = (ops.size() == 1) && isa<EnableOp>(ops.front()) &&
+                          isa<SeqOp, ParOp>(ctrlOp->getParentOp());
+    if (!isUnaryControl)
+      return failure();
+
+    ops.front().moveBefore(ctrlOp);
+    rewriter.eraseOp(ctrlOp);
+    return success();
+  }
+};
+
 /// Verify that the value is not a "complex" value. For example, the source
 /// of an AssignOp should be a constant or port, e.g.
 /// %and = comb.and %a, %b : i1
@@ -248,6 +267,15 @@ static LogicalResult collapseControl(OpTy controlOp,
   return failure();
 }
 
+template <typename OpTy>
+static LogicalResult emptyControl(OpTy controlOp, PatternRewriter &rewriter) {
+  if (controlOp.getBody()->empty()) {
+    rewriter.eraseOp(controlOp);
+    return success();
+  }
+  return failure();
+}
+
 /// A helper function to check whether the conditional and group (if it exists)
 /// needs to be erased to maintain a valid state of a Calyx program. If these
 /// have no more uses, they will be erased.
@@ -394,6 +422,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   p << " -> ";
   printPortDefList(op.getOutputPortInfo());
 
+  p << " ";
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
@@ -651,16 +680,11 @@ static LogicalResult verifyControlOp(ControlOp control) {
 // SeqOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
-  if (seqOp.getBody()->empty()) {
-    rewriter.eraseOp(seqOp);
-    return success();
-  }
-
-  if (succeeded(collapseControl(seqOp, rewriter)))
-    return success();
-
-  return failure();
+void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add(collapseControl<SeqOp>);
+  patterns.add(emptyControl<SeqOp>);
+  patterns.insert<CollapseUnaryControl<SeqOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -684,16 +708,11 @@ static LogicalResult verifyParOp(ParOp parOp) {
   return success();
 }
 
-LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
-  if (parOp.getBody()->empty()) {
-    rewriter.eraseOp(parOp);
-    return success();
-  }
-
-  if (succeeded(collapseControl(parOp, rewriter)))
-    return success();
-
-  return failure();
+void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add(collapseControl<ParOp>);
+  patterns.add(emptyControl<ParOp>);
+  patterns.insert<CollapseUnaryControl<ParOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//

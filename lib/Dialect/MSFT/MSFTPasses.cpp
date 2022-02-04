@@ -801,32 +801,40 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
 }
 
 void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
-  // This particular implementation is _very_ sensitive to iteration order. It
-  // assumes that the order in which the ops, operands, and results are the same
-  // _every_ time it runs through them. Doing this saves on bookkeeping.
   auto *ctxt = mod.getContext();
   FunctionType origType = mod.getType();
   std::string nameBuffer;
 
   //*************
   //   Figure out all the new ports 'mod' is going to need. The outputs need to
-  //   know where they're being driven from, which'll be the outputs of 'ops'.
-  SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
-  SmallVector<Value, 64> newInputOldValue;
-  SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
-  DenseMap<Value, size_t> oldValueNewResultNum;
-  SmallVector<Type, 64> newResTypes;
+  //   know where they're being driven from, which'll be some of the outputs of
+  //   'ops'. Also determine which of the existing ports are no longer used.
+  //
+  //   Don't do any mutation here, just assemble bookkeeping info.
 
-  DenseMap<Value, size_t> oldValueOldInputPort;
+  // The new input ports for operands not defined in 'partBlock'.
+  SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
+  // Map the operand value to new input port.
+  DenseMap<Value, size_t> oldValueNewResultNum;
+
+  // The new output ports.
+  SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
+  // Store the original result value in new port order. Used later on to remap
+  // the moved operations to the new block arguments.
+  SmallVector<Value, 64> newInputOldValue;
 
   for (Operation &op : *partBlock) {
     StringRef opName = ::getOpName(&op);
+
+    // Tagged operation might need new inputs ports to drive its consumers.
     for (OpResult res : op.getOpResults()) {
+      // If all the operations will get moved, no new port is necessary.
       if (llvm::all_of(res.getUsers(), [partBlock](Operation *op) {
             return op->getBlock() == partBlock || isa<OutputOp>(op);
           }))
         continue;
 
+      // Create a new inpurt port.
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
@@ -834,12 +842,13 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       newInputOldValue.push_back(res);
     }
 
+    // Tagged operations may need new output ports to drive their operands.
     for (OpOperand &oper : op.getOpOperands()) {
       Value operVal = oper.get();
-      if (auto operArg = operVal.dyn_cast<BlockArgument>()) {
-        oldValueOldInputPort[operVal] = operArg.getArgNumber();
+
+      // If the value was coming from outside the module, unnecessary.
+      if (auto operArg = operVal.dyn_cast<BlockArgument>())
         continue;
-      }
 
       Operation *defOp = operVal.getDefiningOp();
       assert(defOp && "Value must be operation if not block arg");
@@ -848,15 +857,16 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       if (defOp->getBlock() == partBlock || oldValueNewResultNum.count(operVal))
         continue;
 
-      oldValueNewResultNum[oper.get()] = newOutputs.size();
+      // Create a new output port.
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
           operVal));
-      newResTypes.push_back(oper.get().getType());
+      oldValueNewResultNum[oper.get()] = newOutputs.size();
     }
   }
 
+  // Figure out which of the original output ports can be removed.
   llvm::BitVector outputsToRemove(origType.getNumResults() + newOutputs.size());
   DenseMap<size_t, Value> oldResultOldValues;
   Operation *term = mod.getBodyBlock()->getTerminator();
@@ -869,6 +879,8 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
     oldResultOldValues[outputValIdx.index()] = outputValIdx.value();
   }
 
+  // Figure out which of the original input ports will no longer be used and can
+  // be removed.
   llvm::BitVector inputsToRemove(origType.getNumInputs() + newInputs.size());
   for (auto blockArg : mod.getBodyBlock()->getArguments()) {
     if (llvm::all_of(blockArg.getUsers(), [&](Operation *op) {
@@ -878,8 +890,8 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   }
 
   //*************
-  //   Add them to 'mod' and replace all of the old 'ops' results with the new
-  //   ports.
+  //   Add the new ports and re-wire the operands using the new ports. The
+  //   `addPorts` method handles adding the correct values to the terminator op.
   SmallVector<BlockArgument> newBlockArgs = mod.addPorts(newInputs, newOutputs);
   for (size_t inputNum = 0, e = newBlockArgs.size(); inputNum < e; ++inputNum)
     for (OpOperand &use : newInputOldValue[inputNum].getUses())
@@ -890,26 +902,26 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   //   For all of the instantiation sites (for 'mod'):
   //     - Create a new instance with the correct result types.
   //     - Clone in 'ops'.
-  //     - Construct the new instance operands from the old ones + the cloned
-  //     ops' results.
-
+  //     - Fix up the new operations' operands.
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
     OpBuilder b(newInst);
     BlockAndValueMapping map;
-    for (auto valPortPair : oldValueOldInputPort)
-      map.map(valPortPair.first, oldInst.getOperand(valPortPair.second));
 
+    // Add all of 'mod''s block args to the map in case one of the tagged ops
+    // was driven by a block arg.
+    for (BlockArgument arg : mod.getBodyBlock()->getArguments())
+      map.map(arg, oldInst.getOperand(arg.getArgNumber()));
+
+    // Add all the old values which got moved to output ports to the map.
     size_t origNumResults = origType.getNumResults();
+    for (auto valueResultNum : oldValueNewResultNum)
+      map.map(valueResultNum.first,
+              newInst->getResult(origNumResults + valueResultNum.second));
+
+    // Clone the ops, rename appropriately, and update the global refs.
     llvm::SmallVector<Operation *, 32> newOps;
     for (Operation &op : *partBlock) {
-      for (Value oper : op.getOperands()) {
-        auto newResultF = oldValueNewResultNum.find(oper);
-        if (newResultF != oldValueNewResultNum.end())
-          map.map(oper,
-                  newInst->getResult(origNumResults + newResultF->second));
-      }
-
       Operation *newOp = b.insert(op.clone(map));
       newOps.push_back(newOp);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
@@ -922,14 +934,11 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       for (OpOperand &oper : newOp->getOpOperands())
         oper.set(map.lookupOrDefault(oper.get()));
 
-    // Gather new operands for new instance.
-    for (auto oldOperand : llvm::enumerate(oldInst->getOperands()))
-      if (!inputsToRemove.test(oldOperand.index()))
-        newOperands.push_back(oldOperand.value());
+    // Gather new operands for the new instance.
     for (Value oldValue : newInputOldValue)
       newOperands.push_back(map.lookup(oldValue));
 
-    // Fix up existing ops which used removed outputs.
+    // Fix up existing ops which used the old instance's results.
     for (auto oldResultOldValue : oldResultOldValues)
       for (OpOperand &oldResultUser : llvm::make_early_inc_range(
                oldInst.getResult(oldResultOldValue.first).getUses()))
@@ -937,6 +946,9 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   };
   updateInstances(mod, {}, cloneOpsGetOperands);
 
+  //*************
+  //   Lastly, remove the unnecessary ports. Doing this as a separate mutation
+  //   makes the previous steps simpler without any practical degradation.
   SmallVector<unsigned> resValues =
       mod.removePorts(inputsToRemove, outputsToRemove);
   updateInstances(mod, resValues,

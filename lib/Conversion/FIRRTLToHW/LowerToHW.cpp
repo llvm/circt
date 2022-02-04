@@ -1413,6 +1413,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
+  LogicalResult visitExpr(MultibitMuxOp op);
   LogicalResult visitExpr(VerbatimExprOp op);
 
   // Statements
@@ -3205,6 +3206,26 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
                                     ifFalse);
 }
 
+LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
+  // Lower and resize to the index width.
+  auto index = getLoweredAndExtOrTruncValue(
+      op.index(), UIntType::get(op.getContext(),
+                                getBitWidthFromVectorSize(op.inputs().size())));
+
+  if (!index)
+    return failure();
+  SmallVector<Value> loweredInputs;
+  loweredInputs.reserve(op.inputs().size());
+  for (auto input : op.inputs()) {
+    auto lowered = getLoweredAndExtendedValue(input, op.getType());
+    if (!lowered)
+      return failure();
+    loweredInputs.push_back(lowered);
+  }
+  Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
+  return setLoweringTo<hw::ArrayGetOp>(op, array, index);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
@@ -3600,6 +3621,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       event = circt::sv::EventControl::AtNegEdge;
       break;
     }
+
     buildConcurrentVerifOp(
         builder, opName,
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,

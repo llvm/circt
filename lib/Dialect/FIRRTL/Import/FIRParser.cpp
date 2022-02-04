@@ -1489,36 +1489,39 @@ private:
 };
 } // end anonymous namespace
 
-/// Remove the DontTouch annotation and return true, if it exists.
-/// Ignore DontTouch that will apply only to a subfield.
-static bool removeDontTouch(ArrayAttr &annotations) {
+/// Checks if the annotations imply the requirement for a symbol.
+/// DontTouch and circt.nonlocal annotations require a symbol.
+/// Also remove the DontTouch annotation, if it exists.
+/// But ignore DontTouch that will apply only to a subfield.
+static bool needsSymbol(ArrayAttr &annotations) {
   SmallVector<Attribute> filteredAnnos;
-  bool hasDontTouch = false;
+  bool needsSymbol = false;
   // Only check for DontTouch annotation that applies to the entire op.
   // Then drop it and return true.
   // We cannot use AnnotationSet::removeDontTouch, because it does not ignore
   // Subfield annotations.
-  for (Attribute anno : annotations) {
-    DictionaryAttr dict = {};
-    // If subfield annotation, then field must be 0.
-    if (auto subAnno = anno.dyn_cast<SubAnnotationAttr>()) {
-      if (subAnno.getFieldID() == 0)
-        dict = subAnno.getAnnotations();
-    } else
-      dict = anno.dyn_cast<DictionaryAttr>();
-    if (dict)
-      if (auto cls = dict.get("class"))
-        if (cls.cast<StringAttr>().getValue().equals(
-                "firrtl.transforms.DontTouchAnnotation")) {
-          hasDontTouch = true;
-          continue;
-        }
-    filteredAnnos.push_back(anno);
+  for (Attribute attr : annotations) {
+    // Ensure it is a valid annotation.
+    if (!attr.isa<SubAnnotationAttr, DictionaryAttr>())
+      continue;
+    Annotation anno(attr);
+    // Check if it is a DontTouch annotation that applies to all subfields in
+    // case of a bundle. getFieldID returns 0 if it is not a SubAnno.
+    if (anno.getFieldID() == 0 &&
+        anno.isClass("firrtl.transforms.DontTouchAnnotation")) {
+      needsSymbol = true;
+      // Ignore the annotation.
+      continue;
+    }
+    if (anno.getMember("circt.nonlocal"))
+      needsSymbol = true;
+    filteredAnnos.push_back(attr);
   }
-  if (hasDontTouch)
+  if (needsSymbol)
     annotations = ArrayAttr::get(annotations.getContext(), filteredAnnos);
-  return hasDontTouch;
+  return needsSymbol;
 }
+
 namespace {
 /// This class implements logic and state for parsing statements, suites, and
 /// similar module body constructs.
@@ -1601,9 +1604,10 @@ private:
 
   /// Remove the DontTouch annotation and return a valid symbol name if the
   /// annotation exists. Ignore DontTouch that will apply only to a subfield.
-  StringAttr removeDontTouch(ArrayAttr &annotations, StringRef id) {
+  StringAttr getSymbolIfRequired(ArrayAttr &annotations, StringRef id) {
     SmallVector<Attribute> filteredAnnos;
-    bool hasDontTouch = ::removeDontTouch(annotations);
+
+    bool hasDontTouch = needsSymbol(annotations);
     if (hasDontTouch)
       return StringAttr::get(annotations.getContext(),
                              modNameSpace.newName(id));
@@ -2742,7 +2746,7 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    auto sym = removeDontTouch(annotations.first, id);
+    auto sym = getSymbolIfRequired(annotations.first, id);
     result = builder.create<InstanceOp>(
         referencedModule, id, annotations.first.getValue(),
         annotations.second.getValue(), false, sym);
@@ -2793,7 +2797,7 @@ ParseResult FIRStmtParser::parseCombMem() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto sym = removeDontTouch(annotations, id);
+  auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<CombMemOp>(vectorType.getElementType(),
                                           vectorType.getNumElements(), id,
                                           annotations, sym);
@@ -2832,7 +2836,7 @@ ParseResult FIRStmtParser::parseSeqMem() {
     annotations =
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
-  auto sym = removeDontTouch(annotations, id);
+  auto sym = getSymbolIfRequired(annotations, id);
 
   auto result = builder.create<SeqMemOp>(vectorType.getElementType(),
                                          vectorType.getNumElements(), ruw, id,
@@ -2973,9 +2977,9 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
         getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                             ports, moduleContext.targetsInModule);
 
-    auto sym = removeDontTouch(annotations.first, id);
+    auto sym = getSymbolIfRequired(annotations.first, id);
     if (!sym)
-      sym = removeDontTouch(annotations.second, id);
+      sym = getSymbolIfRequired(annotations.second, id);
     result =
         builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                               ruw, builder.getArrayAttr(resultNames), id,
@@ -3035,7 +3039,7 @@ ParseResult FIRStmtParser::parseNode() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, initializerType);
 
-  auto sym = removeDontTouch(annotations, id);
+  auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
                                        annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -3065,7 +3069,7 @@ ParseResult FIRStmtParser::parseWire() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto sym = removeDontTouch(annotations, id);
+  auto sym = getSymbolIfRequired(annotations, id);
   auto result = builder.create<WireOp>(type, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3159,7 +3163,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
                        moduleContext.targetsInModule, type);
 
   Value result;
-  auto sym = removeDontTouch(annotations, id);
+  auto sym = getSymbolIfRequired(annotations, id);
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, annotations, sym);
@@ -3410,7 +3414,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
       auto annos =
           getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
                          getConstants().targetSet, type);
-      bool addSym = removeDontTouch(annos);
+      bool addSym = needsSymbol(annos);
       if (addSym)
         innerSym = StringAttr::get(getContext(), name.getValue());
       annotations = AnnotationSet(annos);

@@ -58,10 +58,10 @@ void addAttributes(OperationState &result, int size, Type dataType,
                    bool alwaysControl = false) {
   result.addAttribute(
       "size",
-      IntegerAttr::get(IntegerType::get(dataType.getContext(), 32), size));
+      IntegerAttr::get(IntegerType::get(result.getContext(), 32), size));
   result.addAttribute("dataType", TypeAttr::get(dataType));
   if (dataType.isa<NoneType>() || alwaysControl)
-    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+    result.addAttribute("control", BoolAttr::get(result.getContext(), true));
 }
 
 static ParseResult parseIntInSquareBrackets(OpAsmParser &parser, int &v) {
@@ -311,11 +311,24 @@ struct EliminateSimpleMuxesPattern : mlir::OpRewritePattern<MuxOp> {
   }
 };
 
+struct EliminateUnaryMuxesPattern : OpRewritePattern<MuxOp> {
+  using mlir::OpRewritePattern<MuxOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(MuxOp op,
+                                PatternRewriter &rewriter) const override {
+    if (op.dataOperands().size() != 1)
+      return failure();
+
+    rewriter.replaceOp(op, op.dataOperands()[0]);
+    return success();
+  }
+};
+
 } // namespace
 
 void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.insert<EliminateSimpleMuxesPattern>(context);
+  results.insert<EliminateSimpleMuxesPattern, EliminateUnaryMuxesPattern>(
+      context);
 }
 
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
@@ -334,12 +347,13 @@ void MuxOp::build(OpBuilder &builder, OperationState &result, Value anyInput,
 }
 
 void MuxOp::build(OpBuilder &builder, OperationState &result, Value selOperand,
-                  ValueRange dataOprnds) {
-  Type dataType = dataOprnds[0].getType();
+                  ValueRange _dataOperands) {
+  assert(_dataOperands.size() != 0 && "Building mux with no inputs?");
+  Type dataType = _dataOperands[0].getType();
   result.addTypes({dataType});
   result.addOperands({selOperand});
-  result.addOperands(dataOprnds);
-  sost::addAttributes(result, dataOprnds.size(), dataType);
+  result.addOperands(_dataOperands);
+  sost::addAttributes(result, _dataOperands.size(), dataType);
 }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
@@ -387,9 +401,6 @@ static void printMuxOp(OpAsmPrinter &p, MuxOp op) {
 
 static LogicalResult verify(MuxOp op) {
   unsigned numDataOperands = static_cast<int>(op.dataOperands().size());
-  if (numDataOperands < 2)
-    return op.emitError("need at least two inputs to mux");
-
   auto selectType = op.selectOperand().getType();
 
   unsigned selectBits;
@@ -432,6 +443,16 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
     result.addOperands(operand);
 
   sost::addAttributes(result, inputs, type);
+}
+
+void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
+                           ValueRange operands) {
+  auto type = operands[0].getType();
+  result.types.push_back(type);
+  // Selected index.
+  result.types.push_back(builder.getIndexType());
+  result.addOperands(operands);
+  sost::addAttributes(result, operands.size(), type);
 }
 
 static ParseResult parseControlMergeOp(OpAsmParser &parser,
@@ -663,8 +684,8 @@ struct EliminateSimpleControlMergesPattern
 
 LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
     ControlMergeOp op, PatternRewriter &rewriter) const {
-  auto dataResult = op.getResult(0);
-  auto choiceResult = op.getResult(1);
+  auto dataResult = op.result();
+  auto choiceResult = op.index();
   auto choiceUnused = choiceResult.use_empty();
   if (!choiceUnused && !choiceResult.hasOneUse())
     return failure();
@@ -766,7 +787,7 @@ static ParseResult parseConditionalBranchOp(OpAsmParser &parser,
     return failure();
 
   if (dataType.isa<NoneType>())
-    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+    result.addAttribute("control", BoolAttr::get(parser.getContext(), true));
 
   return success();
 }
@@ -831,7 +852,7 @@ static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   if (dataType.isa<NoneType>())
-    result.addAttribute("control", BoolAttr::get(dataType.getContext(), true));
+    result.addAttribute("control", BoolAttr::get(parser.getContext(), true));
 
   return success();
 }
@@ -865,8 +886,8 @@ void handshake::SelectOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(trueOperand);
   result.addOperands(falseOperand);
   result.addAttribute("dataType", TypeAttr::get(type));
-  result.addAttribute("control",
-                      BoolAttr::get(type.getContext(), type.isa<NoneType>()));
+  result.addAttribute(
+      "control", BoolAttr::get(builder.getContext(), type.isa<NoneType>()));
 }
 
 void StartOp::build(OpBuilder &builder, OperationState &result) {

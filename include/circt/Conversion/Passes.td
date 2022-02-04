@@ -19,7 +19,7 @@ include "mlir/Pass/PassBase.td"
 // AffineToStaticLogic
 //===----------------------------------------------------------------------===//
 
-def AffineToStaticLogic : FunctionPass<"convert-affine-to-staticlogic"> {
+def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> {
   let summary = "Convert Affine dialect to StaticLogic pipelines";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling
@@ -197,7 +197,11 @@ def StandardToHandshake : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let options =
     [Option<"sourceConstants", "source-constants", "bool", "false",
             "If true, will connect constants to source operations instead of "
-            "to the control network. May reduce the size of the final circuit.">];
+            "to the control network. May reduce the size of the final circuit.">,
+     Option<"disableTaskPipelining", "disable-task-pipelining", "bool", "false",
+            "If true, will disable support for task pipelining. This relaxes the "
+            "restrictions put on the structure of the input CDFG. Disabling "
+            "task pipelining may severely reduce kernel II.">];
 }
 
 def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {

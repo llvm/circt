@@ -231,6 +231,16 @@ hw.module @or_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
   hw.output %0 : i7
 }
 
+// CHECK-LABEL: hw.module @or_flatten_keep_root_name(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = comb.or %arg0, %arg1, %arg2 {sv.namehint = "waterman"}  : i7
+// CHECK-NEXT:    hw.output [[RES]] : i7
+
+hw.module @or_flatten_keep_root_name(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
+  %or0 = comb.or %arg1, %arg2 : i7
+  %0 = comb.or %arg0, %or0 {sv.namehint="waterman"}: i7
+  hw.output %0 : i7
+}
+
 // CHECK-LABEL: hw.module @or_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> (result: i7) {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.or %arg0, %arg1, %arg2, %arg3 : i7
 // CHECK-NEXT:    hw.output [[RES]] : i7

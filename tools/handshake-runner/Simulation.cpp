@@ -756,6 +756,20 @@ HandshakeExecuter::HandshakeExecuter(
         llvm_unreachable("Memory op does not have unique ID!\n");
   });
 
+  // Initialize the value map for buffers with initial values.
+  for (auto bufferOp : func.getOps<handshake::BufferOp>()) {
+    if (bufferOp.initValues().hasValue()) {
+      auto initValues = bufferOp.getInitValues();
+      assert(initValues.size() == 1 &&
+             "Handshake-runner only supports buffer initialization with a "
+             "single buffer value.");
+      Value bufferRes = bufferOp.getResult();
+      valueMap[bufferRes] = APInt(bufferRes.getType().getIntOrFloatBitWidth(),
+                                  initValues.front());
+      scheduleUses(readyList, valueMap, bufferRes);
+    }
+  }
+
   for (auto blockArg : blockArgs)
     scheduleUses(readyList, valueMap, blockArg);
 

@@ -157,6 +157,8 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
     This operation has a single-block region which dictates the operations that
     may occur concurrently.
 
+    It has a `start` attribute, which indicates the start cycle for this stage.
+
     It may have an optional `when` predicate, which supports conditional
     execution for each stage. This is in addition to the `condition` region that
     controls the execution of the whole pipeline. A stage with a `when`
@@ -177,6 +179,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
   }];
 
   let arguments = (ins
+    SI64Attr:$start,
     Optional<I1>:$when
   );
 
@@ -189,12 +192,16 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
   );
 
   let assemblyFormat = [{
-    (`when` $when^)? $body (`:` qualified(type($results))^)? attr-dict
+    `start` `=` $start (`when` $when^)? $body (`:` qualified(type($results))^)? attr-dict
+  }];
+
+  let verifier = [{
+    return ::verify$cppClass(*this);
   }];
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "mlir::TypeRange":$resultTypes)>
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$start)>
   ];
 
   let extraClassDeclaration = [{

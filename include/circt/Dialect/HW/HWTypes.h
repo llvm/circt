@@ -75,6 +75,14 @@ bool type_isa(Type type) {
   return false;
 }
 
+// type_isa for a nullable argument.
+template <typename BaseTy>
+bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)
+  if (!type)
+    return false;
+  return type_isa<BaseTy>(type);
+}
+
 template <typename BaseTy>
 BaseTy type_cast(Type type) {
   assert(type_isa<BaseTy>(type) && "type must convert to requested type");

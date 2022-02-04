@@ -14,7 +14,7 @@ jobs:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20211130162811
+      image: ghcr.io/circt/images/circt-ci-build:20220131212430
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -123,7 +123,7 @@ jobs:
     needs: sanity-check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210929220136
+      image: ghcr.io/circt/images/circt-ci-build:20220131212430
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -196,7 +196,7 @@ jobs:
     needs: build-llvm
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210929220136
+      image: ghcr.io/circt/images/circt-ci-build:20220131212430
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -258,7 +258,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=OFF \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
             -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-            -DCMAKE_LINKER=lld \
+            -DLLVM_USE_LINKER=lld \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
@@ -276,7 +276,7 @@ jobs:
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
             -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-            -DCMAKE_LINKER=lld \
+            -DLLVM_USE_LINKER=lld \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit

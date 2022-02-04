@@ -797,9 +797,11 @@ static void printHWModuleOp(OpAsmPrinter &p, HWModuleOp op) {
 
   // Print the body if this is not an external function.
   Region &body = op.getBody();
-  if (!body.empty())
+  if (!body.empty()) {
+    p << " ";
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+  }
 }
 
 static LogicalResult verifyModuleCommon(Operation *module) {
@@ -1606,7 +1608,7 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
                             Value input, StringAttr fieldAttr) {
-  auto structType = input.getType().cast<StructType>();
+  auto structType = type_cast<StructType>(input.getType());
   auto resultType = structType.getFieldType(fieldAttr);
   build(builder, odsState, resultType, input, fieldAttr);
 }
@@ -1740,15 +1742,16 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
   auto inputCreate = dyn_cast_or_null<ArrayCreateOp>(input().getDefiningOp());
   if (!inputCreate)
-    return nullptr;
+    return {};
 
-  auto constIdx = dyn_cast_or_null<ConstantOp>(index().getDefiningOp());
-  if (!constIdx || constIdx.value().getBitWidth() > 64)
-    return nullptr;
+  IntegerAttr constIdx = operands[1].dyn_cast_or_null<IntegerAttr>();
+  if (!constIdx || constIdx.getValue().getBitWidth() > 64)
+    return {};
 
-  uint64_t idx = constIdx.value().getLimitedValue();
+  uint64_t idx = constIdx.getValue().getLimitedValue();
   auto createInputs = inputCreate.inputs();
-  assert(idx < createInputs.size());
+  if (idx >= createInputs.size())
+    return {};
   return createInputs[createInputs.size() - idx - 1];
 }
 

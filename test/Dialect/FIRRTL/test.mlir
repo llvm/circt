@@ -147,15 +147,11 @@ firrtl.module @VerbatimExpr() {
 }
 
 // CHECK-LABL: @LowerToBind
-// CHECK: firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
+// CHECK: firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
+  firrtl.instance foo sym @s1 {lowerToBind = true} @InstanceLowerToBind() 
 }
-
-firrtl.nla @NLA1 []
-firrtl.nla @NLA2 [#hw.innerNameRef<@InstanceLowerToBind::@foo>]
-
 
 // CHECK-LABEL: @ProbeTest
 firrtl.module @ProbeTest(in %in1 : !firrtl.uint<2>, in %in2 : !firrtl.uint<3>, out %out3: !firrtl.uint<3>) {
