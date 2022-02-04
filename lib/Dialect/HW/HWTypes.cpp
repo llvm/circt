@@ -266,10 +266,8 @@ Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   unsigned idx = 0, numElems = elems.size();
   for (; idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
-      break;
-  if (idx >= numElems)
-    return {};
-  return idx;
+      return idx;
+  return {};
 }
 
 void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
