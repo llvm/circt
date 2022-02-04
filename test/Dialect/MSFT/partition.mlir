@@ -31,9 +31,9 @@ msft.module @B {} (%clk : i1) -> (x: i2, y: i2)  {
   %0 = msft.instance @unit1 @Extern(%c1) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "unit1" }: (i2) -> (i2)
   %1 = seq.compreg %0, %clk { targetDesignPartition = @top::@part1 } : i2
 
-  %2 = msft.instance @unit2 @Extern(%1) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
+  %3 = msft.instance @c @C(%1) { circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "c" }: (i2) -> (i2)
 
-  %3 = msft.instance @c @C(%2) { targetDesignPartition = @top::@part1, circt.globalRef = [#hw.globalNameRef<@ref2>], inner_sym = "c" }: (i2) -> (i2)
+  %2 = msft.instance @unit2 @Extern(%3) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
 
   msft.output %2, %3: i2, i2
 }

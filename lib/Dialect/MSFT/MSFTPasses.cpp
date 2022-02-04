@@ -446,11 +446,9 @@ void PartitionPass::runOnOperation() {
   getAndSortModules(outerMod, sortedMods);
 
   for (auto mod : sortedMods) {
-    // (void)mlir::applyPatternsAndFoldGreedily(mod,
-    //                                          mlir::FrozenRewritePatternSet());
     partition(mod);
-    // (void)mlir::applyPatternsAndFoldGreedily(mod,
-    //  mlir::FrozenRewritePatternSet());
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
   }
 }
 
@@ -487,11 +485,11 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
       map.map(result, result);
   }
 
-  for (Operation *op : llvm::make_pointer_range(*partBlock)) {
+  for (Operation &op : llvm::make_early_inc_range(*partBlock)) {
     b.setInsertionPointToEnd(partBlock);
 
     // Go through the operands and copy any which we can.
-    for (auto &opOper : op->getOpOperands()) {
+    for (auto &opOper : op.getOpOperands()) {
       Value operValue = opOper.get();
 
       // Check if there's already a copied op for this value.
@@ -525,7 +523,7 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
     }
 
     // Move any "free" consumers which we can.
-    for (auto *user : op->getUsers()) {
+    for (auto *user : llvm::make_early_inc_range(op.getUsers())) {
       // Stop if it's not "free" or already in a partition.
       if (!isWireManipulationOp(user) || getPart(user) ||
           user->getBlock() == partBlock)
@@ -571,28 +569,30 @@ void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
 
 void PartitionPass::partition(MSFTModuleOp mod) {
 
-  Block *nonLocal = new Block();
+  Block *nonLocal = mod.addBlock();
   DenseMap<SymbolRefAttr, Block *> perPartBlocks;
 
   auto modSymbol = SymbolTable::getSymbolName(mod);
   mod.walk([&](DesignPartitionOp part) {
     SymbolRefAttr partRef =
         SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
-    perPartBlocks[partRef] = new Block();
+    perPartBlocks[partRef] = mod.addBlock();
   });
 
   copyInto(mod, perPartBlocks, nonLocal);
 
   if (!nonLocal->empty())
     bubbleUp(mod, nonLocal);
-  delete nonLocal;
+  nonLocal->dropAllReferences();
+  nonLocal->dropAllDefinedValueUses();
+  mod.getBlocks().remove(nonLocal);
 
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
     SymbolRefAttr partRef =
         SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
     Block *partBlock = perPartBlocks[partRef];
-    MSFTModuleOp partMod = partition(part, partBlock);
+    partition(part, partBlock);
     part.erase();
   }
 }
@@ -860,11 +860,11 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
         continue;
 
       // Create a new output port.
+      oldValueNewResultNum[oper.get()] = newOutputs.size();
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
           operVal));
-      oldValueNewResultNum[oper.get()] = newOutputs.size();
     }
   }
 
@@ -912,8 +912,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
 
     // Add all of 'mod''s block args to the map in case one of the tagged ops
     // was driven by a block arg.
+    unsigned oldInstNumInputs = oldInst.getNumOperands();
     for (BlockArgument arg : mod.getBodyBlock()->getArguments())
-      map.map(arg, oldInst.getOperand(arg.getArgNumber()));
+      if (arg.getArgNumber() < oldInstNumInputs)
+        map.map(arg, newInst.getOperand(arg.getArgNumber()));
 
     // Add all the old values which got moved to output ports to the map.
     size_t origNumResults = origType.getNumResults();
@@ -1033,9 +1035,8 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
       OpBuilder::atBlockEnd(getOperation().getBody())
           .create<MSFTModuleOp>(loc, partOp.verilogNameAttr(), modPortInfo,
                                 ArrayRef<NamedAttribute>{});
-  Region &partRegion = partMod->getRegion(0);
-  partRegion.getBlocks().clear();
-  partRegion.getBlocks().push_back(partBlock);
+  partBlock->moveBefore(partMod.getBodyBlock());
+  partMod.getBlocks().back().erase();
 
   OpBuilder::atBlockEnd(partBlock).create<OutputOp>(partOp.getLoc(),
                                                     newOutputs);
@@ -1051,7 +1052,8 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
 
   // And set the outputs properly.
   for (size_t outputNum = 0, e = newOutputs.size(); outputNum < e; ++outputNum)
-    for (OpOperand &oper : newOutputs[outputNum].getUses())
+    for (OpOperand &oper :
+         llvm::make_early_inc_range(newOutputs[outputNum].getUses()))
       if (oper.getOwner()->getBlock() != partBlock)
         oper.set(partInst.getResult(outputNum));
 
