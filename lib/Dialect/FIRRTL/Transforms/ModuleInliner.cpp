@@ -199,24 +199,22 @@ public:
     return last;
   }
 
-  void dumpState() {
-    LLVM_DEBUG({
-      llvm::dbgs() << "  - orig:           " << nla << "\n"
-                   << "    new:            " << *this << "\n"
-                   << "    dead:           " << dead << "\n"
-                   << "    isDead:         " << isDead() << "\n"
-                   << "    isLocal:        " << isLocal() << "\n"
-                   << "    inlinedSymbols: [";
-      llvm::interleaveComma(inlinedSymbols.getData(), llvm::dbgs(), [](auto a) {
-        llvm::dbgs() << llvm::formatv("{0:x-}", a);
-      });
-      llvm::dbgs() << "]\n"
-                   << "    flattenPoint:   " << flattenPoint << "\n"
-                   << "    renames:\n";
-      for (auto rename : renames)
-        llvm::dbgs() << "      - " << rename.first << " -> " << rename.second
-                     << "\n";
+  void dump() {
+    llvm::errs() << "  - orig:           " << nla << "\n"
+                 << "    new:            " << *this << "\n"
+                 << "    dead:           " << dead << "\n"
+                 << "    isDead:         " << isDead() << "\n"
+                 << "    isLocal:        " << isLocal() << "\n"
+                 << "    inlinedSymbols: [";
+    llvm::interleaveComma(inlinedSymbols.getData(), llvm::errs(), [](auto a) {
+      llvm::errs() << llvm::formatv("{0:x-}", a);
     });
+    llvm::errs() << "]\n"
+                 << "    flattenPoint:   " << flattenPoint << "\n"
+                 << "    renames:\n";
+    for (auto rename : renames)
+      llvm::errs() << "      - " << rename.first << " -> " << rename.second
+                   << "\n";
   }
 
   /// Write the current state of this MutableNLA to a string using a format that
@@ -918,13 +916,7 @@ void Inliner::run() {
     llvm::dbgs() << "NLA modifications:\n";
     for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
       auto &mnla = nlaMap[nla.getNameAttr()];
-      // llvm::dbgs() << "  - orig: " << mnla.getNLA() << "\n"
-      //              << "    new:  ";
-      // if (mnla.isDead() || mnla.isLocal())
-      //   llvm::dbgs() << "<deleted>\n";
-      // else
-      //   llvm::dbgs() << mnla << "\n";
-      mnla.dumpState();
+      mnla.dump();
     }
   });
 
