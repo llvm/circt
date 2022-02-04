@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-inliner)' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-inliner)' -allow-unregistered-dialect %s | FileCheck %s
 
 // Test that an external module as the main module works.
 firrtl.circuit "main_extmodule" {
@@ -543,5 +543,20 @@ firrtl.circuit "CollidingSymbolsReTop" {
     firrtl.instance bar @Bar()
     firrtl.instance baz @Baz()
     %colliding_baz = firrtl.wire sym @baz : !firrtl.uint<1>
+  }
+}
+
+// Test that anything with a "name" will be renamed, even things that FIRRTL
+// Dialect doesn't understand.
+//
+// CHECK-LABEL: firrtl.circuit "RenameAnything"
+firrtl.circuit "RenameAnything" {
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    "some_unknown_dialect.op"() { name = "world" } : () -> ()
+  }
+  // CHECK-NEXT: firrtl.module @RenameAnything
+  firrtl.module @RenameAnything() {
+    // CHECK-NEXT: "some_unknown_dialect.op"(){{.+}}name = "hello_world"
+    firrtl.instance hello @Foo()
   }
 }

@@ -479,12 +479,10 @@ private:
 /// these are unique in the namespace.
 void Inliner::rename(StringRef prefix, Operation *op,
                      ModuleNamespace &moduleNamespace) {
-  llvm::TypeSwitch<Operation *>(op)
-      .Case<CombMemOp, InstanceOp, MemOp, MemoryPortOp, NodeOp, RegOp,
-            RegResetOp, SeqMemOp, WireOp>([&](auto op) {
-        op.nameAttr(
-            StringAttr::get(op.getContext(), (prefix + op.name()).str()));
-      });
+  // Add a prefix to _anything_ that has a "name" attribute.
+  if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+    op->setAttr("name", StringAttr::get(op->getContext(),
+                                        (prefix + nameAttr.getValue())));
 
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
