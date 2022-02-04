@@ -39,19 +39,16 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   %10 = comb.shru %in4, %in4 : i4
 
-  // CHECK: wire [1:0] _in4_1to0 = in4[1:0];
-  // CHECK: wire [1:0] _in4_3to2 = in4[3:2];
-
   // CHECK: assign w1 = ~in4;
   %3 = comb.xor %in4, %c-1_i4 : i4
 
   // CHECK: assign w1 = in4 % 4'h1;
   %4 = comb.modu %in4, %c1_i4 : i4
 
-  // CHECK: assign w1 = {2'h0, _in4_1to0};
+  // CHECK: assign w1 = {2'h0, in4[1:0]};
   %5 = comb.extract %in4 from 0 : (i4) -> i2
 
-  // CHECK: assign w1 = {2'h0, _in4_3to2 | {in4[2], 1'h0}};
+  // CHECK: assign w1 = {2'h0, in4[3:2] | {in4[2], 1'h0}};
   %6 = comb.extract %in4 from 2 : (i4) -> i2
   %8 = comb.concat %7, %false : i1, i1
   %9 = comb.or %6, %8 : i2
@@ -66,7 +63,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %15 = comb.mux %clock, %c2_i4, %c3_i4 : i4
   %16 = comb.mux %clock, %c1_i4, %15 : i4
 
-  // CHECK: assign w1 = {2'h0, _in4_3to2 | _in4_1to0};
+  // CHECK: assign w1 = {2'h0, in4[3:2] | in4[1:0]};
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : i2, i4
 
