@@ -496,6 +496,47 @@ void TestSimplexSchedulerPass::runOnOperation() {
     return;
   }
 
+  if (problemToTest == "ChainingProblem") {
+    auto prob = ChainingProblem::get(func);
+    constructProblem(prob, func);
+    constructChainingProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    // get cycle time from the test case
+    auto cycleTimeAttr = func->getAttrOfType<FloatAttr>("cycletime");
+    assert(cycleTimeAttr);
+    float cycleTime = cycleTimeAttr.getValueAsDouble();
+
+    if (failed(scheduleSimplex(prob, lastOp, cycleTime))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    // act like a client that wants to strictly enforce the cycle time
+    for (auto *op : prob.getOperations()) {
+      float endTimeInCycle =
+          *prob.getStartTimeInCycle(op) +
+          *prob.getOutgoingDelay(*prob.getLinkedOperatorType(op));
+      if (endTimeInCycle > cycleTime) {
+        op->emitError("cycle time violated");
+        return signalPassFailure();
+      }
+    }
+
+    emitSchedule(prob, "simplexStartTime", builder);
+    for (auto *op : prob.getOperations()) {
+      float startTimeInCycle = *prob.getStartTimeInCycle(op);
+      op->setAttr("simplexStartTimeInCycle",
+                  builder.getF32FloatAttr(startTimeInCycle));
+    }
+    return;
+  }
+
   llvm_unreachable("Unsupported scheduling problem");
 }
 

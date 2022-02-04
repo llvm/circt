@@ -50,6 +50,14 @@ LogicalResult scheduleSimplex(SharedOperatorsProblem &prob, Operation *lastOp);
 /// that do not include at least one edge with a non-zero distance.
 LogicalResult scheduleSimplex(ModuloProblem &prob, Operation *lastOp);
 
+/// Solve the acyclic, chaining-enabled problem using linear programming and a
+/// handwritten implementation of the simplex algorithm. This approach strictly
+/// adheres to the given maximum \p cycleTime. The objective is to minimize the
+/// start time of the given \p lastOp. Fails if the dependence graph contains
+/// cycles, or individual operator types have delays larger than \p cycleTime.
+LogicalResult scheduleSimplex(ChainingProblem &prob, Operation *lastOp,
+                              float cycleTime);
+
 /// Solve the basic problem using linear programming and an external LP solver.
 /// The objective is to minimize the start time of the given \p lastOp. Fails if
 /// the dependence graph contains cycles.
