@@ -12,16 +12,16 @@ hw.globalRef @ref3 [#hw.innerNameRef<@top::@b2>, #hw.innerNameRef<@B2::@unit1>] 
   "loc" = #msft.physloc<M20K, 0, 0, 0>
 }
 
-msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2) {
+msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2, out3: i2) {
   msft.partition @part1, "dp"
 
-  %res1, %_ = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2, i2)
+  %res1, %res4 = msft.instance @b @B(%clk) { circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "b" } : (i1) -> (i2, i2)
   %res3 = msft.instance @b2 @B2(%clk) { circt.globalRef = [#hw.globalNameRef<@ref3>], inner_sym = "b2" } : (i1) -> (i2)
 
   %c0 = hw.constant 0 : i2
   %res2 = msft.instance @unit1 @Extern(%c0) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
 
-  msft.output %res1, %res2 : i2, i2
+  msft.output %res1, %res2, %res4 : i2, i2, i2
 }
 
 msft.module.extern @Extern (%foo_a: i2) -> (foo_x: i2)
@@ -35,7 +35,7 @@ msft.module @B {} (%clk : i1) -> (x: i2, y: i2)  {
 
   %2 = msft.instance @unit2 @Extern(%3) { targetDesignPartition = @top::@part1 }: (i2) -> (i2)
 
-  msft.output %2, %3: i2, i2
+  msft.output %2, %c1: i2, i2
 }
 
 msft.module @B2 {} (%clk : i1) -> (x: i2) {

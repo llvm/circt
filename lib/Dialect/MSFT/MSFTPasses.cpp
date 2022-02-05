@@ -325,26 +325,23 @@ SmallVector<InstanceOp, 1> &PassCommon::updateInstances(
     MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
         getOperandsFunc) {
+
   SmallVector<InstanceOp, 1> newInstances;
-  bool defaultNewToOldResultMap = newToOldResultMap.empty();
   for (InstanceOp inst : moduleInstantiations[mod]) {
     assert(inst->getParentOp());
     OpBuilder b(inst);
     auto newInst =
         b.create<InstanceOp>(inst.getLoc(), mod.getType().getResults(),
                              inst.getOperands(), inst->getAttrs());
-    for (size_t portNum = 0, e = newToOldResultMap.size(); portNum < e;
-         ++portNum) {
-      assert(portNum < newInst.getNumResults());
-      size_t oldResult =
-          defaultNewToOldResultMap ? portNum : newToOldResultMap[portNum];
-      assert(oldResult < inst.getNumResults());
-      inst.getResult(oldResult).replaceAllUsesWith(newInst.getResult(portNum));
-    }
 
     SmallVector<Value> newOperands;
     getOperandsFunc(newInst, inst, newOperands);
     newInst->setOperands(newOperands);
+
+    for (auto oldResult : llvm::enumerate(newToOldResultMap))
+      if (oldResult.value() < inst.getNumResults())
+        inst.getResult(oldResult.value())
+            .replaceAllUsesWith(newInst.getResult(oldResult.index()));
 
     newInstances.push_back(newInst);
     inst->dropAllUses();
@@ -447,8 +444,11 @@ void PartitionPass::runOnOperation() {
 
   for (auto mod : sortedMods) {
     partition(mod);
-    (void)mlir::applyPatternsAndFoldGreedily(mod,
-                                             mlir::FrozenRewritePatternSet());
+    // llvm::errs() << "----- After partitioning "
+    //              << SymbolTable::getSymbolName(mod) << "\n";
+    // outerMod->dump();
+    // (void)mlir::applyPatternsAndFoldGreedily(mod,
+    //                                          mlir::FrozenRewritePatternSet());
   }
 }
 
@@ -491,6 +491,7 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
     // Go through the operands and copy any which we can.
     for (auto &opOper : op.getOpOperands()) {
       Value operValue = opOper.get();
+      assert(operValue);
 
       // Check if there's already a copied op for this value.
       Value existingValue = map.lookupOrNull(operValue);
@@ -800,6 +801,13 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
   }
 }
 
+static SmallVector<unsigned> makeSequentialRange(unsigned size) {
+  SmallVector<unsigned> seq;
+  for (size_t i = 0; i < size; ++i)
+    seq.push_back(i);
+  return seq;
+}
+
 void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   auto *ctxt = mod.getContext();
   FunctionType origType = mod.getType();
@@ -911,11 +919,11 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
     BlockAndValueMapping map;
 
     // Add all of 'mod''s block args to the map in case one of the tagged ops
-    // was driven by a block arg.
+    // was driven by a block arg. Map to the oldInst operand Value.
     unsigned oldInstNumInputs = oldInst.getNumOperands();
     for (BlockArgument arg : mod.getBodyBlock()->getArguments())
       if (arg.getArgNumber() < oldInstNumInputs)
-        map.map(arg, newInst.getOperand(arg.getArgNumber()));
+        map.map(arg, oldInst.getOperand(arg.getArgNumber()));
 
     // Add all the old values which got moved to output ports to the map.
     size_t origNumResults = origType.getNumResults();
@@ -938,17 +946,20 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       for (OpOperand &oper : newOp->getOpOperands())
         oper.set(map.lookupOrDefault(oper.get()));
 
+    // Since we're not removing any ports, start with the old operands.
+    newOperands.append(oldInst.getOperands().begin(),
+                       oldInst.getOperands().end());
     // Gather new operands for the new instance.
     for (Value oldValue : newInputOldValue)
       newOperands.push_back(map.lookup(oldValue));
 
     // Fix up existing ops which used the old instance's results.
     for (auto oldResultOldValue : oldResultOldValues)
-      for (OpOperand &oldResultUser : llvm::make_early_inc_range(
-               oldInst.getResult(oldResultOldValue.first).getUses()))
-        oldResultUser.set(map.lookup(oldResultOldValue.second));
+      oldInst.getResult(oldResultOldValue.first)
+          .replaceAllUsesWith(map.lookup(oldResultOldValue.second));
   };
-  updateInstances(mod, {}, cloneOpsGetOperands);
+  updateInstances(mod, makeSequentialRange(origType.getNumResults()),
+                  cloneOpsGetOperands);
 
   //*************
   //   Lastly, remove the unnecessary ports. Doing this as a separate mutation
@@ -1127,7 +1138,7 @@ void PassCommon::dedupOutputs(MSFTModuleOp mod) {
   }
 
   mod.removePorts(llvm::BitVector(mod.getNumArguments()), outputPortsToRemove);
-  updateInstances(mod, {},
+  updateInstances(mod, makeSequentialRange(mod.getType().getNumResults()),
                   [&](InstanceOp newInst, InstanceOp oldInst,
                       SmallVectorImpl<Value> &newOperands) {
                     // Operands don't change.
