@@ -97,6 +97,14 @@ public:
   /// Walk the entire design adding placements root at the top module.
   size_t addDesignPlacements();
 
+  /// Remove the placement at a given location. Returns failure if nothing was
+  /// placed there.
+  LogicalResult removePlacement(PhysLocationAttr);
+  /// Move the placement at a given location to a new location. Returns failure
+  /// if nothing was placed at the previous location or something is already
+  /// placed at the new location.
+  LogicalResult movePlacement(PhysLocationAttr, PhysLocationAttr);
+
   /// Lookup the instance at a particular location.
   Optional<PlacedInstance> getInstanceAt(PhysLocationAttr);
 

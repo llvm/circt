@@ -31,24 +31,6 @@ void InvalidValueAttr::print(AsmPrinter &p) const {
   p << '<' << getType() << '>';
 }
 
-Attribute FIRRTLDialect::parseAttribute(DialectAsmParser &p, Type type) const {
-  StringRef attrName;
-  Attribute attr;
-  if (p.parseKeyword(&attrName))
-    return Attribute();
-  auto parseResult = generatedAttributeParser(p, attrName, type, attr);
-  if (parseResult.hasValue())
-    return attr;
-  p.emitError(p.getNameLoc(), "Unexpected FIRRTL attribute '" + attrName + "'");
-  return {};
-}
-
-void FIRRTLDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
-  if (succeeded(generatedAttributePrinter(attr, p)))
-    return;
-  llvm_unreachable("Unexpected attribute");
-}
-
 //===----------------------------------------------------------------------===//
 // SubAnnotationAttr
 //===----------------------------------------------------------------------===//

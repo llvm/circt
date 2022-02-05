@@ -126,6 +126,8 @@ static bool tryFlatteningOperands(Operation *op, PatternRewriter &rewriter) {
 
     Value result =
         createGenericOp(op->getLoc(), op->getName(), newOperands, rewriter);
+    if (auto name = op->getAttr("sv.namehint"))
+      result.getDefiningOp()->setAttr("sv.namehint", name);
     rewriter.replaceOp(op, result);
     return true;
   }

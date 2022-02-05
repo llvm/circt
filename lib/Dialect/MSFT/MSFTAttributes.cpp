@@ -109,24 +109,6 @@ void PhysicalBoundsAttr::print(AsmPrinter &p) const {
   p << '>';
 }
 
-Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
-  StringRef attrName;
-  Attribute attr;
-  if (p.parseKeyword(&attrName))
-    return Attribute();
-  auto parseResult = generatedAttributeParser(p, attrName, type, attr);
-  if (parseResult.hasValue())
-    return attr;
-  p.emitError(p.getNameLoc(), "Unexpected msft attribute '" + attrName + "'");
-  return {};
-}
-
-void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
-  if (succeeded(generatedAttributePrinter(attr, p)))
-    return;
-  llvm_unreachable("Unexpected attribute");
-}
-
 void MSFTDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

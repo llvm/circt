@@ -415,7 +415,11 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
 
   let hasCanonicalizer = 1;
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$operand, "int":$inputs)>];
+  let builders = [
+    // @note: Legacy builder used by the std-to-handshake pass. Should be removed once the pass is rewritten.
+    OpBuilder<(ins "Value":$operand, "int":$inputs)>,
+    OpBuilder<(ins "ValueRange":$inputs)>
+  ];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
 }

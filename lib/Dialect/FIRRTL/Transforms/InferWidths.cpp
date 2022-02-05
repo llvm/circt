@@ -1615,7 +1615,7 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
           auto bBundle = bType.cast<BundleType>();
           for (unsigned aIndex = 0, e = aBundle.getNumElements(); aIndex < e;
                ++aIndex) {
-            auto aField = aBundle.getElements()[aIndex].name.getValue();
+            auto aField = aBundle.getElements()[aIndex].name;
             auto bIndex = bBundle.getElementIndex(aField);
             if (!bIndex)
               continue;

@@ -237,5 +237,45 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %7, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %io_dataOut, %8 : !firrtl.uint<32>, !firrtl.uint<32>
   }
+
+    firrtl.module @constMask(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>) {
+      %mem_MPORT_en = firrtl.wire  : !firrtl.uint<1>
+      %mem_MPORT_data_0 = firrtl.wire  : !firrtl.uint<8>
+      %mem_0_MPORT, %mem_0_MPORT_1 = firrtl.mem Undefined  {depth = 16 : i64, name = "mem_0", portNames = ["MPORT", "MPORT_1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>
+
+      // CHECK: %mem_0_rw = firrtl.mem Undefined  {depth = 16 : i64, name = "mem_0", portNames = ["rw"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>
+      // CHECK: %[[v6:.+]] = firrtl.subfield %mem_0_rw(6) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.uint<1>
+      // CHECK: %[[c1_ui1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+      // CHECK: firrtl.connect %[[v6]], %[[c1_ui1]] : !firrtl.uint<1>, !firrtl.uint<1>
+      %0 = firrtl.subfield %mem_0_MPORT(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<4>
+      firrtl.connect %0, %index2 : !firrtl.uint<4>, !firrtl.uint<4>
+      %1 = firrtl.subfield %mem_0_MPORT(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<1>
+      firrtl.connect %1, %mem_MPORT_en : !firrtl.uint<1>, !firrtl.uint<1>
+      %2 = firrtl.subfield %mem_0_MPORT(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.clock
+      firrtl.connect %2, %clock : !firrtl.clock, !firrtl.clock
+      %3 = firrtl.subfield %mem_0_MPORT(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>) -> !firrtl.uint<8>
+      firrtl.connect %mem_MPORT_data_0, %3 : !firrtl.uint<8>, !firrtl.uint<8>
+      %4 = firrtl.subfield %mem_0_MPORT_1(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>) -> !firrtl.uint<4>
+      firrtl.connect %4, %index : !firrtl.uint<4>, !firrtl.uint<4>
+      %5 = firrtl.subfield %mem_0_MPORT_1(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>) -> !firrtl.uint<1>
+      firrtl.connect %5, %wen : !firrtl.uint<1>, !firrtl.uint<1>
+      %6 = firrtl.subfield %mem_0_MPORT_1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>) -> !firrtl.clock
+      firrtl.connect %6, %clock : !firrtl.clock, !firrtl.clock
+      %7 = firrtl.subfield %mem_0_MPORT_1(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>) -> !firrtl.uint<8>
+      firrtl.connect %7, %data_0 : !firrtl.uint<8>, !firrtl.uint<8>
+      %8 = firrtl.subfield %mem_0_MPORT_1(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>) -> !firrtl.uint<2>
+      %c1 = firrtl.constant 3 : !firrtl.uint<2>
+      firrtl.connect %8, %c1 : !firrtl.uint<2>, !firrtl.uint<2>
+      %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+      %REG = firrtl.reg %clock  : !firrtl.uint<1>
+      firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+      %r_0 = firrtl.reg %clock  : !firrtl.uint<8>
+      %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+      firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
+      %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+      firrtl.connect %auto_0, %11 : !firrtl.uint<8>, !firrtl.uint<8>
+
+    }
 }
 

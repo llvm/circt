@@ -86,6 +86,9 @@ public:
     return llvm::make_range(begin(), end());
   }
 
+  /// Get the number of direct instantiations of this module.
+  unsigned getNumUses() { return moduleUses.size(); }
+
   /// Iterate the instance records which instantiate this module.
   using use_iterator = UseVec::iterator;
   use_iterator uses_begin() { return moduleUses.begin(); }

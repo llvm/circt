@@ -68,6 +68,19 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   ];
 }
 
+def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
+  let summary = "Remove unused ports";
+  let description = [{
+    This pass removes unused ports without annotations or symbols. Implementation
+    wise, this pass iterates over the instance graph in a topological order from
+    leaves to the top so that we can remove unused ports optimally.
+  }];
+  let constructor = "circt::firrtl::createRemoveUnusedPortsPass()";
+  let statistics = [
+    Statistic<"numRemovedPorts", "num-removed-ports", "Number of ports erased">,
+  ];
+}
+
 def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let summary = "Performs inlining, flattening, and dead module elimination";
   let description = [{
@@ -119,6 +132,19 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
       "File to which emit seq meme metadata">
   ];
   let dependentDialects = ["hw::HWDialect"];
+}
+
+def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
+  let summary = "Wires test enables to clock gates for DFT infrastructure";
+  let description = [{
+    This pass will take a 1-bit signal targeted by
+    `DFTTestModeEnableAnnotation` and wires it to the `test_en` port of every
+    module named `EICG_wrapper`. This will create ports in any intermediate
+    module on the path from the signal to the `EICG_wrapper` modules.  This
+    pass is used to enable the "Design For Testing" style of design when the
+    intermediate modules were not originally built with DFT in mind.
+  }];
+  let constructor = "circt::firrtl::createWireDFTPass()";
 }
 
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {

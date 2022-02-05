@@ -878,20 +878,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto fieldRef = leafMap.lookup(ground.getID());
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
-            auto tpe = value.getType().cast<FIRRTLType>();
-
-            // Set type to ground type.
-            while (fieldID) {
-              TypeSwitch<FIRRTLType>(tpe)
-                  .Case<FVectorType, BundleType>([&](auto aggregate) {
-                    unsigned index = aggregate.getIndexForFieldID(fieldID);
-                    tpe = aggregate.getSubTypeByFieldID(fieldID);
-                    fieldID -= aggregate.getFieldID(index);
-                  })
-                  .Default([&](auto op) {
-                    llvm_unreachable("must be handled by traverseField");
-                  });
-            }
+            auto tpe = value.getType().cast<FIRRTLType>().getFinalTypeByFieldID(
+                fieldID);
             if (!tpe.isGround()) {
               value.getDefiningOp()->emitOpError()
                   << "cannot be added to interface with id '"

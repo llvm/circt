@@ -165,7 +165,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// Update the symbol name for the inlined module instance, by prepending
     /// the symbol name of the instance at which the inling was done.
     /// Return true if any update is made.
-     bool inlineModule(StringAttr moduleToDrop);
+    bool inlineModule(StringAttr moduleToDrop);
 
     /// Replace the oldMod module with newMod module in the namepath of the NLA.
     /// Return true if any update is made.
@@ -176,5 +176,34 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// everything after it.
     /// Return true if any update is made.
     bool truncateAtModule(StringAttr atMod, bool includeMod = true);
+
+    /// Return just the module part of the namepath at a specific index.
+    StringAttr modPart(unsigned i);
+
+    /// Return the root module.
+    StringAttr root();
+
+    /// Return just the reference part of the namepath at a specific index.
+    /// This will return an empty attribute if this is the leaf and the leaf is
+    /// a module.
+    StringAttr refPart(unsigned i);
+
+    /// Return the leaf reference.  This returns an empty attribute if the leaf
+    /// reference is a module.
+    StringAttr ref();
+
+    /// Return the leaf Module.
+    StringAttr leafMod();
+
+    /// Returns true, if the NLA path contains the module.
+    bool hasModule(StringAttr modName);
+
+    /// Returns true if this NLA targets a module or instance of a module (as
+    /// opposed to an instance's port or something inside an instance).
+    bool isModule();
+
+    /// Returns true if this NLA targets something inside a module (as opposed
+    /// to a module or an instance of a module);
+    bool isComponent();
     }];
 }

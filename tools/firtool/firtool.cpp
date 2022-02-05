@@ -168,6 +168,9 @@ static cl::opt<bool>
                  cl::desc("lower CHIRRTL memories to FIRRTL memories"),
                  cl::init(true));
 
+static cl::opt<bool> wireDFT("wire-dft", cl::desc("wire the DFT ports"),
+                             cl::init(true));
+
 static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
@@ -202,6 +205,9 @@ static cl::opt<bool>
 static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
                              cl::init(false));
+static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
+                                       cl::desc("enable unused ports pruning"),
+                                       cl::init(true));
 
 static cl::opt<bool> mergeConnections(
     "merge-connections",
@@ -358,6 +364,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
+  if (wireDFT)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
+
   if (prefixModules)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
@@ -420,9 +429,13 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
-  if (!disableOptimization)
+  if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
+    if (removeUnusedPorts)
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createRemoveUnusedPortsPass());
+  }
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(

@@ -1,15 +1,19 @@
 set(LLVM_OPTIONAL_SOURCES
   ASAPScheduler.cpp
+  ChainingSupport.cpp
   LPSchedulers.cpp
   Problems.cpp
   SimplexSchedulers.cpp
   TestPasses.cpp
+  Utilities.cpp
   )
 
 set(SCHEDULING_SOURCES
   ASAPScheduler.cpp
+  ChainingSupport.cpp
   Problems.cpp
   SimplexSchedulers.cpp
+  Utilities.cpp
   )
 
 set(SCHEDULING_LIBS

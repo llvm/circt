@@ -110,6 +110,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   if (mem.maskGran == 0)
     mem.maskGran = mem.dataWidth;
   auto maskBits = mem.dataWidth / mem.maskGran;
+  bool isMasked = maskBits > 1;
   // Each mask bit controls mask-granularity number of data bits.
   auto dataType = b.getIntegerType(mem.dataWidth);
 
@@ -154,23 +155,30 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value clock = op.body().getArgument(inArg++);
     Value wmode = op.body().getArgument(inArg++);
     Value wdataIn = op.body().getArgument(inArg++);
-    Value wmaskBits = op.body().getArgument(inArg++);
+    Value wmaskBits;
+    // There are no input mask ports, if maskBits =1. Create a dummy true value
+    // for mask.
+    if (isMasked)
+      wmaskBits = op.body().getArgument(inArg++);
+    else
+      wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
 
     // Add pipeline stages
     addr = addPipelineStages(b, numStages, clock, addr);
     en = addPipelineStages(b, numStages, clock, en);
     wmode = addPipelineStages(b, numStages, clock, wmode);
     wdataIn = addPipelineStages(b, numStages, clock, wdataIn);
-    wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
+    if (isMasked)
+      wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
     // For multi-bit mask, extract corresponding write data bits of
     // mask-granularity size each. Each of the extracted data bits will be
     // written to a register, gaurded by the corresponding mask bit.
     for (size_t i = 0; i < maskBits; ++i) {
-      maskValues[i] = b.create<comb::ExtractOp>(wmaskBits, i, 1);
-      dataValues[i] =
-          b.create<comb::ExtractOp>(wdataIn, i * mem.maskGran, mem.maskGran);
+      maskValues[i] = b.createOrFold<comb::ExtractOp>(wmaskBits, i, 1);
+      dataValues[i] = b.createOrFold<comb::ExtractOp>(wdataIn, i * mem.maskGran,
+                                                      mem.maskGran);
     }
 
     // wire to store read result
@@ -213,12 +221,19 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
     Value wdataIn = op.body().getArgument(inArg++);
-    Value wmaskBits = op.body().getArgument(inArg++);
+    Value wmaskBits;
+    // There are no input mask ports, if maskBits =1. Create a dummy true value
+    // for mask.
+    if (isMasked)
+      wmaskBits = op.body().getArgument(inArg++);
+    else
+      wmaskBits = b.create<ConstantOp>(b.getIntegerAttr(en.getType(), 1));
     // Add pipeline stages
     addr = addPipelineStages(b, numStages, clock, addr);
     en = addPipelineStages(b, numStages, clock, en);
     wdataIn = addPipelineStages(b, numStages, clock, wdataIn);
-    wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
+    if (isMasked)
+      wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
 
     SmallVector<Value, 4> maskValues(maskBits);
     SmallVector<Value, 4> dataValues(maskBits);
@@ -226,9 +241,9 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     // mask-granularity size each. Each of the extracted data bits will be
     // written to a register, gaurded by the corresponding mask bit.
     for (size_t i = 0; i < maskBits; ++i) {
-      maskValues[i] = b.create<comb::ExtractOp>(wmaskBits, i, 1);
-      dataValues[i] =
-          b.create<comb::ExtractOp>(wdataIn, i * mem.maskGran, mem.maskGran);
+      maskValues[i] = b.createOrFold<comb::ExtractOp>(wmaskBits, i, 1);
+      dataValues[i] = b.createOrFold<comb::ExtractOp>(wdataIn, i * mem.maskGran,
+                                                      mem.maskGran);
     }
     // Build write port logic.
     auto writeLogic = [&] {

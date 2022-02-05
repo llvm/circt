@@ -440,6 +440,8 @@ firrtl.module @Head(in %in4u: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    in %cond: !firrtl.uint<1>,
+                   in %val1: !firrtl.uint<1>,
+                   in %val2: !firrtl.uint<1>,
                    out %out: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<1>) {
   // CHECK: firrtl.connect %out, %in
@@ -466,6 +468,19 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   %8 = firrtl.mux (%invalid_ui1, %in, %c7_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %8 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  %9 = firrtl.multibit_mux %c1_ui1, %c0_ui1, %cond : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %out1, %c0_ui1
+  firrtl.connect %out1, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %10 = firrtl.multibit_mux %cond, %val1, %val2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: %[[MUX:.+]] = firrtl.mux(%cond, %val1, %val2)
+  // CHECK-NEXT: firrtl.connect %out1, %[[MUX]]
+  firrtl.connect %out1, %10 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %11 = firrtl.multibit_mux %cond, %val1, %val1, %val1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %out1, %val1
+  firrtl.connect %out1, %11 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
@@ -1801,16 +1816,41 @@ firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1
 }
 
 // CHECK-LABEL: firrtl.module @EmptyNode
-firrtl.module @EmptyNode(in %d1: !firrtl.uint<5>, out %foo: !firrtl.uint<5>, out %foo2: !firrtl.uint<5>) {
-  %bar0 = firrtl.node %d1 : !firrtl.uint<5>
+firrtl.module @EmptyNode(in %d1: !firrtl.uint<5>, 
+                         out %foo0: !firrtl.uint<5>, 
+                         out %foo1: !firrtl.uint<5>,
+                         out %foo2: !firrtl.uint<5>,
+                         out %foo3: !firrtl.uint<5>,
+                         out %foo4: !firrtl.uint<6>) {
+  // Should be unnamed
+  // CHECK-NEXT: %0 = firrtl.add %d1, %d1 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<6>
+  %tmp = firrtl.add %d1, %d1 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<6>
+  // Should be named
+  // CHECK-NEXT: %bar0 = firrtl.bits %0 4 to 0 {name = "bar0"} : (!firrtl.uint<6>) -> !firrtl.uint<5>
+  %tmq = firrtl.tail %tmp, 1 : (!firrtl.uint<6>) -> !firrtl.uint<5>
+  // Should be dropped
+  %bar0 = firrtl.node %tmq : !firrtl.uint<5>
+  // Should be dropped
   %bar1 = firrtl.node %d1 : !firrtl.uint<5>
-  %bar2 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]} : !firrtl.uint<5>
-  firrtl.connect %foo, %bar1 : !firrtl.uint<5>, !firrtl.uint<5>
+  // Should be retained due to symbol
+  // CHECK-NEXT: %bar2 = firrtl.node sym @foobar %d1  : !firrtl.uint<5>
+  %bar2 = firrtl.node sym @foobar %d1 : !firrtl.uint<5>
+  // Should be retained due to annotation
+  // CHECK-NEXT: %bar3 = firrtl.node %d1  {annotations = [{extrastuff = "n1"}]} : !firrtl.uint<5>
+  %bar3 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]} : !firrtl.uint<5>
+  %_T_4 = firrtl.node %tmp : !firrtl.uint<6>
+  // CHECK-NEXT: firrtl.connect %foo0, %bar0 : !firrtl.uint<5>, !firrtl.uint<5>
+  // CHECK-NEXT: firrtl.connect %foo1, %d1 : !firrtl.uint<5>, !firrtl.uint<5>
+  // CHECK-NEXT: firrtl.connect %foo2, %bar2 : !firrtl.uint<5>, !firrtl.uint<5>
+  // CHECK-NEXT: firrtl.connect %foo3, %bar3 : !firrtl.uint<5>, !firrtl.uint<5>
+  // CHECK-NEXT: firrtl.connect %foo4, %0 : !firrtl.uint<6>, !firrtl.uint<6>
+  firrtl.connect %foo0, %bar0 : !firrtl.uint<5>, !firrtl.uint<5>
+  firrtl.connect %foo1, %bar1 : !firrtl.uint<5>, !firrtl.uint<5>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<5>, !firrtl.uint<5>
+  firrtl.connect %foo3, %bar3 : !firrtl.uint<5>, !firrtl.uint<5>
+  firrtl.connect %foo4, %_T_4 : !firrtl.uint<6>, !firrtl.uint<6>
 }
-// CHECK-NEXT: %bar2 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]}
-// CHECK-NEXT: firrtl.connect %foo, %d1
-// CHECK-NEXT: firrtl.connect %foo2, %bar2
+
 
 // CHECK-LABEL: firrtl.module @RegresetToReg
 firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {

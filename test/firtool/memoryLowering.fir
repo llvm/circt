@@ -35,7 +35,7 @@ circuit test:
 
 ; CHECK: metadata/seq_mems.json
 
-; CHECK: [{"module_name":"memory_ext","depth":16,"width":32,"masked":"true","read":"true","write":"true","readwrite":"false","mask_granularity":8,"extra_ports":[],"hierarchy":[]}]
+; CHECK: [{"module_name":"memory_ext","depth":16,"width":32,"masked":true,"read":true,"write":true,"readwrite":false,"mask_granularity":8,"extra_ports":[],"hierarchy":[]}]
 
 ; CHECK: metadata/test.conf
 

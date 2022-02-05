@@ -245,31 +245,6 @@ void CHIRRTLDialect::initialize() {
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// Dialect Type Parsing and Printing
-//===----------------------------------------------------------------------===//
-
-/// Print a type registered to this dialect.
-void CHIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  if (failed(generatedTypePrinter(type, os)))
-    llvm_unreachable("unexpected 'CHIRRTL' type kind");
-}
-
-/// Parse a type registered to this dialect.
-Type CHIRRTLDialect::parseType(DialectAsmParser &parser) const {
-  llvm::SMLoc typeLoc = parser.getCurrentLocation();
-  StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  Type genType;
-  OptionalParseResult parseResult =
-      generatedTypeParser(parser, mnemonic, genType);
-  if (parseResult.hasValue())
-    return genType;
-  parser.emitError(typeLoc, "unknown type in CHIRRTL dialect");
-  return {};
-}
-
-//===----------------------------------------------------------------------===//
 // CMemory Type
 //===----------------------------------------------------------------------===//
 

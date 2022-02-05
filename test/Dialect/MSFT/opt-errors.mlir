@@ -10,7 +10,7 @@ hw.module @Top() {
 // -----
 
 module {
-  // expected-error @+1 {{Unexpected msft attribute 'foo'}}
+  // expected-error @+1 {{unknown attribute `foo` in dialect `msft`}}
   hw.instance "foo1" @Foo() -> () {"loc:" = #msft.foo<""> } 
 }
 

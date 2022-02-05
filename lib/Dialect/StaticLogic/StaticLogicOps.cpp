@@ -84,10 +84,12 @@ static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
   p.printType(type);
 
   // Print condition region.
+  p << ' ';
   p.printRegion(op.condition(), /*printEntryBlockArgs=*/false);
   p << " do";
 
   // Print stages region.
+  p << ' ';
   p.printRegion(op.stages(), /*printEntryBlockArgs=*/false);
 }
 
@@ -135,14 +137,30 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
   if (stagesBlock.getOperations().size() < 2)
     return op.emitOpError("stages must contain at least one stage");
 
-  // Verify the stages block contains only `staticlogic.pipeline.stage` and
-  // `staticlogic.pipeline.terminator` ops.
-  for (Operation &inner : stagesBlock)
+  int64_t lastStartTime = -1;
+  for (Operation &inner : stagesBlock) {
+    // Verify the stages block contains only `staticlogic.pipeline.stage` and
+    // `staticlogic.pipeline.terminator` ops.
     if (!isa<PipelineStageOp, PipelineTerminatorOp>(inner))
       return op.emitOpError(
                  "stages may only contain 'staticlogic.pipeline.stage' or "
                  "'staticlogic.pipeline.terminator' ops, found ")
              << inner;
+
+    // Verify the stage start times are monotonically increasing.
+    if (auto stage = dyn_cast<PipelineStageOp>(inner)) {
+      if (lastStartTime == -1) {
+        lastStartTime = stage.start();
+        continue;
+      }
+
+      if (lastStartTime >= stage.start())
+        return stage.emitOpError("'start' must be after previous 'start' (")
+               << lastStartTime << ')';
+
+      lastStartTime = stage.start();
+    }
+  }
 
   return success();
 }
@@ -174,11 +192,19 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 // PipelineStageOp
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyPipelineStageOp(PipelineStageOp op) {
+  if (op.start() < 0)
+    return op.emitOpError("'start' must be non-negative");
+
+  return success();
+}
+
 void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
-                            TypeRange resultTypes) {
+                            TypeRange resultTypes, IntegerAttr start) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
+  state.addAttribute("start", start);
 
   Region *region = state.addRegion();
   Block &block = region->emplaceBlock();

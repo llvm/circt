@@ -162,12 +162,54 @@ size_t PlacementDB::addDesignPlacements() {
   return failed;
 }
 
+/// Remove the placement at a given location. Returns failure if nothing was
+/// placed there.
+LogicalResult PlacementDB::removePlacement(PhysLocationAttr loc) {
+  Optional<PlacedInstance *> leaf = getLeaf(loc);
+  if (!leaf.hasValue())
+    return failure();
+  PlacedInstance *cell = *leaf;
+  if (!cell->op)
+    return failure();
+
+  *cell = PlacedInstance{};
+
+  return success();
+}
+
+/// Move the placement at a given location to a new location. Returns failure
+/// if nothing was placed at the previous location or something is already
+/// placed at the new location.
+LogicalResult PlacementDB::movePlacement(PhysLocationAttr oldLoc,
+                                         PhysLocationAttr newLoc) {
+  Optional<PlacedInstance *> oldLeaf = getLeaf(oldLoc);
+  Optional<PlacedInstance *> newLeaf = getLeaf(newLoc);
+
+  if (!oldLeaf.hasValue() || !newLeaf.hasValue())
+    return failure();
+
+  PlacedInstance *oldCell = *oldLeaf;
+  PlacedInstance *newCell = *newLeaf;
+
+  if (!oldCell->op || newCell->op)
+    return failure();
+
+  *newCell = *oldCell;
+
+  if (failed(removePlacement(oldLoc)))
+    return failure();
+
+  return success();
+}
+
 /// Lookup the instance at a particular location.
 Optional<PlacementDB::PlacedInstance>
 PlacementDB::getInstanceAt(PhysLocationAttr loc) {
   auto innerMap = placements[loc.getX()][loc.getY()][loc.getNum()];
   auto instF = innerMap.find(loc.getPrimitiveType().getValue());
   if (instF == innerMap.end())
+    return {};
+  if (!instF->getSecond().op)
     return {};
   return instF->getSecond();
 }

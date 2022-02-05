@@ -17,11 +17,12 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output        out1a, out1b, out1c,
 // CHECK-NEXT:    output [3:0]  out4, out4s,
 // CHECK-NEXT:    output [15:0] out16, out16s,
-// CHECK-NEXT:    output [16:0] sext17);
+// CHECK-NEXT:    output [16:0] sext17,
+// CHECK-NEXT:    output [1:0]  orvout);
 
 hw.module @Expressions(%in4: i4, %clock: i1) ->
   (out1a: i1, out1b: i1, out1c: i1,
-   out4: i4, out4s: i4, out16: i16, out16s: i16, sext17: i17) {
+   out4: i4, out4s: i4, out16: i16, out16s: i16, sext17: i17, orvout: i2) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -119,7 +120,14 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   // CHECK: assign sext17 = {w3[15], w3};
   %36 = comb.extract %w3_use from 15 : (i16) -> i1
   %35 = comb.concat %36, %w3_use : i1, i16
-  hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35 : i1, i1, i1, i4, i4, i16, i16, i17
+
+  // Variadic with name attribute lowers
+  // CHECK: assign orvout = in4[1:0] | in4[3:2] | in4[2:1];
+  %orpre1 = comb.extract %in4 from 0 : (i4) -> i2
+  %orpre2 = comb.extract %in4 from 2 : (i4) -> i2
+  %orpre3 = comb.extract %in4 from 1 : (i4) -> i2
+  %orv = comb.or %orpre1, %orpre2, %orpre3 {sv.namehint = "hintyhint"}: i2
+  hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35, %orv : i1, i1, i1, i4, i4, i16, i16, i17, i2
 }
 
 // CHECK-LABEL: module Precedence(
@@ -355,10 +363,9 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
 
-  // CHECK: wire [4:0] _T = {1'h0, a} << 5'h1;
   // CHECK: always @(posedge clock) begin
   // CHECK:   if (`PRINTF_COND_ & reset)
-  // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", _T, b);
+  // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", {1'h0, a} << 5'h1, b);
   // CHECK: end // always @(posedge)
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
@@ -377,9 +384,8 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
   %count = sv.reg  : !hw.inout<i2>
 
-  // CHECK: wire [1:0] _T = ~{2{reset}} & (cond ? value : count);
-  // CHECK-NEXT: always_ff @(posedge clock)
-  // CHECK-NEXT:   count <= _T;
+  // CHECK: always_ff @(posedge clock)
+  // CHECK-NEXT:   count <= ~{2{reset}} & (cond ? value : count);
 
   %0 = sv.read_inout %count : !hw.inout<i2>
   %1 = comb.mux %cond, %value, %0 : i2

@@ -13,8 +13,8 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
-#include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -46,7 +46,7 @@ namespace {
 
 struct AffineToStaticLogic
     : public AffineToStaticLogicBase<AffineToStaticLogic> {
-  void runOnFunction() override;
+  void runOnOperation() override;
 
 private:
   LogicalResult
@@ -61,7 +61,7 @@ private:
 
 } // namespace
 
-void AffineToStaticLogic::runOnFunction() {
+void AffineToStaticLogic::runOnOperation() {
   // Get dependence analysis for the whole function.
   auto dependenceAnalysis = getAnalysis<MemoryDependenceAnalysis>();
 
@@ -435,7 +435,9 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
       stageTypes.push_back(lowerBound.getType());
 
     // Create the stage itself.
-    auto stage = builder.create<PipelineStageOp>(stageTypes);
+    auto startTimeAttr = builder.getIntegerAttr(
+        builder.getIntegerType(64, /*isSigned=*/true), startTime);
+    auto stage = builder.create<PipelineStageOp>(stageTypes, startTimeAttr);
     auto &stageBlock = stage.getBodyBlock();
     auto *stageTerminator = stageBlock.getTerminator();
     builder.setInsertionPointToStart(&stageBlock);

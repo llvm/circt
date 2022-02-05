@@ -15,7 +15,7 @@
 #define CIRCT_ANALYSIS_DEPENDENCE_ANALYSIS_H
 
 #include "circt/Support/LLVM.h"
-#include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
 #include <utility>
 
 namespace mlir {

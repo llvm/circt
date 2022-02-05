@@ -21,6 +21,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
+#include <functional>
 
 #define DEBUG_TYPE "omir"
 
@@ -42,6 +43,8 @@ struct Tracker {
   Operation *op;
   /// If this tracker is non-local, this is the corresponding anchor.
   NonLocalAnchor nla;
+  /// If this is a port, then set the portIdx, else initialized to -1.
+  int portNo = -1;
 };
 
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
@@ -58,8 +61,10 @@ private:
                    llvm::json::OStream &jsonStream);
   void emitOptionalRTLPorts(DictionaryAttr node,
                             llvm::json::OStream &jsonStream);
-  void emitValue(Attribute node, llvm::json::OStream &jsonStream);
-  void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream);
+  void emitValue(Attribute node, llvm::json::OStream &jsonStream,
+                 bool dutInstance);
+  void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream,
+                         bool dutInstance);
 
   SmallString<8> addSymbolImpl(Attribute symbol) {
     unsigned id;
@@ -128,6 +133,8 @@ private:
   DenseMap<hw::InnerRefAttr, InstanceOp> instancesByName;
   /// Record to remove any temporary symbols added to instances.
   DenseSet<Operation *> tempSymInstances;
+  /// The Design Under Test module.
+  StringAttr dutModuleName;
 };
 } // namespace
 
@@ -244,6 +251,7 @@ void EmitOMIRPass::runOnOperation() {
   symtbl = &currentSymtbl;
   circuitNamespace = &currentCircuitNamespace;
   instancePaths = &currentInstancePaths;
+  dutModuleName = {};
 
   // Traverse the IR and collect all tracker annotations that were previously
   // scattered into the circuit.
@@ -260,26 +268,38 @@ void EmitOMIRPass::runOnOperation() {
                op->getParentOfType<FModuleOp>().getNameAttr()),
            instOp});
     }
-    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+    auto setTracker = [&](int portNo, Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
         return false;
       Tracker tracker;
       tracker.op = op;
       tracker.id = anno.getMember<IntegerAttr>("id");
+      tracker.portNo = portNo;
       if (!tracker.id) {
         op->emitError(omirTrackerAnnoClass)
             << " annotation missing `id` integer attribute";
         anyFailures = true;
         return true;
       }
-      if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+      if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         tracker.nla =
             dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
+        removeTempNLAs.push_back(tracker.nla);
+      }
       if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
-    });
+    };
+    AnnotationSet::removePortAnnotations(op, setTracker);
+    AnnotationSet::removeAnnotations(
+        op, std::bind(setTracker, -1, std::placeholders::_1));
+    if (auto modOp = dyn_cast<FModuleOp>(op)) {
+      AnnotationSet annos(modOp.annotations());
+      if (!annos.hasAnnotation("sifive.enterprise.firrtl.MarkDUTAnnotation"))
+        return;
+      dutModuleName = modOp.getNameAttr();
+    }
   });
 
   // Build the output JSON.
@@ -518,7 +538,8 @@ void EmitOMIRPass::emitOMField(StringAttr fieldName, DictionaryAttr field,
     jsonStream.attribute("info", info);
     jsonStream.attribute("name", fieldName.strref());
     jsonStream.attributeBegin("value");
-    emitValue(field.get("value"), jsonStream);
+    emitValue(field.get("value"), jsonStream,
+              fieldName.strref().equals("dutInstance"));
     jsonStream.attributeEnd();
   });
 }
@@ -589,7 +610,8 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
   });
 }
 
-void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
+void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream,
+                             bool dutInstance) {
   // Handle the null case.
   if (!node || node.isa<UnitAttr>())
     return jsonStream.value(nullptr);
@@ -621,7 +643,7 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
   if (auto attr = node.dyn_cast<ArrayAttr>()) {
     jsonStream.array([&] {
       for (auto element : attr.getValue()) {
-        emitValue(element, jsonStream);
+        emitValue(element, jsonStream, dutInstance);
         if (anyFailures)
           return;
       }
@@ -631,13 +653,13 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
   if (auto attr = node.dyn_cast<DictionaryAttr>()) {
     // Handle targets that have a corresponding tracker annotation in the IR.
     if (attr.getAs<UnitAttr>("omir.tracker"))
-      return emitTrackedTarget(attr, jsonStream);
+      return emitTrackedTarget(attr, jsonStream, dutInstance);
 
     // Handle regular dictionaries.
     jsonStream.object([&] {
       for (auto field : attr.getValue()) {
         jsonStream.attributeBegin(field.getName());
-        emitValue(field.getValue(), jsonStream);
+        emitValue(field.getValue(), jsonStream, dutInstance);
         jsonStream.attributeEnd();
         if (anyFailures)
           return;
@@ -662,7 +684,8 @@ void EmitOMIRPass::emitValue(Attribute node, llvm::json::OStream &jsonStream) {
 }
 
 void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
-                                     llvm::json::OStream &jsonStream) {
+                                     llvm::json::OStream &jsonStream,
+                                     bool dutInstance) {
   // Extract the `id` field.
   auto idAttr = node.getAs<IntegerAttr>("id");
   if (!idAttr) {
@@ -728,11 +751,24 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     bool notFirst = false;
     hw::InnerRefAttr instName;
     for (auto nameRef : tracker.nla.namepath()) {
-      StringRef modName;
+      StringAttr modName;
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
-        modName = innerRef.getModule().getValue();
+        modName = innerRef.getModule();
       else if (auto ref = nameRef.dyn_cast<FlatSymbolRefAttr>())
-        modName = ref.getValue();
+        modName = ref.getAttr();
+      if (!dutInstance && modName == dutModuleName) {
+        // Check if the DUT module occurs in the instance path.
+        // Print the path relative to the DUT, if the nla is inside the DUT.
+        // Keep the path for dutInstance relative to test harness. (SFC
+        // implementation in TestHarnessOMPhase.scala)
+        target = type;
+        target.append(":~");
+        target.append(dutModuleName);
+        target.push_back('|');
+        notFirst = false;
+        instName = {};
+      }
+
       Operation *module = symtbl->lookup(modName);
       assert(module);
       if (notFirst)
@@ -762,6 +798,13 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     if (!module)
       module = tracker.op->getParentOfType<FModuleOp>();
     assert(module);
+    if (module.getNameAttr() == dutModuleName) {
+      // If module is DUT, then root the target relative to the DUT.
+      target = type;
+      target.append(":~");
+      target.append(dutModuleName);
+      target.push_back('|');
+    }
     target.append(addSymbol(module));
   }
 
@@ -772,6 +815,9 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     componentName = getInnerRefTo(tracker.op);
     LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted " << componentName
                             << " as dont-touch\n");
+  } else if (auto mod = dyn_cast<FModuleOp>(tracker.op)) {
+    if (tracker.portNo >= 0)
+      componentName = getInnerRefTo(mod, tracker.portNo);
   } else if (!isa<FModuleOp>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;

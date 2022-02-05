@@ -120,32 +120,37 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     auto maskGran = width / memSummary.maskBits;
     // Now create the config string for the memory.
     std::string portStr;
-    if (memSummary.numWritePorts)
+    if (memSummary.numWritePorts && memSummary.isMasked)
       portStr += "mwrite";
+    else if (memSummary.numWritePorts)
+      portStr += "write";
     if (memSummary.numReadPorts) {
       if (!portStr.empty())
         portStr += ",";
       portStr += "read";
     }
-    if (memSummary.numReadWritePorts)
+    if (memSummary.numReadWritePorts && memSummary.isMasked)
       portStr = "mrw";
+    else if (memSummary.numReadWritePorts)
+      portStr = "rw";
     auto memExtName = memSummary.getFirMemoryName().str();
+    auto maskGranStr =
+        !memSummary.isMasked ? "" : " mask_gran " + std::to_string(maskGran);
     seqMemConfStr += "name " + memExtName + " depth " +
                      std::to_string(memSummary.depth) + " width " +
-                     std::to_string(width) + " ports " + portStr +
-                     " mask_gran " + std::to_string(maskGran) + "\n";
+                     std::to_string(width) + " ports " + portStr + maskGranStr +
+                     "\n";
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
       jsonStream.attribute("module_name", memExtName);
       jsonStream.attribute("depth", (int64_t)memSummary.depth);
       jsonStream.attribute("width", (int64_t)width);
-      jsonStream.attribute("masked", "true");
-      jsonStream.attribute("read", memSummary.numReadPorts ? "true" : "false");
-      jsonStream.attribute("write",
-                           memSummary.numWritePorts ? "true" : "false");
-      jsonStream.attribute("readwrite",
-                           memSummary.numReadWritePorts ? "true" : "false");
-      jsonStream.attribute("mask_granularity", (int64_t)maskGran);
+      jsonStream.attribute("masked", memSummary.isMasked);
+      jsonStream.attribute("read", memSummary.numReadPorts > 0);
+      jsonStream.attribute("write", memSummary.numWritePorts > 0);
+      jsonStream.attribute("readwrite", memSummary.numReadWritePorts > 0);
+      if (memSummary.isMasked)
+        jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {});
       // Record all the hierarchy names.
       SmallVector<std::string> hierNames;
@@ -331,7 +336,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
       // We use symbol substitution to make sure we output the correct thing
       // when the module goes through renaming.
       j.value(("{{" + Twine(index++) + "}}").str());
-      symbols.push_back(SymbolRefAttr::get(context, module.moduleName()));
+      symbols.push_back(SymbolRefAttr::get(module.moduleNameAttr()));
     }
   });
 
