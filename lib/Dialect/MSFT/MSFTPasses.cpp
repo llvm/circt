@@ -1056,7 +1056,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   // Build the module.
   hw::ModulePortInfo modPortInfo(inputPorts, outputPorts);
   auto partMod =
-      OpBuilder::atBlockEnd(getOperation().getBody())
+      OpBuilder(partOp->getParentOfType<MSFTModuleOp>())
           .create<MSFTModuleOp>(loc, partOp.verilogNameAttr(), modPortInfo,
                                 ArrayRef<NamedAttribute>{});
   partBlock->moveBefore(partMod.getBodyBlock());
