@@ -443,12 +443,14 @@ void PartitionPass::runOnOperation() {
   getAndSortModules(outerMod, sortedMods);
 
   for (auto mod : sortedMods) {
+    // Make partition's job easier by cleaning up first.
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
+    // Do the partitioning.
     partition(mod);
-    // llvm::errs() << "----- After partitioning "
-    //              << SymbolTable::getSymbolName(mod) << "\n";
-    // outerMod->dump();
-    // (void)mlir::applyPatternsAndFoldGreedily(mod,
-    //                                          mlir::FrozenRewritePatternSet());
+    // Cleanup whatever mess we made.
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
   }
 }
 
@@ -485,7 +487,7 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
       map.map(result, result);
   }
 
-  for (Operation &op : llvm::make_early_inc_range(*partBlock)) {
+  for (Operation &op : *partBlock) {
     b.setInsertionPointToEnd(partBlock);
 
     // Go through the operands and copy any which we can.
@@ -510,16 +512,15 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
         continue;
 
       DenseSet<Operation *> seen;
-      if (!(extendMaximalUp || isDrivenByPartOpsOnly(defOp, map, seen)))
-        continue;
-
-      if (llvm::all_of(defOp->getUsers(), [&](Operation *user) {
-            return user->getBlock() == partBlock;
-          })) {
-        defOp->moveBefore(partBlock, b.getInsertionPoint());
-      } else {
-        b.insert(defOp->clone(map));
-        opOper.set(map.lookup(opOper.get()));
+      if (extendMaximalUp || isDrivenByPartOpsOnly(defOp, map, seen)) {
+        if (llvm::all_of(defOp->getUsers(), [&](Operation *user) {
+              return user->getBlock() == partBlock;
+            })) {
+          defOp->moveBefore(partBlock, b.getInsertionPoint());
+        } else {
+          b.insert(defOp->clone(map));
+          opOper.set(map.lookup(opOper.get()));
+        }
       }
     }
 
@@ -545,6 +546,8 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
   }
 }
 
+/// Move tagged ops into separate blocks. Copy any wire ops connecting them as
+/// well.
 void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
               Block *nonLocalBlock) {
   DenseMap<SymbolRefAttr, SmallVector<Operation *, 8>> perPartTaggedOps;
@@ -569,25 +572,28 @@ void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
 }
 
 void PartitionPass::partition(MSFTModuleOp mod) {
+  auto modSymbol = SymbolTable::getSymbolName(mod);
 
+  // Construct all the blocks we're going to need.
   Block *nonLocal = mod.addBlock();
   DenseMap<SymbolRefAttr, Block *> perPartBlocks;
-
-  auto modSymbol = SymbolTable::getSymbolName(mod);
   mod.walk([&](DesignPartitionOp part) {
     SymbolRefAttr partRef =
         SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
     perPartBlocks[partRef] = mod.addBlock();
   });
 
+  // Sort the tagged ops into ops to hoist (bubble up) and per-partition blocks.
   copyInto(mod, perPartBlocks, nonLocal);
 
+  // Hoist the appropriate ops.
   if (!nonLocal->empty())
     bubbleUp(mod, nonLocal);
   nonLocal->dropAllReferences();
   nonLocal->dropAllDefinedValueUses();
   mod.getBlocks().remove(nonLocal);
 
+  // Sink all of the "locally-tagged" ops into new partition modules.
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
     SymbolRefAttr partRef =
@@ -801,6 +807,7 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
   }
 }
 
+/// Utility for creating {0, 1, 2, ..., size}.
 static SmallVector<unsigned> makeSequentialRange(unsigned size) {
   SmallVector<unsigned> seq;
   for (size_t i = 0; i < size; ++i)
@@ -998,10 +1005,12 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
 
     for (OpOperand &oper : op.getOpOperands()) {
       Value v = oper.get();
+      // Don't need a new input if we're consuming a value in the same block.
       if (v.getParentBlock() == partBlock)
         continue;
       auto existingF = newInputMap.find(v);
       if (existingF == newInputMap.end()) {
+        // If there's not an existing input, create one.
         auto arg = partBlock->addArgument(v.getType());
         oper.set(arg);
 
@@ -1016,16 +1025,20 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
             /*type*/ v.getType(),
             /*argNum*/ inputPorts.size()});
       } else {
+        // There's already an existing port. Just set it.
         oper.set(partBlock->getArgument(existingF->second));
       }
     }
 
     for (OpResult res : op.getResults()) {
+      // If all the consumers of this result are in the same partition, we don't
+      // need a new output port.
       if (llvm::all_of(res.getUsers(), [partBlock](Operation *op) {
             return op->getBlock() == partBlock;
           }))
         continue;
 
+      // If not, add one.
       newOutputs.push_back(res);
       StringRef portName = getResultName(res, topLevelSyms, nameBuffer);
       outputPorts.push_back(hw::PortInfo{

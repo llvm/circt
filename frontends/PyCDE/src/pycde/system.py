@@ -176,6 +176,10 @@ class System:
                               verilog_file=verilog_file,
                               tcl_file=tcl_file).strip()
 
+  def cleanup(self):
+    pm = mlir.passmanager.PassManager.parse("canonicalize")
+    pm.run(self.mod)
+
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
 
