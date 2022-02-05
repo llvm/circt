@@ -77,6 +77,8 @@ static bool isUInt1(Type type) {
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
 static bool isUselessName(StringRef name) {
+  if (name.empty())
+    return true;
   // Ignore _T and _T_123
   if (name.startswith("_T")) {
     if (name.size() == 2)
@@ -1360,6 +1362,46 @@ LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
       });
 }
 
+OpFoldResult MultibitMuxOp::fold(ArrayRef<Attribute> operands) {
+  // If there is only one input, just return it.
+  if (operands.size() == 2)
+    return getOperand(1);
+
+  if (auto constIndex = getConstant(operands[0])) {
+    auto index = constIndex->getExtValue();
+    if (index >= 0 && index < static_cast<int>(inputs().size()))
+      return inputs()[inputs().size() - 1 - index];
+  }
+
+  return {};
+}
+
+LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
+                                          PatternRewriter &rewriter) {
+  // If all operands are equal, just canonicalize to it. We can add this
+  // canonicalization as a folder but it costly to look through all inputs so it
+  // is added here.
+  if (llvm::all_of(op.inputs().drop_front(),
+                   [&](auto input) { return input == op.inputs().front(); })) {
+    rewriter.replaceOp(op, op.inputs().front());
+    return success();
+  }
+
+  // If the size is 2, canonicalize into a normal mux to introduce more folds.
+  if (op.inputs().size() != 2)
+    return failure();
+
+  // TODO: Handle even when `index` doesn't have uint<1>.
+  auto uintType = op.index().getType().cast<FIRRTLType>().dyn_cast<UIntType>();
+  if (!uintType || uintType.getBitWidthOrSentinel() != 1)
+    return failure();
+
+  // multibit_mux(index, {lhs, rhs}) -> mux(index, lhs, rhs)
+  rewriter.replaceOpWithNewOp<MuxPrimOp>(op, op.index(), op.inputs()[0],
+                                         op.inputs()[1]);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -1560,9 +1602,28 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   return failure();
 }
 
+// Remove private nodes.  If they have an interesting names, move the name to
+// the source expression.
+struct FoldNodeName : public mlir::RewritePattern {
+  FoldNodeName(MLIRContext *context)
+      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto node = cast<NodeOp>(op);
+    auto name = node.nameAttr();
+    if (node.inner_sym() || !node.annotations().empty())
+      return failure();
+    auto *expr = node.input().getDefiningOp();
+    if (expr && !expr->hasAttr("name") && !isUselessName(name))
+      rewriter.updateRootInPlace(expr, [&] { expr->setAttr("name", name); });
+    rewriter.replaceOp(node, node.input());
+    return success();
+  }
+};
+
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<patterns::EmptyNode, patterns::DropNameNode>(context);
+  results.insert<FoldNodeName, patterns::DropNameNode>(context);
 }
 
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,

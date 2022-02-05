@@ -27,8 +27,8 @@ using namespace circt::analysis;
 
 namespace {
 struct TestDependenceAnalysisPass
-    : public PassWrapper<TestDependenceAnalysisPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestDependenceAnalysisPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-dependence-analysis"; }
   StringRef getDescription() const override {
     return "Perform dependence analysis and emit results as attributes";
@@ -36,12 +36,12 @@ struct TestDependenceAnalysisPass
 };
 } // namespace
 
-void TestDependenceAnalysisPass::runOnFunction() {
+void TestDependenceAnalysisPass::runOnOperation() {
   MLIRContext *context = &getContext();
 
-  MemoryDependenceAnalysis analysis(getFunction());
+  MemoryDependenceAnalysis analysis(getOperation());
 
-  getFunction().walk([&](Operation *op) {
+  getOperation().walk([&](Operation *op) {
     if (!isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
       return;
 
@@ -75,8 +75,8 @@ void TestDependenceAnalysisPass::runOnFunction() {
 
 namespace {
 struct TestSchedulingAnalysisPass
-    : public PassWrapper<TestSchedulingAnalysisPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestSchedulingAnalysisPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-scheduling-analysis"; }
   StringRef getDescription() const override {
     return "Perform scheduling analysis and emit results as attributes";
@@ -84,12 +84,12 @@ struct TestSchedulingAnalysisPass
 };
 } // namespace
 
-void TestSchedulingAnalysisPass::runOnFunction() {
+void TestSchedulingAnalysisPass::runOnOperation() {
   MLIRContext *context = &getContext();
 
   CyclicSchedulingAnalysis analysis = getAnalysis<CyclicSchedulingAnalysis>();
 
-  getFunction().walk([&](AffineForOp forOp) {
+  getOperation().walk([&](AffineForOp forOp) {
     if (isa<AffineForOp>(forOp.getBody()->front()))
       return;
     CyclicProblem problem = analysis.getProblem(forOp);

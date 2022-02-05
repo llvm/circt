@@ -231,6 +231,16 @@ hw.module @or_flatten_in_back(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
   hw.output %0 : i7
 }
 
+// CHECK-LABEL: hw.module @or_flatten_keep_root_name(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
+// CHECK-NEXT:    [[RES:%[0-9]+]] = comb.or %arg0, %arg1, %arg2 {sv.namehint = "waterman"}  : i7
+// CHECK-NEXT:    hw.output [[RES]] : i7
+
+hw.module @or_flatten_keep_root_name(%arg0: i7, %arg1: i7, %arg2: i7) -> (result: i7) {
+  %or0 = comb.or %arg1, %arg2 : i7
+  %0 = comb.or %arg0, %or0 {sv.namehint="waterman"}: i7
+  hw.output %0 : i7
+}
+
 // CHECK-LABEL: hw.module @or_flatten_in_middle(%arg0: i7, %arg1: i7, %arg2: i7, %arg3: i7) -> (result: i7) {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.or %arg0, %arg1, %arg2, %arg3 : i7
 // CHECK-NEXT:    hw.output [[RES]] : i7
@@ -1034,6 +1044,33 @@ hw.module @replicate(%arg0: i7) -> (r1: i9, r2: i7) {
   hw.output %r1, %r2 : i9, i7
 }
 
+// CHECK-LABEL: hw.module @bitcast_canonicalization
+hw.module @bitcast_canonicalization(%arg0: i4) -> (r1: i4, r2: !hw.array<2xi2>) {
+  %id = hw.bitcast %arg0 : (i4) -> i4
+  %a = hw.bitcast %arg0 : (i4) -> !hw.struct<a:i2, b:i2>
+  %b = hw.bitcast %a : (!hw.struct<a:i2, b:i2>) -> !hw.array<2xi2>
+  // CHECK-NEXT: %0 = hw.bitcast %arg0 : (i4) -> !hw.array<2xi2>
+  // CHECK-NEXT: hw.output %arg0, %0
+  hw.output %id, %b : i4, !hw.array<2xi2>
+}
+
+// CHECK-LABEL: hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3)
+// CHECK-NEXT:    hw.output %a0 : i3
+hw.module @array_get1(%a0: i3, %a1: i3, %a2: i3) -> (r0: i3) {
+  %c0 = hw.constant 0 : i2
+  %arr = hw.array_create %a2, %a1, %a0 : i3
+  %r0 = hw.array_get %arr[%c0] : !hw.array<3xi3>
+  hw.output %r0 : i3
+}
+
+// CHECK-LABEL: hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3)
+// CHECK-NEXT:    hw.output %a0 : i3
+hw.module @struct_extract1(%a0: i3, %a1: i5) -> (r0: i3) {
+  %s = hw.struct_create (%a0, %a1) : !hw.struct<foo: i3, bar: i5>
+  %r0 = hw.struct_extract %s["foo"] : !hw.struct<foo: i3, bar: i5>
+  hw.output %r0 : i3
+}
+
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
@@ -1272,4 +1309,3 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (data: i32) {
 }
 
 // == End: test cases from LowerToHW ==
-

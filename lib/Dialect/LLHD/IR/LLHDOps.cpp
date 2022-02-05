@@ -582,6 +582,7 @@ static void printEntityOp(OpAsmPrinter &printer, llhd::EntityOp op) {
       op->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
                         llhd::EntityOp::getTypeAttrName(), "ins"});
+  printer << " ";
   printer.printRegion(op.body(), false, false);
 }
 
@@ -804,6 +805,7 @@ static void printProcOp(OpAsmPrinter &printer, llhd::ProcOp op) {
   printer.printSymbolName(op.getName());
   printProcArguments(printer, op.getOperation(), type.getInputs(),
                      op.insAttr().getInt());
+  printer << " ";
   printer.printRegion(op.body(), false, true);
 }
 

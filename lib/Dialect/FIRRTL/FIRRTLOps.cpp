@@ -268,22 +268,20 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   // that defines it and has no parameters.
   llvm::DenseMap<Attribute, FExtModuleOp> defnameMap;
 
-  // Verify external modules.
-  for (auto &op : *circuit.getBody()) {
-    auto extModule = dyn_cast<FExtModuleOp>(op);
+  auto verifyExtModule = [&](FExtModuleOp extModule) {
     if (!extModule)
-      continue;
+      return success();
 
     auto defname = extModule.defnameAttr();
     if (!defname)
-      continue;
+      return success();
 
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
     auto collidingModule = circuit.lookupSymbol(defname.getValue());
     if (isa_and_nonnull<FModuleOp>(collidingModule)) {
       auto diag =
-          op.emitOpError()
+          extModule.emitOpError()
           << "attribute 'defname' with value " << defname
           << " conflicts with the name of another module in the circuit";
       diag.attachNote(collidingModule->getLoc())
@@ -306,7 +304,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
       value = extModule;
       // Go to the next extmodule if no extmodule with the same
       // defname was found.
-      continue;
+      return success();
     }
 
     // Check that the number of ports is exactly the same.
@@ -314,7 +312,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     SmallVector<PortInfo> collidingPorts = collidingExtModule.getPorts();
 
     if (ports.size() != collidingPorts.size()) {
-      auto diag = op.emitOpError()
+      auto diag = extModule.emitOpError()
                   << "with 'defname' attribute " << defname << " has "
                   << ports.size()
                   << " ports which is different from a previously defined "
@@ -339,7 +337,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         bType = bType.getWidthlessType();
       }
       if (aName != bName) {
-        auto diag = op.emitOpError()
+        auto diag = extModule.emitOpError()
                     << "with 'defname' attribute " << defname
                     << " has a port with name " << aName
                     << " which does not match the name of the port "
@@ -352,7 +350,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         return failure();
       }
       if (aType != bType) {
-        auto diag = op.emitOpError()
+        auto diag = extModule.emitOpError()
                     << "with 'defname' attribute " << defname
                     << " has a port with name " << aName
                     << " which has a different type " << aType
@@ -366,6 +364,135 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
         return failure();
       }
     }
+    return success();
+  };
+
+  InnerRefList instanceSyms;
+  InnerRefList leafInnerSyms;
+  SmallVector<NonLocalAnchor> nlaList;
+
+  for (auto &op : *circuit.getBody()) {
+    // Record all the NLAs.
+    if (auto nla = dyn_cast<NonLocalAnchor>(op))
+      nlaList.push_back(nla);
+    else if (auto mod = dyn_cast<FModuleOp>(op)) {
+      auto modName = mod.getNameAttr();
+      mod.walk([&](Operation *op) {
+        if (isa<InstanceOp>(op))
+          instanceSyms.insert(op, modName);
+        else
+          leafInnerSyms.insert(op, modName);
+      });
+      leafInnerSyms.insert(mod);
+    }
+    // Verify external modules.
+    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
+      leafInnerSyms.insert(extModule);
+      if (verifyExtModule(extModule).failed())
+        return failure();
+    }
+  }
+  leafInnerSyms.sort();
+  instanceSyms.sort();
+
+  // Verify the NonLocalAnchor.
+  // 1. Iterate over the namepath.
+  // 2. The namepath should be a valid instance path, specified either on a
+  // module or a declaration inside a module.
+  // 3. Each element in the namepath is an InnerRefAttr except possibly the
+  // last element.
+  // 4. Make sure that the InnerRefAttr is legal, by verifying the module name
+  // and the corresponding inner_sym on the instance.
+  // 5. Make sure that the instance path is legal, by verifying the sequence of
+  // instance and the expected module occurs as the next element in the path.
+  // 6. The last element of the namepath, can be an InnerRefAttr on either a
+  // module port or a declaration inside the module.
+  // 7. The last element of the namepath can also be a module symbol.
+  auto hasNonLocal = [&](AnnotationSet &annos, StringRef nlaName) {
+    bool instFound = false;
+    for (auto anno : annos) {
+      if (auto nlaRef = anno.getMember("circt.nonlocal")) {
+        instFound = nlaRef.cast<FlatSymbolRefAttr>().getAttr() == nlaName;
+        if (instFound)
+          break;
+      }
+    }
+    return instFound;
+  };
+  for (NonLocalAnchor nla : nlaList) {
+    auto namepath = nla.namepath();
+    StringAttr nlaName = nla.sym_nameAttr();
+    if (namepath.size() <= 1)
+      return nla.emitOpError()
+             << "the instance path cannot be empty/single element, it "
+                "must specify an instance path.";
+
+    StringAttr expectedModuleName = {};
+    for (unsigned i = 0, s = namepath.size() - 1; i < s; ++i) {
+      hw::InnerRefAttr innerRef = namepath[i].dyn_cast<hw::InnerRefAttr>();
+      if (!innerRef)
+        return nla.emitOpError()
+               << "the instance path can only contain inner sym reference"
+               << ", only the leaf can refer to a module symbol";
+
+      if (expectedModuleName && expectedModuleName != innerRef.getModule())
+        return nla.emitOpError()
+               << "instance path is incorrect. Expected module: "
+               << expectedModuleName
+               << " instead found: " << innerRef.getModule();
+      InstanceOp instOp =
+          dyn_cast_or_null<InstanceOp>(instanceSyms.getOpIfExists(innerRef));
+      if (!instOp)
+        return nla.emitOpError()
+               << " module: " << innerRef.getModule()
+               << " does not contain any instance with symbol: "
+               << innerRef.getName();
+      expectedModuleName = instOp.moduleNameAttr().getAttr();
+      AnnotationSet annos(instOp);
+      bool instFound = hasNonLocal(annos, nlaName);
+      if (!instFound) {
+        auto diag = nla.emitOpError()
+                    << " instance with symbol: " << innerRef
+                    << " does not contain a reference to the NonLocalAnchor";
+        diag.attachNote(instOp.getLoc()) << "the instance was defined here";
+        return failure();
+      }
+    }
+    // The instance path has been verified. Now verify the last element.
+    auto leafRef = namepath[namepath.size() - 1];
+    bool leafFound = false;
+    if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
+      auto *rec = leafInnerSyms.getRecordIfExists(innerRef);
+      if (!rec)
+        return nla.emitOpError()
+               << " operation with symbol: " << innerRef << " was not found ";
+      if (expectedModuleName != innerRef.getModule())
+        return nla.emitOpError()
+               << "instance path is incorrect. Expected module: "
+               << expectedModuleName
+               << " instead found: " << innerRef.getModule();
+
+      if (auto mod = dyn_cast_or_null<FModuleLike>(rec->op)) {
+        auto annos = AnnotationSet::forPort(mod, rec->portIdx);
+        leafFound = hasNonLocal(annos, nlaName);
+      } else if (rec->op) {
+        AnnotationSet annos(rec->op);
+        leafFound = hasNonLocal(annos, nlaName);
+      }
+      if (!leafFound) {
+        auto diag = nla.emitOpError()
+                    << " operation with symbol: " << innerRef
+                    << " does not contain a reference to the NonLocalAnchor";
+        return diag.attachNote(rec->op->getLoc())
+               << "the symbol was defined here";
+      }
+    } else if (expectedModuleName !=
+               leafRef.cast<FlatSymbolRefAttr>().getAttr())
+      // This is the case when the nla is applied to a module.
+      return nla.emitOpError()
+             << "instance path is incorrect. Expected module: "
+             << expectedModuleName << " instead found: "
+             << leafRef.cast<FlatSymbolRefAttr>().getAttr();
   }
 
   return success();
@@ -824,9 +951,11 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   // not have terminators, printing the terminator actually just prints the last
   // operation.
   Region &body = op.body();
-  if (!body.empty())
+  if (!body.empty()) {
+    p << " ";
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+  }
 }
 
 /// Parse an parameter list if present.
@@ -1070,11 +1199,12 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
 
-  return build(builder, result, resultTypes,
-               SymbolRefAttr::get(builder.getContext(), module.moduleName()),
-               builder.getStringAttr(name), module.getPortDirectionsAttr(),
-               module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
+  return build(
+      builder, result, resultTypes,
+      SymbolRefAttr::get(builder.getContext(), module.moduleNameAttr()),
+      builder.getStringAttr(name), module.getPortDirectionsAttr(),
+      module.getPortNamesAttr(), builder.getArrayAttr(annotations),
+      portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
@@ -1692,8 +1822,7 @@ size_t MemOp::getMaskBits() {
       continue;
 
     FIRRTLType mType;
-    for (auto t :
-         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+    for (auto t : firstPortType.getPassiveType().cast<BundleType>()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
@@ -1787,20 +1916,20 @@ FirMemory MemOp::getSummary() {
     SmallString<8> clocks;
     for (auto a : writeClockIDs)
       clocks.append(Twine((char)(a + 'a')).str());
-    auto instName = op->getAttrOfType<StringAttr>("name").getValue();
     modName = StringAttr::get(
         op->getContext(),
-        llvm::formatv("{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", instName,
+        llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}",
                       numReadPorts, numWritePorts, numReadWritePorts,
                       (size_t)width, op.depth(), op.readLatency(),
                       op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
+                      (unsigned)hw::WUW::PortOrder,
                       clocks.empty() ? "" : "_" + clocks));
   }
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    modName,
-          op.getLoc()};
+  return {numReadPorts,         numWritePorts,    numReadWritePorts,
+          (size_t)width,        op.depth(),       op.readLatency(),
+          op.writeLatency(),    op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder,   writeClockIDs,    modName,
+          op.getMaskBits() > 1, op.getLoc()};
 }
 
 // Construct name of the module which will be used for the memory definition.
@@ -2225,6 +2354,55 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   if (loc)
     mlir::emitError(*loc, "subaccess requires vector operand, not ") << inType;
   return {};
+}
+
+static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
+                                      OperationState &result) {
+  OpAsmParser::OperandType index;
+  llvm::SmallVector<OpAsmParser::OperandType, 16> inputs;
+  Type indexType, elemType;
+
+  if (parser.parseOperand(index) || parser.parseComma() ||
+      parser.parseOperandList(inputs) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(indexType) || parser.parseComma() ||
+      parser.parseType(elemType))
+    return failure();
+
+  if (parser.resolveOperand(index, indexType, result.operands))
+    return failure();
+
+  result.addTypes(elemType);
+
+  return parser.resolveOperands(inputs, elemType, result.operands);
+}
+
+static void printMultibitMuxOp(OpAsmPrinter &p, MultibitMuxOp op) {
+  p << " " << op.index() << ", ";
+  p.printOperands(op.inputs());
+  p.printOptionalAttrDict(op->getAttrs());
+  p << " : " << op.index().getType() << ", " << op.getType();
+}
+
+FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
+                                          ArrayRef<NamedAttribute> attrs,
+                                          Optional<Location> loc) {
+  if (operands.size() < 2) {
+    if (loc)
+      mlir::emitError(*loc, "at least one input is required");
+    return FIRRTLType();
+  }
+
+  // Check all mux inputs have the same type.
+  if (!llvm::all_of(operands.drop_front(2), [&](auto op) {
+        return operands[1].getType() == op.getType();
+      })) {
+    if (loc)
+      mlir::emitError(*loc, "all inputs must have the same type");
+    return FIRRTLType();
+  }
+
+  return operands[1].getType().cast<FIRRTLType>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3119,6 +3297,63 @@ bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
     namepathAttr(ArrayAttr::get(getContext(), newPath));
   return updateMade;
 }
+
+/// Return just the module part of the namepath at a specific index.
+StringAttr NonLocalAnchor::modPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(namepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+}
+
+/// Return the root module.
+StringAttr NonLocalAnchor::root() {
+  assert(!namepath().empty());
+  return modPart(0);
+}
+
+/// Return true if the NLA has the module in its path.
+bool NonLocalAnchor::hasModule(StringAttr modName) {
+  for (auto nameRef : namepath()) {
+    // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
+    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (ref.getModule() == modName)
+        return true;
+    } else {
+      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == modName)
+        return true;
+    }
+  }
+  return false;
+}
+
+/// Return just the reference part of the namepath at a specific index.  This
+/// will return an empty attribute if this is the leaf and the leaf is a module.
+StringAttr NonLocalAnchor::refPart(unsigned i) {
+  return TypeSwitch<Attribute, StringAttr>(namepath()[i])
+      .Case<FlatSymbolRefAttr>([](auto a) { return StringAttr({}); })
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getName(); });
+}
+
+/// Return the leaf reference.  This returns an empty attribute if the leaf
+/// reference is a module.
+StringAttr NonLocalAnchor::ref() {
+  assert(!namepath().empty());
+  return refPart(namepath().size() - 1);
+}
+
+/// Return the leaf module.
+StringAttr NonLocalAnchor::leafMod() {
+  assert(!namepath().empty());
+  return modPart(namepath().size() - 1);
+}
+
+/// Returns true if this NLA targets an instance of a module (as opposed to
+/// an instance's port or something inside an instance).
+bool NonLocalAnchor::isModule() { return !ref(); }
+
+/// Returns true if this NLA targets something inside a module (as opposed
+/// to a module or an instance of a module);
+bool NonLocalAnchor::isComponent() { return (bool)ref(); };
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.

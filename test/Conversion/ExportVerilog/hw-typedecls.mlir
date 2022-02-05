@@ -70,3 +70,20 @@ hw.module @testAggregateCreate(%i: i1) -> (out1: i1, out2: i1) {
   %2 = hw.struct_extract %0["b"] : !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>
   hw.output %1, %2 : i1, i1
 }
+
+// CHECK-LABEL: module testAggregateInout
+hw.module @testAggregateInout(%i: i1) -> (out1: i8, out2: i1) {
+  // CHECK:      wire arr array;
+  // CHECK-NEXT: wire bar str;
+  // CHECK-EMPTY:
+  // CHECK-NEXT: assign out1 = array[4'h0];
+  // CHECk-NEXT: assign out2 = str.a;
+  %array = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>
+  %str = sv.wire : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %c0_i4 = hw.constant 0 : i4
+  %0 = sv.array_index_inout %array[%c0_i4] : !hw.inout<!hw.typealias<@__hw_typedecls::@arr, !hw.array<16xi8>>>, i4
+  %1 = sv.struct_field_inout %str["a"] : !hw.inout<!hw.typealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>
+  %2 = sv.read_inout %0 : !hw.inout<i8>
+  %3 = sv.read_inout %1 : !hw.inout<i1>
+  hw.output %2, %3 : i8, i1
+}

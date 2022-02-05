@@ -40,7 +40,7 @@ struct CircuitNamespace : public Namespace {
 /// and declarations.
 struct ModuleNamespace : public Namespace {
   ModuleNamespace() {}
-  ModuleNamespace(FModuleLike module) { add(module); }
+  ModuleNamespace(FModuleLike module) : module(module) { add(module); }
 
   /// Populate the namespace from a module-like operation. This namespace will
   /// be composed of the `inner_sym`s of the module's ports and declarations.
@@ -54,6 +54,9 @@ struct ModuleNamespace : public Namespace {
         nextIndex.insert({attr.getValue(), 0});
     });
   }
+
+  /// The module associated with this namespace.
+  FModuleLike module;
 };
 
 } // namespace firrtl

@@ -69,7 +69,7 @@ circuit Qux:
 ; READ:    hw.output %[[v6]]
 
 ; CHECK:  hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
-; CHECK:  hw.module @memory_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1) -> (R0_data: i8, RW0_rdata: i8) {
+; CHECK:  hw.module @memory_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8) -> (R0_data: i8, RW0_rdata: i8) {
 ; CHECK:    %[[vtrue:.+]] = hw.constant true
 ; CHECK-NEXT:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
 ; CHECK-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
@@ -90,14 +90,13 @@ circuit Qux:
 ; CHECK-NEXT:    %[[v10:.+]] = sv.read_inout %[[v9]] : !hw.inout<i8>
 ; CHECK-NEXT:    %[[v11:.+]] = comb.mux %[[v8]], %[[v10]], %[[vx_i8]] : i8
 ; CHECK-NEXT:    sv.always posedge %RW0_clk {
-; CHECK-NEXT:      %[[vv12:.+]] = comb.and %RW0_en, %RW0_wmask, %RW0_wmode : i1
+; CHECK-NEXT:      %[[vv12:.+]] = comb.and %RW0_en, %RW0_wmode : i1
 ; CHECK-NEXT:      sv.if %[[vv12]]  {
 ; CHECK-NEXT:        sv.passign %[[v9]], %RW0_wdata : i8
 ; CHECK-NEXT:      }
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    sv.always posedge %W0_clk {
-; CHECK-NEXT:      %[[v12:.+]] = comb.and %W0_en, %W0_mask : i1
-; CHECK-NEXT:      sv.if %[[v12]]  {
+; CHECK-NEXT:      sv.if %W0_en  {
 ; CHECK-NEXT:        %[[v13:.+]] = sv.array_index_inout %[[vMemory]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
 ; CHECK-NEXT:        sv.passign %[[v13]], %W0_data : i8
 ; CHECK-NEXT:      }
@@ -105,7 +104,9 @@ circuit Qux:
 ; CHECK-NEXT:    hw.output %[[v6]], %[[v11]] : i8, i8
 ; CHECK-NEXT:  }
 ; CHECK-NEXT:  hw.module @Qux(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i1, %wData: i8, %rwEn: i1, %rwMode: i1, %rwAddr: i4, %rwMask: i1, %rwDataIn: i8) -> (rData: i8, rwDataOut: i8) {
-; CHECK-NEXT:    %memory.R0_data, %memory.RW0_rdata = hw.instance "memory" @memory_ext(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, RW0_addr: %rwAddr: i4, RW0_en: %rwEn: i1, RW0_clk: %clock: i1, RW0_wmode: %rwMode: i1, RW0_wdata: %rwDataIn: i8, RW0_wmask: %rwMask: i1, W0_addr: %wAddr: i4, W0_en: %wEn: i1, W0_clk: %clock: i1, W0_data: %wData: i8, W0_mask: %wMask: i1) -> (R0_data: i8, RW0_rdata: i8)
+; CHECK-NEXT:    %0 = comb.and %rwEn, %rwMask : i1
+; CHECK-NEXT:    %1 = comb.and %wEn, %wMask : i1
+; CHECK-NEXT:    %memory.R0_data, %memory.RW0_rdata = hw.instance "memory" @memory_ext(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, RW0_addr: %rwAddr: i4, RW0_en: %0: i1, RW0_clk: %clock: i1, RW0_wmode: %rwMode: i1, RW0_wdata: %rwDataIn: i8, W0_addr: %wAddr: i4, W0_en: %1: i1, W0_clk: %clock: i1, W0_data: %wData: i8) -> (R0_data: i8, RW0_rdata: i8)
 ; CHECK-NEXT:    hw.output %memory.R0_data, %memory.RW0_rdata : i8, i8
 ; CHECK-NEXT:  }
 ; CHECK-NEXT:}

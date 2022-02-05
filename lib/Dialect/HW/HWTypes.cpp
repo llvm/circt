@@ -261,6 +261,15 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
+Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+  ArrayRef<hw::StructType::FieldInfo> elems = getElements();
+  unsigned idx = 0, numElems = elems.size();
+  for (; idx < numElems; ++idx)
+    if (elems[idx].name == fieldName)
+      return idx;
+  return {};
+}
+
 void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
   for (const auto &field : getElements())
     types.push_back(field.type);
@@ -444,27 +453,6 @@ TypedeclOp TypeAliasType::getTypeDecl(const SymbolCache &cache) {
     return {};
 
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
-}
-
-/// Parses a type registered to this dialect. Parse out the mnemonic then invoke
-/// the tblgen'd type parser dispatcher.
-Type HWDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return Type();
-  Type type;
-  auto parseResult = generatedTypeParser(parser, mnemonic, type);
-  if (parseResult.hasValue())
-    return type;
-  return Type();
-}
-
-/// Print a type registered to this dialect. Try the tblgen'd type printer
-/// dispatcher then fail since all HW types are defined via ODS.
-void HWDialect::printType(Type type, DialectAsmPrinter &printer) const {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
-  llvm_unreachable("unexpected 'hw' type");
 }
 
 void HWDialect::registerTypes() {

@@ -33,9 +33,11 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -65,6 +67,11 @@ struct FlatBundleFieldEntry {
                  << fieldID << "> suffix<" << suffix << "> isOutput<"
                  << isOutput << ">}\n";
   }
+};
+
+struct NlaNameNewSym {
+  StringAttr nlaName;
+  StringAttr newSym;
 };
 } // end anonymous namespace
 
@@ -190,51 +197,6 @@ static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
   return DictionaryAttr::get(ctxt, fields);
 }
 
-/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
-/// with "target" key, that do not match the field suffix.
-/// Also if the target contains a DontTouch, remove it and set the flag.
-static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
-                                   FIRRTLType srcType,
-                                   FlatBundleFieldEntry field,
-                                   bool &hasDontTouch) {
-  hasDontTouch = false;
-  SmallVector<Attribute> retval;
-  if (!annotations || annotations.empty())
-    return ArrayAttr::get(ctxt, retval);
-  for (auto opAttr : annotations) {
-    if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
-      // Apply annotations to all elements if fieldID is equal to zero.
-      if (subAnno.getFieldID() == 0) {
-        retval.push_back(subAnno.getAnnotations());
-        continue;
-      }
-
-      // Check whether the annotation falls into the range of the current field.
-      if (subAnno.getFieldID() >= field.fieldID &&
-          subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()) {
-        if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
-          // If the target is a subfield/subindex of the current field, create a
-          // new sub-annotation with a new field ID.
-          retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID,
-                                                  subAnno.getAnnotations()));
-        } else {
-          // Otherwise, if the current field is exactly the target, degenerate
-          // the sub-annotation to a normal annotation.
-          if (Annotation(opAttr).getClass() ==
-              "firrtl.transforms.DontTouchAnnotation") {
-            hasDontTouch = true;
-            continue;
-          }
-          retval.push_back(subAnno.getAnnotations());
-        }
-      }
-    } else {
-      retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
-    }
-  }
-  return ArrayAttr::get(ctxt, retval);
-}
-
 static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                                  FlatBundleFieldEntry field) {
   SmallVector<Type, 8> ports;
@@ -311,10 +273,12 @@ namespace {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
-                      bool preserveAggregate, bool preservePublicTypes)
+                      bool preserveAggregate, bool preservePublicTypes,
+                      SmallVector<NlaNameNewSym> &nlaSymList)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
-        preservePublicTypes(preservePublicTypes) {}
+        preservePublicTypes(preservePublicTypes),
+        nlaNameToNewSymList(nlaSymList) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -342,6 +306,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitDecl(RegResetOp op);
   bool visitExpr(InvalidValueOp op);
   bool visitExpr(SubaccessOp op);
+  bool visitExpr(MultibitMuxOp op);
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
@@ -354,13 +319,24 @@ private:
   bool processSAPath(Operation *);
   void lowerBlock(Block *);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
-  bool lowerProducer(Operation *op,
-                     llvm::function_ref<Operation *(FlatBundleFieldEntry,
-                                                    StringRef, ArrayAttr)>
-                         clone);
+  bool lowerProducer(
+      Operation *op,
+      llvm::function_ref<Operation *(FlatBundleFieldEntry, ArrayAttr)> clone);
+  /// Copy annotations from \p annotations to \p loweredAttrs, except
+  /// annotations with "target" key, that do not match the field suffix. Also if
+  /// the target contains a DontTouch, remove it and set the flag.
+  ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
+                              FIRRTLType srcType, FlatBundleFieldEntry field,
+                              bool &needsSym, StringRef sym);
 
   bool isModuleAllowedToPreserveAggregate(Operation *moduleLike);
   Value getSubWhatever(Value val, size_t index);
+
+  size_t uniqueIdx = 0;
+  std::string uniqueName() {
+    auto myID = uniqueIdx++;
+    return (Twine("__GEN_") + Twine(myID)).str();
+  }
 
   MLIRContext *context;
   /// Create a single memory from an aggregate type (instead of one per field)
@@ -377,6 +353,13 @@ private:
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
+
+  // After a bundle type is lowered to its field elements, they can have a
+  // reference to a NonLocalAnchor. This new lowered field element will get a
+  // new symbol, and the corresponding NLA needs to be updatd with this symbol.
+  // This is a list of the NLA name  which needs to be updated, to the new
+  // lowered field symbol name.
+  SmallVector<NlaNameNewSym> &nlaNameToNewSymList;
 };
 } // namespace
 
@@ -447,10 +430,61 @@ void TypeLoweringVisitor::lowerBlock(Block *block) {
   }
 }
 
+ArrayAttr TypeLoweringVisitor::filterAnnotations(
+    MLIRContext *ctxt, ArrayAttr annotations, FIRRTLType srcType,
+    FlatBundleFieldEntry field, bool &needsSym, StringRef sym) {
+  SmallVector<Attribute> retval;
+  if (!annotations || annotations.empty())
+    return ArrayAttr::get(ctxt, retval);
+  for (auto opAttr : annotations) {
+    auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>();
+    if (!subAnno) {
+      retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
+      continue;
+    }
+    /* subAnno handling... */
+    // Apply annotations to all elements if fieldID is equal to zero.
+    if (subAnno.getFieldID() == 0) {
+      retval.push_back(subAnno.getAnnotations());
+      continue;
+    }
+
+    // Check whether the annotation falls into the range of the current field.
+    if (!(subAnno.getFieldID() >= field.fieldID &&
+          subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()))
+      continue;
+
+    if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
+      // If the target is a subfield/subindex of the current field, create a
+      // new sub-annotation with a new field ID.
+      retval.push_back(
+          SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
+      continue;
+    }
+    // Otherwise, if the current field is exactly the target, degenerate
+    // the sub-annotation to a normal annotation.
+    if (Annotation(opAttr).getClass() ==
+        "firrtl.transforms.DontTouchAnnotation") {
+      needsSym = true;
+      continue;
+    }
+    // If this subfield has a nonlocal anchor, then we need to update the
+    // NLA with the new symbol that would be added to the field after
+    // lowering.
+    if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
+            "circt.nonlocal")) {
+      nlaNameToNewSymList.push_back(
+          {nla.getAttr(), StringAttr::get(ctxt, sym)});
+      needsSym = true;
+    }
+    retval.push_back(subAnno.getAnnotations());
+  }
+  return ArrayAttr::get(ctxt, retval);
+}
+
 bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
-    llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef, ArrayAttr)>
-        clone) {
+    llvm::function_ref<Operation *(FlatBundleFieldEntry, ArrayAttr)> clone) {
   // If this is not a bundle, there is nothing to do.
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -461,11 +495,18 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
-  StringAttr innerSym = op->getAttrOfType<StringAttr>("inner_sym");
-  if (auto nameAttr = op->getAttr("name"))
-    if (auto nameStrAttr = nameAttr.dyn_cast<StringAttr>())
-      loweredName = nameStrAttr.getValue();
+  SmallString<16> loweredSymName;
+
+  if (auto innerSymAttr = op->getAttrOfType<StringAttr>("inner_sym"))
+    loweredSymName = innerSymAttr.getValue();
+  if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+    loweredName = nameAttr.getValue();
+  if (loweredSymName.empty())
+    loweredSymName = loweredName;
+  if (loweredSymName.empty())
+    loweredSymName = uniqueName();
   auto baseNameLen = loweredName.size();
+  auto baseSymNameLen = loweredSymName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
   for (auto field : fieldTypes) {
@@ -473,19 +514,25 @@ bool TypeLoweringVisitor::lowerProducer(
       loweredName.resize(baseNameLen);
       loweredName += field.suffix;
     }
-    bool hasDontTouch = false;
+    if (!loweredSymName.empty()) {
+      loweredSymName.resize(baseSymNameLen);
+      loweredSymName += field.suffix;
+    }
+    bool needsSym = false;
+
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    ArrayAttr loweredAttrs =
-        filterAnnotations(context, oldAnno, srcType, field, hasDontTouch);
-    auto newOp = clone(field, loweredName, loweredAttrs);
+    ArrayAttr loweredAttrs = filterAnnotations(context, oldAnno, srcType, field,
+                                               needsSym, loweredSymName);
+    auto *newOp = clone(field, loweredAttrs);
+    // Carry over the name, if present.
+    if (!loweredName.empty())
+      newOp->setAttr("name", StringAttr::get(context, loweredName));
     // Carry over the inner_sym name, if present.
-    if (innerSym)
-      newOp->setAttr("inner_sym", StringAttr::get(context, innerSym.getValue() +
-                                                               loweredName));
-    if (hasDontTouch)
-      newOp->setAttr("inner_sym", StringAttr::get(context, loweredName));
-
+    if (needsSym || op->hasAttr("inner_sym")) {
+      newOp->setAttr("inner_sym", StringAttr::get(context, loweredSymName));
+      assert(!loweredSymName.empty());
+    }
     lowered.push_back(newOp->getResult(0));
   }
 
@@ -532,24 +579,29 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   }
 
   // Save the name attribute for the new argument.
-  auto name =
-      builder->getStringAttr(oldArg.name.getValue().str() + field.suffix.str());
+  auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  bool hasDontTouch = false;
+  SmallString<16> sym;
+  if (oldArg.sym)
+    sym = (oldArg.sym.getValue() + field.suffix).str();
+  else
+    sym = (oldArg.name.getValue() + field.suffix).str();
+
+  bool needsSym = false;
   // Populate the new arg attributes.
-  auto newAnnotations = filterAnnotations(
-      context, oldArg.annotations.getArrayAttr(), srcType, field, hasDontTouch);
+  auto newAnnotations =
+      filterAnnotations(context, oldArg.annotations.getArrayAttr(), srcType,
+                        field, needsSym, sym);
 
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
-  StringAttr sym = oldArg.sym;
-  if (!sym || sym.getValue().empty())
-    if (hasDontTouch)
-      sym = StringAttr::get(builder->getContext(), "sym" + name.getValue());
+  StringAttr newSym = {};
+  if ((needsSym || (oldArg.sym && !oldArg.sym.getValue().empty())))
+    newSym = StringAttr::get(context, sym);
   return std::make_pair(newValue,
-                        PortInfo{name, field.type, direction, sym, oldArg.loc,
-                                 AnnotationSet(newAnnotations)});
+                        PortInfo{name, field.type, direction, newSym,
+                                 oldArg.loc, AnnotationSet(newAnnotations)});
 }
 
 // Lower arguments with bundle type by flattening them.
@@ -749,7 +801,7 @@ static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
   std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
     return TypeSwitch<FIRRTLType, bool>(type)
         .Case<BundleType>([&](auto bundle) {
-          for (auto &elt : bundle.getElements())
+          for (auto &elt : bundle)
             if (!flatten(elt.type))
               return false;
           return true;
@@ -1081,18 +1133,16 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, name, attrs, StringAttr{});
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+    return builder->create<WireOp>(field.type, "", attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), name, attrs,
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+    return builder->create<RegOp>(field.type, op.clockVal(), "", attrs,
                                   StringAttr{});
   };
   return lowerProducer(op, clone);
@@ -1100,11 +1150,10 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
     return builder->create<RegResetOp>(field.type, op.clockVal(),
-                                       op.resetSignal(), resetVal, name, attrs,
+                                       op.resetSignal(), resetVal, "", attrs,
                                        StringAttr{});
   };
   return lowerProducer(op, clone);
@@ -1112,19 +1161,16 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<NodeOp>(field.type, input, name, attrs,
-                                   StringAttr{});
+    return builder->create<NodeOp>(field.type, input, "", attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }
 
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     return builder->create<InvalidValueOp>(field.type);
   };
   return lowerProducer(op, clone);
@@ -1132,8 +1178,7 @@ bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
 
 // Expand muxes of aggregates
 bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto high = getSubWhatever(op.high(), field.index);
     auto low = getSubWhatever(op.low(), field.index);
     return builder->create<MuxPrimOp>(op.sel(), high, low);
@@ -1143,8 +1188,7 @@ bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 
 // Expand UnrealizedConversionCastOp of aggregates
 bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.getOperand(0), field.index);
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
   };
@@ -1188,7 +1232,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   if (op.getResult().getType().isa<BundleType, FVectorType>()) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
-    auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+    auto clone = [&](FlatBundleFieldEntry field,
                      ArrayAttr attrs) -> Operation * {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
       auto fieldBits = getBitWidth(field.type).getValue();
@@ -1226,7 +1270,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       isModuleAllowedToPreserveAggregate(op.getReferencedModule());
 
   endFields.push_back(0);
-  bool hasDontTouch = false;
+  bool needsSymbol = false;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto srcType = op.getType(i).cast<FIRRTLType>();
 
@@ -1248,7 +1292,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         resultTypes.push_back(field.type);
         auto annos = filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
-            field, hasDontTouch);
+            field, needsSymbol, "");
         newPortAnno.push_back(annos);
       }
     }
@@ -1259,7 +1303,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     return false;
   auto sym = op.inner_symAttr();
   if (!sym || sym.getValue().empty())
-    if (hasDontTouch)
+    if (needsSymbol)
       sym = StringAttr::get(builder->getContext(),
                             "sym" + op.nameAttr().getValue());
   // FIXME: annotation update
@@ -1306,22 +1350,28 @@ bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     return true;
   }
 
-  // Reads.  All writes have been eliminated before now
-  auto selectWidth = llvm::Log2_64_Ceil(vType.getNumElements());
+  // Construct a multibit mux
+  SmallVector<Value> inputs;
+  inputs.reserve(vType.getNumElements());
+  for (int index = vType.getNumElements() - 1; index >= 0; index--)
+    inputs.push_back(builder->create<SubindexOp>(input, index));
 
-  // We have at least one element
-  Value mux = builder->create<SubindexOp>(input, 0);
-  // Build up the mux
-  for (size_t index = 1, e = vType.getNumElements(); index < e; ++index) {
-    auto cond = builder->create<EQPrimOp>(
-        op.index(), builder->createOrFold<ConstantOp>(
-                        UIntType::get(op.getContext(), selectWidth),
-                        APInt(selectWidth, index)));
-    auto access = builder->create<SubindexOp>(input, index);
-    mux = builder->create<MuxPrimOp>(cond, access, mux);
-  }
-  op.replaceAllUsesWith(mux);
+  Value multibitMux = builder->create<MultibitMuxOp>(op.index(), inputs);
+  op.replaceAllUsesWith(multibitMux);
   return true;
+}
+
+bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
+  auto clone = [&](FlatBundleFieldEntry field, ArrayAttr attrs) -> Operation * {
+    SmallVector<Value> newInputs;
+    newInputs.reserve(op.inputs().size());
+    for (auto input : op.inputs()) {
+      auto inputSub = getSubWhatever(input, field.index);
+      newInputs.push_back(inputSub);
+    }
+    return builder->create<MultibitMuxOp>(op.index(), newInputs);
+  };
+  return lowerProducer(op, clone);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1343,14 +1393,51 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
   std::vector<Operation *> ops;
-  llvm::for_each(getOperation().getBody()->getOperations(),
-                 [&](Operation &op) { ops.push_back(&op); });
-
-  mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
-    TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
-                        preserveAggregate, preservePublicTypes)
-        .lowerModule(ops[index]);
+  // Map of name of the NonLocalAnchor to the operation.
+  DenseMap<StringAttr, Operation *> nlaMap;
+  // Record all operations in the circuit.
+  llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
+    // Creating a map of all ops in the circt, but only modules are relevant.
+    ops.push_back(&op);
+    // Record the NonLocalAnchor and its name.
+    if (auto nla = dyn_cast<NonLocalAnchor>(op))
+      nlaMap[nla.sym_nameAttr()] = nla;
   });
+
+  // Merge two lists and return it.
+  auto mergeList = [&](const SmallVector<NlaNameNewSym> &lhs,
+                       SmallVector<NlaNameNewSym> rhs) {
+    rhs.append(lhs);
+    return rhs;
+  };
+  // Lower each module and return a list of Nlas which need to be updated with
+  // the new symbol names.
+  auto lowerModules = [&](auto op) {
+    SmallVector<NlaNameNewSym> modNlaToNewSymList;
+    TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
+                        preserveAggregate, preservePublicTypes,
+                        modNlaToNewSymList)
+        .lowerModule(op);
+    return modNlaToNewSymList;
+  };
+  SmallVector<NlaNameNewSym> nlaToNewSymList = llvm::parallelTransformReduce(
+      ops.begin(), ops.end(), SmallVector<NlaNameNewSym>(), mergeList,
+      lowerModules);
+  // Fixup the nla, with the updated symbol names.
+  // This can only update the final element on which the nla is applied, because
+  // lowering cannot update the symbols on the InstanceOp. Also, the final
+  // element cannot be a module.
+  for (auto nlaToSym : nlaToNewSymList) {
+    // Get the nla with the corresponding name. This is guaranteed to exist.
+    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.nlaName]);
+    auto namepath = nla.namepath();
+    SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
+    // Update the final element, which must be an InnerRefAttr.
+    auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
+    updatedPath[namepath.size() - 1] =
+        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.newSym);
+    nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+  }
 }
 
 /// This is the pass constructor.

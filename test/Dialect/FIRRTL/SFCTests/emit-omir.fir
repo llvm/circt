@@ -33,7 +33,8 @@ circuit Foo : %[[
           {"info": "", "name": "c", "value": "OMMemberReferenceTarget:~Foo|Foo"},
           {"info": "", "name": "d", "value": "OMMemberInstanceTarget:~Foo|Foo"},
           {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo"},
-          {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"}
+          {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"},
+          {"info": "", "name": "g", "value": "OMReferenceTarget:~Foo|Foo>signed"}
         ]
       },
       {
@@ -56,7 +57,8 @@ circuit Foo : %[[
         "info": "",
         "id": "OMID:4",
         "fields": [
-          {"info": "", "name": "containingModule", "value": "OMInstanceTarget:~Foo|Foo"}
+          {"info": "", "name": "containingModule", "value": "OMInstanceTarget:~Foo|Foo"},
+          {"info": "", "name": "portField", "value": "OMReferenceTarget:~Foo|Foo/parameter:Bar>b.signed"}
         ]
       }
     ]
@@ -69,8 +71,11 @@ circuit Foo : %[[
     input zeroW : UInt<0>
     output signed : UInt<31>
     inst parameter of Bar
+    parameter.b.signed <= unsigned
+    parameter.b.qux <= unsigned
     signed <= unsigned
   module Bar :
+    input b: {signed: UInt<1>, qux: UInt<1>}
     inst longint of MySRAM
     mem shortint :
         data-type => UInt<42>
@@ -118,6 +123,8 @@ circuit Foo : %[[
 ; CHECK-NEXT:  "value": "OMDontTouchedReferenceTarget:~Foo|Foo"
 ; CHECK:       "name": "f"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
+; CHECK:       "name": "g",
+; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Foo>signed_1"
 
 ; CHECK:       "id": "OMID:2"
 ; CHECK:       "name": "finalPath"
@@ -130,6 +137,8 @@ circuit Foo : %[[
 ; CHECK:       "id": "OMID:4"
 ; CHECK:       "name": "containingModule"
 ; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
+; CHECK:        "name": "portField",
+; CHECK-NEXT        "value": "OMReferenceTarget:~Foo|Foo/parameter_2:Bar>b_signed"
 ; CHECK:       "name": "ports"
 ; CHECK-NEXT:  "value": [
 ; CHECK-NEXT:    {

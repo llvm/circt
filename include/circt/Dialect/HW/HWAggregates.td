@@ -147,6 +147,8 @@ def ArrayGetOp : HWOp<"array_get",
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
+
+  let hasFolder = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -176,6 +178,8 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
     OpBuilder<(ins "Value":$input, "StringAttr":$field)>
   ];
+
+  let hasFolder = 1;
 }
 
 // Extract a range of bits from the specified input.

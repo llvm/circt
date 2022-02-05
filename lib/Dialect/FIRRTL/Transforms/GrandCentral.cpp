@@ -795,13 +795,13 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           TypeSwitch<FIRRTLType>(tpe)
               .template Case<FVectorType>([&](FVectorType vector) {
                 unsigned index = vector.getIndexForFieldID(fieldID);
-                tpe = vector.getSubTypeByFieldID(fieldID);
+                tpe = vector.getElementType();
                 fieldID -= vector.getFieldID(index);
                 path.append("[" + Twine(index) + "]");
               })
               .template Case<BundleType>([&](BundleType bundle) {
                 unsigned index = bundle.getIndexForFieldID(fieldID);
-                tpe = bundle.getSubTypeByFieldID(fieldID);
+                tpe = bundle.getElementType(index);
                 fieldID -= bundle.getFieldID(index);
                 // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
                 // be renamed at ExportVerilog so the path constructed here
@@ -878,20 +878,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto fieldRef = leafMap.lookup(ground.getID());
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
-            auto tpe = value.getType().cast<FIRRTLType>();
-
-            // Set type to ground type.
-            while (fieldID) {
-              TypeSwitch<FIRRTLType>(tpe)
-                  .Case<FVectorType, BundleType>([&](auto aggregate) {
-                    unsigned index = aggregate.getIndexForFieldID(fieldID);
-                    tpe = aggregate.getSubTypeByFieldID(fieldID);
-                    fieldID -= aggregate.getFieldID(index);
-                  })
-                  .Default([&](auto op) {
-                    llvm_unreachable("must be handled by traverseField");
-                  });
-            }
+            auto tpe = value.getType().cast<FIRRTLType>().getFinalTypeByFieldID(
+                fieldID);
             if (!tpe.isGround()) {
               value.getDefiningOp()->emitOpError()
                   << "cannot be added to interface with id '"

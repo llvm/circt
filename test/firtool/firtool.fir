@@ -51,6 +51,7 @@ circuit test_mod : %[[{"a": "a"}]]
     input a: UInt<1>
     input b: UInt<2>
     output c: UInt<1>
+    input vec: UInt<1>[3]
 
     inst cat of Cat
     cat.a <= b
@@ -72,7 +73,12 @@ circuit test_mod : %[[{"a": "a"}]]
 
     c <= flipFlop.a_q
 
-; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>) {
+    inst multibitMux of MultibitMux
+    multibitMux.a <= vec
+    multibitMux.sel <= b
+
+
+; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>) {
 ; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
 ; MLIR-NEXT:    firrtl.connect %cat_a, %b : !firrtl.uint<2>, !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.connect %cat_b, %b : !firrtl.uint<2>, !firrtl.uint<2>
@@ -94,6 +100,11 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    firrtl.connect %flipFlop_clock, %clock : !firrtl.clock, !firrtl.clock
 ; MLIR-NEXT:    firrtl.connect %flipFlop_a_d, %a : !firrtl.uint<1>, !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.connect %c, %flipFlop_a_q : !firrtl.uint<1>, !firrtl.uint<1>
+; MLIR-NEXT:    %multibitMux_a_0, %multibitMux_a_1, %multibitMux_a_2, %multibitMux_sel, %multibitMux_b = firrtl.instance multibitMux @MultibitMux(in a_0: !firrtl.uint<1>, in a_1: !firrtl.uint<1>, in a_2: !firrtl.uint<1>, in sel: !firrtl.uint<2>, out b: !firrtl.uint<1>)
+; MLIR-NEXT:    firrtl.connect %multibitMux_a_0, %vec_0 : !firrtl.uint<1>, !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.connect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>, !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.connect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>, !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.connect %multibitMux_sel, %b : !firrtl.uint<2>, !firrtl.uint<2>
 ; MLIR-NEXT:  }
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
@@ -103,15 +114,16 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-LABEL: module test_mod(
 ; VERILOG-NEXT:    input        clock, a,
 ; VERILOG-NEXT:    input  [1:0] b,
+; VERILOG-NEXT:    input vec_0, vec_1, vec_2,
 ; VERILOG-NEXT:    output       c);
 ; VERILOG-EMPTY:
+; VERILOG-NEXT:    wire multibitMux_b;
 ; VERILOG-NEXT:    wire [9:0] prettifyExample_out1;
 ; VERILOG-NEXT:    wire [9:0] prettifyExample_out2;
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out1;
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out2;
 ; VERILOG-NEXT:    wire [5:0] cat_d;
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:    wire [4:0] _cat_d_4to0 = cat_d[4:0];
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
@@ -120,14 +132,14 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    ImplicitTrunc implicitTrunc (
 ; VERILOG-NEXT:      .inp_1 (a),
-; VERILOG-NEXT:      .inp_2 (_cat_d_4to0),
+; VERILOG-NEXT:      .inp_2 (cat_d[4:0]),
 ; VERILOG-NEXT:      .out1  (implicitTrunc_out1),
 ; VERILOG-NEXT:      .out2  (implicitTrunc_out2)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    PrettifyExample prettifyExample (
-; VERILOG-NEXT:      .inp_1 (_cat_d_4to0),
-; VERILOG-NEXT:      .inp_2 (_cat_d_4to0),
-; VERILOG-NEXT:      .inp_3 (_cat_d_4to0),
+; VERILOG-NEXT:      .inp_1 (cat_d[4:0]),
+; VERILOG-NEXT:      .inp_2 (cat_d[4:0]),
+; VERILOG-NEXT:      .inp_3 (cat_d[4:0]),
 ; VERILOG-NEXT:      .out1  (prettifyExample_out1),
 ; VERILOG-NEXT:      .out2  (prettifyExample_out2)
 ; VERILOG-NEXT:    );
@@ -135,6 +147,13 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:      .clock (clock),
 ; VERILOG-NEXT:      .a_d   (a),
 ; VERILOG-NEXT:      .a_q   (c)
+; VERILOG-NEXT:    );
+; VERILOG-NEXT:    MultibitMux multibitMux (
+; VERILOG-NEXT:     .a_0 (vec_0),
+; VERILOG-NEXT:     .a_1 (vec_1),
+; VERILOG-NEXT:     .a_2 (vec_2),
+; VERILOG-NEXT:     .sel (b),
+; VERILOG-NEXT:     .b   (multibitMux_b)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:  endmodule
 
@@ -219,3 +238,12 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
 ; VERILOG-NEXT:    assign a_q = r;
+
+  module MultibitMux :
+    input a : UInt<1>[3]
+    input sel : UInt<2>
+    output b : UInt<1>
+    b <= a[sel]
+; VERILOG-LABEL: module MultibitMux(
+; VERILOG-CHECK: wire [2:0] [[T:.*]] = {{a_2}, {a_1}, {a_0}};
+; VERILOG-CHECK-NEXT: assign b = [[T]][sel];

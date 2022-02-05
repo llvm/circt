@@ -9,14 +9,14 @@
 // CHECK-DAG:     %[[LT_LEFT:.+]], %[[LT_RIGHT:.+]], %[[LT_OUT:.+]] = calyx.std_lt
 // CHECK-DAG:     %[[ITER_ARG_IN:.+]], %[[ITER_ARG_EN:.+]], %while_0_arg0_reg.clk, %while_0_arg0_reg.reset, %[[ITER_ARG_OUT:.+]], %[[ITER_ARG_DONE:.+]] = calyx.register
 // CHECK:         calyx.wires
-// CHECK-DAG:       calyx.group @assign_while_0_init
+// CHECK-DAG:       calyx.group @[[INIT_GROUP:.+]] {
 // CHECK-DAG:         calyx.assign %[[ITER_ARG_IN]] = %[[C0]] : i64
 // CHECK-DAG:         calyx.assign %[[ITER_ARG_EN]] = %[[TRUE]] : i1
 // CHECK-DAG:         calyx.group_done %[[ITER_ARG_DONE]] : i1
-// CHECK-DAG:       calyx.comb_group @bb0_0
+// CHECK-DAG:       calyx.comb_group @[[COND_GROUP:.+]] {
 // CHECK-DAG:         calyx.assign %[[LT_LEFT]] = %[[ITER_ARG_OUT]] : i64
 // CHECK-DAG:         calyx.assign %[[LT_RIGHT]] = %[[C10]] : i64
-// CHECK-DAG:       calyx.group @assign_while_0_latch
+// CHECK-DAG:       calyx.group @[[COMPUTE_GROUP:.+]] {
 // CHECK-DAG:         calyx.assign %[[ITER_ARG_IN]] = %[[ADD_OUT]] : i64
 // CHECK-DAG:         calyx.assign %[[ITER_ARG_EN]] = %[[TRUE]] : i1
 // CHECK-DAG:         calyx.assign %[[ADD_LEFT]] = %[[ITER_ARG_OUT]] : i64
@@ -24,10 +24,12 @@
 // CHECK-DAG:         calyx.group_done %[[ITER_ARG_DONE]] : i1
 // CHECK:         calyx.control
 // CHECK-NEXT:      calyx.seq
-// CHECK-NEXT:        calyx.enable @assign_while_0_init
-// CHECK-NEXT:        calyx.while %[[LT_OUT]] with @bb0_0
+// CHECK-NEXT:        calyx.par
+// CHECK-NEXT:          calyx.enable @[[INIT_GROUP]]
+// CHECK-NEXT:        }
+// CHECK-NEXT:        calyx.while %[[LT_OUT]] with @[[COND_GROUP]]
 // CHECK-NEXT:          calyx.par
-// CHECK-NEXT:            calyx.enable @assign_while_0_latch
+// CHECK-NEXT:            calyx.enable @[[COMPUTE_GROUP]]
 // CHECK-NEXT:          }
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
@@ -40,7 +42,7 @@ func @minimal() {
     %0 = arith.cmpi ult, %arg0, %c10_i64 : i64
     staticlogic.pipeline.register %0 : i1
   } do {
-    %0 = staticlogic.pipeline.stage  {
+    %0 = staticlogic.pipeline.stage start = 0 {
       %1 = arith.addi %arg0, %c1_i64 : i64
       staticlogic.pipeline.register %1 : i64
     } : i64

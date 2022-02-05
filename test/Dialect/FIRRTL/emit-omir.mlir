@@ -423,3 +423,102 @@ firrtl.circuit "AddPorts" attributes {annotations = [{
 // CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMY]]>,
 // CHECK-SAME:    #hw.innerNameRef<@AddPorts::[[SYMW]]>
 // CHECK-SAME:  ]
+
+
+// Check that the Target path is relative to the DUT, except for dutInstance
+
+// Input annotations
+// 	{
+// 		"class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
+// 		"target": "FixPath.C"
+// 	},
+//   {
+//     "class":"freechips.rocketchip.objectmodel.OMIRAnnotation",
+//     "nodes": [
+//       {
+//         "info":"",
+//         "id":"OMID:0",
+//         "fields":[
+//           {
+//             "info":"",
+//             "name":"dutInstance",
+//             "value":"OMMemberInstanceTarget:~FixPath|FixPath/c:C"
+//           },
+//           {
+//             "info":"",
+//             "name":"pwm",
+//             "value":"OMMemberInstanceTarget:~FixPath|FixPath/c:C>in"
+//           },
+//           {
+//             "info":"",
+//             "name":"power",
+//             "value":"OMMemberInstanceTarget:~FixPath|FixPath/c:C/cd:D"
+//           },
+//           {
+//             "info":"",
+//             "name":"d",
+//             "value":"OMMemberInstanceTarget:~FixPath|D"
+//           }
+//         ]
+//       }
+//     ]
+//   }
+// Output OMIR for reference::
+// [
+//   {
+//     "info": "UnlocatableSourceInfo",
+//     "id": "OMID:0",
+//     "fields": [
+//       {
+//         "info": "UnlocatableSourceInfo",
+//         "name": "dutInstance",
+//         "value": "OMMemberInstanceTarget:~FixPath|FixPath/c:C"
+//       },
+//       {
+//         "info": "UnlocatableSourceInfo",
+//         "name": "pwm",
+//         "value": "OMMemberInstanceTarget:~C|C>in"
+//       },
+//       {
+//         "info": "UnlocatableSourceInfo",
+//         "name": "power",
+//         "value": "OMMemberInstanceTarget:~C|C/cd:D"
+//       },
+//       {
+//         "info": "UnlocatableSourceInfo",
+//         "name": "d",
+//         "value": "OMMemberInstanceTarget:~FixPath|D"
+//       }
+//     ]
+//   }
+// ]
+
+firrtl.circuit "FixPath"  attributes 
+{annotations = [{class = "freechips.rocketchip.objectmodel.OMIRAnnotation", nodes = [{fields = {d = {index = 3 : i64, info = loc(unknown), value = {id = 3 : i64, omir.tracker, path = "~FixPath|D", type = "OMMemberInstanceTarget"}}, dutInstance = {index = 0 : i64, info = loc(unknown), value = {id = 0 : i64, omir.tracker, path = "~FixPath|FixPath/c:C", type = "OMMemberInstanceTarget"}}, power = {index = 2 : i64, info = loc(unknown), value = {id = 2 : i64, omir.tracker, path = "~FixPath|FixPath/c:C/cd:D", type = "OMMemberInstanceTarget"}}, pwm = {index = 1 : i64, info = loc(unknown), value = {id = 1 : i64, omir.tracker, path = "~FixPath|FixPath/c:C>in", type = "OMMemberInstanceTarget"}}}, id = "OMID:0", info = loc(unknown)}]}]} {
+  firrtl.nla @nla_3 [#hw.innerNameRef<@FixPath::@c>, #hw.innerNameRef<@C::@cd>, @D]
+  firrtl.nla @nla_2 [#hw.innerNameRef<@FixPath::@c>, #hw.innerNameRef<@C::@in>]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@FixPath::@c>, @C]
+  firrtl.module @C(in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64}]) attributes {annotations = [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64}, {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    firrtl.instance cd sym @cd  {annotations = [{circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @D()
+  }
+  firrtl.module @D() attributes {annotations = [{circt.nonlocal = @nla_3, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 2 : i64}, {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 3 : i64}]} {
+  }
+  firrtl.module @FixPath(in %a: !firrtl.uint<1>) {
+    %c_in = firrtl.instance c sym @c  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @C(in in: !firrtl.uint<1>)
+    firrtl.connect %c_in, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.instance d  @D()
+  }
+  // CHECK-LABEL: firrtl.circuit "FixPath"
+  // CHECK: firrtl.module @FixPath
+  // CHECK:    firrtl.instance d  @D()
+  // CHECK: sv.verbatim 
+  // CHECK-SAME: name\22: \22dutInstance\22,\0A
+  // CHECK-SAME: OMMemberInstanceTarget:~FixPath|{{[{][{]0[}][}]}}/{{[{][{]1[}][}]}}:{{[{][{]2[}][}]}}
+  // CHECK-SAME: name\22: \22pwm\22,\0A
+  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}>{{[{][{]3[}][}]}}\22\0A
+  // CHECK-SAME: name\22: \22power\22,\0A
+  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~C|{{[{][{]2[}][}]}}/{{[{][{]4[}][}]}}:{{[{][{]5[}][}]}}
+  // CHECK-SAME: name\22: \22d\22,\0A
+  // CHECK-SAME: value\22: \22OMMemberInstanceTarget:~FixPath|{{[{][{]5[}][}]}}\22\0A 
+  // CHECK-SAME: {output_file = #hw.output_file<"omir.json", excludeFromFileList>, symbols = [@FixPath, #hw.innerNameRef<@FixPath::@c>, @C, #hw.innerNameRef<@C::@in>, #hw.innerNameRef<@C::@cd>, @D]}
+}

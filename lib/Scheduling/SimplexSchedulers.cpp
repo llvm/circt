@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Scheduling/Algorithms.h"
+#include "circt/Scheduling/Utilities.h"
 
 #include "mlir/IR/Operation.h"
 
@@ -142,10 +143,16 @@ protected:
   /// All other (explicitly stored) columns represent non-basic variables.
   static constexpr unsigned firstNonBasicVariableColumn = nParameters;
 
+  /// Allow subclasses to collect additional constraints that are not part of
+  /// the input problem, but should be modeled in the linear problem.
+  SmallVector<Problem::Dependence> additionalConstraints;
+
   virtual Problem &getProblem() = 0;
   virtual bool fillObjectiveRow(SmallVector<int> &row, unsigned obj);
   virtual void fillConstraintRow(SmallVector<int> &row,
                                  Problem::Dependence dep);
+  virtual void fillAdditionalConstraintRow(SmallVector<int> &row,
+                                           Problem::Dependence dep);
   void buildTableau();
 
   int getParametricConstant(unsigned row);
@@ -262,6 +269,25 @@ public:
   LogicalResult schedule() override;
 };
 
+// This class solves the `ChainingProblem` by relying on pre-computed
+// chain-breaking constraints.
+class ChainingSimplexScheduler : public SimplexSchedulerBase {
+private:
+  ChainingProblem &prob;
+  float cycleTime;
+
+protected:
+  Problem &getProblem() override { return prob; }
+  void fillAdditionalConstraintRow(SmallVector<int> &row,
+                                   Problem::Dependence dep) override;
+
+public:
+  ChainingSimplexScheduler(ChainingProblem &prob, Operation *lastOp,
+                           float cycleTime)
+      : SimplexSchedulerBase(lastOp), prob(prob), cycleTime(cycleTime) {}
+  LogicalResult schedule() override;
+};
+
 } // anonymous namespace
 
 //===----------------------------------------------------------------------===//
@@ -287,6 +313,13 @@ void SimplexSchedulerBase::fillConstraintRow(SmallVector<int> &row,
     row[startTimeLocations[startTimeVariables[src]]] = 1;
     row[startTimeLocations[startTimeVariables[dst]]] = -1;
   }
+}
+
+void SimplexSchedulerBase::fillAdditionalConstraintRow(
+    SmallVector<int> &row, Problem::Dependence dep) {
+  // Handling is subclass-specific, so do nothing by default.
+  (void)row;
+  (void)dep;
 }
 
 void SimplexSchedulerBase::buildTableau() {
@@ -331,6 +364,12 @@ void SimplexSchedulerBase::buildTableau() {
       basicVariables.push_back(var);
       ++var;
     }
+  }
+  for (auto &dep : additionalConstraints) {
+    auto &consRowVec = addRow();
+    fillAdditionalConstraintRow(consRowVec, dep);
+    basicVariables.push_back(var);
+    ++var;
   }
 
   // one row per objective + one row per dependence
@@ -1112,6 +1151,48 @@ LogicalResult ModuloSimplexScheduler::schedule() {
 }
 
 //===----------------------------------------------------------------------===//
+// ChainingSimplexScheduler
+//===----------------------------------------------------------------------===//
+
+void ChainingSimplexScheduler::fillAdditionalConstraintRow(
+    SmallVector<int> &row, Problem::Dependence dep) {
+  fillConstraintRow(row, dep);
+  // One _extra_ time step breaks the chain (note that the latency is negative
+  // in the tableau).
+  row[parameter1Column] -= 1;
+}
+
+LogicalResult ChainingSimplexScheduler::schedule() {
+  if (failed(computeChainBreakingDependences(prob, cycleTime,
+                                             additionalConstraints)))
+    return failure();
+
+  parameterS = 0;
+  parameterT = 0;
+  buildTableau();
+
+  LLVM_DEBUG(dbgs() << "Initial tableau:\n"; dumpTableau());
+
+  if (failed(solveTableau()))
+    return prob.getContainingOp()->emitError() << "problem is infeasible";
+
+  assert(parameterT == 0);
+  LLVM_DEBUG(
+      dbgs() << "Final tableau:\n"; dumpTableau();
+      dbgs() << "Optimal solution found with start time of last operation = "
+             << -getParametricConstant(0) << '\n');
+
+  for (auto *op : prob.getOperations())
+    prob.setStartTime(op, getStartTime(startTimeVariables[op]));
+
+  auto filledIn = computeStartTimesInCycle(prob);
+  assert(succeeded(filledIn)); // Problem is known to be acyclic at this point.
+  (void)filledIn;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Public API
 //===----------------------------------------------------------------------===//
 
@@ -1135,5 +1216,11 @@ LogicalResult scheduling::scheduleSimplex(SharedOperatorsProblem &prob,
 LogicalResult scheduling::scheduleSimplex(ModuloProblem &prob,
                                           Operation *lastOp) {
   ModuloSimplexScheduler simplex(prob, lastOp);
+  return simplex.schedule();
+}
+
+LogicalResult scheduling::scheduleSimplex(ChainingProblem &prob,
+                                          Operation *lastOp, float cycleTime) {
+  ChainingSimplexScheduler simplex(prob, lastOp, cycleTime);
   return simplex.schedule();
 }

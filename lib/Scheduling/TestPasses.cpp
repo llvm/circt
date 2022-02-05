@@ -153,8 +153,9 @@ static void emitSchedule(Problem &prob, StringRef attrName,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct TestProblemPass : public PassWrapper<TestProblemPass, FunctionPass> {
-  void runOnFunction() override;
+struct TestProblemPass
+    : public PassWrapper<TestProblemPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-scheduling-problem"; }
   StringRef getDescription() const override {
     return "Import a schedule encoded as attributes";
@@ -162,8 +163,8 @@ struct TestProblemPass : public PassWrapper<TestProblemPass, FunctionPass> {
 };
 } // namespace
 
-void TestProblemPass::runOnFunction() {
-  auto func = getFunction();
+void TestProblemPass::runOnOperation() {
+  auto func = getOperation();
 
   auto prob = Problem::get(func);
   constructProblem(prob, func);
@@ -190,8 +191,8 @@ void TestProblemPass::runOnFunction() {
 
 namespace {
 struct TestCyclicProblemPass
-    : public PassWrapper<TestCyclicProblemPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestCyclicProblemPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-cyclic-problem"; }
   StringRef getDescription() const override {
     return "Import a solution for the cyclic problem encoded as attributes";
@@ -199,8 +200,8 @@ struct TestCyclicProblemPass
 };
 } // namespace
 
-void TestCyclicProblemPass::runOnFunction() {
-  auto func = getFunction();
+void TestCyclicProblemPass::runOnOperation() {
+  auto func = getOperation();
 
   auto prob = CyclicProblem::get(func);
   constructProblem(prob, func);
@@ -232,8 +233,8 @@ void TestCyclicProblemPass::runOnFunction() {
 
 namespace {
 struct TestChainingProblemPass
-    : public PassWrapper<TestChainingProblemPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestChainingProblemPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-chaining-problem"; }
   StringRef getDescription() const override {
     return "Import a solution for the chaining problem encoded as attributes";
@@ -241,8 +242,8 @@ struct TestChainingProblemPass
 };
 } // namespace
 
-void TestChainingProblemPass::runOnFunction() {
-  auto func = getFunction();
+void TestChainingProblemPass::runOnOperation() {
+  auto func = getOperation();
 
   auto prob = ChainingProblem::get(func);
   constructProblem(prob, func);
@@ -273,8 +274,9 @@ void TestChainingProblemPass::runOnFunction() {
 
 namespace {
 struct TestSharedOperatorsProblemPass
-    : public PassWrapper<TestSharedOperatorsProblemPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestSharedOperatorsProblemPass,
+                         OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override {
     return "test-shared-operators-problem";
   }
@@ -285,8 +287,8 @@ struct TestSharedOperatorsProblemPass
 };
 } // namespace
 
-void TestSharedOperatorsProblemPass::runOnFunction() {
-  auto func = getFunction();
+void TestSharedOperatorsProblemPass::runOnOperation() {
+  auto func = getOperation();
 
   auto prob = SharedOperatorsProblem::get(func);
   constructProblem(prob, func);
@@ -314,8 +316,8 @@ void TestSharedOperatorsProblemPass::runOnFunction() {
 
 namespace {
 struct TestModuloProblemPass
-    : public PassWrapper<TestModuloProblemPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestModuloProblemPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-modulo-problem"; }
   StringRef getDescription() const override {
     return "Import a solution for the modulo problem encoded as attributes";
@@ -323,8 +325,8 @@ struct TestModuloProblemPass
 };
 } // namespace
 
-void TestModuloProblemPass::runOnFunction() {
-  auto func = getFunction();
+void TestModuloProblemPass::runOnOperation() {
+  auto func = getOperation();
 
   auto prob = ModuloProblem::get(func);
   constructProblem(prob, func);
@@ -357,8 +359,8 @@ void TestModuloProblemPass::runOnFunction() {
 
 namespace {
 struct TestASAPSchedulerPass
-    : public PassWrapper<TestASAPSchedulerPass, FunctionPass> {
-  void runOnFunction() override;
+    : public PassWrapper<TestASAPSchedulerPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-asap-scheduler"; }
   StringRef getDescription() const override {
     return "Emit ASAP scheduler's solution as attributes";
@@ -366,8 +368,8 @@ struct TestASAPSchedulerPass
 };
 } // anonymous namespace
 
-void TestASAPSchedulerPass::runOnFunction() {
-  auto func = getFunction();
+void TestASAPSchedulerPass::runOnOperation() {
+  auto func = getOperation();
 
   auto prob = Problem::get(func);
   constructProblem(prob, func);
@@ -393,11 +395,11 @@ void TestASAPSchedulerPass::runOnFunction() {
 
 namespace {
 struct TestSimplexSchedulerPass
-    : public PassWrapper<TestSimplexSchedulerPass, FunctionPass> {
+    : public PassWrapper<TestSimplexSchedulerPass, OperationPass<FuncOp>> {
   TestSimplexSchedulerPass() = default;
   TestSimplexSchedulerPass(const TestSimplexSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
-  void runOnFunction() override;
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-simplex-scheduler"; }
   StringRef getDescription() const override {
     return "Emit a simplex scheduler's solution as attributes";
@@ -405,8 +407,8 @@ struct TestSimplexSchedulerPass
 };
 } // anonymous namespace
 
-void TestSimplexSchedulerPass::runOnFunction() {
-  auto func = getFunction();
+void TestSimplexSchedulerPass::runOnOperation() {
+  auto func = getOperation();
   Operation *lastOp = func.getBlocks().front().getTerminator();
   OpBuilder builder(func.getContext());
 
@@ -494,6 +496,47 @@ void TestSimplexSchedulerPass::runOnFunction() {
     return;
   }
 
+  if (problemToTest == "ChainingProblem") {
+    auto prob = ChainingProblem::get(func);
+    constructProblem(prob, func);
+    constructChainingProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    // get cycle time from the test case
+    auto cycleTimeAttr = func->getAttrOfType<FloatAttr>("cycletime");
+    assert(cycleTimeAttr);
+    float cycleTime = cycleTimeAttr.getValueAsDouble();
+
+    if (failed(scheduleSimplex(prob, lastOp, cycleTime))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    // act like a client that wants to strictly enforce the cycle time
+    for (auto *op : prob.getOperations()) {
+      float endTimeInCycle =
+          *prob.getStartTimeInCycle(op) +
+          *prob.getOutgoingDelay(*prob.getLinkedOperatorType(op));
+      if (endTimeInCycle > cycleTime) {
+        op->emitError("cycle time violated");
+        return signalPassFailure();
+      }
+    }
+
+    emitSchedule(prob, "simplexStartTime", builder);
+    for (auto *op : prob.getOperations()) {
+      float startTimeInCycle = *prob.getStartTimeInCycle(op);
+      op->setAttr("simplexStartTimeInCycle",
+                  builder.getF32FloatAttr(startTimeInCycle));
+    }
+    return;
+  }
+
   llvm_unreachable("Unsupported scheduling problem");
 }
 
@@ -505,11 +548,11 @@ void TestSimplexSchedulerPass::runOnFunction() {
 
 namespace {
 struct TestLPSchedulerPass
-    : public PassWrapper<TestLPSchedulerPass, FunctionPass> {
+    : public PassWrapper<TestLPSchedulerPass, OperationPass<FuncOp>> {
   TestLPSchedulerPass() = default;
   TestLPSchedulerPass(const TestLPSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
-  void runOnFunction() override;
+  void runOnOperation() override;
   StringRef getArgument() const override { return "test-lp-scheduler"; }
   StringRef getDescription() const override {
     return "Emit an LP scheduler's solution as attributes";
@@ -517,8 +560,8 @@ struct TestLPSchedulerPass
 };
 } // anonymous namespace
 
-void TestLPSchedulerPass::runOnFunction() {
-  auto func = getFunction();
+void TestLPSchedulerPass::runOnOperation() {
+  auto func = getOperation();
   Operation *lastOp = func.getBlocks().front().getTerminator();
   OpBuilder builder(func.getContext());
 

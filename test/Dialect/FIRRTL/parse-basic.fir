@@ -538,7 +538,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; Subfields always get emitted by their declarations.
     ; CHECK: [[SUB:%.+]] = firrtl.subfield %i(0)
-    
+
     ; CHECK: %n3 = firrtl.node [[SUB]]
     node n3 = i.x
 
@@ -547,7 +547,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       ; CHECK: %n4 = firrtl.node [[SUB]]
       node n4 = i.x
     ; CHECK: }
-    
+
     ; Check that invalidation reuses subfields
     wire w: {a: UInt<1>}[1]
     ; CHECK: %1 = firrtl.subindex %w[0]
@@ -905,35 +905,32 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when cond:
       printf(clock, enable, "assert:foo 0", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0"(%value) : !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0" {eventControl = 0 : i32, isConcurrent = true}
 
     when cond:
       printf(clock, enable, "assume:foo 1", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 1"(%value) : !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 1" {eventControl = 0 : i32, isConcurrent = true}
 
     when cond:
       printf(clock, enable, "cover:foo 2", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2"(%value) : !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2" {eventControl = 0 : i32, isConcurrent = true}
 
     when cond:
       printf(clock, enable, "assert:custom label 0:foo 3", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3"(%value) : !firrtl.uint<42>
-    ; CHECK-SAME: name = "custom label 0"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 0"}
 
     when cond:
       printf(clock, enable, "assume:custom label 1:foo 4", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 4"(%value) : !firrtl.uint<42>
-    ; CHECK-SAME: name = "custom label 1"
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 4" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 1"}
 
     when cond:
       printf(clock, enable, "cover:custom label 2:foo 5", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5"(%value) : !firrtl.uint<42>
-    ; CHECK-SAME: name = "custom label 2"
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5" {eventControl = 0 : i32, isConcurrent = true, name = "custom label 2"}
 
     ; Optional `stop` with same clock and condition should be removed.
     when cond:
@@ -941,6 +938,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: firrtl.assert %clock, {{%.+}}, %enable, "without_stop"
     ; CHECK-NOT: firrtl.stop
+
+    when cond:
+      ; expected-warning @+1 {{printf-encoded assertion has format string arguments which may cause lint warnings}}
+      printf(clock, enable, "assert:foo 6, %d", value, value)
+    ; CHECK: firrtl.assert {{.+}} "foo 6, %d"(%value)
 
     ; AssertNotX -- usually `cond` only checks for not-in-reset, and `enable` is
     ; just set to 1; the actual check `^value !== 'x` is implicit.
@@ -955,17 +957,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; Chisel built-in assertions
     when cond:
-      printf(clock, enable, "Assertion failed", value)
+      printf(clock, enable, "Assertion failed with value %d", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed"(%value) : !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed with value %d"(%value) : !firrtl.uint<42>
+    ; CHECK-SAME: isConcurrent = false
     ; CHECK-SAME: name = "chisel3_builtin"
 
     when cond:
-      printf(clock, enable, "Assertion failed: some message", value)
+      printf(clock, enable, "Assertion failed: some message with value %d", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message"(%value) : !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message with value %d"(%value) : !firrtl.uint<42>
+    ; CHECK-SAME: isConcurrent = false
     ; CHECK-SAME: name = "chisel3_builtin"
 
     ; Verification Library Assertions

@@ -86,6 +86,9 @@ public:
     return llvm::make_range(begin(), end());
   }
 
+  /// Get the number of direct instantiations of this module.
+  unsigned getNumUses() { return moduleUses.size(); }
+
   /// Iterate the instance records which instantiate this module.
   using use_iterator = UseVec::iterator;
   use_iterator uses_begin() { return moduleUses.begin(); }
@@ -157,6 +160,9 @@ public:
   /// or an FExtModuleOp.
   InstanceGraphNode *lookup(Operation *op);
 
+  /// Lookup an module by name.
+  InstanceGraphNode *lookup(StringAttr name);
+
   /// Lookup an InstanceGraphNode for a module. Operation must be an FModuleOp
   /// or an FExtModuleOp.
   InstanceGraphNode *operator[](Operation *op) { return lookup(op); }
@@ -189,16 +195,13 @@ public:
 private:
   /// Get the node corresponding to the module.  If the node has does not exist
   /// yet, it will be created.
-  InstanceGraphNode *getOrAddNode(StringRef name);
-
-  /// Lookup an module by name.
-  InstanceGraphNode *lookup(StringRef name);
+  InstanceGraphNode *getOrAddNode(StringAttr name);
 
   /// The storage for graph nodes, with deterministic iteration.
   NodeVec nodes;
 
   /// This maps each operation to its graph node.
-  llvm::StringMap<unsigned> nodeMap;
+  llvm::DenseMap<Attribute, unsigned> nodeMap;
 };
 
 /// An absolute instance path.

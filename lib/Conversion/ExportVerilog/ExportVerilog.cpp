@@ -120,9 +120,27 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   // inline.
   if (isa<VerbatimExprOp>(op)) {
     if (op->getNumOperands() == 0 &&
-        op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
+        op->getAttrOfType<StringAttr>("string").getValue().size() <= 32)
       return true;
   }
+
+  return false;
+}
+
+// Return true if the expression can be inlined even when the op has multiple
+// uses. Be careful to add operations here since it might cause exponential
+// emission without proper restrictions.
+static bool isDuplicatableExpression(Operation *op) {
+  if (op->getNumOperands() == 0)
+    return isDuplicatableNullaryExpression(op);
+
+  // It is cheap to inline extract op.
+  if (isa<comb::ExtractOp>(op))
+    return true;
+
+  // We only inline array_get with a constant index.
+  if (auto array = dyn_cast<hw::ArrayGetOp>(op))
+    return array.index().getDefiningOp<ConstantOp>();
 
   return false;
 }
@@ -203,7 +221,8 @@ StringRef getPortVerilogName(Operation *module, PortInfo port) {
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
-          StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp>(op))
+          StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
+          SampledOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1486,6 +1505,9 @@ private:
   SubExprInfo visitSV(IndexedPartSelectOp op);
   SubExprInfo visitSV(StructFieldInOutOp op);
 
+  // Sampled value functions
+  SubExprInfo visitSV(SampledOp op);
+
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
@@ -2089,6 +2111,13 @@ SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
   return {Selection, prec.signedness};
 }
 
+SubExprInfo ExprEmitter::visitSV(SampledOp op) {
+  os << "$sampled(";
+  auto info = emitSubExpr(op.expression(), LowestPrecedence, OOLTopLevel);
+  os << ")";
+  return info;
+}
+
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // The ?: operator is right associative.
   emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1), OOLBinary);
@@ -2167,15 +2196,25 @@ static bool isExpressionUnableToInline(Operation *op) {
   if (isa<StructCreateOp>(op))
     return true;
 
+  // Verbatim with a long string should be emitted as an out-of-line declration.
+  if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
+    if (verbatim.string().size() > 32)
+      return true;
+
   auto *opBlock = op->getBlock();
+
+  // If the parent op is not a module op, it is defined locally.
+  bool isLocalDefinition = !isa_and_nonnull<HWModuleOp>(op->getParentOp());
+
+  bool isDuplicatable = isDuplicatableExpression(op);
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
-    // If the user is in a different block and the op shouldn't be inlined, then
+    // If the op is defined locally and the user is in a different block, then
     // we emit this as an out-of-line declaration into its block and the user
-    // can refer to it.
-    if (user->getBlock() != opBlock)
+    // can refer to it unless the operation is duplicatable.
+    if (isLocalDefinition && user->getBlock() != opBlock && !isDuplicatable)
       return true;
 
     // Verilog bit selection is required by the standard to be:
@@ -2211,12 +2250,10 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
     return true;
 
-  // If this operation has multiple uses, we can't generally inline it.
-  if (!op->getResult(0).hasOneUse()) {
-    // ... unless it is nullary and duplicable, then we can emit it inline.
-    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
-      return false;
-  }
+  // If this operation has multiple uses, we can't generally inline it unless
+  // the op is duplicatable.
+  if (!op->getResult(0).hasOneUse() && !isDuplicatableExpression(op))
+    return false;
 
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
@@ -2436,7 +2473,8 @@ private:
 
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
-                            SmallPtrSet<Operation *, 8> &ops);
+                            SmallPtrSet<Operation *, 8> &ops,
+                            bool isConcurrent);
   template <typename Op>
   LogicalResult emitImmediateAssertion(Op op, StringRef opName);
   LogicalResult visitSV(AssertOp op);
@@ -2910,7 +2948,8 @@ void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
 /// Emit the optional ` else $error(...)` portion of an immediate or concurrent
 /// verification operation.
 void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
-                                       SmallPtrSet<Operation *, 8> &ops) {
+                                       SmallPtrSet<Operation *, 8> &ops,
+                                       bool isConcurrent = false) {
   if (!message)
     return;
   os << " else $error(\"";
@@ -2972,7 +3011,7 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   os << ") ";
   emitExpression(op.property(), ops);
   os << ")";
-  emitAssertionMessage(op.messageAttr(), op.operands(), ops);
+  emitAssertionMessage(op.messageAttr(), op.operands(), ops, true);
   os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();

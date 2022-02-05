@@ -562,11 +562,10 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // CHECK-EMPTY:
 // CHECK-NEXT:   reg memory_r_en_pipe[0:0];
 // CHECK-EMPTY:
-// CHECK-NEXT:   localparam _T = 1'h0;
 // CHECK-NEXT:   always_ff @(posedge clock)
-// CHECK-NEXT:     memory_r_en_pipe[_T] <= _T;
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
 // CHECK-NEXT:   initial
-// CHECK-NEXT:     memory_r_en_pipe[_T] = _T;
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] = 1'h0;
 // CHECK-NEXT: endmodule
 hw.module @ArrayLHS(%clock: i1) {
   %false = hw.constant false
@@ -585,10 +584,9 @@ hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: 
   // CHECK: wire _T;
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %0 = comb.and %1, %x : i1
-  // CHECK: wire _T_0 = _T & x;
   // CHECK: always_ff @(posedge clock) begin
   sv.alwaysff(posedge %clock) {
-    // CHECK: if (_T_0) begin
+    // CHECK: if (_T & x) begin
     sv.if %0  {
       sv.verbatim "// hello"
     }
@@ -990,8 +988,7 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
   // CHECK: localparam [41:0] _T = xx + 42'd17;
-  // CHECK-NEXT: wire [7:0] _T_0 = _T[7:0];
-  // CHECK-NEXT: assign out3 = _T_0 + _T_0;
+  // CHECK-NEXT: assign out3 = _T[7:0] + _T[7:0];
   %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.decl.ref<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
@@ -1046,3 +1043,11 @@ hw.module @Foo(%a: i1, %b: i1) -> (r1: i1, r2: i1) {
   hw.output %0, %0 : i1, i1
 }
 
+// CHECK-LABEL: module InlineArrayGet(
+hw.module @InlineArrayGet(%source: !hw.array<1xi1>) -> (r1:i1, r2:i1) {
+  %false = hw.constant false
+  %0 = hw.array_get %source[%false] : !hw.array<1xi1>
+  // CHECK:      assign r1 = source[1'h0];
+  // CHECK-NEXT: assign r2 = source[1'h0];
+  hw.output %0, %0 : i1, i1
+}

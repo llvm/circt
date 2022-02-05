@@ -9,27 +9,32 @@
 // CHECK:           %[[VAL_5:.*]] = constant %[[VAL_4]]#0 {value = 1 : index} : index
 // CHECK:           %[[VAL_6:.*]] = br %[[VAL_4]]#1 : none
 // CHECK:           %[[VAL_7:.*]] = br %[[VAL_5]] : index
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = control_merge %[[VAL_10:.*]], %[[VAL_6]] : none
-// CHECK:           %[[VAL_11:.*]]:2 = fork [2] %[[VAL_8]] : none
-// CHECK:           %[[VAL_12:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_13:.*]], %[[VAL_7]]] : index, index
-// CHECK:           %[[VAL_14:.*]]:2 = fork [2] %[[VAL_12]] : index
-// CHECK:           %[[VAL_15:.*]] = constant %[[VAL_11]]#0 {value = 42 : index} : index
-// CHECK:           %[[VAL_16:.*]] = arith.cmpi slt, %[[VAL_14]]#1, %[[VAL_15]] : index
-// CHECK:           %[[VAL_17:.*]]:2 = fork [2] %[[VAL_16]] : i1
-// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = cond_br %[[VAL_17]]#1, %[[VAL_11]]#1 : none
-// CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = cond_br %[[VAL_17]]#0, %[[VAL_14]]#0 : index
-// CHECK:           sink %[[VAL_21]] : index
-// CHECK:           %[[VAL_22:.*]] = merge %[[VAL_20]] : index
-// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = control_merge %[[VAL_18]] : none
-// CHECK:           %[[VAL_25:.*]]:2 = fork [2] %[[VAL_23]] : none
-// CHECK:           sink %[[VAL_24]] : index
-// CHECK:           %[[VAL_26:.*]] = constant %[[VAL_25]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_27:.*]] = arith.addi %[[VAL_22]], %[[VAL_26]] : index
-// CHECK:           %[[VAL_10]] = br %[[VAL_25]]#1 : none
-// CHECK:           %[[VAL_13]] = br %[[VAL_27]] : index
-// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = control_merge %[[VAL_19]] : none
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = control_merge %[[VAL_6]] : none
+// CHECK:           %[[VAL_10:.*]] = buffer [1] %[[VAL_11:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_10]] : i1
+// CHECK:           %[[VAL_13:.*]] = mux %[[VAL_12]]#1 {{\[}}%[[VAL_8]], %[[VAL_14:.*]]] : i1, none
+// CHECK:           %[[VAL_15:.*]]:2 = fork [2] %[[VAL_13]] : none
+// CHECK:           %[[VAL_16:.*]] = mux %[[VAL_9]] {{\[}}%[[VAL_7]]] : index, index
+// CHECK:           %[[VAL_17:.*]] = mux %[[VAL_12]]#0 {{\[}}%[[VAL_16]], %[[VAL_18:.*]]] : i1, index
+// CHECK:           %[[VAL_19:.*]]:2 = fork [2] %[[VAL_17]] : index
+// CHECK:           %[[VAL_11]] = merge %[[VAL_20:.*]]#0 : i1
+// CHECK:           %[[VAL_21:.*]] = constant %[[VAL_15]]#0 {value = 42 : index} : index
+// CHECK:           %[[VAL_22:.*]] = arith.cmpi slt, %[[VAL_19]]#0, %[[VAL_21]] : index
+// CHECK:           %[[VAL_20]]:3 = fork [3] %[[VAL_22]] : i1
+// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cond_br %[[VAL_20]]#2, %[[VAL_15]]#1 : none
+// CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = cond_br %[[VAL_20]]#1, %[[VAL_19]]#1 : index
+// CHECK:           sink %[[VAL_26]] : index
+// CHECK:           %[[VAL_27:.*]] = merge %[[VAL_25]] : index
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = control_merge %[[VAL_23]] : none
+// CHECK:           %[[VAL_30:.*]]:2 = fork [2] %[[VAL_28]] : none
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           return %[[VAL_28]] : none
+// CHECK:           %[[VAL_31:.*]] = constant %[[VAL_30]]#0 {value = 1 : index} : index
+// CHECK:           %[[VAL_32:.*]] = arith.addi %[[VAL_27]], %[[VAL_31]] : index
+// CHECK:           %[[VAL_14]] = br %[[VAL_30]]#1 : none
+// CHECK:           %[[VAL_18]] = br %[[VAL_32]] : index
+// CHECK:           %[[VAL_33:.*]], %[[VAL_34:.*]] = control_merge %[[VAL_24]] : none
+// CHECK:           sink %[[VAL_34]] : index
+// CHECK:           return %[[VAL_33]] : none
 // CHECK:         }
 func @simple_loop() {
 ^bb0:

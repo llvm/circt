@@ -63,7 +63,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<BundleType>([&](auto bundleType) {
         os << "bundle<";
-        llvm::interleaveComma(bundleType.getElements(), os,
+        llvm::interleaveComma(bundleType, os,
                               [&](BundleType::BundleElement element) {
                                 os << element.name.getValue();
                                 if (element.isFlip)
@@ -366,7 +366,7 @@ FIRRTLType FIRRTLType::getMaskType() {
       .Case<BundleType>([&](BundleType bundleType) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
-        for (auto elt : bundleType.getElements())
+        for (auto elt : bundleType)
           newElements.push_back(
               {elt.name, false /* FIXME */, elt.type.getMaskType()});
         return BundleType::get(newElements, this->getContext());
@@ -391,7 +391,7 @@ FIRRTLType FIRRTLType::getWidthlessType() {
       .Case<BundleType>([&](auto a) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
-        for (auto elt : a.getElements())
+        for (auto elt : a)
           newElements.push_back(
               {elt.name, elt.isFlip, elt.type.getWidthlessType()});
         return BundleType::get(newElements, this->getContext());
@@ -447,16 +447,27 @@ unsigned FIRRTLType::getMaxFieldID() {
       });
 }
 
-FIRRTLType FIRRTLType::getSubTypeByFieldID(unsigned fieldID) {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+std::pair<FIRRTLType, unsigned>
+FIRRTLType::getSubTypeByFieldID(unsigned fieldID) {
+  return TypeSwitch<FIRRTLType, std::pair<FIRRTLType, unsigned>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
-            UIntType>([](FIRRTLType t) { return t; })
+            UIntType>([&](FIRRTLType t) {
+        assert(!fieldID && "non-aggregate types must have a field id of 0");
+        return std::pair(t, 0);
+      })
       .Case<BundleType, FVectorType>(
-          [fieldID](auto type) { return type.getSubTypeByFieldID(fieldID); })
+          [&](auto type) { return type.getSubTypeByFieldID(fieldID); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLType();
+        return std::pair(FIRRTLType(), 0);
       });
+}
+
+FIRRTLType FIRRTLType::getFinalTypeByFieldID(unsigned fieldID) {
+  std::pair<FIRRTLType, unsigned> pair(*this, fieldID);
+  while (pair.second)
+    pair = pair.first.getSubTypeByFieldID(pair.second);
+  return pair.first;
 }
 
 std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
@@ -559,7 +570,7 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
   auto srcBundleType = srcType.dyn_cast<BundleType>();
   if (destBundleType && srcBundleType)
     return llvm::all_of(
-        destBundleType.getElements(), [&](auto destElt) -> bool {
+        destBundleType, [&](auto destElt) -> bool {
           auto destField = destElt.name.getValue();
           auto srcElt = srcBundleType.getElement(destField);
           // If the src doesn't contain the destination's field, that's okay.
@@ -736,7 +747,7 @@ FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
   return Base::get(context, elements);
 }
 
-auto BundleType::getElements() -> ArrayRef<BundleElement> {
+auto BundleType::getElements() const -> ArrayRef<BundleElement> {
   return getImpl()->elements;
 }
 
@@ -772,6 +783,16 @@ FIRRTLType BundleType::getPassiveType() {
   return passiveType;
 }
 
+llvm::Optional<unsigned> BundleType::getElementIndex(StringAttr name) {
+  for (auto it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return None;
+}
+
 llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   for (auto it : llvm::enumerate(getElements())) {
     auto element = it.value();
@@ -788,8 +809,13 @@ StringRef BundleType::getElementName(size_t index) {
   return getElements()[index].name.getValue();
 }
 
-/// Look up an element by name.  This returns a BundleElement.
-auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
+Optional<BundleType::BundleElement> BundleType::getElement(StringAttr name) {
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
+  return None;
+}
+
+Optional<BundleType::BundleElement> BundleType::getElement(StringRef name) {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return None;
@@ -800,6 +826,11 @@ BundleType::BundleElement BundleType::getElement(size_t index) {
   assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
   return getElements()[index];
+}
+
+FIRRTLType BundleType::getElementType(StringAttr name) {
+  auto element = getElement(name);
+  return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {
@@ -820,18 +851,19 @@ unsigned BundleType::getFieldID(unsigned index) {
 unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
   assert(getElements().size() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
-  auto it =
-      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
   return std::distance(fieldIDs.begin(), it);
 }
 
-FIRRTLType BundleType::getSubTypeByFieldID(unsigned fieldID) {
+std::pair<FIRRTLType, unsigned>
+BundleType::getSubTypeByFieldID(unsigned fieldID) {
   if (fieldID == 0)
-    return *this;
+    return {*this, 0};
   auto fieldIDs = getImpl()->fieldIDs;
-  auto it =
-      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
-  return getElementType(std::distance(fieldIDs.begin(), it));
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getElementType(subfieldIndex);
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType, subfieldID};
 }
 
 unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
@@ -925,10 +957,12 @@ unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
 }
 
-FIRRTLType FVectorType::getSubTypeByFieldID(unsigned fieldID) {
+std::pair<FIRRTLType, unsigned>
+FVectorType::getSubTypeByFieldID(unsigned fieldID) {
   if (fieldID == 0)
-    return *this;
-  return getElementType();
+    return {*this, 0};
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  return {getElementType(), fieldID - getFieldID(subfieldIndex)};
 }
 
 unsigned FVectorType::getMaxFieldID() {
@@ -966,7 +1000,7 @@ llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
     return TypeSwitch<FIRRTLType, llvm::Optional<int32_t>>(type)
         .Case<BundleType>([&](BundleType bundle) {
           int32_t width = 0;
-          for (auto &elt : bundle.getElements()) {
+          for (auto &elt : bundle) {
             if (elt.isFlip)
               return llvm::Optional<int32_t>(None);
             auto w = getBitWidth(elt.type);
