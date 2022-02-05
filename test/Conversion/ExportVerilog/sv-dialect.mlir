@@ -503,12 +503,11 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
   sv.always posedge %clk {
     %c = hw.constant 0 : i32
 
-    // CHECK: localparam      [31:0] _T = 32'h0;
-    // CHECK: automatic logic [15:0] _T_0 = _T[15:0];
+    // CHECK: localparam [31:0] _T = 32'h0;
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
-    // CHECK: $fwrite(32'h80000002, "%d", _T_0 + _T_0);
+    // CHECK: $fwrite(32'h80000002, "%d", _T[15:0] + _T[15:0]);
     // CHECK: end // always @(posedge)
   }
 }

@@ -127,6 +127,24 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   return false;
 }
 
+// Return true if the expression can be inlined even when the op has multiple
+// uses. Be careful to add operations here since it might cause exponential
+// emission without proper restrictions.
+static bool isDuplicatableExpression(Operation *op) {
+  if (op->getNumOperands() == 0)
+    return isDuplicatableNullaryExpression(op);
+
+  // It is cheap to inline extract op.
+  if (isa<comb::ExtractOp>(op))
+    return true;
+
+  // We only inline array_get with a constant index.
+  if (auto array = dyn_cast<hw::ArrayGetOp>(op))
+    return array.index().getDefiningOp<ConstantOp>();
+
+  return false;
+}
+
 /// Return the verilog name of the operations that can define a symbol.
 /// Except for <WireOp, RegOp, LocalParamOp, InstanceOp>, check global state
 /// `getDeclarationVerilogName` for them.
@@ -2188,14 +2206,15 @@ static bool isExpressionUnableToInline(Operation *op) {
   // If the parent op is not a module op, it is defined locally.
   bool isLocalDefinition = !isa_and_nonnull<HWModuleOp>(op->getParentOp());
 
+  bool isDuplicatable = isDuplicatableExpression(op);
+
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
     // If the op is defined locally and the user is in a different block, then
     // we emit this as an out-of-line declaration into its block and the user
-    // can refer to it unless the operation is nullary and duplicable.
-    if (isLocalDefinition && user->getBlock() != opBlock &&
-        !isDuplicatableNullaryExpression(op))
+    // can refer to it unless the operation is duplicatable.
+    if (isLocalDefinition && user->getBlock() != opBlock && !isDuplicatable)
       return true;
 
     // Verilog bit selection is required by the standard to be:
@@ -2231,12 +2250,10 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
     return true;
 
-  // If this operation has multiple uses, we can't generally inline it.
-  if (!op->getResult(0).hasOneUse()) {
-    // ... unless it is nullary and duplicable, then we can emit it inline.
-    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
-      return false;
-  }
+  // If this operation has multiple uses, we can't generally inline it unless
+  // the op is duplicatable.
+  if (!op->getResult(0).hasOneUse() && !isDuplicatableExpression(op))
+    return false;
 
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
