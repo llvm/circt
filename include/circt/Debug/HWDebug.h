@@ -1,10 +1,10 @@
-#ifndef CIRCT_HWDEBUG_H_
-#define CIRCT_HWDEBUG_H_
+#ifndef CIRCT_DEBUG_HWDEBUG_H
+#define CIRCT_DEBUG_HWDEBUG_H
 
 #include "mlir/Pass/Pass.h"
 
 namespace circt::debug {
 std::unique_ptr<mlir::Pass> createExportHGDBPass(std::string filename);
-}
+} // namespace circt::debug
 
-#endif // CIRCT_HWDEBUG_H_
+#endif // CIRCT_DEBUG_HWDEBUG_H
