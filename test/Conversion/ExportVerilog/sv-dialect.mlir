@@ -257,8 +257,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   sv.assume.concurrent posedge %clock, %cond
   // CHECK-NEXT: assume_1: assume property (@(posedge clock) cond);
   sv.assume.concurrent posedge %clock, %cond label "assume_1"
-  // CHECK-NEXT: assume property (@(posedge clock) cond) else $error("expected %d", val);
-  sv.assume.concurrent posedge %clock, %cond message "expected %d"(%val) : i8
+  // CHECK-NEXT: assume property (@(posedge clock) cond) else $error("expected %d", $sampled(val));
+  %sampledVal = "sv.system.sampled"(%val) : (i8) -> i8
+  sv.assume.concurrent posedge %clock, %cond message "expected %d"(%sampledVal) : i8
 
   // CHECK-NEXT: cover property (@(posedge clock) cond);
   sv.cover.concurrent posedge %clock, %cond

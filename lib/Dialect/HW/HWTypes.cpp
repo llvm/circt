@@ -261,6 +261,15 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
+Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+  ArrayRef<hw::StructType::FieldInfo> elems = getElements();
+  unsigned idx = 0, numElems = elems.size();
+  for (; idx < numElems; ++idx)
+    if (elems[idx].name == fieldName)
+      return idx;
+  return {};
+}
+
 void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
   for (const auto &field : getElements())
     types.push_back(field.type);

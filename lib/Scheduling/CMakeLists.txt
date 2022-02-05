@@ -1,5 +1,6 @@
 set(LLVM_OPTIONAL_SOURCES
   ASAPScheduler.cpp
+  ChainingSupport.cpp
   LPSchedulers.cpp
   Problems.cpp
   SimplexSchedulers.cpp
@@ -9,6 +10,7 @@ set(LLVM_OPTIONAL_SOURCES
 
 set(SCHEDULING_SOURCES
   ASAPScheduler.cpp
+  ChainingSupport.cpp
   Problems.cpp
   SimplexSchedulers.cpp
   Utilities.cpp
