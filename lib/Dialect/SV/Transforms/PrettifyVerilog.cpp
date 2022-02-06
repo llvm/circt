@@ -263,7 +263,8 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     // block as their use.  This will allow the verilog emitter to inline
     // constant expressions and avoids ReadInOutOp from preventing motion.
     if (matchPattern(&op, mlir::m_Constant()) ||
-        isa<sv::ReadInOutOp, sv::ArrayIndexInOutOp, hw::ParamValueOp>(op)) {
+        isa<sv::ReadInOutOp, sv::ArrayIndexInOutOp, sv::StructFieldInOutOp,
+            sv::IndexedPartSelectInOutOp, hw::ParamValueOp>(op)) {
       sinkOrCloneOpToUses(&op);
       continue;
     }
