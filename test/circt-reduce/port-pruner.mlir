@@ -1,11 +1,11 @@
-// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module @Bar" --keep-best=0 --include port-pruner | FileCheck %s
+// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module @Bar" --keep-best=0 --include firrtl-remove-unused-ports | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Foo
   firrtl.module @Foo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<3>) {
-    // CHECK: %bar_a = firrtl.wire
-    // CHECK: %bar_c = firrtl.wire
-    // CHECK: %bar_e = firrtl.wire
+    // CHECK-NOT: %bar_a
+    // CHECK-NOT: %bar_c
+    // CHECK-NOT: %bar_e
     // CHECK: %bar_b, %bar_d = firrtl.instance bar @Bar
     %bar_a, %bar_b, %bar_c, %bar_d, %bar_e = firrtl.instance bar @Bar (in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>, out e: !firrtl.uint<1>)
     firrtl.connect %bar_a, %x : !firrtl.uint<1>, !firrtl.uint<1>
