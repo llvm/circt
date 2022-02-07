@@ -1160,7 +1160,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
       llvm::dbgs() << "\n===----- Build async reset domains -----===\n\n");
 
   // Gather the domains.
-  auto instGraph = getAnalysis<InstanceGraph>();
+  auto &instGraph = getAnalysis<InstanceGraph>();
   auto module = dyn_cast<FModuleOp>(instGraph.getTopLevelNode()->getModule());
   if (!module) {
     LLVM_DEBUG(llvm::dbgs()
@@ -1247,7 +1247,7 @@ void InferResetsPass::buildDomains(FModuleOp module,
 
   // Traverse the child instances.
   InstancePathVec childPath = instPath;
-  for (auto record : instGraph[module]->instances()) {
+  for (auto *record : *instGraph[module]) {
     auto submodule = dyn_cast<FModuleOp>(record->getTarget()->getModule());
     if (!submodule)
       continue;
