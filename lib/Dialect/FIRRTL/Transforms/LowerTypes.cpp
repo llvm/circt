@@ -177,7 +177,7 @@ static bool isAnnotationSensitiveToFieldID(Annotation anno) {
 /// to track which field ID they were applied to. This function adds a fieldID
 /// to such a replicated operation, if the annotation in question requires it.
 static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
-                                         unsigned fieldID) {
+                                         unsigned fieldID, Type i64ty) {
   DictionaryAttr dict = attr.cast<DictionaryAttr>();
 
   // No need to do anything if the annotation applies to the entire field.
@@ -193,7 +193,7 @@ static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
   if (auto existingFieldID = anno.getMember<IntegerAttr>("fieldID"))
     fieldID += existingFieldID.getValue().getZExtValue();
   NamedAttrList fields(dict);
-  fields.set("fieldID", IntegerAttr::get(IntegerType::get(ctxt, 64), fieldID));
+  fields.set("fieldID", IntegerAttr::get(i64ty, fieldID));
   return DictionaryAttr::get(ctxt, fields);
 }
 
@@ -268,18 +268,37 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
 namespace {
+
+struct AttrCache {
+  AttrCache(MLIRContext *context) {
+    i64ty = IntegerType::get(context, 64);
+    innerSymAttr = StringAttr::get(context, "inner_sym");
+    nameAttr = StringAttr::get(context, "name");
+    sPortDirections = StringAttr::get(context, "portDirections");
+    sPortNames = StringAttr::get(context, "portNames");
+    sPortTypes = StringAttr::get(context, "portTypes");
+    sPortSyms = StringAttr::get(context, "portSyms");
+    sPortAnnotations = StringAttr::get(context, "portAnnotations");
+    sEmpty = StringAttr::get(context, "");
+  }
+  AttrCache(const AttrCache &) = default;
+
+  Type i64ty;
+  StringAttr innerSymAttr, nameAttr, sPortDirections, sPortNames, sPortTypes,
+      sPortSyms, sPortAnnotations, sEmpty;
+};
+
 // The visitors all return true if the operation should be deleted, false if
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
                       bool preserveAggregate, bool preservePublicTypes,
-                      SmallVector<NlaNameNewSym> &nlaSymList,
-                      SymbolTable &symTbl)
+                      SymbolTable &symTbl, const AttrCache &cache)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
-        preservePublicTypes(preservePublicTypes),
-        nlaNameToNewSymList(nlaSymList), symTbl(symTbl) {}
+        preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache) {
+  }
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -314,6 +333,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(ConnectOp op);
   bool visitStmt(PartialConnectOp op);
   bool visitStmt(WhenOp op);
+
+  SmallVectorImpl<NlaNameNewSym> &getNLAs() { return nlaNameToNewSymList; };
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -360,10 +381,13 @@ private:
   // new symbol, and the corresponding NLA needs to be updatd with this symbol.
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
-  SmallVector<NlaNameNewSym> &nlaNameToNewSymList;
+  SmallVector<NlaNameNewSym> nlaNameToNewSymList;
 
   // Keep a symbol table around for resolving symbols
   SymbolTable &symTbl;
+
+  // Cache some attributes
+  const AttrCache &cache;
 };
 } // namespace
 
@@ -443,7 +467,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   for (auto opAttr : annotations) {
     auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>();
     if (!subAnno) {
-      retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
+      retval.push_back(
+          updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       continue;
     }
     /* subAnno handling... */
@@ -501,10 +526,10 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallString<16> loweredName;
   SmallString<16> loweredSymName;
 
-  if (auto innerSymAttr = op->getAttrOfType<StringAttr>("inner_sym"))
-    loweredSymName = innerSymAttr.getValue();
-  if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-    loweredName = nameAttr.getValue();
+  if (auto _innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
+    loweredSymName = _innerSymAttr.getValue();
+  if (auto _nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
+    loweredName = _nameAttr.getValue();
   if (loweredSymName.empty())
     loweredSymName = loweredName;
   if (loweredSymName.empty())
@@ -531,10 +556,11 @@ bool TypeLoweringVisitor::lowerProducer(
     auto *newOp = clone(field, loweredAttrs);
     // Carry over the name, if present.
     if (!loweredName.empty())
-      newOp->setAttr("name", StringAttr::get(context, loweredName));
+      newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
     // Carry over the inner_sym name, if present.
-    if (needsSym || op->hasAttr("inner_sym")) {
-      newOp->setAttr("inner_sym", StringAttr::get(context, loweredSymName));
+    if (needsSym || op->hasAttr(cache.innerSymAttr)) {
+      newOp->setAttr(cache.innerSymAttr,
+                     StringAttr::get(context, loweredSymName));
       assert(!loweredSymName.empty());
     }
     lowered.push_back(newOp->getResult(0));
@@ -1037,26 +1063,25 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newPortTypes.push_back(TypeAttr::get(port.type));
-    newArgSyms.push_back(port.sym ? port.sym : StringAttr::get(context, ""));
+    newArgSyms.push_back(port.sym ? port.sym : cache.sEmpty);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portDirections"),
+      NamedAttribute(cache.sPortDirections,
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
-                                          builder.getArrayAttr(newArgNames)));
-
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
-                                          builder.getArrayAttr(newPortTypes)));
-
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
-                                          builder.getArrayAttr(newArgSyms)));
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortNames, builder.getArrayAttr(newArgNames)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portAnnotations"),
-                     builder.getArrayAttr(newArgAnnotations)));
+      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
+
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortSyms, builder.getArrayAttr(newArgSyms)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
@@ -1106,29 +1131,27 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
-
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
-    newArgSyms.push_back(port.sym ? port.sym : StringAttr::get(context, ""));
+    newArgSyms.push_back(port.sym ? port.sym : cache.sEmpty);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portDirections"),
+      NamedAttribute(cache.sPortDirections,
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
-                                          builder->getArrayAttr(newArgNames)));
-
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
-                                          builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
-                                          builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portAnnotations"),
-                     builder->getArrayAttr(newArgAnnotations)));
+      NamedAttribute(cache.sPortNames, builder->getArrayAttr(newArgNames)));
+
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortSyms, builder->getArrayAttr(newArgSyms)));
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -1401,6 +1424,8 @@ void LowerTypesPass::runOnOperation() {
   DenseMap<StringAttr, Operation *> nlaMap;
   // Symbol Table
   SymbolTable symTbl(getOperation());
+  // Cached attr
+  AttrCache cache(&getContext());
 
   // Record all operations in the circuit.
   llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
@@ -1412,25 +1437,19 @@ void LowerTypesPass::runOnOperation() {
       nlaMap[nla.sym_nameAttr()] = nla;
   });
 
-  // Merge two lists and return it.
-  auto mergeList = [&](const SmallVector<NlaNameNewSym> &lhs,
-                       SmallVector<NlaNameNewSym> rhs) {
-    rhs.append(lhs);
-    return rhs;
-  };
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
+  SmallVector<NlaNameNewSym> nlaToNewSymList;
+  std::mutex nlaAppendLock;
   auto lowerModules = [&](auto op) {
-    SmallVector<NlaNameNewSym> modNlaToNewSymList;
-    TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
-                        preserveAggregate, preservePublicTypes,
-                        modNlaToNewSymList, symTbl)
-        .lowerModule(op);
-    return modNlaToNewSymList;
+    auto tl = TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
+                                  preserveAggregate, preservePublicTypes,
+                                  symTbl, cache);
+    tl.lowerModule(op);
+    std::lock_guard<std::mutex> lg(nlaAppendLock);
+    nlaToNewSymList.append(tl.getNLAs());
   };
-  SmallVector<NlaNameNewSym> nlaToNewSymList = llvm::parallelTransformReduce(
-      ops.begin(), ops.end(), SmallVector<NlaNameNewSym>(), mergeList,
-      lowerModules);
+  parallelForEach(&getContext(), ops.begin(), ops.end(), lowerModules);
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
