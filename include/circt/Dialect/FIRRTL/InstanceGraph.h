@@ -27,12 +27,14 @@ template <typename I>
 struct AddressIterator
     : public llvm::mapped_iterator<I, typename I::pointer (*)(
                                           typename I::reference)> {
-  /* implicit */ AddressIterator(I iterator)
-      : llvm::mapped_iterator<I,
-                              typename I::pointer (*)(typename I::reference)>(
-            iterator, &std::addressof<typename I::value_type>) {}
+
+  /* implicit */ AddressIterator(I iterator);
 };
 
+template <typename I>
+AddressIterator<I>::AddressIterator(I iterator)
+    : llvm::mapped_iterator<I, typename I::pointer (*)(typename I::reference)>(
+          iterator, &std::addressof<typename I::value_type>) {}
 } // namespace detail
 
 class InstanceGraphNode;
