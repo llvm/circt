@@ -10,11 +10,7 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
-#include "mlir/Transforms/Passes.h"
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv, circt::sv::SVDialect)
 
-void registerSVPasses() {
-  mlir::registerCanonicalizerPass();
-  circt::sv::registerPasses();
-}
+void registerSVPasses() { circt::sv::registerPasses(); }

@@ -42,8 +42,7 @@ class System:
   PASSES = """
     msft-partition,
     lower-msft-to-hw{{tops={tops} verilog-file={verilog_file} tcl-file={tcl_file}}},
-    lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup),
-    hw-export-module-metadata
+    lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup)
   """
 
   def __init__(self,
@@ -175,10 +174,6 @@ class System:
     return self.PASSES.format(tops=tops,
                               verilog_file=verilog_file,
                               tcl_file=tcl_file).strip()
-
-  def cleanup(self):
-    pm = mlir.passmanager.PassManager.parse("canonicalize")
-    pm.run(self.mod)
 
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)

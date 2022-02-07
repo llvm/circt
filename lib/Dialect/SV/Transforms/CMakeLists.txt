@@ -7,7 +7,6 @@ add_circt_dialect_library(CIRCTSVTransforms
   PrettifyVerilog.cpp
   SVExtractTestCode.cpp
   HWExportModuleHierarchy.cpp
-  HWExportModuleMetadata.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen
