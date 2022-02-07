@@ -23,16 +23,18 @@ namespace firrtl {
 
 namespace detail {
 /// This just maps a iterator of references to an iterator of addresses.
-template <typename I>
+template <typename It>
 struct AddressIterator
-    : public llvm::mapped_iterator<I, typename I::pointer (*)(
-                                          typename I::reference)> {
-  /* implicit */ AddressIterator(I iterator)
-      : llvm::mapped_iterator<I,
-                              typename I::pointer (*)(typename I::reference)>(
-            iterator, &std::addressof<typename I::value_type>) {}
+    : public llvm::mapped_iterator<It, typename It::pointer (*)(
+                                           typename It::reference)> {
+  // This using statement is to get around a bug in MSVC.  Without it, it
+  // tries to look up "It" as a member type of the parent class.
+  using Iterator = It;
+  /* implicit */ AddressIterator(Iterator iterator)
+      : llvm::mapped_iterator<It, typename Iterator::pointer (*)(
+                                      typename Iterator::reference)>(
+            iterator, &std::addressof<typename Iterator::value_type>) {}
 };
-
 } // namespace detail
 
 class InstanceGraphNode;
