@@ -878,6 +878,7 @@ void EmitterBase::emitComment(StringAttr comment) {
 /// a better name than "_T_42" based on the structure of the expression.
 StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
   StringAttr result;
+  bool addPrefixUnderScore = true;
 
   // Look through read_inout.
   if (auto read = expr.getDefiningOp<ReadInOutOp>())
@@ -900,6 +901,8 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
       // doesn't explicitly specify it. Do this last
       result = nameHint;
 
+      // If there is a namehint, don't add underscores to the name.
+      addPrefixUnderScore = false;
     } else {
       TypeSwitch<Operation *>(op)
           // Generate a pretty name for VerbatimExpr's that look macro-like
@@ -941,7 +944,7 @@ StringAttr EmitterBase::inferStructuralNameForTemporary(Value expr) {
     return {};
 
   // Make sure that all temporary names start with an underscore.
-  if (result.strref().front() != '_')
+  if (addPrefixUnderScore && result.strref().front() != '_')
     result = StringAttr::get(expr.getContext(), "_" + result.strref());
 
   return result;
