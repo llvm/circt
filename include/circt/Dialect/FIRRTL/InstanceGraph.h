@@ -23,18 +23,19 @@ namespace firrtl {
 
 namespace detail {
 /// This just maps a iterator of references to an iterator of addresses.
-template <typename I>
+template <typename It>
 struct AddressIterator
-    : public llvm::mapped_iterator<I, typename I::pointer (*)(
-                                          typename I::reference)> {
+    : public llvm::mapped_iterator<It, typename It::pointer (*)(
+                                          typename It::reference)> {
 
-  /* implicit */ AddressIterator(I iterator);
+      using Iterator = It;
+  /* implicit */ AddressIterator(Iterator iterator);
 };
 
-template <typename I>
-AddressIterator<I>::AddressIterator(I iterator)
-    : llvm::mapped_iterator<I, typename I::pointer (*)(typename I::reference)>(
-          iterator, &std::addressof<typename I::value_type>) {}
+template <typename It>
+AddressIterator<It>::AddressIterator(It iterator)
+    : llvm::mapped_iterator<It, typename It::pointer (*)(typename It::reference)>(
+          iterator, &std::addressof<typename It::value_type>) {}
 } // namespace detail
 
 class InstanceGraphNode;
