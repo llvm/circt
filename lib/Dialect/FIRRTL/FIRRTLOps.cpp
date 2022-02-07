@@ -367,8 +367,8 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     return success();
   };
 
-  InnerRefList instanceSyms;
-  InnerRefList leafInnerSyms;
+  InnerRefList instanceSyms(circuit.getContext());
+  InnerRefList leafInnerSyms(circuit.getContext());
   SmallVector<NonLocalAnchor> nlaList;
 
   for (auto &op : *circuit.getBody()) {
@@ -3353,7 +3353,7 @@ bool NonLocalAnchor::isModule() { return !ref(); }
 
 /// Returns true if this NLA targets something inside a module (as opposed
 /// to a module or an instance of a module);
-bool NonLocalAnchor::isComponent() { return (bool)ref(); };
+bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.

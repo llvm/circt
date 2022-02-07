@@ -274,11 +274,12 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
                       bool preserveAggregate, bool preservePublicTypes,
-                      SmallVector<NlaNameNewSym> &nlaSymList)
+                      SmallVector<NlaNameNewSym> &nlaSymList,
+                      SymbolTable &symTbl)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
         preservePublicTypes(preservePublicTypes),
-        nlaNameToNewSymList(nlaSymList) {}
+        nlaNameToNewSymList(nlaSymList), symTbl(symTbl) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -360,6 +361,9 @@ private:
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
   SmallVector<NlaNameNewSym> &nlaNameToNewSymList;
+
+  // Keep a symbol table around for resolving symbols
+  SymbolTable &symTbl;
 };
 } // namespace
 
@@ -1267,7 +1271,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   bool allowedToPreserveAggregate =
-      isModuleAllowedToPreserveAggregate(op.getReferencedModule());
+      isModuleAllowedToPreserveAggregate(op.getReferencedModule(symTbl));
 
   endFields.push_back(0);
   bool needsSymbol = false;
@@ -1395,10 +1399,14 @@ void LowerTypesPass::runOnOperation() {
   std::vector<Operation *> ops;
   // Map of name of the NonLocalAnchor to the operation.
   DenseMap<StringAttr, Operation *> nlaMap;
+  // Symbol Table
+  SymbolTable symTbl(getOperation());
+
   // Record all operations in the circuit.
   llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
     // Creating a map of all ops in the circt, but only modules are relevant.
-    ops.push_back(&op);
+    if (isa<FModuleOp, FExtModuleOp>(op))
+      ops.push_back(&op);
     // Record the NonLocalAnchor and its name.
     if (auto nla = dyn_cast<NonLocalAnchor>(op))
       nlaMap[nla.sym_nameAttr()] = nla;
@@ -1416,7 +1424,7 @@ void LowerTypesPass::runOnOperation() {
     SmallVector<NlaNameNewSym> modNlaToNewSymList;
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
                         preserveAggregate, preservePublicTypes,
-                        modNlaToNewSymList)
+                        modNlaToNewSymList, symTbl)
         .lowerModule(op);
     return modNlaToNewSymList;
   };

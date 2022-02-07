@@ -38,9 +38,9 @@ firrtl.circuit "TwoEnables" {
   }
   
   firrtl.module @TwoEnables() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    // expected-note @+1 {{first instance here}}
-    firrtl.instance test_en0 @TestEn()
     // expected-note @+1 {{second instance here}}
+    firrtl.instance test_en0 @TestEn()
+    // expected-note @+1 {{first instance here}}
     firrtl.instance test_en1 @TestEn()
     %eicg_in, %eicg_test_en, %eicg_en, %eicg_out = firrtl.instance eicg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
   }

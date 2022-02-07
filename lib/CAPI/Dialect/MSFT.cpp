@@ -13,6 +13,7 @@
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 #include "mlir/CAPI/Utils.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -21,7 +22,10 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(MSFT, msft, circt::msft::MSFTDialect)
 using namespace circt;
 using namespace circt::msft;
 
-void mlirMSFTRegisterPasses() { circt::msft::registerMSFTPasses(); }
+void mlirMSFTRegisterPasses() {
+  mlir::registerCanonicalizerPass();
+  circt::msft::registerMSFTPasses();
+}
 
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
