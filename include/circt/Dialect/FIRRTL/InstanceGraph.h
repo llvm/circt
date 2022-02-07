@@ -26,16 +26,15 @@ namespace detail {
 template <typename It>
 struct AddressIterator
     : public llvm::mapped_iterator<It, typename It::pointer (*)(
-                                          typename It::reference)> {
-
-      using Iterator = It;
-  /* implicit */ AddressIterator(Iterator iterator);
+                                           typename It::reference)> {
+  // This using statement is to get around a bug in MSVC.  Without it, it
+  // tries to look up "It" as a member type of the parent class.
+  using Iterator = It;
+  /* implicit */ AddressIterator(Iterator iterator)
+      : llvm::mapped_iterator<It, typename Iterator::pointer (*)(
+                                      typename Iterator::reference)>(
+            iterator, &std::addressof<typename Iterator::value_type>) {}
 };
-
-template <typename It>
-AddressIterator<It>::AddressIterator(It iterator)
-    : llvm::mapped_iterator<It, typename It::pointer (*)(typename It::reference)>(
-          iterator, &std::addressof<typename It::value_type>) {}
 } // namespace detail
 
 class InstanceGraphNode;
