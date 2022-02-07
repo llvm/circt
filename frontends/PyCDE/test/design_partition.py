@@ -51,6 +51,7 @@ s = pycde.System([TopLevel],
 print("Generating...")
 s.generate()
 
+s.cleanup()
 s.print()
 s.emit_outputs()
 print("************")

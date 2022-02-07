@@ -184,6 +184,10 @@ class System:
                                             ("1" if short_names else "0") + "}")
     pm.run(self.mod)
 
+  def cleanup(self):
+    pm = mlir.passmanager.PassManager.parse("canonicalize")
+    pm.run(self.mod)
+
   def generate(self, generator_names=[], iters=None):
     """Fully generate the system unless iters is specified. Iters specifies the
     number of generators to run. Useful for debugging. Maybe."""
