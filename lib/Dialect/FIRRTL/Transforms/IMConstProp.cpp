@@ -15,6 +15,7 @@
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include <stack>
 
 using namespace circt;
 using namespace firrtl;
@@ -270,7 +271,7 @@ private:
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  std::queue<Value> changedLatticeValueWorklist;
+  std::stack<Value> changedLatticeValueWorklist;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -304,7 +305,7 @@ void IMConstPropPass::runOnOperation() {
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    Value changedVal = changedLatticeValueWorklist.front();
+    Value changedVal = changedLatticeValueWorklist.top();
     changedLatticeValueWorklist.pop();
     for (Operation *user : changedVal.getUsers()) {
       if (isBlockExecutable(user->getBlock()))
