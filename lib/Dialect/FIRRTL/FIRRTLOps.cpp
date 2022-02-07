@@ -367,8 +367,8 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     return success();
   };
 
-  InnerRefList instanceSyms;
-  InnerRefList leafInnerSyms;
+  InnerRefList instanceSyms(circuit.getContext());
+  InnerRefList leafInnerSyms(circuit.getContext());
   SmallVector<NonLocalAnchor> nlaList;
 
   for (auto &op : *circuit.getBody()) {
