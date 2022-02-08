@@ -33,9 +33,6 @@ namespace firrtl {
 /// location.
 FieldRef getFieldRefFromValue(Value value);
 
-// Printer for FieldRef.
-raw_ostream &operator<<(raw_ostream &os, const FieldRef &fieldRef);
-
 /// Get a string identifier representing the FieldRef.
 std::string getFieldName(const FieldRef &fieldRef);
 std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
