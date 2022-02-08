@@ -526,10 +526,10 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallString<16> loweredName;
   SmallString<16> loweredSymName;
 
-  if (auto _innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
-    loweredSymName = _innerSymAttr.getValue();
-  if (auto _nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
-    loweredName = _nameAttr.getValue();
+  if (auto innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
+    loweredSymName = innerSymAttr.getValue();
+  if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
+    loweredName = nameAttr.getValue();
   if (loweredSymName.empty())
     loweredSymName = loweredName;
   if (loweredSymName.empty())
