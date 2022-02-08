@@ -183,7 +183,8 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
   if (failures != 0)
     return hwMod->emitError("Could not place ") << failures << " instances";
 
-  os << "proc " << hwMod.getName() << "_config { parent } {\n";
+  os << "proc {{" << state.symbolRefs.size() << "}}_config { parent } {\n";
+  state.symbolRefs.push_back(SymbolRefAttr::get(hwMod));
 
   db.walkPlacements(
       [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {

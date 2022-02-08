@@ -35,9 +35,9 @@ msft.module @leaf {} () -> () {
   msft.instance @module @Foo() {
     circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "module"
   } : () -> ()
-  // LOWER: sv.verbatim "proc shallow_config
-  // LOWER: sv.verbatim "proc deeper_config
-  // LOWER: sv.verbatim "proc regions_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
   msft.output
 }
 
@@ -76,7 +76,7 @@ msft.module @regions {} () -> () {
   msft.output
 }
 
-// TCL-LABEL: proc reg_config
+// TCL-LABEL: proc reg_0_config
 msft.module @reg {} (%input : i8, %clk : i1) -> () {
   %reg = seq.compreg sym @reg %input, %clk { circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "reg" } : i8
   // TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_1
