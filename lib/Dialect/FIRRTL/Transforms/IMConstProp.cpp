@@ -509,9 +509,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
-    if (!AnnotationSet::get(blockArg).hasDontTouch())
-      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-        mergeLatticeValue(userOfResultPort, srcValue);
+    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+      mergeLatticeValue(userOfResultPort, srcValue);
     // Output ports are wire-like and may have users.
     mergeLatticeValue(connect.dest(), srcValue);
     return;
