@@ -263,8 +263,7 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
 
 Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
-  unsigned idx = 0, numElems = elems.size();
-  for (; idx < numElems; ++idx)
+  for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
       return idx;
   return {};
@@ -272,7 +271,7 @@ Optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
 
 Optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
-  for (unsigned idx = 0, numElems = elems.size(); idx < numElems; ++idx)
+  for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
       return idx;
   return {};
