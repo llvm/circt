@@ -308,6 +308,7 @@ protected:
 };
 } // anonymous namespace
 
+/// Is this operation "free" and copy-able?
 static bool isWireManipulationOp(Operation *op) {
   return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
              hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
@@ -456,6 +457,9 @@ void PartitionPass::runOnOperation() {
   }
 }
 
+/// Determine if 'op' is driven exclusively by other tagged ops or wires which
+/// are themselves exclusively driven by tagged ops. Recursive with infinite
+/// recursion prevented with the 'seen' set.
 static bool isDrivenByPartOpsOnly(Operation *op,
                                   const BlockAndValueMapping &partOps,
                                   DenseSet<Operation *> &seen) {
@@ -477,19 +481,26 @@ static bool isDrivenByPartOpsOnly(Operation *op,
   return true;
 }
 
+/// Move the list of tagged operations in to 'partBlock' and copy/move any free
+/// (wire) ops connecting them in also. If 'extendMaximalUp` is specified,
+/// attempt to copy all the way up to the block args.
 void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
                   bool extendMaximalUp) {
   BlockAndValueMapping map;
   if (taggedOps.empty())
     return;
   OpBuilder b(taggedOps[0]->getContext());
+  // Copy all of the ops listed.
   for (Operation *op : taggedOps) {
     op->moveBefore(partBlock, partBlock->end());
     for (Value result : op->getResults())
       map.map(result, result);
   }
 
+  // Treat the 'partBlock' as a queue, iterating through and appending as
+  // necessary.
   for (Operation &op : *partBlock) {
+    // Make sure we are always appending.
     b.setInsertionPointToEnd(partBlock);
 
     // Go through the operands and copy any which we can.
@@ -514,7 +525,13 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
         continue;
 
       DenseSet<Operation *> seen;
+      // Copy operand wire ops into the partition.
+      //   If `extendMaximalUp` is set, we want to copy unconditionally.
+      //   Otherwise, we only want to copy wire ops which connect this operation
+      //   to another in the partition.
       if (extendMaximalUp || isDrivenByPartOpsOnly(defOp, map, seen)) {
+        // Optimization: if all the consumers of this wire op are in the
+        // partition, move instead of clone.
         if (llvm::all_of(defOp->getUsers(), [&](Operation *user) {
               return user->getBlock() == partBlock;
             })) {
@@ -625,6 +642,7 @@ static void setEntityName(Operation *op, Twine name) {
     op->setAttr("sym_name", nameAttr);
 }
 
+/// Try to get a "good" name for the given Value.
 static StringRef getValueName(Value v, const hw::SymbolCache &syms,
                               std::string &buff) {
   Operation *defOp = v.getDefiningOp();
