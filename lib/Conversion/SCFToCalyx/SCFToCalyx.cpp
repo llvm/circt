@@ -1737,8 +1737,11 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     SmallVector<StringAttr> prologueGroups;
     SmallVector<StringAttr> epilogueGroups;
 
-    // Get the number of pipeline stages, excluding the termina
+    // Get the number of pipeline stages in the stages block, excluding the
+    // terminator. The verifier guarantees there is at least one stage followed
+    // by a terminator.
     size_t numStages = whileOp.getStagesBlock().getOperations().size() - 1;
+    assert(numStages > 0);
 
     // For each registered stage result value.
     for (auto &operand :
@@ -1771,7 +1774,11 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       // Mark the group for scheduling in the pipeline's block.
       getComponentState().addBlockScheduleable(stage->getBlock(), group);
 
-      // Add the group to the prologue or epilogue as necessary.
+      // Add the group to the prologue or epilogue for this stage as necessary.
+      // The goal is to fill the pipeline so it will be in steady state after
+      // the prologue, and drain the pipeline from steady state in the epilogue.
+      // Every stage but the last should have its groups in the prologue, and
+      // every stage but the first should have its groups in the epilogue.
       unsigned stageNumber = stage.getStageNumber();
       if (stageNumber < numStages - 1)
         prologueGroups.push_back(group.sym_nameAttr());
@@ -1779,7 +1786,9 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
         epilogueGroups.push_back(group.sym_nameAttr());
     }
 
-    // Add the stage to the prologue or epilogue as necessary.
+    // Append the stage to the prologue or epilogue list of stages if any groups
+    // were added for this stage. We append a list of groups for each stage, so
+    // we can group by stage later, when we generate the schedule.
     if (!prologueGroups.empty())
       getComponentState().addPipelinePrologue(whileOp, prologueGroups);
     if (!epilogueGroups.empty())
