@@ -43,9 +43,11 @@ using sv::VerbatimOp;
 namespace {
 struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
-  bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder);
+  bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
+                       bool isCover);
   bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
-  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool dut);
+  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool dut = false,
+                     bool isCover = false);
   // Check if module or any of its parents in the InstanceGraph is a DUT.
   bool isDut(Operation *module);
 
@@ -64,6 +66,12 @@ private:
   /// The target directory to output black boxes into. Can be changed
   /// through `firrtl.transforms.BlackBoxTargetDirAnno` annotations.
   StringRef targetDir;
+
+  /// The target directory for cover statements.
+  StringRef coverDir;
+
+  /// The target directory for testbench files.
+  StringRef testBenchDir;
 
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
@@ -92,6 +100,9 @@ void BlackBoxReaderPass::runOnOperation() {
   StringRef targetDirAnnoClass = "firrtl.transforms.BlackBoxTargetDirAnno";
   StringRef resourceFileNameAnnoClass =
       "firrtl.transforms.BlackBoxResourceFileNameAnno";
+  StringRef coverAnnoClass =
+      "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+  StringRef testbenchAnno = "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 
   // Determine the target directory and resource file name from the
   // annotations present on the circuit operation.
@@ -128,6 +139,14 @@ void BlackBoxReaderPass::runOnOperation() {
     }
 
     filteredAnnos.push_back(annot.getDict());
+
+    // Get the testbench and cover directories.
+    if (annot.isClass(coverAnnoClass)) {
+      if (auto dir = annot.getMember<StringAttr>("directory"))
+        coverDir = dir.getValue();
+    } else if (annot.isClass(testbenchAnno))
+      if (auto dir = annot.getMember<StringAttr>("dirname"))
+        testBenchDir = dir.getValue();
   }
   // Apply the filtered annotations to the circuit.  If we updated the circuit
   // and record that they changed.
@@ -146,9 +165,15 @@ void BlackBoxReaderPass::runOnOperation() {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
 
+    StringRef verifBBClass =
+        "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
     SmallVector<Attribute, 4> filteredAnnos;
-    for (auto anno : AnnotationSet(&op)) {
-      if (runOnAnnotation(&op, anno, builder))
+    auto annos = AnnotationSet(&op);
+    // If the cover directory is set and it has the verifBBClass annotation,
+    // then output directory should be cover dir.
+    auto isCover = !coverDir.empty() && annos.hasAnnotation(verifBBClass);
+    for (auto anno : annos) {
+      if (runOnAnnotation(&op, anno, builder, isCover))
         // Since the annotation was consumed, add a `BlackBox` annotation to
         // indicate that this extmodule was provided by one of the black box
         // annotations. This is useful for metadata generation.
@@ -207,7 +232,7 @@ void BlackBoxReaderPass::runOnOperation() {
 /// annotation. Returns `true` if the annotation was indeed a black box
 /// annotation (even if it was incomplete) and should be removed from the op.
 bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
-                                         OpBuilder &builder) {
+                                         OpBuilder &builder, bool isCover) {
   StringRef inlineAnnoClass = "firrtl.transforms.BlackBoxInlineAnno";
   StringRef pathAnnoClass = "firrtl.transforms.BlackBoxPathAnno";
   StringRef resourceAnnoClass = "firrtl.transforms.BlackBoxResourceAnno";
@@ -233,7 +258,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
 
     // Create an IR node to hold the contents.
     auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
-    setOutputFile(verbatim, name, dut);
+    setOutputFile(verbatim, name, dut, isCover);
     return true;
   }
 
@@ -308,7 +333,7 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   // Create an IR node to hold the contents.
   auto verbatimOp =
       builder.create<VerbatimOp>(op->getLoc(), input->getBuffer());
-  setOutputFile(verbatimOp, fileNameAttr, false);
+  setOutputFile(verbatimOp, fileNameAttr);
   return true;
 }
 
@@ -318,21 +343,24 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
 void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
-                                       bool dut) {
+                                       bool dut, bool isCover) {
   auto *context = &getContext();
   auto fileName = fileNameAttr.getValue();
   // Exclude Verilog header files since we expect them to be included
   // explicitly by compiler directives in other source files.
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
+  auto outDir = targetDir;
+  if (isCover)
+    outDir = coverDir;
+  else if (!testBenchDir.empty() && targetDir.equals(".") && !dut)
+    outDir = testBenchDir;
+
   // If targetDir is not set explicitly and this is a testbench module, then
   // update the targetDir to be the "../testbench".
-  op->setAttr("output_file",
-              OutputFileAttr::getFromDirectoryAndFilename(
-                  context,
-                  (targetDir.equals(".") && !dut ? "../testbench" : targetDir),
-                  fileName,
-                  /*excludeFromFileList=*/exclude));
+  op->setAttr("output_file", OutputFileAttr::getFromDirectoryAndFilename(
+                                 context, outDir, fileName,
+                                 /*excludeFromFileList=*/exclude));
 
   // Record that this file has been generated.
   assert(!emittedFiles.count(fileNameAttr) &&
