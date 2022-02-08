@@ -28,8 +28,12 @@ add_mlir_public_c_api_library(CIRCTCAPIESI
 add_mlir_public_c_api_library(CIRCTCAPIMSFT
   MSFT.cpp
 
+  DEPENDS
+  MLIRTransforms
+
   LINK_LIBS PUBLIC
   MLIRCAPIIR
+  MLIRTransforms
   CIRCTMSFT
   )
 

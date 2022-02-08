@@ -257,8 +257,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   sv.assume.concurrent posedge %clock, %cond
   // CHECK-NEXT: assume_1: assume property (@(posedge clock) cond);
   sv.assume.concurrent posedge %clock, %cond label "assume_1"
-  // CHECK-NEXT: assume property (@(posedge clock) cond) else $error("expected %d", val);
-  sv.assume.concurrent posedge %clock, %cond message "expected %d"(%val) : i8
+  // CHECK-NEXT: assume property (@(posedge clock) cond) else $error("expected %d", $sampled(val));
+  %sampledVal = "sv.system.sampled"(%val) : (i8) -> i8
+  sv.assume.concurrent posedge %clock, %cond message "expected %d"(%sampledVal) : i8
 
   // CHECK-NEXT: cover property (@(posedge clock) cond);
   sv.cover.concurrent posedge %clock, %cond
@@ -502,12 +503,11 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
   sv.always posedge %clk {
     %c = hw.constant 0 : i32
 
-    // CHECK: localparam      [31:0] _T = 32'h0;
-    // CHECK: automatic logic [15:0] _T_0 = _T[15:0];
+    // CHECK: localparam [31:0] _T = 32'h0;
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
-    // CHECK: $fwrite(32'h80000002, "%d", _T_0 + _T_0);
+    // CHECK: $fwrite(32'h80000002, "%d", _T[15:0] + _T[15:0]);
     // CHECK: end // always @(posedge)
   }
 }

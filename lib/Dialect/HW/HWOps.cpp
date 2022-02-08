@@ -1613,6 +1613,19 @@ void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
   build(builder, odsState, resultType, input, fieldAttr);
 }
 
+// A struct extract of a struct create -> corresponding struct create operand.
+OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
+  auto structCreate = dyn_cast_or_null<StructCreateOp>(input().getDefiningOp());
+  if (!structCreate)
+    return {};
+  auto ty = type_cast<StructType>(input().getType());
+  if (!ty)
+    return {};
+  if (auto idx = ty.getFieldIndex(field()))
+    return structCreate.getOperand(*idx);
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // StructInjectOp
 //===----------------------------------------------------------------------===//

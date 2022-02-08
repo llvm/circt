@@ -170,3 +170,19 @@ def IndexedPartSelectOp
   let assemblyFormat = "$input`[`$base (`decrement` $decrement^)?`:` $width`]`"
                         " attr-dict `:` qualified(type($input)) `,` qualified(type($base))";
 }
+
+def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
+  let summary = "`$sampled` system function to sample a value";
+  let description = [{
+    Sample a value using System Verilog sampling semantics (see Section 16.5.1
+    of the SV 2017 specification for more information).
+
+    A use of `$sampled` is to safely read the value of a net/variable in a
+    concurrent assertion action block such that the value will be the same as
+    the value used when the assertion is triggered.  See Section 16.9.3 of the
+    SV 2017 specification for more information.
+  }];
+  let arguments = (ins AnyType:$expression);
+  let results = (outs AnyType:$sampledValue);
+  let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
+}

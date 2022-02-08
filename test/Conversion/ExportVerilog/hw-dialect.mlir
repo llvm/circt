@@ -123,7 +123,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:_array2d_idx_0_name]] = array2d[a];
+// CHECK-NEXT:   wire [9:0][3:0] [[WIRE2:array2d_idx_0_name]] = array2d[a];
 // CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE3:.+]] = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
@@ -988,8 +988,7 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
   // CHECK: localparam [41:0] _T = xx + 42'd17;
-  // CHECK-NEXT: wire [7:0] _T_0 = _T[7:0];
-  // CHECK-NEXT: assign out3 = _T_0 + _T_0;
+  // CHECK-NEXT: assign out3 = _T[7:0] + _T[7:0];
   %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.decl.ref<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
@@ -1044,3 +1043,11 @@ hw.module @Foo(%a: i1, %b: i1) -> (r1: i1, r2: i1) {
   hw.output %0, %0 : i1, i1
 }
 
+// CHECK-LABEL: module InlineArrayGet(
+hw.module @InlineArrayGet(%source: !hw.array<1xi1>) -> (r1:i1, r2:i1) {
+  %false = hw.constant false
+  %0 = hw.array_get %source[%false] : !hw.array<1xi1>
+  // CHECK:      assign r1 = source[1'h0];
+  // CHECK-NEXT: assign r2 = source[1'h0];
+  hw.output %0, %0 : i1, i1
+}

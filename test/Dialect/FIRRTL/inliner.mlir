@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-inliner)' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-inliner)' -allow-unregistered-dialect %s | FileCheck %s
 
 // Test that an external module as the main module works.
 firrtl.circuit "main_extmodule" {
@@ -442,5 +442,121 @@ firrtl.circuit "NLAFlatteningChildRoot" {
   firrtl.module @NLAFlatteningChildRoot() {
     firrtl.instance foo @Foo()
     firrtl.instance baz @Baz()
+  }
+}
+
+// Test that symbols are uniqued due to collisions.
+//
+//   1) An inlined symbol is uniqued.
+//   2) An inlined symbol that participates in an NLA is uniqued
+//
+// CHECK-LABEL: CollidingSymbols
+firrtl.circuit "CollidingSymbols" {
+  // CHECK-NEXT: firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbols::@[[FoobarSym:[_a-zA-Z0-9]+]]>, @Bar]
+  firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbols::@foo>, #hw.innerNameRef<@Foo::@bar>, @Bar]
+  firrtl.module @Bar() attributes {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} {}
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %b = firrtl.wire sym @b : !firrtl.uint<1>
+    firrtl.instance bar sym @bar {annotations = [
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}
+    ]} @Bar()
+  }
+  // CHECK:      firrtl.module @CollidingSymbols
+  // CHECK-NEXT:   firrtl.wire sym @[[inlinedSymbol:[_a-zA-Z0-9]+]]
+  // CHECK-NEXT:   firrtl.instance foo_bar sym @[[FoobarSym]]
+  // CHECK-SAME:     {circt.nonlocal = @nla1, class = "circt.nonlocal"}
+  // CHECK-NOT:    firrtl.wire sym @[[inlinedSymbol]]
+  // CHECK-NOT:    firrtl.wire sym @[[FoobarSym]]
+  firrtl.module @CollidingSymbols() {
+    firrtl.instance foo sym @foo {annotations = [
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}
+    ]} @Foo()
+    %collision_b = firrtl.wire sym @b : !firrtl.uint<1>
+    %collision_bar = firrtl.wire sym @bar : !firrtl.uint<1>
+  }
+}
+
+// Test that port symbols are uniqued due to a collision.
+//
+//   1) An inlined port is uniqued and the NLA is updated.
+//
+// CHECK-LABEL: CollidingSymbolsPort
+firrtl.circuit "CollidingSymbolsPort" {
+  // CHECK-NEXT: firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbolsPort::@foo>, #hw.innerNameRef<@Foo::@[[BarbSym:[_a-zA-Z0-9]+]]>]
+  firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbolsPort::@foo>, #hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
+  // CHECK-NOT: firrtl.module @Bar
+  firrtl.module @Bar(
+    in %b: !firrtl.uint<1> sym @b [{circt.nonlocal = @nla1, class = "nla1"}]
+  ) attributes {annotations = [
+    {class = "firrtl.passes.InlineAnnotation"}
+  ]} {}
+  // CHECK-NEXT: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: firrtl.wire sym @[[BarbSym]] {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]}
+    firrtl.instance bar sym @bar {annotations = [
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}
+    ]} @Bar(in b: !firrtl.uint<1>)
+    // CHECK-NEXT: firrtl.wire sym @b
+    %colliding_b = firrtl.wire sym @b : !firrtl.uint<1>
+  }
+  firrtl.module @CollidingSymbolsPort() {
+    firrtl.instance foo sym @foo {annotations = [
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}
+    ]} @Foo()
+  }
+}
+
+// Test that colliding symbols that originate from the root of an inlined module
+// are properly duplicated and renamed.
+//
+//   1) The symbol @baz becomes @baz_0 in the top module (as @baz is used)
+//   2) The symbol @baz becomes @baz_1 in Foo (as @baz and @baz_0 are both used)
+//
+// CHECK-LABEL: firrtl.circuit "CollidingSymbolsReTop"
+firrtl.circuit "CollidingSymbolsReTop" {
+  // CHECK-NOT:  #hw.innerNameRef<@CollidingSymbolsReTop::@baz>
+  // CHECK-NOT:  #hw.innerNameRef<@Foo::@baz>
+  // CHECK-NEXT: firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@Baz::@a>]
+  // CHECK-NEXT: firrtl.nla @nla1_0 [#hw.innerNameRef<@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@Baz::@a>]
+  firrtl.nla @nla1 [#hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@a>]
+  // CHECK: firrtl.module @Baz
+  firrtl.module @Baz() {
+    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}]
+    %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
+  }
+  firrtl.module @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance baz sym @baz {annotations = [
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}
+    ]} @Baz()
+  }
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() {
+    // CHECK-NEXT: firrtl.instance bar_baz sym @[[FoobazSym]] {{.+}} [{circt.nonlocal = @nla1_0, class = "circt.nonlocal"}]
+    firrtl.instance bar @Bar()
+    %colliding_baz = firrtl.wire sym @baz : !firrtl.uint<1>
+    %colliding_baz_0 = firrtl.wire sym @baz_0 : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @CollidingSymbolsReTop
+  firrtl.module @CollidingSymbolsReTop() {
+    firrtl.instance foo @Foo()
+    // CHECK: firrtl.instance bar_baz sym @[[TopbazSym]]{{.+}} [{circt.nonlocal = @nla1, class = "circt.nonlocal"}]
+    firrtl.instance bar @Bar()
+    firrtl.instance baz @Baz()
+    %colliding_baz = firrtl.wire sym @baz : !firrtl.uint<1>
+  }
+}
+
+// Test that anything with a "name" will be renamed, even things that FIRRTL
+// Dialect doesn't understand.
+//
+// CHECK-LABEL: firrtl.circuit "RenameAnything"
+firrtl.circuit "RenameAnything" {
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    "some_unknown_dialect.op"() { name = "world" } : () -> ()
+  }
+  // CHECK-NEXT: firrtl.module @RenameAnything
+  firrtl.module @RenameAnything() {
+    // CHECK-NEXT: "some_unknown_dialect.op"(){{.+}}name = "hello_world"
+    firrtl.instance hello @Foo()
   }
 }

@@ -259,6 +259,9 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
   if (isa<sv::XMROp>(op))
     return true;
 
+  if (isa<sv::SampledOp>(op))
+    return true;
+
   return false;
 }
 

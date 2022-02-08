@@ -255,7 +255,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
-      changedLatticeValueWorklist.push(value);
+      changedLatticeValueWorklist.push_back(value);
     }
   }
 
@@ -290,7 +290,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     }
 
     if (valueEntry.mergeIn(source))
-      changedLatticeValueWorklist.push(value);
+      changedLatticeValueWorklist.push_back(value);
 
     LLVM_DEBUG(llvm::dbgs() << "[IMCP][MergeLattice]" << value << " becomes "
                             << valueEntry << "\n";);
@@ -327,7 +327,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
-      changedLatticeValueWorklist.push(value);
+      changedLatticeValueWorklist.push_back(value);
       valueEntry = source;
     }
   }
@@ -370,7 +370,7 @@ private:
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  std::queue<FieldRef> changedLatticeValueWorklist;
+  SmallVector<FieldRef, 64> changedLatticeValueWorklist;
 
   /// This keeps track of subelement values which address the key fieldRef to
   /// propagate states properly.
@@ -408,8 +408,7 @@ void IMConstPropPass::runOnOperation() {
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    FieldRef changedVal = changedLatticeValueWorklist.front();
-    changedLatticeValueWorklist.pop();
+    FieldRef changedVal = changedLatticeValueWorklist.pop_back_val();
     for (Operation *user : changedVal.getValue().getUsers()) {
       if (isBlockExecutable(user->getBlock()))
         visitOperation(user);
@@ -653,9 +652,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = destRoot.dyn_cast<BlockArgument>()) {
-    if (!hasDontTouch(blockArg))
-      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-        mergeLatticeValue({userOfResultPort, destFieldID}, srcValue);
+    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+      mergeLatticeValue({userOfResultPort, destFieldID}, srcValue);
     // Output ports are wire-like and may have users.
     mergeLatticeValue(destFieldRef, srcValue);
     return;
