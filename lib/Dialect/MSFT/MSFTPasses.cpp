@@ -458,14 +458,17 @@ void PartitionPass::runOnOperation() {
 }
 
 /// Determine if 'op' is driven exclusively by other tagged ops or wires which
-/// are themselves exclusively driven by tagged ops. Recursive with infinite
-/// recursion prevented with the 'seen' set.
+/// are themselves exclusively driven by tagged ops. Recursive but memoized via
+/// `seen`.
 static bool isDrivenByPartOpsOnly(Operation *op,
                                   const BlockAndValueMapping &partOps,
-                                  DenseSet<Operation *> &seen) {
-  if (seen.contains(op))
-    return true;
-  seen.insert(op);
+                                  DenseMap<Operation *, bool> &seen) {
+  auto prevResult = seen.find(op);
+  if (prevResult != seen.end())
+    return prevResult->second;
+  bool &result = seen[op];
+  // Default to true.
+  result = true;
 
   for (Value oper : op->getOperands()) {
     if (partOps.contains(oper))
@@ -473,12 +476,11 @@ static bool isDrivenByPartOpsOnly(Operation *op,
     if (oper.isa<BlockArgument>())
       continue;
     Operation *defOp = oper.getDefiningOp();
-    if (!isWireManipulationOp(defOp))
-      return false;
-    if (!isDrivenByPartOpsOnly(defOp, partOps, seen))
-      return false;
+    if (!isWireManipulationOp(defOp) ||
+        !isDrivenByPartOpsOnly(defOp, partOps, seen))
+      result = false;
   }
-  return true;
+  return result;
 }
 
 /// Move the list of tagged operations in to 'partBlock' and copy/move any free
@@ -496,6 +498,9 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
     for (Value result : op->getResults())
       map.map(result, result);
   }
+
+  // Memoization space.
+  DenseMap<Operation *, bool> seen;
 
   // Treat the 'partBlock' as a queue, iterating through and appending as
   // necessary.
@@ -524,7 +529,6 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
       if (!isWireManipulationOp(defOp))
         continue;
 
-      DenseSet<Operation *> seen;
       // Copy operand wire ops into the partition.
       //   If `extendMaximalUp` is set, we want to copy unconditionally.
       //   Otherwise, we only want to copy wire ops which connect this operation
@@ -551,14 +555,15 @@ void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
         continue;
       // Op must also only have its operands driven (or indirectly driven) by
       // ops in the partition.
-      DenseSet<Operation *> seen;
       if (!isDrivenByPartOpsOnly(user, map, seen))
         continue;
 
       // All the conditions are met, move it!
       user->moveBefore(partBlock, partBlock->end());
+      // Mark it as being in the block by putting it into the map.
       for (Value result : user->getResults())
         map.map(result, result);
+      // Re-map the inputs to results in the block, if they exist.
       for (OpOperand &oper : user->getOpOperands())
         oper.set(map.lookupOrDefault(oper.get()));
     }
@@ -572,6 +577,7 @@ void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
   DenseMap<SymbolRefAttr, SmallVector<Operation *, 8>> perPartTaggedOps;
   SmallVector<Operation *, 16> nonLocalTaggedOps;
 
+  // Bucket the ops by partition tag.
   mod.walk([&](Operation *op) {
     auto partRef = getPart(op);
     if (!partRef)
@@ -583,6 +589,7 @@ void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
       nonLocalTaggedOps.push_back(op);
   });
 
+  // Copy into the appropriate partition block.
   for (auto &partOpQueuePair : perPartTaggedOps) {
     copyIntoPart(partOpQueuePair.second, perPartBlocks[partOpQueuePair.first],
                  false);
@@ -605,7 +612,7 @@ void PartitionPass::partition(MSFTModuleOp mod) {
   // Sort the tagged ops into ops to hoist (bubble up) and per-partition blocks.
   copyInto(mod, perPartBlocks, nonLocal);
 
-  // Hoist the appropriate ops.
+  // Hoist the appropriate ops and erase the partition block.
   if (!nonLocal->empty())
     bubbleUp(mod, nonLocal);
   nonLocal->dropAllReferences();
