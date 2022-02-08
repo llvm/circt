@@ -60,22 +60,29 @@ class ComplexPorts:
 
 top = System([Top])
 top.generate()
-top.run_passes()
 top.print()
-# CHECK-LABEL: hw.module @Top()
-# CHECK:  %c7_i12 = hw.constant 7 : i12
-# CHECK:  %0 = hw.struct_create (%c7_i12) : !hw.struct<foo: i12>
-# CHECK:  %c42_i8 = hw.constant 42 : i8
-# CHECK:  %c45_i8 = hw.constant 45 : i8
-# CHECK:  %1 = hw.array_create %c45_i8, %c42_i8 : i8
-# CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 
-# CHECK:  hw.module @Taps()
+# CHECK-LABEL:  msft.module @Top {} () attributes {fileName = "Top.sv"} {
+# CHECK:    %c7_i12 = hw.constant 7 : i12
+# CHECK:    hw.struct_create (%c7_i12) : !hw.struct<foo: i12>
+# CHECK:    %c42_i8 = hw.constant 42 : i8
+# CHECK:    %c45_i8 = hw.constant 45 : i8
+# CHECK:    hw.array_create %c45_i8, %c42_i8 : i8
+# CHECK:    %c5_i8 = hw.constant 5 : i8
+# CHECK:    %c7_i12_0 = hw.constant 7 : i12
+# CHECK:    hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
+# CHECK:    %Taps.taps = msft.instance @Taps @Taps()  : () -> !hw.array<3xi8>
+# CHECK:    %c0_i4 = hw.constant 0 : i4
+# CHECK:    [[ARG0:%.+]] = hw.bitcast %c0_i4 : (i4) -> !hw.array<4xi1>
+# CHECK:    msft.instance @StupidLegacy @StupidLegacy([[ARG0]])  : (!hw.array<4xi1>) -> ()
+# CHECK:    msft.output
+# CHECK-LABEL:  msft.module @Taps {} () -> (taps: !hw.array<3xi8>) attributes {fileName = "Taps.sv"} {
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
 # CHECK:    %c100_i8 = hw.constant 100 : i8
 # CHECK:    %c23_i8 = hw.constant 23 : i8
-# CHECK:    [[REG0:%.+]] = hw.array_create %c23_i8, %c100_i8, %c-53_i8 : i8
-# CHECK:    hw.output
+# CHECK:    [[R0:%.+]] = hw.array_create %c23_i8, %c100_i8, %c-53_i8 : i8
+# CHECK:    msft.output [[R0]] : !hw.array<3xi8>
+# CHECK:  msft.module.extern @StupidLegacy(%ignore: !hw.array<4xi1>) attributes {verilogName = "StupidLegacy"}
 
 sys = System([ComplexPorts])
 sys.generate()

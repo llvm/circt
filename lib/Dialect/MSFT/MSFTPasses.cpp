@@ -20,8 +20,10 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
@@ -47,6 +49,10 @@ hw::ModulePortInfo getModulePortInfo(Operation *op) {
   if (auto mod = dyn_cast<MSFTModuleExternOp>(op))
     return mod.getPorts();
   return hw::getModulePortInfo(op);
+}
+
+static SymbolRefAttr getPart(Operation *op) {
+  return op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
 }
 
 //===----------------------------------------------------------------------===//
@@ -242,6 +248,7 @@ void LowerToHWPass::runOnOperation() {
   patterns.insert<OutputOpLowering>(ctxt);
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
   patterns.insert<RemoveOpLowering<EntityExternOp>>(ctxt);
+  patterns.insert<RemoveOpLowering<DesignPartitionOp>>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
@@ -289,19 +296,25 @@ protected:
                                 SmallVectorImpl<MSFTModuleOp> &mods,
                                 DenseSet<MSFTModuleOp> &modsSeen);
 
-  void updateInstances(
+  SmallVector<InstanceOp, 1> &updateInstances(
       MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
       llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
           getOperandsFunc);
 
-  static bool isWireManipulationOp(Operation *op) {
-    return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
-               hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
-               hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
-               hw::ConstantOp>(op);
-  }
+  void bubbleWiresUp(MSFTModuleOp mod);
+  void dedupOutputs(MSFTModuleOp mod);
+  void sinkWiresDown(MSFTModuleOp mod);
+  void dedupInputs(MSFTModuleOp mod);
 };
 } // anonymous namespace
+
+/// Is this operation "free" and copy-able?
+static bool isWireManipulationOp(Operation *op) {
+  return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
+             hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
+             hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
+             hw::ConstantOp>(op);
+}
 
 /// Update all the instantiations of 'mod' to match the port list. For any
 /// output ports which survived, automatically map the result according to
@@ -310,10 +323,11 @@ protected:
 /// `getOperandsFunc` can (and often does) modify other operations. The update
 /// call deletes the original instance op, so all references are invalidated
 /// after this call.
-void PassCommon::updateInstances(
+SmallVector<InstanceOp, 1> &PassCommon::updateInstances(
     MSFTModuleOp mod, ArrayRef<unsigned> newToOldResultMap,
     llvm::function_ref<void(InstanceOp, InstanceOp, SmallVectorImpl<Value> &)>
         getOperandsFunc) {
+
   SmallVector<InstanceOp, 1> newInstances;
   for (InstanceOp inst : moduleInstantiations[mod]) {
     assert(inst->getParentOp());
@@ -321,23 +335,22 @@ void PassCommon::updateInstances(
     auto newInst =
         b.create<InstanceOp>(inst.getLoc(), mod.getType().getResults(),
                              inst.getOperands(), inst->getAttrs());
-    for (size_t portNum = 0, e = newToOldResultMap.size(); portNum < e;
-         ++portNum) {
-      assert(portNum < newInst.getNumResults());
-      assert(newToOldResultMap[portNum] < inst.getNumResults());
-      inst.getResult(newToOldResultMap[portNum])
-          .replaceAllUsesWith(newInst.getResult(portNum));
-    }
 
     SmallVector<Value> newOperands;
     getOperandsFunc(newInst, inst, newOperands);
     newInst->setOperands(newOperands);
+
+    for (auto oldResult : llvm::enumerate(newToOldResultMap))
+      if (oldResult.value() < inst.getNumResults())
+        inst.getResult(oldResult.value())
+            .replaceAllUsesWith(newInst.getResult(oldResult.index()));
 
     newInstances.push_back(newInst);
     inst->dropAllUses();
     inst->erase();
   }
   moduleInstantiations[mod].swap(newInstances);
+  return moduleInstantiations[mod];
 }
 
 // Run a post-order DFS.
@@ -402,20 +415,26 @@ struct PartitionPass : public PartitionBase<PartitionPass>, PassCommon {
 
 private:
   void partition(MSFTModuleOp mod);
-  void partition(DesignPartitionOp part, ArrayRef<Operation *> users);
+  MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
-  void bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops);
-  void bubbleUpGlobalRefs(Operation *op);
+  void bubbleUp(MSFTModuleOp mod, Block *ops);
+  void bubbleUpGlobalRefs(Operation *op,
+                          llvm::DenseSet<hw::GlobalRefAttr> &refsMoved);
   void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
-                          DenseSet<Attribute> &newGlobalRefs);
+                          llvm::SetVector<Attribute> &newGlobalRefs);
 
-  // Tag wire manipulation ops connected to this potentially tagged op.
-  static void markWireOps(Operation *op);
+  // Tag wire manipulation ops in this module.
+  static void
+  copyWireOps(MSFTModuleOp,
+              DenseMap<SymbolRefAttr, DenseSet<Operation *>> &perPartOpsToMove);
+
+  MLIRContext *ctxt;
 };
 } // anonymous namespace
 
 void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
+  ctxt = outerMod.getContext();
   populateSymbolCache(outerMod);
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
@@ -425,65 +444,188 @@ void PartitionPass::runOnOperation() {
   // Get a properly sorted list, then partition the mods in order.
   SmallVector<MSFTModuleOp, 64> sortedMods;
   getAndSortModules(outerMod, sortedMods);
-  for (auto mod : sortedMods)
+
+  for (auto mod : sortedMods) {
+    // Make partition's job easier by cleaning up first.
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
+    // Do the partitioning.
     partition(mod);
+    // Cleanup whatever mess we made.
+    (void)mlir::applyPatternsAndFoldGreedily(mod,
+                                             mlir::FrozenRewritePatternSet());
+  }
 }
 
-void PartitionPass::markWireOps(Operation *taggedOp) {
-  auto partRef =
-      taggedOp->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
-  if (!partRef)
+/// Determine if 'op' is driven exclusively by other tagged ops or wires which
+/// are themselves exclusively driven by tagged ops. Recursive but memoized via
+/// `seen`.
+static bool isDrivenByPartOpsOnly(Operation *op,
+                                  const BlockAndValueMapping &partOps,
+                                  DenseMap<Operation *, bool> &seen) {
+  auto prevResult = seen.find(op);
+  if (prevResult != seen.end())
+    return prevResult->second;
+  bool &result = seen[op];
+  // Default to true.
+  result = true;
+
+  for (Value oper : op->getOperands()) {
+    if (partOps.contains(oper))
+      continue;
+    if (oper.isa<BlockArgument>())
+      continue;
+    Operation *defOp = oper.getDefiningOp();
+    if (!isWireManipulationOp(defOp) ||
+        !isDrivenByPartOpsOnly(defOp, partOps, seen))
+      result = false;
+  }
+  return result;
+}
+
+/// Move the list of tagged operations in to 'partBlock' and copy/move any free
+/// (wire) ops connecting them in also. If 'extendMaximalUp` is specified,
+/// attempt to copy all the way up to the block args.
+void copyIntoPart(ArrayRef<Operation *> taggedOps, Block *partBlock,
+                  bool extendMaximalUp) {
+  BlockAndValueMapping map;
+  if (taggedOps.empty())
     return;
-  SmallVector<Operation *, 8> opQueue;
-  opQueue.push_back(taggedOp);
+  OpBuilder b(taggedOps[0]->getContext());
+  // Copy all of the ops listed.
+  for (Operation *op : taggedOps) {
+    op->moveBefore(partBlock, partBlock->end());
+    for (Value result : op->getResults())
+      map.map(result, result);
+  }
 
-  while (!opQueue.empty()) {
-    Operation *op = opQueue.back();
-    opQueue.pop_back();
+  // Memoization space.
+  DenseMap<Operation *, bool> seen;
 
-    for (auto *user : op->getUsers()) {
-      if (!isWireManipulationOp(user) || user->hasAttr("targetDesignPartition"))
+  // Treat the 'partBlock' as a queue, iterating through and appending as
+  // necessary.
+  for (Operation &op : *partBlock) {
+    // Make sure we are always appending.
+    b.setInsertionPointToEnd(partBlock);
+
+    // Go through the operands and copy any which we can.
+    for (auto &opOper : op.getOpOperands()) {
+      Value operValue = opOper.get();
+      assert(operValue);
+
+      // Check if there's already a copied op for this value.
+      Value existingValue = map.lookupOrNull(operValue);
+      if (existingValue) {
+        opOper.set(existingValue);
         continue;
-      user->setAttr("targetDesignPartition", partRef);
-      opQueue.push_back(user);
+      }
+
+      // Determine if we can copy the op into our partition.
+      Operation *defOp = operValue.getDefiningOp();
+      if (!defOp)
+        continue;
+
+      // We don't copy anything which isn't "free".
+      if (!isWireManipulationOp(defOp))
+        continue;
+
+      // Copy operand wire ops into the partition.
+      //   If `extendMaximalUp` is set, we want to copy unconditionally.
+      //   Otherwise, we only want to copy wire ops which connect this operation
+      //   to another in the partition.
+      if (extendMaximalUp || isDrivenByPartOpsOnly(defOp, map, seen)) {
+        // Optimization: if all the consumers of this wire op are in the
+        // partition, move instead of clone.
+        if (llvm::all_of(defOp->getUsers(), [&](Operation *user) {
+              return user->getBlock() == partBlock;
+            })) {
+          defOp->moveBefore(partBlock, b.getInsertionPoint());
+        } else {
+          b.insert(defOp->clone(map));
+          opOper.set(map.lookup(opOper.get()));
+        }
+      }
     }
 
-    for (auto operValue : op->getOperands()) {
-      Operation *defOp = operValue.getDefiningOp();
-      if (!defOp || !isWireManipulationOp(defOp) ||
-          defOp->hasAttr("targetDesignPartition"))
+    // Move any "free" consumers which we can.
+    for (auto *user : llvm::make_early_inc_range(op.getUsers())) {
+      // Stop if it's not "free" or already in a partition.
+      if (!isWireManipulationOp(user) || getPart(user) ||
+          user->getBlock() == partBlock)
         continue;
-      defOp->setAttr("targetDesignPartition", partRef);
-      opQueue.push_back(defOp);
+      // Op must also only have its operands driven (or indirectly driven) by
+      // ops in the partition.
+      if (!isDrivenByPartOpsOnly(user, map, seen))
+        continue;
+
+      // All the conditions are met, move it!
+      user->moveBefore(partBlock, partBlock->end());
+      // Mark it as being in the block by putting it into the map.
+      for (Value result : user->getResults())
+        map.map(result, result);
+      // Re-map the inputs to results in the block, if they exist.
+      for (OpOperand &oper : user->getOpOperands())
+        oper.set(map.lookupOrDefault(oper.get()));
     }
   }
 }
 
-void PartitionPass::partition(MSFTModuleOp mod) {
-  DenseMap<StringAttr, SmallVector<Operation *, 1>> localPartMembers;
-  SmallVector<Operation *, 64> nonLocalTaggedOps;
+/// Move tagged ops into separate blocks. Copy any wire ops connecting them as
+/// well.
+void copyInto(MSFTModuleOp mod, DenseMap<SymbolRefAttr, Block *> &perPartBlocks,
+              Block *nonLocalBlock) {
+  DenseMap<SymbolRefAttr, SmallVector<Operation *, 8>> perPartTaggedOps;
+  SmallVector<Operation *, 16> nonLocalTaggedOps;
 
-  mod.walk(&markWireOps);
-
+  // Bucket the ops by partition tag.
   mod.walk([&](Operation *op) {
-    auto partRef = op->getAttrOfType<SymbolRefAttr>("targetDesignPartition");
+    auto partRef = getPart(op);
     if (!partRef)
       return;
-
-    if (partRef.getRootReference() == SymbolTable::getSymbolName(mod))
-      localPartMembers[partRef.getLeafReference()].push_back(op);
+    auto partBlockF = perPartBlocks.find(partRef);
+    if (partBlockF != perPartBlocks.end())
+      perPartTaggedOps[partRef].push_back(op);
     else
       nonLocalTaggedOps.push_back(op);
   });
 
-  if (!nonLocalTaggedOps.empty())
-    bubbleUp(mod, nonLocalTaggedOps);
+  // Copy into the appropriate partition block.
+  for (auto &partOpQueuePair : perPartTaggedOps) {
+    copyIntoPart(partOpQueuePair.second, perPartBlocks[partOpQueuePair.first],
+                 false);
+  }
+  copyIntoPart(nonLocalTaggedOps, nonLocalBlock, true);
+}
 
+void PartitionPass::partition(MSFTModuleOp mod) {
+  auto modSymbol = SymbolTable::getSymbolName(mod);
+
+  // Construct all the blocks we're going to need.
+  Block *nonLocal = mod.addBlock();
+  DenseMap<SymbolRefAttr, Block *> perPartBlocks;
+  mod.walk([&](DesignPartitionOp part) {
+    SymbolRefAttr partRef =
+        SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
+    perPartBlocks[partRef] = mod.addBlock();
+  });
+
+  // Sort the tagged ops into ops to hoist (bubble up) and per-partition blocks.
+  copyInto(mod, perPartBlocks, nonLocal);
+
+  // Hoist the appropriate ops and erase the partition block.
+  if (!nonLocal->empty())
+    bubbleUp(mod, nonLocal);
+  nonLocal->dropAllReferences();
+  nonLocal->dropAllDefinedValueUses();
+  mod.getBlocks().remove(nonLocal);
+
+  // Sink all of the "locally-tagged" ops into new partition modules.
   for (auto part :
        llvm::make_early_inc_range(mod.getOps<DesignPartitionOp>())) {
-    auto usersIter = localPartMembers.find(part.sym_nameAttr());
-    if (usersIter != localPartMembers.end())
-      this->partition(part, usersIter->second);
+    SymbolRefAttr partRef =
+        SymbolRefAttr::get(modSymbol, {SymbolRefAttr::get(part)});
+    Block *partBlock = perPartBlocks[partRef];
+    partition(part, partBlock);
     part.erase();
   }
 }
@@ -506,33 +648,48 @@ static void setEntityName(Operation *op, Twine name) {
   if (op->hasAttrOfType<StringAttr>("sym_name"))
     op->setAttr("sym_name", nameAttr);
 }
-/// Heuristics to get the output name.
-static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
-                               std::string &buff) {
-  Operation *op = res.getDefiningOp();
-  if (auto inst = dyn_cast<InstanceOp>(op)) {
+
+/// Try to get a "good" name for the given Value.
+static StringRef getValueName(Value v, const hw::SymbolCache &syms,
+                              std::string &buff) {
+  Operation *defOp = v.getDefiningOp();
+  if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
     Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
-    assert(modOp && "Invalid IR");
-    assert(isAnyModule(modOp) && "Instance must point to a module");
-    hw::ModulePortInfo ports = getModulePortInfo(modOp);
-    return ports.outputs[res.getResultNumber()].name;
+    if (modOp) { // If modOp isn't in the cache, it's probably a new module;
+      assert(isAnyModule(modOp) && "Instance must point to a module");
+      OpResult instResult = v.cast<OpResult>();
+      hw::ModulePortInfo ports = getModulePortInfo(modOp);
+      buff.clear();
+      llvm::raw_string_ostream os(buff);
+      os << inst.sym_name() << ".";
+      StringAttr name = ports.outputs[instResult.getResultNumber()].name;
+      if (name)
+        os << name.getValue();
+      return buff;
+    }
   }
-  if (auto asmInterface = dyn_cast<mlir::OpAsmOpInterface>(op)) {
-    StringRef retName;
-    asmInterface.getAsmResultNames([&](Value v, StringRef name) {
-      if (v == res && !name.empty())
-        retName = StringAttr::get(op->getContext(), name).getValue();
-    });
-    if (!retName.empty())
-      return retName;
+  if (auto blockArg = v.dyn_cast<BlockArgument>()) {
+    auto portInfo =
+        getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
+    return portInfo.inputs[blockArg.getArgNumber()].getName();
   }
-  if (auto constOp = dyn_cast<hw::ConstantOp>(op)) {
+  if (auto constOp = dyn_cast<hw::ConstantOp>(defOp)) {
     buff.clear();
     llvm::raw_string_ostream(buff) << "c" << constOp.value();
     return buff;
   }
 
-  if (res.getDefiningOp()->getNumResults() == 1)
+  return "";
+}
+
+/// Heuristics to get the output name.
+static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
+                               std::string &buff) {
+
+  StringRef valName = getValueName(res, syms, buff);
+  if (!valName.empty())
+    return valName;
+  if (res.getOwner()->getNumResults() == 1)
     return {};
 
   // Fallback. Not ideal.
@@ -547,10 +704,16 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
     Operation *modOp = syms.getDefinition(inst.moduleNameAttr());
-    assert(modOp && "Invalid IR");
-    assert(isAnyModule(modOp) && "Instance must point to a module");
-    hw::ModulePortInfo ports = getModulePortInfo(modOp);
-    return ports.inputs[oper.getOperandNumber()].name;
+    if (modOp) { // If modOp isn't in the cache, it's probably a new module;
+      assert(isAnyModule(modOp) && "Instance must point to a module");
+      hw::ModulePortInfo ports = getModulePortInfo(modOp);
+      return ports.inputs[oper.getOperandNumber()].name;
+    }
+  }
+  if (auto blockArg = oper.get().dyn_cast<BlockArgument>()) {
+    auto portInfo =
+        getModulePortInfo(blockArg.getOwner()->getParent()->getParentOp());
+    return portInfo.inputs[blockArg.getArgNumber()].getName();
   }
 
   if (oper.getOwner()->getNumOperands() == 1)
@@ -568,7 +731,8 @@ static ArrayAttr getGlobalRefs(Operation *op) {
 }
 
 /// Helper to update GlobalRefOps after referenced ops bubble up.
-void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
+void PartitionPass::bubbleUpGlobalRefs(
+    Operation *op, llvm::DenseSet<hw::GlobalRefAttr> &refsMoved) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
@@ -615,12 +779,15 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     // Update the path on the GlobalRefOp.
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
     globalRefOp.namepathAttr(newPathAttr);
+
+    refsMoved.insert(globalRef);
   }
 }
 
 /// Helper to update GlobalRefops after referenced ops are pushed down.
-void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
-                                       DenseSet<Attribute> &newGlobalRefs) {
+void PartitionPass::pushDownGlobalRefs(
+    Operation *op, DesignPartitionOp partOp,
+    llvm::SetVector<Attribute> &newGlobalRefs) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
@@ -671,84 +838,201 @@ void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
   }
 }
 
-void PartitionPass::bubbleUp(MSFTModuleOp mod, ArrayRef<Operation *> ops) {
-  // This particular implementation is _very_ sensitive to iteration order. It
-  // assumes that the order in which the ops, operands, and results are the same
-  // _every_ time it runs through them. Doing this saves on bookkeeping.
+/// Utility for creating {0, 1, 2, ..., size}.
+static SmallVector<unsigned> makeSequentialRange(unsigned size) {
+  SmallVector<unsigned> seq;
+  for (size_t i = 0; i < size; ++i)
+    seq.push_back(i);
+  return seq;
+}
+
+void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   auto *ctxt = mod.getContext();
   FunctionType origType = mod.getType();
   std::string nameBuffer;
 
   //*************
   //   Figure out all the new ports 'mod' is going to need. The outputs need to
-  //   know where they're being driven from, which'll be the outputs of 'ops'.
-  SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
-  SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
-  SmallVector<Type, 64> newResTypes;
+  //   know where they're being driven from, which'll be some of the outputs of
+  //   'ops'. Also determine which of the existing ports are no longer used.
+  //
+  //   Don't do any mutation here, just assemble bookkeeping info.
 
-  for (Operation *op : ops) {
-    StringRef opName = ::getOpName(op);
-    for (OpResult res : op->getOpResults()) {
+  // The new input ports for operands not defined in 'partBlock'.
+  SmallVector<std::pair<StringAttr, Type>, 64> newInputs;
+  // Map the operand value to new input port.
+  DenseMap<Value, size_t> oldValueNewResultNum;
+
+  // The new output ports.
+  SmallVector<std::pair<StringAttr, Value>, 64> newOutputs;
+  // Store the original result value in new port order. Used later on to remap
+  // the moved operations to the new block arguments.
+  SmallVector<Value, 64> newInputOldValue;
+
+  for (Operation &op : *partBlock) {
+    StringRef opName = ::getOpName(&op);
+    if (opName.empty())
+      opName = op.getName().getIdentifier().getValue();
+
+    // Tagged operation might need new inputs ports to drive its consumers.
+    for (OpResult res : op.getOpResults()) {
+      // If all the operations will get moved, no new port is necessary.
+      if (llvm::all_of(res.getUsers(), [partBlock](Operation *op) {
+            return op->getBlock() == partBlock || isa<OutputOp>(op);
+          }))
+        continue;
+
+      // Create a new inpurt port.
       StringRef name = getResultName(res, topLevelSyms, nameBuffer);
       newInputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
           res.getType()));
+      newInputOldValue.push_back(res);
     }
-    for (OpOperand &oper : op->getOpOperands()) {
+
+    // Tagged operations may need new output ports to drive their operands.
+    for (OpOperand &oper : op.getOpOperands()) {
+      Value operVal = oper.get();
+
+      // If the value was coming from outside the module, unnecessary.
+      if (auto operArg = operVal.dyn_cast<BlockArgument>())
+        continue;
+
+      Operation *defOp = operVal.getDefiningOp();
+      assert(defOp && "Value must be operation if not block arg");
+      // New port unnecessary if source will be moved or there's already a port
+      // for that value.
+      if (defOp->getBlock() == partBlock || oldValueNewResultNum.count(operVal))
+        continue;
+
+      // Create a new output port.
+      oldValueNewResultNum[oper.get()] = newOutputs.size();
       StringRef name = getOperandName(oper, topLevelSyms, nameBuffer);
       newOutputs.push_back(std::make_pair(
           StringAttr::get(ctxt, opName + (name.empty() ? "" : "." + name)),
-          oper.get()));
-      newResTypes.push_back(oper.get().getType());
+          operVal));
     }
   }
 
+  // Figure out which of the original output ports can be removed.
+  llvm::BitVector outputsToRemove(origType.getNumResults() + newOutputs.size());
+  DenseMap<size_t, Value> oldResultOldValues;
+  Operation *term = mod.getBodyBlock()->getTerminator();
+  assert(term && "Invalid IR");
+  for (auto outputValIdx : llvm::enumerate(term->getOperands())) {
+    Operation *defOp = outputValIdx.value().getDefiningOp();
+    if (!defOp || defOp->getBlock() != partBlock)
+      continue;
+    outputsToRemove.set(outputValIdx.index());
+    oldResultOldValues[outputValIdx.index()] = outputValIdx.value();
+  }
+
+  // Figure out which of the original input ports will no longer be used and can
+  // be removed.
+  llvm::BitVector inputsToRemove(origType.getNumInputs() + newInputs.size());
+  for (auto blockArg : mod.getBodyBlock()->getArguments()) {
+    if (llvm::all_of(blockArg.getUsers(), [&](Operation *op) {
+          return op->getBlock() == partBlock;
+        }))
+      inputsToRemove.set(blockArg.getArgNumber());
+  }
+
   //*************
-  //   Add them to 'mod' and replace all of the old 'ops' results with the new
-  //   ports.
+  //   Add the new ports and re-wire the operands using the new ports. The
+  //   `addPorts` method handles adding the correct values to the terminator op.
   SmallVector<BlockArgument> newBlockArgs = mod.addPorts(newInputs, newOutputs);
-  size_t blockArgNum = 0;
-  for (Operation *op : ops)
-    for (OpResult res : op->getResults())
-      res.replaceAllUsesWith(newBlockArgs[blockArgNum++]);
+  for (size_t inputNum = 0, e = newBlockArgs.size(); inputNum < e; ++inputNum)
+    for (OpOperand &use : newInputOldValue[inputNum].getUses())
+      if (use.getOwner()->getBlock() != partBlock)
+        use.set(newBlockArgs[inputNum]);
 
   //*************
   //   For all of the instantiation sites (for 'mod'):
   //     - Create a new instance with the correct result types.
   //     - Clone in 'ops'.
-  //     - Construct the new instance operands from the old ones + the cloned
-  //     ops' results.
-  SmallVector<unsigned> resValues;
-  for (size_t i = 0, e = origType.getNumResults(); i < e; ++i)
-    resValues.push_back(i);
+  //     - Fix up the new operations' operands.
   auto cloneOpsGetOperands = [&](InstanceOp newInst, InstanceOp oldInst,
                                  SmallVectorImpl<Value> &newOperands) {
     OpBuilder b(newInst);
+    BlockAndValueMapping map;
 
-    size_t resultNum = origType.getNumResults();
-    auto oldOperands = oldInst->getOperands();
-    newOperands.append(oldOperands.begin(), oldOperands.end());
-    for (Operation *op : ops) {
-      BlockAndValueMapping map;
-      for (Value oper : op->getOperands())
-        map.map(oper, newInst->getResult(resultNum++));
-      Operation *newOp = b.insert(op->clone(map));
-      for (Value res : newOp->getResults())
-        newOperands.push_back(res);
-      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(op));
-      bubbleUpGlobalRefs(newOp);
+    // Add all of 'mod''s block args to the map in case one of the tagged ops
+    // was driven by a block arg. Map to the oldInst operand Value.
+    unsigned oldInstNumInputs = oldInst.getNumOperands();
+    for (BlockArgument arg : mod.getBodyBlock()->getArguments())
+      if (arg.getArgNumber() < oldInstNumInputs)
+        map.map(arg, oldInst.getOperand(arg.getArgNumber()));
+
+    // Add all the old values which got moved to output ports to the map.
+    size_t origNumResults = origType.getNumResults();
+    for (auto valueResultNum : oldValueNewResultNum)
+      map.map(valueResultNum.first,
+              newInst->getResult(origNumResults + valueResultNum.second));
+
+    // Clone the ops, rename appropriately, and update the global refs.
+    llvm::SmallVector<Operation *, 32> newOps;
+    llvm::DenseSet<hw::GlobalRefAttr> movedRefs;
+    for (Operation &op : *partBlock) {
+      Operation *newOp = b.insert(op.clone(map));
+      newOps.push_back(newOp);
+      setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
+      bubbleUpGlobalRefs(newOp, movedRefs);
     }
+
+    // Remove the hoisted global refs from new instance.
+    if (ArrayAttr oldInstRefs =
+            oldInst->getAttrOfType<ArrayAttr>("circt.globalRef")) {
+      llvm::SmallVector<Attribute> newInstRefs;
+      for (Attribute oldRef : oldInstRefs.getValue()) {
+        if (hw::GlobalRefAttr ref = oldRef.dyn_cast<hw::GlobalRefAttr>())
+          if (movedRefs.contains(ref))
+            continue;
+        newInstRefs.push_back(oldRef);
+      }
+      if (newInstRefs.empty())
+        newInst->removeAttr("circt.globalRef");
+      else
+        newInst->setAttr("circt.globalRef", ArrayAttr::get(ctxt, newInstRefs));
+    }
+
+    // Fix up operands of cloned ops (backedges didn't exist in the map so they
+    // didn't get mapped during the initial clone).
+    for (Operation *newOp : newOps)
+      for (OpOperand &oper : newOp->getOpOperands())
+        oper.set(map.lookupOrDefault(oper.get()));
+
+    // Since we're not removing any ports, start with the old operands.
+    newOperands.append(oldInst.getOperands().begin(),
+                       oldInst.getOperands().end());
+    // Gather new operands for the new instance.
+    for (Value oldValue : newInputOldValue)
+      newOperands.push_back(map.lookup(oldValue));
+
+    // Fix up existing ops which used the old instance's results.
+    for (auto oldResultOldValue : oldResultOldValues)
+      oldInst.getResult(oldResultOldValue.first)
+          .replaceAllUsesWith(map.lookup(oldResultOldValue.second));
   };
-  updateInstances(mod, resValues, cloneOpsGetOperands);
+  updateInstances(mod, makeSequentialRange(origType.getNumResults()),
+                  cloneOpsGetOperands);
 
   //*************
-  //   Done.
-  for (Operation *op : ops)
-    op->erase();
+  //   Lastly, remove the unnecessary ports. Doing this as a separate mutation
+  //   makes the previous steps simpler without any practical degradation.
+  SmallVector<unsigned> resValues =
+      mod.removePorts(inputsToRemove, outputsToRemove);
+  updateInstances(mod, resValues,
+                  [&](InstanceOp newInst, InstanceOp oldInst,
+                      SmallVectorImpl<Value> &newOperands) {
+                    for (auto oldOperand :
+                         llvm::enumerate(oldInst->getOperands()))
+                      if (!inputsToRemove.test(oldOperand.index()))
+                        newOperands.push_back(oldOperand.value());
+                  });
 }
 
-void PartitionPass::partition(DesignPartitionOp partOp,
-                              ArrayRef<Operation *> toMove) {
+MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
+                                      Block *partBlock) {
 
   auto *ctxt = partOp.getContext();
   auto loc = partOp.getLoc();
@@ -758,72 +1042,59 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   //   Determine the partition module's interface. Keep some bookkeeping around.
   SmallVector<hw::PortInfo> inputPorts;
   SmallVector<hw::PortInfo> outputPorts;
-  SmallVector<Value, 64> partInstInputs;
-  SmallVector<Value, 64> partInstOutputs;
+  DenseMap<Value, size_t> newInputMap;
+  SmallVector<Value, 32> instInputs;
+  SmallVector<Value, 32> newOutputs;
 
-  // Handle module-like operations. Not strictly necessary, but we can base the
-  // new portnames on the portnames of the instance being moved and the instance
-  // name.
-  auto addModuleLike = [&](Operation *inst, Operation *modOp) {
-    hw::ModulePortInfo modPorts = getModulePortInfo(modOp);
-    StringRef name = ::getOpName(inst);
+  for (Operation &op : *partBlock) {
+    StringRef opName = ::getOpName(&op);
+    if (opName.empty())
+      opName = op.getName().getIdentifier().getValue();
 
-    for (auto port : modPorts.inputs) {
-      partInstInputs.push_back(inst->getOperand(port.argNum));
-      inputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-          /*direction*/ hw::PortDirection::INPUT,
-          /*type*/ port.type,
-          /*argNum*/ inputPorts.size()});
+    for (OpOperand &oper : op.getOpOperands()) {
+      Value v = oper.get();
+      // Don't need a new input if we're consuming a value in the same block.
+      if (v.getParentBlock() == partBlock)
+        continue;
+      auto existingF = newInputMap.find(v);
+      if (existingF == newInputMap.end()) {
+        // If there's not an existing input, create one.
+        auto arg = partBlock->addArgument(v.getType());
+        oper.set(arg);
+
+        newInputMap[v] = inputPorts.size();
+        StringRef portName = getValueName(v, topLevelSyms, nameBuffer);
+
+        instInputs.push_back(v);
+        inputPorts.push_back(hw::PortInfo{
+            /*name*/ StringAttr::get(
+                ctxt, opName + (portName.empty() ? "" : "." + portName)),
+            /*direction*/ hw::PortDirection::INPUT,
+            /*type*/ v.getType(),
+            /*argNum*/ inputPorts.size()});
+      } else {
+        // There's already an existing port. Just set it.
+        oper.set(partBlock->getArgument(existingF->second));
+      }
     }
 
-    for (auto port : modPorts.outputs) {
-      partInstOutputs.push_back(inst->getResult(port.argNum));
+    for (OpResult res : op.getResults()) {
+      // If all the consumers of this result are in the same partition, we don't
+      // need a new output port.
+      if (llvm::all_of(res.getUsers(), [partBlock](Operation *op) {
+            return op->getBlock() == partBlock;
+          }))
+        continue;
+
+      // If not, add one.
+      newOutputs.push_back(res);
+      StringRef portName = getResultName(res, topLevelSyms, nameBuffer);
       outputPorts.push_back(hw::PortInfo{
-          /*name*/ StringAttr::get(ctxt, name + "." + port.name.getValue()),
-          /*direction*/ hw::PortDirection::OUTPUT,
-          /*type*/ port.type,
-          /*argNum*/ outputPorts.size()});
-    }
-  };
-  // Handle all other operators.
-  auto addOther = [&](Operation *op) {
-    StringRef name = ::getOpName(op);
-
-    for (OpOperand &oper : op->getOpOperands()) {
-      inputPorts.push_back(hw::PortInfo{
           /*name*/ StringAttr::get(
-              ctxt,
-              name + "." + getOperandName(oper, topLevelSyms, nameBuffer)),
-          /*direction*/ hw::PortDirection::INPUT,
-          /*type*/ oper.get().getType(),
-          /*argNum*/ inputPorts.size()});
-      partInstInputs.push_back(oper.get());
-    }
-
-    for (OpResult res : op->getOpResults()) {
-      StringRef resName = getResultName(res, topLevelSyms, nameBuffer);
-      outputPorts.push_back(
-          hw::PortInfo{/*name*/ StringAttr::get(
-                           ctxt, name + (resName.empty() ? "" : "." + resName)),
-                       /*direction*/ hw::PortDirection::OUTPUT,
-                       /*type*/ res.getType(),
-                       /*argNum*/ outputPorts.size()});
-      partInstOutputs.push_back(res);
-    }
-  };
-
-  // Aggregate the args/results into partition module ports.
-  for (Operation *op : toMove) {
-    if (auto inst = dyn_cast<InstanceOp>(op)) {
-      Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
-      assert(modOp && "Module instantiated should exist. Verifier should have "
-                      "caught this.");
-
-      if (isAnyModule(modOp))
-        addModuleLike(inst, modOp);
-    } else {
-      addOther(op);
+              ctxt, opName + (portName.empty() ? "" : "." + portName)),
+          /*direction*/ hw::PortDirection::OUTPUT,
+          /*type*/ res.getType(),
+          /*argNum*/ outputPorts.size()});
     }
   }
 
@@ -833,67 +1104,43 @@ void PartitionPass::partition(DesignPartitionOp partOp,
   // Build the module.
   hw::ModulePortInfo modPortInfo(inputPorts, outputPorts);
   auto partMod =
-      OpBuilder::atBlockEnd(getOperation().getBody())
+      OpBuilder(partOp->getParentOfType<MSFTModuleOp>())
           .create<MSFTModuleOp>(loc, partOp.verilogNameAttr(), modPortInfo,
                                 ArrayRef<NamedAttribute>{});
-  Block *partBlock = partMod.getBodyBlock();
-  partBlock->clear();
-  auto partBuilder = OpBuilder::atBlockEnd(partBlock);
+  partBlock->moveBefore(partMod.getBodyBlock());
+  partMod.getBlocks().back().erase();
+
+  OpBuilder::atBlockEnd(partBlock).create<OutputOp>(partOp.getLoc(),
+                                                    newOutputs);
 
   // Replace partOp with an instantion of the partition.
   SmallVector<Type> instRetTypes(
-      llvm::map_range(partInstOutputs, [](Value v) { return v.getType(); }));
+      llvm::map_range(newOutputs, [](Value v) { return v.getType(); }));
   auto partInst = OpBuilder(partOp).create<InstanceOp>(
       loc, instRetTypes, partOp.getNameAttr(),
-      SymbolTable::getSymbolName(partMod), partInstInputs, ArrayAttr(),
+      SymbolTable::getSymbolName(partMod), instInputs, ArrayAttr(),
       SymbolRefAttr());
+  moduleInstantiations[partMod].push_back(partInst);
 
-  //*************
-  //   Move the operations!
+  // And set the outputs properly.
+  for (size_t outputNum = 0, e = newOutputs.size(); outputNum < e; ++outputNum)
+    for (OpOperand &oper :
+         llvm::make_early_inc_range(newOutputs[outputNum].getUses()))
+      if (oper.getOwner()->getBlock() != partBlock)
+        oper.set(partInst.getResult(outputNum));
 
-  // Map the original operation's inputs to block arguments.
-  mlir::BlockAndValueMapping mapping;
-  assert(partInstInputs.size() == partBlock->getNumArguments());
-  for (size_t argNum = 0, e = partInstInputs.size(); argNum < e; ++argNum) {
-    mapping.map(partInstInputs[argNum], partBlock->getArgument(argNum));
-  }
-
-  // Since the same value can map to multiple outputs, compute the 1-N mapping
-  // here.
-  DenseMap<Value, SmallVector<int, 1>> resultOutputConnections;
-  for (size_t outNum = 0, e = partInstOutputs.size(); outNum < e; ++outNum)
-    resultOutputConnections[partInstOutputs[outNum]].push_back(outNum);
-
-  // Hold the block outputs.
-  SmallVector<Value, 64> outputs(partInstOutputs.size(), Value());
-
-  // Clone the ops into the partition block. Map the results into the module
-  // outputs. Push down any global refs to include the partition. Update the
+  // Push down any global refs to include the partition. Update the
   // partition to include the new set of global refs, and set its inner_sym.
-  DenseSet<Attribute> newGlobalRefs;
-  for (Operation *op : toMove) {
-    Operation *newOp = partBuilder.insert(op->clone(mapping));
-    newOp->removeAttr("targetDesignPartition");
-    for (size_t resNum = 0, e = op->getNumResults(); resNum < e; ++resNum)
-      for (int outputNum : resultOutputConnections[op->getResult(resNum)])
-        outputs[outputNum] = newOp->getResult(resNum);
-    pushDownGlobalRefs(op, partOp, newGlobalRefs);
-  }
+  llvm::SetVector<Attribute> newGlobalRefs;
+  for (Operation &op : *partBlock)
+    pushDownGlobalRefs(&op, partOp, newGlobalRefs);
   SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),
                                          newGlobalRefs.end());
   auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
   partInst->setAttr("circt.globalRef", newRefsAttr);
   partInst->setAttr("inner_sym", partInst.sym_nameAttr());
 
-  partBuilder.create<OutputOp>(loc, outputs);
-
-  // Replace original ops' outputs with partition outputs.
-  assert(partInstOutputs.size() == partInst.getNumResults());
-  for (size_t resNum = 0, e = partInstOutputs.size(); resNum < e; ++resNum)
-    partInstOutputs[resNum].replaceAllUsesWith(partInst.getResult(resNum));
-
-  for (Operation *op : toMove)
-    op->erase();
+  return partMod;
 }
 
 namespace circt {
@@ -907,12 +1154,6 @@ std::unique_ptr<Pass> createPartitionPass() {
 namespace {
 struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
   void runOnOperation() override;
-
-private:
-  void bubbleWiresUp(MSFTModuleOp mod);
-  void dedupOutputs(MSFTModuleOp mod);
-  void sinkWiresDown(MSFTModuleOp mod);
-  void dedupInputs(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
@@ -939,7 +1180,7 @@ void WireCleanupPass::runOnOperation() {
 }
 
 /// Remove outputs driven by the same value.
-void WireCleanupPass::dedupOutputs(MSFTModuleOp mod) {
+void PassCommon::dedupOutputs(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
 
@@ -958,7 +1199,7 @@ void WireCleanupPass::dedupOutputs(MSFTModuleOp mod) {
   }
 
   mod.removePorts(llvm::BitVector(mod.getNumArguments()), outputPortsToRemove);
-  updateInstances(mod, {},
+  updateInstances(mod, makeSequentialRange(mod.getType().getNumResults()),
                   [&](InstanceOp newInst, InstanceOp oldInst,
                       SmallVectorImpl<Value> &newOperands) {
                     // Operands don't change.
@@ -971,7 +1212,7 @@ void WireCleanupPass::dedupOutputs(MSFTModuleOp mod) {
 }
 
 /// Push up any wires which are simply passed-through.
-void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
+void PassCommon::bubbleWiresUp(MSFTModuleOp mod) {
   Block *body = mod.getBodyBlock();
   Operation *terminator = body->getTerminator();
   hw::ModulePortInfo ports = mod.getPorts();
@@ -1036,7 +1277,7 @@ void WireCleanupPass::bubbleWiresUp(MSFTModuleOp mod) {
   updateInstances(mod, newToOldResult, setPassthroughsGetOperands);
 }
 
-void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
+void PassCommon::dedupInputs(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
@@ -1073,11 +1314,20 @@ void WireCleanupPass::dedupInputs(MSFTModuleOp mod) {
       if (!argsToErase.test(argNum))
         newOperands.push_back(oldInst.getOperand(argNum));
   };
-  updateInstances(mod, remappedResults, getOperands);
+  instantiations = updateInstances(mod, remappedResults, getOperands);
+  inst = instantiations[0];
+
+  SmallVector<Attribute, 32> newArgNames;
+  std::string buff;
+  for (Value oper : inst->getOperands()) {
+    newArgNames.push_back(StringAttr::get(
+        mod.getContext(), getValueName(oper, topLevelSyms, buff)));
+  }
+  mod.argNamesAttr(ArrayAttr::get(mod.getContext(), newArgNames));
 }
 
 /// Sink all the instance connections which are loops.
-void WireCleanupPass::sinkWiresDown(MSFTModuleOp mod) {
+void PassCommon::sinkWiresDown(MSFTModuleOp mod) {
   auto instantiations = moduleInstantiations[mod];
   // TODO: remove this limitation. This would involve looking at the common
   // loopbacks for all the instances.
