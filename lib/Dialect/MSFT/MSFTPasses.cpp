@@ -23,6 +23,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
@@ -416,9 +417,10 @@ private:
   MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
   void bubbleUp(MSFTModuleOp mod, Block *ops);
-  void bubbleUpGlobalRefs(Operation *op);
+  void bubbleUpGlobalRefs(Operation *op,
+                          llvm::DenseSet<hw::GlobalRefAttr> &refsMoved);
   void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
-                          DenseSet<Attribute> &newGlobalRefs);
+                          llvm::SetVector<Attribute> &newGlobalRefs);
 
   // Tag wire manipulation ops in this module.
   static void
@@ -704,7 +706,8 @@ static ArrayAttr getGlobalRefs(Operation *op) {
 }
 
 /// Helper to update GlobalRefOps after referenced ops bubble up.
-void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
+void PartitionPass::bubbleUpGlobalRefs(
+    Operation *op, llvm::DenseSet<hw::GlobalRefAttr> &refsMoved) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
@@ -751,12 +754,15 @@ void PartitionPass::bubbleUpGlobalRefs(Operation *op) {
     // Update the path on the GlobalRefOp.
     auto newPathAttr = ArrayAttr::get(op->getContext(), newPath);
     globalRefOp.namepathAttr(newPathAttr);
+
+    refsMoved.insert(globalRef);
   }
 }
 
 /// Helper to update GlobalRefops after referenced ops are pushed down.
-void PartitionPass::pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
-                                       DenseSet<Attribute> &newGlobalRefs) {
+void PartitionPass::pushDownGlobalRefs(
+    Operation *op, DesignPartitionOp partOp,
+    llvm::SetVector<Attribute> &newGlobalRefs) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
     return;
@@ -940,11 +946,28 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
 
     // Clone the ops, rename appropriately, and update the global refs.
     llvm::SmallVector<Operation *, 32> newOps;
+    llvm::DenseSet<hw::GlobalRefAttr> movedRefs;
     for (Operation &op : *partBlock) {
       Operation *newOp = b.insert(op.clone(map));
       newOps.push_back(newOp);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
-      bubbleUpGlobalRefs(newOp);
+      bubbleUpGlobalRefs(newOp, movedRefs);
+    }
+
+    // Remove the hoisted global refs from new instance.
+    if (ArrayAttr oldInstRefs =
+            oldInst->getAttrOfType<ArrayAttr>("circt.globalRef")) {
+      llvm::SmallVector<Attribute> newInstRefs;
+      for (Attribute oldRef : oldInstRefs.getValue()) {
+        if (hw::GlobalRefAttr ref = oldRef.dyn_cast<hw::GlobalRefAttr>())
+          if (movedRefs.contains(ref))
+            continue;
+        newInstRefs.push_back(oldRef);
+      }
+      if (newInstRefs.empty())
+        newInst->removeAttr("circt.globalRef");
+      else
+        newInst->setAttr("circt.globalRef", ArrayAttr::get(ctxt, newInstRefs));
     }
 
     // Fix up operands of cloned ops (backedges didn't exist in the map so they
@@ -1083,7 +1106,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
 
   // Push down any global refs to include the partition. Update the
   // partition to include the new set of global refs, and set its inner_sym.
-  DenseSet<Attribute> newGlobalRefs;
+  llvm::SetVector<Attribute> newGlobalRefs;
   for (Operation &op : *partBlock)
     pushDownGlobalRefs(&op, partOp, newGlobalRefs);
   SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),

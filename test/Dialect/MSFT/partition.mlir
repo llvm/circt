@@ -40,14 +40,14 @@ msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2, out3: i2) {
 // CHECK:    msft.output %b.unit2.foo_x, %unit1.foo_x : i2, i2
 
 // CHECK-LABEL:  msft.module @top {} (%clk: i1) -> (out1: i2, out2: i2, out3: i2) {
-// CHECK:    %part1.b.unit2.b.unit2.foo_x, %part1.unit1.unit1.foo_x = msft.instance @part1 @dp(%clk)
-// CHECK:    %b.y = msft.instance @b @B()
-// CHECK:    msft.instance @b2 @B2()
+// CHECK:    %part1.b.unit2.b.unit2.foo_x, %part1.unit1.unit1.foo_x = msft.instance @part1 @dp(%clk) {circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>, #hw.globalNameRef<@ref3>], inner_sym = "part1"} : (i1) -> (i2, i2)
+// CHECK:    %b.y = msft.instance @b @B()  {inner_sym = "b"} : () -> i2
+// CHECK:    msft.instance @b2 @B2()  {inner_sym = "b2"} : () -> ()
 // CHECK:    msft.output %part1.b.unit2.b.unit2.foo_x, %part1.unit1.unit1.foo_x, %b.y : i2, i2, i2
 
 // CHECK-LABEL:  msft.module @B {} () -> (y: i2) {
 // CHECK:    %c1_i2 = hw.constant 1 : i2
-// CHECK:    msft.instance @c @C()
+// CHECK:    msft.instance @c @C()  {inner_sym = "c"} : () -> ()
 // CHECK:    msft.output %c1_i2 : i2
 
 // CHECK-LABEL:  msft.module @B2 {} () {
