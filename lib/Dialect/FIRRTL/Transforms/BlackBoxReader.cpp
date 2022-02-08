@@ -357,7 +357,7 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
     dutModuleMap[module] = true;
     return true;
   }
-  auto node = instanceGraph->lookup(module);
+  auto *node = instanceGraph->lookup(module);
   if (node->noUses()) {
     dutModuleMap[module] = false;
     return false;
