@@ -116,6 +116,7 @@ def StructTypeImpl : HWType<"Struct"> {
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
     llvm::Optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
+    llvm::Optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
