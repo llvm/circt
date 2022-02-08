@@ -181,7 +181,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
-      changedLatticeValueWorklist.push(value);
+      changedLatticeValueWorklist.push_back(value);
     }
   }
 
@@ -195,7 +195,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
          hasDontTouch(value)))
       source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
-      changedLatticeValueWorklist.push(value);
+      changedLatticeValueWorklist.push_back(value);
   }
   void mergeLatticeValue(Value value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
@@ -229,7 +229,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
-      changedLatticeValueWorklist.push(value);
+      changedLatticeValueWorklist.push_back(value);
       valueEntry = source;
     }
   }
@@ -270,7 +270,7 @@ private:
 
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
-  std::queue<Value> changedLatticeValueWorklist;
+  SmallVector<Value, 64> changedLatticeValueWorklist;
 
   /// This keeps track of users the instance results that correspond to output
   /// ports.
@@ -304,8 +304,7 @@ void IMConstPropPass::runOnOperation() {
 
   // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    Value changedVal = changedLatticeValueWorklist.front();
-    changedLatticeValueWorklist.pop();
+    Value changedVal = changedLatticeValueWorklist.pop_back_val();
     for (Operation *user : changedVal.getUsers()) {
       if (isBlockExecutable(user->getBlock()))
         visitOperation(user);
@@ -510,9 +509,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
-    if (!AnnotationSet::get(blockArg).hasDontTouch())
-      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-        mergeLatticeValue(userOfResultPort, srcValue);
+    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+      mergeLatticeValue(userOfResultPort, srcValue);
     // Output ports are wire-like and may have users.
     mergeLatticeValue(connect.dest(), srcValue);
     return;
