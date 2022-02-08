@@ -322,7 +322,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite "z"
     } // CHECK-NEXT: endcase
 
-   // CHECK-NEXT: casez (cond)
+   // CHECK-NEXT: case (cond)
    sv.casez %cond : i1
    // CHECK-NEXT: 1'b0:
      case b0: {

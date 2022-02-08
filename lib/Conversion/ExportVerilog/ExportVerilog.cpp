@@ -3230,27 +3230,45 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
 LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
+  SmallVector<std::string, 8> patterns;
+  bool isCaseZ = false;
+  auto cases = op.getCases();
 
-  indent() << "casez (";
+  for (size_t idx = 0, e = cases.size(); idx != e; ++idx) {
+    auto caseInfo = cases[idx];
+    auto pattern = caseInfo.pattern;
+    if (pattern.isDefault())
+      patterns.push_back("default");
+    else {
+      std::string buffer;
+      llvm::raw_string_ostream bufferStream(buffer);
+      bufferStream << pattern.getWidth() << "'b";
+      for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit) {
+        bufferStream << getLetter(pattern.getBit(e - bit - 1),
+                                  /*isVerilog*/ true);
+        if (pattern.getBit(e - bit - 1) == CaseZPatternBit::Any) {
+          isCaseZ = true;
+        }
+      }
+      patterns.push_back(buffer);
+    }
+  }
+
+  if (isCaseZ)
+    indent() << "casez (";
+  else
+    indent() << "case (";
+
   emitExpression(op.cond(), ops);
   os << ')';
   emitLocationInfoAndNewLine(ops);
 
   addIndent();
-  for (auto caseInfo : op.getCases()) {
-    auto pattern = caseInfo.pattern;
-
-    if (pattern.isDefault())
-      indent() << "default";
-    else {
-      // TODO: We could emit in hex if/when the size is a multiple of 4 and
-      // there are no x's crossing nibble boundaries.
-      indent() << pattern.getWidth() << "'b";
-      for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit)
-        os << getLetter(pattern.getBit(e - bit - 1), /*isVerilog*/ true);
-    }
-    os << ":";
-    emitBlockAsStatement(caseInfo.block, emptyOps);
+  // TODO: We could emit in hex if/when the size is a multiple of 4 and
+  // there are no x's crossing nibble boundaries.
+  for (size_t idx = 0, e = cases.size(); idx != e; ++idx) {
+    indent() << patterns[idx] << ":";
+    emitBlockAsStatement(cases[idx].block, emptyOps);
   }
 
   reduceIndent();
