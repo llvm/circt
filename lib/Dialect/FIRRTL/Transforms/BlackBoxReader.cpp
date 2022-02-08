@@ -15,6 +15,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -44,7 +45,9 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder);
   bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
-  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr);
+  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool dut);
+  // Check if module or any of its parents in the InstanceGraph is a DUT.
+  bool isDut(Operation *module);
 
   using BlackBoxReaderBase::inputPrefix;
   using BlackBoxReaderBase::resourcePrefix;
@@ -66,12 +69,20 @@ private:
   /// that lists all non-header source files for black boxes. Can be changed
   /// through `firrtl.transforms.BlackBoxResourceFileNameAnno` annotations.
   StringRef resourceFileName;
+
+  /// InstanceGraph to determine modules which are under the DUT.
+  InstanceGraph *instanceGraph;
+
+  /// A cache of the the modules which have been marked as DUT or a testbench.
+  /// This is used to determine the output directory.
+  DenseMap<Operation *, bool> dutModuleMap;
 };
 } // end anonymous namespace
 
 /// Emit the annotated source code for black boxes in a circuit.
 void BlackBoxReaderPass::runOnOperation() {
   CircuitOp circuitOp = getOperation();
+  instanceGraph = &getAnalysis<InstanceGraph>();
   auto context = &getContext();
 
   // If this pass has changed anything.
@@ -218,10 +229,11 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     // Skip this inline annotation if the target is already generated.
     if (emittedFiles.count(name))
       return true;
+    bool dut = isDut(op);
 
     // Create an IR node to hold the contents.
     auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
-    setOutputFile(verbatim, name);
+    setOutputFile(verbatim, name, dut);
     return true;
   }
 
@@ -296,7 +308,7 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   // Create an IR node to hold the contents.
   auto verbatimOp =
       builder.create<VerbatimOp>(op->getLoc(), input->getBuffer());
-  setOutputFile(verbatimOp, fileNameAttr);
+  setOutputFile(verbatimOp, fileNameAttr, false);
   return true;
 }
 
@@ -305,16 +317,22 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  1. Attaches the output file attribute to the VerbatimOp.
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
-void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
+void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
+                                       bool dut) {
   auto *context = &getContext();
   auto fileName = fileNameAttr.getValue();
   // Exclude Verilog header files since we expect them to be included
   // explicitly by compiler directives in other source files.
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
-  op->setAttr("output_file", OutputFileAttr::getFromDirectoryAndFilename(
-                                 context, targetDir, fileName,
-                                 /*excludeFromFileList=*/exclude));
+  // If targetDir is not set explicitly and this is a testbench module, then
+  // update the targetDir to be the "../testbench".
+  op->setAttr("output_file",
+              OutputFileAttr::getFromDirectoryAndFilename(
+                  context,
+                  (targetDir.equals(".") && !dut ? "../testbench" : targetDir),
+                  fileName,
+                  /*excludeFromFileList=*/exclude));
 
   // Record that this file has been generated.
   assert(!emittedFiles.count(fileNameAttr) &&
@@ -324,6 +342,34 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
   // Append this file to the file list if its not excluded.
   if (!exclude)
     fileListFiles.push_back(fileName);
+}
+
+/// Return true if module is in the DUT hierarchy.
+bool BlackBoxReaderPass::isDut(Operation *module) {
+  // Check if result already cached.
+  auto iter = dutModuleMap.find(module);
+  if (iter != dutModuleMap.end())
+    return iter->getSecond();
+  const StringRef dutAnno = "sifive.enterprise.firrtl.MarkDUTAnnotation";
+  AnnotationSet annos(module);
+  // Any module with the dutAnno, is the DUT.
+  if (annos.hasAnnotation(dutAnno)) {
+    dutModuleMap[module] = true;
+    return true;
+  }
+  auto node = instanceGraph->lookup(module);
+  if (node->noUses()) {
+    dutModuleMap[module] = false;
+    return false;
+  }
+  // Checking only one of the instances should be enough. Either all the
+  // instances are within DUT or not.
+  auto inst = (*node->usesBegin())->getInstance();
+  // Recursively check the parents.
+  auto dut = isDut(inst->getParentOfType<FModuleOp>());
+  // Cache the result.
+  dutModuleMap[module] = dut;
+  return dut;
 }
 
 //===----------------------------------------------------------------------===//
