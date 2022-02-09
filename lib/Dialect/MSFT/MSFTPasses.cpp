@@ -830,7 +830,8 @@ void PartitionPass::pushDownGlobalRefs(
     size_t opIndex = 0;
     bool found = false;
     for (; opIndex < oldPath.size(); ++opIndex) {
-      if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == innerSym) {
+      auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
+      if (oldNode.getModule() == partMod && oldNode.getName() == innerSym) {
         found = true;
         break;
       }
