@@ -141,12 +141,17 @@ void BlackBoxReaderPass::runOnOperation() {
     filteredAnnos.push_back(annot.getDict());
 
     // Get the testbench and cover directories.
-    if (annot.isClass(coverAnnoClass)) {
-      if (auto dir = annot.getMember<StringAttr>("directory"))
+    if (annot.isClass(coverAnnoClass))
+      if (auto dir = annot.getMember<StringAttr>("directory")) {
         coverDir = dir.getValue();
-    } else if (annot.isClass(testbenchAnno))
-      if (auto dir = annot.getMember<StringAttr>("dirname"))
+        continue;
+      }
+    
+    if (annot.isClass(testbenchAnno))
+      if (auto dir = annot.getMember<StringAttr>("dirname")) {
         testBenchDir = dir.getValue();
+        continue;
+      }
   }
   // Apply the filtered annotations to the circuit.  If we updated the circuit
   // and record that they changed.
