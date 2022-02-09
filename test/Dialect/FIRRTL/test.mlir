@@ -18,6 +18,8 @@ firrtl.module @Constants() {
   firrtl.specialconstant 1 : !firrtl.reset
   // CHECK: %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
   firrtl.specialconstant 1 : !firrtl.asyncreset
+  // CHECK: firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
+  firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
 }
 
 //module MyModule :
