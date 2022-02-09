@@ -29,6 +29,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
@@ -41,6 +42,9 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
+
+#include <chrono>
+#include <memory>
 
 using namespace llvm;
 using namespace mlir;
@@ -272,6 +276,11 @@ static cl::opt<std::string> blackBoxRootResourcePath(
         "Optional path to use as the root of black box resource annotations"),
     cl::value_desc("path"), cl::init(""));
 
+static cl::opt<bool>
+    verbosePassExecutions("verbose-pass-executions",
+                          cl::desc("Log executions of toplevel module passes"),
+                          cl::init(false));
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -279,6 +288,42 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   config.enableRegionSimplification = false;
   return mlir::createCanonicalizerPass(config);
 }
+
+// This class prints logs before and after of pass executions. This
+// insrumentation assumes that passes are not parallelized for firrtl::CircuitOp
+// and mlir::ModuleOp.
+class FirtoolPassInstrumentation : public mlir::PassInstrumentation {
+  // Current nest level.
+  int level = 0;
+  // This stores start time points of passes.
+  llvm::SmallVector<std::chrono::steady_clock::time_point> timePoints;
+
+public:
+  void runBeforePass(Pass *pass, Operation *op) override {
+    // This assumes that it is safe to log messages to stderr if the operation
+    // is circuit or module op.
+    if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
+      timePoints.push_back(std::chrono::steady_clock::now());
+      llvm::dbgs().indent(2 * level++);
+      llvm::dbgs() << "[firtool] Running \"";
+      pass->printAsTextualPipeline(llvm::dbgs());
+      llvm::dbgs() << "\"\n";
+    }
+  }
+
+  void runAfterPass(Pass *pass, Operation *op) override {
+    // This assumes that it is safe to log messages to stderr if the operation
+    // is circuit or module op.
+    if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
+      llvm::dbgs().indent(2 * --level);
+      auto elpased = std::chrono::duration<double>(
+          std::chrono::steady_clock::now() - timePoints.pop_back_val());
+      llvm::dbgs() << "[firtool] Done in "
+                   << llvm::format("%.3f", elpased / std::chrono::seconds(1))
+                   << " sec\n";
+    }
+  }
+};
 
 /// Process a single buffer of the input.
 static LogicalResult
@@ -336,6 +381,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
+  if (verbosePassExecutions)
+    pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
   applyPassManagerCLOptions(pm);
 
   if (newAnno)
