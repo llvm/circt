@@ -146,7 +146,7 @@ void BlackBoxReaderPass::runOnOperation() {
         coverDir = dir.getValue();
         continue;
       }
-    
+
     if (annot.isClass(testbenchAnno))
       if (auto dir = annot.getMember<StringAttr>("dirname")) {
         testBenchDir = dir.getValue();
