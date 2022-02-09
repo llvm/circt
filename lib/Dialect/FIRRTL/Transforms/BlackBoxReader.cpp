@@ -15,6 +15,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -42,9 +43,13 @@ using sv::VerbatimOp;
 namespace {
 struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
-  bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder);
+  bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
+                       bool isCover);
   bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
-  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr);
+  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool isDut = false,
+                     bool isCover = false);
+  // Check if module or any of its parents in the InstanceGraph is a DUT.
+  bool isDut(Operation *module);
 
   using BlackBoxReaderBase::inputPrefix;
   using BlackBoxReaderBase::resourcePrefix;
@@ -62,16 +67,30 @@ private:
   /// through `firrtl.transforms.BlackBoxTargetDirAnno` annotations.
   StringRef targetDir;
 
+  /// The target directory for cover statements.
+  StringRef coverDir;
+
+  /// The target directory for testbench files.
+  StringRef testBenchDir;
+
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
   /// through `firrtl.transforms.BlackBoxResourceFileNameAnno` annotations.
   StringRef resourceFileName;
+
+  /// InstanceGraph to determine modules which are under the DUT.
+  InstanceGraph *instanceGraph;
+
+  /// A cache of the the modules which have been marked as DUT or a testbench.
+  /// This is used to determine the output directory.
+  DenseMap<Operation *, bool> dutModuleMap;
 };
 } // end anonymous namespace
 
 /// Emit the annotated source code for black boxes in a circuit.
 void BlackBoxReaderPass::runOnOperation() {
   CircuitOp circuitOp = getOperation();
+  instanceGraph = &getAnalysis<InstanceGraph>();
   auto context = &getContext();
 
   // If this pass has changed anything.
@@ -81,6 +100,9 @@ void BlackBoxReaderPass::runOnOperation() {
   StringRef targetDirAnnoClass = "firrtl.transforms.BlackBoxTargetDirAnno";
   StringRef resourceFileNameAnnoClass =
       "firrtl.transforms.BlackBoxResourceFileNameAnno";
+  StringRef coverAnnoClass =
+      "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+  StringRef testbenchAnno = "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 
   // Determine the target directory and resource file name from the
   // annotations present on the circuit operation.
@@ -117,6 +139,19 @@ void BlackBoxReaderPass::runOnOperation() {
     }
 
     filteredAnnos.push_back(annot.getDict());
+
+    // Get the testbench and cover directories.
+    if (annot.isClass(coverAnnoClass))
+      if (auto dir = annot.getMember<StringAttr>("directory")) {
+        coverDir = dir.getValue();
+        continue;
+      }
+
+    if (annot.isClass(testbenchAnno))
+      if (auto dir = annot.getMember<StringAttr>("dirname")) {
+        testBenchDir = dir.getValue();
+        continue;
+      }
   }
   // Apply the filtered annotations to the circuit.  If we updated the circuit
   // and record that they changed.
@@ -135,9 +170,15 @@ void BlackBoxReaderPass::runOnOperation() {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
 
+    StringRef verifBBClass =
+        "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
     SmallVector<Attribute, 4> filteredAnnos;
-    for (auto anno : AnnotationSet(&op)) {
-      if (runOnAnnotation(&op, anno, builder))
+    auto annos = AnnotationSet(&op);
+    // If the cover directory is set and it has the verifBBClass annotation,
+    // then output directory should be cover dir.
+    auto isCover = !coverDir.empty() && annos.hasAnnotation(verifBBClass);
+    for (auto anno : annos) {
+      if (runOnAnnotation(&op, anno, builder, isCover))
         // Since the annotation was consumed, add a `BlackBox` annotation to
         // indicate that this extmodule was provided by one of the black box
         // annotations. This is useful for metadata generation.
@@ -186,6 +227,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // If nothing has changed we can preseve the analysis.
   if (!anythingChanged)
     markAllAnalysesPreserved();
+  markAnalysesPreserved<InstanceGraph>();
 
   // Clean up.
   emittedFiles.clear();
@@ -196,7 +238,7 @@ void BlackBoxReaderPass::runOnOperation() {
 /// annotation. Returns `true` if the annotation was indeed a black box
 /// annotation (even if it was incomplete) and should be removed from the op.
 bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
-                                         OpBuilder &builder) {
+                                         OpBuilder &builder, bool isCover) {
   StringRef inlineAnnoClass = "firrtl.transforms.BlackBoxInlineAnno";
   StringRef pathAnnoClass = "firrtl.transforms.BlackBoxPathAnno";
   StringRef resourceAnnoClass = "firrtl.transforms.BlackBoxResourceAnno";
@@ -221,7 +263,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
 
     // Create an IR node to hold the contents.
     auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
-    setOutputFile(verbatim, name);
+    setOutputFile(verbatim, name, isDut(op), isCover);
     return true;
   }
 
@@ -305,15 +347,24 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  1. Attaches the output file attribute to the VerbatimOp.
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
-void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
+void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
+                                       bool isDut, bool isCover) {
   auto *context = &getContext();
   auto fileName = fileNameAttr.getValue();
   // Exclude Verilog header files since we expect them to be included
   // explicitly by compiler directives in other source files.
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
+  auto outDir = targetDir;
+  if (!testBenchDir.empty() && targetDir.equals(".") && !isDut)
+    outDir = testBenchDir;
+  else if (isCover)
+    outDir = coverDir;
+
+  // If targetDir is not set explicitly and this is a testbench module, then
+  // update the targetDir to be the "../testbench".
   op->setAttr("output_file", OutputFileAttr::getFromDirectoryAndFilename(
-                                 context, targetDir, fileName,
+                                 context, outDir, fileName,
                                  /*excludeFromFileList=*/exclude));
 
   // Record that this file has been generated.
@@ -324,6 +375,34 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
   // Append this file to the file list if its not excluded.
   if (!exclude)
     fileListFiles.push_back(fileName);
+}
+
+/// Return true if module is in the DUT hierarchy.
+bool BlackBoxReaderPass::isDut(Operation *module) {
+  // Check if result already cached.
+  auto iter = dutModuleMap.find(module);
+  if (iter != dutModuleMap.end())
+    return iter->getSecond();
+  const StringRef dutAnno = "sifive.enterprise.firrtl.MarkDUTAnnotation";
+  AnnotationSet annos(module);
+  // Any module with the dutAnno, is the DUT.
+  if (annos.hasAnnotation(dutAnno)) {
+    dutModuleMap[module] = true;
+    return true;
+  }
+  auto *node = instanceGraph->lookup(module);
+  bool anyParentIsDut = false;
+  if (node)
+    for (auto *u : node->uses()) {
+      InstanceOp inst = u->getInstance();
+      // Recursively check the parents.
+      auto dut = isDut(inst->getParentOfType<FModuleOp>());
+      // Cache the result.
+      dutModuleMap[module] = dut;
+      anyParentIsDut |= dut;
+    }
+  dutModuleMap[module] = anyParentIsDut;
+  return anyParentIsDut;
 }
 
 //===----------------------------------------------------------------------===//
