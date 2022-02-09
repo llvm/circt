@@ -39,7 +39,8 @@ namespace {
 
 // A helper struct to merge connections.
 struct MergeConnection {
-  MergeConnection(FModuleOp moduleOp) : moduleOp(moduleOp) {}
+  MergeConnection(FModuleOp moduleOp, bool enableAggressiveMerging)
+      : moduleOp(moduleOp), enableAggressiveMerging(enableAggressiveMerging) {}
 
   // Return true if something is changed.
   bool run();
@@ -54,6 +55,10 @@ struct MergeConnection {
 
   FModuleOp moduleOp;
   ImplicitLocOpBuilder *builder = nullptr;
+
+  // If true, we merge connections even when source values will not be
+  // simplified.
+  bool enableAggressiveMerging = false;
 };
 
 bool MergeConnection::peelConnect(ConnectOp connect) {
@@ -112,6 +117,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
     // This flag tracks whether we can use the parent of source values as the
     // merged value.
     bool canUseSourceParent = true;
+    bool areOperandsAllConstants = true;
 
     // The value which might be used as a merged value.
     Value sourceParent;
@@ -138,10 +144,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
       assert(src && "all subconnections are guranteed to exist");
       operands.push_back(src);
 
-      // Erase connections except for subConnections[index] since it must be
-      // erased at the top-level loop.
-      if (idx != index)
-        subConnections[idx].erase();
+      areOperandsAllConstants &= (bool)src.getDefiningOp<ConstantOp>();
 
       // From here, check whether the value is derived from the same aggregate
       // value.
@@ -172,18 +175,33 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
       LLVM_DEBUG(llvm::dbgs() << "Success to merge " << destFieldRef.getValue()
                               << " ,fieldID= " << destFieldRef.getFieldID()
                               << "to" << sourceParent << "\n";);
+      // Erase connections except for subConnections[index] since it must be
+      // erased at the top-level loop.
+      for (auto idx : llvm::seq(0ul, operands.size()))
+        if (idx != index)
+          subConnections[idx].erase();
       return sourceParent;
     }
 
+    // If operands are not all constants, we don't merge connections unless
+    // "aggressive-merging" option is enabled.
+    if (!enableAggressiveMerging && !areOperandsAllConstants)
+      return Value();
+
     // Otherwise, we concat all values and cast them into the aggregate type.
     Value accumulate;
-    for (auto value : operands) {
+    for (auto e : llvm::enumerate(operands)) {
+      // Erase connections except for subConnections[index] since it must be
+      // erased at the top-level loop.
+      if (e.index() != index)
+        subConnections[e.index()].erase();
+      auto value = e.value();
+      auto bitwidth =
+          firrtl::getBitWidth(value.getType().template cast<FIRRTLType>());
+      assert(bitwidth &&
+             "it should be checked at the beginning of `peelConnect`");
       value = builder->createOrFold<BitCastOp>(
-          value.getLoc(),
-          UIntType::get(value.getContext(),
-                        *firrtl::getBitWidth(
-                            value.getType().template cast<FIRRTLType>())),
-          value);
+          value.getLoc(), UIntType::get(value.getContext(), *bitwidth), value);
 
       if (parentType.isa<FVectorType>())
         accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
@@ -205,6 +223,8 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
     merged = getMergedValue(bundle);
   if (auto vector = parentType.dyn_cast_or_null<FVectorType>())
     merged = getMergedValue(vector);
+  if (!merged)
+    return false;
 
   builder->create<ConnectOp>(connect.getLoc(), parent, merged);
   return true;
@@ -243,6 +263,9 @@ bool MergeConnection::run() {
 
 struct MergeConnectionsPass
     : public MergeConnectionsBase<MergeConnectionsPass> {
+  MergeConnectionsPass(bool enableAggressiveMergingFlag) {
+    enableAggressiveMerging = enableAggressiveMergingFlag;
+  }
   void runOnOperation() override;
 };
 
@@ -253,13 +276,14 @@ void MergeConnectionsPass::runOnOperation() {
                              "--------------------------------------===\n"
                           << "Module: '" << getOperation().getName() << "'\n";);
 
-  MergeConnection mergeConnection(getOperation());
+  MergeConnection mergeConnection(getOperation(), enableAggressiveMerging);
   bool changed = mergeConnection.run();
 
   if (!changed)
     return markAllAnalysesPreserved();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createMergeConnectionsPass() {
-  return std::make_unique<MergeConnectionsPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createMergeConnectionsPass(bool enableAggressiveMerging) {
+  return std::make_unique<MergeConnectionsPass>(enableAggressiveMerging);
 }

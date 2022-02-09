@@ -1,4 +1,5 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(merge-connections))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(merge-connections))' %s | FileCheck %s --check-prefixes=CHECK,COMMON
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(merge-connections{aggressive-merging=true}))' %s | FileCheck %s --check-prefixes=AGGRESSIVE,COMMON
 
 firrtl.circuit "Test"   {
   // circuit Test :
@@ -6,9 +7,9 @@ firrtl.circuit "Test"   {
   //     input a : {c: {clock: Clock, valid:UInt<1>}[2]}
   //     output b : {c: {clock: Clock, valid:UInt<1>}[2]}
   //     b <= a
-  // CHECK-LABEL: firrtl.module @Test(in %a: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>, out %b: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>) {
-  // CHECK-NEXT:    firrtl.connect %b, %a : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>, !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
-  // CHECK-NEXT:  }
+  // COMMON-LABEL: firrtl.module @Test(
+  // COMMON-NEXT:    firrtl.connect %b, %a
+  // COMMON-NEXT:  }
   firrtl.module @Test(in %a: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>, out %b: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>) {
      %0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
      %1 = firrtl.subindex %b[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
@@ -33,11 +34,11 @@ firrtl.circuit "Test"   {
   //     output a : {b: UInt<1>, c:UInt<1>}
   //     a.b <= UInt<1>(0)
   //     a.c <= UInt<1>(1)
-  // CHECK-LABEL: firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
-  // CHECK-NEXT:    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-  // CHECK-NEXT:    %0 = firrtl.bitcast %c1_ui2 : (!firrtl.uint<2>) -> !firrtl.bundle<b: uint<1>, c: uint<1>>
-  // CHECK-NEXT:    firrtl.connect %a, %0 : !firrtl.bundle<b: uint<1>, c: uint<1>>, !firrtl.bundle<b: uint<1>, c: uint<1>>
-  // CHECK-NEXT:  }
+  // COMMON-LABEL: firrtl.module @Constant(
+  // COMMON-NEXT:    %c1_ui2 = firrtl.constant 1
+  // COMMON-NEXT:    %0 = firrtl.bitcast %c1_ui2
+  // COMMON-NEXT:    firrtl.connect %a, %0
+  // COMMON-NEXT:  }
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
@@ -47,11 +48,18 @@ firrtl.circuit "Test"   {
     firrtl.connect %1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK: firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
-  // CHECK-NEXT: %0 = firrtl.cat %s2, %s1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-  // CHECK-NEXT: %1 = firrtl.bitcast %0 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT: firrtl.connect %sink, %1 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT: }
+  // AGGRESSIVE-LABEL:  firrtl.module @ConcatToVector(
+  // AGGRESSIVE-NEXT:     %0 = firrtl.cat %s2, %s1
+  // AGGRESSIVE-NEXT:     %1 = firrtl.bitcast %0
+  // AGGRESSIVE-NEXT:     firrtl.connect %sink, %1
+  // AGGRESSIVE-NEXT:   }
+  // CHECK-LABEL:       firrtl.module @ConcatToVector(
+  // CHECK-NEXT:          %0 = firrtl.subindex %sink[1]
+  // CHECK-NEXT:          %1 = firrtl.subindex %sink[0]
+  // CHECK-NEXT:          firrtl.connect %1, %s1
+  // CHECK-NEXT:          firrtl.connect %0, %s2
+  // CHECK-NEXT:        }
+
   firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %sink[0] : !firrtl.vector<uint<1>, 2>
@@ -60,12 +68,19 @@ firrtl.circuit "Test"   {
   }
 
   // Check that we don't use %s1 as a source value.
-  // CHECK: firrtl.module @FailedToUseAggregate(in %s1: !firrtl.vector<uint<1>, 2>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>)
-  // CHECK-NEXT:  %0 = firrtl.subindex %s1[0] : !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT:  %1 = firrtl.cat %s2, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
-  // CHECK-NEXT:  %2 = firrtl.bitcast %1 : (!firrtl.uint<2>) -> !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT:  firrtl.connect %sink, %2 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT: }
+  // AGGRESSIVE-LABEL:   firrtl.module @FailedToUseAggregate(
+  // AGGRESSIVE-NEXT:    %0 = firrtl.subindex %s1[0]
+  // AGGRESSIVE-NEXT:    %1 = firrtl.cat %s2, %0
+  // AGGRESSIVE-NEXT:    %2 = firrtl.bitcast %1
+  // AGGRESSIVE-NEXT:    firrtl.connect %sink, %2
+  // AGGRESSIVE-NEXT:   }
+  // CHECK-LABEL:       firrtl.module @FailedToUseAggregate(
+  // CHECK-NEXT:         %0 = firrtl.subindex %sink[1]
+  // CHECK-NEXT:         %1 = firrtl.subindex %s1[0]
+  // CHECK-NEXT:         %2 = firrtl.subindex %sink[0]
+  // CHECK-NEXT:         firrtl.connect %2, %1
+  // CHECK-NEXT:         firrtl.connect %0, %s2
+  // CHECK-NEXT:        }
   firrtl.module @FailedToUseAggregate(in %s1: !firrtl.vector<uint<1>, 2>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %s1[0] : !firrtl.vector<uint<1>, 2>
