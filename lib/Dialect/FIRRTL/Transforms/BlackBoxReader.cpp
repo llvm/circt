@@ -254,11 +254,10 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     // Skip this inline annotation if the target is already generated.
     if (emittedFiles.count(name))
       return true;
-    bool dut = isDut(op);
 
     // Create an IR node to hold the contents.
     auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
-    setOutputFile(verbatim, name, dut, isCover);
+    setOutputFile(verbatim, name, isDut(op), isCover);
     return true;
   }
 
@@ -386,18 +385,18 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
     return true;
   }
   auto *node = instanceGraph->lookup(module);
-  if (node->noUses()) {
-    dutModuleMap[module] = false;
-    return false;
-  }
-  // Checking only one of the instances should be enough. Either all the
-  // instances are within DUT or not.
-  auto inst = (*node->usesBegin())->getInstance();
-  // Recursively check the parents.
-  auto dut = isDut(inst->getParentOfType<FModuleOp>());
-  // Cache the result.
-  dutModuleMap[module] = dut;
-  return dut;
+  bool anyParentIsDut = false;
+  if (node)
+    for (auto u : node->uses()) {
+      InstanceOp inst = u->getInstance();
+      // Recursively check the parents.
+      auto dut = isDut(inst->getParentOfType<FModuleOp>());
+      // Cache the result.
+      dutModuleMap[module] = dut;
+      anyParentIsDut |= dut;
+    }
+  dutModuleMap[module] = anyParentIsDut;
+  return anyParentIsDut;
 }
 
 //===----------------------------------------------------------------------===//
