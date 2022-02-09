@@ -762,11 +762,15 @@ void PartitionPass::bubbleUpGlobalRefs(
     // Find the index of the node in the path that points to the opName. The
     // previous node in the path must point to parentName.
     size_t opIndex = 0;
-    for (; opIndex < oldPath.size(); ++opIndex)
-      if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == oldInnerSym)
+    bool found = false;
+    for (; opIndex < oldPath.size(); ++opIndex) {
+      if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == oldInnerSym) {
+	found = true;
         break;
+      }
+    }
 
-    assert(opIndex > 0);
+    assert(found && opIndex > 0);
     auto parentIndex = opIndex - 1;
     auto parentNode = oldPath[parentIndex].cast<hw::InnerRefAttr>();
     assert(parentNode.getName() == parentName);
@@ -821,9 +825,15 @@ void PartitionPass::pushDownGlobalRefs(
     // Find the index of the node in the path that points to the innerSym.
     auto innerSym = op->getAttrOfType<StringAttr>("inner_sym");
     size_t opIndex = 0;
-    for (; opIndex < oldPath.size(); ++opIndex)
-      if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == innerSym)
+    bool found = false;
+    for (; opIndex < oldPath.size(); ++opIndex) {
+      if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == innerSym) {
+	found = true;
         break;
+      }
+    }
+
+    assert(found);
 
     // If this path already points to the design partition, we are done.
     if (oldPath[opIndex].cast<hw::InnerRefAttr>().getModule() == partModName)
