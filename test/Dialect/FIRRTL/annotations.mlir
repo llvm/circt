@@ -54,6 +54,29 @@ firrtl.circuit "FooNL"  attributes {annotations = [
 
 // -----
 
+// Non-local annotations on memory ports should work.
+
+// CHECK-LABEL: firrtl.circuit "MemPortsNL"
+// CHECK: firrtl.nla @nla [#hw.innerNameRef<@MemPortsNL::@child>, #hw.innerNameRef<@Child::@bar>]
+// CHECK: firrtl.module @Child()
+// CHECK:   %bar_r = firrtl.mem sym @bar
+// CHECK-SAME: portAnnotations = {{\[}}[{circt.nonlocal = @nla, class = "circt.test", nl = "nl"}]]
+// CHECK: firrtl.module @MemPortsNL()
+// CHECK:   firrtl.instance child sym @child
+// CHECK-SAME: annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]
+firrtl.circuit "MemPortsNL" attributes {annotations = [
+  {class = "circt.test", nl = "nl", target = "~MemPortsNL|MemPortsNL/child:Child>bar.r"}
+  ]}  {
+  firrtl.module @Child() {
+    %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+  }
+  firrtl.module @MemPortsNL() {
+    firrtl.instance child @Child()
+  }
+}
+
+// -----
+
 // Annotations on ports should work.
 firrtl.circuit "Test" attributes {annotations = [
   {class = "circt.test", target = "~Test|PortTest>in"}

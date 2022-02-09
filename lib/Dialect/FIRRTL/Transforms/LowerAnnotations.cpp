@@ -199,7 +199,7 @@ static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
   if (auto mem = dyn_cast<MemOp>(ref.getOp()))
     for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
       if (mem.getPortNameStr(p) == field) {
-        ref = PortAnnoTarget(ref.getOp(), p);
+        ref = PortAnnoTarget(mem, p);
         return success();
       }
   ref.getOp()->emitError("Cannot find port with name ") << field;
@@ -244,7 +244,7 @@ static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
   return index;
 }
 
-static FailureOr<unsigned> findFieldID(AnnoTarget ref,
+static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
                                        ArrayRef<TargetToken> tokens) {
   if (tokens.empty())
     return 0;
@@ -356,7 +356,8 @@ Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
     }
   }
 
-  // If we have aggregate specifiers, resolve those now.
+  // If we have aggregate specifiers, resolve those now. This call can update
+  // the ref to target a port of a memory.
   auto result = findFieldID(ref, component);
   if (failed(result))
     return {};
