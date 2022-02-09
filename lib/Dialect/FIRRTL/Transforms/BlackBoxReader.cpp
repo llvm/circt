@@ -347,7 +347,7 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
 void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
-                                       bool dut, bool isCover) {
+                                       bool isDut, bool isCover) {
   auto *context = &getContext();
   auto fileName = fileNameAttr.getValue();
   // Exclude Verilog header files since we expect them to be included
