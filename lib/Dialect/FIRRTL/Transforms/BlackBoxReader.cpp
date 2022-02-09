@@ -392,7 +392,7 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
   auto *node = instanceGraph->lookup(module);
   bool anyParentIsDut = false;
   if (node)
-    for (auto u : node->uses()) {
+    for (auto *u : node->uses()) {
       InstanceOp inst = u->getInstance();
       // Recursively check the parents.
       auto dut = isDut(inst->getParentOfType<FModuleOp>());
