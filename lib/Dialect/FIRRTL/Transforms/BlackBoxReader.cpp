@@ -356,10 +356,10 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = targetDir;
-  if (isCover)
-    outDir = coverDir;
-  else if (!testBenchDir.empty() && targetDir.equals(".") && !isDut)
+  if (!testBenchDir.empty() && targetDir.equals(".") && !isDut)
     outDir = testBenchDir;
+  else if (isCover)
+    outDir = coverDir;
 
   // If targetDir is not set explicitly and this is a testbench module, then
   // update the targetDir to be the "../testbench".

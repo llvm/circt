@@ -28,6 +28,6 @@ firrtl.circuit "Foo" attributes {annotations = [
   }
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"../testbench/hello.v">, symbols = []}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover/hello2.v">, symbols = []}
-  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover/hello3.v">, symbols = []}
+  // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"../testbench/hello3.v">, symbols = []}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"./hello_dut.v">, symbols = []}
 }
