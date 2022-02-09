@@ -1009,7 +1009,7 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       Operation *newOp = b.insert(op.clone(map));
       newOps.push_back(newOp);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
-      auto oldInstMod = oldInst.getReferencedModule();
+      auto *oldInstMod = oldInst.getReferencedModule();
       assert(oldInstMod);
       auto oldModName = oldInstMod->getAttrOfType<StringAttr>("sym_name");
       bubbleUpGlobalRefs(newOp, oldModName, oldInst.getNameAttr(), movedRefs);
