@@ -12,6 +12,10 @@ hw.globalRef @ref3 [#hw.innerNameRef<@top::@b2>, #hw.innerNameRef<@B2::@unit1>] 
   "loc" = #msft.physloc<M20K, 0, 0, 0>
 }
 
+hw.globalRef @ref4 [#hw.innerNameRef<@InnerPartLeafLoc::@inner>, #hw.innerNameRef<@Inner::@leaf>] {
+  "loc" = #msft.physloc<M20K, 0, 0, 0>
+}
+
 msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2, out3: i2) {
   msft.partition @part1, "dp"
 
@@ -27,6 +31,7 @@ msft.module @top {} (%clk : i1) -> (out1: i2, out2: i2, out3: i2) {
 // CHECK:  hw.globalRef @ref1 [#hw.innerNameRef<@top::@part1>, #hw.innerNameRef<@dp::@b.unit1>] {loc = #msft.physloc<M20K, 0, 0, 0>}
 // CHECK:  hw.globalRef @ref2 [#hw.innerNameRef<@top::@part1>, #hw.innerNameRef<@dp::@b.c.unit3>] {loc = #msft.physloc<M20K, 0, 0, 1>}
 // CHECK:  hw.globalRef @ref3 [#hw.innerNameRef<@top::@part1>, #hw.innerNameRef<@dp::@b2.unit1>] {loc = #msft.physloc<M20K, 0, 0, 0>}
+// CHECK:  hw.globalRef @ref4 [#hw.innerNameRef<@InnerPartLeafLoc::@part>, #hw.innerNameRef<@InnerLeafPartition::@inner>, #hw.innerNameRef<@Inner::@leaf>] {loc = #msft.physloc<M20K, 0, 0, 0>}
 
 // CHECK-LABEL:  msft.module @dp {} (%b.seq.compreg.clk: i1) -> (b.unit2.b.unit2.foo_x: i2, unit1.unit1.foo_x: i2) {
 // CHECK:    %b.unit1.foo_x = msft.instance @b.unit1 @Extern(%c1_i2)  {circt.globalRef = [#hw.globalNameRef<@ref1>], inner_sym = "b.unit1", targetDesignPartition = @top::@part1} : (i2) -> i2
@@ -159,3 +164,28 @@ msft.module @Struct {} (%in: !hw.struct<data: i5, valid: i1>) -> (out: !hw.struc
 
 // CHECK-LABEL:  msft.module @Struct {} () {
 // CHECK:    msft.output
+
+msft.module @InnerPartLeafLoc {} (%clk : i1) -> (out1: i2, out2: i2) {
+  msft.partition @part, "InnerLeafPartition"
+
+  %res1, %res2 = msft.instance @inner @Inner(%clk) { targetDesignPartition = @InnerPartLeafLoc::@part, circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "inner" } : (i1) -> (i2, i2)
+
+  msft.output %res1, %res2 : i2, i2
+}
+
+msft.module @Inner {} (%clk: i1) -> (out1: i2, out2: i2) {
+  %c0 = hw.constant 0 : i2
+
+  %0 = msft.instance @leaf @Extern(%c0) { circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "leaf" }: (i2) -> (i2)
+
+  msft.output %0, %0 : i2, i2
+}
+
+// CHECK-LABEL: msft.module @InnerLeafPartition
+// CHECK: msft.instance @inner @Inner{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "inner"
+
+// CHECK-LABEL: msft.module @InnerPartLeafLoc
+// CHECK: msft.instance @part @InnerLeafPartition{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "part"
+
+// CHECK-LABEL: msft.module @Inner
+// CHECK: msft.instance @leaf @Extern{{.+}}circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "leaf"
