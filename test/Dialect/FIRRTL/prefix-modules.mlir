@@ -297,13 +297,13 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
     // CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@X_Foo::@bar>, #hw.innerNameRef<@X_Bar::@baz>, #hw.innerNameRef<@X_Baz::@s1>]
     firrtl.nla @nla_3 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
     // CHECK: firrtl.nla @nla_3 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    firrtl.nla @nla_4 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-    // CHECK: firrtl.nla @nla_4 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@X_Foo::@bar>, #hw.innerNameRef<@X_Bar::@baz>, @X_Baz]
+    firrtl.nla @nla_4 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
+    // CHECK: firrtl.nla @nla_4 [#hw.innerNameRef<@X_Foo::@bar>, #hw.innerNameRef<@X_Bar::@baz>, @X_Baz]
     // CHECK-LABEL: firrtl.module @FixNLA()
     firrtl.module @FixNLA() {
-      firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_4, class = "circt.nonlocal"}]} @Foo()
+      firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Foo()
       firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @Bar()
-      // CHECK: firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}, {circt.nonlocal = @nla_4, class = "circt.nonlocal"}]} @X_Foo()
+      // CHECK: firrtl.instance foo sym @foo  {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @X_Foo()
       // CHECK: firrtl.instance bar sym @bar  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_3, class = "circt.nonlocal"}]} @Bar()
     }
     firrtl.module @Foo() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "X_"}]} {
