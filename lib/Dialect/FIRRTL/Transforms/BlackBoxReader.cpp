@@ -227,6 +227,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // If nothing has changed we can preseve the analysis.
   if (!anythingChanged)
     markAllAnalysesPreserved();
+  markAnalysesPreserved<InstanceGraph>();
 
   // Clean up.
   emittedFiles.clear();
