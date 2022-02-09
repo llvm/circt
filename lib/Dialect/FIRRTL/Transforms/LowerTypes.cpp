@@ -611,11 +611,13 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  SmallString<16> sym;
-  if (oldArg.sym)
-    sym = (oldArg.sym.getValue() + field.suffix).str();
-  else
-    sym = (oldArg.name.getValue() + field.suffix).str();
+  SmallString<16> symtmp;
+  StringRef sym;
+  if (oldArg.sym) {
+    symtmp = (oldArg.sym.getValue() + field.suffix).str();
+    sym = symtmp;
+  } else
+    sym = name.getValue();
 
   bool needsSym = false;
   // Populate the new arg attributes.
