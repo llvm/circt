@@ -46,7 +46,7 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
                        bool isCover);
   bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
-  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool dut = false,
+  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool isDut = false,
                      bool isCover = false);
   // Check if module or any of its parents in the InstanceGraph is a DUT.
   bool isDut(Operation *module);
@@ -357,7 +357,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
   auto outDir = targetDir;
   if (isCover)
     outDir = coverDir;
-  else if (!testBenchDir.empty() && targetDir.equals(".") && !dut)
+  else if (!testBenchDir.empty() && targetDir.equals(".") && !isDut)
     outDir = testBenchDir;
 
   // If targetDir is not set explicitly and this is a testbench module, then
