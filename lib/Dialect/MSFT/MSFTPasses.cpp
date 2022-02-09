@@ -418,7 +418,8 @@ private:
   MSFTModuleOp partition(DesignPartitionOp part, Block *partBlock);
 
   void bubbleUp(MSFTModuleOp mod, Block *ops);
-  void bubbleUpGlobalRefs(Operation *op, StringAttr parentName,
+  void bubbleUpGlobalRefs(Operation *op, StringAttr parentMod,
+                          StringAttr parentName,
                           llvm::DenseSet<hw::GlobalRefAttr> &refsMoved);
   void pushDownGlobalRefs(Operation *op, DesignPartitionOp partOp,
                           llvm::SetVector<Attribute> &newGlobalRefs);
@@ -732,7 +733,7 @@ static ArrayAttr getGlobalRefs(Operation *op) {
 
 /// Helper to update GlobalRefOps after referenced ops bubble up.
 void PartitionPass::bubbleUpGlobalRefs(
-    Operation *op, StringAttr parentName,
+    Operation *op, StringAttr parentMod, StringAttr parentName,
     llvm::DenseSet<hw::GlobalRefAttr> &refsMoved) {
   auto globalRefs = getGlobalRefs(op);
   if (!globalRefs)
@@ -764,7 +765,9 @@ void PartitionPass::bubbleUpGlobalRefs(
     size_t opIndex = 0;
     bool found = false;
     for (; opIndex < oldPath.size(); ++opIndex) {
-      if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == oldInnerSym) {
+      auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
+      if (oldNode.getModule() == parentMod &&
+          oldNode.getName() == oldInnerSym) {
         found = true;
         break;
       }
@@ -1005,7 +1008,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
       Operation *newOp = b.insert(op.clone(map));
       newOps.push_back(newOp);
       setEntityName(newOp, oldInst.getName() + "." + ::getOpName(&op));
-      bubbleUpGlobalRefs(newOp, oldInst.getNameAttr(), movedRefs);
+      auto oldInstMod = oldInst.getReferencedModule();
+      assert(oldInstMod);
+      auto oldModName = oldInstMod->getAttrOfType<StringAttr>("sym_name");
+      bubbleUpGlobalRefs(newOp, oldModName, oldInst.getNameAttr(), movedRefs);
     }
 
     // Remove the hoisted global refs from new instance.
