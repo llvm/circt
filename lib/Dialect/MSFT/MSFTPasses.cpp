@@ -765,7 +765,7 @@ void PartitionPass::bubbleUpGlobalRefs(
     bool found = false;
     for (; opIndex < oldPath.size(); ++opIndex) {
       if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == oldInnerSym) {
-	found = true;
+        found = true;
         break;
       }
     }
@@ -828,7 +828,7 @@ void PartitionPass::pushDownGlobalRefs(
     bool found = false;
     for (; opIndex < oldPath.size(); ++opIndex) {
       if (oldPath[opIndex].cast<hw::InnerRefAttr>().getName() == innerSym) {
-	found = true;
+        found = true;
         break;
       }
     }
