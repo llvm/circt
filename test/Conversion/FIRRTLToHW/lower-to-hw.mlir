@@ -1238,6 +1238,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in clockIn: !firrtl.clock sym @extClockInSym,
     out clockOut: !firrtl.clock sym @extClockOutSym
   )
+  attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
   // CHECK-LABEL: hw.module @InnerNames
   // CHECK-SAME:  (
