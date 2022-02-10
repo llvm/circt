@@ -1225,6 +1225,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // CHECK-LABEL: hw.module.extern @chkcoverAnno(%clock: i1)
+  // CHECK-SAME: attributes {firrtl.extract.cover.extra}
 
   // CHECK-LABEL: hw.module.extern @InnerNamesExt
   // CHECK-SAME:  (
