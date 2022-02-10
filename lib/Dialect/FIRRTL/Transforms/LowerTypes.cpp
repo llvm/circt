@@ -518,7 +518,7 @@ bool TypeLoweringVisitor::lowerProducer(
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
 
-  if (!peelType(srcType, fieldTypes, preserveAggregate))
+  if (!peelType(srcType, fieldTypes, false))
     return false;
 
   SmallVector<Value> lowered;
