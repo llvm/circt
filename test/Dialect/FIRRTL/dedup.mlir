@@ -405,7 +405,11 @@ firrtl.circuit "NoEmptyAnnos" {
 // Don't deduplicate modules with NoDedup.
 // CHECK-LABEL: firrtl.circuit "NoDedup"
 firrtl.circuit "NoDedup" {
-  firrtl.module @Simple() { }
+  firrtl.module @Simple0() { }
+  firrtl.module @Simple1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
   // CHECK: firrtl.module @NoDedup 
-  firrtl.module @NoDedup() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  firrtl.module @NoDedup() {
+    firrtl.instance simple0 @Simple0()
+    firrtl.instance simple1 @Simple1()
+  }
 }

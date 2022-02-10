@@ -35,14 +35,10 @@ using hw::InnerRefAttr;
 using NLAMap = DenseMap<Attribute, std::vector<NonLocalAnchor>>;
 
 NLAMap createNLAMap(CircuitOp circuit) {
-  DenseMap<Attribute, std::vector<NonLocalAnchor>> nlaMap;
+  NLAMap nlaMap;
   for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
-    for (auto element : nla.namepath()) {
-      if (auto moduleRef = element.dyn_cast<FlatSymbolRefAttr>())
-        nlaMap[moduleRef.getAttr()].push_back(nla);
-      else
-        nlaMap[element.cast<InnerRefAttr>().getModule()].push_back(nla);
-    }
+    for (size_t i = 0, e = nla.namepath().size(); i != e; ++i)
+      nlaMap[nla.modPart(i)].push_back(nla);
   }
   return nlaMap;
 }
@@ -101,7 +97,7 @@ private:
     sha.update(ArrayRef(addr, sizeof pointer));
   }
 
-  void update(unsigned value) {
+  void update(size_t value) {
     auto *addr = reinterpret_cast<const uint8_t *>(&value);
     sha.update(ArrayRef(addr, sizeof value));
   }
@@ -201,6 +197,9 @@ private:
 //===----------------------------------------------------------------------===//
 
 struct Deduper {
+
+  using RenameMap = DenseMap<StringAttr, StringAttr>;
+
   Deduper(InstanceGraph &instanceGraph, SymbolTable &symbolTable,
           NLAMap &nlaMap, CircuitOp circuit)
       : context(circuit->getContext()), instanceGraph(instanceGraph),
@@ -215,7 +214,7 @@ struct Deduper {
   void dedup(FModuleLike toModule, FModuleLike fromModule) {
     // A map of operation (e.g. wires, nodes) names which are changed, which is
     // used to update NLAs that reference the "fromModule".
-    DenseMap<StringAttr, StringAttr> renameMap;
+    RenameMap renameMap;
 
     // Merge the two modules.
     mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
@@ -235,8 +234,15 @@ struct Deduper {
 
   /// Record the usages of any NLA's in this module, so that we may update the
   /// annotation if the parent module is deduped with another module.
-  void record(Operation *module) {
+  void record(FModuleLike module) {
+    // Record any annotations on the module.
     recordAnnotations(module);
+    // Record port annotations.
+    for (auto pair : llvm::enumerate(module.getPortAnnotations()))
+      for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
+        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+          targetMap[nlaRef.getAttr()] = PortAnnoTarget(module, pair.index());
+    // Record any annotations in the module body.
     module->walk([&](Operation *op) { recordAnnotations(op); });
   }
 
@@ -259,23 +265,16 @@ private:
       }
     }
 
-    auto portAnnotations = op->getAttrOfType<ArrayAttr>("portAnnotations");
-    if (!portAnnotations)
-      return;
-    auto module = dyn_cast<FModuleOp>(op);
+    // Record port annotations if this is a mem operation.
     auto mem = dyn_cast<MemOp>(op);
-    for (auto pair : llvm::enumerate(portAnnotations))
+    if (!mem)
+      return;
+    // Breadcrumbs don't appear on port annotations, so we can skip the
+    // class check that we have above.
+    for (auto pair : llvm::enumerate(mem.portAnnotations()))
       for (auto anno : AnnotationSet(pair.value().cast<ArrayAttr>()))
-        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-          // Breadcrumbs don't appear on port annotations, so we can skip the
-          // class check that we have above.
-          if (module)
-            targetMap[nlaRef.getAttr()] = PortAnnoTarget(module, pair.index());
-          else if (mem)
-            targetMap[nlaRef.getAttr()] = PortAnnoTarget(mem, pair.index());
-          else
-            llvm_unreachable("unknown operaiton with ports");
-        }
+        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+          targetMap[nlaRef.getAttr()] = PortAnnoTarget(mem, pair.index());
   }
 
   /// This fixes up connects when the field names of a bundle type changes.  It
@@ -297,12 +296,12 @@ private:
     for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
       auto dstField = builder.create<SubfieldOp>(dst, i);
       auto srcField = builder.create<SubfieldOp>(src, i);
-      if (!dstBundle.getElement(i).isFlip)
-        fixupConnect(builder, dstField, dstBundle.getElementType(i), srcField,
-                     srcBundle.getElementType(i));
-      else
-        fixupConnect(builder, srcField, srcBundle.getElementType(i), dstField,
-                     dstBundle.getElementType(i));
+      if (dstBundle.getElement(i).isFlip) {
+        std::swap(srcBundle, dstBundle);
+        std::swap(srcField, dstField);
+      }
+      fixupConnect(builder, dstField, dstBundle.getElementType(i), srcField,
+                   srcBundle.getElementType(i));
     }
   }
 
@@ -338,7 +337,7 @@ private:
         // trying to avoid creating subfield operations when no field ultimately
         // matches.
         Value dstValue;
-        auto dstLazy = [&](ImplicitLocOpBuilder &builder) {
+        LazyValue dstLazy = [&](ImplicitLocOpBuilder &builder) -> Value {
           if (!dstValue)
             dstValue = builder.create<SubfieldOp>(dst(builder), dstIndex);
           return dstValue;
@@ -346,19 +345,20 @@ private:
         auto dstNewElement = dstNewBundle.getElementType(dstIndex);
         auto dstOldElement = dstOldBundle.getElementType(dstIndex);
         Value srcValue;
-        auto srcLazy = [&](ImplicitLocOpBuilder &builder) {
+        LazyValue srcLazy = [&](ImplicitLocOpBuilder &builder) -> Value {
           if (!srcValue)
             srcValue = builder.create<SubfieldOp>(src(builder), srcIndex);
           return srcValue;
         };
         auto srcNewElement = srcNewBundle.getElementType(srcIndex);
         auto srcOldElement = srcOldBundle.getElementType(srcIndex);
-        if (!dstField.isFlip)
-          fixupPartialConnect(builder, dstLazy, dstNewElement, dstOldElement,
-                              srcLazy, srcNewElement, srcOldElement);
-        else
-          fixupPartialConnect(builder, srcLazy, srcNewElement, srcOldElement,
-                              dstLazy, dstNewElement, dstOldElement);
+        if (dstField.isFlip) {
+          std::swap(srcLazy, dstLazy);
+          std::swap(srcNewElement, dstNewElement);
+          std::swap(srcOldElement, dstOldElement);
+        }
+        fixupPartialConnect(builder, dstLazy, dstNewElement, dstOldElement,
+                            srcLazy, srcNewElement, srcOldElement);
       }
       return;
     }
@@ -387,7 +387,9 @@ private:
           auto result = subfield.getResult();
           workList.emplace_back(result, result.getType());
           subfield.getResult().setType(newResultType);
-        } else if (auto partial = dyn_cast<PartialConnectOp>(op)) {
+          continue;
+        }
+        if (auto partial = dyn_cast<PartialConnectOp>(op)) {
           // Rewrite the partial connect to connect the same elements.
           auto dstOldType = partial.dest().getType();
           auto dstNewType = dstOldType;
@@ -404,7 +406,9 @@ private:
               dstOldType, [&](auto) { return partial.src(); }, srcNewType,
               srcOldType);
           partial->erase();
-        } else if (auto connect = dyn_cast<ConnectOp>(op)) {
+          continue;
+        }
+        if (auto connect = dyn_cast<ConnectOp>(op)) {
           // Rewrite the connect to connect all values.
           auto dst = connect.dest();
           auto src = connect.src();
@@ -509,15 +513,14 @@ private:
     return nlas;
   }
 
-  /// Look up the instantiations of the this module and create an NLA for each
+  /// Look up the instantiations of this module and create an NLA for each
   /// one, appending the baseNamepath to each NLA. This is used to add more
   /// context to an already existing NLA.
   SmallVector<FlatSymbolRefAttr> createNLAs(FModuleLike toModule, AnnoTarget to,
                                             FModuleLike fromModule,
                                             ArrayRef<Attribute> baseNamepath) {
-    SmallVector<Attribute> namepath;
     // Push an empty placeholder.
-    namepath.push_back(nullptr);
+    SmallVector<Attribute> namepath = {nullptr};
     namepath.append(baseNamepath.begin(), baseNamepath.end());
     return createNLAsImpl(toModule.moduleNameAttr(), to, fromModule, namepath);
   }
@@ -529,9 +532,8 @@ private:
                                             StringAttr toModuleName,
                                             AnnoTarget to,
                                             FModuleLike fromModule) {
-    SmallVector<Attribute, 2> namepath;
     // Push an empty placeholder.
-    namepath.push_back(nullptr);
+    SmallVector<Attribute, 2> namepath = {nullptr};
     namepath.push_back(to.getNLAReference(getNamespace(toModule)));
     return createNLAsImpl(toModuleName, to, fromModule, namepath);
   }
@@ -559,7 +561,7 @@ private:
                          NonLocalAnchor nla) {
     auto fromRef = FlatSymbolRefAttr::get(fromName);
     SmallVector<Attribute> namepath;
-    for (auto element : nla.namepath().getValue()) {
+    for (auto element : nla.namepath()) {
       if (auto innerRef = element.dyn_cast<InnerRefAttr>()) {
         if (innerRef.getModule() == fromName) {
           auto to = renameMap[innerRef.getName()];
@@ -578,7 +580,7 @@ private:
   }
 
   /// This erases the NLA op, all breadcrumb trails, and removes the NLA from
-  /// every module's NLA map, but it does not delete it the NLA reference from
+  /// every module's NLA map, but it does not delete the NLA reference from
   /// the target operation's annotations.
   void eraseNLA(NonLocalAnchor nla) {
     auto nlaRef = FlatSymbolRefAttr::get(nla.getNameAttr());
@@ -605,25 +607,15 @@ private:
       instAnnos.applyToOperation(inst);
     }
     // Erase the NLA from the leaf module's nlaMap.
-    auto back = namepath.back();
-    if (auto ref = back.dyn_cast<InnerRefAttr>())
-      llvm::erase_value(nlaMap[ref.getModule()], nla);
-    else
-      llvm::erase_value(nlaMap[back.cast<FlatSymbolRefAttr>().getAttr()], nla);
+    llvm::erase_value(nlaMap[nla.leafMod()], nla);
     targetMap.erase(nla.getNameAttr());
     nla->erase();
   }
 
-  /// Add additional context to a single annotation.
-  void addAnnotationContext(DenseMap<StringAttr, StringAttr> &renameMap,
-                            FModuleOp toModule, FModuleOp fromModule,
-                            SmallVectorImpl<Attribute> anno,
-                            ArrayRef<Attribute> baseNamepath) {}
-
   /// Process all NLAs referencing the "from" module to point to the "to"
   /// module. This is used after merging two modules together.
-  void addAnnotationContext(DenseMap<StringAttr, StringAttr> &renameMap,
-                            FModuleOp toModule, FModuleOp fromModule) {
+  void addAnnotationContext(RenameMap &renameMap, FModuleOp toModule,
+                            FModuleOp fromModule) {
     auto toName = toModule.getNameAttr();
     auto fromName = fromModule.getNameAttr();
     // Create a copy of the current NLAs. We will be pushing and removing
@@ -635,7 +627,7 @@ private:
         renameModuleInNLA(renameMap, toName, fromName, nla);
       auto elements = nla.namepath().getValue();
       // If we don't need to add more context, we're done here.
-      if (elements[0].cast<InnerRefAttr>().getModule() != toName)
+      if (nla.root() != toName)
         continue;
       // We need to clone the annotation for each new NLA.
       auto target = targetMap[nla.sym_nameAttr()];
@@ -670,8 +662,8 @@ private:
   /// Process all the NLAs that the two modules participate in, replacing
   /// references to the "from" module with references to the "to" module, and
   /// adding more context if necessary.
-  void rewriteModuleNLAs(DenseMap<StringAttr, StringAttr> &renameMap,
-                         FModuleOp toModule, FModuleOp fromModule) {
+  void rewriteModuleNLAs(RenameMap &renameMap, FModuleOp toModule,
+                         FModuleOp fromModule) {
     addAnnotationContext(renameMap, toModule, toModule);
     addAnnotationContext(renameMap, toModule, fromModule);
   }
@@ -831,9 +823,9 @@ private:
   // Record the symbol name change of the operation or any of its ports when
   // merging two operations.  The renamed symbols are used to update the
   // target of any NLAs.  This will add symbols to the "to" operation if needed.
-  void recordSymRenames(DenseMap<StringAttr, StringAttr> &renameMap,
-                        FModuleLike toModule, Operation *to,
-                        FModuleLike fromModule, Operation *from) {
+  void recordSymRenames(RenameMap &renameMap, FModuleLike toModule,
+                        Operation *to, FModuleLike fromModule,
+                        Operation *from) {
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
     if (auto fromSym = from->getAttrOfType<StringAttr>("inner_sym")) {
@@ -888,9 +880,8 @@ private:
 
   /// Recursively merge two operations.
   // NOLINTNEXTLINE(misc-no-recursion)
-  void mergeOps(DenseMap<StringAttr, StringAttr> &renameMap,
-                FModuleLike toModule, Operation *to, FModuleLike fromModule,
-                Operation *from) {
+  void mergeOps(RenameMap &renameMap, FModuleLike toModule, Operation *to,
+                FModuleLike fromModule, Operation *from) {
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
@@ -906,18 +897,17 @@ private:
   }
 
   /// Recursively merge two blocks.
-  void mergeBlocks(DenseMap<StringAttr, StringAttr> &renameMap,
-                   FModuleLike toModule, Block &toBlock, FModuleLike fromModule,
-                   Block &fromBlock) {
+  void mergeBlocks(RenameMap &renameMap, FModuleLike toModule, Block &toBlock,
+                   FModuleLike fromModule, Block &fromBlock) {
     for (auto ops : llvm::zip(toBlock, fromBlock))
       mergeOps(renameMap, toModule, &std::get<0>(ops), fromModule,
                &std::get<1>(ops));
   }
 
   // Recursively merge two regions.
-  void mergeRegions(DenseMap<StringAttr, StringAttr> &renameMap,
-                    FModuleLike toModule, Region &toRegion,
-                    FModuleLike fromModule, Region &fromRegion) {
+  void mergeRegions(RenameMap &renameMap, FModuleLike toModule,
+                    Region &toRegion, FModuleLike fromModule,
+                    Region &fromRegion) {
     for (auto blocks : llvm::zip(toRegion, fromRegion))
       mergeBlocks(renameMap, toModule, std::get<0>(blocks), fromModule,
                   std::get<1>(blocks));
