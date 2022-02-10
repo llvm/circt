@@ -15,6 +15,10 @@
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "firrtl-imconstprop"
 
 using namespace circt;
 using namespace firrtl;
@@ -162,6 +166,35 @@ private:
   /// kind.  The attribute is always an IntegerAttr.
   llvm::PointerIntPair<Attribute, 3, Kind> valueAndTag;
 };
+
+raw_ostream &operator<<(raw_ostream &os, const LatticeValue &lattice) {
+  if (lattice.isInvalidValue())
+    return os << "<invalid>";
+  if (lattice.isUnknown())
+    return os << "<unknown>";
+  if (lattice.isConstant())
+    return os << "<constant: " << lattice.getConstant() << ">";
+  if (lattice.isOverdefined())
+    return os << "<overdefined>";
+
+  llvm_unreachable("Lattice must have exactly one state");
+}
+
+// Printer of a fieldRef.
+// FIXME: Move to a more appropriate place. The problem is that FieldRef
+// is defined under circt/Support but `getFieldName` is specialized
+// for FIRRTL dialect so it was not possible to put this into FieldRef
+// definition.
+raw_ostream &operator<<(raw_ostream &os, const FieldRef &fieldRef) {
+  // If fieldRef points at a declaration, then we can use that name.
+  auto fieldName = circt::firrtl::getFieldName(fieldRef);
+  if (!fieldName.empty())
+    return os << fieldName;
+
+  return os << "FieldRef<" << fieldRef.getValue()
+            << ", fieldID=" << fieldRef.getFieldID() << ">";
+}
+
 } // end anonymous namespace
 
 namespace {
@@ -201,12 +234,20 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(FieldRef value, LatticeValue &valueEntry,
                          LatticeValue source) {
+    LLVM_DEBUG(llvm::dbgs() << "[IMCP][MergeLattice] " << value << " current: "
+                            << valueEntry << " source: " << source << "\n";);
     if (!source.isOverdefined() &&
         (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
-         hasDontTouch(value.getValue())))
+         hasDontTouch(value.getValue()))) {
+      LLVM_DEBUG(llvm::dbgs() << "value has dontTouch\n";);
       source = LatticeValue::getOverdefined();
+    }
+
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value.getValue());
+
+    LLVM_DEBUG(llvm::dbgs() << "[IMCP][MergeLattice] " << value << " becomes "
+                            << valueEntry << "\n";);
   }
 
   void mergeLatticeValue(FieldRef value, LatticeValue source) {
@@ -247,8 +288,12 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
         (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
          hasDontTouch(value.getValue())))
       source = LatticeValue::getOverdefined();
+
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
+    LLVM_DEBUG(llvm::dbgs() << "[IMCP][SetLattice] " << value << " current: "
+                         << valueEntry << " source: " << source << "\n";);
+
     if (valueEntry != source) {
       changedLatticeValueWorklist.push_back(value.getValue());
       valueEntry = source;
@@ -279,6 +324,10 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitSubfield(SubfieldOp subfield);
   void visitSubindex(SubindexOp subfield);
   void visitOperation(Operation *op);
+
+  void visitSubfieldInv(SubfieldOp subfield, LatticeValue val, uint32_t fieldIdx);
+  void visitSubindexInv(SubindexOp subindex, LatticeValue val, uint32_t fieldIdx);
+
 
 private:
   /// This is the current instance graph for the Circuit.
@@ -423,14 +472,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 }
 
 void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
-  // If the wire/reg has a non-ground type, then it is too complex for us to
-  // handle, mark it as overdefined.
-  // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
-  if (!resultValue.getType().cast<FIRRTLType>().getPassiveType().isGround())
-    return markOverdefined(resultValue);
-
-  // Otherwise, this starts out as InvalidValue and is upgraded by connects.
   mergeLatticeValue(resultValue, InvalidValueAttr::get(resultValue.getType()));
 }
 
@@ -570,6 +612,13 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
       return;
   }
 
+  // Drive backwards through aggregates
+  if (auto subfield = dest.getDefiningOp<SubfieldOp>())
+    return visitSubfield(subfield);
+  if (auto subindex = dest.getDefiningOp<SubindexOp>())
+    return visitSubindex(subindex);
+
+
   connect.emitError("connect unhandled by IMConstProp")
           .attachNote(connect.dest().getLoc())
       << "connect destination is here";
@@ -585,10 +634,30 @@ void IMConstPropPass::visitSubfield(SubfieldOp subfield) {
   mergeLatticeValue(FieldRef(subfield.result(),0), FieldRef(subfield.input(), field));
 }
 
+void IMConstPropPass::visitSubfieldInv(SubfieldOp subfield, LatticeValue val, uint32_t fieldIdx) {
+  auto field = subfield.fieldIndex();
+    if (auto parent = subfield.input().getDefiningOp<SubfieldOp>())
+      visitSubfieldInv(parent, val, fieldIdx);
+    else if (auto parent = subfield.input().getDefiningOp<SubindexOp>())
+      visitSubindexInv(parent, val, fieldIdx);
+}
+
 //Subindex can be lhs or rhs, so do a bidirectional lattice merge
 void IMConstPropPass::visitSubindex(SubindexOp subindex) {
   auto field = subindex.index();
   mergeLatticeValue(FieldRef(subindex.result(),0), FieldRef(subindex.input(), field));
+}
+
+void IMConstPropPass::visitSubindexInv(SubindexOp subindex, LatticeValue val, uint32_t fieldIdx) {
+  auto field = subindex.index();
+    if (auto parent = subindex.input().getDefiningOp<SubfieldOp>())
+      visitSubfieldInv(parent, val, fieldIdx);
+    else if (auto parent = subindex.input().getDefiningOp<SubindexOp>())
+      visitSubindexInv(parent, val, fieldIdx);
+}
+
+void IMConstPropPAss::visitOperationInv(Operation* op) {
+  
 }
 
 /// This method is invoked when an operand of the specified op changes its
@@ -626,7 +695,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
   SmallVector<Attribute, 8> operandConstants;
   operandConstants.reserve(op->getNumOperands());
   for (Value operand : op->getOperands()) {
-    auto &operandLattice = latticeValues[operand];
+    auto &operandLattice = latticeValues[FieldRef(operand,0)];
 
     // If the operand is an unknown value, then we generally don't want to
     // process it - we want to wait until the value is resolved to by the SCCP
@@ -671,13 +740,13 @@ void IMConstPropPass::visitOperation(Operation *op) {
       else // Treat non integer constants as overdefined.
         resultLattice = LatticeValue::getOverdefined();
     } else { // Folding to an operand results in its value.
-      resultLattice = latticeValues[foldResult.get<Value>()];
+      resultLattice = latticeValues[FieldRef(foldResult.get<Value>(),0)];
     }
 
     // We do not "merge" the lattice value in, we set it.  This is because the
     // fold functions can produce different values over time, e.g. in the
     // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(op->getResult(i), resultLattice);
+    setLatticeValue(FieldRef(op->getResult(i),0), resultLattice);
   }
 }
 
@@ -692,7 +761,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   // If the lattice value for the specified value is a constant or
   // InvalidValue, update it and return true.  Otherwise return false.
   auto replaceValueIfPossible = [&](Value value) -> bool {
-    auto it = latticeValues.find(value);
+    auto it = latticeValues.find(FieldRef(value,0));
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
       return false;
