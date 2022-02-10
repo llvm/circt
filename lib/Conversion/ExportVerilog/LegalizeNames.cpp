@@ -56,17 +56,9 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
   if (it != renamedFieldNames.end())
     return it->second;
 
-  // If a field name is not verilog name or used already, we have to rename it.
-  bool hasToBeRenamed = !sv::isNameValid(fieldName.getValue()) ||
-                        usedFieldNames.count(fieldName.getValue());
-
-  if (!hasToBeRenamed) {
-    setRenamedFieldName(fieldName, fieldName);
-    return fieldName;
-  }
-
-  StringRef newFieldName = sv::legalizeName(
-      fieldName.getValue(), usedFieldNames, nextGeneratedNameID);
+  // Add a prefix "field_" as a Workaround to rename field names consitenly.
+  SmallString<16> newFieldName("_");
+  newFieldName +=  fieldName.getValue();
 
   auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);
 

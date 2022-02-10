@@ -626,7 +626,7 @@ void GrandCentralTapsPass::runOnOperation() {
                 // might become invalid. We can use an inner name ref to encode
                 // a reference to a subfield.
 
-                hname += "." + bundle.getElement(index).name.getValue().str();
+                hname += "._" + bundle.getElement(index).name.getValue().str();
               })
               .Default([&](auto op) {
                 llvm_unreachable(

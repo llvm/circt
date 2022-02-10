@@ -2671,7 +2671,7 @@ void FIRRTLLowering::initializeRegister(Value reg) {
           })
           .Case<hw::StructType>([&](hw::StructType s) {
             for (auto elem : s.getElements())
-              recurse(reg, elem.type, accessor + "." + elem.name.getValue());
+              recurse(reg, elem.type, accessor + "._" + elem.name.getValue());
           })
           .Case<hw::TypeAliasType>([&](hw::TypeAliasType s) {
             recurse(reg, s.getInnerType(), accessor);

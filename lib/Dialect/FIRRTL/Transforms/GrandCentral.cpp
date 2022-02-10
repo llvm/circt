@@ -807,7 +807,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 // be renamed at ExportVerilog so the path constructed here
                 // might become invalid. We can use an inner name ref to encode
                 // a reference to a subfield.
-                path.append("." + Twine(bundle.getElement(index).name));
+                path.append("._" + Twine(bundle.getElement(index).name));
               })
               .Default([&](auto op) {
                 llvm_unreachable(
