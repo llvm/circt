@@ -75,6 +75,11 @@ bool type_isa(Type type) {
   return false;
 }
 
+template <typename First, typename Second, typename... Rest>
+bool type_isa(Type Val) { // NOLINT(readability-identifier-naming)
+  return type_isa<First>(Val) || type_isa<Second, Rest...>(Val);
+}
+
 // type_isa for a nullable argument.
 template <typename BaseTy>
 bool type_isa_and_nonnull(Type type) { // NOLINT(readability-identifier-naming)

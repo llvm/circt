@@ -25,7 +25,8 @@ namespace circt {
 
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false,
-                          bool nonConstAsyncResetValueIsError = false);
+                          bool nonConstAsyncResetValueIsError = false,
+                          bool createTypeDeclarations = false);
 
 } // namespace circt
 
