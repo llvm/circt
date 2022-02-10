@@ -870,6 +870,13 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   auto newModule = builder.create<hw::HWModuleExternOp>(
       oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
+
+  bool hasOutputPort =
+      llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
+  if (!hasOutputPort &&
+      AnnotationSet::removeAnnotations(oldModule, verifBBClass))
+    newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
