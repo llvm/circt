@@ -177,7 +177,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
                               << "to" << sourceParent << "\n";);
       // Erase connections except for subConnections[index] since it must be
       // erased at the top-level loop.
-      for (auto idx : llvm::seq(0ul, operands.size()))
+      for (auto idx : llvm::seq(0u, static_cast<unsigned>(operands.size())))
         if (idx != index)
           subConnections[idx].erase();
       return sourceParent;
