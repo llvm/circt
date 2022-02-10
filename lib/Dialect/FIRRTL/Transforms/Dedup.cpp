@@ -308,7 +308,7 @@ private:
   /// This fixes up a partial connect when the field names of a bundle type
   /// changes.  It finds all the fields which were previously connected and
   /// replaces them with new partial connects.
-  using LazyValue = llvm::function_ref<Value(ImplicitLocOpBuilder &)>;
+  using LazyValue = std::function<Value(ImplicitLocOpBuilder &)>;
   // NOLINTNEXTLINE(misc-no-recursion)
   void fixupPartialConnect(ImplicitLocOpBuilder &builder, LazyValue dst,
                            Type dstNewType, Type dstOldType, LazyValue src,
@@ -946,6 +946,7 @@ class DedupPass : public DedupBase<DedupPass> {
   void runOnOperation() override {
     auto *context = &getContext();
     auto circuit = getOperation();
+    circuit->dump();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     SymbolTable symbolTable(circuit);
     NLAMap nlaMap = createNLAMap(circuit);
