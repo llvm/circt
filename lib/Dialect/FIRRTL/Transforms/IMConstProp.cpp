@@ -172,13 +172,13 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   bool isOverdefined(Value value) const {
     auto it = latticeValues.find(value);
-    return it != latticeValues.end() && it->second.isOverdefined();
+    return it != latticeValues.end() && it->second[0].isOverdefined();
   }
 
   /// Mark the given value as overdefined. This means that we cannot refine a
   /// specific constant for this value.
-  void markOverdefined(Value value) {
-    auto &entry = latticeValues[value];
+  void markOverdefined(Value value, uint32_t field = 0) {
+    auto &entry = getLatticeValues(value, field);
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
       changedLatticeValueWorklist.push_back(value);
@@ -253,14 +253,18 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void visitConnect(ConnectOp connect);
   void visitPartialConnect(PartialConnectOp connect);
+  void visitSubfield(SubfieldOp subfield);
+  void visitSubindex(SubindexOp subfield);
   void visitOperation(Operation *op);
 
 private:
+  SmallVectorImpl<LatticeValue>& getLatticeValue();
+
   /// This is the current instance graph for the Circuit.
   InstanceGraph *instanceGraph = nullptr;
 
   /// This keeps track of the current state of each tracked value.
-  DenseMap<Value, LatticeValue> latticeValues;
+  DenseMap<Value, SmallVector<LatticeValue,1> > latticeValues;
 
   /// The set of blocks that are known to execute, or are intrinsically live.
   SmallPtrSet<Block *, 16> executableBlocks;
@@ -387,6 +391,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markRegResetOp(regReset);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
+    else if (isa<SubaccessOp>(op))
+      markOverdefined(op->getResult(0));
   }
 }
 
@@ -495,12 +501,6 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 void IMConstPropPass::visitConnect(ConnectOp connect) {
   auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
 
-  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
-  if (!destType.isGround()) {
-    connect.emitError("non-ground type connect unhandled by IMConstProp");
-    return;
-  }
-
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.src(), destType);
   if (srcValue.isUnknown())
@@ -553,6 +553,27 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
 
+// Pair-wise recursive mergine of lattice values based on field index.
+// When a node in the tree (BFS fieldID) is not constant, then we don't recurse further.
+// A summary node contains a sentinal constant if the tree below it is valid
+void IMConstPropPass::recursiveMerge(Value lhs, lhsField, Value rhs, rhsField) {
+
+}
+
+//Subfield can be lhs or rhs, so do a bidirectional lattice merge
+void IMConstPropPass::visitSubfield(SubfieldOp subfield) {
+  auto field = subfield.fieldIndex();
+  recursiveMerge(subfield.result(), 0, subfield.input(), field);
+  recursiveMerge(subfield.input(), field, subfield.result(), 0);
+}
+
+//Subindex can be lhs or rhs, so do a bidirectional lattice merge
+void IMConstPropPass::visitSubindex(SubindexOp subindex) {
+  auto field = subfield.fieldIndex();
+  recursiveMerge(subfield.result(), 0, subfield.input(), field);
+  recursiveMerge(subfield.input(), field, subfield.result(), 0);
+}
+
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -565,6 +586,10 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitConnect(connectOp);
   if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
     return visitPartialConnect(partialConnectOp);
+  if (auto subfieldOp = dyn_cast<SubfieldOp>(op))
+    return visitSubfield(subfieldOp);
+  if (auto subindexOp = dyn_cast<SubindexOp>(op))
+    return visitSubindex(subindexOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return markRegResetOp(regResetOp);
 
