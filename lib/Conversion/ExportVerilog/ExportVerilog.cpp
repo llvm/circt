@@ -2774,7 +2774,10 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
+  std::string scopeName = "__TYPE_SCOPE_" + op.sym_name().upper();
+  os << "`ifndef " << scopeName << "\n";
   emitStatementBlock(*op.getBodyBlock());
+  os << "`define " << scopeName << "\n`endif\n";
   return success();
 }
 
