@@ -178,6 +178,9 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     auto it = latticeValues.find(value);
     return it != latticeValues.end() && it->second.isOverdefined();
   }
+  bool isOverdefined(Value value) const {
+    return isOverdefined(FieldRef(value,0));
+  }
 
   /// Mark the given fieldRef as overdefined. This means that we cannot refine a
   /// specific constant for this fieldRef.
@@ -185,8 +188,12 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push_back(value.getValue());
     }
+  }
+
+  void markOverdefined(Value value) {
+    markOverdefined(FieldRef(value, 0));
   }
 
   /// Merge information from the 'from' lattice value into value.  If it
@@ -196,17 +203,23 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
                          LatticeValue source) {
     if (!source.isOverdefined() &&
         (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
-         hasDontTouch(value)))
+         hasDontTouch(value.getValue())))
       source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push_back(value.getValue());
   }
+
   void mergeLatticeValue(FieldRef value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
     if (source.isUnknown())
       return;
     mergeLatticeValue(value, latticeValues[value], source);
   }
+
+  void mergeLatticeValue(Value value, LatticeValue source) {
+    mergeLatticeValue(FieldRef(value,0), source);
+  }
+  
   void mergeLatticeValue(FieldRef result, FieldRef from) {
     // If 'from' hasn't been computed yet, then it is unknown, don't do
     // anything.
@@ -214,6 +227,10 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (it == latticeValues.end())
       return;
     mergeLatticeValue(result, it->second);
+  }
+
+  void mergeLatticeValue(Value result, Value from) {
+    mergeLatticeValue(FieldRef(result,0), FieldRef(from,0));
   }
 
   /// setLatticeValue - This is used when a new LatticeValue is computed for
@@ -228,12 +245,12 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
     if (!source.isOverdefined() &&
         (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
-         hasDontTouch(value)))
+         hasDontTouch(value.getValue())))
       source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
-      changedLatticeValueWorklist.push_back(value);
+      changedLatticeValueWorklist.push_back(value.getValue());
       valueEntry = source;
     }
   }
@@ -241,6 +258,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Return the lattice value for the specified fieldRef, extended to the
   /// width of the specified destType.  If allowTruncation is true, then this
   /// allows truncating the lattice value to the specified type.
+  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType,
+                                       bool allowTruncation = false);
   LatticeValue getExtendedLatticeValue(FieldRef value, FIRRTLType destType,
                                        bool allowTruncation = false);
 
@@ -335,6 +354,11 @@ void IMConstPropPass::runOnOperation() {
 LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
                                                       FIRRTLType destType,
                                                       bool allowTruncation) {
+                                                        return getExtendedLatticeValue(FieldRef(value,0), destType, allowTruncation);
+                                                      }
+LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
+                                                      FIRRTLType destType,
+                                                      bool allowTruncation) {
   // If 'value' hasn't been computed yet, then it is unknown.
   auto it = latticeValues.find(value);
   if (it == latticeValues.end())
@@ -394,7 +418,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
     else if (isa<SubaccessOp>(op))
-      markOverdefined(op->getResult(0));
+      markOverdefined(op.getResult(0));
   }
 }
 
@@ -555,25 +579,16 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
 
-// Pair-wise recursive mergine of lattice values based on field index.
-// When a node in the tree (BFS fieldID) is not constant, then we don't recurse further.
-// A summary node contains the lattice value Aggregate if the tree below it is valid.
-void IMConstPropPass::recursiveMerge(Value lhs, lhsField, Value rhs, rhsField) {
-
-}
-
 //Subfield can be lhs or rhs, so do a bidirectional lattice merge
 void IMConstPropPass::visitSubfield(SubfieldOp subfield) {
   auto field = subfield.fieldIndex();
-  recursiveMerge(subfield.result(), 0, subfield.input(), field);
-  recursiveMerge(subfield.input(), field, subfield.result(), 0);
+  mergeLatticeValue(FieldRef(subfield.result(),0), FieldRef(subfield.input(), field));
 }
 
 //Subindex can be lhs or rhs, so do a bidirectional lattice merge
 void IMConstPropPass::visitSubindex(SubindexOp subindex) {
-  auto field = subfield.fieldIndex();
-  recursiveMerge(subfield.result(), 0, subfield.input(), field);
-  recursiveMerge(subfield.input(), field, subfield.result(), 0);
+  auto field = subindex.index();
+  mergeLatticeValue(FieldRef(subindex.result(),0), FieldRef(subindex.input(), field));
 }
 
 /// This method is invoked when an operand of the specified op changes its
