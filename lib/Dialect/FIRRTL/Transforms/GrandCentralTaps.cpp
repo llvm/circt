@@ -55,6 +55,11 @@ public:
 };
 } // end namespace llvm
 
+static FIRRTLType getFuncType(Operation *op, unsigned num) {
+  auto t = cast<FModuleLike>(op);
+  return t.getPortType(num);
+}
+
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
@@ -99,6 +104,8 @@ struct PortWiring {
   ArrayRef<InstancePath> prefices;
   /// The operation or module port being wire to this data tap module port.
   Target target;
+  /// The fieldID we want to connect in the port.
+  unsigned targetFieldID;
   /// An additional string suffix to append to the hierarchical name.
   SmallString<16> suffix;
   /// If set, the port should output a constant literal.
@@ -588,12 +595,43 @@ void GrandCentralTapsPass::runOnOperation() {
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
+        FIRRTLType tpe;
+
         if (port.target.getOp()) {
-          if (port.target.hasPort())
+          if (port.target.hasPort()) {
             addSymbol(
                 getInnerRefTo(port.target.getOp(), port.target.getPort()));
-          else
+            tpe = getFuncType(port.target.getOp(), port.target.getPort());
+          } else {
             addSymbol(getInnerRefTo(port.target.getOp()));
+            tpe =
+                port.target.getOp()->getResult(0).getType().cast<FIRRTLType>();
+          }
+        }
+        auto fieldID = port.targetFieldID;
+        while (fieldID) {
+          TypeSwitch<FIRRTLType>(tpe)
+              .template Case<FVectorType>([&](FVectorType vector) {
+                unsigned index = vector.getIndexForFieldID(fieldID);
+                tpe = vector.getElementType();
+                fieldID -= vector.getFieldID(index);
+                hname += "[" + std::to_string(index) + "]";
+              })
+              .template Case<BundleType>([&](BundleType bundle) {
+                unsigned index = bundle.getIndexForFieldID(fieldID);
+                tpe = bundle.getElementType(index);
+                fieldID -= bundle.getFieldID(index);
+                // FIXME: Invalid verilog names (e.g. "begin", "reg", .. ) will
+                // be renamed at ExportVerilog so the path constructed here
+                // might become invalid. We can use an inner name ref to encode
+                // a reference to a subfield.
+
+                hname += "." + bundle.getElement(index).name.getValue().str();
+              })
+              .Default([&](auto op) {
+                llvm_unreachable(
+                    "fieldID > maxFieldID case must be already handled");
+              });
         }
         if (!port.suffix.empty()) {
           hname += '.';
@@ -710,6 +748,8 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   auto targetAnnoIt = annos.find(key);
   auto targetAnno =
       targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
+
+  wiring.targetFieldID = targetAnno.getFieldID();
 
   // Handle data taps on signals and ports.
   if (targetAnno.isClass(referenceKeyClass)) {
