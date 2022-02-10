@@ -53,6 +53,10 @@ class LatticeValue {
     /// valid lattice state, and a can move up to Constant or Overdefined.
     InvalidValue,
 
+    /// A value that indicates there is a type-based hierarchy of lattice values below this.
+    /// Transitions to overdefined.
+    Aggregate,
+
     /// A value that is known to be a constant. This state may be changed to
     /// overdefined.
     Constant,
@@ -156,7 +160,7 @@ public:
 private:
   /// The attribute value if this is a constant and the tag for the element
   /// kind.  The attribute is always an IntegerAttr.
-  llvm::PointerIntPair<Attribute, 2, Kind> valueAndTag;
+  llvm::PointerIntPair<Attribute, 3, Kind> valueAndTag;
 };
 } // end anonymous namespace
 
@@ -555,7 +559,7 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
 
 // Pair-wise recursive mergine of lattice values based on field index.
 // When a node in the tree (BFS fieldID) is not constant, then we don't recurse further.
-// A summary node contains a sentinal constant if the tree below it is valid
+// A summary node contains the lattice value Aggregate if the tree below it is valid.
 void IMConstPropPass::recursiveMerge(Value lhs, lhsField, Value rhs, rhsField) {
 
 }
