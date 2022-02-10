@@ -174,15 +174,15 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     return executableBlocks.count(block);
   }
 
-  bool isOverdefined(Value value) const {
+  bool isOverdefined(FieldRef value) const {
     auto it = latticeValues.find(value);
-    return it != latticeValues.end() && it->second[0].isOverdefined();
+    return it != latticeValues.end() && it->second.isOverdefined();
   }
 
-  /// Mark the given value as overdefined. This means that we cannot refine a
-  /// specific constant for this value.
-  void markOverdefined(Value value, uint32_t field = 0) {
-    auto &entry = getLatticeValues(value, field);
+  /// Mark the given fieldRef as overdefined. This means that we cannot refine a
+  /// specific constant for this fieldRef.
+  void markOverdefined(FieldRef value) {
+    auto &entry = latticeValues[value];
     if (!entry.isOverdefined()) {
       entry.markOverdefined();
       changedLatticeValueWorklist.push_back(value);
@@ -192,7 +192,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Merge information from the 'from' lattice value into value.  If it
   /// changes, then users of the value are added to the worklist for
   /// revisitation.
-  void mergeLatticeValue(Value value, LatticeValue &valueEntry,
+  void mergeLatticeValue(FieldRef value, LatticeValue &valueEntry,
                          LatticeValue source) {
     if (!source.isOverdefined() &&
         (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
@@ -201,13 +201,13 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
   }
-  void mergeLatticeValue(Value value, LatticeValue source) {
+  void mergeLatticeValue(FieldRef value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
     if (source.isUnknown())
       return;
     mergeLatticeValue(value, latticeValues[value], source);
   }
-  void mergeLatticeValue(Value result, Value from) {
+  void mergeLatticeValue(FieldRef result, FieldRef from) {
     // If 'from' hasn't been computed yet, then it is unknown, don't do
     // anything.
     auto it = latticeValues.find(from);
@@ -221,7 +221,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// e.g. because a fold() function on an op returned a new thing.  This should
   /// not be used on operations that have multiple contributors to it, e.g.
   /// wires or ports.
-  void setLatticeValue(Value value, LatticeValue source) {
+  void setLatticeValue(FieldRef value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
     if (source.isUnknown())
       return;
@@ -238,10 +238,10 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     }
   }
 
-  /// Return the lattice value for the specified SSA value, extended to the
+  /// Return the lattice value for the specified fieldRef, extended to the
   /// width of the specified destType.  If allowTruncation is true, then this
   /// allows truncating the lattice value to the specified type.
-  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType,
+  LatticeValue getExtendedLatticeValue(FieldRef value, FIRRTLType destType,
                                        bool allowTruncation = false);
 
   /// Mark the given block as executable.
@@ -262,13 +262,11 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitOperation(Operation *op);
 
 private:
-  SmallVectorImpl<LatticeValue>& getLatticeValue();
-
   /// This is the current instance graph for the Circuit.
   InstanceGraph *instanceGraph = nullptr;
 
-  /// This keeps track of the current state of each tracked value.
-  DenseMap<Value, SmallVector<LatticeValue,1> > latticeValues;
+  /// This keeps track of the current state of each tracked fieldRef.
+  DenseMap<FieldRef, LatticeValue> latticeValues;
 
   /// The set of blocks that are known to execute, or are intrinsically live.
   SmallPtrSet<Block *, 16> executableBlocks;
