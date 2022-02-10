@@ -645,8 +645,34 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
   if (!peelType(srcType, fieldTypes,
-                isModuleAllowedToPreserveAggregate(module)))
+                isModuleAllowedToPreserveAggregate(module))) {
+    if (!srcType.isGround() && !newArgs[argIndex].annotations.empty()) {
+      auto annotations = newArgs[argIndex].annotations.getArrayAttr();
+      bool needsSym = false;
+      auto name = newArgs[argIndex].name;
+      auto sym = (name && !name.getValue().empty())
+                     ? newArgs[argIndex].name
+                     : StringAttr::get(module->getContext(), uniqueName());
+      for (auto opAttr : annotations) {
+        auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>();
+        if (!subAnno)
+          continue;
+        if (Annotation(opAttr).getClass() ==
+            "firrtl.transforms.DontTouchAnnotation") {
+          needsSym = true;
+          continue;
+        }
+        if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
+                "circt.nonlocal")) {
+          nlaNameToNewSymList.push_back({nla.getAttr(), sym});
+          needsSym = true;
+        }
+      }
+      if (needsSym)
+        newArgs[argIndex].sym = sym;
+    }
     return false;
+  }
 
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), srcType,
