@@ -20,7 +20,7 @@ module {
     sv.interface.signal @uarrayData : !hw.uarray<4xi8>
     sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
     sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
-    sv.verbatim  "//MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
+    sv.verbatim  "//MACRO({{0}}, {{1}}, {{2}} -- {{3}})"
                     {symbols = [@data, @valid, @ready, @data_in]}
   }
 

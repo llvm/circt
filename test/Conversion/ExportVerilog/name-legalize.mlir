@@ -2,7 +2,7 @@
 
 // CHECK: module namechange(
 // CHECK: input  [3:0] casex_0,
-// CHECK: output [3:0] if_1); 
+// CHECK: output [3:0] if_1);
 hw.module @namechange(%casex: i4) -> (if: i4) {
   // CHECK: assign if_1 = casex_0;
   hw.output %casex : i4
@@ -28,7 +28,7 @@ hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
   }
 
   // "wire" param getting updated should update in this instance.
-  
+
   // CHECK: module_with_bool #(
   // CHECK:  .bparam(wire_1)
   // CHECK: ) inst ();
@@ -67,7 +67,7 @@ hw.module @inout(%inout: i1) -> (output: i1) {
   hw.output %inout : i1
 }
 
-// CHECK-LABEL: module inout_inst(	
+// CHECK-LABEL: module inout_inst(
 hw.module @inout_inst(%a: i1) {
   // CHECK: inout_0 foo (
   // CHECK:   .inout_0  (a),

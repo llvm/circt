@@ -184,7 +184,7 @@ circuit test_mod : %[[{"a": "a"}]]
 
 ; MLIRLOWER-LABEL: hw.module @ImplicitTrunc(%inp_1: i1, %inp_2: i5) -> (out1: i3, out2: i3) {
 ; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
-; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1 
+; MLIRLOWER-NEXT:    %0 = comb.extract %inp_2 from 4 : (i5) -> i1
 ; MLIRLOWER-NEXT:    %1 = comb.concat %0, %inp_2 : i1, i5
 ; MLIRLOWER-NEXT:    %2 = comb.concat %c0_i5, %inp_1 : i5, i1
 ; MLIRLOWER-NEXT:    %3 = comb.shl %1, %2 : i6
