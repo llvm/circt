@@ -408,16 +408,12 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   // 6. The last element of the namepath, can be an InnerRefAttr on either a
   // module port or a declaration inside the module.
   // 7. The last element of the namepath can also be a module symbol.
-  auto hasNonLocal = [&](AnnotationSet &annos, StringRef nlaName) {
-    bool instFound = false;
-    for (auto anno : annos) {
-      if (auto nlaRef = anno.getMember("circt.nonlocal")) {
-        instFound = nlaRef.cast<FlatSymbolRefAttr>().getAttr() == nlaName;
-        if (instFound)
-          break;
-      }
-    }
-    return instFound;
+  auto hasNonLocal = [&](const AnnotationSet &annos, StringAttr nlaName) {
+    for (auto anno : annos)
+      if (auto nlaRef = anno.getMember("circt.nonlocal"))
+        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == nlaName)
+          return true;
+    return false;
   };
   for (NonLocalAnchor nla : nlaList) {
     auto namepath = nla.namepath();
@@ -448,8 +444,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
                << " does not contain any instance with symbol: "
                << innerRef.getName();
       expectedModuleName = instOp.moduleNameAttr().getAttr();
-      AnnotationSet annos(instOp);
-      bool instFound = hasNonLocal(annos, nlaName);
+      bool instFound = hasNonLocal(AnnotationSet(instOp), nlaName);
       if (!instFound) {
         auto diag = nla.emitOpError()
                     << " instance with symbol: " << innerRef
@@ -472,12 +467,16 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
                << expectedModuleName
                << " instead found: " << innerRef.getModule();
 
-      if (auto mod = dyn_cast_or_null<FModuleLike>(rec->op)) {
-        auto annos = AnnotationSet::forPort(mod, rec->portIdx);
-        leafFound = hasNonLocal(annos, nlaName);
+      if (auto mod = dyn_cast<FModuleLike>(rec->op)) {
+        leafFound =
+            hasNonLocal(AnnotationSet::forPort(mod, rec->portIdx), nlaName);
       } else if (rec->op) {
-        AnnotationSet annos(rec->op);
-        leafFound = hasNonLocal(annos, nlaName);
+        leafFound = hasNonLocal(AnnotationSet(rec->op), nlaName);
+        if (auto mem = dyn_cast<MemOp>(rec->op)) {
+          for (unsigned i = 0, e = mem.getNumResults(); !leafFound && i < e;
+               ++i)
+            leafFound = hasNonLocal(AnnotationSet::forPort(mem, i), nlaName);
+        }
       }
       if (!leafFound) {
         auto diag = nla.emitOpError()
