@@ -1485,7 +1485,7 @@ void LowerTypesPass::runOnOperation() {
   // have the "circt.nonlocal" annotation on the corresponding leaf, and delete
   // the NLA from the circuit.
 
-  struct validInstancesRecord {
+  struct ValidInstancesRecord {
     // NLA is invalid, if the "nonlocal" annotation is missing from the leaf.
     // Assumption: InstanceOp cannot be the leaf.
     bool isValid = false;
@@ -1493,7 +1493,7 @@ void LowerTypesPass::runOnOperation() {
   };
   // A record of each NLA, its instance path and if the NLA exists on some leaf
   // op.
-  DenseMap<StringAttr, validInstancesRecord> nlaToAnchorsMap;
+  DenseMap<StringAttr, ValidInstancesRecord> nlaToAnchorsMap;
 
   // For all ops in the circt, check its annotations.
   getOperation().walk([&](Operation *op) {
@@ -1526,7 +1526,7 @@ void LowerTypesPass::runOnOperation() {
           "cannot lower: NLA dropped but use exists in VerbatimOp");
       continue;
     }
-    for (auto instOp : nlaOps.getSecond().instances)
+    for (auto *instOp : nlaOps.getSecond().instances)
       AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
         if (auto nlaRef = anno.getMember("circt.nonlocal"))
           if (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr())
