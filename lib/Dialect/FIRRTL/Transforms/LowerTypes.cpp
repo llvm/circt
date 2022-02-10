@@ -490,8 +490,6 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
       continue;
     }
-    // Otherwise, if the current field is exactly the target, degenerate
-    // the sub-annotation to a normal annotation.
     if (Annotation(opAttr).getClass() ==
         "firrtl.transforms.DontTouchAnnotation") {
       needsSym = true;
@@ -506,6 +504,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           {nla.getAttr(), StringAttr::get(ctxt, sym)});
       needsSym = true;
     }
+    // Otherwise, if the current field is exactly the target, degenerate
+    // the sub-annotation to a normal annotation.
     retval.push_back(subAnno.getAnnotations());
   }
   return ArrayAttr::get(ctxt, retval);
@@ -1466,6 +1466,42 @@ void LowerTypesPass::runOnOperation() {
     updatedPath[namepath.size() - 1] =
         hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.newSym);
     nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+  }
+  struct validInstancesRecord {
+    bool isValid = false;
+    SmallVector<Operation *> instances;
+  };
+  DenseMap<StringAttr, validInstancesRecord> nlaToAnchorsMap;
+  SmallVector<StringAttr> validNLAs;
+  getOperation().walk([&](Operation *op) {
+    bool isaInstance = isa<InstanceOp>(op);
+    for (auto anno : AnnotationSet(op))
+      if (auto nlaRef = anno.getMember("circt.nonlocal")) {
+        auto nlaName = nlaRef.cast<FlatSymbolRefAttr>().getAttr();
+        if (isaInstance)
+          nlaToAnchorsMap[nlaName].instances.push_back(op);
+        else
+          nlaToAnchorsMap[nlaName].isValid = true;
+      }
+    if (auto modLike = dyn_cast_or_null<FModuleLike>(op))
+      for (size_t port = 0, e = modLike.getNumPorts(); port < e; ++port)
+        for (auto anno : AnnotationSet::forPort(modLike, port))
+          if (auto nlaRef = anno.getMember("circt.nonlocal"))
+            nlaToAnchorsMap[nlaRef.cast<FlatSymbolRefAttr>().getAttr()]
+                .isValid = true;
+  });
+  for (auto nlaOps : nlaToAnchorsMap) {
+    if (nlaOps.getSecond().isValid)
+      continue;
+    auto nlaName = nlaOps.first;
+    for (auto instOp : nlaOps.getSecond().instances)
+      AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
+        if (auto nlaRef = anno.getMember("circt.nonlocal"))
+          if (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr())
+            return true;
+        return false;
+      });
+    nlaMap[nlaName]->erase();
   }
 }
 
