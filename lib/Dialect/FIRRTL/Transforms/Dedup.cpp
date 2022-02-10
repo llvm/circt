@@ -456,13 +456,18 @@ private:
     fromModule->erase();
   }
 
-  /// Private NLA creation method.  This function requires an attribute array
-  /// with a placeholder in the first element, where the root refence of the NLA
-  /// will be inserted. This clones the NLA for each instantiation of the
-  /// "fromModule".
-  SmallVector<FlatSymbolRefAttr>
-  createNLAsImpl(StringAttr toModuleName, AnnoTarget to, Operation *fromModule,
-                 SmallVectorImpl<Attribute> &namepath) {
+  /// Look up the instantiations of this module and create an NLA for each
+  /// one, appending the baseNamepath to each NLA. This is used to add more
+  /// context to an already existing NLA.
+  SmallVector<FlatSymbolRefAttr> createNLAs(StringAttr toModuleName,
+                                            AnnoTarget to,
+                                            Operation *fromModule,
+                                            ArrayRef<Attribute> baseNamepath) {
+    // Create an attribute array with a placeholder in the first element, where
+    // the root refence of the NLA will be inserted.
+    SmallVector<Attribute> namepath = {nullptr};
+    namepath.append(baseNamepath.begin(), baseNamepath.end());
+
     auto loc = fromModule->getLoc();
     SmallVector<FlatSymbolRefAttr> nlas;
     for (auto *instanceRecord : instanceGraph[fromModule]->uses()) {
@@ -513,18 +518,6 @@ private:
     return nlas;
   }
 
-  /// Look up the instantiations of this module and create an NLA for each
-  /// one, appending the baseNamepath to each NLA. This is used to add more
-  /// context to an already existing NLA.
-  SmallVector<FlatSymbolRefAttr> createNLAs(FModuleLike toModule, AnnoTarget to,
-                                            FModuleLike fromModule,
-                                            ArrayRef<Attribute> baseNamepath) {
-    // Push an empty placeholder.
-    SmallVector<Attribute> namepath = {nullptr};
-    namepath.append(baseNamepath.begin(), baseNamepath.end());
-    return createNLAsImpl(toModule.moduleNameAttr(), to, fromModule, namepath);
-  }
-
   /// Look up the instantiations of this module and create an NLA for each one.
   /// This returns an array of symbol references which can be used to reference
   /// the NLAs.
@@ -532,10 +525,8 @@ private:
                                             StringAttr toModuleName,
                                             AnnoTarget to,
                                             FModuleLike fromModule) {
-    // Push an empty placeholder.
-    SmallVector<Attribute, 2> namepath = {nullptr};
-    namepath.push_back(to.getNLAReference(getNamespace(toModule)));
-    return createNLAsImpl(toModuleName, to, fromModule, namepath);
+    return createNLAs(toModuleName, to, fromModule,
+                      to.getNLAReference(getNamespace(toModule)));
   }
 
   /// Clone the annotation for each NLA in a list.
@@ -635,7 +626,7 @@ private:
                        "be reachable from the top module.");
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
       SmallVector<Annotation> newAnnotations;
-      auto nlas = createNLAs(toModule, target, fromModule, namepath);
+      auto nlas = createNLAs(toName, target, fromModule, namepath);
       for (auto anno : target.getAnnotations()) {
         // Find the non-local field of the annotation.
         auto [it, found] = mlir::impl::findAttrSorted(anno.begin(), anno.end(),
