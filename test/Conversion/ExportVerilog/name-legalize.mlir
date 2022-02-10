@@ -109,9 +109,9 @@ hw.module @TestDupInstanceName(%a: i1) {
 
 // CHECK-LABEL: module TestEmptyInstanceName(
 hw.module @TestEmptyInstanceName(%a: i1) {
-  // CHECK: B _T (
+  // CHECK: B _GEN (
   hw.instance "" @B(a: %a: i1) -> ()
-  // CHECK: B _T_0 (
+  // CHECK: B _GEN_0 (
   hw.instance "" @B(a: %a: i1) -> ()
 }
 
@@ -130,7 +130,7 @@ hw.module @TestInstanceNameValueConflict(%a: i1) {
 // https://github.com/llvm/circt/issues/855
 // CHECK-LABEL: module nameless_reg(
 hw.module @nameless_reg(%a: i1) -> () {
-  // CHECK: reg [3:0] _T;
+  // CHECK: reg [3:0] _GEN;
   %661 = sv.reg : !hw.inout<i4>
 }
 

@@ -483,13 +483,13 @@ hw.module @TestZeroStructInstance(%structZero: !hw.struct<>, %structZeroNest: !h
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 hw.module @cyclic(%a: i1) -> (b: i1) {
-  // CHECK: wire _T;
+  // CHECK: wire _GEN;
 
-  // CHECK: wire _T_0 = _T + _T;
+  // CHECK: wire _GEN_0 = _GEN + _GEN;
   %1 = comb.add %0, %0 : i1
-  // CHECK: assign _T = a << a;
+  // CHECK: assign _GEN = a << a;
   %0 = comb.shl %a, %a : i1
-  // CHECK: assign b = _T_0 - _T_0;
+  // CHECK: assign b = _GEN_0 - _GEN_0;
   %2 = comb.sub %1, %1 : i1
   hw.output %2 : i1
 }
@@ -581,19 +581,19 @@ hw.module @ArrayLHS(%clock: i1) {
 
 // CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
 hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
-  // CHECK: wire _T;
+  // CHECK: wire _GEN;
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %0 = comb.and %1, %x : i1
   // CHECK: always_ff @(posedge clock) begin
   sv.alwaysff(posedge %clock) {
-    // CHECK: if (_T & x) begin
+    // CHECK: if (_GEN & x) begin
     sv.if %0  {
       sv.verbatim "// hello"
     }
   }
 
   // CHECK: end // always_ff @(posedge)
-  // CHECK: assign _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  // CHECK: assign _GEN = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
   %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
 }
@@ -849,8 +849,8 @@ hw.module @structExtractChain(%cond: i1, %a: !hw.struct<c: !hw.struct<d:i1>>) ->
 hw.module @structExtractFromTemporary(%cond: i1, %a: !hw.struct<c: i1>, %b: !hw.struct<c: i1>) -> (out: i1) {
     %0 = comb.mux %cond, %a, %b : !hw.struct<c: i1>
     %1 = hw.struct_extract %0["c"] : !hw.struct<c: i1>
-    // CHECK: wire struct packed {logic c; } _T = cond ? a : b;
-    // CHECK-NEXT: assign out = _T.c;
+    // CHECK: wire struct packed {logic c; } _GEN = cond ? a : b;
+    // CHECK-NEXT: assign out = _GEN.c;
     hw.output %1 : i1
 }
 
@@ -987,8 +987,8 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   // CHECK-NEXT: ) inst3 (
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
-  // CHECK: localparam [41:0] _T = xx + 42'd17;
-  // CHECK-NEXT: assign out3 = _T[7:0] + _T[7:0];
+  // CHECK: localparam [41:0] _GEN = xx + 42'd17;
+  // CHECK-NEXT: assign out3 = _GEN[7:0] + _GEN[7:0];
   %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.decl.ref<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
@@ -1038,7 +1038,7 @@ hw.module @moduleWithComment()
 // https://github.com/llvm/circt/issues/2363
 hw.module @Foo(%a: i1, %b: i1) -> (r1: i1, r2: i1) {
   // Make sure the temporary wire is indented correctly.
-  // CHECK: {{^  wire _T = a == b;}}
+  // CHECK: {{^  wire _GEN = a == b;}}
   %0 = comb.icmp eq %a, %b : i1
   hw.output %0, %0 : i1, i1
 }
