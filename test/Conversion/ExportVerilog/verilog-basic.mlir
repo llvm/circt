@@ -34,7 +34,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %c0_i6 = hw.constant 0 : i6
   %c0_i10 = hw.constant 0 : i10
 
-  // CHECK: wire [3:0] _T = in4 >> in4;
+  // CHECK: wire [3:0] _GEN = in4 >> in4;
   %7 = comb.extract %in4 from 2 : (i4) -> i1
 
   %10 = comb.shru %in4, %in4 : i4
@@ -53,7 +53,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %8 = comb.concat %7, %false : i1, i1
   %9 = comb.or %6, %8 : i2
 
-  // CHECK: assign w1 = _T;
+  // CHECK: assign w1 = _GEN;
   // CHECK: assign w1 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
   // CHECK: assign w1 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
   %11 = comb.shrs %in4, %in4 : i4
@@ -138,23 +138,23 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (out1: i1, out: i10) {
   %_out1_output = sv.wire  : !hw.inout<i1>
   %_out_output = sv.wire  : !hw.inout<i10>
 
-  // CHECK: wire [4:0] _T = {1'h0, b};
-  // CHECK: wire [4:0] _T_0 = _T + {1'h0, c};
-  // CHECK: wire [5:0] _T_1 = {2'h0, a};
-  // CHECK: wire [5:0] _T_2 = {1'h0, _T_0};
-  // CHECK: assign _out_output = {4'h0, _T_1 + _T_2};
-  // CHECK: wire [4:0] _T_3 = {1'h0, a} + _T;
-  // CHECK: assign _out_output = {4'h0, {1'h0, _T_3} - {2'h0, c}};
-  // CHECK: assign _out_output = {4'h0, _T_1 - _T_2};
-  // CHECK: wire [7:0] _T_4 = {4'h0, b};
-  // CHECK: wire [8:0] _T_5 = {5'h0, a};
-  // CHECK: assign _out_output = {1'h0, _T_5 + {1'h0, _T_4 * {4'h0, c}}};
-  // CHECK: wire [8:0] _T_6 = {5'h0, c};
-  // CHECK: assign _out_output = {1'h0, {1'h0, {4'h0, a} * _T_4} + _T_6};
-  // CHECK: assign _out_output = {1'h0, {4'h0, _T_3} * _T_6};
-  // CHECK: assign _out_output = {1'h0, _T_5 * {4'h0, _T_0}};
-  // CHECK: assign _out_output = {5'h0, _T_3} * {5'h0, _T_0};
-  // CHECK: assign _out1_output = ^_T_0;
+  // CHECK: wire [4:0] _GEN = {1'h0, b};
+  // CHECK: wire [4:0] _GEN_0 = _GEN + {1'h0, c};
+  // CHECK: wire [5:0] _GEN_1 = {2'h0, a};
+  // CHECK: wire [5:0] _GEN_2 = {1'h0, _GEN_0};
+  // CHECK: assign _out_output = {4'h0, _GEN_1 + _GEN_2};
+  // CHECK: wire [4:0] _GEN_3 = {1'h0, a} + _GEN;
+  // CHECK: assign _out_output = {4'h0, {1'h0, _GEN_3} - {2'h0, c}};
+  // CHECK: assign _out_output = {4'h0, _GEN_1 - _GEN_2};
+  // CHECK: wire [7:0] _GEN_4 = {4'h0, b};
+  // CHECK: wire [8:0] _GEN_5 = {5'h0, a};
+  // CHECK: assign _out_output = {1'h0, _GEN_5 + {1'h0, _GEN_4 * {4'h0, c}}};
+  // CHECK: wire [8:0] _GEN_6 = {5'h0, c};
+  // CHECK: assign _out_output = {1'h0, {1'h0, {4'h0, a} * _GEN_4} + _GEN_6};
+  // CHECK: assign _out_output = {1'h0, {4'h0, _GEN_3} * _GEN_6};
+  // CHECK: assign _out_output = {1'h0, _GEN_5 * {4'h0, _GEN_0}};
+  // CHECK: assign _out_output = {5'h0, _GEN_3} * {5'h0, _GEN_0};
+  // CHECK: assign _out1_output = ^_GEN_0;
   // CHECK: assign _out1_output = b < c | b > c;
   // CHECK: assign _out_output = {6'h0, (b ^ c) & {3'h0, _out1_output}};
   // CHECK: assign _out_output = {2'h0, _out_output[9:2]};
@@ -273,18 +273,18 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   %c-1_i5 = hw.constant -1 : i5
   %c-1_i4 = hw.constant -1 : i4
 
-  // CHECK: wire _T = ^a;
+  // CHECK: wire _GEN = ^a;
   %0 = comb.parity %a : i4
-  // CHECK-NEXT: wire [4:0] _T_0 = {1'h0, a} << 5'h1;
+  // CHECK-NEXT: wire [4:0] _GEN_0 = {1'h0, a} << 5'h1;
   %1 = comb.concat %false, %a : i1, i4
   %2 = comb.shl %1, %c1_i5 : i5
 
-  // CHECK-NEXT: wire [3:0] _T_1 = ~a;
-  // CHECK-NEXT: assign b0 = _T;
-  // CHECK-NEXT: assign b1 = ^_T;
-  // CHECK-NEXT: assign b2 = &_T_0;
-  // CHECK-NEXT: assign b3 = ^_T_0;
-  // CHECK-NEXT: assign b4 = _T_1[3:2];
+  // CHECK-NEXT: wire [3:0] _GEN_1 = ~a;
+  // CHECK-NEXT: assign b0 = _GEN;
+  // CHECK-NEXT: assign b1 = ^_GEN;
+  // CHECK-NEXT: assign b2 = &_GEN_0;
+  // CHECK-NEXT: assign b3 = ^_GEN_0;
+  // CHECK-NEXT: assign b4 = _GEN_1[3:2];
   %3 = comb.parity %0 : i1
   %4 = comb.icmp eq %2, %c-1_i5 : i5
   %5 = comb.parity %2 : i5
