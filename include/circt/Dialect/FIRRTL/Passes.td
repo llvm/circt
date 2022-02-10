@@ -369,6 +369,15 @@ def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createRemoveResetsPass()";
 }
 
+def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+  let summary = "Merge field-level connections into full bundle connections";
+  let constructor = "circt::firrtl::createMergeConnectionsPass()";
+  let options = [
+    Option<"enableAggressiveMerging", "aggressive-merging", "bool", "false",
+      "Merge connections even when source values won't be simplified.">
+  ];
+}
+
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let summary = "Infer the read-write memory port";
   let description = [{

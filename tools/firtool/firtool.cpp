@@ -209,6 +209,16 @@ static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
                                        cl::desc("enable unused ports pruning"),
                                        cl::init(true));
 
+static cl::opt<bool> mergeConnections(
+    "merge-connections",
+    cl::desc("merge field-level connections into full aggregate connections"),
+    cl::init(true));
+
+static cl::opt<bool>
+    mergeConnectionsAgggresively("merge-connections-aggressive-merging",
+                                 cl::desc("merge connections aggressively"),
+                                 cl::init(false));
+
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
 static cl::opt<bool>
@@ -439,6 +449,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
+
+  if (!disableOptimization && preserveAggregate && mergeConnections)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createMergeConnectionsPass(mergeConnectionsAgggresively));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {

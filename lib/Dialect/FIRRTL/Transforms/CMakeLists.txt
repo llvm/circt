@@ -15,6 +15,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerTypes.cpp
+  MergeConnections.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
