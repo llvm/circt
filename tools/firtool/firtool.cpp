@@ -36,15 +36,13 @@
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/Support/Chrono.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
-
-#include <chrono>
-#include <memory>
 
 using namespace llvm;
 using namespace mlir;
@@ -293,34 +291,38 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 // insrumentation assumes that passes are not parallelized for firrtl::CircuitOp
 // and mlir::ModuleOp.
 class FirtoolPassInstrumentation : public mlir::PassInstrumentation {
-  // Current nest level.
-  int level = 0;
   // This stores start time points of passes.
-  llvm::SmallVector<std::chrono::steady_clock::time_point> timePoints;
+  using TimePoint = llvm::sys::TimePoint<>;
+  llvm::SmallVector<TimePoint> timePoints;
+  int level = 0;
 
 public:
   void runBeforePass(Pass *pass, Operation *op) override {
     // This assumes that it is safe to log messages to stderr if the operation
     // is circuit or module op.
     if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
-      timePoints.push_back(std::chrono::steady_clock::now());
-      llvm::dbgs().indent(2 * level++);
-      llvm::dbgs() << "[firtool] Running \"";
-      pass->printAsTextualPipeline(llvm::dbgs());
-      llvm::dbgs() << "\"\n";
+      timePoints.push_back(TimePoint::clock::now());
+      auto &os = llvm::errs();
+      os << "[firtool] ";
+      os.indent(2 * level++);
+      os << "Running \"";
+      pass->printAsTextualPipeline(llvm::errs());
+      os << "\"\n";
     }
   }
 
   void runAfterPass(Pass *pass, Operation *op) override {
+    using namespace std::chrono;
     // This assumes that it is safe to log messages to stderr if the operation
     // is circuit or module op.
     if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
-      llvm::dbgs().indent(2 * --level);
-      auto elpased = std::chrono::duration<double>(
-          std::chrono::steady_clock::now() - timePoints.pop_back_val());
-      llvm::dbgs() << "[firtool] Done in "
-                   << llvm::format("%.3f", elpased / std::chrono::seconds(1))
-                   << " sec\n";
+      auto &os = llvm::errs();
+      auto elpased = duration<double>(TimePoint::clock::now() -
+                                      timePoints.pop_back_val()) /
+                     seconds(1);
+      os << "[firtool] ";
+      os.indent(2 * --level);
+      os << "-- Done in " << llvm::format("%.3f", elpased) << " sec\n";
     }
   }
 };
