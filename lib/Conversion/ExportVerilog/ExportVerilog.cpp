@@ -135,7 +135,7 @@ static bool isDuplicatableExpression(Operation *op) {
     return isDuplicatableNullaryExpression(op);
 
   // It is cheap to inline extract op.
-  if (isa<comb::ExtractOp>(op))
+  if (isa<comb::ExtractOp, hw::StructExtractOp>(op))
     return true;
 
   // We only inline array_get with a constant index.
@@ -492,15 +492,12 @@ static bool isOkToBitSelectFrom(Value v) {
   if (v.isa<BlockArgument>())
     return true;
 
-  // Uses of a wire or register can be done inline.
-  if (auto read = v.getDefiningOp<ReadInOutOp>()) {
-    if (read.input().getDefiningOp<WireOp>() ||
-        read.input().getDefiningOp<RegOp>())
-      return true;
-  }
+  // ReadInout can be done inline.
+  if (auto read = v.getDefiningOp<ReadInOutOp>())
+    return true;
 
   // Aggregate access can be inlined.
-  if (v.getDefiningOp<StructExtractOp>())
+  if (v.getDefiningOp<StructExtractOp>() || v.getDefiningOp<ArrayGetOp>())
     return true;
 
   // Interface signal can be inlined.
