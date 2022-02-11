@@ -1048,7 +1048,6 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                        getComponentState().getUniqueName("div_reg"),
                        width.getIntOrFloatBitWidth());
   // Division pipelines are not combinational, so a GroupOp is required.
-  // ------
   auto group = createGroupForOp<calyx::GroupOp>(rewriter, div);
   getComponentState().addBlockScheduleable(div->getBlock(), group);
 
