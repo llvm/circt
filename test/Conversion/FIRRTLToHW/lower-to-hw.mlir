@@ -438,10 +438,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TMP3:%.+]] = comb.xor %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP4:%.+]] = comb.or [[TMP3]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP4]] label "assert__assert_0" message "assert0"
+    // CHECK-NEXT: [[SAMPLED:%.+]] =  sv.system.sampled %value : i42
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP5:%.+]] = comb.xor %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP6:%.+]] = comb.or [[TMP5]], %aCond
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP6]] message "assert0"(%value) : i42
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP6]] message "assert0"([[SAMPLED]]) : i42
     // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
     // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP4]] label "assume__assert_0"
@@ -458,10 +459,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
     // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] label "assume__assume_0" message "assume0"
+    // CHECK-NEXT: [[SAMPLED:%.+]] = sv.system.sampled %value
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"(%value) : i42
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"([[SAMPLED]]) : i42
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}

@@ -435,18 +435,12 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
 
     // Handle the case of builtin Chisel assertions.
     //
-    // These are historically emitted as non-concurrent assertions and are
-    // expected to have format string arguments.  Parsing these as
-    // non-concurrent assertions works around two VCS lint warnings that arise
-    // if these are emitted as concurrent assertions:
-    //   1. VCS warns about non-sampled values used in the pass/fail statements
-    //      of concurrent assertions.
-    //   2. VCS warns if you sample the values ($sample) indicating that the
-    //      assertion has side effects.
+    // These are historically emitted as non-concurrent assertions but we choose
+    // to treat them as concurrent.
   case VerifFlavor::ChiselAssert: {
     builder.create<AssertOp>(
         printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
-        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", false);
+        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
     printOp.erase();
     break;
   }
@@ -586,6 +580,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     Operation *op;
     predicate = builder.create<NotPrimOp>(
         predicate); // assertion triggers when predicate fails
+    // TODO: The "ifElseFatal" variant isn't actually a concurrent assertion,
+    // but downstream logic assumes that isConcurrent is set.
     if (flavor == VerifFlavor::VerifLibAssert)
       op = builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
                                     message, printOp.operands(), label, true);
