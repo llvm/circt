@@ -38,33 +38,6 @@ circuit Top : %[[
 
 ; CHECK-NOT: firrtl.module @A_
 
-; // -----
-; "Modules with aggregate ports that are (partial)? connected should NOT dedup if
-; their port names differ".
-;
-; Note: it is reasonable for dedup to expand and update the connects/partial
-; connects that are changed by this process.  This needs to do this in a
-; flow-correct manner.
-;
-; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
-circuit FooAndBarModule :
-  ; CHECK: firrtl.module @FooModule
-  module FooModule :
-    output io : {flip foo : UInt<1>, fuzz : UInt<1>}
-    io.fuzz <= io.foo
-  ; CHECK: firrtl.module @BarModule
-  module BarModule :
-    output io : {flip bar : UInt<1>, buzz : UInt<1>}
-    io.buzz <= io.bar
-  ; CHECK: firrtl.module @FooAndBarModule
-  module FooAndBarModule :
-    output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip bar : UInt<1>, buzz : UInt<1>}}
-    ; CHECK-NEXT: firrtl.instance foo @FooModule
-    ; CHECK-NEXT: firrtl.instance bar @BarModule
-    inst foo of FooModule
-    inst bar of BarModule
-    io.foo <- foo.io
-    io.bar <= bar.io
 
 ; // -----
 ; "The module A and A_ should dedup with different annotation targets."
