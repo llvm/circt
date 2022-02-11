@@ -937,7 +937,6 @@ class DedupPass : public DedupBase<DedupPass> {
   void runOnOperation() override {
     auto *context = &getContext();
     auto circuit = getOperation();
-    circuit->dump();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     SymbolTable symbolTable(circuit);
     NLAMap nlaMap = createNLAMap(circuit);
