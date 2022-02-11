@@ -88,4 +88,23 @@ firrtl.circuit "Test"   {
     firrtl.connect %2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %0, %s2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
+
+  // COMMON-LABEL:  firrtl.module @CheckConstant(out %c: !firrtl.vector<vector<uint<1>, 2>, 2>) {
+  // COMMON-NEXT:     %c0_ui4 = firrtl.constant 0
+  // COMMON-NEXT:     %0 = firrtl.bitcast %c0_ui4
+  // COMMON-NEXT:     firrtl.connect %c, %0
+  // COMMON-NEXT:   }
+  firrtl.module @CheckConstant(out %c: !firrtl.vector<vector<uint<1>, 2>, 2>) {
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %0 = firrtl.subindex %c[1] : !firrtl.vector<vector<uint<1>, 2>, 2>
+    %1 = firrtl.subindex %0[1] : !firrtl.vector<uint<1>, 2>
+    %2 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
+    %3 = firrtl.subindex %c[0] : !firrtl.vector<vector<uint<1>, 2>, 2>
+    %4 = firrtl.subindex %3[1] : !firrtl.vector<uint<1>, 2>
+    %5 = firrtl.subindex %3[0] : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %5, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %4, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %2, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %1, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }

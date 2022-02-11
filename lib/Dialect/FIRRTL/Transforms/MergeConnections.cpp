@@ -32,6 +32,18 @@
 using namespace circt;
 using namespace firrtl;
 
+// Return true if value is essentially constant.
+static bool isConstantLike(Value value) {
+  auto op = value.getDefiningOp();
+  if (op && isa<ConstantOp, InvalidValueOp>(op))
+    return true;
+  if (auto bitcast = value.getDefiningOp<BitCastOp>())
+    return isConstant(bitcast.input());
+
+  // TODO: Add unrealized_conversion, asUInt, asSInt
+  return false;
+}
+
 namespace {
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -65,6 +77,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
   // Ignore connections between different types because it will produce a
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
+  LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
   auto destTy = connect.dest().getType().cast<FIRRTLType>();
   auto srcTy = connect.src().getType().cast<FIRRTLType>();
   if (destTy != srcTy || !destTy.isPassive() ||
@@ -144,7 +157,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
       assert(src && "all subconnections are guranteed to exist");
       operands.push_back(src);
 
-      areOperandsAllConstants &= (bool)src.getDefiningOp<ConstantOp>();
+      areOperandsAllConstants &= isConstantLike(src);
 
       // From here, check whether the value is derived from the same aggregate
       // value.
@@ -174,7 +187,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
     if (canUseSourceParent) {
       LLVM_DEBUG(llvm::dbgs() << "Success to merge " << destFieldRef.getValue()
                               << " ,fieldID= " << destFieldRef.getFieldID()
-                              << "to" << sourceParent << "\n";);
+                              << " to " << sourceParent << "\n";);
       // Erase connections except for subConnections[index] since it must be
       // erased at the top-level loop.
       for (auto idx : llvm::seq(0u, static_cast<unsigned>(operands.size())))
