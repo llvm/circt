@@ -162,7 +162,7 @@ static cl::opt<bool>
 
 static cl::opt<bool>
     dedup("dedup", cl::desc("deduplicate structurally identical modules"),
-          cl::init(true));
+          cl::init(false));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
