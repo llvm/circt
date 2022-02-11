@@ -1886,14 +1886,27 @@ FirMemory MemOp::getSummary() {
           continue;
         auto clockPort = a->getResult(0);
         for (auto *b : clockPort.getUsers()) {
-          auto connect = dyn_cast<ConnectOp>(b);
-          if (!connect || connect.dest() != clockPort)
-            continue;
-          auto result = clockToLeader.insert({connect.src(), numWritePorts});
-          if (result.second) {
-            writeClockIDs.push_back(numWritePorts);
-          } else {
-            writeClockIDs.push_back(result.first->second);
+          if (auto connect = dyn_cast<ConnectOp>(b)) {
+            if (connect.dest() == clockPort) {
+              auto result =
+                  clockToLeader.insert({connect.src(), numWritePorts});
+              if (result.second) {
+                writeClockIDs.push_back(numWritePorts);
+              } else {
+                writeClockIDs.push_back(result.first->second);
+              }
+            }
+          }
+          if (auto connect = dyn_cast<StrictConnectOp>(b)) {
+            if (connect.dest() == clockPort) {
+              auto result =
+                  clockToLeader.insert({connect.src(), numWritePorts});
+              if (result.second) {
+                writeClockIDs.push_back(numWritePorts);
+              } else {
+                writeClockIDs.push_back(result.first->second);
+              }
+            }
           }
         }
         break;
@@ -2032,6 +2045,43 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
     return diag.attachNote(partialConnect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
+static LogicalResult verifyStrictConnectOp(StrictConnectOp connect) {
+  FIRRTLType type = connect.dest().getType().cast<FIRRTLType>();
+
+  // Analog types cannot be connected and must be attached.
+  if (type.isa<AnalogType>())
+    return connect.emitError("analog types may not be connected");
+  if (auto destBundle = type.dyn_cast<BundleType>())
+    if (destBundle.containsAnalog())
+      return connect.emitError("analog types may not be connected");
+
+  // TODO: Relax this to allow reads from output ports,
+  // instance/memory input ports.
+  if (foldFlow(connect.src()) == Flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(connect.src());
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto diag =
+          connect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(connect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(connect.dest()) == Flow::Source) {
+    auto diag = connect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(connect.dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 

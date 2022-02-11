@@ -252,6 +252,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markInstanceOp(InstanceOp instance);
 
   void visitConnect(ConnectOp connect);
+  void visitStrictConnect(StrictConnectOp connect);
   void visitPartialConnect(PartialConnectOp connect);
   void visitOperation(Operation *op);
 
@@ -549,6 +550,64 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
       << "connect destination is here";
 }
 
+// We merge the value from the RHS into the value of the LHS.
+void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
+  auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
+
+  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
+  if (!destType.isGround()) {
+    connect.emitError("non-ground type connect unhandled by IMConstProp");
+    return;
+  }
+
+  // Handle implicit extensions.
+  auto srcValue = getExtendedLatticeValue(connect.src(), destType);
+  if (srcValue.isUnknown())
+    return;
+
+  // Driving result ports propagates the value to each instance using the
+  // module.
+  if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
+    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+      mergeLatticeValue(userOfResultPort, srcValue);
+    // Output ports are wire-like and may have users.
+    mergeLatticeValue(connect.dest(), srcValue);
+    return;
+  }
+
+  auto dest = connect.dest().cast<mlir::OpResult>();
+
+  // For wires and registers, we drive the value of the wire itself, which
+  // automatically propagates to users.
+  if (isWireOrReg(dest.getOwner()))
+    return mergeLatticeValue(connect.dest(), srcValue);
+
+  // Driving an instance argument port drives the corresponding argument of the
+  // referenced module.
+  if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+    // Update the dest, when its an instance op.
+    mergeLatticeValue(connect.dest(), srcValue);
+    auto module =
+        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
+    if (!module)
+      return;
+
+    BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
+    return mergeLatticeValue(modulePortVal, srcValue);
+  }
+
+  // Driving a memory result is ignored because these are always treated as
+  // overdefined.
+  if (auto subfield = dest.getDefiningOp<SubfieldOp>()) {
+    if (subfield.getOperand().getDefiningOp<MemOp>())
+      return;
+  }
+
+  connect.emitError("strictconnect unhandled by IMConstProp")
+          .attachNote(connect.dest().getLoc())
+      << "strictconnect destination is here";
+}
+
 void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
@@ -563,6 +622,8 @@ void IMConstPropPass::visitOperation(Operation *op) {
   // If this is a operation with special handling, handle it specially.
   if (auto connectOp = dyn_cast<ConnectOp>(op))
     return visitConnect(connectOp);
+  if (auto strictConnectOp = dyn_cast<StrictConnectOp>(op))
+    return visitStrictConnect(strictConnectOp);
   if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
     return visitPartialConnect(partialConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
@@ -667,6 +728,9 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     value.replaceUsesWithIf(cstValue, [](OpOperand &operand) {
       if (isa<ConnectOp>(operand.getOwner()) && operand.getOperandNumber() == 0)
         return false;
+      if (isa<StrictConnectOp>(operand.getOwner()) &&
+          operand.getOperandNumber() == 0)
+        return false;
       return true;
     });
     return true;
@@ -685,6 +749,15 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
+      if (auto *destOp = connect.dest().getDefiningOp()) {
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest())) {
+          connect.erase();
+          ++numErasedOp;
+        }
+      }
+      continue;
+    }
+    if (auto connect = dyn_cast<StrictConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
         if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest())) {
           connect.erase();

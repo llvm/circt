@@ -153,11 +153,12 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, PartialConnectOp, ForceOp, PrintFOp,
-                       SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
-                       ProbeOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitStmt(opNode, args...);
-        })
+        .template Case<AttachOp, ConnectOp, PartialConnectOp, StrictConnectOp,
+                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
+                       AssumeOp, CoverOp, ProbeOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitStmt(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -183,6 +184,7 @@ public:
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(PartialConnectOp);
+  HANDLE(StrictConnectOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(SkipOp);

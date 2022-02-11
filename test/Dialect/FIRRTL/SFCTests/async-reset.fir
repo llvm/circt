@@ -113,10 +113,10 @@ circuit Foo:
     complex_literal[3] <= UInt<1>("h00")
     reg r : UInt<1>[4], clock with : (reset => (reset, complex_literal))
     z <= r
-    ; CHECK: firrtl.connect %z_0, %c1_ui1
-    ; CHECK: firrtl.connect %z_1, %c1_ui1
-    ; CHECK: firrtl.connect %z_2, %c0_ui1
-    ; CHECK: firrtl.connect %z_3, %c0_ui1
+    ; CHECK: firrtl.strictconnect %z_0, %c1_ui1
+    ; CHECK: firrtl.strictconnect %z_1, %c1_ui1
+    ; CHECK: firrtl.strictconnect %z_2, %c0_ui1
+    ; CHECK: firrtl.strictconnect %z_3, %c0_ui1
 
 // -----
 
@@ -130,7 +130,7 @@ circuit Foo:
     reg r : UInt<1>, clock with : (reset => (reset, r))
     r <= UInt(0)
     z <= r
-    ; CHECK: firrtl.connect %z, %c0_ui1
+    ; CHECK: firrtl.strictconnect %z, %c0_ui1
 
 // -----
 
@@ -144,4 +144,4 @@ circuit Foo:
     reg r : UInt<1>, clock with : (reset => (reset, UInt(0)))
     r <= UInt(0)
     z <= r
-    ; CHECK: firrtl.connect %z, %c0_ui1
+    ; CHECK: firrtl.strictconnect %z, %c0_ui1
