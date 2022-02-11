@@ -337,6 +337,10 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   SmallVectorImpl<NlaNameNewSym> &getNLAs() { return nlaNameToNewSymList; };
 
+  SmallVectorImpl<InnerRefRecord> &getInstanceInnerRefs() {
+    return nlaInstances;
+  };
+
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
   bool processSAPath(Operation *);
@@ -383,6 +387,12 @@ private:
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
   SmallVector<NlaNameNewSym> nlaNameToNewSymList;
+
+  //  Record all the inner sym and the corresponding InstanceOps, that have a
+  //  "circt.nonlocal" annotation. This will be later queried when updating the
+  //  NLA, to get direct access to the InstanceOp that participates in the
+  //  namepath.
+  SmallVector<InnerRefRecord> nlaInstances;
 
   // Keep a symbol table around for resolving symbols
   SymbolTable &symTbl;
@@ -491,22 +501,30 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
       continue;
     }
-    // Otherwise, if the current field is exactly the target, degenerate
-    // the sub-annotation to a normal annotation.
+    auto nlaRef =
+        subAnno.getAnnotations().getAs<FlatSymbolRefAttr>("circt.nonlocal");
     if (Annotation(opAttr).getClass() ==
         "firrtl.transforms.DontTouchAnnotation") {
       needsSym = true;
+      // If this is a nonlocal DontTouch, then,
+      // 1. Drop the annotation and the circt.nonlocal reference.
+      // 2. This makes the NLA redundant.
+      // 3. Just record the nla name, and insert a null Attr, to signify that
+      // the original NLA must be deleted.
+      if (nlaRef)
+        nlaNameToNewSymList.push_back({nlaRef.getAttr(), {}});
       continue;
     }
     // If this subfield has a nonlocal anchor, then we need to update the
     // NLA with the new symbol that would be added to the field after
     // lowering.
-    if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
-            "circt.nonlocal")) {
+    if (nlaRef) {
       nlaNameToNewSymList.push_back(
-          {nla.getAttr(), StringAttr::get(ctxt, sym)});
+          {nlaRef.getAttr(), StringAttr::get(ctxt, sym)});
       needsSym = true;
     }
+    // Otherwise, if the current field is exactly the target, degenerate
+    // the sub-annotation to a normal annotation.
     retval.push_back(subAnno.getAnnotations());
   }
   return ArrayAttr::get(ctxt, retval);
@@ -1289,6 +1307,15 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
 }
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
+  auto sym = op.inner_symAttr();
+
+  // If it has any "circt.nonlocal" annotation, then record the inner_sym;
+  for (auto anno : AnnotationSet(op))
+    if (auto nlaRef = anno.getMember("circt.nonlocal")) {
+      nlaInstances.emplace_back(op->getParentOfType<FModuleOp>().getNameAttr(),
+                                sym, op);
+      break;
+    }
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
@@ -1331,7 +1358,6 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   if (skip)
     return false;
-  auto sym = op.inner_symAttr();
   if (!sym || sym.getValue().empty())
     if (needsSymbol)
       sym = StringAttr::get(builder->getContext(),
@@ -1425,10 +1451,6 @@ void LowerTypesPass::runOnOperation() {
   std::vector<Operation *> ops;
   // Map of name of the NonLocalAnchor to the operation.
   DenseMap<StringAttr, Operation *> nlaMap;
-  // Only verbatim ops have NLAs as their input argument, rest all clients of
-  // NLA are annotations.
-  llvm::SmallPtrSet<Attribute, 10> nlaUsedinVerbatim;
-
   // Symbol Table
   SymbolTable symTbl(getOperation());
   // Cached attr
@@ -1442,16 +1464,12 @@ void LowerTypesPass::runOnOperation() {
     // Record the NonLocalAnchor and its name.
     if (auto nla = dyn_cast<NonLocalAnchor>(op))
       nlaMap[nla.sym_nameAttr()] = nla;
-    // Record if any NLA is used in the Verbatim ops.
-    if (auto verbatim = dyn_cast<sv::VerbatimOp>(op))
-      for (auto s : verbatim.symbols())
-        if (auto nlaRef = s.dyn_cast<FlatSymbolRefAttr>())
-          nlaUsedinVerbatim.insert(nlaRef.getAttr());
   });
 
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
   SmallVector<NlaNameNewSym> nlaToNewSymList;
+  SmallVector<InnerRefRecord> nlaInstances;
   std::mutex nlaAppendLock;
   auto lowerModules = [&](auto op) {
     auto tl = TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
@@ -1460,80 +1478,60 @@ void LowerTypesPass::runOnOperation() {
     tl.lowerModule(op);
     std::lock_guard<std::mutex> lg(nlaAppendLock);
     nlaToNewSymList.append(tl.getNLAs());
+    // Record all the instances in the module, that participate in
+    // circt.nonlocal.
+    nlaInstances.append(tl.getInstanceInnerRefs());
   };
   parallelForEach(&getContext(), ops.begin(), ops.end(), lowerModules);
+  // Sort it, to enable binary search.
+  llvm::sort(nlaInstances.begin(), nlaInstances.end());
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
   // element cannot be a module.
   for (auto nlaToSym : nlaToNewSymList) {
+    auto nlaName = nlaToSym.nlaName;
     // Get the nla with the corresponding name. This is guaranteed to exist.
-    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.nlaName]);
+    auto nla = cast<NonLocalAnchor>(nlaMap[nlaName]);
     auto namepath = nla.namepath();
-    SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
     // Update the final element, which must be an InnerRefAttr.
-    auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
-    updatedPath[namepath.size() - 1] =
-        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.newSym);
-    nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
-  }
-  // Now cleanup and remove the dangling NLAs.
-  // If there were nonlocal DontTouch, it is already lowered to a local
-  // DontTouch in this pass, by adding a symbol to the op. When the nonlocal
-  // DontTouch is removed from the fields of a Bundle, the corresponding NLA
-  // must also be removed. In this section, search for all NLAs, which don't
-  // have the "circt.nonlocal" annotation on the corresponding leaf, and delete
-  // the NLA from the circuit.
-
-  struct ValidInstancesRecord {
-    // NLA is invalid, if the "nonlocal" annotation is missing from the leaf.
-    // Assumption: InstanceOp cannot be the leaf.
-    bool isValid = false;
-    SmallVector<Operation *> instances;
-  };
-  // A record of each NLA, its instance path and if the NLA exists on some leaf
-  // op.
-  DenseMap<StringAttr, ValidInstancesRecord> nlaToAnchorsMap;
-
-  // For all ops in the circt, check its annotations.
-  getOperation().walk([&](Operation *op) {
-    bool isaInstance = isa<InstanceOp>(op);
-    for (auto anno : AnnotationSet(op))
-      if (auto nlaRef = anno.getMember("circt.nonlocal")) {
-        auto nlaName = nlaRef.cast<FlatSymbolRefAttr>().getAttr();
-        // If this is not an InstanceOp, then the NLA is valid.
-        if (isaInstance)
-          nlaToAnchorsMap[nlaName].instances.push_back(op);
-        else
-          nlaToAnchorsMap[nlaName].isValid = true;
-      }
-    // Check for ports.
-    if (auto modLike = dyn_cast_or_null<FModuleLike>(op))
-      for (size_t port = 0, e = modLike.getNumPorts(); port < e; ++port)
-        for (auto anno : AnnotationSet::forPort(modLike, port))
+    if (nlaToSym.newSym) {
+      SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
+      auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
+      updatedPath[namepath.size() - 1] = hw::InnerRefAttr::get(
+          &getContext(), leaf.getModule(), nlaToSym.newSym);
+      nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+    } else {
+      // Now cleanup and remove the dangling NLAs, if the nonlocal annotation
+      // was dropped. If there were nonlocal DontTouch, it is already lowered to
+      // a local DontTouch in this pass, by adding a symbol to the op. When the
+      // nonlocal DontTouch is removed from the fields of a Bundle, the
+      // corresponding NLA must also be removed. In this block, remove all the
+      // references to the nla from the InstanceOps and erase the NLA.
+      auto namepath = nla.namepath();
+      bool failedToRemove = false;
+      // Iterate over the instances that have a referece to the NLA.
+      for (size_t i = 0, e = namepath.size() - 1; i < e; ++i) {
+        auto innerRef = namepath[i].cast<hw::InnerRefAttr>();
+        // Binary search over the list of InsntanceOps, given the InnerRefAttr;
+        const auto *iter = std::lower_bound(
+            nlaInstances.begin(), nlaInstances.end(), InnerRefRecord(innerRef));
+        if (iter == nlaInstances.end()) {
+          // verifier will fail after LowerTypes.
+          nla.emitOpError("cannot find the instance op:") << innerRef;
+          failedToRemove = true;
+          break;
+        }
+        auto instOp = iter->op;
+        AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
           if (auto nlaRef = anno.getMember("circt.nonlocal"))
-            nlaToAnchorsMap[nlaRef.cast<FlatSymbolRefAttr>().getAttr()]
-                .isValid = true;
-  });
-  for (auto nlaOps : nlaToAnchorsMap) {
-    if (nlaOps.getSecond().isValid)
-      continue;
-    auto nlaName = nlaOps.first;
-    if (nlaUsedinVerbatim.contains(nlaName)) {
-      // This case can never occur, verbatim op should not re-use the NLA
-      // attached with the DontTouch Nonlocal annotation.
-      nlaMap[nlaName]->emitOpError(
-          "cannot lower: NLA dropped but use exists in VerbatimOp");
-      continue;
+            return (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr());
+          return false;
+        });
+      }
+      if (!failedToRemove)
+        nla->erase();
     }
-    for (auto *instOp : nlaOps.getSecond().instances)
-      AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
-        if (auto nlaRef = anno.getMember("circt.nonlocal"))
-          if (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr())
-            return true;
-        return false;
-      });
-    nlaMap[nlaName]->erase();
   }
 }
 
