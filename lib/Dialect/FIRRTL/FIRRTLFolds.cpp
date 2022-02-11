@@ -1090,7 +1090,7 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
 
 LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputOp = op.input().getDefiningOp();
+  auto *inputOp = op.input().getDefiningOp();
   // bits(bits(x, ...), ...) -> bits(x, ...).
   if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
     auto newLo = op.lo() + innerBits.lo();
@@ -1515,9 +1515,9 @@ static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
     auto nv =
         rewriter.createOrFold<PadPrimOp>(op.getLoc(), op.src(), destWidth);
     rewriter.create<StrictConnectOp>(op.getLoc(), op.dest(), nv);
-    if (auto srcOp = op.src().getDefiningOp())
+    if (auto *srcOp = op.src().getDefiningOp())
       rewriter.updateRootInPlace(srcOp, []() {});
-    if (auto destOp = op.dest().getDefiningOp())
+    if (auto *destOp = op.dest().getDefiningOp())
       rewriter.updateRootInPlace(destOp, []() {});
     rewriter.eraseOp(op);
     return success();
@@ -1532,9 +1532,9 @@ canonicalizeMatchingTypeConnect(ConnectOp op, PatternRewriter &rewriter) {
       op.src().getType().cast<FIRRTLType>().hasUninferredWidth())
     return failure();
   rewriter.create<StrictConnectOp>(op.getLoc(), op.dest(), op.src());
-  if (auto srcOp = op.src().getDefiningOp())
+  if (auto *srcOp = op.src().getDefiningOp())
     rewriter.updateRootInPlace(srcOp, []() {});
-  if (auto destOp = op.dest().getDefiningOp())
+  if (auto *destOp = op.dest().getDefiningOp())
     rewriter.updateRootInPlace(destOp, []() {});
   rewriter.eraseOp(op);
   return success();
@@ -1688,8 +1688,8 @@ void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
-struct foldResetMux : public mlir::RewritePattern {
-  foldResetMux(MLIRContext *context)
+struct FoldResetMux : public mlir::RewritePattern {
+  FoldResetMux(MLIRContext *context)
       : RewritePattern(RegResetOp::getOperationName(), 0, context) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
@@ -1705,8 +1705,8 @@ struct foldResetMux : public mlir::RewritePattern {
     auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
     if (!mux)
       return failure();
-    auto high = mux.high().getDefiningOp();
-    auto low = mux.low().getDefiningOp();
+    auto *high = mux.high().getDefiningOp();
+    auto *low = mux.low().getDefiningOp();
     auto constOp = dyn_cast_or_null<ConstantOp>(high);
 
     if (constOp && low != reg)
@@ -1744,7 +1744,7 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::RegResetWithZeroReset,
                  patterns::RegResetWithInvalidReset,
                  patterns::RegResetWithInvalidResetValue,
-                 patterns::DropNameRegReset, foldResetMux>(context);
+                 patterns::DropNameRegReset, FoldResetMux>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
@@ -1757,14 +1757,14 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
     return failure();
   // Make sure are users are safe to replace
   for (auto port : op->getResults())
-    for (auto user : port.getUsers())
+    for (auto *user : port.getUsers())
       if (!isa<SubfieldOp>(user))
         return failure();
 
   // Annoyingly, there isn't a good replacement for the port as a whole, since
   // they have an outer flip type.
   for (auto port : op->getResults()) {
-    for (auto user : llvm::make_early_inc_range(port.getUsers())) {
+    for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
       SubfieldOp sfop = cast<SubfieldOp>(user);
       rewriter.replaceOpWithNewOp<WireOp>(sfop, sfop.result().getType());
     }
@@ -1792,8 +1792,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
   if (!mux)
     return failure();
-  auto high = mux.high().getDefiningOp();
-  auto low = mux.low().getDefiningOp();
+  auto *high = mux.high().getDefiningOp();
+  auto *low = mux.low().getDefiningOp();
   // Reset value must be constant
   auto constOp = dyn_cast_or_null<ConstantOp>(high);
 
