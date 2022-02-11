@@ -1432,7 +1432,7 @@ firrtl.module @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source: !firrtl
   // CHECK-LABEL: firrtl.module @Zebra()
   firrtl.module @Zebra() attributes {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}{
     %bundle = firrtl.wire sym @b {annotations = [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla, class =\"test\" }>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
-    %bundle2 = firrtl.wire sym @b2 {annotations = [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    %bundle2 = firrtl.wire sym @b2 {annotations = [#firrtl<"subAnno<fieldID = 3, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">, #firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @nla_2, class =\"firrtl.transforms.DontTouchAnnotation\"}>">]}: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
    // CHECK:   %bundle_valid = firrtl.wire sym @b_valid : !firrtl.uint<1>
    // CHECK-NEXT:   %bundle_ready = firrtl.wire sym @b_ready {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
    // CHECK-NEXT:   %bundle_data = firrtl.wire sym @b_data : !firrtl.uint<64>

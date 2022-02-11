@@ -1525,7 +1525,7 @@ void LowerTypesPass::runOnOperation() {
           failedToRemove = true;
           break;
         }
-        auto instOp = iter->op;
+        auto *instOp = iter->op;
         AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
           if (auto nlaRef = anno.getMember("circt.nonlocal"))
             return (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr());
