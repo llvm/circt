@@ -1491,8 +1491,14 @@ void LowerTypesPass::runOnOperation() {
   // element cannot be a module.
   for (auto nlaToSym : nlaToNewSymList) {
     auto nlaName = nlaToSym.nlaName;
-    // Get the nla with the corresponding name. This is guaranteed to exist.
-    auto nla = cast<NonLocalAnchor>(nlaMap[nlaName]);
+    // Get the nla with the corresponding name. It may not exist in the nlaMap,
+    // if we have already processed the NLA once. nlaToNewSymList can have
+    // duplicate entries for an NLA, since an NLA can be reused by multiple
+    // bundle subfields.
+    auto iter = nlaMap.find(nlaName);
+    if (iter == nlaMap.end())
+      continue;
+    auto nla = cast<NonLocalAnchor>(iter->second);
     auto namepath = nla.namepath();
     // Update the final element, which must be an InnerRefAttr.
     if (nlaToSym.newSym) {
@@ -1522,15 +1528,20 @@ void LowerTypesPass::runOnOperation() {
           failedToRemove = true;
           break;
         }
-        auto instOp = iter->op;
+        auto *instOp = iter->op;
         AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
           if (auto nlaRef = anno.getMember("circt.nonlocal"))
             return (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr());
           return false;
         });
       }
-      if (!failedToRemove)
+      if (!failedToRemove) {
         nla->erase();
+        // Ensure that the nla is removed, to avoid deleting the same NLA twice.
+        // There can be multiple entries in nlaToNewSymList, if NLA reused by
+        // bundle subfields.
+        nlaMap.erase(nlaName);
+      }
     }
   }
 }
