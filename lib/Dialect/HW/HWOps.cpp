@@ -1296,6 +1296,8 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
   static const char globalRefStr[] = "circt.globalRef";
   SymbolTable symTable(parent);
   auto hasGlobalRef = [&](Attribute attr) -> bool {
+    if (!attr)
+      return false;
     for (auto ref : attr.cast<ArrayAttr>().getAsRange<GlobalRefAttr>())
       if (ref.getGlblSym().getAttr() == symNameAttr)
         return true;

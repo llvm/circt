@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_MSFT_MSFTOPS_H
 #define CIRCT_DIALECT_MSFT_MSFTOPS_H
 
+#include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Support/LLVM.h"
 

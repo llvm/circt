@@ -232,20 +232,16 @@ void LowerToHWPass::runOnOperation() {
   // Convert everything except instance ops first.
 
   ConversionTarget target(*ctxt);
-  target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp>();
+  target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp,
+                      hw::GlobalRefOp>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
-  target.addDynamicallyLegalOp<hw::GlobalRefOp>([](hw::GlobalRefOp op) {
-    for (auto attr : op->getAttrs())
-      if (isa<MSFTDialect>(attr.getValue().getDialect()))
-        return false;
-    return true;
-  });
 
   RewritePatternSet patterns(ctxt);
   patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
   patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
+  patterns.insert<RemoveOpLowering<msft::PhysLocationOp>>(ctxt);
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
   patterns.insert<RemoveOpLowering<EntityExternOp>>(ctxt);
   patterns.insert<RemoveOpLowering<DesignPartitionOp>>(ctxt);

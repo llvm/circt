@@ -68,9 +68,9 @@ void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst) {
   }
 
   // Some placements don't require subpaths.
-  if (!inst.subpath.empty()) {
+  if (inst.subpath) {
     s.os << '|';
-    s.os << inst.subpath;
+    s.os << inst.subpath.getValue();
   }
 
   s.os << '\n';
