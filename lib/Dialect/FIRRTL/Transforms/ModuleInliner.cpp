@@ -584,12 +584,13 @@ void Inliner::cloneAndRename(
         if (!isa<InstanceOp>(op) || symbolRenames.empty())
           return false;
         NamedAttrList newAnnotation;
-        if (auto newSym =
-                symbolRenames.lookup(sym.getAttr()).cast<StringAttr>()) {
-          anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newSym));
-          newAnnotations.push_back(anno);
-          return true;
-        }
+        if (symbolRenames.count(sym.getAttr()))
+          if (auto newSym =
+                  symbolRenames.lookup(sym.getAttr()).cast<StringAttr>()) {
+            anno.setMember("circt.nonlocal", FlatSymbolRefAttr::get(newSym));
+            newAnnotations.push_back(anno);
+            return true;
+          }
       }
       return false;
     });
