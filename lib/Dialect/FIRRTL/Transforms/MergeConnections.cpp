@@ -34,8 +34,7 @@ using namespace firrtl;
 
 // Return true if value is essentially constant.
 static bool isConstantLike(Value value) {
-  auto op = value.getDefiningOp();
-  if (op && isa<ConstantOp, InvalidValueOp>(op))
+  if (isa_and_nonnull<ConstantOp, InvalidValueOp>(value.getDefiningOp()))
     return true;
   if (auto bitcast = value.getDefiningOp<BitCastOp>())
     return isConstant(bitcast.input());
