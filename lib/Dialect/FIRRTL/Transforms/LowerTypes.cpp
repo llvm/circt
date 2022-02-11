@@ -1491,7 +1491,10 @@ void LowerTypesPass::runOnOperation() {
   // element cannot be a module.
   for (auto nlaToSym : nlaToNewSymList) {
     auto nlaName = nlaToSym.nlaName;
-    // Get the nla with the corresponding name. This is guaranteed to exist.
+    // Get the nla with the corresponding name. It may not exist in the nlaMap,
+    // if we have already processed the NLA once. nlaToNewSymList can have
+    // duplicate entries for an NLA, since an NLA can be reused by multiple
+    // bundle subfields.
     auto iter = nlaMap.find(nlaName);
     if (iter == nlaMap.end())
       continue;
