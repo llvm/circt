@@ -799,7 +799,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
-                             IndexCastOp,
+                             DivUIOp, IndexCastOp,
                              /// static logic
                              staticlogic::PipelineTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -832,6 +832,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, DivUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -1032,6 +1033,44 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   getComponentState().registerEvaluatingGroup(multPipe.right(), group);
 
   return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     DivUIOp div) const {
+  Location loc = div.getLoc();
+  Type width = div.getResult().getType(), one = rewriter.getI1Type();
+  auto divPipe =
+      getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
+          rewriter, loc, {width, width, one, one, one, width, width, one});
+  // Pass the result from the DivUIOp to the Calyx primitive.
+  div.getResult().replaceAllUsesWith(divPipe.out_quotient());
+  auto reg = createReg(getComponentState(), rewriter, div.getLoc(),
+                       getComponentState().getUniqueName("div_reg"),
+                       width.getIntOrFloatBitWidth());
+  // Division pipelines are not combinational, so a GroupOp is required.
+  // ------
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, div);
+  getComponentState().addBlockScheduleable(div->getBlock(), group);
+
+  rewriter.setInsertionPointToEnd(group.getBody());
+  rewriter.create<calyx::AssignOp>(loc, divPipe.left(), div.getLhs());
+  rewriter.create<calyx::AssignOp>(loc, divPipe.right(), div.getRhs());
+  // Write the out_quotient to this register.
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), divPipe.out_quotient());
+  // The write enable port is high when the pipeline is done.
+  rewriter.create<calyx::AssignOp>(loc, reg.write_en(), divPipe.done());
+  rewriter.create<calyx::AssignOp>(
+      loc, divPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
+  // The group is done when the register write is complete.
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+
+  // Register the values for the pipeline.
+  getComponentState().registerEvaluatingGroup(divPipe.out_quotient(), group);
+  getComponentState().registerEvaluatingGroup(divPipe.left(), group);
+  getComponentState().registerEvaluatingGroup(divPipe.right(), group);
+
+  return success();
+
 }
 
 template <typename TAllocOp>
@@ -2189,7 +2228,8 @@ private:
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
+              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivPipeLibOp,
+              scf::WhileOp>(
               src.getDefiningOp()))
         continue;
 
@@ -2407,7 +2447,8 @@ public:
     target.addIllegalDialect<ArithmeticDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
-                      MulIOp, ReturnOp, arith::ConstantOp, IndexCastOp>();
+                      MulIOp, DivUIOp, ReturnOp, arith::ConstantOp,
+                      IndexCastOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
