@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics -allow-unregistered-dialect | circt-opt -verify-diagnostics -allow-unregistered-dialect | FileCheck %s
 
 hw.module @B(%a: i1) -> (nameOfPortInSV: i1, "": i1) {
   %0 = comb.or %a, %a : i1
@@ -56,3 +56,15 @@ hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {write_latenc
 
 // CHECK-LABEL: hw.module.extern @AnonArg(i42)
 hw.module.extern @AnonArg(i42)
+
+// CHECK-LABEL: hw.module @OutputUsableOutsideModule()
+hw.module @OutputUsableOutsideModule() {
+  // CHECK-NEXT: "imaginary_nested_region_op"() ({
+  // CHECK-NEXT:   [[TMP:%.+]] = hw.constant 0
+  // CHECK-NEXT:   hw.output [[TMP]], [[TMP]]
+  // CHECK-NEXT: })
+  "imaginary_nested_region_op"() ({
+    %c0_i42 = hw.constant 0 : i42
+    hw.output %c0_i42, %c0_i42 : i42, i42
+  }) {type = () -> (i42, i42)} : () -> (i42, i42)
+}

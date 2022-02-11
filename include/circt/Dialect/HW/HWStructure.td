@@ -428,8 +428,7 @@ def InstanceOp : HWOp<"instance", [
   let verifier = "return this->verifyCustom();";
 }
 
-def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
-                                NoSideEffect, ReturnLike]> {
+def OutputOp : HWOp<"output", [Terminator, NoSideEffect, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
     "hw.output" marks the end of a region in the HW dialect and the values

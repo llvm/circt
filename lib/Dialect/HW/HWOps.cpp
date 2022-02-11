@@ -295,10 +295,9 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
     return FunctionType::get(instance->getContext(), inputs, results);
   }
 
-  assert(isAnyModule(moduleOrInstance) &&
-         "must be called on instance or module");
   auto typeAttr =
       moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
+  assert(typeAttr && "must be called on instance or module");
   return typeAttr.getValue().cast<FunctionType>();
 }
 
