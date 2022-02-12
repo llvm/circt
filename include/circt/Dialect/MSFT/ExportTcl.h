@@ -13,16 +13,8 @@
 #ifndef CIRCT_DIALECT_MSFT_EXPORTTCL_H
 #define CIRCT_DIALECT_MSFT_EXPORTTCL_H
 
+#include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
-
-namespace llvm {
-class raw_ostream;
-} // namespace llvm
-
-namespace mlir {
-struct LogicalResult;
-class ModuleOp;
-} // namespace mlir
 
 namespace circt {
 namespace hw {
@@ -34,7 +26,7 @@ class MSFTModuleOp;
 
 /// Export TCL for a specific hw module.
 mlir::LogicalResult exportQuartusTcl(Operation *module,
-                                     llvm::StringRef outputFile = "");
+                                     StringRef outputFile = "");
 
 } // namespace msft
 } // namespace circt
