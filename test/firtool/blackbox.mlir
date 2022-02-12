@@ -55,26 +55,26 @@ firrtl.circuit "test_mod" attributes {annotations = [
       name = "blackbox-inline.svh",
       text = "`define SOME_MACRO\n"
     }
-  ]}
+  ], defname = "ExtInline"}
 
   // VERILOG-BAR-LABEL: module ExtResource(); endmodule
   // VERILOG-BAR-NOT:   module ExtResource(); endmodule
   firrtl.extmodule @ExtResource() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxResourceAnno",
     resourceId = "firtool/blackbox-resource.v"
-  }]}
+  }], defname = "ExtResource"}
 
   // Duplicate resources will not be copied.
   // VERILOG-BAR-NOT:   module ExtResource(); endmodule
   firrtl.extmodule @DuplicateExtResource() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxResourceAnno",
     resourceId = "firtool/blackbox-resource.v"
-  }]}
+  }], defname = "DuplicateExtResource"}
 
   // VERILOG-GIB-LABEL: module ExtPath(); endmodule
   // VERILOG-GIB-NOT:   module ExtPath(); endmodule
   firrtl.extmodule @ExtPath() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxPathAnno",
     path = "blackbox-path.v"
-  }]}
+  }], defname = "ExtPath"}
 }

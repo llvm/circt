@@ -37,4 +37,13 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
   }];
   let mnemonic = "globalNameRef";
   let parameters = (ins "::mlir::FlatSymbolRefAttr":$glblSym);
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::circt::hw::GlobalRefOp":$ref),[{
+      return get(ref.getContext(), SymbolRefAttr::get(ref));
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    static constexpr char DialectAttrName[] = "circt.globalRef";
+  }];
 }
