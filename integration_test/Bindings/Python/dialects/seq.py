@@ -60,7 +60,7 @@ with Context() as ctx, Location.unknown():
       seq.CompRegOp.create(i32,
                            input=reg_input,
                            clk=module.clk,
-                           inner_sym="reg1")
+                           sym_name="reg1")
 
       # CHECK: hw.output %[[DATA_VAL]]
       hw.OutputOp([reg.data])

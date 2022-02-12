@@ -47,7 +47,7 @@ def CompRegOp : SeqOp<"compreg",
 
   let arguments = (ins AnyType:$input, I1:$clk, StrAttr:$name,
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<SymbolNameAttr>:$innerSym);
+    OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs AnyType:$data);
 
   let printer = "return ::print$cppClass(p, *this);";

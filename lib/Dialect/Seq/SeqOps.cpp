@@ -24,8 +24,8 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
-    StringAttr innerSym;
-    parser.parseSymbolName(innerSym, "innerSym", result.attributes);
+    StringAttr symName;
+    parser.parseSymbolName(symName, "sym_name", result.attributes);
   }
 
   SmallVector<OpAsmParser::OperandType, 4> operands;
@@ -75,10 +75,10 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
 
 static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
   SmallVector<StringRef> elidedAttrs;
-  if (reg.innerSym().hasValue()) {
-    elidedAttrs.push_back("innerSym");
+  if (reg.sym_name().hasValue()) {
+    elidedAttrs.push_back("sym_name");
     p << ' ' << "sym ";
-    p.printSymbolName(*reg.innerSym());
+    p.printSymbolName(*reg.sym_name());
   }
 
   p << ' ' << reg.input() << ", " << reg.clk();
