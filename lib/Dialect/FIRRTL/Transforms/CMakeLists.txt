@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxReader.cpp
   CheckCombCycles.cpp
   CreateSiFiveMetadata.cpp
+  Dedup.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
   GrandCentral.cpp

@@ -75,9 +75,9 @@ circuit Foo:
     ; assert emitted as SVA
     ; CHECK-NEXT: wire [[TMP1:.+]] = ~enable | predicate5 | reset;
     ; CHECK-NEXT: assert__verif_library: assert property (@(posedge clock) [[TMP1]])
-    ; CHECK-SAME:   else $error("Assertion failed (verification library): SVA assert example");
+    ; CHECK-SAME:   else $error("Assertion failed (verification library): SVA assert example, sum was %d", $sampled(sum));
     when not(or(predicate5, asUInt(reset))) :
-      printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): SVA assert example\"}</extraction-summary> bar")
+      printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Assertion failed (verification library): SVA assert example, sum was %d\"}</extraction-summary> bar", sum)
       stop(clock, enable, 1)
 
     ; assert with custom label

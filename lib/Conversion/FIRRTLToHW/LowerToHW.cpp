@@ -3564,8 +3564,18 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   SmallVector<Value> messageOps;
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
     message = opMessageAttr;
-    for (auto operand : opOperands)
-      messageOps.push_back(getLoweredValue(operand));
+    for (auto operand : opOperands) {
+      auto loweredValue = getLoweredValue(operand);
+      // Wrap any message ops in $sampled() to guarantee that these will print
+      // with the same value as when the assertion triggers.  (See SystemVerilog
+      // 2017 spec section 16.9.3 for more information.)  The custom
+      // "ifElseFatal" variant is special cased because this isn't actually a
+      // concurrent assertion.
+      auto format = op->getAttrOfType<StringAttr>("format");
+      if (isConcurrent && (!format || format.getValue() != "ifElseFatal"))
+        loweredValue = builder.create<sv::SampledOp>(loweredValue);
+      messageOps.push_back(loweredValue);
+    }
   }
 
   auto emit = [&]() {
