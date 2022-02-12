@@ -172,7 +172,7 @@ static bool isEntityExtern(Operation *op) {
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
-LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
+LogicalResult circt::msft::exportQuartusTcl(Operation *hwMod,
                                             StringRef outputFile) {
   // Build up the output Tcl, tracking symbol references in state.
   std::string s;

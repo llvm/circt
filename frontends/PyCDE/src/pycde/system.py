@@ -41,8 +41,9 @@ class System:
 
   PASSES = """
     msft-partition,
-    lower-msft-to-hw{{tops={tops} verilog-file={verilog_file} tcl-file={tcl_file}}},
-    lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup)
+    lower-msft-to-hw{{verilog-file={verilog_file}}},
+    lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
+    msft-export-tcl{{tops={tops}, tcl-file={tcl_file}}}
   """
 
   def __init__(self,

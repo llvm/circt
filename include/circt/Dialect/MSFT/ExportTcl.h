@@ -33,7 +33,7 @@ namespace msft {
 class MSFTModuleOp;
 
 /// Export TCL for a specific hw module.
-mlir::LogicalResult exportQuartusTcl(MSFTModuleOp module,
+mlir::LogicalResult exportQuartusTcl(Operation *module,
                                      llvm::StringRef outputFile = "");
 
 } // namespace msft

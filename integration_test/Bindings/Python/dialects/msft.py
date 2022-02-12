@@ -110,9 +110,6 @@ with ir.Context() as ctx, ir.Location.unknown():
       [ir.FlatSymbolRefAttr.get(entity_extern.sym_name.value)])
   rc = seeded_pdb.add_placement(physAttr2, external_path, "", entity_extern)
   assert rc
-  with ir.InsertionPoint(m.body):
-    global_ref = hw.GlobalRefOp(ir.StringAttr.get("foo"), path)
-    global_ref = hw.GlobalRefOp(ir.StringAttr.get("bar"), external_path)
 
   nearest = seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4)
   assert isinstance(nearest, msft.PhysLocationAttr)
@@ -256,6 +253,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   # CHECK: proc top_config { parent } {
   # BROKEN:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
-  pm = mlir.passmanager.PassManager.parse("lower-msft-to-hw{tops=top}")
+  pm = mlir.passmanager.PassManager.parse(
+      "lower-msft-to-hw,msft-export-tcl{tops=top}")
   pm.run(m)
   circt.export_verilog(m, sys.stdout)
