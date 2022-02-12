@@ -295,7 +295,7 @@ void ExportTclPass::runOnOperation() {
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
   for (auto moduleName : tops) {
-    auto hwmod = top.lookupSymbol(moduleName);
+    Operation *hwmod = top.lookupSymbol(moduleName);
     if (!hwmod)
       continue;
     if (failed(exportQuartusTcl(hwmod, tclFile)))
