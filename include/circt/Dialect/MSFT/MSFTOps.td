@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Dialect/HW/HWTypes.td"
+
 // Base class for the operation in this dialect.
 class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
     Op<MSFTDialect, mnemonic, traits>;
@@ -239,4 +241,20 @@ def PhysLocationOp : MSFTOp<"pd.location"> {
   let assemblyFormat = [{
     ($ref^)? custom<PhysLoc>($loc) (`path` `:` $subPath^)? attr-dict
   }];
+}
+
+def DynamicInstanceOp : MSFTOp<"instance.dynamic",
+                               [HasParent<"mlir::ModuleOp">, NoTerminator]> {
+
+  let summary = "A module instance in the instance hierarchy";
+  let arguments = (ins NameRefArrayAttr:$appid);
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+  }];
+
+  let assemblyFormat = [{
+    $appid $body attr-dict
+  }];
+
 }

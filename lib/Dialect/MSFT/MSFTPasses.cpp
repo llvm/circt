@@ -56,6 +56,144 @@ static SymbolRefAttr getPart(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
+// Lower dynamic instances to global refs.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Lower MSFT's dynamic instance to global ref and associated PD ops.
+struct DynamicInstanceOpLowering
+    : public OpConversionPattern<DynamicInstanceOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  DynamicInstanceOpLowering(
+      MLIRContext *ctxt, const hw::SymbolCache &topSyms,
+      DenseSet<StringAttr> &newSyms,
+      DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>>
+          &globalRefsToApply)
+      : OpConversionPattern(ctxt), topSyms(topSyms), newSyms(newSyms),
+        globalRefsToApply(globalRefsToApply) {}
+
+  LogicalResult
+  matchAndRewrite(DynamicInstanceOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+
+private:
+  const hw::SymbolCache &topSyms;
+  DenseSet<StringAttr> &newSyms;
+  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> &globalRefsToApply;
+
+  mutable DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
+  const hw::SymbolCache &getSyms(MSFTModuleOp mod) const;
+};
+} // anonymous namespace
+
+const hw::SymbolCache &
+DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
+  auto symsFound = perModSyms.find(mod);
+  if (symsFound != perModSyms.end())
+    return symsFound->getSecond();
+
+  hw::SymbolCache &syms = perModSyms[mod];
+  mod.walk([&syms](Operation *op) {
+    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+      if (auto name = symOp.getNameAttr())
+        syms.addDefinition(name, symOp);
+  });
+  syms.freeze();
+  return syms;
+}
+
+LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
+    DynamicInstanceOp inst, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+
+  // Come up with a unique symbol name.
+  auto refSym = StringAttr::get(getContext(), "instref");
+  auto origRefSym = refSym;
+  unsigned ctr = 0;
+  while (topSyms.getDefinition(refSym) || newSyms.contains(refSym))
+    refSym = StringAttr::get(getContext(),
+                             origRefSym.getValue() + "_" + Twine(++ctr));
+  newSyms.insert(refSym);
+
+  auto ref =
+      rewriter.create<hw::GlobalRefOp>(inst.getLoc(), refSym, inst.appid());
+  auto refAttr = hw::GlobalRefAttr::get(ref);
+
+  for (auto innerRef : inst.appid().getAsRange<hw::InnerRefAttr>()) {
+    MSFTModuleOp mod =
+        cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
+    const hw::SymbolCache &modSyms = getSyms(mod);
+    Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
+    assert(tgtOp);
+    globalRefsToApply[tgtOp].push_back(refAttr);
+
+    if (!tgtOp->hasAttr("inner_sym")) {
+      rewriter.startRootUpdate(tgtOp);
+      tgtOp->setAttr("inner_sym", innerRef.getName());
+      rewriter.finalizeRootUpdate(tgtOp);
+    }
+  }
+
+  rewriter.eraseOp(inst);
+  return success();
+}
+
+namespace {
+struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+void LowerInstancesPass::runOnOperation() {
+  auto top = getOperation();
+  auto *ctxt = &getContext();
+
+  hw::SymbolCache topSyms;
+  for (Operation &op : top.getOps())
+    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+      if (auto name = symOp.getNameAttr())
+        topSyms.addDefinition(name, symOp);
+  topSyms.freeze();
+  DenseSet<StringAttr> newSyms;
+
+  ConversionTarget target(*ctxt);
+  target.addLegalDialect<hw::HWDialect>();
+  target.addLegalDialect<sv::SVDialect>();
+  target.addLegalDialect<msft::MSFTDialect>();
+  target.addIllegalOp<DynamicInstanceOp>();
+
+  RewritePatternSet patterns(ctxt);
+  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
+  patterns.insert<DynamicInstanceOpLowering>(ctxt, topSyms, newSyms,
+                                             globalRefsToApply);
+
+  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+
+  for (auto opRefPair : globalRefsToApply) {
+    ArrayRef<hw::GlobalRefAttr> refArr = opRefPair.getSecond();
+    SmallVector<Attribute> newGlobalRefs(
+        llvm::map_range(refArr, [](hw::GlobalRefAttr ref) { return ref; }));
+    Operation *op = opRefPair.getFirst();
+    if (auto refArr =
+            op->getAttrOfType<ArrayAttr>(hw::GlobalRefAttr::DialectAttrName))
+      newGlobalRefs.append(refArr.getValue().begin(), refArr.getValue().end());
+    op->setAttr(hw::GlobalRefAttr::DialectAttrName,
+                ArrayAttr::get(ctxt, newGlobalRefs));
+  }
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createLowerInstancesPass() {
+  return std::make_unique<LowerInstancesPass>();
+}
+} // namespace msft
+} // namespace circt
+
+//===----------------------------------------------------------------------===//
 // Lower MSFT to HW.
 //===----------------------------------------------------------------------===//
 
