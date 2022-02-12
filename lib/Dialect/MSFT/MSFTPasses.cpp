@@ -95,7 +95,9 @@ DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
     return symsFound->getSecond();
 
   hw::SymbolCache &syms = perModSyms[mod];
-  mod.walk([&syms](Operation *op) {
+  mod.walk([&syms, mod](Operation *op) {
+    if (op == mod)
+      return;
     if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
       if (auto name = symOp.getNameAttr())
         syms.addDefinition(name, symOp);
@@ -121,20 +123,37 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
       rewriter.create<hw::GlobalRefOp>(inst.getLoc(), refSym, inst.appid());
   auto refAttr = hw::GlobalRefAttr::get(ref);
 
+  bool symNotFound = false;
   for (auto innerRef : inst.appid().getAsRange<hw::InnerRefAttr>()) {
     MSFTModuleOp mod =
         cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
     const hw::SymbolCache &modSyms = getSyms(mod);
     Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
-    assert(tgtOp);
+    if (!tgtOp) {
+      symNotFound = true;
+      inst.emitOpError("Could not find ")
+          << innerRef.getName() << " in module " << innerRef.getModule();
+      continue;
+    }
     globalRefsToApply[tgtOp].push_back(refAttr);
 
+    // Assign the 'inner_sym' attribute if it's not already assigned.
     if (!tgtOp->hasAttr("inner_sym")) {
-      rewriter.startRootUpdate(tgtOp);
       tgtOp->setAttr("inner_sym", innerRef.getName());
-      rewriter.finalizeRootUpdate(tgtOp);
     }
   }
+  if (symNotFound)
+    return failure();
+
+  rewriter.setInsertionPointAfter(inst);
+  auto refSymbol = FlatSymbolRefAttr::get(ref);
+  inst.walk([&](Operation *op) {
+    op->remove();
+    rewriter.insert(op);
+
+    if (auto physLoc = dyn_cast<PhysLocationOp>(op))
+      physLoc.refAttr(refSymbol);
+  });
 
   rewriter.eraseOp(inst);
   return success();
