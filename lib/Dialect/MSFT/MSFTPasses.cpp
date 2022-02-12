@@ -98,9 +98,9 @@ DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
       return;
-    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-      if (auto name = symOp.getNameAttr())
-        syms.addDefinition(name, symOp);
+    if (auto name =
+            op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+      syms.addDefinition(name, op);
   });
   syms.freeze();
   return syms;
