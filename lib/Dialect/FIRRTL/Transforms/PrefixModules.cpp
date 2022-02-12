@@ -113,6 +113,9 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// Map of symbol name to NonLocalAnchor op.
   llvm::StringMap<Operation *> nlaMap;
 
+  /// Map of root module name to NonLocalAnchor op.
+  DenseMap<Attribute, SmallVector<Operation *>> nlaRootMap;
+
   /// Boolean keeping track of any name changes.
   bool anythingChanged = false;
 };
@@ -128,8 +131,42 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   // changed yet.
   if (!prefix.empty())
     anythingChanged = true;
+  StringAttr thisMod = module.getNameAttr();
+  // A predicate to check if an annotation can be removed. If there is a
+  // refernece to a NLA, the NLA should either contain this module in its path,
+  // if its an InstanceOp. Else, it must exist at the leaf of the NLA. Otherwise
+  // the NLA reference can be removed, since its a spurious annotation, result
+  // of cloning the original module.
+  auto canRemoveAnno = [&](Annotation anno, Operation *op) -> bool {
+    auto nla = anno.getMember("circt.nonlocal");
+    if (!nla)
+      return false;
+    auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
+    auto nlaIter = nlaMap.find(nlaName);
+    if (nlaIter == nlaMap.end()) {
+      op->emitError("cannot find NonLocalAnchor :" + nlaName);
+      return true;
+    }
 
+    auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
+    bool isValid = false;
+    if (isa<InstanceOp>(op))
+      isValid = nlaOp.hasModule(thisMod);
+    else
+      isValid = nlaOp.leafMod() == thisMod;
+    return !isValid;
+  };
+  // Remove spurious NLA references from the module ports and the module itself.
+  // Some of the NLA references become invalid after a module is cloned, based
+  // on the instnace.
+  AnnotationSet::removePortAnnotations(
+      module, std::bind(canRemoveAnno, std::placeholders::_2, module));
+  AnnotationSet::removeAnnotations(
+      module, std::bind(canRemoveAnno, std::placeholders::_1, module));
   module.body().walk([&](Operation *op) {
+    // Remove spurious NLA references either on a leaf op, or the InstanceOp.
+    AnnotationSet::removeAnnotations(
+        op, std::bind(canRemoveAnno, std::placeholders::_1, op));
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
@@ -160,19 +197,17 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // There can be multiple NonLocalAnchors attached to the instance op.
 
       for (Annotation anno : instAnnos) {
-        if (anno.isClass("circt.nonlocal"))
-          if (auto nla = anno.getMember("circt.nonlocal")) {
-            auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-            auto f = nlaMap.find(nlaName);
-            if (f == nlaMap.end())
-              instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
-            else {
-              auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
-              StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
-              nlaOp.updateModule(oldModName,
-                                 StringAttr::get(context, newTarget));
-            }
+        if (auto nla = anno.getMember("circt.nonlocal")) {
+          auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
+          auto nlaIter = nlaMap.find(nlaName);
+          if (nlaIter == nlaMap.end())
+            instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
+          else {
+            auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
+            StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
+            nlaOp.updateModule(oldModName, StringAttr::get(context, newTarget));
           }
+        }
       }
 
       instanceOp.moduleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
@@ -208,21 +243,33 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
 
   auto &firstPrefix = prefixes.front();
 
+  auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
+    auto iter = nlaRootMap.find(oldModName);
+    if (iter != nlaRootMap.end())
+      for (auto &n : iter->second)
+        cast<NonLocalAnchor>(n).updateModule(oldModName, newModuleName);
+  };
   // Rename the module for each required prefix. This will clone the module
   // once for each prefix but the first.
   OpBuilder builder(module);
   builder.setInsertionPointAfter(module);
   for (auto &outerPrefix : llvm::drop_begin(prefixes)) {
     auto moduleClone = cast<FModuleOp>(builder.clone(*module));
-    moduleClone.setName(outerPrefix + moduleName);
+    auto newModuleName = (outerPrefix + moduleName);
+    fixNLAsRootedAt(module.getNameAttr(),
+                    StringAttr::get(module.getContext(), newModuleName));
+    moduleClone.setName(newModuleName);
     // Each call to this function could invalidate the `prefixes` reference.
     renameModuleBody((outerPrefix + innerPrefix).str(), moduleClone);
   }
 
+  auto prefixFull = (firstPrefix + innerPrefix).str();
+  auto newModuleName = firstPrefix + moduleName;
+  fixNLAsRootedAt(module.getNameAttr(),
+                  StringAttr::get(module.getContext(), newModuleName));
   // The first prefix renames the module in place. There is always at least 1
   // prefix.
-  module.setName(firstPrefix + moduleName);
-  auto prefixFull = (firstPrefix + innerPrefix).str();
+  module.setName(newModuleName);
   renameModuleBody(prefixFull, module);
 
   // If this module contains a Grand Central interface, then also apply renames
@@ -303,29 +350,24 @@ void PrefixModulesPass::runOnOperation() {
   auto circuitOp = getOperation();
 
   // Record all the NLA ops in the circt.
-  for (auto nla : circuitOp.body().getOps<NonLocalAnchor>())
+  for (auto nla : circuitOp.body().getOps<NonLocalAnchor>()) {
     nlaMap[nla.sym_name()] = nla;
+    nlaRootMap[nla.root()].push_back(nla);
+  }
 
   // If the main module is prefixed, we have to update the CircuitOp.
   auto mainModule = instanceGraph->getTopLevelModule();
   auto prefix = getPrefix(mainModule);
+  auto oldModName = mainModule.moduleNameAttr();
   if (!prefix.empty()) {
     auto newMainModuleName = ((prefix + circuitOp.name()).str());
     circuitOp.nameAttr(StringAttr::get(context, newMainModuleName));
     // Now update all the NLAs that have the top level module symbol.
-    for (auto &n : nlaMap) {
-      auto nla = cast<NonLocalAnchor>(n.second);
-      auto oldMods = nla.namepath();
-      if (oldMods.empty())
-        continue;
-      SmallVector<Attribute, 4> newMods(oldMods.begin(), oldMods.end());
-      auto iref = oldMods[0].cast<hw::InnerRefAttr>();
-      if (iref.getModule().getValue().equals(mainModule.moduleName()))
-        newMods[0] = hw::InnerRefAttr::get(
-            StringAttr::get(context, newMainModuleName), iref.getName());
-      nla->setAttr("namepath", ArrayAttr::get(context, newMods));
-    }
+    for (auto &n : nlaRootMap[oldModName])
+      cast<NonLocalAnchor>(n).updateModule(
+          oldModName, StringAttr::get(context, newMainModuleName));
   }
+  nlaRootMap.erase(oldModName);
 
   // Walk all Modules in a top-down order.  For each module, look at the list of
   // required prefixes to be applied.

@@ -42,7 +42,7 @@ circuit Foo:
 
     ; assume with message with arguments
     ; CHECK-NEXT: {{assume__verif_library.*}}: assume property (@(posedge clock) ~enable | predicate4 | reset)
-    ; CHECK-SAME:   else $error("Assumption does not hold (verification library): expected sum === 2.U but got %d", sum);
+    ; CHECK-SAME:   else $error("Assumption does not hold (verification library): expected sum === 2.U but got %d", $sampled(sum));
     when not(or(predicate4, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"baseMsg\":\"Assumption does not hold (verification library): expected sum === 2.U but got %d\"}</extraction-summary> bar", sum)
       stop(clock, enable, 1)

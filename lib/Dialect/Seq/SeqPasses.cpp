@@ -48,8 +48,8 @@ public:
 
     // If the seq::CompRegOp has an inner_sym attribute, set this for the
     // sv::RegOp inner_sym attribute.
-    if (reg.innerSym().hasValue())
-      svReg.inner_symAttr(reg.innerSymAttr());
+    if (reg.sym_name().hasValue())
+      svReg.inner_symAttr(reg.sym_nameAttr());
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
