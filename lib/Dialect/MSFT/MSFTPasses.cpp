@@ -728,7 +728,7 @@ static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
 
 /// Helper to get the circt.globalRef attribute.
 static ArrayAttr getGlobalRefs(Operation *op) {
-  return op->getAttrOfType<ArrayAttr>("circt.globalRef");
+  return op->getAttrOfType<ArrayAttr>(hw::GlobalRefAttr::DialectAttrName);
 }
 
 /// Helper to update GlobalRefOps after referenced ops bubble up.
@@ -1016,8 +1016,8 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
     }
 
     // Remove the hoisted global refs from new instance.
-    if (ArrayAttr oldInstRefs =
-            oldInst->getAttrOfType<ArrayAttr>("circt.globalRef")) {
+    if (ArrayAttr oldInstRefs = oldInst->getAttrOfType<ArrayAttr>(
+            hw::GlobalRefAttr::DialectAttrName)) {
       llvm::SmallVector<Attribute> newInstRefs;
       for (Attribute oldRef : oldInstRefs.getValue()) {
         if (hw::GlobalRefAttr ref = oldRef.dyn_cast<hw::GlobalRefAttr>())
@@ -1026,9 +1026,10 @@ void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
         newInstRefs.push_back(oldRef);
       }
       if (newInstRefs.empty())
-        newInst->removeAttr("circt.globalRef");
+        newInst->removeAttr(hw::GlobalRefAttr::DialectAttrName);
       else
-        newInst->setAttr("circt.globalRef", ArrayAttr::get(ctxt, newInstRefs));
+        newInst->setAttr(hw::GlobalRefAttr::DialectAttrName,
+                         ArrayAttr::get(ctxt, newInstRefs));
     }
 
     // Fix up operands of cloned ops (backedges didn't exist in the map so they
@@ -1173,7 +1174,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
   SmallVector<Attribute> newGlobalRefVec(newGlobalRefs.begin(),
                                          newGlobalRefs.end());
   auto newRefsAttr = ArrayAttr::get(partInst->getContext(), newGlobalRefVec);
-  partInst->setAttr("circt.globalRef", newRefsAttr);
+  partInst->setAttr(hw::GlobalRefAttr::DialectAttrName, newRefsAttr);
   partInst->setAttr("inner_sym", partInst.sym_nameAttr());
 
   return partMod;

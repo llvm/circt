@@ -1293,7 +1293,6 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 LogicalResult GlobalRefOp::verifyGlobalRef() {
   Operation *parent = (*this)->getParentOp();
   StringAttr symNameAttr = (*this).sym_nameAttr();
-  static const char globalRefStr[] = "circt.globalRef";
   SymbolTable symTable(parent);
   auto hasGlobalRef = [&](Attribute attr) -> bool {
     for (auto ref : attr.cast<ArrayAttr>().getAsRange<GlobalRefAttr>())
@@ -1312,13 +1311,15 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
       return failure();
     }
     bool glblSymNotFound = true;
+    bool innerSymOpNotFound = true;
     mod->walk([&](Operation *op) -> WalkResult {
       StringAttr attr = op->getAttrOfType<StringAttr>("inner_sym");
       // If this is one of the ops in the instance path for the GlobalRefOp.
       if (attr && attr == innerSym) {
+        innerSymOpNotFound = false;
         // Each op can have an array of GlobalRefAttr, check if this op is one
         // of them.
-        if (hasGlobalRef(op->getAttr(globalRefStr))) {
+        if (hasGlobalRef(op->getAttr(GlobalRefAttr::DialectAttrName))) {
           glblSymNotFound = false;
           return WalkResult::interrupt();
         }
@@ -1337,7 +1338,7 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))
               if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
-                if (hasGlobalRef(attr.get(globalRefStr)))
+                if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
         if (auto resAttrs =
@@ -1346,15 +1347,18 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))
               if (symRef.cast<FlatSymbolRefAttr>().getValue() == innerSym)
-                if (hasGlobalRef(attr.get(globalRefStr)))
+                if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
       }
     }
-    if (glblSymNotFound) {
+    if (innerSymOpNotFound)
+      return (*this)->emitOpError("operation:'" + innerSym.str() +
+                                  "' in module:'" + modName.str() +
+                                  "' could not be found");
+    if (glblSymNotFound)
       return (*this)->emitOpError(
           "operation:'" + innerSym.str() + "' in module:'" + modName.str() +
           "' does not contain a reference to '" + symNameAttr.str() + "'");
-    }
   }
   return success();
 }
