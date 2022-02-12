@@ -3,17 +3,17 @@
 // RUN: circt-opt %s --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,regions,reg --export-verilog | FileCheck %s --check-prefix=TCL
 
 hw.globalRef @ref1 [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
-msft.pd.location @ref1 <M20K, 15, 9, 3> path: "memBank2"
+msft.pd.location @ref1 M20K x: 15 y: 9 n: 3 path: "memBank2"
 
 hw.globalRef @ref2 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
-msft.pd.location @ref2 <M20K, 8, 19, 1> path: "memBank2"
+msft.pd.location @ref2 M20K x: 8 y: 19 n: 1 path: "memBank2"
 
 hw.globalRef @ref3 [#hw.innerNameRef<@regions::@module>] {
   "baz" = #msft.physical_region_ref<@region1>
 }
 
 hw.globalRef @ref4 [#hw.innerNameRef<@reg::@reg>]
-msft.pd.location @ref4 <FF, 0, 0, 0>
+msft.pd.location @ref4 FF x: 0 y: 0 n: 0
 
 hw.module.extern @Foo()
 

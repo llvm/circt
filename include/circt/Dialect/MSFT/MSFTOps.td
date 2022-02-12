@@ -237,6 +237,6 @@ def PhysLocationOp : MSFTOp<"pd.location"> {
                        OptionalAttr<StrAttr>:$subPath,
                        OptionalAttr<FlatSymbolRefAttr>:$ref);
   let assemblyFormat = [{
-    ($ref^)? $loc (`path` `:` $subPath^)? attr-dict
+    ($ref^)? custom<PhysLoc>($loc) (`path` `:` $subPath^)? attr-dict
   }];
 }
