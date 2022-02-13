@@ -13,6 +13,7 @@
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 #include "mlir/CAPI/Utils.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
@@ -75,8 +76,7 @@ circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
   ArrayAttr path = unwrap(cInst.path).cast<ArrayAttr>();
   StringAttr subpath = StringAttr::get(
       attr.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
-  auto inst =
-      PlacementDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
+  auto inst = PlacementDB::PlacedInstance{path, subpath, unwrap(cInst.op)};
 
   if (auto loc = attr.dyn_cast<PhysLocationAttr>())
     return wrap(unwrap(self)->addPlacement(loc, inst));
@@ -130,6 +130,8 @@ void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
   PlacementDB *db = unwrap(cdb);
   auto cb = [ccb, userData](PhysLocationAttr loc,
                             PlacementDB::PlacedInstance p) {
+    if (!p.subpath)
+      p.subpath = StringAttr::get(loc.getContext(), "");
     CirctMSFTPlacedInstance cPlacement = {wrap(p.path), p.subpath.data(),
                                           p.subpath.size(), wrap(p.op)};
     ccb(wrap(loc), cPlacement, userData);
@@ -156,12 +158,13 @@ void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
 
 void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
                                  PrimitiveType type, long x, long y, long num) {
-  mlir::Operation *op = unwrap(cOp);
-  mlir::MLIRContext *ctxt = op->getContext();
+  Operation *op = unwrap(cOp);
+  MLIRContext *ctxt = op->getContext();
   PhysLocationAttr loc = PhysLocationAttr::get(
-      ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num, entityName);
-  llvm::SmallString<64> entity("loc:");
-  entity.append(entityName);
+      ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num);
+  StringAttr entity = StringAttr::get(ctxt, entityName);
+  OpBuilder(op).create<PhysLocationOp>(op->getLoc(), loc, entity,
+                                       FlatSymbolRefAttr::get(op));
   op->setAttr(entity, loc);
 }
 
@@ -174,8 +177,7 @@ MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
                                            MlirStringRef subPath) {
   auto *ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
-      ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num,
-      unwrap(subPath)));
+      ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
 }
 
 CirctMSFTPrimitiveType

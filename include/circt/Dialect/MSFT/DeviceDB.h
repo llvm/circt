@@ -73,7 +73,7 @@ public:
   /// necessary as most often the instance is an extern module.
   struct PlacedInstance {
     ArrayAttr path;
-    llvm::StringRef subpath;
+    StringAttr subpath;
     Operation *op;
   };
 
@@ -93,7 +93,8 @@ public:
   LogicalResult addPlacement(PhysicalRegionRefAttr, PlacedInstance);
   /// Using the operation attributes, add the proper placements to the database.
   /// Return the number of placements which weren't added due to conflicts.
-  size_t addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *);
+  size_t addPlacements(const hw::SymbolCache &globalRefs,
+                       FlatSymbolRefAttr rootMod, mlir::Operation *);
   /// Walk the entire design adding placements root at the top module.
   size_t addDesignPlacements();
 

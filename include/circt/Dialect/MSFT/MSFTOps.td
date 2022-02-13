@@ -231,3 +231,12 @@ def EntityExternOp : MSFTOp<"entity.extern",
     $sym_name $metadata attr-dict
   }];
 }
+
+def PhysLocationOp : MSFTOp<"pd.location"> {
+  let arguments = (ins PhysLocation:$loc,
+                       OptionalAttr<StrAttr>:$subPath,
+                       OptionalAttr<FlatSymbolRefAttr>:$ref);
+  let assemblyFormat = [{
+    ($ref^)? custom<PhysLoc>($loc) (`path` `:` $subPath^)? attr-dict
+  }];
+}
