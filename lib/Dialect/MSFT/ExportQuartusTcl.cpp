@@ -117,10 +117,10 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 /// set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|a|b|c
 /// set_instance_assignment -name REGION_NAME test_region -to $parent|a|b|c
 static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
-                 PhysicalRegionRefAttr regionRef) {
+                 PDPhysRegionOp regionRef) {
   auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
-  auto physicalRegion =
-      topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
+  auto physicalRegion = topModule.lookupSymbol<DeclPhysicalRegionOp>(
+      regionRef.physRegionRefAttr());
   assert(physicalRegion && "must reference an existant physical region");
 
   // PLACE_REGION directive.
@@ -194,13 +194,13 @@ LogicalResult circt::msft::exportQuartusTcl(Operation *hwMod,
         emit(state, inst, loc);
       });
 
-  db.walkRegionPlacements([&state](PhysicalRegionRefAttr regionRef,
-                                   PlacementDB::PlacedInstance inst) {
-    // Skip entities which we don't need to emit placements for.
-    if (isEntityExtern(inst.op))
-      return;
-    emit(state, inst, regionRef);
-  });
+  db.walkRegionPlacements(
+      [&state](PDPhysRegionOp regionRef, PlacementDB::PlacedInstance inst) {
+        // Skip entities which we don't need to emit placements for.
+        if (isEntityExtern(inst.op))
+          return;
+        emit(state, inst, regionRef);
+      });
 
   os << "}\n\n";
 

@@ -58,7 +58,15 @@ static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
     << " x: " << loc.getX() << " y: " << loc.getY() << " n: " << loc.getNum();
 }
 
-void PhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
+//===----------------------------------------------------------------------===//
+// Misc MSFT ops
+//===----------------------------------------------------------------------===//
+
+void PDPhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
+  refAttr(FlatSymbolRefAttr::get(ref));
+}
+
+void PDPhysRegionOp::setGlobalRef(hw::GlobalRefOp ref) {
   refAttr(FlatSymbolRefAttr::get(ref));
 }
 
