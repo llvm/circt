@@ -58,6 +58,10 @@ static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
     << " x: " << loc.getX() << " y: " << loc.getY() << " n: " << loc.getNum();
 }
 
+void PhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
+  refAttr(FlatSymbolRefAttr::get(ref));
+}
+
 //===----------------------------------------------------------------------===//
 // Module/Instance stuff, mostly copied from HW dialect.
 //===----------------------------------------------------------------------===//

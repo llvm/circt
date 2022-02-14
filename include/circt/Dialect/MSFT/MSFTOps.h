@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
@@ -23,4 +24,4 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.h.inc"
 
-#endif // CIRCT_DIALECT_MSFT_MSFTATTRIBUTES_H
+#endif // CIRCT_DIALECT_MSFT_MSFTOPS_H
