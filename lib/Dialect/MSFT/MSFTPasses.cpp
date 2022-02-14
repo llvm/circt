@@ -166,7 +166,7 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
     rewriter.insert(&op);
 
     // Assign a ref for ops which need it.
-    if (auto specOp = dyn_cast<InstanceSpecificOpInterface>(op))
+    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op))
       specOp.setGlobalRef(ref);
   }
 

@@ -8,7 +8,7 @@
 
 include "mlir/IR/OpBase.td"
 
-def InstanceSpecificOpInterface : OpInterface<"InstanceSpecificOpInterface"> {
+def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
   let description = [{
     Interface for anything which needs to refer to a GlobalRefOp.
   }];

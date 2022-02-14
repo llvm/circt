@@ -235,7 +235,7 @@ def EntityExternOp : MSFTOp<"entity.extern",
 }
 
 def PhysLocationOp : MSFTOp<"pd.location",
-      [DeclareOpInterfaceMethods<InstanceSpecificOpInterface>]> {
+      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
   let summary = "Specify a location for an instance";
   let description = [{
     Used to specify a specific location on an FPGA to place a dynamic instance.
