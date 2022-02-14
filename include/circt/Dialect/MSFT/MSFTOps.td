@@ -235,6 +235,15 @@ def EntityExternOp : MSFTOp<"entity.extern",
 }
 
 def PhysLocationOp : MSFTOp<"pd.location"> {
+  let summary = "Specify a location for an instance";
+  let description = [{
+    Used to specify a specific location on an FPGA to place a dynamic instance.
+    Supports specifying the location of a subpath for extern modules and device
+    primitives. Intended to live as a child of `instance.dynamic` initially
+    without the `ref` field. The dynamic instance lowering will fill in `ref`
+    with the symol of the `hw.globalref` op corresponding to the lowered dynamic
+    instance.
+  }];
   let arguments = (ins PhysLocation:$loc,
                        OptionalAttr<StrAttr>:$subPath,
                        OptionalAttr<FlatSymbolRefAttr>:$ref);
@@ -247,11 +256,22 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
                                [HasParent<"mlir::ModuleOp">, NoTerminator]> {
 
   let summary = "A module instance in the instance hierarchy";
+  let description = [{
+    Represents an instance (as in instance in the instance hierarchy) referred
+    to henceforth as a dynamic instance. Specified with a path through the
+    instance hierarchy (which in the future will be replaced with an AppID).
+    Lowers to a `hw.globalref` but unlike a global ref, does not require all of
+    the ops participating in the globalref to contain a back pointer attribute.
+    Allows users to efficiently add placements to a large number of dynamic
+    instances which happen to map to a small number of static instances by
+    bulk-adding the necessary `hw.globalref` attributes.
+
+    During the lowering, moves the operations in the body to the top level and
+    gives them the symbol of the globalref which was created to replace the
+    dynamic instance.
+  }];
   let arguments = (ins NameRefArrayAttr:$appid);
   let regions = (region SizedRegion<1>:$body);
-
-  let extraClassDeclaration = [{
-  }];
 
   let assemblyFormat = [{
     $appid $body attr-dict

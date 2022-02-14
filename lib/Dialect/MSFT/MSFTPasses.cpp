@@ -79,11 +79,18 @@ public:
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
+  // Symbol cache for top module symbols.
   const hw::SymbolCache &topSyms;
+  // List of symbols which have been created in this pass. Along with `topSyms`,
+  // used to generate unique symbol names.
   DenseSet<StringAttr> &newSyms;
+  // Aggregate the globalRef attributes which have to be applied to static
+  // operations.
   DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> &globalRefsToApply;
 
+  // In order to be efficient, cache the symbols in each module.
   mutable DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
+  // Accessor for `perModSyms` which lazily constructs each cache.
   const hw::SymbolCache &getSyms(MSFTModuleOp mod) const;
 };
 } // anonymous namespace
@@ -94,6 +101,7 @@ DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
 
+  // Build the cache if necessary;
   hw::SymbolCache &syms = perModSyms[mod];
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
@@ -119,10 +127,13 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
                              origRefSym.getValue() + "_" + Twine(++ctr));
   newSyms.insert(refSym);
 
+  // Create a global ref to replace us.
   auto ref =
       rewriter.create<hw::GlobalRefOp>(inst.getLoc(), refSym, inst.appid());
   auto refAttr = hw::GlobalRefAttr::get(ref);
 
+  // For each level of `appid`, find the static operation which needs a back
+  // reference to the global ref which is replacing us.
   bool symNotFound = false;
   for (auto innerRef : inst.appid().getAsRange<hw::InnerRefAttr>()) {
     MSFTModuleOp mod =
@@ -135,9 +146,11 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
           << innerRef.getName() << " in module " << innerRef.getModule();
       continue;
     }
+    // Add the backref to the list of attributes to apply.
     globalRefsToApply[tgtOp].push_back(refAttr);
 
-    // Assign the 'inner_sym' attribute if it's not already assigned.
+    // Since GlobalRefOp uses the `inner_sym` attribute, assign the 'inner_sym'
+    // attribute if it's not already assigned.
     if (!tgtOp->hasAttr("inner_sym")) {
       tgtOp->setAttr("inner_sym", innerRef.getName());
     }
@@ -145,15 +158,20 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
   if (symNotFound)
     return failure();
 
+  // Relocate all my children.
   rewriter.setInsertionPointAfter(inst);
   auto refSymbol = FlatSymbolRefAttr::get(ref);
-  inst.walk([&](Operation *op) {
+  for (Operation *op :
+       llvm::make_early_inc_range(llvm::make_pointer_range(inst.getOps()))) {
     op->remove();
     rewriter.insert(op);
 
+    // Assign a ref for known ops.
+    // TODO: Write an OpInterface to set the reference so this lowering pattern
+    // doesn't have to have a full list.
     if (auto physLoc = dyn_cast<PhysLocationOp>(op))
       physLoc.refAttr(refSymbol);
-  });
+  }
 
   rewriter.eraseOp(inst);
   return success();
@@ -168,7 +186,11 @@ struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
 void LowerInstancesPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
+  // Aggregation of the global ref attributes populated as a side-effect of the
+  // conversion.
+  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
 
+  // Populate the top level symbol cache.
   hw::SymbolCache topSyms;
   for (Operation &op : top.getOps())
     if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
@@ -184,13 +206,15 @@ void LowerInstancesPass::runOnOperation() {
   target.addIllegalOp<DynamicInstanceOp>();
 
   RewritePatternSet patterns(ctxt);
-  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
   patterns.insert<DynamicInstanceOpLowering>(ctxt, topSyms, newSyms,
                                              globalRefsToApply);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 
+  // Since applying a large number of attributes is very expensive in MLIR (both
+  // in terms of time and memory), bulk-apply the attributes necessary for
+  // `hw.globalref`s.
   for (auto opRefPair : globalRefsToApply) {
     ArrayRef<hw::GlobalRefAttr> refArr = opRefPair.getSecond();
     SmallVector<Attribute> newGlobalRefs(
