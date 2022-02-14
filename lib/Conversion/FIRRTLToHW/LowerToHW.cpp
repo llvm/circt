@@ -1432,6 +1432,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(PartialConnectOp op);
+  LogicalResult visitStmt(StrictConnectOp op);
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
@@ -3394,6 +3395,54 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     };
     recurse(destVal, srcVal, destType, op.src().getType());
 
+    return success();
+  }
+
+  builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
+  auto dest = op.dest();
+  auto srcVal = getLoweredValue(op.src());
+  if (!srcVal)
+    return handleZeroBit(op.src(), []() { return success(); });
+
+  auto destVal = getPossiblyInoutLoweredValue(dest);
+  if (!destVal)
+    return failure();
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
+  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
+
+  // If this is an assignment to a register, then the connect implicitly
+  // happens under the clock that gates the register.
+  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
+    Value clockVal = getLoweredValue(regOp.clockVal());
+    if (!clockVal)
+      return failure();
+
+    addToAlwaysBlock(clockVal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+    return success();
+  }
+
+  // If this is an assignment to a RegReset, then the connect implicitly
+  // happens under the clock and reset that gate the register.
+  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
+    Value clockVal = getLoweredValue(regResetOp.clockVal());
+    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
+    if (!clockVal || !resetSignal)
+      return failure();
+
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
+                     regResetOp.resetSignal().getType().isa<AsyncResetType>()
+                         ? ::ResetType::AsyncReset
+                         : ::ResetType::SyncReset,
+                     sv::EventControl::AtPosEdge, resetSignal,
+                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
 

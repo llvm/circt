@@ -1090,7 +1090,7 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
 
 LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
                                        PatternRewriter &rewriter) {
-  auto inputOp = op.input().getDefiningOp();
+  auto *inputOp = op.input().getDefiningOp();
   // bits(bits(x, ...), ...) -> bits(x, ...).
   if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
     auto newLo = op.lo() + innerBits.lo();
@@ -1410,14 +1410,14 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 /// exactly one connect that sets the value as its destination.  This returns
 /// the operation if found and if all the other users are "reads" from the
 /// value.
-static ConnectOp getSingleConnectUserOf(Value value) {
-  ConnectOp connect;
+static StrictConnectOp getSingleConnectUserOf(Value value) {
+  StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
     // If we see a partial connect or attach, just conservatively fail.
-    if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
+    if (isa<AttachOp, PartialConnectOp>(user))
       return {};
 
-    if (auto aConnect = dyn_cast<ConnectOp>(user))
+    if (auto aConnect = dyn_cast<StrictConnectOp>(user))
       if (aConnect.dest() == value) {
         if (!connect)
           connect = aConnect;
@@ -1429,7 +1429,7 @@ static ConnectOp getSingleConnectUserOf(Value value) {
 }
 
 // Forward simple values through wire's and reg's.
-static LogicalResult canonicalizeSingleSetConnect(ConnectOp op,
+static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
                                                   PatternRewriter &rewriter) {
   // While we can do this for nearly all wires, we currently limit it to simple
   // things.
@@ -1497,14 +1497,69 @@ static LogicalResult canonicalizeSingleSetConnect(ConnectOp op,
   return success();
 }
 
+static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
+                                                PatternRewriter &rewriter) {
+  // If a partial connect exists from a shorter int to a longer int, simplify
+  // to an extend and strict connect.
+  auto destType =
+      op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+  auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
+  if (destType == srcType)
+    return failure();
+
+  auto srcWidth = srcType.getBitWidthOrSentinel();
+  auto destWidth = destType.getBitWidthOrSentinel();
+
+  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
+      destWidth >= 0 && destWidth > srcWidth) {
+    auto nv =
+        rewriter.createOrFold<PadPrimOp>(op.getLoc(), op.src(), destWidth);
+    rewriter.create<StrictConnectOp>(op.getLoc(), op.dest(), nv);
+    if (auto *srcOp = op.src().getDefiningOp())
+      rewriter.updateRootInPlace(srcOp, []() {});
+    if (auto *destOp = op.dest().getDefiningOp())
+      rewriter.updateRootInPlace(destOp, []() {});
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
+}
+
+// Forward simple values through wire's and reg's.
+static LogicalResult
+canonicalizeMatchingTypeConnect(ConnectOp op, PatternRewriter &rewriter) {
+  if (op.src().getType() != op.dest().getType() ||
+      op.src().getType().cast<FIRRTLType>().hasUninferredWidth())
+    return failure();
+  rewriter.create<StrictConnectOp>(op.getLoc(), op.dest(), op.src());
+  if (auto *srcOp = op.src().getDefiningOp())
+    rewriter.updateRootInPlace(srcOp, []() {});
+  if (auto *destOp = op.dest().getDefiningOp())
+    rewriter.updateRootInPlace(destOp, []() {});
+  rewriter.eraseOp(op);
+  return success();
+}
+
 LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
+  // TODO: Canonicalize towards explicit extensions and flips here.
+
+  // If there is a simple value connected to a foldable decl like a wire or reg,
+  // see if we can eliminate the decl.
+  if (succeeded(canonicalizeMatchingTypeConnect(op, rewriter)))
+    return success();
+  if (succeeded(canonicalizeIntTypeConnect(op, rewriter)))
+    return success();
+  return failure();
+}
+
+LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
+                                            PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
 
   // If there is a simple value connected to a foldable decl like a wire or reg,
   // see if we can eliminate the decl.
   if (succeeded(canonicalizeSingleSetConnect(op, rewriter)))
     return success();
-
   return failure();
 }
 
@@ -1633,8 +1688,8 @@ void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
-struct foldResetMux : public mlir::RewritePattern {
-  foldResetMux(MLIRContext *context)
+struct FoldResetMux : public mlir::RewritePattern {
+  FoldResetMux(MLIRContext *context)
       : RewritePattern(RegResetOp::getOperationName(), 0, context) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
@@ -1643,15 +1698,15 @@ struct foldResetMux : public mlir::RewritePattern {
     if (!reset || hasDontTouch(reg.getOperation()))
       return failure();
     // Find the one true connect, or bail
-    ConnectOp con = getSingleConnectUserOf(reg.result());
+    auto con = getSingleConnectUserOf(reg.result());
     if (!con)
       return failure();
 
     auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
     if (!mux)
       return failure();
-    auto high = mux.high().getDefiningOp();
-    auto low = mux.low().getDefiningOp();
+    auto *high = mux.high().getDefiningOp();
+    auto *low = mux.low().getDefiningOp();
     auto constOp = dyn_cast_or_null<ConstantOp>(high);
 
     if (constOp && low != reg)
@@ -1689,7 +1744,7 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::RegResetWithZeroReset,
                  patterns::RegResetWithInvalidReset,
                  patterns::RegResetWithInvalidResetValue,
-                 patterns::DropNameRegReset, foldResetMux>(context);
+                 patterns::DropNameRegReset, FoldResetMux>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
@@ -1702,14 +1757,14 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
     return failure();
   // Make sure are users are safe to replace
   for (auto port : op->getResults())
-    for (auto user : port.getUsers())
+    for (auto *user : port.getUsers())
       if (!isa<SubfieldOp>(user))
         return failure();
 
   // Annoyingly, there isn't a good replacement for the port as a whole, since
   // they have an outer flip type.
   for (auto port : op->getResults()) {
-    for (auto user : llvm::make_early_inc_range(port.getUsers())) {
+    for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
       SubfieldOp sfop = cast<SubfieldOp>(user);
       rewriter.replaceOpWithNewOp<WireOp>(sfop, sfop.result().getType());
     }
@@ -1730,15 +1785,15 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // reg.reset(port, const); connect(reg, val)
 
   // Find the one true connect, or bail
-  ConnectOp con = getSingleConnectUserOf(reg.result());
+  auto con = getSingleConnectUserOf(reg.result());
   if (!con)
     return failure();
 
   auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
   if (!mux)
     return failure();
-  auto high = mux.high().getDefiningOp();
-  auto low = mux.low().getDefiningOp();
+  auto *high = mux.high().getDefiningOp();
+  auto *low = mux.low().getDefiningOp();
   // Reset value must be constant
   auto constOp = dyn_cast_or_null<ConstantOp>(high);
 

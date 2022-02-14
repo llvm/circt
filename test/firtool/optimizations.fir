@@ -13,17 +13,17 @@ circuit test_cse :
     d <= and(a, UInt<4>(0))
     e <= and(UInt<4>(3), UInt<4>(1))
 
-; OPT-DAG: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-; OPT-DAG: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
+; OPT-DAG: %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
+; OPT-DAG: %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
 
 ; Only one add.
 ; OPT: %0 = firrtl.add %a, %a
-; OPT: firrtl.connect %b, %0
-; OPT: firrtl.connect %c, %0
+; OPT: firrtl.strictconnect %b, %0
+; OPT: firrtl.strictconnect %c, %0
 
 ; Connect with zero and one directly.
-; OPT: firrtl.connect %d, %c0_ui4
-; OPT: firrtl.connect %e, %c1_ui4
+; OPT: firrtl.strictconnect %d, %c0_ui5
+; OPT: firrtl.strictconnect %e, %c1_ui5
 
 ; Both adds persist.
 ; NOOPT: %0 = firrtl.add %a, %a

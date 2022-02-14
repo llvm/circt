@@ -9,7 +9,7 @@ firrtl.circuit "Top" {
 }
 
 // MLIR-LABEL: firrtl.module @Top(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-// MLIR-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+// MLIR-NEXT:    firrtl.strictconnect %out, %in : !firrtl.uint<8>
 // MLIR-NEXT:  }
 
 // VERILOG-LABEL: module Top(

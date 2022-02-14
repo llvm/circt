@@ -1211,7 +1211,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown && !isa<ConnectOp, PartialConnectOp, AttachOp>(op))
+  if (allWidthsKnown &&
+      !isa<ConnectOp, PartialConnectOp, StrictConnectOp, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.

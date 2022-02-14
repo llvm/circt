@@ -179,7 +179,7 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
     TypeSwitch<Operation *>(useOp)
         // Insert a mux on the value connected to the target:
         // connect(dst, src) -> connect(dst, mux(reset, resetValue, src))
-        .Case<ConnectOp, PartialConnectOp>([&](auto op) {
+        .Case<ConnectOp, PartialConnectOp, StrictConnectOp>([&](auto op) {
           if (op.dest() != target)
             return;
           LLVM_DEBUG(llvm::dbgs() << "  - Insert mux into " << op << "\n");
@@ -590,7 +590,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
       llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
   circuit.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
-        .Case<ConnectOp, PartialConnectOp>(
+        .Case<ConnectOp, PartialConnectOp, StrictConnectOp>(
             [&](auto op) { traceResets(op.dest(), op.src(), op.getLoc()); })
 
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
