@@ -9,11 +9,11 @@ firrtl.circuit "Test" {
 
     %dontTouchWire = firrtl.wire sym @a1 : !firrtl.uint<1>
     // CHECK-NEXT: %dontTouchWire = firrtl.wire
-    firrtl.connect %dontTouchWire, %source : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.connect %dontTouchWire, %c0_ui1
+    firrtl.strictconnect %dontTouchWire, %source : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %dontTouchWire, %c0_ui1
 
-    // CHECK-NEXT: firrtl.connect %dest, %dontTouchWire
-    firrtl.connect %dest, %dontTouchWire : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %dest, %dontTouchWire
+    firrtl.strictconnect %dest, %dontTouchWire : !firrtl.uint<1>
     // CHECK-NEXT: }
   }
 
@@ -27,75 +27,75 @@ firrtl.circuit "Test" {
                       out %result6: !firrtl.uint<2>,
                       out %result7: !firrtl.uint<4>,
                       out %result8: !firrtl.uint<4>,
-                      out %result9: !firrtl.uint<4>) {
+                      out %result9: !firrtl.uint<2>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 
     // Trivial wire constant propagation.
     %someWire = firrtl.wire : !firrtl.uint<1>
-    firrtl.connect %someWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %someWire, %c0_ui1 : !firrtl.uint<1>
 
     // CHECK-NOT: firrtl.wire
-    // CHECK: firrtl.connect %result1, %c0_ui1_0
-    firrtl.connect %result1, %someWire : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %result1, %c0_ui1_0
+    firrtl.strictconnect %result1, %someWire : !firrtl.uint<1>
 
     // Trivial wire special constant propagation.
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
     %clockWire = firrtl.wire : !firrtl.clock
-    firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
+    firrtl.strictconnect %clockWire, %c0_clock : !firrtl.clock
 
     // CHECK-NOT: firrtl.wire
-    // CHECK: firrtl.connect %result2, %c0_clock
-    firrtl.connect %result2, %clockWire : !firrtl.clock, !firrtl.clock
+    // CHECK: firrtl.strictconnect %result2, %c0_clock
+    firrtl.strictconnect %result2, %clockWire : !firrtl.clock
 
     // Not a constant.
     %nonconstWire = firrtl.wire : !firrtl.uint<1>
-    firrtl.connect %nonconstWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %nonconstWire, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %nonconstWire, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %nonconstWire, %c1_ui1 : !firrtl.uint<1>
 
-    // CHECK: firrtl.connect %result3, %nonconstWire
-    firrtl.connect %result3, %nonconstWire : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %result3, %nonconstWire
+    firrtl.strictconnect %result3, %nonconstWire : !firrtl.uint<1>
 
     // Constant propagation through instance.
     %source, %dest = firrtl.instance "" sym @dm21 @PassThrough(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>)
 
-    // CHECK: firrtl.connect %inst_source, %c0_ui1
-    firrtl.connect %source, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %inst_source, %c0_ui1
+    firrtl.strictconnect %source, %c0_ui1 : !firrtl.uint<1>
 
-    // CHECK: firrtl.connect %result4, %inst_dest
-    firrtl.connect %result4, %dest : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %result4, %inst_dest
+    firrtl.strictconnect %result4, %dest : !firrtl.uint<1>
 
-    // Check connect extensions.
     %extWire = firrtl.wire : !firrtl.uint<2>
-    firrtl.connect %extWire, %c0_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
+    firrtl.strictconnect %extWire, %c0_ui2 : !firrtl.uint<2>
 
     // Connects of invalid values shouldn't hurt.
     %invalid = firrtl.invalidvalue : !firrtl.uint<2>
-    firrtl.connect %extWire, %invalid : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %extWire, %invalid : !firrtl.uint<2>
 
-    // CHECK: firrtl.connect %result5, %c0_ui2
-    firrtl.connect %result5, %extWire: !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK: firrtl.strictconnect %result5, %c0_ui2
+    firrtl.strictconnect %result5, %extWire: !firrtl.uint<2>
 
     // regreset
     %c0_ui20 = firrtl.constant 0 : !firrtl.uint<20>
     %regreset = firrtl.regreset %clock, %reset, %c0_ui20 : !firrtl.uint<1>, !firrtl.uint<20>, !firrtl.uint<2>
 
-    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-    firrtl.connect %regreset, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.strictconnect %regreset, %c0_ui2 : !firrtl.uint<2>
 
-    // CHECK: firrtl.connect %result6, %c0_ui2
-    firrtl.connect %result6, %regreset: !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK: firrtl.strictconnect %result6, %c0_ui2
+    firrtl.strictconnect %result6, %regreset: !firrtl.uint<2>
 
     // reg
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %reg = firrtl.reg %clock  : !firrtl.uint<4>
-    firrtl.connect %reg, %c0_ui2 : !firrtl.uint<4>, !firrtl.uint<2>
-    // CHECK: firrtl.connect %result7, %c0_ui4
-    firrtl.connect %result7, %reg: !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %reg, %c0_ui4 : !firrtl.uint<4>
+    // CHECK: firrtl.strictconnect %result7, %c0_ui4
+    firrtl.strictconnect %result7, %reg: !firrtl.uint<4>
 
     // Wire without connects to it should turn into 'invalid'.
-    %unconnectedWire = firrtl.wire : !firrtl.uint<2>
-    // CHECK: firrtl.connect %result8, %invalid_ui2
-    firrtl.connect %result8, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
+    %unconnectedWire = firrtl.wire : !firrtl.uint<4>
+    // CHECK: firrtl.strictconnect %result8, %invalid_ui4
+    firrtl.strictconnect %result8, %unconnectedWire: !firrtl.uint<4>
 
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -107,8 +107,8 @@ firrtl.circuit "Test" {
     // CHECK-NEXT: firrtl.constant 3
     %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: firrtl.connect %result9, %c3_ui2
-    firrtl.connect %result9, %c: !firrtl.uint<4>, !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.strictconnect %result9, %c3_ui2
+    firrtl.strictconnect %result9, %c: !firrtl.uint<2>
 
 
     // Constant propagation through instance.
@@ -120,24 +120,24 @@ firrtl.circuit "Test" {
 
   // CHECK-LABEL: @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
   firrtl.module @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
-    // CHECK-NEXT: firrtl.connect %dest, %source
-    firrtl.connect %dest, %source : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %dest, %source
+    firrtl.strictconnect %dest, %source : !firrtl.uint<1>
     // CHECK-NEXT: }
   }
 
 
   // CHECK-LABEL: ReadMem
   firrtl.module @ReadMem() {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     %0 = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
 
     %1 = firrtl.subfield %0(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.sint<8>
     %2 = firrtl.subfield %0(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.uint<4>
-    firrtl.connect %2, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
+    firrtl.strictconnect %2, %c0_ui4 : !firrtl.uint<4>
     %3 = firrtl.subfield %0(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.uint<1>
-    firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %3, %c1_ui1 : !firrtl.uint<1>
     %4 = firrtl.subfield %0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) -> !firrtl.clock
   }
 }
@@ -160,11 +160,11 @@ firrtl.circuit "Issue1188"  {
     %6 = firrtl.bits %D0123456 3 to 3 : (!firrtl.uint<6>) -> !firrtl.uint<1>
     %7 = firrtl.cat %5, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
     %8 = firrtl.cat %7, %1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<3>
-    firrtl.connect %io_out, %D0123456 : !firrtl.uint<6>, !firrtl.uint<6>
-    firrtl.connect %io_out3, %8 : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %io_out, %D0123456 : !firrtl.uint<6>
+    firrtl.strictconnect %io_out3, %8 : !firrtl.uint<3>
     // CHECK: firrtl.mux(%reset, %c1_ui6, %4)
     %9 = firrtl.mux(%reset, %c1_ui6, %4) : (!firrtl.uint<1>, !firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
-    firrtl.connect %D0123456, %9 : !firrtl.uint<6>, !firrtl.uint<6>
+    firrtl.strictconnect %D0123456, %9 : !firrtl.uint<6>
   }
 }
 
@@ -179,23 +179,23 @@ firrtl.circuit "testDontTouch"  {
   }{
     //CHECK: %c = firrtl.reg
     %c = firrtl.reg %clock : !firrtl.uint<1>
-    firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %c, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %c : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @allowProp
   firrtl.module @allowProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK: [[CONST:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     %c = firrtl.reg %clock  : !firrtl.uint<1>
-    firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b, [[CONST]]
-    firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %c, %a : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, [[CONST]]
+    firrtl.strictconnect %b, %c : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @blockProp3
   firrtl.module @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
     //CHECK: %c = firrtl.reg
     %c = firrtl.reg sym @s2 %clock : !firrtl.uint<1>
-    firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %c, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %c : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @testDontTouch
   firrtl.module @testDontTouch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>, out %a1: !firrtl.uint<1>, out %a2: !firrtl.uint<1>) {
@@ -203,24 +203,24 @@ firrtl.circuit "testDontTouch"  {
     %blockProp1_clock, %blockProp1_a, %blockProp1_b = firrtl.instance blockProp1 sym @a1 @blockProp1(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     %allowProp_clock, %allowProp_a, %allowProp_b = firrtl.instance allowProp sym @a2 @allowProp(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     %blockProp3_clock, %blockProp3_a, %blockProp3_b = firrtl.instance blockProp3  sym @a3 @blockProp3(in clock: !firrtl.clock, in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
-    firrtl.connect %blockProp1_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %allowProp_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %blockProp3_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %blockProp1_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %allowProp_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %blockProp3_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %a, %blockProp1_b
-    firrtl.connect %a, %blockProp1_b : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %a1, %c
-    firrtl.connect %a1, %allowProp_b : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %a2, %blockProp3_b
-    firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %blockProp1_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %allowProp_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %blockProp3_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %blockProp1_a, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %allowProp_a, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %blockProp3_a, %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a, %blockProp1_b
+    firrtl.strictconnect %a, %blockProp1_b : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a1, %c
+    firrtl.strictconnect %a1, %allowProp_b : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a2, %blockProp3_b
+    firrtl.strictconnect %a2, %blockProp3_b : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @CheckNode
   firrtl.module @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     %z = firrtl.node   sym @s2 %x: !firrtl.uint<1>
-    // CHECK: firrtl.connect %y, %z
-    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %y, %z
+    firrtl.strictconnect %y, %z : !firrtl.uint<1>
   }
 
 }
@@ -230,11 +230,11 @@ firrtl.circuit "testDontTouch"  {
 firrtl.circuit "OutPortTop" {
     firrtl.module @OutPortChild1(out %out: !firrtl.uint<1>)  attributes {portSyms = ["dntSym"]}{
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-      firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.strictconnect %out, %c0_ui1 : !firrtl.uint<1>
     } 
     firrtl.module @OutPortChild2(out %out: !firrtl.uint<1>) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-      firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.strictconnect %out, %c0_ui1 : !firrtl.uint<1>
     }
   // CHECK-LABEL: firrtl.module @OutPortTop
     firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %zc: !firrtl.uint<1>, out %zn: !firrtl.uint<1>) {
@@ -244,10 +244,10 @@ firrtl.circuit "OutPortTop" {
       %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
       // CHECK: %c0_ui1_1 = firrtl.constant 0 
       %1 = firrtl.and %x, %c_out_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // CHECK: firrtl.connect %zn, %0
-      firrtl.connect %zn, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-      // CHECK: firrtl.connect %zc, %c0_ui1_1
-      firrtl.connect %zc, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.strictconnect %zn, %0
+      firrtl.strictconnect %zn, %0 : !firrtl.uint<1>
+      // CHECK: firrtl.strictconnect %zc, %c0_ui1_1
+      firrtl.strictconnect %zc, %1 : !firrtl.uint<1>
     }
 }
 
@@ -259,7 +259,7 @@ firrtl.circuit "InputPortTop"   {
   firrtl.module @InputPortChild2(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     // CHECK: = firrtl.constant 1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %out, %0 : !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @InputPortChild
   firrtl.module @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
@@ -267,18 +267,18 @@ firrtl.circuit "InputPortTop"   {
   } {
     // CHECK: %0 = firrtl.and %in0, %in1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %out, %0 : !firrtl.uint<1>
   }
   firrtl.module @InputPortTop(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %z2: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c_in0, %c_in1, %c_out = firrtl.instance c @InputPortChild(in in0: !firrtl.uint<1>, in in1: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     %c2_in0, %c2_in1, %c2_out = firrtl.instance c2 @InputPortChild2(in in0: !firrtl.uint<1>, in in1: !firrtl.uint<1>, out out: !firrtl.uint<1>)
-    firrtl.connect %z, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %c_in0, %x : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %c_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %z2, %c2_out : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %c2_in0, %x : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %c2_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %z, %c_out : !firrtl.uint<1>
+    firrtl.strictconnect %c_in0, %x : !firrtl.uint<1>
+    firrtl.strictconnect %c_in1, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %z2, %c2_out : !firrtl.uint<1>
+    firrtl.strictconnect %c2_in0, %x : !firrtl.uint<1>
+    firrtl.strictconnect %c2_in1, %c1_ui1 : !firrtl.uint<1>
   }
 }
 
@@ -290,12 +290,12 @@ firrtl.circuit "InstanceOut"   {
   // CHECK-LABEL: firrtl.module @InstanceOut
   firrtl.module @InstanceOut(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     %ext_a = firrtl.instance ext @Ext(in a: !firrtl.uint<1>)
-    firrtl.connect %ext_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %ext_a, %a : !firrtl.uint<1>
     %w = firrtl.wire  : !firrtl.uint<1>
-    // CHECK: firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %w, %ext_a : !firrtl.uint<1>
+    firrtl.strictconnect %w, %ext_a : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %w : !firrtl.uint<1>
+    firrtl.strictconnect %b, %w : !firrtl.uint<1>
   }
 }
 
@@ -308,12 +308,12 @@ firrtl.circuit "InstanceOut2"   {
   // CHECK-LABEL: firrtl.module @InstanceOut2
   firrtl.module @InstanceOut2(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     %ext_a = firrtl.instance ext @Ext(in a: !firrtl.uint<1>)
-    firrtl.connect %ext_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %ext_a, %a : !firrtl.uint<1>
     %w = firrtl.wire  : !firrtl.uint<1>
-    // CHECK: firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %w, %ext_a : !firrtl.uint<1>
+    firrtl.strictconnect %w, %ext_a : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %w : !firrtl.uint<1>
+    firrtl.strictconnect %b, %w : !firrtl.uint<1>
   }
 }
 
@@ -325,10 +325,10 @@ firrtl.circuit "invalidReg1"   {
     %foobar = firrtl.reg %clock  : !firrtl.uint<1>
       //CHECK: %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
       %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
-      //CHECK: firrtl.connect %foobar, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %foobar, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-      //CHECK: firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
-      firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+      //CHECK: firrtl.strictconnect %foobar, %0 : !firrtl.uint<1>
+      firrtl.strictconnect %foobar, %0 : !firrtl.uint<1>
+      //CHECK: firrtl.strictconnect %a, %foobar : !firrtl.uint<1>
+      firrtl.strictconnect %a, %foobar : !firrtl.uint<1>
   }
 }
 
@@ -338,10 +338,10 @@ firrtl.circuit "invalidReg2"   {
   // CHECK_LABEL: @invalidReg2
   firrtl.module @invalidReg2(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
     %foobar = firrtl.reg %clock  : !firrtl.uint<1>
-    firrtl.connect %foobar, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %foobar, %foobar : !firrtl.uint<1>
     //CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    //CHECK: firrtl.connect %a, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+    //CHECK: firrtl.strictconnect %a, %invalid_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %a, %foobar : !firrtl.uint<1>
   }
 }
 
@@ -364,11 +364,11 @@ firrtl.circuit "Oscillators"   {
     // CHECK: firrtl.regreset
     %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %r : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %s : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %s, %1 : !firrtl.uint<1>
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %a, %2 : !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Bar
   firrtl.module @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
@@ -379,11 +379,11 @@ firrtl.circuit "Oscillators"   {
     %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %0 = firrtl.xor %a, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.xor %a, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %s, %1 : !firrtl.uint<1>
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %a, %2 : !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Baz
   firrtl.module @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
@@ -393,11 +393,11 @@ firrtl.circuit "Oscillators"   {
     // CHECK: firrtl.regreset
     %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %s, %1 : !firrtl.uint<1>
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %a, %2 : !firrtl.uint<1>
   }
   firrtl.extmodule @Ext(in a: !firrtl.uint<1>)
   // CHECK: firrtl.module @Qux
@@ -409,30 +409,30 @@ firrtl.circuit "Oscillators"   {
     // CHECK: firrtl.regreset
     %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %s, %1 : !firrtl.uint<1>
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %ext_a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %a, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %ext_a, %2 : !firrtl.uint<1>
+    firrtl.strictconnect %a, %ext_a : !firrtl.uint<1>
   }
   firrtl.module @Oscillators(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %foo_a: !firrtl.uint<1>, out %bar_a: !firrtl.uint<1>, out %baz_a: !firrtl.uint<1>, out %qux_a: !firrtl.uint<1>) {
     %foo_clock, %foo_reset, %foo_a_0 = firrtl.instance foo @Foo(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
-    firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %foo_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
-    firrtl.connect %foo_a, %foo_a_0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %foo_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %foo_reset, %reset : !firrtl.asyncreset
+    firrtl.strictconnect %foo_a, %foo_a_0 : !firrtl.uint<1>
     %bar_clock, %bar_reset, %bar_a_1 = firrtl.instance bar @Bar (in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
-    firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %bar_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
-    firrtl.connect %bar_a, %bar_a_1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %bar_reset, %reset : !firrtl.asyncreset
+    firrtl.strictconnect %bar_a, %bar_a_1 : !firrtl.uint<1>
     %baz_clock, %baz_reset, %baz_a_2 = firrtl.instance baz @Baz(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
-    firrtl.connect %baz_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %baz_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
-    firrtl.connect %baz_a, %baz_a_2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %baz_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %baz_reset, %reset : !firrtl.asyncreset
+    firrtl.strictconnect %baz_a, %baz_a_2 : !firrtl.uint<1>
     %qux_clock, %qux_reset, %qux_a_3 = firrtl.instance qux @Qux(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
-    firrtl.connect %qux_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %qux_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
-    firrtl.connect %qux_a, %qux_a_3 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %qux_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %qux_reset, %reset : !firrtl.asyncreset
+    firrtl.strictconnect %qux_a, %qux_a_3 : !firrtl.uint<1>
   }
 }
 
@@ -447,19 +447,19 @@ firrtl.circuit "Oscillators"   {
 firrtl.circuit "rhs_sink_output_used_as_wire" {
   // CHECK: firrtl.module @Bar
   firrtl.module @Bar(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
-    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %c, %b : !firrtl.uint<1>
     %_c = firrtl.wire  : !firrtl.uint<1>
     // CHECK: firrtl.xor %a, %c
     %0 = firrtl.xor %a, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %_c, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %d, %_c : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %_c, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %d, %_c : !firrtl.uint<1>
   }
   firrtl.module @rhs_sink_output_used_as_wire(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
     %bar_a, %bar_b, %bar_c, %bar_d = firrtl.instance bar @Bar(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>)
-    firrtl.connect %bar_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %bar_b, %b : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %c, %bar_c : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %d, %bar_d : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %bar_b, %b : !firrtl.uint<1>
+    firrtl.strictconnect %c, %bar_c : !firrtl.uint<1>
+    firrtl.strictconnect %d, %bar_d : !firrtl.uint<1>
   }
 }
 
@@ -471,10 +471,10 @@ firrtl.module @constRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
-  firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.strictconnect %r, %0 : !firrtl.uint<8>
   // CHECK:  %[[C13:.+]] = firrtl.constant 11
-  // CHECK: firrtl.connect %z, %[[C13]]
-  firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: firrtl.strictconnect %z, %[[C13]]
+  firrtl.strictconnect %z, %r : !firrtl.uint<8>
 }
 }
 
@@ -487,10 +487,10 @@ firrtl.module @constRegReset2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
   %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
-  firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.strictconnect %r, %0 : !firrtl.uint<8>
   // CHECK:  %[[C14:.+]] = firrtl.constant 11
-  // CHECK: firrtl.connect %z, %[[C14]]
-  firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: firrtl.strictconnect %z, %[[C14]]
+  firrtl.strictconnect %z, %r : !firrtl.uint<8>
 }
 }
 
@@ -517,10 +517,10 @@ firrtl.circuit "regMuxTree"   {
     %9 = firrtl.mux(%8, %c7_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     %10 = firrtl.mux(%4, %r, %9) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     %11 = firrtl.mux(%1, %c7_ui8, %10) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
-    firrtl.connect %r, %11 : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %r, %11 : !firrtl.uint<8>
+    firrtl.strictconnect %z, %r : !firrtl.uint<8>
     // CHECK:  %[[c7_ui8:.+]] = firrtl.constant 7 : !firrtl.uint<8>
-    // CHECK:  firrtl.connect %z, %[[c7_ui8]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK:  firrtl.strictconnect %z, %[[c7_ui8]] : !firrtl.uint<8>
   }
 }
 
@@ -531,15 +531,15 @@ firrtl.circuit "regMuxTree"   {
 firrtl.circuit "dntOutput" {
   // CHECK-LABEL: firrtl.module @dntOutput
   // CHECK: %0 = firrtl.mux(%c, %int_b, %c2_ui3)
-  // CHECK-NEXT: firrtl.connect %b, %0
+  // CHECK-NEXT: firrtl.strictconnect %b, %0
   firrtl.module @dntOutput(out %b : !firrtl.uint<3>, in %c : !firrtl.uint<1>) {
     %const = firrtl.constant 2 : !firrtl.uint<3>
     %int_b = firrtl.instance int @foo(out b: !firrtl.uint<3>)
     %m = firrtl.mux(%c, %int_b, %const) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    firrtl.connect %b, %m : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %b, %m : !firrtl.uint<3>
   }
   firrtl.module @foo(out %b: !firrtl.uint<3> ) attributes {portSyms = ["dntSym1"] } {
     %const = firrtl.constant 1 : !firrtl.uint<3>
-    firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %b, %const : !firrtl.uint<3>
   }
 }

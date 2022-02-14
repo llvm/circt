@@ -240,6 +240,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType,
                                        bool allowTruncation = false);
 
+  LatticeValue getLatticeValue(Value value);
+
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
   void markWireOrUnresetableRegOp(Operation *wireOrReg);
@@ -322,6 +324,15 @@ void IMConstPropPass::runOnOperation() {
   latticeValues.clear();
   executableBlocks.clear();
   resultPortToInstanceResultMapping.clear();
+}
+
+LatticeValue IMConstPropPass::getLatticeValue(Value value) {
+  // If 'value' hasn't been computed yet, then it is unknown.
+  auto it = latticeValues.find(value);
+  if (it == latticeValues.end())
+    return LatticeValue();
+
+  return it->second;
 }
 
 /// Return the lattice value for the specified SSA value, extended to the width
@@ -494,60 +505,8 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
-
-  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
-  if (!destType.isGround()) {
-    connect.emitError("non-ground type connect unhandled by IMConstProp");
-    return;
-  }
-
-  // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(connect.src(), destType);
-  if (srcValue.isUnknown())
-    return;
-
-  // Driving result ports propagates the value to each instance using the
-  // module.
-  if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
-    // Output ports are wire-like and may have users.
-    mergeLatticeValue(connect.dest(), srcValue);
-    return;
-  }
-
-  auto dest = connect.dest().cast<mlir::OpResult>();
-
-  // For wires and registers, we drive the value of the wire itself, which
-  // automatically propagates to users.
-  if (isWireOrReg(dest.getOwner()))
-    return mergeLatticeValue(connect.dest(), srcValue);
-
-  // Driving an instance argument port drives the corresponding argument of the
-  // referenced module.
-  if (auto instance = dest.getDefiningOp<InstanceOp>()) {
-    // Update the dest, when its an instance op.
-    mergeLatticeValue(connect.dest(), srcValue);
-    auto module =
-        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
-    if (!module)
-      return;
-
-    BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
-    return mergeLatticeValue(modulePortVal, srcValue);
-  }
-
-  // Driving a memory result is ignored because these are always treated as
-  // overdefined.
-  if (auto subfield = dest.getDefiningOp<SubfieldOp>()) {
-    if (subfield.getOperand().getDefiningOp<MemOp>())
-      return;
-  }
-
-  connect.emitError("connect unhandled by IMConstProp")
-          .attachNote(connect.dest().getLoc())
-      << "connect destination is here";
+  connect.emitError(
+      "IMConstProp cannot handle connect (should be strictconnect)");
 }
 
 // We merge the value from the RHS into the value of the LHS.
@@ -561,7 +520,7 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
   }
 
   // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(connect.src(), destType);
+  auto srcValue = getLatticeValue(connect.src());
   if (srcValue.isUnknown())
     return;
 
@@ -609,7 +568,8 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
 }
 
 void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
-  partialConnect.emitError("IMConstProp cannot handle partial connect");
+  partialConnect.emitError(
+      "IMConstProp cannot handle partial connect (should be strictconnect)");
 }
 
 /// This method is invoked when an operand of the specified op changes its
