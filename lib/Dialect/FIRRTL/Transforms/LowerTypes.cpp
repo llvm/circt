@@ -337,8 +337,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   SmallVectorImpl<NlaNameNewSym> &getNLAs() { return nlaNameToNewSymList; };
 
-  SmallVectorImpl<InnerRefRecord> &getInstanceInnerRefs() {
-    return nlaInstances;
+  DenseMap<StringAttr, Operation *> &getInstanceSymNames() {
+    return instanceSymNames;
   };
 
 private:
@@ -388,11 +388,13 @@ private:
   // lowered field symbol name.
   SmallVector<NlaNameNewSym> nlaNameToNewSymList;
 
-  //  Record all the inner sym and the corresponding InstanceOps, that have a
-  //  "circt.nonlocal" annotation. This will be later queried when updating the
-  //  NLA, to get direct access to the InstanceOp that participates in the
-  //  namepath.
-  SmallVector<InnerRefRecord> nlaInstances;
+  //  Record all the inner sym and the corresponding InstanceOps. This will be
+  //  later queried when updating the NLA, to get direct access to the
+  //  InstanceOp that participates in the namepath.
+  // During Lowering, an instance can be visited multiple times, based on the
+  // type of the result. So, we need a map to record the final lowered
+  // InstanceOp for the corresponding symbol name.
+  DenseMap<StringAttr, Operation *> instanceSymNames;
 
   // Keep a symbol table around for resolving symbols
   SymbolTable &symTbl;
@@ -1307,15 +1309,6 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
 }
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
-  auto sym = op.inner_symAttr();
-
-  // If it has any "circt.nonlocal" annotation, then record the inner_sym;
-  for (auto anno : AnnotationSet(op))
-    if (auto nlaRef = anno.getMember("circt.nonlocal")) {
-      nlaInstances.emplace_back(op->getParentOfType<FModuleOp>().getNameAttr(),
-                                sym, op);
-      break;
-    }
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
@@ -1356,8 +1349,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     endFields.push_back(resultTypes.size());
   }
 
-  if (skip)
+  auto sym = op.inner_symAttr();
+
+  if (skip) {
+    if (sym)
+      instanceSymNames[sym] = op;
     return false;
+  }
   if (!sym || sym.getValue().empty())
     if (needsSymbol)
       sym = StringAttr::get(builder->getContext(),
@@ -1383,6 +1381,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     else
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
+  if (sym)
+    instanceSymNames[sym] = newInstance;
   return true;
 }
 
@@ -1469,7 +1469,7 @@ void LowerTypesPass::runOnOperation() {
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
   SmallVector<NlaNameNewSym> nlaToNewSymList;
-  SmallVector<InnerRefRecord> nlaInstances;
+  SmallVector<InnerRefRecord> instanceSymNames;
   std::mutex nlaAppendLock;
   auto lowerModules = [&](auto op) {
     auto tl = TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
@@ -1478,13 +1478,16 @@ void LowerTypesPass::runOnOperation() {
     tl.lowerModule(op);
     std::lock_guard<std::mutex> lg(nlaAppendLock);
     nlaToNewSymList.append(tl.getNLAs());
-    // Record all the instances in the module, that participate in
-    // circt.nonlocal.
-    nlaInstances.append(tl.getInstanceInnerRefs());
+    // Record all the instances in the module that have a symbol.
+    if (auto mod = dyn_cast<FModuleOp>(op))
+      for (auto instName : tl.getInstanceSymNames()) {
+        instanceSymNames.emplace_back(mod.getNameAttr(), instName.getFirst(),
+                                      instName.getSecond());
+      }
   };
   parallelForEach(&getContext(), ops.begin(), ops.end(), lowerModules);
   // Sort it, to enable binary search.
-  llvm::sort(nlaInstances.begin(), nlaInstances.end());
+  llvm::sort(instanceSymNames.begin(), instanceSymNames.end());
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
@@ -1520,9 +1523,10 @@ void LowerTypesPass::runOnOperation() {
       for (size_t i = 0, e = namepath.size() - 1; i < e; ++i) {
         auto innerRef = namepath[i].cast<hw::InnerRefAttr>();
         // Binary search over the list of InsntanceOps, given the InnerRefAttr;
-        const auto *iter = std::lower_bound(
-            nlaInstances.begin(), nlaInstances.end(), InnerRefRecord(innerRef));
-        if (iter == nlaInstances.end()) {
+        const auto *iter =
+            std::lower_bound(instanceSymNames.begin(), instanceSymNames.end(),
+                             InnerRefRecord(innerRef));
+        if (iter == instanceSymNames.end()) {
           // verifier will fail after LowerTypes.
           nla.emitOpError("cannot find the instance op:") << innerRef;
           failedToRemove = true;
