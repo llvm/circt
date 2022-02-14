@@ -14,5 +14,5 @@ using namespace msft;
 namespace circt {
 namespace msft {
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.cpp.inc"
-}
+} // namespace msft
 } // namespace circt
