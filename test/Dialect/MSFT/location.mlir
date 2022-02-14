@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv | FileCheck %s --check-prefix=LOWER
-// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv --export-verilog | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,regions,reg | FileCheck %s --check-prefix=LOWER
+// RUN: circt-opt %s --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,regions,reg --export-verilog | FileCheck %s --check-prefix=TCL
 
 hw.globalRef @ref1 [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
 msft.pd.location @ref1 M20K x: 15 y: 9 n: 3 path: "memBank2"

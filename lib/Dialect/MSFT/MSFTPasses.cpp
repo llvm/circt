@@ -87,6 +87,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
       msftInst.parameters().getValueOr(ArrayAttr()), msftInst.sym_nameAttr());
+  hwInst->setDialectAttrs(msftInst->getDialectAttrs());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }
@@ -215,16 +216,6 @@ void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
 
-  // Traverse MSFT location attributes and export the required Tcl into
-  // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
-  for (auto moduleName : tops) {
-    auto hwmod = top.lookupSymbol<msft::MSFTModuleOp>(moduleName);
-    if (!hwmod)
-      continue;
-    if (failed(exportQuartusTcl(hwmod, tclFile)))
-      return signalPassFailure();
-  }
-
   // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
   // builder gets its argNames and resultNames from the `hw::HWModuleOp`. So we
   // have to lower `msft::MSFTModuleOp` before we lower `msft::InstanceOp`.
@@ -232,8 +223,7 @@ void LowerToHWPass::runOnOperation() {
   // Convert everything except instance ops first.
 
   ConversionTarget target(*ctxt);
-  target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp,
-                      hw::GlobalRefOp>();
+  target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
 
@@ -241,8 +231,6 @@ void LowerToHWPass::runOnOperation() {
   patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
   patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
-  patterns.insert<RemoveOpLowering<msft::PhysLocationOp>>(ctxt);
-  patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
   patterns.insert<RemoveOpLowering<EntityExternOp>>(ctxt);
   patterns.insert<RemoveOpLowering<DesignPartitionOp>>(ctxt);
 
@@ -250,17 +238,11 @@ void LowerToHWPass::runOnOperation() {
     signalPassFailure();
 
   // Then, convert the InstanceOps
-  target.addIllegalOp<msft::InstanceOp>();
+  target.addDynamicallyLegalDialect<MSFTDialect>(
+      [](Operation *op) { return isa<PhysLocationOp, PhysicalRegionOp>(op); });
   RewritePatternSet instancePatterns(ctxt);
   instancePatterns.insert<InstanceOpLowering>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(instancePatterns))))
-    signalPassFailure();
-
-  // Finally, legalize the rest of the MSFT dialect.
-  target.addIllegalDialect<MSFTDialect>();
-  RewritePatternSet finalPatterns(ctxt);
-  finalPatterns.insert<RemoveOpLowering<PhysicalRegionOp>>(ctxt);
-  if (failed(applyPartialConversion(top, target, std::move(finalPatterns))))
     signalPassFailure();
 }
 
@@ -271,6 +253,90 @@ std::unique_ptr<Pass> createLowerToHWPass() {
 }
 } // namespace msft
 } // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Export tcl -- create tcl verbatim ops
+//===----------------------------------------------------------------------===//
+
+namespace {
+template <typename PhysOpTy>
+struct RemovePhysOpLowering : public OpConversionPattern<PhysOpTy> {
+  using OpAdaptor = typename OpConversionPattern<PhysOpTy>::OpAdaptor;
+
+  RemovePhysOpLowering(MLIRContext *ctxt, DenseSet<SymbolRefAttr> &refsUsed)
+      : OpConversionPattern<PhysOpTy>::OpConversionPattern(ctxt),
+        refsUsed(refsUsed) {}
+
+  LogicalResult
+  matchAndRewrite(PhysOpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    SymbolRefAttr refSym = op->template getAttrOfType<FlatSymbolRefAttr>("ref");
+    if (refSym)
+      refsUsed.insert(refSym);
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+private:
+  DenseSet<SymbolRefAttr> &refsUsed;
+};
+} // anonymous namespace
+
+namespace {
+struct ExportTclPass : public ExportTclBase<ExportTclPass> {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+void ExportTclPass::runOnOperation() {
+  auto top = getOperation();
+  auto *ctxt = &getContext();
+
+  // Traverse MSFT location attributes and export the required Tcl into
+  // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
+  for (auto moduleName : tops) {
+    Operation *hwmod = top.lookupSymbol(moduleName);
+    if (!hwmod)
+      continue;
+    if (failed(exportQuartusTcl(hwmod, tclFile)))
+      return signalPassFailure();
+  }
+
+  ConversionTarget target(*ctxt);
+  target.addIllegalDialect<msft::MSFTDialect>();
+  target.addLegalDialect<hw::HWDialect>();
+  target.addLegalDialect<sv::SVDialect>();
+
+  RewritePatternSet patterns(ctxt);
+  DenseSet<SymbolRefAttr> refsUsed;
+  patterns.insert<RemovePhysOpLowering<PhysLocationOp>>(ctxt, refsUsed);
+  patterns.insert<RemoveOpLowering<PhysicalRegionOp>>(ctxt);
+  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+
+  target.addDynamicallyLegalOp<hw::GlobalRefOp>([&](hw::GlobalRefOp ref) {
+    return !refsUsed.contains(SymbolRefAttr::get(ref)) &&
+           llvm::none_of(ref->getAttrs(), [](NamedAttribute attr) {
+             return attr.getValue().isa<PhysicalRegionRefAttr>();
+           });
+  });
+  patterns.clear();
+  patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);
+  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createExportTclPass() {
+  return std::make_unique<ExportTclPass>();
+}
+} // namespace msft
+} // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Wire and partitioning passes
+//===----------------------------------------------------------------------===//
 
 namespace {
 struct PassCommon {
