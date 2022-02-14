@@ -34,6 +34,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
@@ -336,6 +337,10 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   SmallVectorImpl<NlaNameNewSym> &getNLAs() { return nlaNameToNewSymList; };
 
+  DenseMap<StringAttr, Operation *> &getInstanceSymNames() {
+    return instanceSymNames;
+  };
+
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
   bool processSAPath(Operation *);
@@ -382,6 +387,14 @@ private:
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
   SmallVector<NlaNameNewSym> nlaNameToNewSymList;
+
+  //  Record all the inner sym and the corresponding InstanceOps. This will be
+  //  later queried when updating the NLA, to get direct access to the
+  //  InstanceOp that participates in the namepath.
+  // During Lowering, an instance can be visited multiple times, based on the
+  // type of the result. So, we need a map to record the final lowered
+  // InstanceOp for the corresponding symbol name.
+  DenseMap<StringAttr, Operation *> instanceSymNames;
 
   // Keep a symbol table around for resolving symbols
   SymbolTable &symTbl;
@@ -490,22 +503,30 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
       continue;
     }
-    // Otherwise, if the current field is exactly the target, degenerate
-    // the sub-annotation to a normal annotation.
+    auto nlaRef =
+        subAnno.getAnnotations().getAs<FlatSymbolRefAttr>("circt.nonlocal");
     if (Annotation(opAttr).getClass() ==
         "firrtl.transforms.DontTouchAnnotation") {
       needsSym = true;
+      // If this is a nonlocal DontTouch, then,
+      // 1. Drop the annotation and the circt.nonlocal reference.
+      // 2. This makes the NLA redundant.
+      // 3. Just record the nla name, and insert a null Attr, to signify that
+      // the original NLA must be deleted.
+      if (nlaRef)
+        nlaNameToNewSymList.push_back({nlaRef.getAttr(), {}});
       continue;
     }
     // If this subfield has a nonlocal anchor, then we need to update the
     // NLA with the new symbol that would be added to the field after
     // lowering.
-    if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
-            "circt.nonlocal")) {
+    if (nlaRef) {
       nlaNameToNewSymList.push_back(
-          {nla.getAttr(), StringAttr::get(ctxt, sym)});
+          {nlaRef.getAttr(), StringAttr::get(ctxt, sym)});
       needsSym = true;
     }
+    // Otherwise, if the current field is exactly the target, degenerate
+    // the sub-annotation to a normal annotation.
     retval.push_back(subAnno.getAnnotations());
   }
   return ArrayAttr::get(ctxt, retval);
@@ -1328,9 +1349,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     endFields.push_back(resultTypes.size());
   }
 
-  if (skip)
-    return false;
   auto sym = op.inner_symAttr();
+
+  if (skip) {
+    if (sym)
+      instanceSymNames[sym] = op;
+    return false;
+  }
   if (!sym || sym.getValue().empty())
     if (needsSymbol)
       sym = StringAttr::get(builder->getContext(),
@@ -1356,6 +1381,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     else
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
+  if (sym)
+    instanceSymNames[sym] = newInstance;
   return true;
 }
 
@@ -1442,6 +1469,7 @@ void LowerTypesPass::runOnOperation() {
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
   SmallVector<NlaNameNewSym> nlaToNewSymList;
+  SmallVector<InnerRefRecord> instanceSymNames;
   std::mutex nlaAppendLock;
   auto lowerModules = [&](auto op) {
     auto tl = TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
@@ -1450,22 +1478,75 @@ void LowerTypesPass::runOnOperation() {
     tl.lowerModule(op);
     std::lock_guard<std::mutex> lg(nlaAppendLock);
     nlaToNewSymList.append(tl.getNLAs());
+    // Record all the instances in the module that have a symbol.
+    if (auto mod = dyn_cast<FModuleOp>(op))
+      for (auto instName : tl.getInstanceSymNames()) {
+        instanceSymNames.emplace_back(mod.getNameAttr(), instName.getFirst(),
+                                      instName.getSecond());
+      }
   };
   parallelForEach(&getContext(), ops.begin(), ops.end(), lowerModules);
+  // Sort it, to enable binary search.
+  llvm::sort(instanceSymNames.begin(), instanceSymNames.end());
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
   // element cannot be a module.
   for (auto nlaToSym : nlaToNewSymList) {
-    // Get the nla with the corresponding name. This is guaranteed to exist.
-    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.nlaName]);
+    auto nlaName = nlaToSym.nlaName;
+    // Get the nla with the corresponding name. It may not exist in the nlaMap,
+    // if we have already processed the NLA once. nlaToNewSymList can have
+    // duplicate entries for an NLA, since an NLA can be reused by multiple
+    // bundle subfields.
+    auto iter = nlaMap.find(nlaName);
+    if (iter == nlaMap.end())
+      continue;
+    auto nla = cast<NonLocalAnchor>(iter->second);
     auto namepath = nla.namepath();
-    SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
     // Update the final element, which must be an InnerRefAttr.
-    auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
-    updatedPath[namepath.size() - 1] =
-        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.newSym);
-    nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+    if (nlaToSym.newSym) {
+      SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
+      auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
+      updatedPath[namepath.size() - 1] = hw::InnerRefAttr::get(
+          &getContext(), leaf.getModule(), nlaToSym.newSym);
+      nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+    } else {
+      // Now cleanup and remove the dangling NLAs, if the nonlocal annotation
+      // was dropped. If there were nonlocal DontTouch, it is already lowered to
+      // a local DontTouch in this pass, by adding a symbol to the op. When the
+      // nonlocal DontTouch is removed from the fields of a Bundle, the
+      // corresponding NLA must also be removed. In this block, remove all the
+      // references to the nla from the InstanceOps and erase the NLA.
+      auto namepath = nla.namepath();
+      bool failedToRemove = false;
+      // Iterate over the instances that have a referece to the NLA.
+      for (size_t i = 0, e = namepath.size() - 1; i < e; ++i) {
+        auto innerRef = namepath[i].cast<hw::InnerRefAttr>();
+        // Binary search over the list of InsntanceOps, given the InnerRefAttr;
+        const auto *iter =
+            std::lower_bound(instanceSymNames.begin(), instanceSymNames.end(),
+                             InnerRefRecord(innerRef));
+        if (iter == instanceSymNames.end()) {
+          // verifier will fail after LowerTypes.
+          nla.emitOpError("cannot find the instance op:") << innerRef;
+          failedToRemove = true;
+          break;
+        }
+        auto *instOp = iter->op;
+        AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
+          if (auto nlaRef = anno.getMember("circt.nonlocal"))
+            return (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr());
+          return false;
+        });
+      }
+      if (!failedToRemove) {
+        nla->erase();
+        // Ensure that the nla is removed, to avoid deleting the same NLA twice.
+        // There can be multiple entries in nlaToNewSymList, if NLA reused by
+        // bundle subfields.
+        nlaMap.erase(nlaName);
+      }
+    }
   }
 }
 
