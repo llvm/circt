@@ -161,10 +161,9 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
   // Relocate all my children.
   rewriter.setInsertionPointAfter(inst);
   auto refSymbol = FlatSymbolRefAttr::get(ref);
-  for (Operation *op :
-       llvm::make_early_inc_range(llvm::make_pointer_range(inst.getOps()))) {
-    op->remove();
-    rewriter.insert(op);
+  for (Operation &op : llvm::make_early_inc_range(inst.getOps())) {
+    op.remove();
+    rewriter.insert(&op);
 
     // Assign a ref for known ops.
     // TODO: Write an OpInterface to set the reference so this lowering pattern
