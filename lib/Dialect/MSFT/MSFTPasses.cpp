@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 
@@ -160,16 +161,13 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
 
   // Relocate all my children.
   rewriter.setInsertionPointAfter(inst);
-  auto refSymbol = FlatSymbolRefAttr::get(ref);
   for (Operation &op : llvm::make_early_inc_range(inst.getOps())) {
     op.remove();
     rewriter.insert(&op);
 
-    // Assign a ref for known ops.
-    // TODO: Write an OpInterface to set the reference so this lowering pattern
-    // doesn't have to have a full list.
-    if (auto physLoc = dyn_cast<PhysLocationOp>(op))
-      physLoc.refAttr(refSymbol);
+    // Assign a ref for ops which need it.
+    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op))
+      specOp.setGlobalRef(ref);
   }
 
   rewriter.eraseOp(inst);
