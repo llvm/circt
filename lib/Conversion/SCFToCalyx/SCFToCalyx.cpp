@@ -917,13 +917,13 @@ private:
   template <typename TOpType, typename TSrcOp>
   LogicalResult buildLibraryPipeOp(PatternRewriter &rewriter, TSrcOp op,
                                    TOpType opPipe, Value out) const {
-    StringRef nnn = TSrcOp::getOperationName().split(".").second;
+    StringRef opName = TSrcOp::getOperationName().split(".").second;
     Location loc = op.getLoc();
     Type width = op.getResult().getType();
     // Pass the result from the Operation to the Calyx primitive.
     op.getResult().replaceAllUsesWith(out);
     auto reg = createReg(getComponentState(), rewriter, op.getLoc(),
-                        getComponentState().getUniqueName( nnn ),
+                        getComponentState().getUniqueName(opName),
                         width.getIntOrFloatBitWidth());
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
@@ -932,7 +932,7 @@ private:
     rewriter.setInsertionPointToEnd(group.getBody());
     rewriter.create<calyx::AssignOp>(loc, opPipe.left(), op.getLhs());
     rewriter.create<calyx::AssignOp>(loc, opPipe.right(), op.getRhs());
-  // Write the output to this register.
+    // Write the output to this register.
     rewriter.create<calyx::AssignOp>(loc, reg.in(), out);
     // The write enable port is high when the pipeline is done.
     rewriter.create<calyx::AssignOp>(loc, reg.write_en(), opPipe.done());
@@ -942,7 +942,7 @@ private:
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 
-  // Register the values for the pipeline.
+    // Register the values for the pipeline.
     getComponentState().registerEvaluatingGroup(out, group);
     getComponentState().registerEvaluatingGroup(opPipe.left(), group);
     getComponentState().registerEvaluatingGroup(opPipe.right(), group);
