@@ -24,6 +24,11 @@ static bool isWireOrReg(Operation *op) {
   return isa<WireOp>(op) || isa<RegResetOp>(op) || isa<RegOp>(op);
 }
 
+/// Return true if this is an aggregate indexer.
+static bool isAggregate(Operation *op) {
+  return isa<SubindexOp>(op) || isa<SubaccessOp>(op) || isa<SubfieldOp>(op);
+}
+
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
   return isWireOrReg(op) && !hasDontTouch(op);
@@ -496,12 +501,6 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 void IMConstPropPass::visitConnect(ConnectOp connect) {
   auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
 
-  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
-  if (!destType.isGround()) {
-    connect.emitError("non-ground type connect unhandled by IMConstProp");
-    return;
-  }
-
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.src(), destType);
   if (srcValue.isUnknown())
@@ -554,12 +553,6 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
   auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
 
-  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
-  if (!destType.isGround()) {
-    connect.emitError("non-ground type connect unhandled by IMConstProp");
-    return;
-  }
-
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.src(), destType);
   if (srcValue.isUnknown())
@@ -602,6 +595,9 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
     if (subfield.getOperand().getDefiningOp<MemOp>())
       return;
   }
+
+  if (isAggregate(dest.getOwner()))
+    return mergeLatticeValue(connect.dest(), srcValue);
 
   connect.emitError("strictconnect unhandled by IMConstProp")
           .attachNote(connect.dest().getLoc())
