@@ -13,6 +13,9 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
     Interface for anything which needs to refer to a GlobalRefOp.
   }];
   let cppNamespace = "::circt::msft";
+  let verify = [{
+    return ::circt::msft::verifyDynInstData($_op);
+  }];
 
   let methods = [
     InterfaceMethod<
@@ -22,6 +25,13 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       /*retTy=*/"void",
       /*methodName=*/"setGlobalRef",
       /*args=*/(ins "::circt::hw::GlobalRefOp":$ref)
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Get the symbol of the GlobalRefOp to which this op is referring.
+      }],
+      /*retTy=*/"FlatSymbolRefAttr",
+      /*methodName=*/"getGlobalRefSym"
     >
   ];
 }

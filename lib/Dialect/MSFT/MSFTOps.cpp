@@ -58,6 +58,8 @@ static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
     << " x: " << loc.getX() << " y: " << loc.getY() << " n: " << loc.getNum();
 }
 
+FlatSymbolRefAttr PhysLocationOp::getGlobalRefSym() { return refAttr(); }
+
 void PhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
   refAttr(FlatSymbolRefAttr::get(ref));
 }
