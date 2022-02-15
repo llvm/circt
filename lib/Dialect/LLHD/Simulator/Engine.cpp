@@ -174,7 +174,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
 
     // Run the instances present in the wakeup queue.
     for (auto i : wakeupQueue)
-      state->getInstance(i).run();
+      state->getInstance(i).run(reinterpret_cast<void*>(&state));
 
     // Clear wakeup queue.
     wakeupQueue.clear();

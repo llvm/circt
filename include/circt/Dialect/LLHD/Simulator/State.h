@@ -25,6 +25,8 @@ namespace circt {
 namespace llhd {
 namespace sim {
 
+class State;
+
 /// The simulator's internal representation of time.
 class Time {
 public:
@@ -334,15 +336,15 @@ public:
   void registerRunner(void(*fp)(void**)) { unitFPtr = fp; }
 
   // Simulate the instance with jitted function
-  void run() {
+  void run(void* state) {
     auto signalTable = sensitivityList.data();
 
     // Gather the instance arguments for unit invocation.
-    llvm::SmallVector<void *, 4> args;
+    llvm::SmallVector<void *, 3> args;
     if (isEntity())
-      args.assign({this, entityState, &signalTable});
+      args.assign({state, &entityState, &signalTable});
     else
-      args.assign({this, procState, &signalTable});
+      args.assign({state, &procState, &signalTable});
 
     // Run the unit.
     (*unitFPtr)(args.data());
