@@ -13,12 +13,9 @@ using namespace circt;
 using namespace msft;
 
 LogicalResult circt::msft::verifyDynInstData(Operation *op) {
-  auto didOp = dyn_cast<DynInstDataOpInterface>(op);
-  if (!didOp)
-    return op->emitOpError("does not have a DynInstData op interface");
-
   auto inst = dyn_cast<DynamicInstanceOp>(op->getParentOp());
-  FlatSymbolRefAttr globalRef = didOp.getGlobalRefSym();
+  FlatSymbolRefAttr globalRef =
+      cast<DynInstDataOpInterface>(op).getGlobalRefSym();
 
   if (inst && globalRef)
     return op->emitOpError("cannot both have a global ref symbol and be a "
