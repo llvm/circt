@@ -255,6 +255,7 @@ public:
 struct ProcState {
   unsigned inst;
   int resume;
+  /// FIXME:  These data members are not used
   bool *senses;
   uint8_t *resumeState;
 };
@@ -272,10 +273,7 @@ public:
   Instance(std::string name, std::string path, std::string unit, int nArgs = 0)
       : name(name), path(path), unit(unit), numArgs(nArgs) {}
 
-  ~Instance() {
-    if (procState)
-      std::free(procState->senses);
-  }
+  ~Instance() { }
 
   const std::string getName() const { return name; }
   const std::string getPath() const { return path; }
@@ -311,8 +309,10 @@ public:
                            [sigIndex](const SignalDetail &sig) {
                              return sig.globalIndex == sigIndex;
                            });
-    return sensitivityList.end() != IT &&
-        procState->senses[IT - sensitivityList.begin()] == 0;
+
+    // FIXME: procState->senses is not initialized.
+    return sensitivityList.end() != IT;
+    // && procState->senses[IT - sensitivityList.begin()] == 0;
   }
 
   llvm::SmallVector<SignalDetail, 0>& getSensitivityList() {
@@ -398,7 +398,7 @@ public:
   }
 
   /// Push a new scheduled wakeup event in the event queue.
-  void pushEvent(Time &t, unsigned instIndex) {
+  void pushEvent(Time t, unsigned instIndex) {
     Time newTime = time + t;
     events.insertOrUpdate(newTime, instIndex);
     instances[instIndex].setWakeupTime(newTime);
@@ -455,12 +455,12 @@ public:
   }
 
   /// Spawn a new event.
-  void spawnEvent(SignalDetail *SD, Time &T, uint8_t *sigValue,
+  void spawnEvent(SignalDetail *SD, Time t, uint8_t *sigValue,
                   uint64_t sigWidth) {
     int bitOffset =
       (SD->value - signals[SD->globalIndex].Value()) * 8 + SD->offset;
 
-    events.insertOrUpdate(time + T, SD->globalIndex,
+    events.insertOrUpdate(time + t, SD->globalIndex,
                           bitOffset, sigValue, sigWidth);
   }
 

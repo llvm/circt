@@ -82,15 +82,15 @@ cl::opt<OptLevel> optimizationLevel(
                clEnumVal(O3, "Run passes and codegen at O3")));
 
 static cl::opt<TraceMode> traceMode(
-    "trace-level", cl::desc("Choose the dump format:"), cl::init(TraceMode::Full),
+    "trace-format", cl::desc("Choose the dump format:"), cl::init(TraceMode::Full),
     cl::values(
-        clEnumVal(TraceMode::Full,
+        clEnumValN(TraceMode::Full, "full",
                   "Dump signal changes for every time step and sub-step, "
                   "for all instances"),
-        clEnumVal(TraceMode::Reduced,
+        clEnumValN(TraceMode::Reduced, "reduced",
                   "Dump signal changes for every time-step and "
                   "sub-step, only for the top-level instance"),
-        clEnumVal(TraceMode::Merged,
+        clEnumValN(TraceMode::Merged, "merged",
                   "Only dump changes for real-time steps, for all instances"),
         clEnumValN(TraceMode::MergedReduce, "merged-reduce",
                    "Only dump changes for real-time steps, only for the "
@@ -98,7 +98,7 @@ static cl::opt<TraceMode> traceMode(
         clEnumValN(TraceMode::NamedOnly, "named-only",
             "Only dump changes for real-time steps, only for top-level "
             "instance and signals not having the default name '(sig)?[0-9]*'"),
-        clEnumValN(TraceMode::None, "no-trace", "Don't dump a signal trace")));
+        clEnumValN(TraceMode::None, "none", "Don't dump a signal trace")));
 
 static cl::list<std::string>
     sharedLibs("shared-libs",

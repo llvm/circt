@@ -46,14 +46,13 @@ void allocEntity(circt::llhd::sim::State *state, char *owner,
 
 /// Drive a value onto a signal.
 void driveSignal(circt::llhd::sim::State *state,
-                 circt::llhd::sim::Time *time,
-                 circt::llhd::sim::SignalDetail *index,
-                 uint8_t *value, uint64_t width);
+                 circt::llhd::sim::SignalDetail *index, uint8_t *value,
+                 uint64_t width, int time, int delta, int eps);
 
 /// Suspend a process.
 void llhdSuspend(circt::llhd::sim::State *state,
                  circt::llhd::sim::ProcState *procState,
-                 circt::llhd::sim::Time *time);
+                 int time, int delta, int eps);
 }
 
 #endif // CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H

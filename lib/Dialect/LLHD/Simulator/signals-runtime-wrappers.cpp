@@ -51,15 +51,16 @@ void allocEntity(State *state, char *owner, uint8_t *entityState) {
   state->setInstanceEntityState(std::string(owner), entityState);
 }
 
-void driveSignal(State *state, SignalDetail *detail, Time *time,
-                 uint8_t *value, uint64_t width) {
+void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
+                 uint64_t width, int time, int delta, int eps) {
   assert(state && "drive_signal: state not found");
-  state->spawnEvent(detail, *time, value, width);
+  state->spawnEvent(detail, Time(time, delta, eps), value, width);
 }
 
-void llhdSuspend(State *state, ProcState *procState, Time *time) {
+void llhdSuspend(State *state, ProcState *procState, int time, int delta,
+                 int eps) {
   // Add a new scheduled wake up if a time is specified.
-  if (time->isZero())
+  if (!(time || delta || eps))
     return;
-  state->pushEvent(*time, procState->inst);
+  state->pushEvent(Time(time, delta, eps), procState->inst);
 }
