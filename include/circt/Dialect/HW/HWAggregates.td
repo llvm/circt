@@ -113,7 +113,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   }];
 
   let assemblyFormat = [{
-    $input `at` $lowIndex attr-dict `:`
+    $input`[`$lowIndex`]` attr-dict `:`
       `(` custom<SliceTypes>(type($input), qualified(type($lowIndex))) `)` `->` qualified(type($dst))
   }];
 }
