@@ -15,6 +15,8 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "State.h"
+#include "Trace.h"
 
 namespace mlir {
 class ExecutionEngine;
@@ -29,9 +31,6 @@ namespace circt {
 namespace llhd {
 namespace sim {
 
-struct State;
-struct Instance;
-
 class Engine {
 public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
@@ -40,14 +39,14 @@ public:
       llvm::raw_ostream &out, ModuleOp module,
       llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
       llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-      std::string root, int mode, ArrayRef<StringRef> sharedLibPaths);
+      std::string root, TraceMode tm, ArrayRef<StringRef> sharedLibPaths);
 
   /// Default destructor
   ~Engine();
 
-  /// Run simulation up to n steps or maxTime picoseconds of simulation time.
-  /// n=0 and T=0 make the simulation run indefinitely.
-  int simulate(int n, uint64_t maxTime);
+  /// Run simulation up to maxCycle or maxTime picoseconds of simulation time.
+  /// maxCycle=0 and maxTime=0 make the simulation run indefinitely.
+  int simulate(uint64_t maxCycle, uint64_t maxTime);
 
   /// Build the instance layout of the design.
   void buildLayout(ModuleOp module);
@@ -65,14 +64,17 @@ public:
   void dumpStateSignalTriggers();
 
 private:
+  /// Recursively walk given `entity` and it's child to collect signal and
+  /// instances.
   void walkEntity(EntityOp entity, Instance &child);
 
+private:
   llvm::raw_ostream &out;
   std::string root;
   std::unique_ptr<State> state;
   std::unique_ptr<mlir::ExecutionEngine> engine;
   ModuleOp module;
-  int traceMode;
+  TraceMode traceMode;
 };
 
 } // namespace sim

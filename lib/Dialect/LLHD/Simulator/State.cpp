@@ -11,8 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "State.h"
-
+#include "circt/Dialect/LLHD/Simulator/State.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -26,47 +25,33 @@ using namespace circt::llhd::sim;
 //===----------------------------------------------------------------------===//
 
 bool Time::operator<(const Time &rhs) const {
-  if (time < rhs.time)
-    return true;
-  if (time == rhs.time && delta < rhs.delta)
-    return true;
-  if (time == rhs.time && delta == rhs.delta && eps < rhs.eps)
-    return true;
-  return false;
+  return time < rhs.time || (time == rhs.time && delta < rhs.delta) ||
+         (time == rhs.time && delta == rhs.delta && eps < rhs.eps);
 }
 
 bool Time::operator==(const Time &rhs) const {
-  return (time == rhs.time && delta == rhs.delta && eps == rhs.eps);
+  return time == rhs.time && delta == rhs.delta && eps == rhs.eps;
 }
 
 Time Time::operator+(const Time &rhs) const {
   return Time(time + rhs.time, delta + rhs.delta, eps + rhs.eps);
 }
 
-bool Time::isZero() { return (time == 0 && delta == 0 && eps == 0); }
+bool Time::isZero() { return time == 0 && delta == 0 && eps == 0; }
 
-std::string Time::dump() {
-  std::string ret;
-  raw_string_ostream ss(ret);
-  ss << time << "ps " << delta << "d " << eps << "e";
-  return ss.str();
+std::string Time::toString() {
+  return std::to_string(time) + "ps " + std::to_string(delta) + "d " +
+    std::to_string(eps) + "e";
 }
 
 //===----------------------------------------------------------------------===//
 // Signal
 //===----------------------------------------------------------------------===//
 
-Signal::Signal(std::string name, std::string owner)
-    : name(name), owner(owner), size(0), value(nullptr) {}
-
-Signal::Signal(std::string name, std::string owner, uint8_t *value,
-               uint64_t size)
-    : name(name), owner(owner), size(size), value(value) {}
-
 bool Signal::operator==(const Signal &rhs) const {
   if (owner != rhs.owner || name != rhs.name || size != rhs.size)
     return false;
-  return std::memcmp(value.get(), rhs.value.get(), size);
+  return std::memcmp(value, rhs.value, size);
 }
 
 bool Signal::operator<(const Signal &rhs) const {
@@ -77,20 +62,20 @@ bool Signal::operator<(const Signal &rhs) const {
   return false;
 }
 
-std::string Signal::dump() {
+std::string Signal::toHexString() const {
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << format_hex_no_prefix(static_cast<int>(value.get()[i]), 2);
+    ss << format_hex_no_prefix(static_cast<int>(value[i]), 2);
   }
-  return ss.str();
+  return ret;
 }
 
-std::string Signal::dump(unsigned elemIndex) {
+std::string Signal::toHexString(unsigned elemIndex) const {
   assert(elements.size() > 0 && "the signal type has to be tuple or array!");
   auto elemSize = elements[elemIndex].second;
-  auto ptr = value.get() + elements[elemIndex].first;
+  auto ptr = value + elements[elemIndex].first;
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
@@ -112,17 +97,17 @@ void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
   // Get the amount of 64 bit words required to store the value in an APInt.
   auto size = llvm::divideCeil(width, 64);
 
+  auto obj = std::make_pair(
+      bitOffset,
+      APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
+
   if (changesSize >= buffers.size()) {
     // Create a new change buffer if we don't have any unused one available for
     // reuse.
-    buffers.push_back(std::make_pair(
-        bitOffset,
-        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size))));
+    buffers.push_back(obj);
   } else {
     // Reuse the first available buffer.
-    buffers[changesSize] = std::make_pair(
-        bitOffset,
-        APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
+    buffers[changesSize] = obj;
   }
 
   // Map the signal index to the change buffer so we can retrieve
@@ -151,7 +136,7 @@ Slot &UpdateQueue::getOrCreateSlot(Time time) {
   auto &top = begin()[topSlot];
 
   // Directly add to top slot.
-  if (!top.unused && time == top.time) {
+  if (top.isUsed() && time == top.getTime()) {
     return top;
   }
 
@@ -159,9 +144,9 @@ Slot &UpdateQueue::getOrCreateSlot(Time time) {
   // spawning an event later than the top slot. Adding to an existing slot
   // scheduled earlier than the top slot should never happens, as then it should
   // be the top.
-  if (events > 0 && top.time < time) {
+  if (numEvents > 0 && top.getTime() < time) {
     for (size_t i = 0, e = size(); i < e; ++i) {
-      if (time == begin()[i].time) {
+      if (time == begin()[i].getTime()) {
         return begin()[i];
       }
     }
@@ -171,15 +156,14 @@ Slot &UpdateQueue::getOrCreateSlot(Time time) {
   if (!unused.empty()) {
     auto firstUnused = unused.pop_back_val();
     auto &newSlot = begin()[firstUnused];
-    newSlot.unused = false;
-    newSlot.time = time;
+    newSlot.occupy(time);
 
     // Update the top of the queue either if it is currently unused or the new
     // timestamp is earlier than it.
-    if (top.unused || time < top.time)
+    if (!top.isUsed() || time < top.getTime())
       topSlot = firstUnused;
 
-    ++events;
+    ++numEvents;
     return newSlot;
   }
 
@@ -188,10 +172,10 @@ Slot &UpdateQueue::getOrCreateSlot(Time time) {
 
   // Update the top of the queue either if it is currently unused or the new
   // timestamp is earlier than it.
-  if (top.unused || time < top.time)
+  if (!top.isUsed() || time < top.getTime())
     topSlot = size() - 1;
 
-  ++events;
+  ++numEvents;
   return back();
 }
 
@@ -201,19 +185,15 @@ const Slot &UpdateQueue::top() {
   // Sort the changes of the top slot such that all changes to the same signal
   // are in succession.
   auto &top = begin()[topSlot];
-  llvm::sort(top.changes.begin(), top.changes.begin() + top.changesSize);
+  top.sortChanges();
   return top;
 }
 
 void UpdateQueue::pop() {
   // Reset internal structures and decrease the event counter.
-  auto &curr = begin()[topSlot];
-  curr.unused = true;
-  curr.changesSize = 0;
-  curr.scheduled.clear();
-  curr.changes.clear();
-  curr.time = Time();
-  --events;
+  auto &top = begin()[topSlot];
+  top.release();
+  --numEvents;
 
   // Add to unused slots list for easy retrieval.
   unused.push_back(topSlot);
@@ -224,7 +204,7 @@ void UpdateQueue::pop() {
       std::min_element(begin(), end(), [](const auto &a, const auto &b) {
         // a is "smaller" than b if either a's timestamp is earlier than b's, or
         // b is unused (i.e. b has no actual meaning).
-        return !a.unused && (a < b || b.unused);
+        return a.isUsed() && (a < b || !b.isUsed());
       }));
 }
 
@@ -232,97 +212,55 @@ void UpdateQueue::pop() {
 // State
 //===----------------------------------------------------------------------===//
 
-State::~State() {
-  for (auto &inst : instances) {
-    if (inst.procState) {
-      std::free(inst.procState->senses);
-    }
-  }
-}
-
-Slot State::popQueue() {
-  assert(!queue.empty() && "the event queue is empty");
-  Slot pop = queue.top();
-  queue.pop();
-  return pop;
-}
-
-void State::pushQueue(Time t, unsigned inst) {
-  Time newTime = time + t;
-  queue.insertOrUpdate(newTime, inst);
-  instances[inst].expectedWakeup = newTime;
-}
-
 llvm::SmallVectorTemplateCommon<Instance>::iterator
-State::getInstanceIterator(std::string instName) {
-  auto it =
+State::findInstanceByName(std::string name) {
+  auto II =
       std::find_if(instances.begin(), instances.end(),
-                   [&](const auto &inst) { return instName == inst.name; });
+                   [&](const auto &inst) { return name == inst.getName(); });
 
-  assert(it != instances.end() && "instance does not exist!");
+  assert(II != instances.end() && "instance does not exist!");
 
-  return it;
-}
-
-int State::addSignal(std::string name, std::string owner) {
-  signals.push_back(Signal(name, owner));
-  return signals.size() - 1;
-}
-
-void State::addProcPtr(std::string name, ProcState *procStatePtr) {
-  auto it = getInstanceIterator(name);
-
-  // Store instance index in process state.
-  procStatePtr->inst = it - instances.begin();
-  (*it).procState = std::unique_ptr<ProcState>(procStatePtr);
+  return II;
 }
 
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
-  auto it = getInstanceIterator(owner);
+  auto II = findInstanceByName(owner);
 
-  uint64_t globalIdx = (*it).sensitivityList[index + (*it).nArgs].globalIndex;
+  uint64_t globalIdx = II->getSensiSigIndex(index);
   auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
-  sig.value = std::unique_ptr<uint8_t>(value);
-  sig.size = size;
+  sig.update(value, size);
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.
-  for (auto inst : signals[globalIdx].triggers) {
-    for (auto &detail : instances[inst].sensitivityList) {
-      if (detail.globalIndex == globalIdx) {
-        detail.value = sig.value.get();
-      }
-    }
+  for (auto idx : signals[globalIdx].getTriggeredInstanceIndices()) {
+    instances[idx].updateSignalDetail(globalIdx, sig.Value());
   }
   return globalIdx;
 }
 
 void State::addSignalElement(unsigned index, unsigned offset, unsigned size) {
-  signals[index].elements.push_back(std::make_pair(offset, size));
+  signals[index].pushElement(std::make_pair(offset, size));
 }
 
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
-  for (auto inst : sig.triggers) {
-    out << time.dump() << "  " << instances[inst].path << "/" << sig.name
-        << "  " << sig.dump() << "\n";
+  for (auto instIdx : sig.getTriggeredInstanceIndices()) {
+    out << time.toString() << "  " << instances[instIdx].getPath() << "/"
+        << sig.getName() << "  " << sig.toHexString() << "\n";
   }
 }
 
 void State::dumpLayout() {
   llvm::errs() << "::------------------- Layout -------------------::\n";
   for (const auto &inst : instances) {
-    llvm::errs() << inst.name << ":\n";
-    llvm::errs() << "---path: " << inst.path << "\n";
-    llvm::errs() << "---isEntity: " << inst.isEntity << "\n";
-    llvm::errs() << "---sensitivity list: ";
-    for (auto in : inst.sensitivityList) {
-      llvm::errs() << in.globalIndex << " ";
-    }
-    llvm::errs() << "\n";
+    llvm::errs() << inst.getName() << ":\n";
+    llvm::errs() << "---path: " << inst.getPath() << "\n";
+    llvm::errs() << "---isEntity: " << inst.isEntity() << "\n";
+    llvm::errs() << "---sensitivity list: " << inst.dumpSensitivityList()
+                 << "\n";
   }
   llvm::errs() << "::----------------------------------------------::\n";
 }
@@ -330,8 +268,9 @@ void State::dumpLayout() {
 void State::dumpSignalTriggers() {
   llvm::errs() << "::------------- Signal information -------------::\n";
   for (size_t i = 0, e = signals.size(); i < e; ++i) {
-    llvm::errs() << signals[i].owner << "/" << signals[i].name << " triggers: ";
-    for (auto trig : signals[i].triggers) {
+    llvm::errs() << signals[i].getOwner() << "/" << signals[i].getName()
+                 << " triggers: ";
+    for (auto trig : signals[i].getTriggeredInstanceIndices()) {
       llvm::errs() << trig << " ";
     }
     llvm::errs() << "\n";

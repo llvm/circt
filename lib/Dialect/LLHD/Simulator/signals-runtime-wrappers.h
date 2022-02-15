@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 
-#include "State.h"
+#include "circt/Dialect/LLHD/Simulator/State.h"
 
 extern "C" {
 
@@ -46,13 +46,14 @@ void allocEntity(circt::llhd::sim::State *state, char *owner,
 
 /// Drive a value onto a signal.
 void driveSignal(circt::llhd::sim::State *state,
-                 circt::llhd::sim::SignalDetail *index, uint8_t *value,
-                 uint64_t width, int time, int delta, int eps);
+                 circt::llhd::sim::Time *time,
+                 circt::llhd::sim::SignalDetail *index,
+                 uint8_t *value, uint64_t width);
 
 /// Suspend a process.
 void llhdSuspend(circt::llhd::sim::State *state,
-                 circt::llhd::sim::ProcState *procState, int time, int delta,
-                 int eps);
+                 circt::llhd::sim::ProcState *procState,
+                 circt::llhd::sim::Time *time);
 }
 
 #endif // CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H

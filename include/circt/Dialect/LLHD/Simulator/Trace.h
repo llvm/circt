@@ -11,14 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-// clang-tidy seems to expect the absolute path in the header guard on some
-// systems, so just disable it.
-// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 
 #include "State.h"
-
 #include <map>
 #include <vector>
 
@@ -30,7 +26,7 @@ namespace circt {
 namespace llhd {
 namespace sim {
 
-enum TraceMode { full, reduced, merged, mergedReduce, namedOnly };
+enum class TraceMode { Full, Reduced, Merged, MergedReduce, NamedOnly, None };
 
 class Trace {
   llvm::raw_ostream &out;
@@ -46,11 +42,12 @@ class Trace {
   // Buffer of last dumped change for each signal.
   std::map<std::pair<std::string, int>, std::string> lastValue;
 
+private:
   /// Push one change to the changes vector.
-  void pushChange(unsigned inst, unsigned sigIndex, int elem);
+  void pushChange(unsigned instIndex, unsigned sigIndex, int elem);
   /// Push one change for each element of a signal if it is of a structured
   /// type, or the full signal otherwise.
-  void pushAllChanges(unsigned inst, unsigned sigIndex);
+  void pushAllChanges(unsigned instIndex, unsigned sigIndex);
 
   /// Add a merged change to the change buffer.
   void addChangeMerged(unsigned);
