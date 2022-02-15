@@ -550,6 +550,10 @@ private:
   /// Map of NLA symbol to NLA.
   DenseMap<StringAttr, NonLocalAnchor> nlaMap;
 
+  /// The set of NLAs that are dead after this pass.  These will be removed
+  /// before the pass finishes.
+  DenseSet<StringAttr> deadNLAs;
+
   /// Return a string containing the name of an interface.  Apply correct
   /// prefixing from the interfacePrefix and module-level prefix parameter.
   std::string getInterfaceName(StringAttr prefix,
@@ -1284,6 +1288,8 @@ void GrandCentralPass::runOnOperation() {
                 annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
             leafMap[maybeID.getValue()] = {
                 {op.getResult(), annotation.getFieldID()}, sym};
+            if (sym)
+              deadNLAs.insert(sym.getAttr());
             return true;
           });
         })
@@ -1341,6 +1347,8 @@ void GrandCentralPass::runOnOperation() {
                     annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
                 leafMap[maybeID.getValue()] = {
                     {op.getArgument(i), annotation.getFieldID()}, sym};
+                if (sym)
+                  deadNLAs.insert(sym.getAttr());
                 return true;
               });
 
@@ -1646,6 +1654,52 @@ void GrandCentralPass::runOnOperation() {
                       maybeHierarchyFileYAML.getValue().getValue(),
                       /*excludFromFileList=*/true));
     LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
+  }
+
+  // Garbage collect dead NLAs.
+  for (auto &op :
+       llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
+
+    // Remove NLA operations.
+    if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
+      if (deadNLAs.count(nla.sym_nameAttr()))
+        nla.erase();
+      continue;
+    }
+
+    auto fmodule = dyn_cast<FModuleOp>(op);
+    if (!fmodule)
+      continue;
+
+    // Visit module bodies to remove any dead NLAs.
+    for (auto &op : *fmodule.getBody()) {
+      AnnotationSet annotations(&op);
+      if (annotations.empty())
+        continue;
+
+      SmallVector<Attribute> newAnnotations;
+      auto isDead = [&](Annotation anno) -> bool {
+        auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+        if (!sym)
+          return false;
+        return deadNLAs.count(sym.getAttr());
+      };
+
+      annotations.removeAnnotations(isDead);
+      annotations.addAnnotations(newAnnotations);
+      annotations.applyToOperation(&op);
+
+      SmallVector<Attribute> newPortAnnotations;
+      for (auto port : fmodule.getPorts()) {
+        newAnnotations.clear();
+        port.annotations.removeAnnotations(isDead);
+        port.annotations.addAnnotations(newAnnotations);
+        newPortAnnotations.push_back(
+            ArrayAttr::get(op.getContext(), port.annotations.getArray()));
+      }
+      fmodule->setAttr("portAnnotations",
+                       ArrayAttr::get(op.getContext(), newPortAnnotations));
+    }
   }
 
   // Signal pass failure if any errors were found while examining circuit
