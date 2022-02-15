@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/Simulator/Trace.h"
+
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt::llhd::sim;
@@ -34,27 +35,26 @@ Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
 
 void Trace::pushChange(unsigned instIndex, unsigned sigIndex, int elem = -1) {
   auto &sig = state->getSignal(sigIndex);
-  std::string valueDump;
-  std::string path;
-  llvm::raw_string_ostream ss(path);
+  std::string valueStr;
 
-  ss << state->getInstance(instIndex).getPath() << '/' << sig.getName();
+  std::string path = state->getInstance(instIndex).getPath() + '/' +
+      sig.getName();
 
   if (elem >= 0) {
     // Add element index to the hierarchical path.
-    ss << '[' << elem << ']';
+    path += '[' + std::to_string(elem) + ']';
     // Get element value dump.
-    valueDump = sig.toHexString(elem);
+    valueStr = sig.toHexString(elem);
   } else {
     // Get signal value dump.
-    valueDump = sig.toHexString();
+    valueStr = sig.toHexString();
   }
 
   // Check wheter we have an actual change from last value.
   auto lastValKey = std::make_pair(path, elem);
-  if (valueDump != lastValue[lastValKey]) {
-    changes.push_back(std::make_pair(path, valueDump));
-    lastValue[lastValKey] = valueDump;
+  if (valueStr != lastValue[lastValKey]) {
+    changes.push_back(std::make_pair(path, valueStr));
+    lastValue[lastValKey] = valueStr;
   }
 }
 

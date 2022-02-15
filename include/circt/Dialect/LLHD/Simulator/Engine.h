@@ -64,7 +64,7 @@ public:
   void dumpStateSignalTriggers();
 
 private:
-  /// Recursively walk given `entity` and it's child to collect signal and
+  /// Recursively walk given `entity` and it's children to collect signals and
   /// instances.
   void walkEntity(EntityOp entity, Instance &child);
 
