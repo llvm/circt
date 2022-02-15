@@ -1,5 +1,4 @@
-; RUN: firtool -split-input-file -ir-fir -lower-types=0 -imconstprop=0 %s | FileCheck %s
-; XFAIL: *
+; RUN: firtool -dedup -split-input-file -ir-fir -lower-types=0 -imconstprop=0 %s | FileCheck %s
 ; Tests extracted from:
 ;   - test/scala/firrtlTests/transforms/DedupTests.scala
 ; The following tests are not included:
@@ -210,6 +209,33 @@ circuit Top :
     parameter N = 1
 
 ; // -----
+; "Modules with aggregate ports that are (partial)? connected should NOT dedup if
+; their port names differ".
+;
+; Since the MFC support expanding connects and partial connects when the port
+; names differ, this now testing that the modules succesfully dedup.
+;
+; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
+circuit FooAndBarModule :
+  ; CHECK: firrtl.module @FooModule
+  module FooModule :
+    output io : {flip foo : UInt<1>, fuzz : UInt<1>}
+    io.fuzz <= io.foo
+  ; CHECK-NOT: firrtl.module @BarModule
+  module BarModule :
+    output io : {flip bar : UInt<1>, buzz : UInt<1>}
+    io.buzz <= io.bar
+  ; CHECK: firrtl.module @FooAndBarModule
+  module FooAndBarModule :
+    output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip bar : UInt<1>, buzz : UInt<1>}}
+    ; CHECK: firrtl.instance foo @FooModule
+    ; CHECK: firrtl.instance bar @FooModule
+    inst foo of FooModule
+    inst bar of BarModule
+    io.foo <- foo.io
+    io.bar <= bar.io
+
+; // -----
 ; "Modules with aggregate ports that are (partial)? connected should dedup if
 ; their port names are the same".
 ;
@@ -293,13 +319,13 @@ circuit Top : %[[
     "target":"Top.A.b"
   }
 ]]
+  ; CHECK: firrtl.nla @[[nlaSym:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a1Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>]
   ; CHECK: firrtl.module @Top
-  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym:[_a-zA-Z0-9]+]] {annotations = [{circt.nonlocal = @[[nlaSym:[_a-zA-Z0-9]+]], class = "circt.nonlocal"}]} @A(
+  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.nonlocal"}]} @A(
   ; CHECK-NEXT: firrtl.instance a2 @A(
   module Top :
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.nla @[[nlaSym]] [#hw.innerNameRef<@Top::@[[a1Sym]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>]
   module A :
     output x: UInt<1>
     ; CHECk-NEXT: firrtl.wire sym @[[bSym]] {annotations = [{circt.nonlocal = @[[nlaSym]], class = "hello"}]}
@@ -328,14 +354,14 @@ circuit Top : %[[
     "target":"~Top|A_>b"
   }
 ]]
+  ; CHECK: firrtl.nla @[[nlaSym1:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a1Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>]
+  ; CHECK: firrtl.nla @[[nlaSym2:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[a2Sym:[_a-zA-Z0-9]+]]>, #hw.innerNameRef<@A::@[[bSym]]>]
   ; CHECK: firrtl.module @Top
-  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym:[_a-zA-Z0-9]+]] {annotations = [{circt.nonlocal = @[[nlaSym1:[_a-zA-Z0-9]+]], class = "circt.nonlocal"}]} @A(
-  ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym:[_a-zA-Z0-9]+]] {annotations = [{circt.nonlocal = @[[nlaSym2:[_a-zA-Z0-9]+]], class = "circt.nonlocal"}]} @A(
+  ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.nonlocal"}]} @A(
+  ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] {annotations = [{circt.nonlocal = @[[nlaSym2]], class = "circt.nonlocal"}]} @A(
   module Top :
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.nla @[[nlaSym2]] [#hw.innerNameRef<@Top::@[[a2Sym]]>, #hw.innerNameRef<@A::@[[bSym]]>]
-  ; CHECK: firrtl.nla @[[nlaSym1]] [#hw.innerNameRef<@Top::@[[a1Sym]]>, #hw.innerNameRef<@A::@[[bSym:[_a-zA-Z0-9]+]]>]
   module A :
     output x: UInt<1>
     ; CHECk-NEXT: firrtl.wire sym @[[bSym]] {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "world"}, {circt.nonlocal = @[[nlaSym2]], class = "hello"}]}
@@ -591,11 +617,11 @@ circuit Top : %[[
   },
   {
     "class":"nla3",
-    "target":"~Top|Top/a1:A/b_:B"
+    "target":"~Top|Top/a1:A/b_:B_"
   },
   {
     "class":"nla4",
-    "target":"~Top|Top/a2:A/b_:B"
+    "target":"~Top|Top/a2:A/b_:B_"
   },
   {
     "class":"nla5",
@@ -611,15 +637,15 @@ circuit Top : %[[
   },
   {
     "class":"nla8",
-    "target":"~Top|Top/b_:B/c:C"
+    "target":"~Top|Top/b_:B_/c:C"
   },
   {
     "class":"nla9",
-    "target":"~Top|Top/a1:A/b_:B/c:C"
+    "target":"~Top|Top/a1:A/b_:B_/c:C"
   },
   {
     "class":"nla10",
-    "target":"~Top|Top/a2:A/b_:B/c:C"
+    "target":"~Top|Top/a2:A/b_:B_/c:C"
   },
   {
     "class":"nla11",
@@ -726,17 +752,17 @@ circuit Top : %[[
 
   ; CHECK:        firrtl.module @B()
   ; CHECK-SAME:     [{circt.nonlocal = @[[nla_2]], class = "nla2"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "nla1"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "nla3"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "nla4"},
+  ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "nla1"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_5]], class = "nla5"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_6]], class = "nla6"}]
   module B :
     ; CHECK-NEXT:   firrtl.instance c sym @[[BcSym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_7]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_8]], class = "circt.nonlocal"},
+    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_8]], class = "circt.nonlocal"},
     ; CHECK-SAME:      {circt.nonlocal = @[[nla_9]], class = "circt.nonlocal"},
     ; CHECK-SAME:      {circt.nonlocal = @[[nla_10]], class = "circt.nonlocal"},
+    ; CHECK-SAME:      {circt.nonlocal = @[[nla_7]], class = "circt.nonlocal"},
     ; CHECK-SAME:      {circt.nonlocal = @[[nla_11]], class = "circt.nonlocal"},
     ; CHECK-SAME:      {circt.nonlocal = @[[nla_12]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @C()
@@ -775,33 +801,32 @@ circuit top : %[[
     "target":"~top|b>q.a"
   }
 ]]
+  ; CHECK:      firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:   [#hw.innerNameRef<@top::@[[topaSym:[_a-zA-Z0-9]+]]>,
+  ; CHECK-SAME:    #hw.innerNameRef<@a::@[[aiSym:[_a-zA-Z0-9]+]]>
+  ; CHECK:      firrtl.nla @[[nla_2:[_a-zA-Z0-9]+]]
+  ; CHECK-SAME:   [#hw.innerNameRef<@top::@[[topbSym:[_a-zA-Z0-9]+]]>,
+  ; CHECK-SAME:    #hw.innerNameRef<@a::@[[aiSym]]>
   ; CHECK: firrtl.module @top
   module top:
     input ia: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     input ib: {a: {b: {c: UInt<1>}}, z: UInt<1>}
     output oa: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     output ob: {a: {b: {c: UInt<1>}}, z: UInt<1>}
-    ; CHECK:      firrtl.instance a sym @[[topaSym:[_a-zA-Z0-9]+]]
-    ; CHECK-SAME:   [{circt.nonlocal = @[[nla_1:[_a-zA-Z0-9]+]], class = "circt.nonlocal"}]
+    ; CHECK:      firrtl.instance a sym @[[topaSym]]
+    ; CHECK-SAME:   [{circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"}]
     inst a of a
     a.i.z.y.x <= ia.z.y.x
     a.i.a <= ia.a
     oa.z.y.x <= a.o.z.y.x
     oa.a <= a.o.a
-    ; CHECK:      firrtl.instance b sym @[[topbSym:[_a-zA-Z0-9]+]]
-    ; CHECK-SAME:   [{circt.nonlocal = @[[nla_2:[_a-zA-Z0-9]+]], class = "circt.nonlocal"}
+    ; CHECK:      firrtl.instance b sym @[[topbSym]]
+    ; CHECK-SAME:   [{circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}
     inst b of b
     b.q.a.b.c <= ib.a.b.c
     b.q.z <= ib.z
     ob.a.b.c <= b.r.a.b.c
     ob.z <= b.r.z
-
-  ; CHECK:      firrtl.nla @[[nla_2]]
-  ; CHECK-SAME:   [#hw.innerNameRef<@top::@[[topbSym]]>,
-  ; CHECK-SAME:    #hw.innerNameRef<@a::@[[aiSym:[_a-zA-Z0-9]+]]>
-  ; CHECK:      firrtl.nla @[[nla_1]]
-  ; CHECK-SAME:   [#hw.innerNameRef<@top::@[[topaSym]]>,
-  ; CHECK-SAME:    #hw.innerNameRef<@a::@[[aiSym]]>
 
   ; CHECK:      firrtl.module @a(
   ; CHECK-SAME:   in %i: {{.+}} sym @[[aiSym]]

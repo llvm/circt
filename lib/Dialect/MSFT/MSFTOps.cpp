@@ -27,6 +27,55 @@
 using namespace circt;
 using namespace msft;
 
+//===----------------------------------------------------------------------===//
+// Custom directive parsers/printers
+//===----------------------------------------------------------------------===//
+
+ParseResult parsePhysLoc(OpAsmParser &p, PhysLocationAttr &attr) {
+  llvm::SMLoc loc = p.getCurrentLocation();
+  StringRef devTypeStr;
+  uint64_t x, y, num;
+
+  if (p.parseKeyword(&devTypeStr) || p.parseKeyword("x") || p.parseColon() ||
+      p.parseInteger(x) || p.parseKeyword("y") || p.parseColon() ||
+      p.parseInteger(y) || p.parseKeyword("n") || p.parseColon() ||
+      p.parseInteger(num))
+    return failure();
+
+  Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
+  if (!devType) {
+    p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
+    return failure();
+  }
+  PrimitiveTypeAttr devTypeAttr =
+      PrimitiveTypeAttr::get(p.getContext(), *devType);
+  attr = PhysLocationAttr::get(p.getContext(), devTypeAttr, x, y, num);
+  return success();
+}
+
+static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
+  p << stringifyPrimitiveType(loc.getPrimitiveType().getValue())
+    << " x: " << loc.getX() << " y: " << loc.getY() << " n: " << loc.getNum();
+}
+
+//===----------------------------------------------------------------------===//
+// Misc MSFT ops
+//===----------------------------------------------------------------------===//
+
+void PDPhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
+  refAttr(FlatSymbolRefAttr::get(ref));
+}
+FlatSymbolRefAttr PDPhysLocationOp::getGlobalRefSym() { return refAttr(); }
+
+void PDPhysRegionOp::setGlobalRef(hw::GlobalRefOp ref) {
+  refAttr(FlatSymbolRefAttr::get(ref));
+}
+FlatSymbolRefAttr PDPhysRegionOp::getGlobalRefSym() { return refAttr(); }
+
+//===----------------------------------------------------------------------===//
+// Module/Instance stuff, mostly copied from HW dialect.
+//===----------------------------------------------------------------------===//
+
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {

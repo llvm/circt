@@ -167,12 +167,6 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       return;
     }
 
-    // Many firrtl dialect operations have an optional 'name' attribute.  If
-    // present, use it.
-    if (op->getNumResults() == 1)
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        setNameFn(op->getResult(0), nameAttr.getValue());
-
     // For constants in particular, propagate the value into the result name to
     // make it easier to read the IR.
     if (auto constant = dyn_cast<ConstantOp>(op)) {
@@ -193,6 +187,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
         constant.value().print(specialName, /*isSigned:*/ false);
       }
       setNameFn(constant.getResult(), specialName.str());
+      return;
     }
 
     if (auto specialConstant = dyn_cast<SpecialConstantOp>(op)) {
@@ -209,6 +204,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
         specialName << "_asyncreset";
       }
       setNameFn(specialConstant.getResult(), specialName.str());
+      return;
     }
 
     // Set invalid values to have a distinct name.
@@ -237,7 +233,14 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
         name = "invalid";
 
       setNameFn(invalid.getResult(), name);
+      return;
     }
+
+    // Many firrtl dialect operations have an optional 'name' attribute.  If
+    // present, use it.
+    if (op->getNumResults() == 1)
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        setNameFn(op->getResult(0), nameAttr.getValue());
   }
 };
 

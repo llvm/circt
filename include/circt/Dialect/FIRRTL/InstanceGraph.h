@@ -15,22 +15,35 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
-#include <deque>
 
 namespace circt {
 namespace firrtl {
+
+namespace detail {
+/// This just maps a iterator of references to an iterator of addresses.
+template <typename It>
+struct AddressIterator
+    : public llvm::mapped_iterator<It, typename It::pointer (*)(
+                                           typename It::reference)> {
+  // This using statement is to get around a bug in MSVC.  Without it, it
+  // tries to look up "It" as a member type of the parent class.
+  using Iterator = It;
+  /* implicit */ AddressIterator(Iterator iterator)
+      : llvm::mapped_iterator<It, typename Iterator::pointer (*)(
+                                      typename Iterator::reference)>(
+            iterator, &std::addressof<typename Iterator::value_type>) {}
+};
+} // namespace detail
 
 class InstanceGraphNode;
 
 /// This is an edge in the InstanceGraph. This tracks a specific instantiation
 /// of a module.
-class InstanceRecord {
+class InstanceRecord
+    : public llvm::ilist_node_with_parent<InstanceRecord, InstanceGraphNode> {
 public:
-  InstanceRecord(InstanceOp instance, InstanceGraphNode *parent,
-                 InstanceGraphNode *target)
-      : instance(instance), parent(parent), target(target) {}
-
   /// Get the InstanceOp that this is tracking.
   InstanceOp getInstance() const { return instance; }
 
@@ -40,68 +53,95 @@ public:
   /// Get the module which the InstanceOp is instantiating.
   InstanceGraphNode *getTarget() const { return target; }
 
+  /// Erase this instance record, removing it from the parent module and the
+  /// target's use-list.
+  void erase();
+
 private:
   friend class InstanceGraph;
+  friend class InstanceGraphNode;
 
-  /// The InstanceOp that this is tracking.
-  InstanceOp instance;
+  InstanceRecord(InstanceGraphNode *parent, InstanceOp instance,
+                 InstanceGraphNode *target)
+      : parent(parent), instance(instance), target(target) {}
+  InstanceRecord(const InstanceRecord &) = delete;
 
   /// This is the module where the InstanceOp lives.
   InstanceGraphNode *parent;
 
+  /// The InstanceOp that this is tracking.
+  InstanceOp instance;
+
   /// This is the module which the InstanceOp is instantiating.
   InstanceGraphNode *target;
+  /// Intrusive linked list for other uses.
+  InstanceRecord *nextUse = nullptr;
+  InstanceRecord *prevUse = nullptr;
 };
 
 /// This is a Node in the InstanceGraph.  Each node represents a Module in a
 /// Circuit.  Both external modules and regular modules can be represented by
 /// this class. It is possible to efficiently iterate all modules instantiated
 /// by this module, as well as all instantiations of this module.
-class InstanceGraphNode {
-  using EdgeVec = std::deque<InstanceRecord>;
-  using UseVec = std::vector<InstanceRecord *>;
-
-  static InstanceRecord *unwrap(EdgeVec::value_type &value) { return &value; }
-  class InstanceIterator final
-      : public llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)> {
-  public:
-    /// Initializes the result type iterator to the specified result iterator.
-    InstanceIterator(EdgeVec::iterator it)
-        : llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)>(it,
-                                                                      &unwrap) {
-    }
-  };
+class InstanceGraphNode : public llvm::ilist_node<InstanceGraphNode> {
+  using InstanceList = llvm::iplist<InstanceRecord>;
 
 public:
-  InstanceGraphNode() : module(nullptr) {}
-
   /// Get the module that this node is tracking.
   Operation *getModule() const { return module; }
 
   /// Iterate the instance records in this module.
-  using iterator = InstanceIterator;
-  iterator begin() { return iterator(moduleInstances.begin()); }
-  iterator end() { return iterator(moduleInstances.end()); }
-  llvm::iterator_range<iterator> instances() {
-    return llvm::make_range(begin(), end());
-  }
+  using iterator = detail::AddressIterator<InstanceList::iterator>;
+  iterator begin() { return instances.begin(); }
+  iterator end() { return instances.end(); }
+
+  /// Return true if there are no more instances of this module.
+  bool noUses() { return !firstUse; }
+
+  /// Return true if this module has exactly one use.
+  bool hasOneUse() { return llvm::hasSingleElement(uses()); }
 
   /// Get the number of direct instantiations of this module.
-  unsigned getNumUses() { return moduleUses.size(); }
+  size_t getNumUses() { return std::distance(usesBegin(), usesEnd()); }
+
+  /// Iterator for module uses.
+  struct UseIterator
+      : public llvm::iterator_facade_base<
+            UseIterator, std::forward_iterator_tag, InstanceRecord *> {
+    UseIterator() : current(nullptr) {}
+    UseIterator(InstanceGraphNode *node) : current(node->firstUse) {}
+    InstanceRecord *operator*() const { return current; }
+    using llvm::iterator_facade_base<UseIterator, std::forward_iterator_tag,
+                                     InstanceRecord *>::operator++;
+    UseIterator &operator++() {
+      assert(current && "incrementing past end");
+      current = current->nextUse;
+      return *this;
+    }
+    bool operator==(const UseIterator &other) const {
+      return current == other.current;
+    }
+
+  private:
+    InstanceRecord *current;
+  };
 
   /// Iterate the instance records which instantiate this module.
-  using use_iterator = UseVec::iterator;
-  use_iterator uses_begin() { return moduleUses.begin(); }
-  use_iterator uses_end() { return moduleUses.end(); }
-  llvm::iterator_range<use_iterator> uses() {
-    return llvm::make_range(uses_begin(), uses_end());
+  UseIterator usesBegin() { return {this}; }
+  UseIterator usesEnd() { return {}; }
+  llvm::iterator_range<UseIterator> uses() {
+    return llvm::make_range(usesBegin(), usesEnd());
   }
 
-private:
   /// Record a new instance op in the body of this module. Returns a newly
   /// allocated InstanceRecord which will be owned by this node.
-  InstanceRecord *recordInstance(InstanceOp instance,
-                                 InstanceGraphNode *target);
+  InstanceRecord *addInstance(InstanceOp instance, InstanceGraphNode *target);
+
+private:
+  friend class InstanceRecord;
+
+  InstanceGraphNode() : module(nullptr) {}
+  InstanceGraphNode(const InstanceGraphNode &) = delete;
 
   /// Record that a module instantiates this module.
   void recordUse(InstanceRecord *record);
@@ -112,10 +152,10 @@ private:
   /// List of instance operations in this module.  This member owns the
   /// InstanceRecords, which may be pointed to by other InstanceGraohNode's use
   /// lists.
-  EdgeVec moduleInstances;
+  InstanceList instances;
 
   /// List of instances which instantiate this module.
-  UseVec moduleUses;
+  InstanceRecord *firstUse = nullptr;
 
   // Provide access to the constructor.
   friend class InstanceGraph;
@@ -128,26 +168,12 @@ private:
 /// To use this class, retrieve a cached copy from the analysis manager:
 ///   auto &instanceGraph = getAnalysis<InstanceGraph>(getOperation());
 class InstanceGraph {
-
-  /// Storage for InstanceGraphNodes.
-  using NodeVec = std::deque<InstanceGraphNode>;
-
-  /// Iterator that unwraps a unique_ptr to return a regular pointer.
-  static InstanceGraphNode *unwrap(NodeVec::value_type &value) {
-    return &value;
-  }
-  struct NodeIterator final
-      : public llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)> {
-    /// Initializes the result type iterator to the specified result iterator.
-    NodeIterator(NodeVec::iterator it)
-        : llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)>(it,
-                                                                      &unwrap) {
-    }
-  };
+  /// This is the list of InstanceGraphNodes in the graph.
+  using NodeList = llvm::iplist<InstanceGraphNode>;
 
 public:
   /// Create a new module graph of a circuit.  This must be called on a FIRRTL
-  /// CircuitOp.
+  /// CircuitOp or MLIR ModuleOp.
   explicit InstanceGraph(Operation *operation);
 
   /// Get the node corresponding to the top-level module of a circuit.
@@ -176,7 +202,7 @@ public:
   bool isAncestor(FModuleLike child, FModuleOp parent);
 
   /// Iterate through all modules.
-  using iterator = NodeIterator;
+  using iterator = detail::AddressIterator<NodeList::iterator>;
   iterator begin() { return nodes.begin(); }
   iterator end() { return nodes.end(); }
 
@@ -188,20 +214,38 @@ public:
   // InstanceGraph is used as an analysis, this is only safe when the pass is
   // on a CircuitOp.
 
-  // Replaces an instance of a module with another instance. The target module
-  // of both InstanceOps must be the same.
+  /// Add a newly created module to the instance graph.
+  InstanceGraphNode *addModule(Operation *op);
+
+  /// Remove this module from the instance graph. This will also remove all
+  /// InstanceRecords in this module.  All instances of this module must have
+  /// been removed from the graph.
+  void erase(InstanceGraphNode *node);
+
+  /// Replaces an instance of a module with another instance. The target module
+  /// of both InstanceOps must be the same.
   void replaceInstance(InstanceOp inst, InstanceOp newInst);
 
+  /// Returns pointer to member of operation list.
+  static NodeList InstanceGraph::*
+  getSublistAccessgetSublistAccess(Operation *) {
+    return &InstanceGraph::nodes;
+  }
+
 private:
+  InstanceGraph(const InstanceGraph &) = delete;
+
+  InstanceGraphNode *topLevelNode;
+
   /// Get the node corresponding to the module.  If the node has does not exist
   /// yet, it will be created.
   InstanceGraphNode *getOrAddNode(StringAttr name);
 
   /// The storage for graph nodes, with deterministic iteration.
-  NodeVec nodes;
+  NodeList nodes;
 
   /// This maps each operation to its graph node.
-  llvm::DenseMap<Attribute, unsigned> nodeMap;
+  llvm::DenseMap<Attribute, InstanceGraphNode *> nodeMap;
 };
 
 /// An absolute instance path.
@@ -296,16 +340,16 @@ struct GraphTraits<Inverse<circt::firrtl::InstanceGraphNode *>> {
   }
 
   using ChildIteratorType =
-      llvm::mapped_iterator<NodeType::use_iterator, decltype(&getParent)>;
+      llvm::mapped_iterator<NodeType::UseIterator, decltype(&getParent)>;
 
   static NodeRef getEntryNode(Inverse<NodeRef> inverse) {
     return inverse.Graph;
   }
   static ChildIteratorType child_begin(NodeRef node) {
-    return {node->uses_begin(), &getParent};
+    return {node->usesBegin(), &getParent};
   }
   static ChildIteratorType child_end(NodeRef node) {
-    return {node->uses_end(), &getParent};
+    return {node->usesEnd(), &getParent};
   }
 };
 

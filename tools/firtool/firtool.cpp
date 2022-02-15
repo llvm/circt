@@ -29,12 +29,14 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/Support/Chrono.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
@@ -159,6 +161,10 @@ static cl::opt<bool>
                    cl::init(false));
 
 static cl::opt<bool>
+    dedup("dedup", cl::desc("deduplicate structurally identical modules"),
+          cl::init(false));
+
+static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
@@ -208,6 +214,16 @@ static cl::opt<bool> newAnno("new-anno",
 static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
                                        cl::desc("enable unused ports pruning"),
                                        cl::init(true));
+
+static cl::opt<bool> mergeConnections(
+    "merge-connections",
+    cl::desc("merge field-level connections into full aggregate connections"),
+    cl::init(true));
+
+static cl::opt<bool>
+    mergeConnectionsAgggresively("merge-connections-aggressive-merging",
+                                 cl::desc("merge connections aggressively"),
+                                 cl::init(false));
 
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
@@ -272,6 +288,11 @@ static cl::opt<std::string> blackBoxRootResourcePath(
         "Optional path to use as the root of black box resource annotations"),
     cl::value_desc("path"), cl::init(""));
 
+static cl::opt<bool>
+    verbosePassExecutions("verbose-pass-executions",
+                          cl::desc("Log executions of toplevel module passes"),
+                          cl::init(false));
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -279,6 +300,46 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   config.enableRegionSimplification = false;
   return mlir::createCanonicalizerPass(config);
 }
+
+// This class prints logs before and after of pass executions. This
+// insrumentation assumes that passes are not parallelized for firrtl::CircuitOp
+// and mlir::ModuleOp.
+class FirtoolPassInstrumentation : public mlir::PassInstrumentation {
+  // This stores start time points of passes.
+  using TimePoint = llvm::sys::TimePoint<>;
+  llvm::SmallVector<TimePoint> timePoints;
+  int level = 0;
+
+public:
+  void runBeforePass(Pass *pass, Operation *op) override {
+    // This assumes that it is safe to log messages to stderr if the operation
+    // is circuit or module op.
+    if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
+      timePoints.push_back(TimePoint::clock::now());
+      auto &os = llvm::errs();
+      os << "[firtool] ";
+      os.indent(2 * level++);
+      os << "Running \"";
+      pass->printAsTextualPipeline(llvm::errs());
+      os << "\"\n";
+    }
+  }
+
+  void runAfterPass(Pass *pass, Operation *op) override {
+    using namespace std::chrono;
+    // This assumes that it is safe to log messages to stderr if the operation
+    // is circuit or module op.
+    if (isa<firrtl::CircuitOp, mlir::ModuleOp>(op)) {
+      auto &os = llvm::errs();
+      auto elpased = duration<double>(TimePoint::clock::now() -
+                                      timePoints.pop_back_val()) /
+                     seconds(1);
+      os << "[firtool] ";
+      os.indent(2 * --level);
+      os << "-- Done in " << llvm::format("%.3f", elpased) << " sec\n";
+    }
+  }
+};
 
 /// Process a single buffer of the input.
 static LogicalResult
@@ -336,6 +397,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
+  if (verbosePassExecutions)
+    pm.addInstrumentation(std::make_unique<FirtoolPassInstrumentation>());
   applyPassManagerCLOptions(pm);
 
   if (newAnno)
@@ -343,10 +406,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
                                                  disableAnnotationsClassless));
 
-  if (!disableOptimization) {
+  if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
-  }
 
   if (lowerCHIRRTL)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -358,6 +420,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (!disableOptimization && dedup)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
   if (wireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
@@ -439,6 +504,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createEmitOMIRPass(omirOutFile));
+
+  if (!disableOptimization && preserveAggregate && mergeConnections)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createMergeConnectionsPass(mergeConnectionsAgggresively));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {

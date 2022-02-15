@@ -51,6 +51,7 @@ s = pycde.System([TopLevel],
 print("Generating...")
 s.generate()
 
+s.cleanup()
 s.print()
 s.emit_outputs()
 print("************")
@@ -64,9 +65,9 @@ s.print()
 # CHECK:         msft.output %PlusPipeline.y : i32
 
 # CHECK-LABEL: ** Post pass/emit
-# CHECK-LABEL: hw.module @TopLevel
-# CHECK:         hw.instance "part1" sym @part1 @part1
-# CHECK:         hw.instance "PlusPipeline" sym @PlusPipeline @PlusPipeline
 # CHECK-LABEL: hw.module @part1
 # CHECK:         hw.instance "Plus1" sym @Plus1 @Plus
 # CHECK:         hw.instance "PlusPipeline.Plus_1" sym @PlusPipeline.Plus_1 @Plus
+# CHECK-LABEL: hw.module @TopLevel
+# CHECK:         hw.instance "part1" sym @part1 @part1
+# CHECK:         hw.instance "PlusPipeline" sym @PlusPipeline @PlusPipeline

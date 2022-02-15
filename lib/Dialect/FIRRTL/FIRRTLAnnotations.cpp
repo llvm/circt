@@ -607,18 +607,23 @@ StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
     innerSym = StringAttr::get(context, moduleNamespace.newName(name));
     getOp()->setAttr("inner_sym", innerSym);
   }
+  assert(innerSym && "invalid inner_sym");
   return innerSym;
 }
 
 Attribute
 OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
-  if (auto module = llvm::dyn_cast<FModuleLike>(getOp()))
+  if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
+    auto moduleName = module.moduleNameAttr();
+    assert(moduleName && "invalid NLA reference");
     return FlatSymbolRefAttr::get(module.moduleNameAttr());
+  }
   // Return an inner-ref to the target.
-  auto module = getOp()->getParentOfType<FModuleLike>();
-  return hw::InnerRefAttr::get(module.moduleNameAttr(),
-                               getInnerSym(moduleNamespace));
+  auto moduleName = getOp()->getParentOfType<FModuleLike>().moduleNameAttr();
+  auto innerSym = getInnerSym(moduleNamespace);
+  assert(moduleName && innerSym && "invalid NLA reference");
+  return hw::InnerRefAttr::get(moduleName, innerSym);
 }
 
 FIRRTLType OpAnnoTarget::getType() const {
@@ -695,6 +700,7 @@ PortAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
     module = getOp()->getParentOfType<FModuleLike>();
   StringAttr moduleName = module.moduleNameAttr();
   auto innerSym = getInnerSym(moduleNamespace);
+  assert(moduleName && innerSym && "invalid NLA reference");
   return hw::InnerRefAttr::get(moduleName, innerSym);
 }
 

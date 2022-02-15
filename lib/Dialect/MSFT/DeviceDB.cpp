@@ -56,7 +56,7 @@ void PrimitiveDB::foreach (
       for (auto n : y.second)
         for (auto p : n.second)
           callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
-                                         x.first, y.first, n.first, ""));
+                                         x.first, y.first, n.first));
 }
 
 //===----------------------------------------------------------------------===//
@@ -95,14 +95,14 @@ LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
 }
 
 /// Assign an operation to a physical region. Return false on failure.
-LogicalResult PlacementDB::addPlacement(PhysicalRegionRefAttr regionRef,
+LogicalResult PlacementDB::addPlacement(PDPhysRegionOp regionRef,
                                         PlacedInstance inst) {
   auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
-  auto physicalRegion =
-      topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
+  auto physicalRegion = topModule.lookupSymbol<DeclPhysicalRegionOp>(
+      regionRef.physRegionRefAttr());
   if (!physicalRegion)
     return inst.op->emitOpError("referenced non-existant PhysicalRegion named ")
-           << regionRef.getPhysicalRegion().getValue();
+           << regionRef.physRegionRefAttr();
 
   regionPlacements.emplace_back(regionRef, inst);
   return success();
@@ -110,46 +110,33 @@ LogicalResult PlacementDB::addPlacement(PhysicalRegionRefAttr regionRef,
 
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
-size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
+size_t PlacementDB::addPlacements(const hw::SymbolCache &globalRefs,
+                                  FlatSymbolRefAttr rootMod,
                                   mlir::Operation *op) {
-  // Placements must be specified via a GlobalRef.
-  auto globalRef = dyn_cast<hw::GlobalRefOp>(op);
-  if (!globalRef)
-    return 0;
-
-  ArrayAttr instPath = globalRef.namepath();
-
-  // Filter out all paths which aren't related to this DB.
-  auto rootInnerRef = instPath.getValue()[0].dyn_cast<hw::InnerRefAttr>();
-  if (rootInnerRef && rootInnerRef.getModule().getValue() != rootMod.getValue())
-    return 0;
-
-  size_t numFailed = 0;
-  for (NamedAttribute attr : op->getAttrs()) {
-    llvm::TypeSwitch<Attribute>(attr.getValue())
-
-        // Handle PhysLocationAttr.
-        .Case([&](PhysLocationAttr physLoc) {
-          // PhysLoc has a subpath.
-          auto subPath = physLoc.getSubPath();
-          LogicalResult added =
-              addPlacement(physLoc, PlacedInstance{instPath, subPath, op});
-          if (failed(added))
-            ++numFailed;
-        })
-
-        // Handle PhysicalRegionRefAttr.
-        .Case([&](PhysicalRegionRefAttr physRegion) {
-          LogicalResult added = addPlacement(
-              physRegion, PlacedInstance{instPath, StringRef(), op});
-          if (failed(added))
-            ++numFailed;
-        })
-
-        // Ignore attributes we don't understand.
-        .Default([](Attribute) {});
+  // PhysLocations have become op-specified.
+  if (auto physLocOp = dyn_cast<PDPhysLocationOp>(op)) {
+    auto refName = physLocOp.ref();
+    assert(refName);
+    hw::GlobalRefOp globalRef =
+        cast<hw::GlobalRefOp>(globalRefs.getDefinition(*refName));
+    LogicalResult added =
+        addPlacement(physLocOp.locAttr(),
+                     PlacedInstance{globalRef.namepath(),
+                                    physLocOp.subPathAttr(), globalRef});
+    return failed(added) ? 1 : 0;
   }
-  return numFailed;
+  // PhysRegions have become op-specified.
+  if (auto physRegOp = dyn_cast<PDPhysRegionOp>(op)) {
+    auto refName = physRegOp.ref();
+    assert(refName);
+    hw::GlobalRefOp globalRef =
+        cast<hw::GlobalRefOp>(globalRefs.getDefinition(*refName));
+    LogicalResult added = addPlacement(
+        physRegOp, PlacedInstance{globalRef.namepath(), physRegOp.subPathAttr(),
+                                  globalRef});
+    return failed(added) ? 1 : 0;
+  }
+  return 0;
 }
 
 /// Walk the entire design adding placements.
@@ -157,8 +144,13 @@ size_t PlacementDB::addDesignPlacements() {
   size_t failed = 0;
   FlatSymbolRefAttr rootModule = FlatSymbolRefAttr::get(top);
   auto mlirModule = top->getParentOfType<mlir::ModuleOp>();
-  mlirModule.walk(
-      [&](Operation *op) { failed += addPlacements(rootModule, op); });
+  hw::SymbolCache globalRefs;
+  for (auto ref : mlirModule.getOps<hw::GlobalRefOp>())
+    globalRefs.addDefinition(ref.sym_nameAttr(), ref);
+  globalRefs.freeze();
+  mlirModule.walk([&](Operation *op) {
+    failed += addPlacements(globalRefs, rootModule, op);
+  });
   return failed;
 }
 
@@ -318,9 +310,8 @@ void PlacementDB::walkPlacements(
           PlacedInstance inst = devF->getSecond();
 
           // Marshall and run the callback.
-          PhysLocationAttr loc =
-              PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, devtype),
-                                    x, y, num, inst.subpath);
+          PhysLocationAttr loc = PhysLocationAttr::get(
+              ctxt, PrimitiveTypeAttr::get(ctxt, devtype), x, y, num);
           callback(loc, inst);
         }
       }
@@ -330,7 +321,7 @@ void PlacementDB::walkPlacements(
 
 /// Walk the region placement information.
 void PlacementDB::walkRegionPlacements(
-    function_ref<void(PhysicalRegionRefAttr, PlacedInstance)> callback) {
+    function_ref<void(PDPhysRegionOp, PlacedInstance)> callback) {
   for (auto iter = regionPlacements.begin(), end = regionPlacements.end();
        iter != end; ++iter)
     callback(iter->first, iter->second);

@@ -12,7 +12,7 @@ hw.module @cyclic(%a: i1) -> (b: i1) {
   // for holding the value of %0.  If this wire is not emitted then this test
   // should either be deleted or find a different way to force IR generation.
 
-  // CHECK: wire _T;
+  // CHECK: wire _GEN;
 
   %1 = comb.add %0, %0 : i1
   %0 = comb.shl %a, %a : i1

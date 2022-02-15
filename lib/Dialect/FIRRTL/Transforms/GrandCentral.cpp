@@ -892,7 +892,6 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedVectorTypeAttr>(
           [&](AugmentedVectorTypeAttr vector) -> Optional<TypeSum> {
-            bool notFailed = true;
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
             auto elementType =
@@ -905,9 +904,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
               auto subField = fromAttr(elements[i]);
               if (!subField)
                 return None;
-              notFailed &=
-                  traverseField(subField.getValue(), id,
-                                path.snapshot().append("[" + Twine(i) + "]"));
+              (void)traverseField(subField.getValue(), id,
+                                  path.snapshot().append("[" + Twine(i) + "]"));
             }
 
             if (auto *tpe = std::get_if<Type>(&elementType.getValue()))

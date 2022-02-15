@@ -34,6 +34,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
@@ -177,7 +178,7 @@ static bool isAnnotationSensitiveToFieldID(Annotation anno) {
 /// to track which field ID they were applied to. This function adds a fieldID
 /// to such a replicated operation, if the annotation in question requires it.
 static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
-                                         unsigned fieldID) {
+                                         unsigned fieldID, Type i64ty) {
   DictionaryAttr dict = attr.cast<DictionaryAttr>();
 
   // No need to do anything if the annotation applies to the entire field.
@@ -193,7 +194,7 @@ static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
   if (auto existingFieldID = anno.getMember<IntegerAttr>("fieldID"))
     fieldID += existingFieldID.getValue().getZExtValue();
   NamedAttrList fields(dict);
-  fields.set("fieldID", IntegerAttr::get(IntegerType::get(ctxt, 64), fieldID));
+  fields.set("fieldID", IntegerAttr::get(i64ty, fieldID));
   return DictionaryAttr::get(ctxt, fields);
 }
 
@@ -268,17 +269,37 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
 namespace {
+
+struct AttrCache {
+  AttrCache(MLIRContext *context) {
+    i64ty = IntegerType::get(context, 64);
+    innerSymAttr = StringAttr::get(context, "inner_sym");
+    nameAttr = StringAttr::get(context, "name");
+    sPortDirections = StringAttr::get(context, "portDirections");
+    sPortNames = StringAttr::get(context, "portNames");
+    sPortTypes = StringAttr::get(context, "portTypes");
+    sPortSyms = StringAttr::get(context, "portSyms");
+    sPortAnnotations = StringAttr::get(context, "portAnnotations");
+    sEmpty = StringAttr::get(context, "");
+  }
+  AttrCache(const AttrCache &) = default;
+
+  Type i64ty;
+  StringAttr innerSymAttr, nameAttr, sPortDirections, sPortNames, sPortTypes,
+      sPortSyms, sPortAnnotations, sEmpty;
+};
+
 // The visitors all return true if the operation should be deleted, false if
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData,
                       bool preserveAggregate, bool preservePublicTypes,
-                      SmallVector<NlaNameNewSym> &nlaSymList)
+                      SymbolTable &symTbl, const AttrCache &cache)
       : context(context), flattenAggregateMemData(flattenAggregateMemData),
         preserveAggregate(preserveAggregate),
-        preservePublicTypes(preservePublicTypes),
-        nlaNameToNewSymList(nlaSymList) {}
+        preservePublicTypes(preservePublicTypes), symTbl(symTbl), cache(cache) {
+  }
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -313,6 +334,12 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(ConnectOp op);
   bool visitStmt(PartialConnectOp op);
   bool visitStmt(WhenOp op);
+
+  SmallVectorImpl<NlaNameNewSym> &getNLAs() { return nlaNameToNewSymList; };
+
+  DenseMap<StringAttr, Operation *> &getInstanceSymNames() {
+    return instanceSymNames;
+  };
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -359,7 +386,21 @@ private:
   // new symbol, and the corresponding NLA needs to be updatd with this symbol.
   // This is a list of the NLA name  which needs to be updated, to the new
   // lowered field symbol name.
-  SmallVector<NlaNameNewSym> &nlaNameToNewSymList;
+  SmallVector<NlaNameNewSym> nlaNameToNewSymList;
+
+  //  Record all the inner sym and the corresponding InstanceOps. This will be
+  //  later queried when updating the NLA, to get direct access to the
+  //  InstanceOp that participates in the namepath.
+  // During Lowering, an instance can be visited multiple times, based on the
+  // type of the result. So, we need a map to record the final lowered
+  // InstanceOp for the corresponding symbol name.
+  DenseMap<StringAttr, Operation *> instanceSymNames;
+
+  // Keep a symbol table around for resolving symbols
+  SymbolTable &symTbl;
+
+  // Cache some attributes
+  const AttrCache &cache;
 };
 } // namespace
 
@@ -439,7 +480,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   for (auto opAttr : annotations) {
     auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>();
     if (!subAnno) {
-      retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
+      retval.push_back(
+          updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       continue;
     }
     /* subAnno handling... */
@@ -461,22 +503,30 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
       continue;
     }
-    // Otherwise, if the current field is exactly the target, degenerate
-    // the sub-annotation to a normal annotation.
+    auto nlaRef =
+        subAnno.getAnnotations().getAs<FlatSymbolRefAttr>("circt.nonlocal");
     if (Annotation(opAttr).getClass() ==
         "firrtl.transforms.DontTouchAnnotation") {
       needsSym = true;
+      // If this is a nonlocal DontTouch, then,
+      // 1. Drop the annotation and the circt.nonlocal reference.
+      // 2. This makes the NLA redundant.
+      // 3. Just record the nla name, and insert a null Attr, to signify that
+      // the original NLA must be deleted.
+      if (nlaRef)
+        nlaNameToNewSymList.push_back({nlaRef.getAttr(), {}});
       continue;
     }
     // If this subfield has a nonlocal anchor, then we need to update the
     // NLA with the new symbol that would be added to the field after
     // lowering.
-    if (auto nla = subAnno.getAnnotations().getAs<FlatSymbolRefAttr>(
-            "circt.nonlocal")) {
+    if (nlaRef) {
       nlaNameToNewSymList.push_back(
-          {nla.getAttr(), StringAttr::get(ctxt, sym)});
+          {nlaRef.getAttr(), StringAttr::get(ctxt, sym)});
       needsSym = true;
     }
+    // Otherwise, if the current field is exactly the target, degenerate
+    // the sub-annotation to a normal annotation.
     retval.push_back(subAnno.getAnnotations());
   }
   return ArrayAttr::get(ctxt, retval);
@@ -497,9 +547,9 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallString<16> loweredName;
   SmallString<16> loweredSymName;
 
-  if (auto innerSymAttr = op->getAttrOfType<StringAttr>("inner_sym"))
+  if (auto innerSymAttr = op->getAttrOfType<StringAttr>(cache.innerSymAttr))
     loweredSymName = innerSymAttr.getValue();
-  if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+  if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
     loweredName = nameAttr.getValue();
   if (loweredSymName.empty())
     loweredSymName = loweredName;
@@ -527,10 +577,11 @@ bool TypeLoweringVisitor::lowerProducer(
     auto *newOp = clone(field, loweredAttrs);
     // Carry over the name, if present.
     if (!loweredName.empty())
-      newOp->setAttr("name", StringAttr::get(context, loweredName));
+      newOp->setAttr(cache.nameAttr, StringAttr::get(context, loweredName));
     // Carry over the inner_sym name, if present.
-    if (needsSym || op->hasAttr("inner_sym")) {
-      newOp->setAttr("inner_sym", StringAttr::get(context, loweredSymName));
+    if (needsSym || op->hasAttr(cache.innerSymAttr)) {
+      newOp->setAttr(cache.innerSymAttr,
+                     StringAttr::get(context, loweredSymName));
       assert(!loweredSymName.empty());
     }
     lowered.push_back(newOp->getResult(0));
@@ -581,11 +632,13 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(oldArg.name.getValue() + field.suffix);
 
-  SmallString<16> sym;
-  if (oldArg.sym)
-    sym = (oldArg.sym.getValue() + field.suffix).str();
-  else
-    sym = (oldArg.name.getValue() + field.suffix).str();
+  SmallString<16> symtmp;
+  StringRef sym;
+  if (oldArg.sym) {
+    symtmp = (oldArg.sym.getValue() + field.suffix).str();
+    sym = symtmp;
+  } else
+    sym = name.getValue();
 
   bool needsSym = false;
   // Populate the new arg attributes.
@@ -1033,26 +1086,25 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newPortTypes.push_back(TypeAttr::get(port.type));
-    newArgSyms.push_back(port.sym ? port.sym : StringAttr::get(context, ""));
+    newArgSyms.push_back(port.sym ? port.sym : cache.sEmpty);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portDirections"),
+      NamedAttribute(cache.sPortDirections,
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
-                                          builder.getArrayAttr(newArgNames)));
-
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
-                                          builder.getArrayAttr(newPortTypes)));
-
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
-                                          builder.getArrayAttr(newArgSyms)));
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortNames, builder.getArrayAttr(newArgNames)));
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portAnnotations"),
-                     builder.getArrayAttr(newArgAnnotations)));
+      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newPortTypes)));
+
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortSyms, builder.getArrayAttr(newArgSyms)));
+
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
@@ -1102,29 +1154,27 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
-
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
-    newArgSyms.push_back(port.sym ? port.sym : StringAttr::get(context, ""));
+    newArgSyms.push_back(port.sym ? port.sym : cache.sEmpty);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portDirections"),
+      NamedAttribute(cache.sPortDirections,
                      direction::packAttribute(context, newArgDirections)));
 
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portNames"),
-                                          builder->getArrayAttr(newArgNames)));
-
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portTypes"),
-                                          builder->getArrayAttr(newArgTypes)));
-  newModuleAttrs.push_back(NamedAttribute(StringAttr::get(context, "portSyms"),
-                                          builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(
-      NamedAttribute(StringAttr::get(context, "portAnnotations"),
-                     builder->getArrayAttr(newArgAnnotations)));
+      NamedAttribute(cache.sPortNames, builder->getArrayAttr(newArgNames)));
+
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
+  newModuleAttrs.push_back(
+      NamedAttribute(cache.sPortSyms, builder->getArrayAttr(newArgSyms)));
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -1267,7 +1317,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   bool allowedToPreserveAggregate =
-      isModuleAllowedToPreserveAggregate(op.getReferencedModule());
+      isModuleAllowedToPreserveAggregate(op.getReferencedModule(symTbl));
 
   endFields.push_back(0);
   bool needsSymbol = false;
@@ -1299,9 +1349,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     endFields.push_back(resultTypes.size());
   }
 
-  if (skip)
-    return false;
   auto sym = op.inner_symAttr();
+
+  if (skip) {
+    if (sym)
+      instanceSymNames[sym] = op;
+    return false;
+  }
   if (!sym || sym.getValue().empty())
     if (needsSymbol)
       sym = StringAttr::get(builder->getContext(),
@@ -1327,6 +1381,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     else
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
+  if (sym)
+    instanceSymNames[sym] = newInstance;
   return true;
 }
 
@@ -1395,48 +1451,102 @@ void LowerTypesPass::runOnOperation() {
   std::vector<Operation *> ops;
   // Map of name of the NonLocalAnchor to the operation.
   DenseMap<StringAttr, Operation *> nlaMap;
+  // Symbol Table
+  SymbolTable symTbl(getOperation());
+  // Cached attr
+  AttrCache cache(&getContext());
+
   // Record all operations in the circuit.
   llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
     // Creating a map of all ops in the circt, but only modules are relevant.
-    ops.push_back(&op);
+    if (isa<FModuleOp, FExtModuleOp>(op))
+      ops.push_back(&op);
     // Record the NonLocalAnchor and its name.
     if (auto nla = dyn_cast<NonLocalAnchor>(op))
       nlaMap[nla.sym_nameAttr()] = nla;
   });
 
-  // Merge two lists and return it.
-  auto mergeList = [&](const SmallVector<NlaNameNewSym> &lhs,
-                       SmallVector<NlaNameNewSym> rhs) {
-    rhs.append(lhs);
-    return rhs;
-  };
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
+  SmallVector<NlaNameNewSym> nlaToNewSymList;
+  SmallVector<InnerRefRecord> instanceSymNames;
+  std::mutex nlaAppendLock;
   auto lowerModules = [&](auto op) {
-    SmallVector<NlaNameNewSym> modNlaToNewSymList;
-    TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
-                        preserveAggregate, preservePublicTypes,
-                        modNlaToNewSymList)
-        .lowerModule(op);
-    return modNlaToNewSymList;
+    auto tl = TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
+                                  preserveAggregate, preservePublicTypes,
+                                  symTbl, cache);
+    tl.lowerModule(op);
+    std::lock_guard<std::mutex> lg(nlaAppendLock);
+    nlaToNewSymList.append(tl.getNLAs());
+    // Record all the instances in the module that have a symbol.
+    if (auto mod = dyn_cast<FModuleOp>(op))
+      for (auto instName : tl.getInstanceSymNames()) {
+        instanceSymNames.emplace_back(mod.getNameAttr(), instName.getFirst(),
+                                      instName.getSecond());
+      }
   };
-  SmallVector<NlaNameNewSym> nlaToNewSymList = llvm::parallelTransformReduce(
-      ops.begin(), ops.end(), SmallVector<NlaNameNewSym>(), mergeList,
-      lowerModules);
+  parallelForEach(&getContext(), ops.begin(), ops.end(), lowerModules);
+  // Sort it, to enable binary search.
+  llvm::sort(instanceSymNames.begin(), instanceSymNames.end());
   // Fixup the nla, with the updated symbol names.
   // This can only update the final element on which the nla is applied, because
   // lowering cannot update the symbols on the InstanceOp. Also, the final
   // element cannot be a module.
   for (auto nlaToSym : nlaToNewSymList) {
-    // Get the nla with the corresponding name. This is guaranteed to exist.
-    auto nla = cast<NonLocalAnchor>(nlaMap[nlaToSym.nlaName]);
+    auto nlaName = nlaToSym.nlaName;
+    // Get the nla with the corresponding name. It may not exist in the nlaMap,
+    // if we have already processed the NLA once. nlaToNewSymList can have
+    // duplicate entries for an NLA, since an NLA can be reused by multiple
+    // bundle subfields.
+    auto iter = nlaMap.find(nlaName);
+    if (iter == nlaMap.end())
+      continue;
+    auto nla = cast<NonLocalAnchor>(iter->second);
     auto namepath = nla.namepath();
-    SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
     // Update the final element, which must be an InnerRefAttr.
-    auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
-    updatedPath[namepath.size() - 1] =
-        hw::InnerRefAttr::get(&getContext(), leaf.getModule(), nlaToSym.newSym);
-    nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+    if (nlaToSym.newSym) {
+      SmallVector<Attribute> updatedPath(namepath.begin(), namepath.end());
+      auto leaf = namepath[namepath.size() - 1].cast<hw::InnerRefAttr>();
+      updatedPath[namepath.size() - 1] = hw::InnerRefAttr::get(
+          &getContext(), leaf.getModule(), nlaToSym.newSym);
+      nla.namepathAttr(ArrayAttr::get(&getContext(), updatedPath));
+    } else {
+      // Now cleanup and remove the dangling NLAs, if the nonlocal annotation
+      // was dropped. If there were nonlocal DontTouch, it is already lowered to
+      // a local DontTouch in this pass, by adding a symbol to the op. When the
+      // nonlocal DontTouch is removed from the fields of a Bundle, the
+      // corresponding NLA must also be removed. In this block, remove all the
+      // references to the nla from the InstanceOps and erase the NLA.
+      auto namepath = nla.namepath();
+      bool failedToRemove = false;
+      // Iterate over the instances that have a referece to the NLA.
+      for (size_t i = 0, e = namepath.size() - 1; i < e; ++i) {
+        auto innerRef = namepath[i].cast<hw::InnerRefAttr>();
+        // Binary search over the list of InsntanceOps, given the InnerRefAttr;
+        const auto *iter =
+            std::lower_bound(instanceSymNames.begin(), instanceSymNames.end(),
+                             InnerRefRecord(innerRef));
+        if (iter == instanceSymNames.end()) {
+          // verifier will fail after LowerTypes.
+          nla.emitOpError("cannot find the instance op:") << innerRef;
+          failedToRemove = true;
+          break;
+        }
+        auto *instOp = iter->op;
+        AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
+          if (auto nlaRef = anno.getMember("circt.nonlocal"))
+            return (nlaName == nlaRef.cast<FlatSymbolRefAttr>().getAttr());
+          return false;
+        });
+      }
+      if (!failedToRemove) {
+        nla->erase();
+        // Ensure that the nla is removed, to avoid deleting the same NLA twice.
+        // There can be multiple entries in nlaToNewSymList, if NLA reused by
+        // bundle subfields.
+        nlaMap.erase(nlaName);
+      }
+    }
   }
 }
 

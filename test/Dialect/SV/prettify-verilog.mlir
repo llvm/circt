@@ -91,19 +91,24 @@ hw.module @sink_constants(%clock :i1) -> (out : i1){
 // CHECK-LABEL: @sinkReadInOut
 // VERILOG-LABEL: sinkReadInOut
 hw.module @sinkReadInOut(%clk: i1) {
-  %myreg = sv.reg  : !hw.inout<i48>
-  %1 = sv.read_inout %myreg : !hw.inout<i48>
+  %myreg = sv.reg  : !hw.inout<array<1xstruct<a:i48>>>
+  %false = hw.constant false
+  %0 = sv.array_index_inout %myreg[%false]: !hw.inout<array<1xstruct<a: i48>>>, i1
+  %1 = sv.struct_field_inout %0["a"]: !hw.inout<struct<a: i48>>
+  %2 = sv.read_inout %1 : !hw.inout<i48>
   sv.alwaysff(posedge %clk)  {
-    sv.passign %myreg, %1 : i48
+    sv.passign %1, %2 : i48
   }
 }
-// CHECK:  sv.reg  : !hw.inout<i48>
+// CHECK:  %myreg = sv.reg
 // CHECK:  sv.alwaysff(posedge %clk)
+// CHECK:    sv.array_index_inout
+// CHECK:    sv.struct_field_inout
 // CHECK:    sv.read_inout
 
-// VERILOG:  reg [47:0] myreg;
+// VERILOG:  struct packed {logic [47:0] a; }[0:0] myreg;
 // VERILOG:  always_ff @(posedge clk)
-// VERILOG:    myreg <= myreg;
+// VERILOG:    myreg[1'h0].a <= myreg[1'h0].a;
 
 
 // CHECK-LABEL: @sink_expression

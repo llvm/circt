@@ -1,22 +1,18 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv | FileCheck %s --check-prefix=LOWER
-// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper,regions,reg --lower-seq-to-sv --export-verilog | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,regions,reg | FileCheck %s --check-prefix=LOWER
+// RUN: circt-opt %s --lower-msft-to-hw --lower-seq-to-sv --msft-export-tcl=tops=shallow,deeper,regions,reg --export-verilog | FileCheck %s --check-prefix=TCL
 
-hw.globalRef @ref1 [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>] {
-  "foo" = #msft.physloc<M20K, 15, 9, 3, "memBank2">
-}
+hw.globalRef @ref1 [#hw.innerNameRef<@deeper::@branch>, #hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
+msft.pd.location @ref1 M20K x: 15 y: 9 n: 3 path: "memBank2"
 
-hw.globalRef @ref2 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>] {
-  "bar" = #msft.physloc<M20K, 8, 19, 1, "memBank2">
-}
+hw.globalRef @ref2 [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf::@module>]
+msft.pd.location @ref2 M20K x: 8 y: 19 n: 1 path: "memBank2"
 
-hw.globalRef @ref3 [#hw.innerNameRef<@regions::@module>] {
-  "baz" = #msft.physical_region_ref<@region1>
-}
+hw.globalRef @ref3 [#hw.innerNameRef<@regions::@module>]
+msft.pd.physregion @ref3 @region1 path: "baz"
 
-hw.globalRef @ref4 [#hw.innerNameRef<@reg::@reg>] {
-  "qux" = #msft.physloc<FF, 0, 0, 0>
-}
+hw.globalRef @ref4 [#hw.innerNameRef<@reg::@reg>]
+msft.pd.location @ref4 FF x: 0 y: 0 n: 0
 
 hw.module.extern @Foo()
 
@@ -35,9 +31,9 @@ msft.module @leaf {} () -> () {
   msft.instance @module @Foo() {
     circt.globalRef = [#hw.globalNameRef<@ref1>, #hw.globalNameRef<@ref2>], inner_sym = "module"
   } : () -> ()
-  // LOWER: sv.verbatim "proc shallow_config
-  // LOWER: sv.verbatim "proc deeper_config
-  // LOWER: sv.verbatim "proc regions_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
+  // LOWER{LITERAL}: sv.verbatim "proc {{0}}_config
   msft.output
 }
 
@@ -76,7 +72,7 @@ msft.module @regions {} () -> () {
   msft.output
 }
 
-// TCL-LABEL: proc reg_config
+// TCL-LABEL: proc reg_0_config
 msft.module @reg {} (%input : i8, %clk : i1) -> () {
   %reg = seq.compreg sym @reg %input, %clk { circt.globalRef = [#hw.globalNameRef<@ref4>], inner_sym = "reg" } : i8
   // TCL: set_location_assignment FF_X0_Y0_N0 -to $parent|reg_1

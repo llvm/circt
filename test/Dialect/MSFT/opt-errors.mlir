@@ -20,3 +20,15 @@ hw.module @M() {
   // expected-error @+1 {{Cannot find module definition 'Bar'}}
   msft.instance @instance @Bar () : () -> ()
 }
+
+// -----
+
+msft.instance.dynamic [#hw.innerNameRef<@reg::@reg>] {
+  // expected-error @+1 {{'msft.pd.location' op cannot both have a global ref symbol and be a child of a dynamic instance op}}
+  msft.pd.location @ref FF x: 0 y: 0 n: 0
+}
+
+// -----
+
+// expected-error @+1 {{'msft.pd.location' op must have either a global ref symbol of belong to a dynamic instance op}}
+msft.pd.location FF x: 0 y: 0 n: 0

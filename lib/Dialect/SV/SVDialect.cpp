@@ -118,7 +118,7 @@ StringRef circt::sv::legalizeName(StringRef name,
                                   size_t &nextGeneratedNameID) {
   // Fastest path: empty name.
   if (name.empty())
-    return resolveKeywordConflict("_T", recordNames, nextGeneratedNameID);
+    return resolveKeywordConflict("_GEN", recordNames, nextGeneratedNameID);
 
   // Check that the name is valid as the semi-fast path.
   if (llvm::all_of(name, isValidVerilogCharacter) &&

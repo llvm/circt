@@ -31,15 +31,7 @@ Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
 
   if (p.parseLess() || p.parseKeyword(&devTypeStr) || p.parseComma() ||
       p.parseInteger(x) || p.parseComma() || p.parseInteger(y) ||
-      p.parseComma() || p.parseInteger(num))
-    return Attribute();
-
-  // Parse an optional subPath.
-  if (succeeded(p.parseOptionalComma()))
-    if (p.parseString(&subPath))
-      return Attribute();
-
-  if (p.parseGreater())
+      p.parseComma() || p.parseInteger(num) || p.parseGreater())
     return Attribute();
 
   Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
@@ -49,41 +41,13 @@ Attribute PhysLocationAttr::parse(AsmParser &p, Type type) {
   }
   PrimitiveTypeAttr devTypeAttr =
       PrimitiveTypeAttr::get(p.getContext(), *devType);
-  auto phy =
-      PhysLocationAttr::get(p.getContext(), devTypeAttr, x, y, num, subPath);
+  auto phy = PhysLocationAttr::get(p.getContext(), devTypeAttr, x, y, num);
   return phy;
 }
 
 void PhysLocationAttr::print(AsmPrinter &p) const {
   p << "<" << stringifyPrimitiveType(getPrimitiveType().getValue()) << ", "
-    << getX() << ", " << getY() << ", " << getNum();
-
-  // Print an optional subPath.
-  if (!getSubPath().empty())
-    p << ", \"" << getSubPath() << '"';
-
-  p << '>';
-}
-
-Attribute PhysicalRegionRefAttr::parse(AsmParser &p, Type type) {
-  StringAttr physicalRegion;
-  NamedAttrList attrs;
-  if (p.parseLess() ||
-      p.parseSymbolName(physicalRegion, "physicalRegion", attrs) ||
-      p.parseGreater()) {
-    llvm::SMLoc loc = p.getCurrentLocation();
-    p.emitError(loc, "unable to parse PhysicalRegion reference");
-    return Attribute();
-  }
-
-  auto physicalRegionAttr =
-      FlatSymbolRefAttr::get(p.getContext(), physicalRegion.getValue());
-
-  return PhysicalRegionRefAttr::get(p.getContext(), physicalRegionAttr);
-}
-
-void PhysicalRegionRefAttr::print(AsmPrinter &p) const {
-  p << "<" << getPhysicalRegion() << '>';
+    << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 
 Attribute PhysicalBoundsAttr::parse(AsmParser &p, Type type) {

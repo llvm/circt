@@ -367,8 +367,8 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     return success();
   };
 
-  InnerRefList instanceSyms;
-  InnerRefList leafInnerSyms;
+  InnerRefList instanceSyms(circuit.getContext());
+  InnerRefList leafInnerSyms(circuit.getContext());
   SmallVector<NonLocalAnchor> nlaList;
 
   for (auto &op : *circuit.getBody()) {
@@ -408,16 +408,12 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   // 6. The last element of the namepath, can be an InnerRefAttr on either a
   // module port or a declaration inside the module.
   // 7. The last element of the namepath can also be a module symbol.
-  auto hasNonLocal = [&](AnnotationSet &annos, StringRef nlaName) {
-    bool instFound = false;
-    for (auto anno : annos) {
-      if (auto nlaRef = anno.getMember("circt.nonlocal")) {
-        instFound = nlaRef.cast<FlatSymbolRefAttr>().getAttr() == nlaName;
-        if (instFound)
-          break;
-      }
-    }
-    return instFound;
+  auto hasNonLocal = [&](const AnnotationSet &annos, StringAttr nlaName) {
+    for (auto anno : annos)
+      if (auto nlaRef = anno.getMember("circt.nonlocal"))
+        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == nlaName)
+          return true;
+    return false;
   };
   for (NonLocalAnchor nla : nlaList) {
     auto namepath = nla.namepath();
@@ -448,8 +444,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
                << " does not contain any instance with symbol: "
                << innerRef.getName();
       expectedModuleName = instOp.moduleNameAttr().getAttr();
-      AnnotationSet annos(instOp);
-      bool instFound = hasNonLocal(annos, nlaName);
+      bool instFound = hasNonLocal(AnnotationSet(instOp), nlaName);
       if (!instFound) {
         auto diag = nla.emitOpError()
                     << " instance with symbol: " << innerRef
@@ -472,12 +467,16 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
                << expectedModuleName
                << " instead found: " << innerRef.getModule();
 
-      if (auto mod = dyn_cast_or_null<FModuleLike>(rec->op)) {
-        auto annos = AnnotationSet::forPort(mod, rec->portIdx);
-        leafFound = hasNonLocal(annos, nlaName);
+      if (auto mod = dyn_cast<FModuleLike>(rec->op)) {
+        leafFound =
+            hasNonLocal(AnnotationSet::forPort(mod, rec->portIdx), nlaName);
       } else if (rec->op) {
-        AnnotationSet annos(rec->op);
-        leafFound = hasNonLocal(annos, nlaName);
+        leafFound = hasNonLocal(AnnotationSet(rec->op), nlaName);
+        if (auto mem = dyn_cast<MemOp>(rec->op)) {
+          for (unsigned i = 0, e = mem.getNumResults(); !leafFound && i < e;
+               ++i)
+            leafFound = hasNonLocal(AnnotationSet::forPort(mem, i), nlaName);
+        }
       }
       if (!leafFound) {
         auto diag = nla.emitOpError()
@@ -1887,14 +1886,27 @@ FirMemory MemOp::getSummary() {
           continue;
         auto clockPort = a->getResult(0);
         for (auto *b : clockPort.getUsers()) {
-          auto connect = dyn_cast<ConnectOp>(b);
-          if (!connect || connect.dest() != clockPort)
-            continue;
-          auto result = clockToLeader.insert({connect.src(), numWritePorts});
-          if (result.second) {
-            writeClockIDs.push_back(numWritePorts);
-          } else {
-            writeClockIDs.push_back(result.first->second);
+          if (auto connect = dyn_cast<ConnectOp>(b)) {
+            if (connect.dest() == clockPort) {
+              auto result =
+                  clockToLeader.insert({connect.src(), numWritePorts});
+              if (result.second) {
+                writeClockIDs.push_back(numWritePorts);
+              } else {
+                writeClockIDs.push_back(result.first->second);
+              }
+            }
+          }
+          if (auto connect = dyn_cast<StrictConnectOp>(b)) {
+            if (connect.dest() == clockPort) {
+              auto result =
+                  clockToLeader.insert({connect.src(), numWritePorts});
+              if (result.second) {
+                writeClockIDs.push_back(numWritePorts);
+              } else {
+                writeClockIDs.push_back(result.first->second);
+              }
+            }
           }
         }
         break;
@@ -2033,6 +2045,43 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
     return diag.attachNote(partialConnect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
+static LogicalResult verifyStrictConnectOp(StrictConnectOp connect) {
+  FIRRTLType type = connect.dest().getType().cast<FIRRTLType>();
+
+  // Analog types cannot be connected and must be attached.
+  if (type.isa<AnalogType>())
+    return connect.emitError("analog types may not be connected");
+  if (auto destBundle = type.dyn_cast<BundleType>())
+    if (destBundle.containsAnalog())
+      return connect.emitError("analog types may not be connected");
+
+  // TODO: Relax this to allow reads from output ports,
+  // instance/memory input ports.
+  if (foldFlow(connect.src()) == Flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(connect.src());
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto diag =
+          connect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(connect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(connect.dest()) == Flow::Source) {
+    auto diag = connect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(connect.dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 
@@ -3353,7 +3402,7 @@ bool NonLocalAnchor::isModule() { return !ref(); }
 
 /// Returns true if this NLA targets something inside a module (as opposed
 /// to a module or an instance of a module);
-bool NonLocalAnchor::isComponent() { return (bool)ref(); };
+bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.

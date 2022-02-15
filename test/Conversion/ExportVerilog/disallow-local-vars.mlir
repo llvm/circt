@@ -61,11 +61,11 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
     %1 = comb.icmp eq %0, %z : i8
 
     // This shouldn't be touched.
-    // CHECK: if (_T == z) begin
-    // DISALLOW: if (_T == z) begin
+    // CHECK: if (_GEN == z) begin
+    // DISALLOW: if (_GEN == z) begin
     sv.if %1  {
-      // CHECK: $fwrite(32'h80000002, "Hi %x\n", _T * z);
-      // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _T * z);
+      // CHECK: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
+      // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
       %2 = comb.mul %0, %z : i8
       sv.fwrite "Hi %x\0A"(%2) : i8
       sv.fatal 1
@@ -130,7 +130,7 @@ hw.module @EmittedDespiteDisallowed(%clock: i1, %reset: i1) {
   // DISALLOW: initial begin
   sv.initial {
     // CHECK: automatic logic [1:0] _magic = magic;
-    // DISALLOW: _T = magic;
+    // DISALLOW: _GEN = magic;
     %RANDOM = sv.verbatim.expr.se "magic" : () -> i2 {symbols = []}
 
     // CHECK: tick_value_2 = _magic[0];

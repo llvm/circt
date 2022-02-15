@@ -22,6 +22,9 @@ struct InnerName {
   static llvm::StringRef getInnerNameAttrName() { return "inner_sym"; }
 };
 
+// Forward declaration.
+class GlobalRefOp;
+
 } // namespace hw
 } // namespace circt
 

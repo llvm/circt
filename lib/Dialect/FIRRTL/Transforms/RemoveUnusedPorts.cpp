@@ -30,7 +30,7 @@ struct RemoveUnusedPortsPass
 } // namespace
 
 void RemoveUnusedPortsPass::runOnOperation() {
-  auto instanceGraph = getAnalysis<InstanceGraph>();
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
   LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
                           << "\n");
   CircuitOp circuit = getOperation();

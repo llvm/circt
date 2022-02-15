@@ -43,6 +43,12 @@ static bool isInvalid(Value val) {
         val = connect.src();
         return;
       }
+      if (auto connect = dyn_cast<StrictConnectOp>(user)) {
+        if (connect.dest() != val)
+          continue;
+        val = connect.src();
+        return;
+      }
     }
     val = nullptr;
     return;

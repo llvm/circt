@@ -68,9 +68,9 @@ void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst) {
   }
 
   // Some placements don't require subpaths.
-  if (!inst.subpath.empty()) {
+  if (inst.subpath) {
     s.os << '|';
-    s.os << inst.subpath;
+    s.os << inst.subpath.getValue();
   }
 
   s.os << '\n';
@@ -117,10 +117,10 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 /// set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|a|b|c
 /// set_instance_assignment -name REGION_NAME test_region -to $parent|a|b|c
 static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
-                 PhysicalRegionRefAttr regionRef) {
+                 PDPhysRegionOp regionRef) {
   auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
-  auto physicalRegion =
-      topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
+  auto physicalRegion = topModule.lookupSymbol<DeclPhysicalRegionOp>(
+      regionRef.physRegionRefAttr());
   assert(physicalRegion && "must reference an existant physical region");
 
   // PLACE_REGION directive.
@@ -172,7 +172,7 @@ static bool isEntityExtern(Operation *op) {
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
-LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
+LogicalResult circt::msft::exportQuartusTcl(Operation *hwMod,
                                             StringRef outputFile) {
   // Build up the output Tcl, tracking symbol references in state.
   std::string s;
@@ -183,7 +183,8 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
   if (failures != 0)
     return hwMod->emitError("Could not place ") << failures << " instances";
 
-  os << "proc " << hwMod.getName() << "_config { parent } {\n";
+  os << "proc {{" << state.symbolRefs.size() << "}}_config { parent } {\n";
+  state.symbolRefs.push_back(SymbolRefAttr::get(hwMod));
 
   db.walkPlacements(
       [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
@@ -193,13 +194,13 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
         emit(state, inst, loc);
       });
 
-  db.walkRegionPlacements([&state](PhysicalRegionRefAttr regionRef,
-                                   PlacementDB::PlacedInstance inst) {
-    // Skip entities which we don't need to emit placements for.
-    if (isEntityExtern(inst.op))
-      return;
-    emit(state, inst, regionRef);
-  });
+  db.walkRegionPlacements(
+      [&state](PDPhysRegionOp regionRef, PlacementDB::PlacedInstance inst) {
+        // Skip entities which we don't need to emit placements for.
+        if (isEntityExtern(inst.op))
+          return;
+        emit(state, inst, regionRef);
+      });
 
   os << "}\n\n";
 

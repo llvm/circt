@@ -54,6 +54,8 @@ createCreateSiFiveMetadataPass(bool replSeqMem = false,
 
 std::unique_ptr<mlir::Pass> createWireDFTPass();
 
+std::unique_ptr<mlir::Pass> createDedupPass();
+
 std::unique_ptr<mlir::Pass> createEmitOMIRPass(StringRef outputFilename = "");
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
@@ -80,6 +82,8 @@ std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 std::unique_ptr<mlir::Pass> createRemoveResetsPass();
 
+std::unique_ptr<mlir::Pass>
+createMergeConnectionsPass(bool enableAggressiveMerging = false);
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

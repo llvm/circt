@@ -961,7 +961,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed with value %d"(%value) : !firrtl.uint<42>
-    ; CHECK-SAME: isConcurrent = false
+    ; CHECK-SAME: isConcurrent = true
     ; CHECK-SAME: name = "chisel3_builtin"
 
     when cond:
@@ -969,7 +969,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message with value %d"(%value) : !firrtl.uint<42>
-    ; CHECK-SAME: isConcurrent = false
+    ; CHECK-SAME: isConcurrent = true
     ; CHECK-SAME: name = "chisel3_builtin"
 
     ; Verification Library Assertions

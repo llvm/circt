@@ -277,10 +277,10 @@ void WireDFTPass::runOnOperation() {
   while (node != lca) {
     // If there is more than one parent the we are in trouble. We can't handle
     // more than one enable signal to wire everywhere else.
-    if (node->getNumUses() != 1) {
+    if (!node->hasOneUse()) {
       auto diag = emitError(enableSignal.getLoc(),
                             "mutliple instantiations of the DFT enable signal");
-      auto it = node->uses_begin();
+      auto it = node->usesBegin();
       diag.attachNote((*it++)->getInstance()->getLoc())
           << "first instance here";
       diag.attachNote((*it)->getInstance()->getLoc()) << "second instance here";
@@ -299,7 +299,7 @@ void WireDFTPass::runOnOperation() {
     builder.create<ConnectOp>(module.getArgument(portNo), signal);
 
     // Add an output port to the instance of this module.
-    auto *instanceNode = (*node->uses_begin());
+    auto *instanceNode = (*node->usesBegin());
     auto clone = insertPortIntoInstance(instanceNode, {portNo, portInfo});
 
     // Set up for the next iteration.

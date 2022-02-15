@@ -126,13 +126,17 @@ public:
   /// Get the destination value from a connection.  This supports any operation
   /// which is capable of driving a value.
   static Value getDestinationValue(Operation *op) {
-    return cast<ConnectOp>(op).dest();
+    if (auto connect = dyn_cast<ConnectOp>(op))
+      return connect.dest();
+    return cast<StrictConnectOp>(op).dest();
   }
 
   /// Get the source value from a connection. This supports any operation which
   /// is capable of driving a value.
   static Value getConnectedValue(Operation *op) {
-    return cast<ConnectOp>(op).src();
+    if (auto connect = dyn_cast<ConnectOp>(op))
+      return connect.src();
+    return cast<StrictConnectOp>(op).src();
   }
 
   /// For every leaf field in the sink, record that it exists and should be
@@ -269,6 +273,10 @@ public:
   }
 
   void visitStmt(ConnectOp op) {
+    setLastConnect(getFieldRefFromValue(op.dest()), op);
+  }
+
+  void visitStmt(StrictConnectOp op) {
     setLastConnect(getFieldRefFromValue(op.dest()), op);
   }
 
@@ -531,6 +539,7 @@ public:
   using LastConnectResolver<ModuleVisitor>::visitStmt;
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
+  void visitStmt(StrictConnectOp connectOp);
 
   bool run(FModuleOp op);
   LogicalResult checkInitialization();
@@ -564,6 +573,10 @@ bool ModuleVisitor::run(FModuleOp module) {
 }
 
 void ModuleVisitor::visitStmt(ConnectOp op) {
+  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+}
+
+void ModuleVisitor::visitStmt(StrictConnectOp op) {
   anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
 }
 

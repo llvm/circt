@@ -147,6 +147,25 @@ def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createWireDFTPass()";
 }
 
+def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
+  let summary = "Deduplicate modules which are structurally equivalent";
+  let description = [{
+    This pass detects modules which are structurally equivalent and removes the
+    duplicate module by replacing all instances of one with the other.
+    Structural equivalence ignores the naming of operations and fields in
+    bundles, and any annotations. Deduplicating a module may cause the result
+    type of instances to change if the field names of a bundle type change.  To
+    handle this, the pass will update any bulk-connections so that the correct
+    fields are legally connected. Deduplicated modules will have their
+    annotations merged, which tends to create many non-local annotations.
+  }];
+  let statistics = [
+    Statistic<"erasedModules", "num-erased-modules",
+      "Number of modules which were erased by deduplication">
+  ];
+  let constructor = "circt::firrtl::createDedupPass()";
+}
+
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let summary = "Emit OMIR annotations";
   let description = [{
@@ -367,6 +386,15 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
 def RemoveResets : Pass<"firrtl-remove-resets", "firrtl::FModuleOp"> {
   let summary = "Remove module-scoped invalidated resets";
   let constructor = "circt::firrtl::createRemoveResetsPass()";
+}
+
+def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+  let summary = "Merge field-level connections into full bundle connections";
+  let constructor = "circt::firrtl::createMergeConnectionsPass()";
+  let options = [
+    Option<"enableAggressiveMerging", "aggressive-merging", "bool", "false",
+      "Merge connections even when source values won't be simplified.">
+  ];
 }
 
 def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
