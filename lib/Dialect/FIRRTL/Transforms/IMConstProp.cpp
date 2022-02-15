@@ -596,8 +596,11 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
       return;
   }
 
-  if (isAggregate(dest.getOwner()))
-    return mergeLatticeValue(connect.dest(), srcValue);
+  // Make aggregates overdefined for now.  Fix when context sensitive.
+  if (isAggregate(dest.getOwner())) {
+    markOverdefined(connect.src());
+    return markOverdefined(connect.dest());
+  }
 
   connect.emitError("strictconnect unhandled by IMConstProp")
           .attachNote(connect.dest().getLoc())
