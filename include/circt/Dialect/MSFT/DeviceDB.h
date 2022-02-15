@@ -82,13 +82,14 @@ public:
 
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
-  LogicalResult addPlacement(PDPhysLocationOp);
+  PDPhysLocationOp addPlacement(DynamicInstanceOp inst, PhysLocationAttr,
+                                StringRef subpath, Location srcLoc);
   /// Assign an operation to a physical region. Return false on failure.
-  LogicalResult addPlacement(PDPhysRegionOp);
-  /// Using the operation attributes, add the proper placements to the database.
-  /// Return the number of placements which weren't added due to conflicts.
-  size_t addPlacements(DynamicInstanceOp inst);
-  /// Walk the entire design adding placements root at the top module.
+  PDPhysRegionOp addPlacement(DynamicInstanceOp inst, DeclPhysicalRegionOp,
+                              StringRef subPath, Location srcLoc);
+
+  /// Load the database from the IR. Return the number of placements which
+  /// failed to load due to invalid specifications.
   size_t addDesignPlacements();
 
   /// Remove the placement at a given location. Returns the removed op if one
@@ -140,6 +141,11 @@ private:
   DimXMap placements;
   RegionPlacements regionPlacements;
   bool seeded;
+
+  /// Load the placements from `inst`.  Return the number of placements which
+  /// weren't added due to conflicts.
+  size_t addPlacements(DynamicInstanceOp inst);
+  LogicalResult insertPlacement(PDPhysLocationOp locOp);
 };
 
 } // namespace msft

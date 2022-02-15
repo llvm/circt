@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 
+#include "mlir/IR/Builders.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -79,23 +80,50 @@ PlacementDB::PlacementDB(Operation *top, const PrimitiveDB &seed)
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
-LogicalResult PlacementDB::addPlacement(PDPhysLocationOp locOp) {
-  PhysLocationAttr loc = locOp.locAttr();
-  Placement *leaf = getLeaf(loc);
+PDPhysLocationOp PlacementDB::addPlacement(DynamicInstanceOp inst,
+                                           PhysLocationAttr loc,
+                                           StringRef subPath, Location srcLoc) {
+
+  StringAttr subPathAttr;
+  if (!subPath.empty())
+    subPathAttr = StringAttr::get(inst->getContext(), subPath);
+  PDPhysLocationOp locOp =
+      OpBuilder::atBlockEnd(&inst.body().front())
+          .create<PDPhysLocationOp>(srcLoc, loc, subPathAttr,
+                                    FlatSymbolRefAttr());
+  if (succeeded(insertPlacement(locOp)))
+    return locOp;
+  locOp->erase();
+  return {};
+}
+
+LogicalResult PlacementDB::insertPlacement(PDPhysLocationOp locOp) {
+  Placement *leaf = getLeaf(locOp.loc());
   if (!leaf)
     return locOp->emitOpError("Could not apply placement. Invalid location: ")
-           << loc;
+           << locOp.loc();
   if (leaf->locOp != nullptr)
     return locOp->emitOpError("Could not apply placement ")
-           << loc << ". Position already occupied by " << leaf->locOp << ".";
+           << locOp.loc() << ". Position already occupied by " << leaf->locOp
+           << ".";
+
   leaf->locOp = locOp;
   return success();
 }
 
 /// Assign an operation to a physical region. Return false on failure.
-LogicalResult PlacementDB::addPlacement(PDPhysRegionOp regionRef) {
-  regionPlacements.push_back(regionRef);
-  return success();
+PDPhysRegionOp PlacementDB::addPlacement(DynamicInstanceOp inst,
+                                         DeclPhysicalRegionOp physregion,
+                                         StringRef subPath, Location srcLoc) {
+  StringAttr subPathAttr;
+  if (!subPath.empty())
+    subPathAttr = StringAttr::get(inst->getContext(), subPath);
+  PDPhysRegionOp regOp =
+      OpBuilder::atBlockEnd(&inst.body().front())
+          .create<PDPhysRegionOp>(srcLoc, FlatSymbolRefAttr::get(physregion),
+                                  subPathAttr, FlatSymbolRefAttr());
+  regionPlacements.push_back(regOp);
+  return regOp;
 }
 
 /// Using the operation attributes, add the proper placements to the database.
@@ -105,8 +133,11 @@ size_t PlacementDB::addPlacements(DynamicInstanceOp inst) {
   inst->walk([&](Operation *op) {
     LogicalResult added =
         TypeSwitch<Operation *, LogicalResult>(op)
-            .Case([&](PDPhysLocationOp op) { return addPlacement(op); })
-            .Case([&](PDPhysRegionOp op) { return addPlacement(op); })
+            .Case([&](PDPhysLocationOp op) { return insertPlacement(op); })
+            .Case([&](PDPhysRegionOp op) {
+              regionPlacements.push_back(op);
+              return success();
+            })
             .Default([](Operation *op) { return failure(); });
     if (failed(added))
       ++numFailed;
