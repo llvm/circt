@@ -219,6 +219,18 @@ public:
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
   //===--------------------------------------------------------------------===//
+  // Properties as string key-value pairs (e.g. for DOT graphs)
+  //===--------------------------------------------------------------------===//
+public:
+  using PropertyStringVector =
+      llvm::SmallVector<std::pair<std::string, std::string>, 2>;
+
+  virtual PropertyStringVector getProperties(Operation *op);
+  virtual PropertyStringVector getProperties(Dependence dep);
+  virtual PropertyStringVector getProperties(OperatorType opr);
+  virtual PropertyStringVector getProperties();
+
+  //===--------------------------------------------------------------------===//
   // Property-specific validators
   //===--------------------------------------------------------------------===//
 protected:
@@ -268,6 +280,9 @@ public:
   /// problem's solution.
   Optional<unsigned> getInitiationInterval() { return initiationInterval; }
   void setInitiationInterval(unsigned val) { initiationInterval = val; }
+
+  virtual PropertyStringVector getProperties(Dependence dep) override;
+  virtual PropertyStringVector getProperties() override;
 
 protected:
   /// \p dep's source operation is available before \p dep's destination
@@ -328,6 +343,9 @@ public:
     startTimeInCycle[op] = time;
   }
 
+  virtual PropertyStringVector getProperties(Operation *op) override;
+  virtual PropertyStringVector getProperties(OperatorType opr) override;
+
 protected:
   /// Incoming/outgoing delays are set for \p opr and non-negative. The delays
   /// are equal if \p opr is a zero-latency operator type.
@@ -367,6 +385,8 @@ public:
   /// allowed to start in the same time step.
   Optional<unsigned> getLimit(OperatorType opr) { return limit.lookup(opr); }
   void setLimit(OperatorType opr, unsigned val) { limit[opr] = val; }
+
+  virtual PropertyStringVector getProperties(OperatorType opr) override;
 
 protected:
   /// If \p opr is limited, it has a non-zero latency.

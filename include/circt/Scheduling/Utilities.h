@@ -47,6 +47,9 @@ computeChainBreakingDependences(ChainingProblem &prob, float cycleTime,
 /// Fails if the dependence graph contains cycles.
 LogicalResult computeStartTimesInCycle(ChainingProblem &prob);
 
+/// Export \p prob as a DOT graph into \p fileName.
+void dumpAsDOT(Problem &prob, StringRef fileName);
+
 } // namespace scheduling
 } // namespace circt
 
