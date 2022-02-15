@@ -11,6 +11,11 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 
+namespace circt {
+namespace msft {
+LogicalResult verifyDynInstData(Operation *);
+} // namespace msft
+} // namespace circt
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_MSFT_MSFTOPINTERFACES_H

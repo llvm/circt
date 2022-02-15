@@ -65,10 +65,12 @@ static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
 void PDPhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
   refAttr(FlatSymbolRefAttr::get(ref));
 }
+FlatSymbolRefAttr PDPhysLocationOp::getGlobalRefSym() { return refAttr(); }
 
 void PDPhysRegionOp::setGlobalRef(hw::GlobalRefOp ref) {
   refAttr(FlatSymbolRefAttr::get(ref));
 }
+FlatSymbolRefAttr PDPhysRegionOp::getGlobalRefSym() { return refAttr(); }
 
 //===----------------------------------------------------------------------===//
 // Module/Instance stuff, mostly copied from HW dialect.

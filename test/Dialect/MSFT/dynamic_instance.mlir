@@ -10,7 +10,7 @@ msft.instance.dynamic [#hw.innerNameRef<@shallow::@leaf>, #hw.innerNameRef<@leaf
 }
 
 msft.instance.dynamic [#hw.innerNameRef<@reg::@reg>] {
-  msft.pd.location @ref4 FF x: 0 y: 0 n: 0
+  msft.pd.location FF x: 0 y: 0 n: 0
 }
 
 hw.module.extern @Foo()
