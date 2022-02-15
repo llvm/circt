@@ -416,8 +416,9 @@ void LowerToHWPass::runOnOperation() {
     signalPassFailure();
 
   // Then, convert the InstanceOps
-  target.addDynamicallyLegalDialect<MSFTDialect>(
-      [](Operation *op) { return isa<PhysLocationOp, PhysicalRegionOp>(op); });
+  target.addDynamicallyLegalDialect<MSFTDialect>([](Operation *op) {
+    return isa<DynInstDataOpInterface, DeclPhysicalRegionOp>(op);
+  });
   RewritePatternSet instancePatterns(ctxt);
   instancePatterns.insert<InstanceOpLowering>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(instancePatterns))))
@@ -487,16 +488,14 @@ void ExportTclPass::runOnOperation() {
 
   RewritePatternSet patterns(ctxt);
   DenseSet<SymbolRefAttr> refsUsed;
-  patterns.insert<RemovePhysOpLowering<PhysLocationOp>>(ctxt, refsUsed);
-  patterns.insert<RemoveOpLowering<PhysicalRegionOp>>(ctxt);
+  patterns.insert<RemovePhysOpLowering<PDPhysLocationOp>>(ctxt, refsUsed);
+  patterns.insert<RemovePhysOpLowering<PDPhysRegionOp>>(ctxt, refsUsed);
+  patterns.insert<RemoveOpLowering<DeclPhysicalRegionOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 
   target.addDynamicallyLegalOp<hw::GlobalRefOp>([&](hw::GlobalRefOp ref) {
-    return !refsUsed.contains(SymbolRefAttr::get(ref)) &&
-           llvm::none_of(ref->getAttrs(), [](NamedAttribute attr) {
-             return attr.getValue().isa<PhysicalRegionRefAttr>();
-           });
+    return !refsUsed.contains(SymbolRefAttr::get(ref));
   });
   patterns.clear();
   patterns.insert<RemoveOpLowering<hw::GlobalRefOp>>(ctxt);

@@ -2,10 +2,10 @@
 
 hw.module.extern @Foo()
 
-// expected-error @+1 {{'hw.globalRef' op referenced non-existant PhysicalRegion named region1}}
-hw.globalRef @ref [#hw.innerNameRef<@top::@foo1>] {
-  "loc:" = #msft.physical_region_ref<@region1>
-}
+// expected-error @+1 {{'hw.globalRef' op referenced non-existant PhysicalRegion named @region1}}
+hw.globalRef @ref [#hw.innerNameRef<@top::@foo1>]
+msft.pd.physregion @ref @region1
+
 
 // expected-error @+1 {{Could not place 1 instances}}
 msft.module @top {} () -> () {
