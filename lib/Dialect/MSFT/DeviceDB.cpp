@@ -73,137 +73,99 @@ PlacementDB::PlacementDB(Operation *top)
 PlacementDB::PlacementDB(Operation *top, const PrimitiveDB &seed)
     : ctxt(top->getContext()), top(top), seeded(false) {
 
-  seed.foreach ([this](PhysLocationAttr loc) { (void)addPlacement(loc, {}); });
+  seed.foreach ([this](PhysLocationAttr loc) { (void)getLeaf(loc); });
   seeded = true;
 }
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
-LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
-                                        PlacedInstance inst) {
-
-  Optional<PlacedInstance *> leaf = getLeaf(loc);
+LogicalResult PlacementDB::addPlacement(PDPhysLocationOp locOp) {
+  PhysLocationAttr loc = locOp.locAttr();
+  Placement *leaf = getLeaf(loc);
   if (!leaf)
-    return inst.op->emitOpError("Could not apply placement. Invalid location: ")
+    return locOp->emitOpError("Could not apply placement. Invalid location: ")
            << loc;
-  PlacedInstance *cell = *leaf;
-  if (cell->op != nullptr)
-    return inst.op->emitOpError("Could not apply placement ")
-           << loc << ". Position already occupied by " << cell->op << ".";
-  *cell = inst;
+  if (leaf->locOp != nullptr)
+    return locOp->emitOpError("Could not apply placement ")
+           << loc << ". Position already occupied by " << leaf->locOp << ".";
+  leaf->locOp = locOp;
   return success();
 }
 
 /// Assign an operation to a physical region. Return false on failure.
-LogicalResult PlacementDB::addPlacement(PDPhysRegionOp regionRef,
-                                        PlacedInstance inst) {
-  auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
-  auto physicalRegion = topModule.lookupSymbol<DeclPhysicalRegionOp>(
-      regionRef.physRegionRefAttr());
-  if (!physicalRegion)
-    return inst.op->emitOpError("referenced non-existant PhysicalRegion named ")
-           << regionRef.physRegionRefAttr();
-
-  regionPlacements.emplace_back(regionRef, inst);
+LogicalResult PlacementDB::addPlacement(PDPhysRegionOp regionRef) {
+  regionPlacements.push_back(regionRef);
   return success();
 }
 
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
-size_t PlacementDB::addPlacements(const hw::SymbolCache &globalRefs,
-                                  FlatSymbolRefAttr rootMod,
-                                  mlir::Operation *op) {
-  // PhysLocations have become op-specified.
-  if (auto physLocOp = dyn_cast<PDPhysLocationOp>(op)) {
-    auto refName = physLocOp.ref();
-    assert(refName);
-    hw::GlobalRefOp globalRef =
-        cast<hw::GlobalRefOp>(globalRefs.getDefinition(*refName));
+size_t PlacementDB::addPlacements(DynamicInstanceOp inst) {
+  size_t numFailed = 0;
+  inst->walk([&](Operation *op) {
     LogicalResult added =
-        addPlacement(physLocOp.locAttr(),
-                     PlacedInstance{globalRef.namepath(),
-                                    physLocOp.subPathAttr(), globalRef});
-    return failed(added) ? 1 : 0;
-  }
-  // PhysRegions have become op-specified.
-  if (auto physRegOp = dyn_cast<PDPhysRegionOp>(op)) {
-    auto refName = physRegOp.ref();
-    assert(refName);
-    hw::GlobalRefOp globalRef =
-        cast<hw::GlobalRefOp>(globalRefs.getDefinition(*refName));
-    LogicalResult added = addPlacement(
-        physRegOp, PlacedInstance{globalRef.namepath(), physRegOp.subPathAttr(),
-                                  globalRef});
-    return failed(added) ? 1 : 0;
-  }
-  return 0;
+        TypeSwitch<Operation *, LogicalResult>(op)
+            .Case([&](PDPhysLocationOp op) { return addPlacement(op); })
+            .Case([&](PDPhysRegionOp op) { return addPlacement(op); })
+            .Default([](Operation *op) { return failure(); });
+    if (failed(added))
+      ++numFailed;
+  });
+
+  return numFailed;
 }
 
 /// Walk the entire design adding placements.
 size_t PlacementDB::addDesignPlacements() {
   size_t failed = 0;
-  FlatSymbolRefAttr rootModule = FlatSymbolRefAttr::get(top);
   auto mlirModule = top->getParentOfType<mlir::ModuleOp>();
-  hw::SymbolCache globalRefs;
-  for (auto ref : mlirModule.getOps<hw::GlobalRefOp>())
-    globalRefs.addDefinition(ref.sym_nameAttr(), ref);
-  globalRefs.freeze();
-  mlirModule.walk([&](Operation *op) {
-    failed += addPlacements(globalRefs, rootModule, op);
-  });
+  for (auto inst : mlirModule.getOps<DynamicInstanceOp>())
+    if (inst.isRootedIn(top))
+      failed += addPlacements(inst);
   return failed;
 }
 
 /// Remove the placement at a given location. Returns failure if nothing was
 /// placed there.
-LogicalResult PlacementDB::removePlacement(PhysLocationAttr loc) {
-  Optional<PlacedInstance *> leaf = getLeaf(loc);
-  if (!leaf.hasValue())
-    return failure();
-  PlacedInstance *cell = *leaf;
-  if (!cell->op)
-    return failure();
-
-  *cell = PlacedInstance{};
-
-  return success();
+PDPhysLocationOp PlacementDB::removePlacement(PhysLocationAttr loc) {
+  Placement *leaf = getLeaf(loc);
+  if (!leaf)
+    return {};
+  leaf->locOp = {};
+  return leaf->locOp;
 }
 
 /// Move the placement at a given location to a new location. Returns failure
 /// if nothing was placed at the previous location or something is already
 /// placed at the new location.
-LogicalResult PlacementDB::movePlacement(PhysLocationAttr oldLoc,
+LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
                                          PhysLocationAttr newLoc) {
-  Optional<PlacedInstance *> oldLeaf = getLeaf(oldLoc);
-  Optional<PlacedInstance *> newLeaf = getLeaf(newLoc);
+  PhysLocationAttr oldLoc = locOp.locAttr();
+  Placement *oldLeaf = getLeaf(oldLoc);
+  Placement *newLeaf = getLeaf(newLoc);
 
-  if (!oldLeaf.hasValue() || !newLeaf.hasValue())
+  if (!oldLeaf || !newLeaf)
     return failure();
+  if (newLeaf->locOp)
+    return locOp.emitError(
+               "cannot move to new location since location is occupied by ")
+           << newLeaf->locOp;
 
-  PlacedInstance *oldCell = *oldLeaf;
-  PlacedInstance *newCell = *newLeaf;
-
-  if (!oldCell->op || newCell->op)
-    return failure();
-
-  *newCell = *oldCell;
-
-  if (failed(removePlacement(oldLoc)))
-    return failure();
-
+  locOp.locAttr(newLoc);
+  newLeaf->locOp = locOp;
+  oldLeaf->locOp = {};
   return success();
 }
 
 /// Lookup the instance at a particular location.
-Optional<PlacementDB::PlacedInstance>
-PlacementDB::getInstanceAt(PhysLocationAttr loc) {
+PDPhysLocationOp PlacementDB::getInstanceAt(PhysLocationAttr loc) {
   auto innerMap = placements[loc.getX()][loc.getY()][loc.getNum()];
   auto instF = innerMap.find(loc.getPrimitiveType().getValue());
   if (instF == innerMap.end())
     return {};
-  if (!instF->getSecond().op)
+  if (!instF->getSecond().locOp)
     return {};
-  return instF->getSecond();
+  return instF->getSecond().locOp;
 }
 
 PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
@@ -212,8 +174,8 @@ PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
   // Simplest possible algorithm.
   PhysLocationAttr nearest = {};
   walkPlacements(
-      [&nearest, nearestToY](PhysLocationAttr loc, PlacedInstance inst) {
-        if (inst.op)
+      [&nearest, nearestToY](PhysLocationAttr loc, Placement p) {
+        if (p.locOp)
           return;
         if (!nearest) {
           nearest = loc;
@@ -229,8 +191,7 @@ PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
   return nearest;
 }
 
-Optional<PlacementDB::PlacedInstance *>
-PlacementDB::getLeaf(PhysLocationAttr loc) {
+PlacementDB::Placement *PlacementDB::getLeaf(PhysLocationAttr loc) {
   PrimitiveType primType = loc.getPrimitiveType().getValue();
 
   DimNumMap &nums = placements[loc.getX()][loc.getY()];
@@ -247,7 +208,7 @@ PlacementDB::getLeaf(PhysLocationAttr loc) {
 
 /// Walker for placements.
 void PlacementDB::walkPlacements(
-    function_ref<void(PhysLocationAttr, PlacedInstance)> callback,
+    function_ref<void(PhysLocationAttr, Placement)> callback,
     std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
     Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
   uint64_t xmin = std::get<0>(bounds) < 0 ? 0 : std::get<0>(bounds);
@@ -307,7 +268,7 @@ void PlacementDB::walkPlacements(
           PrimitiveType devtype = devF->getFirst();
           if (primType && devtype != *primType)
             continue;
-          PlacedInstance inst = devF->getSecond();
+          Placement &inst = devF->getSecond();
 
           // Marshall and run the callback.
           PhysLocationAttr loc = PhysLocationAttr::get(
@@ -319,10 +280,22 @@ void PlacementDB::walkPlacements(
   }
 }
 
+/// Walker for placements.
+void PlacementDB::walkPlacements(
+    function_ref<void(PDPhysLocationOp)> callback,
+    std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
+    Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
+  walkPlacements(
+      [callback](PhysLocationAttr, Placement p) {
+        if (p.locOp)
+          callback(p.locOp);
+      },
+      bounds, primType, walkOrder);
+}
+
 /// Walk the region placement information.
 void PlacementDB::walkRegionPlacements(
-    function_ref<void(PDPhysRegionOp, PlacedInstance)> callback) {
-  for (auto iter = regionPlacements.begin(), end = regionPlacements.end();
-       iter != end; ++iter)
-    callback(iter->first, iter->second);
+    function_ref<void(PDPhysRegionOp)> callback) {
+  for (auto regOp : regionPlacements)
+    callback(regOp);
 }

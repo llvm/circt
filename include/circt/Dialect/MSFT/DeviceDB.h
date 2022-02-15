@@ -67,15 +67,8 @@ public:
   PlacementDB(Operation *top);
   PlacementDB(Operation *top, const PrimitiveDB &seed);
 
-  // TODO: Add calls to model the device primitive locations.
-
-  /// In addition to an Operation which is the instance at the level being
-  /// modeled in MLIR, the instance path within the MLIR instance is often
-  /// necessary as most often the instance is an extern module.
-  struct PlacedInstance {
-    ArrayAttr path;
-    StringAttr subpath;
-    Operation *op;
+  struct Placement {
+    PDPhysLocationOp locOp;
   };
 
   /// Contains the order to iterate in each dimension for walkPlacements. The
@@ -89,26 +82,24 @@ public:
 
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
-  LogicalResult addPlacement(PhysLocationAttr, PlacedInstance);
+  LogicalResult addPlacement(PDPhysLocationOp);
   /// Assign an operation to a physical region. Return false on failure.
-  LogicalResult addPlacement(PDPhysRegionOp, PlacedInstance);
+  LogicalResult addPlacement(PDPhysRegionOp);
   /// Using the operation attributes, add the proper placements to the database.
   /// Return the number of placements which weren't added due to conflicts.
-  size_t addPlacements(const hw::SymbolCache &globalRefs,
-                       FlatSymbolRefAttr rootMod, mlir::Operation *);
+  size_t addPlacements(DynamicInstanceOp inst);
   /// Walk the entire design adding placements root at the top module.
   size_t addDesignPlacements();
 
-  /// Remove the placement at a given location. Returns failure if nothing was
-  /// placed there.
-  LogicalResult removePlacement(PhysLocationAttr);
-  /// Move the placement at a given location to a new location. Returns failure
-  /// if nothing was placed at the previous location or something is already
-  /// placed at the new location.
-  LogicalResult movePlacement(PhysLocationAttr, PhysLocationAttr);
+  /// Remove the placement at a given location. Returns the removed op if one
+  /// was removed. Null otherwise.
+  PDPhysLocationOp removePlacement(PhysLocationAttr);
+  /// Move a placement location to a new location. Returns failure if something
+  /// is already placed at the new location.
+  LogicalResult movePlacement(PDPhysLocationOp, PhysLocationAttr);
 
   /// Lookup the instance at a particular location.
-  Optional<PlacedInstance> getInstanceAt(PhysLocationAttr);
+  PDPhysLocationOp getInstanceAt(PhysLocationAttr);
 
   /// Find the nearest unoccupied primitive location to 'nearestToY' in
   /// 'column'.
@@ -118,29 +109,33 @@ public:
   /// Walk the placement information in some sort of reasonable order. Bounds
   /// restricts the walk to a rectangle of [xmin, xmax, ymin, ymax] (inclusive),
   /// with -1 meaning unbounded.
-  void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>,
+  void walkPlacements(function_ref<void(PhysLocationAttr, Placement)>,
+                      std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
+                          std::make_tuple(-1, -1, -1, -1),
+                      Optional<PrimitiveType> primType = {},
+                      Optional<WalkOrder> = {});
+  void walkPlacements(function_ref<void(PDPhysLocationOp)>,
                       std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
                           std::make_tuple(-1, -1, -1, -1),
                       Optional<PrimitiveType> primType = {},
                       Optional<WalkOrder> = {});
 
   /// Walk the region placement information.
-  void walkRegionPlacements(function_ref<void(PDPhysRegionOp, PlacedInstance)>);
+  void walkRegionPlacements(function_ref<void(PDPhysRegionOp)>);
 
 private:
   MLIRContext *ctxt;
   Operation *top;
 
-  using DimDevType = DenseMap<PrimitiveType, PlacedInstance>;
+  using DimDevType = DenseMap<PrimitiveType, Placement>;
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
-  using InstanceAndRegion = std::pair<PDPhysRegionOp, PlacedInstance>;
-  using RegionPlacements = SmallVector<InstanceAndRegion>;
+  using RegionPlacements = SmallVector<PDPhysRegionOp>;
 
   /// Get the leaf node. Abstract this out to make it easier to change the
   /// underlying data structure.
-  Optional<PlacedInstance *> getLeaf(PhysLocationAttr);
+  Placement *getLeaf(PhysLocationAttr);
 
   DimXMap placements;
   RegionPlacements regionPlacements;
