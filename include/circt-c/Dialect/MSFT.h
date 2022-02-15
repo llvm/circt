@@ -57,11 +57,6 @@ MLIR_CAPI_EXPORTED
 MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext, uint64_t, uint64_t,
                                              uint64_t, uint64_t);
 
-MLIR_CAPI_EXPORTED bool
-    circtMSFTAttributeIsAPhysicalRegionRefAttr(MlirAttribute);
-MLIR_CAPI_EXPORTED
-MlirAttribute circtMSFTPhysicalRegionRefAttrGet(MlirContext, MlirStringRef);
-
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//

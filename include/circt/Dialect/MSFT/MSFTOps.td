@@ -212,7 +212,7 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
   let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 }
 
-def PhysicalRegionOp : MSFTOp<"physical_region",
+def DeclPhysicalRegionOp : MSFTOp<"physical_region",
     [Symbol, HasParent<"mlir::ModuleOp">]> {
   let arguments = (ins
     SymbolNameAttr:$sym_name,
@@ -234,7 +234,7 @@ def EntityExternOp : MSFTOp<"entity.extern",
   }];
 }
 
-def PhysLocationOp : MSFTOp<"pd.location",
+def PDPhysLocationOp : MSFTOp<"pd.location",
       [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
   let summary = "Specify a location for an instance";
   let description = [{
@@ -250,6 +250,22 @@ def PhysLocationOp : MSFTOp<"pd.location",
                        OptionalAttr<FlatSymbolRefAttr>:$ref);
   let assemblyFormat = [{
     ($ref^)? custom<PhysLoc>($loc) (`path` `:` $subPath^)? attr-dict
+  }];
+}
+
+def PDPhysRegionOp : MSFTOp<"pd.physregion", 
+      [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+  let summary = "Specify a physical region for an instance";
+  let description = [{
+    Annotate a particular entity within an op with the region of the devices
+    on an FPGA to which it should mapped. The physRegionRef must refer to a
+    DeclPhysicalRegion operation.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$physRegionRef,
+                       OptionalAttr<StrAttr>:$subPath,
+                       OptionalAttr<FlatSymbolRefAttr>:$ref);
+  let assemblyFormat = [{
+    ($ref^)? $physRegionRef (`path` `:` $subPath^)? attr-dict
   }];
 }
 
