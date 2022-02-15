@@ -504,6 +504,13 @@ struct CompanionInfo {
   FModuleOp mapping;
 };
 
+/// Stores a reference to a ground type and an optional NLA associated with
+/// that field.
+struct FieldAndNLA {
+  FieldRef field;
+  FlatSymbolRefAttr nlaSym;
+};
+
 /// Generate SystemVerilog interfaces from Grand Central annotations.  This pass
 /// roughly works in the following three phases:
 ///
@@ -525,8 +532,9 @@ private:
   /// templates for AugmentedTypes.
   Optional<Attribute> fromAttr(Attribute attr);
 
-  /// Mapping of ID to leaf ground type associated with that ID.
-  DenseMap<Attribute, FieldRef> leafMap;
+  /// Mapping of ID to leaf ground type and an optional non-local annotation
+  /// associated with that ID.
+  DenseMap<Attribute, FieldAndNLA> leafMap;
 
   /// Mapping of ID to parent instance and module.  If this module is the top
   /// module, then the first tuple member will be None.
@@ -538,6 +546,9 @@ private:
   /// An optional prefix applied to all interfaces in the design.  This is set
   /// based on a PrefixInterfacesAnnotation.
   StringRef interfacePrefix;
+
+  /// Map of NLA symbol to NLA.
+  DenseMap<StringAttr, NonLocalAnchor> nlaMap;
 
   /// Return a string containing the name of an interface.  Apply correct
   /// prefixing from the interfacePrefix and module-level prefix parameter.
@@ -569,7 +580,7 @@ private:
                                            VerbatimBuilder &path);
 
   /// Return the module associated with this value.
-  FModuleLike getEnclosingModule(Value value);
+  FModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -746,7 +757,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                                      VerbatimBuilder &path) {
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](auto ground) {
-        FieldRef fieldRef = leafMap.lookup(ground.getID());
+        auto [fieldRef, sym] = leafMap.lookup(ground.getID());
+        NonLocalAnchor nla;
+        if (sym)
+          nla = nlaMap[sym.getAttr()];
         Value leafValue = fieldRef.getValue();
         unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
@@ -754,7 +768,15 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
-        auto enclosing = getEnclosingModule(leafValue);
+        // The enclosing module is either the module where the leaf lives or its
+        // the root of the NLA.  After computing this, the enclosing module
+        // should be singly-instantiated.
+        FModuleLike enclosing;
+        if (!nla)
+          enclosing = getEnclosingModule(leafValue, sym);
+        else
+          enclosing = getSymbolTable().lookup<FModuleOp>(nla.root());
+
         auto srcPaths = instancePaths->getAbsolutePaths(enclosing);
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
@@ -766,11 +788,30 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 ? enclosing
                 : srcPaths[0][0]->getParentOfType<FModuleLike>()));
 
-        // Add the source path.
+        // Add the source path up to the enclosing module.
         for (auto inst : srcPaths[0]) {
           path += '.';
           path += getInnerRefTo(inst);
         }
+
+        // Append the path encoded in the NLA (if an NLA exists).
+        //
+        // TODO: Improve the performance of this.  This is doing linear search
+        // of all instances in each module to find an instance whose name
+        // matches the reference part of an NLA.
+        if (nla)
+          for (size_t i = 0, e = nla.namepath().size() - 1; i != e; ++i) {
+            path += '.';
+            InstanceOp found;
+            for (auto *inst :
+                 *(instancePaths->instanceGraph.lookup(nla.modPart(i)))) {
+              found = inst->getInstance();
+              if (found.nameAttr() == nla.refPart(i))
+                break;
+            }
+            assert(found && "did not find instance in module");
+            path += getInnerRefTo(found);
+          }
 
         // Add the leaf value to the path.
         auto uloc = builder.getUnknownLoc();
@@ -875,7 +916,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             // Traverse to generate mappings.
             if (!traverseField(field, id, path))
               return None;
-            auto fieldRef = leafMap.lookup(ground.getID());
+            FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
             auto tpe = value.getType().cast<FIRRTLType>().getFinalTypeByFieldID(
@@ -1035,7 +1076,8 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-FModuleLike GrandCentralPass::getEnclosingModule(Value value) {
+FModuleLike GrandCentralPass::getEnclosingModule(Value value,
+                                                 FlatSymbolRefAttr sym) {
   if (auto blockArg = value.dyn_cast<BlockArgument>())
     return cast<FModuleOp>(blockArg.getOwner()->getParentOp());
 
@@ -1217,6 +1259,10 @@ void GrandCentralPass::runOnOperation() {
     }
   };
 
+  /// Populate the NLA map with Symbol -> NLA.
+  for (NonLocalAnchor nla : circuitOp.getBody()->getOps<NonLocalAnchor>())
+    nlaMap.insert({nla.sym_nameAttr(), nla});
+
   /// Walk the circuit and extract all information related to scattered
   /// Grand Central annotations.  This is used to populate: (1) the
   /// companionIDMap, (2) the parentIDMap, and (3) the leafMap.
@@ -1234,8 +1280,10 @@ void GrandCentralPass::runOnOperation() {
             auto maybeID = getID(op, annotation);
             if (!maybeID)
               return false;
-            leafMap[maybeID.getValue()] = {op.getResult(),
-                                           annotation.getFieldID()};
+            auto sym =
+                annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+            leafMap[maybeID.getValue()] = {
+                {op.getResult(), annotation.getFieldID()}, sym};
             return true;
           });
         })
@@ -1289,9 +1337,10 @@ void GrandCentralPass::runOnOperation() {
                 auto maybeID = getID(op, annotation);
                 if (!maybeID)
                   return false;
-                leafMap[maybeID.getValue()] = {op.getArgument(i),
-                                               annotation.getFieldID()};
-
+                auto sym =
+                    annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+                leafMap[maybeID.getValue()] = {
+                    {op.getArgument(i), annotation.getFieldID()}, sym};
                 return true;
               });
 
@@ -1472,7 +1521,7 @@ void GrandCentralPass::runOnOperation() {
     sort();
     llvm::dbgs() << "leafMap:\n";
     for (auto id : ids) {
-      auto fieldRef = leafMap.lookup(id);
+      auto fieldRef = leafMap.lookup(id).field;
       auto value = fieldRef.getValue();
       auto fieldID = fieldRef.getValue();
       if (auto blockArg = value.dyn_cast<BlockArgument>()) {
