@@ -14,7 +14,7 @@
 namespace circt {
 namespace msft {
 LogicalResult verifyDynInstData(Operation *);
-}
+} // namespace msft
 } // namespace circt
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h.inc"
 
