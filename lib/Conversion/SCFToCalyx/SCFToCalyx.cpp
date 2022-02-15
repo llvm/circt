@@ -912,10 +912,10 @@ private:
                                  block->front().getLoc(), groupName);
   }
 
-  /// buildLibraryPipeOp will build a TCalyxLibPipeOp
-  /// deal with MulIOp, DivUIOp and RemUIOp
+  /// buildLibraryBinaryPipeOp will build a TCalyxLibBinaryPipeOp, to
+  /// deal with MulIOp, DivUIOp and RemUIOp.
   template <typename TOpType, typename TSrcOp>
-  LogicalResult buildLibraryPipeOp(PatternRewriter &rewriter, TSrcOp op,
+  LogicalResult buildLibraryBinaryPipeOp(PatternRewriter &rewriter, TSrcOp op,
                                    TOpType opPipe, Value out) const {
     StringRef opName = TSrcOp::getOperationName().split(".").second;
     Location loc = op.getLoc();
@@ -1045,9 +1045,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto mulPipe =
       getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, one});
-  auto output = mulPipe.out();
-  return buildLibraryPipeOp<calyx::MultPipeLibOp>(rewriter,
-                                                  mul, mulPipe, output);
+  return buildLibraryBinaryPipeOp<calyx::MultPipeLibOp>(rewriter, mul, mulPipe,
+                                  /*out=*/ mulPipe.out());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1057,9 +1056,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto divPipe =
       getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, width, one});
-  auto output = divPipe.out_quotient();
-  return buildLibraryPipeOp<calyx::DivPipeLibOp>(rewriter,
-                                                 div, divPipe, output);
+  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(rewriter, div, divPipe,
+                                  /*out=*/ divPipe.out_quotient());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1069,9 +1067,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto remPipe =
       getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, width, one});
-  auto output = remPipe.out_remainder();
-  return buildLibraryPipeOp<calyx::DivPipeLibOp>(rewriter,
-                                                 rem, remPipe, output);
+  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(rewriter, rem, remPipe,
+                                  /*out=*/ remPipe.out_remainder());
 }
 
 template <typename TAllocOp>
