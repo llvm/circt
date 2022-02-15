@@ -945,6 +945,89 @@ firrtl.circuit "ParentIsMainModule" attributes {
 
 // -----
 
+firrtl.circuit "DedupedPath" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "foo",
+        id = 1 : i64},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        name = "bar",
+        id = 2 : i64}],
+     id = 0 : i64,
+     name = "View"}]} {
+  firrtl.nla @nla_0 [#hw.innerNameRef<@DUT::@tile1>, #hw.innerNameRef<@Tile::@w>]
+  firrtl.nla @nla [#hw.innerNameRef<@DUT::@tile2>, #hw.innerNameRef<@Tile::@w>]
+  firrtl.module @Tile() {
+    %w = firrtl.wire sym @w {
+      annotations = [
+        #firrtl.subAnno<fieldID = 0, {
+          circt.nonlocal = @nla,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 2 : i64}>,
+        #firrtl.subAnno<fieldID = 0, {
+          circt.nonlocal = @nla_0,
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64}>]} : !firrtl.uint<8>
+  }
+  firrtl.module @MyView_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "MyView",
+       type = "companion"},
+      {class = "firrtl.transforms.NoDedupAnnotation"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "MyView",
+       type = "parent"},
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    firrtl.instance tile1 sym @tile1 {annotations = [
+      {circt.nonlocal = @nla_0,
+       class = "circt.nonlocal"}]} @Tile()
+    firrtl.instance tile2 sym @tile2 {annotations = [
+      {circt.nonlocal = @nla,
+       class = "circt.nonlocal"}]} @Tile()
+    firrtl.instance MyView_companion  @MyView_companion()
+  }
+  firrtl.module @DedupedPath() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// Chceck that NLAs that encode a path to a Grand Central leaf work.  This
+// should result in two things:
+//   1) The compute XMR should include information from the NLA.
+//   2) The NLAs should be removed.
+//
+// CHECK-LABEL:          firrtl.circuit "DedupedPath"
+// CHECK-NOT:              firrtl.nla
+// CHECK-NEXT:             firrtl.module @Tile()
+// CHECK-NOT:                circt.nonlocal
+// CHECK:                  firrtl.module @DUT()
+// CHECK-NOT:                circt.nonlocal
+// CHECK:                  firrtl.module @DedupedPath
+// CHECK-NEXT:               firrtl.instance dut sym @[[dutSym:[a-zA-Z0-9]+]]
+// CHECK:                  firrtl.module @MyView_mapping()
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.foo = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
+// CHECK-SAME:                   @DedupedPath,
+// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile1>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+// CHECK-NEXT{LITERAL}:      sv.verbatim "assign {{0}}.bar = {{1}}.{{2}}.{{3}}.{{4}};"
+// CHECK-SAME:                 symbols = [#hw.innerNameRef<@DUT::@__MyView_Foo__>,
+// CHECK-SAME:                   @DedupedPath,
+// CHECK-SAME:                   #hw.innerNameRef<@DedupedPath::@[[dutSym]]>,
+// CHECK-SAME:                   #hw.innerNameRef<@DUT::@tile2>,
+// CHECK-SAME:                   #hw.innerNameRef<@Tile::@w>]
+
+// -----
+
 firrtl.circuit "YAMLOutputEmptyInterface" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
