@@ -82,7 +82,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
   %one = hw.constant 1 : i4
   %aPlusOne = comb.add %a, %one : i4
   sv.verbatim "/* verilator lint_off WIDTH */"
-  %29 = hw.array_slice %array at %aPlusOne: (!hw.array<10xi4>) -> !hw.array<3xi4>
+  %29 = hw.array_slice %array[%aPlusOne]: (!hw.array<10xi4>) -> !hw.array<3xi4>
 
 
   hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %27, %28, %29:
@@ -104,7 +104,7 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
 hw.module @casts(%in1: i64) -> (r1: !hw.array<5xi8>) {
   %bits = hw.bitcast %in1 : (i64) -> !hw.array<64xi1>
   %idx = hw.constant 10 : i6
-  %midBits = hw.array_slice %bits at %idx : (!hw.array<64xi1>) -> !hw.array<40xi1>
+  %midBits = hw.array_slice %bits[%idx] : (!hw.array<64xi1>) -> !hw.array<40xi1>
   %r1 = hw.bitcast %midBits : (!hw.array<40xi1>) -> !hw.array<5xi8>
   hw.output %r1 : !hw.array<5xi8>
 }
