@@ -45,7 +45,6 @@ public:
   ~Engine();
 
   /// Run simulation up to maxCycle or maxTime picoseconds of simulation time.
-  /// maxCycle=0 and maxTime=0 make the simulation run indefinitely.
   int simulate(uint64_t maxCycle, uint64_t maxTime);
 
   /// Build the instance layout of the design.

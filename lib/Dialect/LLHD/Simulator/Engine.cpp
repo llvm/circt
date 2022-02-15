@@ -106,7 +106,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
     const auto &event = state->popEvent();
 
     // Interrupt the simulation if a stop condition is met.
-    if (cycle > maxCycle || event.getTimeTime() > maxTime)
+    if (cycle >= maxCycle || event.getTimeTime() >= maxTime)
       break;
 
     // Update the simulation time.

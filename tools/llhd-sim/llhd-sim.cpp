@@ -44,14 +44,14 @@ static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
                                            cl::init("-"));
 
-static cl::opt<int> nSteps("n", cl::desc("Set the maximum number of steps"),
-                           cl::value_desc("max-steps"));
+static cl::opt<uint64_t> nSteps("n", cl::desc("Set the maximum number of steps"),
+                           cl::value_desc("max-steps"), cl::init(ULLONG_MAX));
 
 static cl::opt<uint64_t> maxTime(
     "T",
     cl::desc("Stop the simulation after the given amount of simulation time in "
              "picoseconds, including all sub-steps for that real-time step"),
-    cl::value_desc("max-time"));
+    cl::value_desc("max-time"), cl::init(ULLONG_MAX));
 
 static cl::opt<bool>
     dumpLLVMDialect("dump-llvm-dialect",
