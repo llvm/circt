@@ -292,7 +292,7 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
           loc, type,
           builder.getBoolAttr(attrValue.getValue().isAllOnesValue()));
 
-    [[maybe_unused]] auto intType = type.cast<IntType>();
+    auto intType = type.cast<IntType>();
     assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
                                        attrValue.getValue().getBitWidth()) &&
            "type/value width mismatch materializing constant");

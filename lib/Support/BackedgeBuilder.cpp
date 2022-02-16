@@ -27,7 +27,8 @@ void Backedge::setValue(mlir::Value newValue) {
 
 BackedgeBuilder::~BackedgeBuilder() {
   for (Operation *op : edges) {
-    assert(op->getUsers().empty() && "Backedge still in use");
+    auto users = op->getUsers();
+    assert(users.empty() && "Backedge still in use");
     if (rewriter)
       rewriter->eraseOp(op);
     else

@@ -965,7 +965,7 @@ void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
     Operation *trueUser = *condBr.trueResult().getUsers().begin();
     Operation *falseUser = *condBr.falseResult().getUsers().begin();
     bool isTrueParity = trueUser->getBlock() == exitBlock;
-    [[maybe_unused]] bool isFalseParity = falseUser->getBlock() == exitBlock;
+    bool isFalseParity = falseUser->getBlock() == exitBlock;
     assert(isTrueParity ^ isFalseParity &&
            "The user of either the true or the false result should be in the "
            "exit block");

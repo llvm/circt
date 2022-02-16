@@ -917,8 +917,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            [[maybe_unused]] auto iface =
-                traverseBundle(bundle, id, prefix, path);
+            auto iface = traverseBundle(bundle, id, prefix, path);
             assert(iface && iface.getValue());
             return VerbatimType({getInterfaceName(prefix, bundle), true});
           })

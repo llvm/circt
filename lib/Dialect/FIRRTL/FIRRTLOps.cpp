@@ -621,7 +621,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   if (portIndices.empty())
     return;
-  [[maybe_unused]] unsigned numPorts = getNumPorts();
+  unsigned numPorts = getNumPorts();
 
   // Drop the direction markers for dead ports.
   SmallVector<Direction> portDirections =
