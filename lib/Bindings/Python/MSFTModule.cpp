@@ -57,26 +57,20 @@ public:
   size_t addDesignPlacements() {
     return circtMSFTPlacementDBAddDesignPlacements(db);
   }
-  bool addPlacement(MlirAttribute loc, MlirAttribute path, std::string subpath,
-                    MlirOperation op) {
-    return mlirLogicalResultIsSuccess(circtMSFTPlacementDBAddPlacement(
-        db, loc,
-        CirctMSFTPlacedInstance{path, subpath.c_str(), subpath.size(), op}));
+  MlirOperation place(MlirOperation instOp, MlirAttribute loc,
+                      std::string subpath, MlirLocation srcLoc) {
+    auto cSubpath = mlirStringRefCreate(subpath.c_str(), subpath.size());
+    return circtMSFTPlacementDBPlace(db, instOp, loc, cSubpath, srcLoc);
   }
-  bool removePlacement(MlirAttribute loc) {
+  MlirOperation removePlacement(MlirAttribute loc) {
+    return circtMSFTPlacementDBRemovePlacement(db, loc);
+  }
+  bool movePlacement(MlirOperation locOp, MlirAttribute newLoc) {
     return mlirLogicalResultIsSuccess(
-        circtMSFTPlacementDBRemovePlacement(db, loc));
+        circtMSFTPlacementDBMovePlacement(db, locOp, newLoc));
   }
-  bool movePlacement(MlirAttribute oldLoc, MlirAttribute newLoc) {
-    return mlirLogicalResultIsSuccess(
-        circtMSFTPlacementDBMovePlacement(db, oldLoc, newLoc));
-  }
-  py::object getInstanceAt(MlirAttribute loc) {
-    CirctMSFTPlacedInstance inst;
-    if (!circtMSFTPlacementDBTryGetInstanceAt(db, loc, &inst))
-      return py::none();
-    std::string subpath(inst.subpath, inst.subpathLength);
-    return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
+  MlirOperation getInstanceAt(MlirAttribute loc) {
+    return circtMSFTPlacementDBGetInstanceAt(db, loc);
   }
   py::handle getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
                                     uint64_t column, uint64_t nearestToY) {
@@ -112,16 +106,10 @@ public:
 
     circtMSFTPlacementDBWalkPlacements(
         db,
-        [](MlirAttribute loc, CirctMSFTPlacedInstance p, void *userData) {
-          std::string subpath(p.subpath, p.subpathLength);
+        [](MlirOperation locOp, void *userData) {
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
-          auto physLoc = getPhysLocationAttr(loc);
-          if (!p.op.ptr) {
-            pycb(physLoc, py::none());
-          } else {
-            pycb(physLoc, std::make_tuple(p.path, subpath, p.op));
-          }
+          pycb(locOp);
         },
         cBounds, cPrim, cWalkOrder, &pycb);
   }
@@ -208,9 +196,9 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("seed") = nullptr)
       .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")
-      .def("add_placement", &PlacementDB::addPlacement,
-           "Inform the DB about a new placement.", py::arg("location"),
-           py::arg("path"), py::arg("subpath"), py::arg("op"))
+      .def("place", &PlacementDB::place, "Inform the DB about a new placement.",
+           py::arg("location"), py::arg("path"), py::arg("subpath"),
+           py::arg("op"))
       .def("remove_placement", &PlacementDB::removePlacement,
            "Remove a placment from the DB.", py::arg("location"))
       .def("move_placement", &PlacementDB::movePlacement,

@@ -80,9 +80,9 @@ PlacementDB::PlacementDB(Operation *top, const PrimitiveDB &seed)
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
-PDPhysLocationOp PlacementDB::addPlacement(DynamicInstanceOp inst,
-                                           PhysLocationAttr loc,
-                                           StringRef subPath, Location srcLoc) {
+PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
+                                    PhysLocationAttr loc, StringRef subPath,
+                                    Location srcLoc) {
 
   StringAttr subPathAttr;
   if (!subPath.empty())
@@ -112,9 +112,9 @@ LogicalResult PlacementDB::insertPlacement(PDPhysLocationOp locOp) {
 }
 
 /// Assign an operation to a physical region. Return false on failure.
-PDPhysRegionOp PlacementDB::addPlacement(DynamicInstanceOp inst,
-                                         DeclPhysicalRegionOp physregion,
-                                         StringRef subPath, Location srcLoc) {
+PDPhysRegionOp PlacementDB::placeIn(DynamicInstanceOp inst,
+                                    DeclPhysicalRegionOp physregion,
+                                    StringRef subPath, Location srcLoc) {
   StringAttr subPathAttr;
   if (!subPath.empty())
     subPathAttr = StringAttr::get(inst->getContext(), subPath);

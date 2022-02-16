@@ -77,7 +77,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   db = msft.PlacementDB(top.operation)
 
   assert db.get_instance_at(physAttr) is None
-  place_rc = db.add_placement(physAttr, path, "foo_subpath", resolved_inst)
+  place_rc = db.place(physAttr, path, "foo_subpath", resolved_inst)
   assert place_rc
   located_inst = db.get_instance_at(physAttr)
   assert located_inst is not None

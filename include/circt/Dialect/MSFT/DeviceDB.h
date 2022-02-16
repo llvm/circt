@@ -82,11 +82,11 @@ public:
 
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
-  PDPhysLocationOp addPlacement(DynamicInstanceOp inst, PhysLocationAttr,
-                                StringRef subpath, Location srcLoc);
+  PDPhysLocationOp place(DynamicInstanceOp inst, PhysLocationAttr,
+                         StringRef subpath, Location srcLoc);
   /// Assign an operation to a physical region. Return false on failure.
-  PDPhysRegionOp addPlacement(DynamicInstanceOp inst, DeclPhysicalRegionOp,
-                              StringRef subPath, Location srcLoc);
+  PDPhysRegionOp placeIn(DynamicInstanceOp inst, DeclPhysicalRegionOp,
+                         StringRef subPath, Location srcLoc);
 
   /// Load the database from the IR. Return the number of placements which
   /// failed to load due to invalid specifications.
