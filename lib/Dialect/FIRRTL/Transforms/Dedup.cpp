@@ -555,8 +555,7 @@ private:
     for (auto element : nla.namepath()) {
       if (auto innerRef = element.dyn_cast<InnerRefAttr>()) {
         if (innerRef.getModule() == fromName) {
-          auto to = renameMap[innerRef.getName()];
-          assert(to && "should have been renamed");
+          assert(renameMap[innerRef.getName()] && "should have been renamed");
           namepath.push_back(
               InnerRefAttr::get(toName, renameMap[innerRef.getName()]));
         } else

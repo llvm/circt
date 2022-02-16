@@ -678,7 +678,8 @@ void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
   }
 }
 
-inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const LinIneq &l) {
+[[maybe_unused]] inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                                      const LinIneq &l) {
   l.print(os);
   return os;
 }
@@ -811,7 +812,7 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                               unsigned indent = 1) {
   // See if we have a memoized result we can return.
-  bool isTrivial = isa<KnownExpr>(expr);
+  [[maybe_unused]] bool isTrivial = isa<KnownExpr>(expr);
   if (expr->solution) {
     LLVM_DEBUG({
       if (!isTrivial)

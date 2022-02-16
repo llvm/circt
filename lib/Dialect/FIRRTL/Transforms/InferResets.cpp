@@ -53,7 +53,7 @@ static T &operator<<(T &os, InstancePathRef path) {
   return os;
 }
 
-static StringRef getTail(InstancePathRef path) {
+[[maybe_unused]] static StringRef getTail(InstancePathRef path) {
   if (path.empty())
     return "$root";
   auto last = path.back();

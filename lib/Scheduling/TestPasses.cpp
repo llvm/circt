@@ -83,13 +83,11 @@ static void constructProblem(Problem &prob, FuncOp func) {
   // of integer attributes
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
     auto &ops = prob.getOperations();
-    unsigned nOps = ops.size();
-    for (auto &elemArr : parseArrayOfArrays(attr)) {
+    [[maybe_unused]] unsigned nOps = ops.size();
+    for ([[maybe_unused]] auto &elemArr : parseArrayOfArrays(attr)) {
       assert(elemArr.size() >= 2 && elemArr[0] < nOps && elemArr[1] < nOps);
-      Operation *from = ops[elemArr[0]];
-      Operation *to = ops[elemArr[1]];
-      auto res = prob.insertDependence(std::make_pair(from, to));
-      assert(succeeded(res));
+      assert(succeeded(prob.insertDependence(
+          std::make_pair(ops[elemArr[0]], ops[elemArr[1]]))));
     }
   }
 }
