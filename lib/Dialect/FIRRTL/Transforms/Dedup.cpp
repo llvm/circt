@@ -873,6 +873,8 @@ private:
   // NOLINTNEXTLINE(misc-no-recursion)
   void mergeOps(RenameMap &renameMap, FModuleLike toModule, Operation *to,
                 FModuleLike fromModule, Operation *from) {
+    // Merge the operation locations.
+    to->setLoc(FusedLoc::get(context, {to->getLoc(), from->getLoc()}));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
