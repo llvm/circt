@@ -916,15 +916,15 @@ private:
   /// deal with MulIOp, DivUIOp and RemUIOp.
   template <typename TOpType, typename TSrcOp>
   LogicalResult buildLibraryBinaryPipeOp(PatternRewriter &rewriter, TSrcOp op,
-                                   TOpType opPipe, Value out) const {
+                                         TOpType opPipe, Value out) const {
     StringRef opName = TSrcOp::getOperationName().split(".").second;
     Location loc = op.getLoc();
     Type width = op.getResult().getType();
     // Pass the result from the Operation to the Calyx primitive.
     op.getResult().replaceAllUsesWith(out);
     auto reg = createReg(getComponentState(), rewriter, op.getLoc(),
-                        getComponentState().getUniqueName(opName),
-                        width.getIntOrFloatBitWidth());
+                         getComponentState().getUniqueName(opName),
+                         width.getIntOrFloatBitWidth());
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
     getComponentState().addBlockScheduleable(op->getBlock(), group);
@@ -937,8 +937,7 @@ private:
     // The write enable port is high when the pipeline is done.
     rewriter.create<calyx::AssignOp>(loc, reg.write_en(), opPipe.done());
     rewriter.create<calyx::AssignOp>(
-        loc, opPipe.go(),
-        getComponentState().getConstant(rewriter, loc, 1, 1));
+        loc, opPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 
@@ -1046,7 +1045,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, one});
   return buildLibraryBinaryPipeOp<calyx::MultPipeLibOp>(rewriter, mul, mulPipe,
-                                  /*out=*/ mulPipe.out());
+                                                        /*out=*/mulPipe.out());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1056,19 +1055,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto divPipe =
       getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, width, one});
-  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(rewriter, div, divPipe,
-                                  /*out=*/ divPipe.out_quotient());
+  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
+      rewriter, div, divPipe,
+      /*out=*/divPipe.out_quotient());
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     RemUIOp rem) const{
+                                     RemUIOp rem) const {
   Location loc = rem.getLoc();
   Type width = rem.getResult().getType(), one = rewriter.getI1Type();
   auto remPipe =
       getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, width, one});
-  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(rewriter, rem, remPipe,
-                                  /*out=*/ remPipe.out_remainder());
+  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
+      rewriter, rem, remPipe,
+      /*out=*/remPipe.out_remainder());
 }
 
 template <typename TAllocOp>
@@ -2227,8 +2228,7 @@ private:
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
               arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivPipeLibOp,
-              scf::WhileOp>(
-              src.getDefiningOp()))
+              scf::WhileOp>(src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
