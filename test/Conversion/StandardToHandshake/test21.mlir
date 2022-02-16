@@ -31,14 +31,14 @@
 // CHECK:           %[[VAL_16]] = merge %[[VAL_34:.*]]#0 : i1
 // CHECK:           %[[VAL_35:.*]] = arith.cmpi slt, %[[VAL_33]]#0, %[[VAL_23]]#0 : index
 // CHECK:           %[[VAL_34]]:6 = fork [6] %[[VAL_35]] : i1
-// CHECK:           %[[VAL_36:.*]], %[[VAL_37:.*]] = cond_br %[[VAL_34]]#5, %[[VAL_23]]#1 : index
+// CHECK:           %[[VAL_36:.*]], %[[VAL_37:.*]] = cf.cond_br %[[VAL_34]]#5, %[[VAL_23]]#1 : index
 // CHECK:           sink %[[VAL_37]] : index
-// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = cond_br %[[VAL_34]]#4, %[[VAL_25]] : index
+// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = cf.cond_br %[[VAL_34]]#4, %[[VAL_25]] : index
 // CHECK:           sink %[[VAL_39]] : index
-// CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = cond_br %[[VAL_34]]#3, %[[VAL_28]] : index
+// CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = cf.cond_br %[[VAL_34]]#3, %[[VAL_28]] : index
 // CHECK:           sink %[[VAL_41]] : index
-// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cond_br %[[VAL_34]]#2, %[[VAL_18]] : none
-// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cond_br %[[VAL_34]]#1, %[[VAL_33]]#1 : index
+// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cf.cond_br %[[VAL_34]]#2, %[[VAL_18]] : none
+// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cf.cond_br %[[VAL_34]]#1, %[[VAL_33]]#1 : index
 // CHECK:           sink %[[VAL_45]] : index
 // CHECK:           %[[VAL_46:.*]] = merge %[[VAL_44]] : index
 // CHECK:           %[[VAL_47:.*]]:5 = fork [5] %[[VAL_46]] : index
@@ -82,16 +82,16 @@
 // CHECK:           %[[VAL_94:.*]]:2 = fork [2] %[[VAL_92]] : index
 // CHECK:           %[[VAL_95:.*]] = arith.cmpi slt, %[[VAL_94]]#1, %[[VAL_78]]#1 : index
 // CHECK:           %[[VAL_96:.*]]:8 = fork [8] %[[VAL_95]] : i1
-// CHECK:           %[[VAL_97:.*]], %[[VAL_98:.*]] = cond_br %[[VAL_96]]#7, %[[VAL_78]]#0 : index
+// CHECK:           %[[VAL_97:.*]], %[[VAL_98:.*]] = cf.cond_br %[[VAL_96]]#7, %[[VAL_78]]#0 : index
 // CHECK:           sink %[[VAL_98]] : index
-// CHECK:           %[[VAL_99:.*]], %[[VAL_100:.*]] = cond_br %[[VAL_96]]#6, %[[VAL_79]] : index
+// CHECK:           %[[VAL_99:.*]], %[[VAL_100:.*]] = cf.cond_br %[[VAL_96]]#6, %[[VAL_79]] : index
 // CHECK:           sink %[[VAL_100]] : index
-// CHECK:           %[[VAL_101:.*]], %[[VAL_102:.*]] = cond_br %[[VAL_96]]#5, %[[VAL_81]] : index
-// CHECK:           %[[VAL_103:.*]], %[[VAL_104:.*]] = cond_br %[[VAL_96]]#4, %[[VAL_83]] : index
-// CHECK:           %[[VAL_105:.*]], %[[VAL_106:.*]] = cond_br %[[VAL_96]]#3, %[[VAL_85]] : index
-// CHECK:           %[[VAL_107:.*]], %[[VAL_108:.*]] = cond_br %[[VAL_96]]#2, %[[VAL_87]] : index
-// CHECK:           %[[VAL_109:.*]], %[[VAL_110:.*]] = cond_br %[[VAL_96]]#1, %[[VAL_89]] : none
-// CHECK:           %[[VAL_111:.*]], %[[VAL_112:.*]] = cond_br %[[VAL_96]]#0, %[[VAL_94]]#0 : index
+// CHECK:           %[[VAL_101:.*]], %[[VAL_102:.*]] = cf.cond_br %[[VAL_96]]#5, %[[VAL_81]] : index
+// CHECK:           %[[VAL_103:.*]], %[[VAL_104:.*]] = cf.cond_br %[[VAL_96]]#4, %[[VAL_83]] : index
+// CHECK:           %[[VAL_105:.*]], %[[VAL_106:.*]] = cf.cond_br %[[VAL_96]]#3, %[[VAL_85]] : index
+// CHECK:           %[[VAL_107:.*]], %[[VAL_108:.*]] = cf.cond_br %[[VAL_96]]#2, %[[VAL_87]] : index
+// CHECK:           %[[VAL_109:.*]], %[[VAL_110:.*]] = cf.cond_br %[[VAL_96]]#1, %[[VAL_89]] : none
+// CHECK:           %[[VAL_111:.*]], %[[VAL_112:.*]] = cf.cond_br %[[VAL_96]]#0, %[[VAL_94]]#0 : index
 // CHECK:           sink %[[VAL_112]] : index
 // CHECK:           %[[VAL_113:.*]] = merge %[[VAL_111]] : index
 // CHECK:           %[[VAL_114:.*]] = merge %[[VAL_99]] : index
@@ -136,7 +136,7 @@ func @loop_min_max(%arg0: index) {
   cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb2, ^bb6
+  cf.cond_br %1, ^bb2, ^bb6
 ^bb2: // pred: ^bb1
   %c-1 = arith.constant -1 : index
   %2 = arith.muli %0, %c-1 : index
@@ -151,7 +151,7 @@ func @loop_min_max(%arg0: index) {
   cf.br ^bb3(%5 : index)
 ^bb3(%9: index):      // 2 preds: ^bb2, ^bb4
   %10 = arith.cmpi slt, %9, %8 : index
-  cond_br %10, ^bb4, ^bb5
+  cf.cond_br %10, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %11 = arith.addi %9, %c1_0 : index
   cf.br ^bb3(%11 : index)

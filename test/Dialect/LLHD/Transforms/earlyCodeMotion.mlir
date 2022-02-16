@@ -123,7 +123,7 @@ llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
 // CHECK:           %[[VAL_6:.*]] = llhd.load %[[VAL_5]] : !llhd.ptr<i32>
 // CHECK:           %[[VAL_7:.*]] = comb.icmp ult %[[VAL_6]], %[[VAL_2]] : i32
 // CHECK:           %[[VAL_8:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i2>
-// CHECK:           cond_br %[[VAL_7]], ^bb4, ^bb3
+// CHECK:           cf.cond_br %[[VAL_7]], ^bb4, ^bb3
 // CHECK:         ^bb3:
 // CHECK:           llhd.wait (%[[VAL_0]] : !llhd.sig<i2>), ^bb1
 // CHECK:         ^bb4:
@@ -145,7 +145,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   %i_ld = llhd.load %i : !llhd.ptr<i32>
   %1 = hw.constant 2 : i32
   %2 = comb.icmp ult %i_ld, %1 : i32
-  cond_br %2, ^loop_continue, ^check
+  cf.cond_br %2, ^loop_continue, ^check
 ^check:
   // TR: 1
   llhd.wait (%in_i : !llhd.sig<i2>), ^body
@@ -191,9 +191,9 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 // CHECK:           %[[VAL_22:.*]] = comb.xor %[[VAL_21]], %[[ALLSET]] : i1
 // CHECK:           %[[VAL_23:.*]] = comb.icmp ne %[[VAL_22]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_24:.*]] = llhd.prb %[[VAL_2]] : !llhd.sig<i1>
-// CHECK:           cond_br %[[VAL_20]], ^bb4, ^bb2
+// CHECK:           cf.cond_br %[[VAL_20]], ^bb4, ^bb2
 // CHECK:         ^bb4:
-// CHECK:           cond_br %[[VAL_23]], ^bb6, ^bb5
+// CHECK:           cf.cond_br %[[VAL_23]], ^bb6, ^bb5
 // CHECK:         ^bb5:
 // CHECK:           llhd.drv %[[VAL_3]], %[[VAL_24]] after %[[VAL_6]] : !llhd.sig<i1>
 // CHECK:           %[[VAL_25:.*]] = llhd.load %[[VAL_8]] : !llhd.ptr<i1>
@@ -233,14 +233,14 @@ llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack
   %7 = comb.icmp eq %rst_ni_prb1, %3 : i1
   %negedge = comb.and %7, %6 : i1
   %event_or = comb.or %posedge, %negedge : i1
-  cond_br %event_or, ^event, ^init
+  cf.cond_br %event_or, ^event, ^init
 ^event:
   // TR: 0
   %8 = comb.icmp ne %rst_ni_prb1, %3 : i1
   %9 = comb.xor %8, %allset : i1
   %10 = comb.icmp ne %9, %3 : i1
   %11 = llhd.constant_time <0s, 1d, 0e>
-  cond_br %10, ^if_true, ^if_false
+  cf.cond_br %10, ^if_true, ^if_false
 ^if_false:
   // TR: 0
   %async_ack_i_prb = llhd.prb %async_ack_i : !llhd.sig<i1>

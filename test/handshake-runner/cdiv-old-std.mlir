@@ -18,14 +18,14 @@ module {
     cf.br ^bb1(%c0 : index)
   ^bb1(%11: index):	// 2 preds: ^bb0, ^bb5
     %12 = arith.cmpi slt, %11, %c4 : index
-    cond_br %12, ^bb2, ^bb6
+    cf.cond_br %12, ^bb2, ^bb6
   ^bb2:	// pred: ^bb1
     %13 = memref.load %0[%11] : memref<4xi32>
     %14 = memref.load %2[%11] : memref<4xi32>
     %15 = memref.load %0[%11] : memref<4xi32>
     %16 = memref.load %2[%11] : memref<4xi32>
     %17 = memref.load %10[%11] : memref<4xi1>
-    cond_br %17, ^bb3, ^bb4
+    cf.cond_br %17, ^bb3, ^bb4
   ^bb3:	// pred: ^bb2
     %18 = memref.load %6[%11] : memref<4xi32>
     %19 = memref.load %9[%11] : memref<4xi32>

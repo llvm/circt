@@ -14,7 +14,7 @@ module {
     cf.br ^bb1(%c0 : index)
   ^bb1(%2: index):  // 2 preds: ^bb0, ^bb2
     %3 = arith.cmpi slt, %2, %c4 : index
-    cond_br %3, ^bb2, ^bb3
+    cf.cond_br %3, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     memref.store %c5_i32, %0[%2] : memref<64xi32>
     %4 = arith.addi %2, %c1 : index
@@ -23,7 +23,7 @@ module {
     cf.br ^bb4(%c0 : index)
   ^bb4(%5: index):  // 2 preds: ^bb3, ^bb5
     %6 = arith.cmpi slt, %5, %c4 : index
-    cond_br %6, ^bb5, ^bb6
+    cf.cond_br %6, ^bb5, ^bb6
   ^bb5: // pred: ^bb4
     %7 = memref.load %0[%5] : memref<64xi32>
     %8 = arith.addi %7, %7 : i32

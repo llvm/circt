@@ -14,7 +14,7 @@ func @simple() -> i32 {
 
 // CHECK-NOT: func
 func @complex(%flag : i1) -> i32 {
-  cond_br %flag, ^bb1, ^bb2
+  cf.cond_br %flag, ^bb1, ^bb2
 ^bb1:
   %0 = hw.constant 5 : i32
   return %0 : i32
@@ -37,7 +37,7 @@ llhd.entity @check_entity_inline() -> (%out : !llhd.sig<i32>) {
 // CHECK-LABEL: @check_proc_inline
 llhd.proc @check_proc_inline(%arg : !llhd.sig<i1>) -> (%out : !llhd.sig<i32>) {
   // CHECK-NEXT: %[[PRB:.*]] = llhd.prb
-  // CHECK-NEXT: cond_br %[[PRB]], ^[[BB1:.*]], ^[[BB2:.*]]
+  // CHECK-NEXT: cf.cond_br %[[PRB]], ^[[BB1:.*]], ^[[BB2:.*]]
   // CHECK-NEXT: ^[[BB1]]:
   // CHECK-NEXT: %[[C0:.*]] = hw.constant
   // CHECK-NEXT: cf.br ^[[BB3:.*]](%[[C0]] : i32)

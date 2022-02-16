@@ -26,10 +26,10 @@
 // CHECK:           %[[VAL_25:.*]]:2 = fork [2] %[[VAL_24]] : index
 // CHECK:           %[[VAL_26:.*]] = arith.cmpi slt, %[[VAL_25]]#1, %[[VAL_16]]#1 : index
 // CHECK:           %[[VAL_27:.*]]:3 = fork [3] %[[VAL_26]] : i1
-// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_27]]#2, %[[VAL_16]]#0 : index
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cf.cond_br %[[VAL_27]]#2, %[[VAL_16]]#0 : index
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_27]]#1, %[[VAL_21]] : none
-// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_27]]#0, %[[VAL_25]]#0 : index
+// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cf.cond_br %[[VAL_27]]#1, %[[VAL_21]] : none
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cf.cond_br %[[VAL_27]]#0, %[[VAL_25]]#0 : index
 // CHECK:           sink %[[VAL_33]] : index
 // CHECK:           %[[VAL_34:.*]] = merge %[[VAL_32]] : index
 // CHECK:           %[[VAL_35:.*]] = buffer [2] %[[VAL_34]] {sequential = false} : index
@@ -70,10 +70,10 @@ module {
     %13:2 = fork [2] %12 : index
     %14 = arith.cmpi slt, %13#1, %9#1 : index
     %15:3 = fork [3] %14 : i1
-    %trueResult, %falseResult = cond_br %15#2, %9#0 : index
+    %trueResult, %falseResult = cf.cond_br %15#2, %9#0 : index
     sink %falseResult : index
-    %trueResult_0, %falseResult_1 = cond_br %15#1, %10#0 : none
-    %trueResult_2, %falseResult_3 = cond_br %15#0, %13#0 : index
+    %trueResult_0, %falseResult_1 = cf.cond_br %15#1, %10#0 : none
+    %trueResult_2, %falseResult_3 = cf.cond_br %15#0, %13#0 : index
     sink %falseResult_3 : index
     %16 = merge %trueResult_2 : index
     %17 = merge %trueResult : index

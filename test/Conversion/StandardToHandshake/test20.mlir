@@ -45,12 +45,12 @@
 // CHECK:           %[[VAL_32]] = merge %[[VAL_47:.*]]#0 : i1
 // CHECK:           %[[VAL_48:.*]] = arith.cmpi slt, %[[VAL_46]]#0, %[[VAL_39]]#0 : index
 // CHECK:           %[[VAL_47]]:5 = fork [5] %[[VAL_48]] : i1
-// CHECK:           %[[VAL_49:.*]], %[[VAL_50:.*]] = cond_br %[[VAL_47]]#4, %[[VAL_39]]#1 : index
+// CHECK:           %[[VAL_49:.*]], %[[VAL_50:.*]] = cf.cond_br %[[VAL_47]]#4, %[[VAL_39]]#1 : index
 // CHECK:           sink %[[VAL_50]] : index
-// CHECK:           %[[VAL_51:.*]], %[[VAL_52:.*]] = cond_br %[[VAL_47]]#3, %[[VAL_41]] : index
+// CHECK:           %[[VAL_51:.*]], %[[VAL_52:.*]] = cf.cond_br %[[VAL_47]]#3, %[[VAL_41]] : index
 // CHECK:           sink %[[VAL_52]] : index
-// CHECK:           %[[VAL_53:.*]], %[[VAL_54:.*]] = cond_br %[[VAL_47]]#2, %[[VAL_34]] : none
-// CHECK:           %[[VAL_55:.*]], %[[VAL_56:.*]] = cond_br %[[VAL_47]]#1, %[[VAL_46]]#1 : index
+// CHECK:           %[[VAL_53:.*]], %[[VAL_54:.*]] = cf.cond_br %[[VAL_47]]#2, %[[VAL_34]] : none
+// CHECK:           %[[VAL_55:.*]], %[[VAL_56:.*]] = cf.cond_br %[[VAL_47]]#1, %[[VAL_46]]#1 : index
 // CHECK:           sink %[[VAL_56]] : index
 // CHECK:           %[[VAL_57:.*]] = merge %[[VAL_55]] : index
 // CHECK:           %[[VAL_58:.*]] = merge %[[VAL_51]] : index
@@ -85,7 +85,7 @@ func @min_reduction_tree(%arg0: index) {
   cf.br ^bb1(%c0 : index)
 ^bb1(%12: index):     // 2 preds: ^bb0, ^bb2
   %13 = arith.cmpi slt, %12, %11 : index
-  cond_br %13, ^bb2, ^bb3
+  cf.cond_br %13, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %14 = arith.addi %12, %c1 : index
   cf.br ^bb1(%14 : index)

@@ -13,7 +13,7 @@ module {
     cf.br ^bb1(%c0 : index)
   ^bb1(%3: index):	// 2 preds: ^bb0, ^bb2
     %4 = arith.cmpi slt, %3, %c10 : index
-    cond_br %4, ^bb2, ^bb3
+    cf.cond_br %4, ^bb2, ^bb3
   ^bb2:	// pred: ^bb1
     %5 = memref.load %0[%3] : memref<100xi32>
     %6 = memref.load %1[%3] : memref<100xi32>

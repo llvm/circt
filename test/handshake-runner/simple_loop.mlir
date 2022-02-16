@@ -10,7 +10,7 @@ module {
     cf.br ^bb1(%c1 : index)
   ^bb1(%0: index):	// 2 preds: ^bb0, ^bb2
     %1 = arith.cmpi slt, %0, %c42 : index
-    cond_br %1, ^bb2, ^bb3
+    cf.cond_br %1, ^bb2, ^bb3
   ^bb2:	// pred: ^bb1
 //    call @body(%0) : (index) -> ()
     %2 = arith.addi %0, %c1_0 : index

@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_14]] = merge %[[VAL_26:.*]]#0 : i1
 // CHECK:           %[[VAL_27:.*]] = arith.cmpi slt, %[[VAL_25]]#0, %[[VAL_21]]#0 : index
 // CHECK:           %[[VAL_26]]:4 = fork [4] %[[VAL_27]] : i1
-// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_26]]#3, %[[VAL_21]]#1 : index
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cf.cond_br %[[VAL_26]]#3, %[[VAL_21]]#1 : index
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_26]]#2, %[[VAL_16]] : none
-// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_26]]#1, %[[VAL_25]]#1 : index
+// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cf.cond_br %[[VAL_26]]#2, %[[VAL_16]] : none
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cf.cond_br %[[VAL_26]]#1, %[[VAL_25]]#1 : index
 // CHECK:           sink %[[VAL_33]] : index
 // CHECK:           %[[VAL_34:.*]] = merge %[[VAL_32]] : index
 // CHECK:           %[[VAL_35:.*]] = merge %[[VAL_28]] : index
@@ -59,12 +59,12 @@
 // CHECK:           %[[VAL_66:.*]]:2 = fork [2] %[[VAL_64]] : index
 // CHECK:           %[[VAL_67:.*]] = arith.cmpi slt, %[[VAL_66]]#1, %[[VAL_56]]#1 : index
 // CHECK:           %[[VAL_68:.*]]:5 = fork [5] %[[VAL_67]] : i1
-// CHECK:           %[[VAL_69:.*]], %[[VAL_70:.*]] = cond_br %[[VAL_68]]#4, %[[VAL_56]]#0 : index
+// CHECK:           %[[VAL_69:.*]], %[[VAL_70:.*]] = cf.cond_br %[[VAL_68]]#4, %[[VAL_56]]#0 : index
 // CHECK:           sink %[[VAL_70]] : index
-// CHECK:           %[[VAL_71:.*]], %[[VAL_72:.*]] = cond_br %[[VAL_68]]#3, %[[VAL_57]] : index
-// CHECK:           %[[VAL_73:.*]], %[[VAL_74:.*]] = cond_br %[[VAL_68]]#2, %[[VAL_59]] : index
-// CHECK:           %[[VAL_75:.*]], %[[VAL_76:.*]] = cond_br %[[VAL_68]]#1, %[[VAL_61]] : none
-// CHECK:           %[[VAL_77:.*]], %[[VAL_78:.*]] = cond_br %[[VAL_68]]#0, %[[VAL_66]]#0 : index
+// CHECK:           %[[VAL_71:.*]], %[[VAL_72:.*]] = cf.cond_br %[[VAL_68]]#3, %[[VAL_57]] : index
+// CHECK:           %[[VAL_73:.*]], %[[VAL_74:.*]] = cf.cond_br %[[VAL_68]]#2, %[[VAL_59]] : index
+// CHECK:           %[[VAL_75:.*]], %[[VAL_76:.*]] = cf.cond_br %[[VAL_68]]#1, %[[VAL_61]] : none
+// CHECK:           %[[VAL_77:.*]], %[[VAL_78:.*]] = cf.cond_br %[[VAL_68]]#0, %[[VAL_66]]#0 : index
 // CHECK:           sink %[[VAL_78]] : index
 // CHECK:           %[[VAL_79:.*]] = merge %[[VAL_77]] : index
 // CHECK:           %[[VAL_80:.*]] = merge %[[VAL_69]] : index
@@ -109,12 +109,12 @@
 // CHECK:           %[[VAL_120:.*]]:2 = fork [2] %[[VAL_118]] : index
 // CHECK:           %[[VAL_121:.*]] = arith.cmpi slt, %[[VAL_120]]#1, %[[VAL_110]]#1 : index
 // CHECK:           %[[VAL_122:.*]]:5 = fork [5] %[[VAL_121]] : i1
-// CHECK:           %[[VAL_123:.*]], %[[VAL_124:.*]] = cond_br %[[VAL_122]]#4, %[[VAL_110]]#0 : index
+// CHECK:           %[[VAL_123:.*]], %[[VAL_124:.*]] = cf.cond_br %[[VAL_122]]#4, %[[VAL_110]]#0 : index
 // CHECK:           sink %[[VAL_124]] : index
-// CHECK:           %[[VAL_125:.*]], %[[VAL_126:.*]] = cond_br %[[VAL_122]]#3, %[[VAL_111]] : index
-// CHECK:           %[[VAL_127:.*]], %[[VAL_128:.*]] = cond_br %[[VAL_122]]#2, %[[VAL_113]] : index
-// CHECK:           %[[VAL_129:.*]], %[[VAL_130:.*]] = cond_br %[[VAL_122]]#1, %[[VAL_115]] : none
-// CHECK:           %[[VAL_131:.*]], %[[VAL_132:.*]] = cond_br %[[VAL_122]]#0, %[[VAL_120]]#0 : index
+// CHECK:           %[[VAL_125:.*]], %[[VAL_126:.*]] = cf.cond_br %[[VAL_122]]#3, %[[VAL_111]] : index
+// CHECK:           %[[VAL_127:.*]], %[[VAL_128:.*]] = cf.cond_br %[[VAL_122]]#2, %[[VAL_113]] : index
+// CHECK:           %[[VAL_129:.*]], %[[VAL_130:.*]] = cf.cond_br %[[VAL_122]]#1, %[[VAL_115]] : none
+// CHECK:           %[[VAL_131:.*]], %[[VAL_132:.*]] = cf.cond_br %[[VAL_122]]#0, %[[VAL_120]]#0 : index
 // CHECK:           sink %[[VAL_132]] : index
 // CHECK:           %[[VAL_133:.*]] = merge %[[VAL_131]] : index
 // CHECK:           %[[VAL_134:.*]] = merge %[[VAL_123]] : index
@@ -153,7 +153,7 @@ func @more_imperfectly_nested_loops() {
   cf.br ^bb2(%c0 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb11
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb3, ^bb12
+  cf.cond_br %1, ^bb3, ^bb12
 ^bb3:	// pred: ^bb2
   cf.br ^bb4
 ^bb4:	// pred: ^bb3
@@ -162,7 +162,7 @@ func @more_imperfectly_nested_loops() {
   cf.br ^bb5(%c7 : index)
 ^bb5(%2: index):	// 2 preds: ^bb4, ^bb6
   %3 = arith.cmpi slt, %2, %c56 : index
-  cond_br %3, ^bb6, ^bb7
+  cf.cond_br %3, ^bb6, ^bb7
 ^bb6:	// pred: ^bb5
   %c2 = arith.constant 2 : index
   %4 = arith.addi %2, %c2 : index
@@ -175,7 +175,7 @@ func @more_imperfectly_nested_loops() {
   cf.br ^bb9(%c18 : index)
 ^bb9(%5: index):	// 2 preds: ^bb8, ^bb10
   %6 = arith.cmpi slt, %5, %c37 : index
-  cond_br %6, ^bb10, ^bb11
+  cf.cond_br %6, ^bb10, ^bb11
 ^bb10:	// pred: ^bb9
   %c3 = arith.constant 3 : index
   %7 = arith.addi %5, %c3 : index

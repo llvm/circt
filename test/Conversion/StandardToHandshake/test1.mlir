@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_14]] = merge %[[VAL_26:.*]]#0 : i1
 // CHECK:           %[[VAL_27:.*]] = arith.cmpi slt, %[[VAL_25]]#0, %[[VAL_21]]#0 : index
 // CHECK:           %[[VAL_26]]:4 = fork [4] %[[VAL_27]] : i1
-// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_26]]#3, %[[VAL_21]]#1 : index
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cf.cond_br %[[VAL_26]]#3, %[[VAL_21]]#1 : index
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_26]]#2, %[[VAL_16]] : none
-// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_26]]#1, %[[VAL_25]]#1 : index
+// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cf.cond_br %[[VAL_26]]#2, %[[VAL_16]] : none
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cf.cond_br %[[VAL_26]]#1, %[[VAL_25]]#1 : index
 // CHECK:           sink %[[VAL_33]] : index
 // CHECK:           %[[VAL_34:.*]] = merge %[[VAL_32]] : index
 // CHECK:           %[[VAL_35:.*]] = merge %[[VAL_28]] : index
@@ -53,7 +53,7 @@ func @simple_loop() {
   cf.br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb3, ^bb4
+  cf.cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = arith.constant 1 : index
   %2 = arith.addi %0, %c1_0 : index

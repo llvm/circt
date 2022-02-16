@@ -16,7 +16,7 @@
 // CHECK:             %[[TMP_0:.*]] = arith.cmpi slt, %[[ARG_0:.*]], %[[ARG_1:.*]] : index
 // CHECK:             "staticlogic.return"(%[[TMP_0:.*]]) : (i1) -> ()
 // CHECK:           }) : (index, index) -> i1
-// CHECK:           cond_br %[[VAL_2:.*]], ^bb3, ^bb4
+// CHECK:           cf.cond_br %[[VAL_2:.*]], ^bb3, ^bb4
 // CHECK:         ^bb3: // pred: ^bb2
 // CHECK:           %[[VAL_3:.*]] = "staticlogic.pipeline"(%[[VAL_1:.*]]) ({
 // CHECK:           ^bb0(%[[ARG_0:.*]]: index):
@@ -39,7 +39,7 @@ func @simple_loop() {
   cf.br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb3, ^bb4
+  cf.cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = arith.constant 1 : index
   %2 = arith.addi %0, %c1_0 : index

@@ -44,15 +44,15 @@ module {
     %15:3 = fork [3] %14 : i1
     // CHECK: buffer
     // CHECK: buffer
-    %trueResult, %falseResult = cond_br %15#2, %9#0 : index
+    %trueResult, %falseResult = cf.cond_br %15#2, %9#0 : index
     // CHECK: buffer
     sink %falseResult : index
     // CHECK: buffer
     // CHECK: buffer
-    %trueResult_0, %falseResult_1 = cond_br %15#1, %10#0 : none
+    %trueResult_0, %falseResult_1 = cf.cond_br %15#1, %10#0 : none
     // CHECK: buffer
     // CHECK: buffer
-    %trueResult_2, %falseResult_3 = cond_br %15#0, %13#0 : index
+    %trueResult_2, %falseResult_3 = cf.cond_br %15#0, %13#0 : index
     // CHECK: buffer
     sink %falseResult_3 : index
     // CHECK: buffer

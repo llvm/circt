@@ -114,7 +114,7 @@ func @allocs() -> memref<4x4xi32> {
 // CHECK:                     %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: index, %[[VAL_2:.*]]: i1) {
 // CHECK:           %[[VAL_3:.*]] = memref.alloc() : memref<16xi32>
 // CHECK:           %[[VAL_4:.*]] = memref.alloc() : memref<16xi32>
-// CHECK:           cond_br %[[VAL_2]], ^bb1(%[[VAL_3]], %[[VAL_4]] : memref<16xi32>, memref<16xi32>), ^bb1(%[[VAL_4]], %[[VAL_3]] : memref<16xi32>, memref<16xi32>)
+// CHECK:           cf.cond_br %[[VAL_2]], ^bb1(%[[VAL_3]], %[[VAL_4]] : memref<16xi32>, memref<16xi32>), ^bb1(%[[VAL_4]], %[[VAL_3]] : memref<16xi32>, memref<16xi32>)
 // CHECK:         ^bb1(%[[VAL_5:.*]]: memref<16xi32>, %[[VAL_6:.*]]: memref<16xi32>):
 // CHECK:           %[[VAL_7:.*]] = arith.constant 2 : index
 // CHECK:           %[[VAL_8:.*]] = arith.shli %[[VAL_1]], %[[VAL_7]] : index
@@ -129,7 +129,7 @@ func @allocs() -> memref<4x4xi32> {
 func @across_bbs(%i1 : index, %i2 : index, %c : i1) {
   %0 = memref.alloc() : memref<4x4xi32>
   %1 = memref.alloc() : memref<4x4xi32>
-  cond_br %c,
+  cf.cond_br %c,
     ^bb1(%0, %1 : memref<4x4xi32>, memref<4x4xi32>),
     ^bb1(%1, %0 : memref<4x4xi32>, memref<4x4xi32>)
 ^bb1(%m1 : memref<4x4xi32>, %m2 : memref<4x4xi32>):

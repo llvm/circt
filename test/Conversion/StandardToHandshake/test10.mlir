@@ -51,24 +51,24 @@
 // CHECK:           %[[VAL_26]] = merge %[[VAL_59:.*]]#0 : i1
 // CHECK:           %[[VAL_60:.*]] = arith.cmpi slt, %[[VAL_58]]#0, %[[VAL_33]]#0 : index
 // CHECK:           %[[VAL_59]]:11 = fork [11] %[[VAL_60]] : i1
-// CHECK:           %[[VAL_61:.*]], %[[VAL_62:.*]] = cond_br %[[VAL_59]]#10, %[[VAL_33]]#1 : index
+// CHECK:           %[[VAL_61:.*]], %[[VAL_62:.*]] = cf.cond_br %[[VAL_59]]#10, %[[VAL_33]]#1 : index
 // CHECK:           sink %[[VAL_62]] : index
-// CHECK:           %[[VAL_63:.*]], %[[VAL_64:.*]] = cond_br %[[VAL_59]]#9, %[[VAL_35]] : index
+// CHECK:           %[[VAL_63:.*]], %[[VAL_64:.*]] = cf.cond_br %[[VAL_59]]#9, %[[VAL_35]] : index
 // CHECK:           sink %[[VAL_64]] : index
-// CHECK:           %[[VAL_65:.*]], %[[VAL_66:.*]] = cond_br %[[VAL_59]]#8, %[[VAL_38]] : memref<100xf32>
+// CHECK:           %[[VAL_65:.*]], %[[VAL_66:.*]] = cf.cond_br %[[VAL_59]]#8, %[[VAL_38]] : memref<100xf32>
 // CHECK:           sink %[[VAL_66]] : memref<100xf32>
-// CHECK:           %[[VAL_67:.*]], %[[VAL_68:.*]] = cond_br %[[VAL_59]]#7, %[[VAL_41]] : memref<100xf32, 2>
+// CHECK:           %[[VAL_67:.*]], %[[VAL_68:.*]] = cf.cond_br %[[VAL_59]]#7, %[[VAL_41]] : memref<100xf32, 2>
 // CHECK:           sink %[[VAL_68]] : memref<100xf32, 2>
-// CHECK:           %[[VAL_69:.*]], %[[VAL_70:.*]] = cond_br %[[VAL_59]]#6, %[[VAL_44]] : index
+// CHECK:           %[[VAL_69:.*]], %[[VAL_70:.*]] = cf.cond_br %[[VAL_59]]#6, %[[VAL_44]] : index
 // CHECK:           sink %[[VAL_70]] : index
-// CHECK:           %[[VAL_71:.*]], %[[VAL_72:.*]] = cond_br %[[VAL_59]]#5, %[[VAL_47]] : memref<1xi32>
+// CHECK:           %[[VAL_71:.*]], %[[VAL_72:.*]] = cf.cond_br %[[VAL_59]]#5, %[[VAL_47]] : memref<1xi32>
 // CHECK:           sink %[[VAL_72]] : memref<1xi32>
-// CHECK:           %[[VAL_73:.*]], %[[VAL_74:.*]] = cond_br %[[VAL_59]]#4, %[[VAL_50]] : index
+// CHECK:           %[[VAL_73:.*]], %[[VAL_74:.*]] = cf.cond_br %[[VAL_59]]#4, %[[VAL_50]] : index
 // CHECK:           sink %[[VAL_74]] : index
-// CHECK:           %[[VAL_75:.*]], %[[VAL_76:.*]] = cond_br %[[VAL_59]]#3, %[[VAL_53]] : index
+// CHECK:           %[[VAL_75:.*]], %[[VAL_76:.*]] = cf.cond_br %[[VAL_59]]#3, %[[VAL_53]] : index
 // CHECK:           sink %[[VAL_76]] : index
-// CHECK:           %[[VAL_77:.*]], %[[VAL_78:.*]] = cond_br %[[VAL_59]]#2, %[[VAL_28]] : none
-// CHECK:           %[[VAL_79:.*]], %[[VAL_80:.*]] = cond_br %[[VAL_59]]#1, %[[VAL_58]]#1 : index
+// CHECK:           %[[VAL_77:.*]], %[[VAL_78:.*]] = cf.cond_br %[[VAL_59]]#2, %[[VAL_28]] : none
+// CHECK:           %[[VAL_79:.*]], %[[VAL_80:.*]] = cf.cond_br %[[VAL_59]]#1, %[[VAL_58]]#1 : index
 // CHECK:           sink %[[VAL_80]] : index
 // CHECK:           %[[VAL_81:.*]] = merge %[[VAL_79]] : index
 // CHECK:           %[[VAL_82:.*]]:2 = fork [2] %[[VAL_81]] : index
@@ -122,7 +122,7 @@ func @affine_dma_start(%arg0: index) {
   cf.br ^bb1(%c0_0 : index)
 ^bb1(%3: index):      // 2 preds: ^bb0, ^bb2
   %4 = arith.cmpi slt, %3, %c10 : index
-  cond_br %4, ^bb2, ^bb3
+  cf.cond_br %4, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c7 = arith.constant 7 : index
   %5 = arith.addi %3, %c7 : index

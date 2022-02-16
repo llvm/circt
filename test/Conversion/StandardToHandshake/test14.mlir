@@ -36,16 +36,16 @@
 // CHECK:           %[[VAL_21]] = merge %[[VAL_42:.*]]#0 : i1
 // CHECK:           %[[VAL_43:.*]] = arith.cmpi slt, %[[VAL_41]]#0, %[[VAL_28]]#0 : index
 // CHECK:           %[[VAL_42]]:7 = fork [7] %[[VAL_43]] : i1
-// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cond_br %[[VAL_42]]#6, %[[VAL_28]]#1 : index
+// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cf.cond_br %[[VAL_42]]#6, %[[VAL_28]]#1 : index
 // CHECK:           sink %[[VAL_45]] : index
-// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cond_br %[[VAL_42]]#5, %[[VAL_30]] : index
+// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cf.cond_br %[[VAL_42]]#5, %[[VAL_30]] : index
 // CHECK:           sink %[[VAL_47]] : index
-// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cond_br %[[VAL_42]]#4, %[[VAL_33]] : f32
+// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cf.cond_br %[[VAL_42]]#4, %[[VAL_33]] : f32
 // CHECK:           sink %[[VAL_49]] : f32
-// CHECK:           %[[VAL_50:.*]], %[[VAL_51:.*]] = cond_br %[[VAL_42]]#3, %[[VAL_36]] : index
+// CHECK:           %[[VAL_50:.*]], %[[VAL_51:.*]] = cf.cond_br %[[VAL_42]]#3, %[[VAL_36]] : index
 // CHECK:           sink %[[VAL_51]] : index
-// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cond_br %[[VAL_42]]#2, %[[VAL_23]] : none
-// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = cond_br %[[VAL_42]]#1, %[[VAL_41]]#1 : index
+// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cf.cond_br %[[VAL_42]]#2, %[[VAL_23]] : none
+// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = cf.cond_br %[[VAL_42]]#1, %[[VAL_41]]#1 : index
 // CHECK:           sink %[[VAL_55]] : index
 // CHECK:           %[[VAL_56:.*]] = merge %[[VAL_46]] : index
 // CHECK:           %[[VAL_57:.*]]:2 = fork [2] %[[VAL_56]] : index
@@ -87,7 +87,7 @@ func @affine_store(%arg0: index) {
   cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c-1 = arith.constant -1 : index
   %3 = arith.muli %arg0, %c-1 : index

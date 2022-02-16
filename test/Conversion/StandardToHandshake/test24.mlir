@@ -12,8 +12,8 @@
 // CHECK:           %[[VAL_8:.*]] = arith.addi %[[VAL_6]]#1, %[[VAL_7]] : index
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi sge, %[[VAL_8]], %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_10:.*]]:2 = fork [2] %[[VAL_9]] : i1
-// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = cond_br %[[VAL_10]]#1, %[[VAL_1]]#3 : none
-// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = cond_br %[[VAL_10]]#0, %[[VAL_6]]#0 : index
+// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = cf.cond_br %[[VAL_10]]#1, %[[VAL_1]]#3 : none
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = cf.cond_br %[[VAL_10]]#0, %[[VAL_6]]#0 : index
 // CHECK:           %[[VAL_15:.*]] = merge %[[VAL_13]] : index
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_11]] : none
 // CHECK:           %[[VAL_18:.*]]:3 = fork [3] %[[VAL_16]] : none
@@ -22,7 +22,7 @@
 // CHECK:           %[[VAL_20:.*]] = constant %[[VAL_18]]#0 {value = -10 : index} : index
 // CHECK:           %[[VAL_21:.*]] = arith.addi %[[VAL_15]], %[[VAL_20]] : index
 // CHECK:           %[[VAL_22:.*]] = arith.cmpi sge, %[[VAL_21]], %[[VAL_19]] : index
-// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cond_br %[[VAL_22]], %[[VAL_18]]#2 : none
+// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cf.cond_br %[[VAL_22]], %[[VAL_18]]#2 : none
 // CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = control_merge %[[VAL_23]] : none
 // CHECK:           sink %[[VAL_26]] : index
 // CHECK:           %[[VAL_27:.*]] = cf.br %[[VAL_25]] : none
@@ -37,7 +37,7 @@
 // CHECK:           %[[VAL_36:.*]] = constant %[[VAL_34]]#0 {value = -10 : index} : index
 // CHECK:           %[[VAL_37:.*]] = arith.addi %[[VAL_31]], %[[VAL_36]] : index
 // CHECK:           %[[VAL_38:.*]] = arith.cmpi sge, %[[VAL_37]], %[[VAL_35]] : index
-// CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = cond_br %[[VAL_38]], %[[VAL_34]]#2 : none
+// CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = cf.cond_br %[[VAL_38]], %[[VAL_34]]#2 : none
 // CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]] = control_merge %[[VAL_39]] : none
 // CHECK:           sink %[[VAL_42]] : index
 // CHECK:           %[[VAL_43:.*]] = cf.br %[[VAL_41]] : none
@@ -55,13 +55,13 @@
     %c20 = arith.constant 20 : index
     %2 = arith.addi %1, %c20 : index
     %3 = arith.cmpi sge, %2, %c0 : index
-    cond_br %3, ^bb1, ^bb4
+    cf.cond_br %3, ^bb1, ^bb4
   ^bb1: // pred: ^bb0
     %c0_0 = arith.constant 0 : index
     %c-10 = arith.constant -10 : index
     %4 = arith.addi %1, %c-10 : index
     %5 = arith.cmpi sge, %4, %c0_0 : index
-    cond_br %5, ^bb2, ^bb3
+    cf.cond_br %5, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
@@ -71,7 +71,7 @@
     %c-10_2 = arith.constant -10 : index
     %6 = arith.addi %1, %c-10_2 : index
     %7 = arith.cmpi sge, %6, %c0_1 : index
-    cond_br %7, ^bb5, ^bb6
+    cf.cond_br %7, ^bb5, ^bb6
   ^bb5: // pred: ^bb4
     cf.br ^bb6
   ^bb6: // 2 preds: ^bb4, ^bb5

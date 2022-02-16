@@ -20,7 +20,7 @@ module {
     cf.br ^bb1(%c0 : index)
   ^bb1(%4: index):  // 2 preds: ^bb0, ^bb2
     %5 = arith.cmpi slt, %4, %c64 : index
-    cond_br %5, ^bb2, ^bb3
+    cf.cond_br %5, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     memref.store %c5_i32, %0[%4] : memref<64xi32>
     memref.store %c5_i32, %1[%4] : memref<64xi32>
@@ -30,19 +30,19 @@ module {
     cf.br ^bb4(%c0 : index)
   ^bb4(%7: index):  // 2 preds: ^bb3, ^bb11
     %8 = arith.cmpi slt, %7, %c8 : index
-    cond_br %8, ^bb5, ^bb12
+    cf.cond_br %8, ^bb5, ^bb12
   ^bb5: // pred: ^bb4
     cf.br ^bb6(%c0 : index)
   ^bb6(%9: index):  // 2 preds: ^bb5, ^bb10
     %10 = arith.cmpi slt, %9, %c8 : index
-    cond_br %10, ^bb7, ^bb11
+    cf.cond_br %10, ^bb7, ^bb11
   ^bb7: // pred: ^bb6
     memref.store %c0_i32, %3[%c0] : memref<1xi32>
     %11 = arith.muli %7, %c8 : index
     cf.br ^bb8(%c0 : index)
   ^bb8(%12: index): // 2 preds: ^bb7, ^bb9
     %13 = arith.cmpi slt, %12, %c8 : index
-    cond_br %13, ^bb9, ^bb10
+    cf.cond_br %13, ^bb9, ^bb10
   ^bb9: // pred: ^bb8
     %14 = arith.addi %11, %12 : index
     %15 = memref.load %0[%14] : memref<64xi32>

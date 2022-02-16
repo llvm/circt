@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_18]] = merge %[[VAL_30:.*]]#0 : i1
 // CHECK:           %[[VAL_31:.*]] = arith.cmpi slt, %[[VAL_29]]#0, %[[VAL_25]]#0 : index
 // CHECK:           %[[VAL_30]]:4 = fork [4] %[[VAL_31]] : i1
-// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_30]]#3, %[[VAL_25]]#1 : index
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cf.cond_br %[[VAL_30]]#3, %[[VAL_25]]#1 : index
 // CHECK:           sink %[[VAL_33]] : index
-// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]] = cond_br %[[VAL_30]]#2, %[[VAL_20]] : none
-// CHECK:           %[[VAL_36:.*]], %[[VAL_37:.*]] = cond_br %[[VAL_30]]#1, %[[VAL_29]]#1 : index
+// CHECK:           %[[VAL_34:.*]], %[[VAL_35:.*]] = cf.cond_br %[[VAL_30]]#2, %[[VAL_20]] : none
+// CHECK:           %[[VAL_36:.*]], %[[VAL_37:.*]] = cf.cond_br %[[VAL_30]]#1, %[[VAL_29]]#1 : index
 // CHECK:           sink %[[VAL_37]] : index
 // CHECK:           %[[VAL_38:.*]] = merge %[[VAL_36]] : index
 // CHECK:           %[[VAL_39:.*]] = merge %[[VAL_32]] : index
@@ -63,7 +63,7 @@ func @test() {
   cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c1 = arith.constant 1 : index
   %3 = arith.addi %1, %c1 : index

@@ -14,7 +14,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 }
 
 func @main(%arg0 : i32, %arg1 : i32, %cond : i1) -> i32 {
-  cond_br %cond, ^bb1, ^bb2
+  cf.cond_br %cond, ^bb1, ^bb2
 ^bb1:
   %0 = call @add(%arg0, %arg1) : (i32, i32) -> i32
   cf.br ^bb3(%0 : i32)

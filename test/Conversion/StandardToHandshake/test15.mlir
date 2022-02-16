@@ -32,14 +32,14 @@
 // CHECK:           %[[VAL_18]] = merge %[[VAL_36:.*]]#0 : i1
 // CHECK:           %[[VAL_37:.*]] = arith.cmpi slt, %[[VAL_35]]#0, %[[VAL_25]]#0 : index
 // CHECK:           %[[VAL_36]]:6 = fork [6] %[[VAL_37]] : i1
-// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = cond_br %[[VAL_36]]#5, %[[VAL_25]]#1 : index
+// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]] = cf.cond_br %[[VAL_36]]#5, %[[VAL_25]]#1 : index
 // CHECK:           sink %[[VAL_39]] : index
-// CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = cond_br %[[VAL_36]]#4, %[[VAL_27]] : index
+// CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = cf.cond_br %[[VAL_36]]#4, %[[VAL_27]] : index
 // CHECK:           sink %[[VAL_41]] : index
-// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cond_br %[[VAL_36]]#3, %[[VAL_30]] : index
+// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cf.cond_br %[[VAL_36]]#3, %[[VAL_30]] : index
 // CHECK:           sink %[[VAL_43]] : index
-// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cond_br %[[VAL_36]]#2, %[[VAL_20]] : none
-// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cond_br %[[VAL_36]]#1, %[[VAL_35]]#1 : index
+// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cf.cond_br %[[VAL_36]]#2, %[[VAL_20]] : none
+// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cf.cond_br %[[VAL_36]]#1, %[[VAL_35]]#1 : index
 // CHECK:           sink %[[VAL_47]] : index
 // CHECK:           %[[VAL_48:.*]] = merge %[[VAL_46]] : index
 // CHECK:           %[[VAL_49:.*]]:2 = fork [2] %[[VAL_48]] : index
@@ -76,7 +76,7 @@ func @affine_load(%arg0: index) {
   cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %3 = arith.addi %1, %arg0 : index
   %c7 = arith.constant 7 : index

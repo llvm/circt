@@ -32,7 +32,7 @@
 // CHECK:           %[[VAL_32:.*]] = arith.addi %[[VAL_9]], %[[VAL_31]] : index
 // CHECK:           %[[VAL_33:.*]] = arith.cmpi eq, %[[VAL_32]], %[[VAL_12]]#5 : index
 // CHECK:           %[[VAL_34:.*]] = arith.andi %[[VAL_30]], %[[VAL_33]] : i1
-// CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = cond_br %[[VAL_34]], %[[VAL_10]]#7 : none
+// CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = cf.cond_br %[[VAL_34]], %[[VAL_10]]#7 : none
 // CHECK:           %[[VAL_37:.*]], %[[VAL_38:.*]] = control_merge %[[VAL_35]] : none
 // CHECK:           sink %[[VAL_38]] : index
 // CHECK:           %[[VAL_39:.*]] = cf.br %[[VAL_37]] : none
@@ -67,7 +67,7 @@ func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
     %14 = arith.addi %arg3, %c-42 : index
     %15 = arith.cmpi eq, %14, %c0 : index
     %16 = arith.andi %13, %15 : i1
-    cond_br %16, ^bb1, ^bb2
+    cf.cond_br %16, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
     cf.br ^bb3
   ^bb2: // pred: ^bb0

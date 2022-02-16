@@ -41,16 +41,16 @@
 // CHECK:           %[[VAL_29]] = merge %[[VAL_50:.*]]#0 : i1
 // CHECK:           %[[VAL_51:.*]] = arith.cmpi slt, %[[VAL_49]]#0, %[[VAL_36]]#0 : index
 // CHECK:           %[[VAL_50]]:7 = fork [7] %[[VAL_51]] : i1
-// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cond_br %[[VAL_50]]#6, %[[VAL_36]]#1 : index
+// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cf.cond_br %[[VAL_50]]#6, %[[VAL_36]]#1 : index
 // CHECK:           sink %[[VAL_53]] : index
-// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = cond_br %[[VAL_50]]#5, %[[VAL_38]] : index
+// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = cf.cond_br %[[VAL_50]]#5, %[[VAL_38]] : index
 // CHECK:           sink %[[VAL_55]] : index
-// CHECK:           %[[VAL_56:.*]], %[[VAL_57:.*]] = cond_br %[[VAL_50]]#4, %[[VAL_41]] : index
+// CHECK:           %[[VAL_56:.*]], %[[VAL_57:.*]] = cf.cond_br %[[VAL_50]]#4, %[[VAL_41]] : index
 // CHECK:           sink %[[VAL_57]] : index
-// CHECK:           %[[VAL_58:.*]], %[[VAL_59:.*]] = cond_br %[[VAL_50]]#3, %[[VAL_44]] : f32
+// CHECK:           %[[VAL_58:.*]], %[[VAL_59:.*]] = cf.cond_br %[[VAL_50]]#3, %[[VAL_44]] : f32
 // CHECK:           sink %[[VAL_59]] : f32
-// CHECK:           %[[VAL_60:.*]], %[[VAL_61:.*]] = cond_br %[[VAL_50]]#2, %[[VAL_31]] : none
-// CHECK:           %[[VAL_62:.*]], %[[VAL_63:.*]] = cond_br %[[VAL_50]]#1, %[[VAL_49]]#1 : index
+// CHECK:           %[[VAL_60:.*]], %[[VAL_61:.*]] = cf.cond_br %[[VAL_50]]#2, %[[VAL_31]] : none
+// CHECK:           %[[VAL_62:.*]], %[[VAL_63:.*]] = cf.cond_br %[[VAL_50]]#1, %[[VAL_49]]#1 : index
 // CHECK:           sink %[[VAL_63]] : index
 // CHECK:           %[[VAL_64:.*]] = merge %[[VAL_62]] : index
 // CHECK:           %[[VAL_65:.*]]:2 = fork [2] %[[VAL_64]] : index
@@ -97,7 +97,7 @@ func @affine_load(%arg0: index) {
   cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %3 = arith.addi %1, %arg0 : index
   %c7 = arith.constant 7 : index

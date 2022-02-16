@@ -39,18 +39,18 @@
 // CHECK:           %[[VAL_20]] = merge %[[VAL_44:.*]]#0 : i1
 // CHECK:           %[[VAL_45:.*]] = arith.cmpi slt, %[[VAL_43]]#0, %[[VAL_27]]#0 : index
 // CHECK:           %[[VAL_44]]:8 = fork [8] %[[VAL_45]] : i1
-// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cond_br %[[VAL_44]]#7, %[[VAL_27]]#1 : index
+// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cf.cond_br %[[VAL_44]]#7, %[[VAL_27]]#1 : index
 // CHECK:           sink %[[VAL_47]] : index
-// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cond_br %[[VAL_44]]#6, %[[VAL_29]] : index
+// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cf.cond_br %[[VAL_44]]#6, %[[VAL_29]] : index
 // CHECK:           sink %[[VAL_49]] : index
-// CHECK:           %[[VAL_50:.*]], %[[VAL_51:.*]] = cond_br %[[VAL_44]]#5, %[[VAL_32]] : memref<1xi32>
+// CHECK:           %[[VAL_50:.*]], %[[VAL_51:.*]] = cf.cond_br %[[VAL_44]]#5, %[[VAL_32]] : memref<1xi32>
 // CHECK:           sink %[[VAL_51]] : memref<1xi32>
-// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cond_br %[[VAL_44]]#4, %[[VAL_35]] : index
+// CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = cf.cond_br %[[VAL_44]]#4, %[[VAL_35]] : index
 // CHECK:           sink %[[VAL_53]] : index
-// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = cond_br %[[VAL_44]]#3, %[[VAL_38]] : index
+// CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = cf.cond_br %[[VAL_44]]#3, %[[VAL_38]] : index
 // CHECK:           sink %[[VAL_55]] : index
-// CHECK:           %[[VAL_56:.*]], %[[VAL_57:.*]] = cond_br %[[VAL_44]]#2, %[[VAL_22]] : none
-// CHECK:           %[[VAL_58:.*]], %[[VAL_59:.*]] = cond_br %[[VAL_44]]#1, %[[VAL_43]]#1 : index
+// CHECK:           %[[VAL_56:.*]], %[[VAL_57:.*]] = cf.cond_br %[[VAL_44]]#2, %[[VAL_22]] : none
+// CHECK:           %[[VAL_58:.*]], %[[VAL_59:.*]] = cf.cond_br %[[VAL_44]]#1, %[[VAL_43]]#1 : index
 // CHECK:           sink %[[VAL_59]] : index
 // CHECK:           %[[VAL_60:.*]] = merge %[[VAL_58]] : index
 // CHECK:           %[[VAL_61:.*]]:2 = fork [2] %[[VAL_60]] : index
@@ -91,7 +91,7 @@ func @affine_dma_wait(%arg0: index) {
   cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %3 = arith.addi %1, %arg0 : index
   %c17 = arith.constant 17 : index
