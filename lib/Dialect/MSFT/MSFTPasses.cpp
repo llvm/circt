@@ -470,14 +470,14 @@ struct ExportTclPass : public ExportTclBase<ExportTclPass> {
 void ExportTclPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
+  TclEmitter emitter(top);
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
   for (auto moduleName : tops) {
-    Operation *hwmod = top.lookupSymbol(moduleName);
-    if (!hwmod)
-      continue;
-    if (failed(exportQuartusTcl(hwmod, tclFile)))
+    Operation *hwmod =
+        emitter.getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
+    if (!hwmod || failed(emitter.emit(hwmod, tclFile)))
       return signalPassFailure();
   }
 

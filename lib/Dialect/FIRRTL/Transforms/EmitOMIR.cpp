@@ -286,7 +286,7 @@ void EmitOMIRPass::runOnOperation() {
             dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
         removeTempNLAs.push_back(tracker.nla);
       }
-      if (sramIDs.erase(tracker.id))
+      if (sramIDs.erase(tracker.id) && !tracker.nla)
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
