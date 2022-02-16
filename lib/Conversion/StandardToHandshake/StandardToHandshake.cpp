@@ -20,6 +20,8 @@
 #include "mlir/Dialect/Affine/Analysis/AffineStructures.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
+#include "mlir/Dialect/Affine/Utils.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -35,7 +37,6 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
-#include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -501,14 +502,14 @@ Value getMergeOperand(Operation *op, Block *predBlock, BlockOps blockMerges) {
   else {
     unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
     Operation *termOp = predBlock->getTerminator();
-    if (mlir::CondBranchOp br = dyn_cast<mlir::CondBranchOp>(termOp)) {
+    if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
       if (block == br.getTrueDest())
         return br.getTrueOperand(index);
       else {
         assert(block == br.getFalseDest());
         return br.getFalseOperand(index);
       }
-    } else if (isa<mlir::BranchOp>(termOp))
+    } else if (isa<mlir::cf::BranchOp>(termOp))
       return termOp->getOperand(index);
   }
   return nullptr;
@@ -1062,7 +1063,7 @@ LogicalResult LoopNetworkRewriter::processOuterLoop(Location loc,
 // Return the appropriate branch result based on successor block which uses it
 Value getSuccResult(Operation *termOp, Operation *newOp, Block *succBlock) {
   // For conditional block, check if result goes to true or to false successor
-  if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp)) {
+  if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
     if (condBranchOp.getTrueDest() == succBlock)
       return dyn_cast<handshake::ConditionalBranchOp>(newOp).trueResult();
     else {
@@ -1099,10 +1100,10 @@ FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
       for (int i = 0, e = numBranches; i < e; ++i) {
         Operation *newOp = nullptr;
 
-        if (auto condBranchOp = dyn_cast<mlir::CondBranchOp>(termOp))
+        if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp))
           newOp = rewriter.create<handshake::ConditionalBranchOp>(
               termOp->getLoc(), condBranchOp.getCondition(), val);
-        else if (isa<mlir::BranchOp>(termOp))
+        else if (isa<mlir::cf::BranchOp>(termOp))
           newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
 
         if (newOp == nullptr)
@@ -1128,7 +1129,8 @@ FuncOpLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
   // in Verifier.cpp)
   for (Block &block : f) {
     Operation *termOp = block.getTerminator();
-    if (!(isa<mlir::CondBranchOp>(termOp) || isa<mlir::BranchOp>(termOp)))
+    if (!(isa<mlir::cf::CondBranchOp>(termOp) ||
+          isa<mlir::cf::BranchOp>(termOp)))
       continue;
 
     SmallVector<mlir::Block *, 8> results(block.getSuccessors());
@@ -1262,7 +1264,7 @@ LogicalResult checkMergeOps(MergeLikeOpInterface mergeOp,
 LogicalResult checkDataflowConversion(handshake::FuncOp f,
                                       bool disableTaskPipelining) {
   for (Operation &op : f.getOps()) {
-    if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+    if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
             arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
             op))
       continue;
@@ -1810,7 +1812,8 @@ LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
 
   auto funcType = rewriter.getFunctionType(newArgTypes, resTypes);
   f.setType(funcType);
-  auto ctrlArg = f.front().addArgument(rewriter.getNoneType());
+  auto ctrlArg =
+      f.front().addArgument(rewriter.getNoneType(), rewriter.getUnknownLoc());
 
   // We've now added all types to the handshake.funcOp; resolve arg- and
   // res names to ensure they are up to date with the final type
@@ -1830,7 +1833,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
     if (attr.getName() == SymbolTable::getSymbolAttrName() ||
-        attr.getName() == function_like_impl::getTypeAttrName())
+        attr.getName() == function_interface_impl::getTypeAttrName())
       continue;
     attributes.push_back(attr);
   }
@@ -1911,10 +1914,10 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
 
 namespace {
 
-struct ConvertSelectOps : public OpConversionPattern<mlir::SelectOp> {
+struct ConvertSelectOps : public OpConversionPattern<mlir::arith::SelectOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(mlir::SelectOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::arith::SelectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<handshake::SelectOp>(op, adaptor.getCondition(),
                                                      adaptor.getFalseValue(),
@@ -1953,7 +1956,7 @@ struct StandardToHandshakePass
   LogicalResult postDataflowConvert(handshake::FuncOp op) {
     ConversionTarget target(getContext());
     target.addLegalDialect<handshake::HandshakeDialect>();
-    target.addIllegalOp<mlir::SelectOp>();
+    target.addIllegalOp<mlir::arith::SelectOp>();
     RewritePatternSet patterns(&getContext());
     patterns.insert<ConvertSelectOps>(&getContext());
     return applyPartialConversion(op, target, std::move(patterns));

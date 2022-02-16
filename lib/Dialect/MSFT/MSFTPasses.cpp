@@ -1335,7 +1335,7 @@ MSFTModuleOp PartitionPass::partition(DesignPartitionOp partOp,
       auto existingF = newInputMap.find(v);
       if (existingF == newInputMap.end()) {
         // If there's not an existing input, create one.
-        auto arg = partBlock->addArgument(v.getType());
+        auto arg = partBlock->addArgument(v.getType(), loc);
         oper.set(arg);
 
         newInputMap[v] = inputPorts.size();

@@ -40,7 +40,7 @@ struct FIRParserOptions {
   unsigned numAnnotationFiles;
 };
 
-mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,
+mlir::OwningOpRef<mlir::ModuleOp>  importFIRFile(llvm::SourceMgr &sourceMgr,
                                     mlir::MLIRContext *context,
                                     FIRParserOptions options = {});
 

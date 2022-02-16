@@ -17,7 +17,7 @@
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Base class for binary operators.
-class BinOp<string mnemonic, list<OpTrait> traits = []> :
+class BinOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs);
   let results = (outs HWIntegerType:$result);
@@ -27,20 +27,20 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
 }
 
 // Binary operator with uniform input/result types.
-class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
+class UTBinOp<string mnemonic, list<Trait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type($result))";
 }
 
 // Base class for variadic operators.
-class VariadicOp<string mnemonic, list<OpTrait> traits = []> :
+class VariadicOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results = (outs HWIntegerType:$result);
 }
 
-class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
+class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
       VariadicOp<mnemonic,
                     traits # [SameTypeOperands, SameOperandsAndResultType]> {
 
@@ -154,7 +154,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 //===----------------------------------------------------------------------===//
 
 // Base class for unary reduction operations that produce an i1.
-class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
+class UnaryI1ReductionOp<string mnemonic, list<Trait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins HWIntegerType:$input);
   let results = (outs I1:$result);

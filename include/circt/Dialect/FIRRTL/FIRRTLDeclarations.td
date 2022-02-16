@@ -33,8 +33,7 @@ def InstanceOp : FIRRTLOp<"instance", [
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let verifier = "return ::verifyInstanceOp(*this);";
-  let printer = "printInstanceOp(p, *this);";
-  let parser = "return parseInstanceOp(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,

@@ -369,7 +369,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
 
   // Parse the input.
-  OwningModuleRef module;
+  mlir::OwningOpRef<mlir::ModuleOp> module;
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;

@@ -20,7 +20,7 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
-ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
+ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
@@ -73,32 +73,32 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
                                   result.operands);
 }
 
-static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
+void CompRegOp::print(::mlir::OpAsmPrinter &p) {
   SmallVector<StringRef> elidedAttrs;
-  if (reg.sym_name().hasValue()) {
+  if (sym_name().hasValue()) {
     elidedAttrs.push_back("sym_name");
     p << ' ' << "sym ";
-    p.printSymbolName(*reg.sym_name());
+    p.printSymbolName(*sym_name());
   }
 
-  p << ' ' << reg.input() << ", " << reg.clk();
-  if (reg.reset())
-    p << ", " << reg.reset() << ", " << reg.resetValue() << ' ';
+  p << ' ' << input() << ", " << clk();
+  if (reset())
+    p << ", " << reset() << ", " << resetValue() << ' ';
 
   // Determine if 'name' can be elided.
-  if (reg.name().empty()) {
+  if (name().empty()) {
     elidedAttrs.push_back("name");
   } else {
     SmallString<32> resultNameStr;
     llvm::raw_svector_ostream tmpStream(resultNameStr);
-    p.printOperand(reg.data(), tmpStream);
+    p.printOperand(data(), tmpStream);
     auto actualName = tmpStream.str().drop_front();
-    if (actualName == reg.name())
+    if (actualName == name())
       elidedAttrs.push_back("name");
   }
 
-  p.printOptionalAttrDict(reg->getAttrs(), elidedAttrs);
-  p << " : " << reg.input().getType();
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  p << " : " << input().getType();
 }
 
 /// Suggest a name for each result value based on the saved result names

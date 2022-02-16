@@ -35,8 +35,8 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
   if (argAttrs.empty())
     return;
   assert(type.getNumInputs() == argAttrs.size());
-  function_like_impl::addArgAndResultAttrs(builder, state, argAttrs,
-                                           /*resultAttrs=*/llvm::None);
+  function_interface_impl::addArgAndResultAttrs(builder, state, argAttrs,
+                                                /*resultAttrs=*/llvm::None);
 }
 
 /// Get the default state of the machine.
@@ -67,21 +67,20 @@ void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   }
 }
 
-static ParseResult parseMachineOp(OpAsmParser &parser, OperationState &result) {
-  auto buildFuncType = [](Builder &builder, ArrayRef<Type> argTypes,
-                          ArrayRef<Type> results,
-                          function_like_impl::VariadicFlag, std::string &) {
-    return builder.getFunctionType(argTypes, results);
-  };
+ParseResult MachineOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         function_interface_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
 
-  return function_like_impl::parseFunctionLikeOp(
+  return function_interface_impl::parseFunctionOp(
       parser, result, /*allowVariadic=*/false, buildFuncType);
 }
 
-static void print(MachineOp op, OpAsmPrinter &p) {
-  FunctionType fnType = op.getType();
-  function_like_impl::printFunctionLikeOp(
-      p, op, fnType.getInputs(), /*isVariadic=*/false, fnType.getResults());
+void MachineOp::print(OpAsmPrinter &p) {
+  FunctionType fnType = getType();
+  function_interface_impl::printFunctionOp(
+      p, *this, fnType.getInputs(), /*isVariadic=*/false, fnType.getResults());
 }
 
 static LogicalResult compareTypes(TypeRange rangeA, TypeRange rangeB) {
@@ -264,7 +263,7 @@ bool TransitionOp::isAlwaysTaken() {
     return true;
 
   if (auto constantOp =
-          guardReturn.getOperand(0).getDefiningOp<mlir::ConstantOp>())
+          guardReturn.getOperand(0).getDefiningOp<mlir::arith::ConstantOp>())
     return constantOp.getValue().cast<BoolAttr>().getValue();
 
   return false;
@@ -274,8 +273,8 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
                                          PatternRewriter &rewriter) {
   auto guardReturn = op.getGuardReturn();
   if (guardReturn.getNumOperands() == 1)
-    if (auto constantOp =
-            guardReturn.getOperand(0).getDefiningOp<mlir::ConstantOp>()) {
+    if (auto constantOp = guardReturn.getOperand(0)
+                              .getDefiningOp<mlir::arith::ConstantOp>()) {
       // Simplify when the guard region returns a constant value.
       if (constantOp.getValue().cast<BoolAttr>().getValue()) {
         // Replace the original return op with a new one without any operands

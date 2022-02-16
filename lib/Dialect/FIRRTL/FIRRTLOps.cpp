@@ -939,20 +939,18 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
-static void printFExtModuleOp(OpAsmPrinter &p, FExtModuleOp op) {
-  printFModuleLikeOp(p, op);
-}
+void FExtModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
-static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
-  printFModuleLikeOp(p, op);
+void FModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp(p, *this);
 
   // Print the body if this is not an external function. Since this block does
   // not have terminators, printing the terminator actually just prints the last
   // operation.
-  Region &body = op.body();
-  if (!body.empty()) {
+  Region &fbody = body();
+  if (!fbody.empty()) {
     p << " ";
-    p.printRegion(body, /*printEntryBlockArgs=*/false,
+    p.printRegion(fbody, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
   }
 }
@@ -1085,12 +1083,11 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   return success();
 }
 
-static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
+ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
 }
 
-static ParseResult parseFExtModuleOp(OpAsmParser &parser,
-                                     OperationState &result) {
+ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
@@ -1415,11 +1412,11 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
-static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
+void InstanceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
   p << " ";
-  p.printKeywordOrString(op.name());
-  if (auto attr = op.inner_symAttr()) {
+  p.printKeywordOrString(name());
+  if (auto attr = inner_symAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
@@ -1429,29 +1426,27 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
   SmallVector<StringRef, 4> omittedAttrs = {
       "moduleName",      "name",     "portDirections", "portNames", "portTypes",
       "portAnnotations", "inner_sym"};
-  if (!op.lowerToBind())
+  if (!lowerToBind())
     omittedAttrs.push_back("lowerToBind");
-  if (op.annotations().empty())
+  if (annotations().empty())
     omittedAttrs.push_back("annotations");
-  p.printOptionalAttrDict(op->getAttrs(), omittedAttrs);
+  p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
 
   // Print the module name.
   p << " ";
-  p.printSymbolName(op.moduleName());
+  p.printSymbolName(moduleName());
 
   // Collect all the result types as TypeAttrs for printing.
   SmallVector<Attribute> portTypes;
-  portTypes.reserve(op->getNumResults());
-  llvm::transform(op->getResultTypes(), std::back_inserter(portTypes),
+  portTypes.reserve(getNumResults());
+  llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
-  auto portDirections = direction::unpackAttribute(op.portDirectionsAttr());
-  printModulePorts(p, /*block=*/nullptr, portDirections,
-                   op.portNames().getValue(), portTypes,
-                   op.portAnnotations().getValue(), {});
+  auto portDirections = direction::unpackAttribute(portDirectionsAttr());
+  printModulePorts(p, /*block=*/nullptr, portDirections, portNames().getValue(),
+                   portTypes, portAnnotations().getValue(), {});
 }
 
-static ParseResult parseInstanceOp(OpAsmParser &parser,
-                                   OperationState &result) {
+ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
   auto &resultAttrs = result.attributes;
 
@@ -2162,16 +2157,15 @@ bool firrtl::isExpression(Operation *op) {
   return IsExprClassifier().dispatchExprVisitor(op);
 }
 
-static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
+void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(op.valueAttr());
+  p.printAttributeWithoutType(valueAttr());
   p << " : ";
-  p.printType(op.getType());
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+  p.printType(getType());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
-static ParseResult parseConstantOp(OpAsmParser &parser,
-                                   OperationState &result) {
+ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the constant value, without knowing its width.
   APInt value;
   auto loc = parser.getCurrentLocation();
@@ -2253,17 +2247,17 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
-static void printSpecialConstantOp(OpAsmPrinter &p, SpecialConstantOp &op) {
+void SpecialConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
-  p << static_cast<unsigned>(op.value());
+  p << static_cast<unsigned>(value());
   p << " : ";
-  p.printType(op.getType());
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+  p.printType(getType());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
-static ParseResult parseSpecialConstantOp(OpAsmParser &parser,
-                                          OperationState &result) {
+ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
   // Parse the constant value.  SpecialConstant uses bool attributes, but it
   // prints as an integer.
   APInt value;
@@ -2405,8 +2399,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   return {};
 }
 
-static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
-                                      OperationState &result) {
+ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType index;
   llvm::SmallVector<OpAsmParser::OperandType, 16> inputs;
   Type indexType, elemType;
@@ -2426,11 +2419,11 @@ static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
   return parser.resolveOperands(inputs, elemType, result.operands);
 }
 
-static void printMultibitMuxOp(OpAsmPrinter &p, MultibitMuxOp op) {
-  p << " " << op.index() << ", ";
-  p.printOperands(op.inputs());
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.index().getType() << ", " << op.getType();
+void MultibitMuxOp::print(OpAsmPrinter &p) {
+  p << " " << index() << ", ";
+  p.printOperands(inputs());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << index().getType() << ", " << getType();
 }
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,

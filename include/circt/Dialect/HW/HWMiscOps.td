@@ -24,9 +24,7 @@ def ConstantOp
 
   let arguments = (ins APIntAttr:$value);
   let results = (outs HWIntegerType:$result);
-
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     /// Build a ConstantOp from an APInt, infering the result type from the

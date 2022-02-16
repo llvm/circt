@@ -208,8 +208,7 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 namespace {
 struct CHIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
-  void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {
+  void getAsmResultNames(Operation *op, OpAsmSetValueNameFn setNameFn) const {
     // Many CHIRRTL dialect operations have an optional 'name' attribute.  If
     // present, use it.
     if (op->getNumResults() == 1)

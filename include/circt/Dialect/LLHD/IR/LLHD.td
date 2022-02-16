@@ -18,6 +18,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -83,7 +84,7 @@ def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
 //===----------------------------------------------------------------------===//
 
 // Base class for all LLHD ops.
-class LLHD_Op<string mnemonic, list<OpTrait> traits = []>
+class LLHD_Op<string mnemonic, list<Trait> traits = []>
     : Op<LLHD_Dialect, mnemonic, traits> {
 
   // For each LLHD op, the following static functions need to be defined in
@@ -92,8 +93,7 @@ class LLHD_Op<string mnemonic, list<OpTrait> traits = []>
   // * static ParseResult parse<op-c++-class-name>(OpAsmParser &parser,
   //                                               OperationState &state);
   // * static void print<op-c++-class-name>(OpAsmPrinter &p, <op-c++-class-name> op)
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ ::print$cppClass(p, *this); }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 //===----------------------------------------------------------------------===//

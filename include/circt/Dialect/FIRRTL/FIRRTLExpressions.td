@@ -19,7 +19,7 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
 
 // A common base class for operations that implement type inference and parsed
 // argument validation.
-class FIRRTLExprOp<string mnemonic, list<OpTrait> traits = []> :
+class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<mnemonic, traits # [InferTypeOpInterface, NoSideEffect]> {
 
   // The narrow operation-specific type inference method. Operations can
@@ -90,11 +90,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
 
   let arguments = (ins APSIntAttr:$value);
   let results = (outs IntType:$result);
-
-  // Need a custom parser/printer to avoid redundant type for the attribute and
-  // the op itself.
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
@@ -119,10 +115,7 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
   let results = (outs
     AnyTypeOf<[ClockType, ResetType, AsyncResetType]>:$result);
 
-  // Need a custom parser/printer to avoid redundant type for the attribute and
-  // the op itself.
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 }
 
@@ -257,10 +250,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
 
   let arguments = (ins FIRRTLType:$index, Variadic<FIRRTLType>:$inputs);
   let results = (outs FIRRTLType:$result);
-
-  // Need a custom parser/printer to emit operands type only once.
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 }
@@ -270,7 +260,7 @@ def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
 //===----------------------------------------------------------------------===//
 
 /// PrimOp is a FIRRTLOp without side effects.
-class PrimOp<string mnemonic, list<OpTrait> traits = []> :
+class PrimOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLExprOp<mnemonic, traits> {
   let hasFolder = 1;
 }
@@ -281,7 +271,7 @@ class PrimOp<string mnemonic, list<OpTrait> traits = []> :
 
 // Base class for binary primitive operators.
 class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
-                   list<OpTrait> traits = []> : PrimOp<mnemonic, traits> {
+                   list<Trait> traits = []> : PrimOp<mnemonic, traits> {
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
   let results = (outs resultType:$result);
 
@@ -314,7 +304,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
 
 // A binary operation on two integer-typed arguments of the same kind.
 class IntBinaryPrimOp<string mnemonic, Type resultType,
-                      list<OpTrait> traits = []> :
+                      list<Trait> traits = []> :
    BinaryPrimOp<mnemonic, IntType, IntType, resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
@@ -386,7 +376,7 @@ def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType> {
 
 // Base class for binary primitive operators.
 class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
-                  list<OpTrait> traits = []> : PrimOp<mnemonic, traits> {
+                  list<Trait> traits = []> : PrimOp<mnemonic, traits> {
   let arguments = (ins srcType:$input);
   let results = (outs resultType:$result);
 

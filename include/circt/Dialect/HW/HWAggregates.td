@@ -39,8 +39,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     return success();
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let builders = [
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$input)>
@@ -159,9 +158,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 // Extract a range of bits from the specified input.
@@ -170,9 +167,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
 
   let arguments = (ins StructType:$input, StrAttr:$field);
   let results = (outs HWNonInOutType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>,
@@ -190,17 +185,14 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
   let arguments = (ins StructType:$input, StrAttr:$field,
                    HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituent parts.";
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
-   let parser = "return ::parse$cppClass(parser, result);";
-   let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
  }
 
 //===----------------------------------------------------------------------===//
@@ -221,9 +213,7 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
 
   let arguments = (ins StrAttr:$field, HWNonInOutType:$input);
   let results = (outs UnionType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
@@ -242,7 +232,5 @@ def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
 
   let arguments = (ins UnionType:$input, StrAttr:$field);
   let results = (outs HWNonInOutType:$result);
-
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print$cppClass(p, *this);";
+  let hasCustomAssemblyFormat = 1;
 }

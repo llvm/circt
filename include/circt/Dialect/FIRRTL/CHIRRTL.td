@@ -91,7 +91,7 @@ def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {
 //===----------------------------------------------------------------------===//
 
 // Base class for the operation in this dialect.
-class CHIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
+class CHIRRTLOp<string mnemonic, list<Trait> traits = []> :
     Op<CHIRRTLDialect, mnemonic, traits>;
 
 def CombMemOp : CHIRRTLOp<"combmem"> {
