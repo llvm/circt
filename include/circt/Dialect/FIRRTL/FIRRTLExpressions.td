@@ -77,8 +77,9 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
-def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
-                                       FirstAttrDerivedResultType]> {
+def ConstantOp : FIRRTLOp<"constant",
+      [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+       HasCustomSSAName]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of SInt or UInt type, it
@@ -100,8 +101,8 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let verifier = "return ::verifyConstantOp(*this);";
 }
 
-def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
-                                                     ConstantLike]> {
+def SpecialConstantOp : FIRRTLOp<"specialconstant",
+      [NoSideEffect, ConstantLike, HasCustomSSAName]> {
   let summary = "Produce a constant Reset or Clock value";
   let description = [{
     The constant operation produces a constant value of Reset, AsyncReset, or
@@ -119,7 +120,8 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
   let hasFolder = 1;
 }
 
-def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
+def InvalidValueOp : FIRRTLOp<"invalidvalue",
+      [NoSideEffect, ConstantLike, HasCustomSSAName]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -543,9 +545,6 @@ def TailPrimOp : PrimOp<"tail"> {
 //===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
-
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
 
 def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
                               [NoSideEffect, HasCustomSSAName]> {

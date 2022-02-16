@@ -176,6 +176,10 @@ void CombMemOp::build(OpBuilder &builder, OperationState &result,
         annotations, innerSym);
 }
 
+void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
 //===----------------------------------------------------------------------===//
 // SeqMemOp
 //===----------------------------------------------------------------------===//
@@ -197,6 +201,10 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, annotations, innerSym);
+}
+
+void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
 }
 
 //===----------------------------------------------------------------------===//

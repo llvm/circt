@@ -1506,6 +1506,16 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "inst";
+
+  for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
+    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+  }
+}
+
 void MemOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, uint32_t readLatency,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
@@ -1939,6 +1949,16 @@ FirMemory MemOp::getSummary() {
           op.getMaskBits() > 1, op.getLoc()};
 }
 
+void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "mem";
+
+  for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
+    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+  }
+}
+
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
@@ -1951,6 +1971,22 @@ LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
                                        SmallVectorImpl<Type> &results) {
   results.push_back(operands[0].getType());
   return success();
+}
+
+void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
+void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
+void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
 }
 
 //===----------------------------------------------------------------------===//
@@ -2157,6 +2193,34 @@ bool firrtl::isExpression(Operation *op) {
   return IsExprClassifier().dispatchExprVisitor(op);
 }
 
+void InvalidValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // Set invalid values to have a distinct name.
+  std::string name;
+  if (auto ty = getType().dyn_cast<IntType>()) {
+    const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
+    auto width = ty.getWidthOrSentinel();
+    if (width == -1)
+      name = base;
+    else
+      name = (Twine(base) + Twine(width)).str();
+  } else if (auto ty = getType().dyn_cast<AnalogType>()) {
+    auto width = ty.getWidthOrSentinel();
+    if (width == -1)
+      name = "invalid_analog";
+    else
+      name = ("invalid_analog" + Twine(width)).str();
+  } else if (getType().isa<AsyncResetType>())
+    name = "invalid_asyncreset";
+  else if (getType().isa<ResetType>())
+    name = "invalid_reset";
+  else if (getType().isa<ClockType>())
+    name = "invalid_clock";
+  else
+    name = "invalid";
+
+  setNameFn(getResult(), name);
+}
+
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(valueAttr());
@@ -2247,6 +2311,28 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
+void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // For constants in particular, propagate the value into the result name to
+  // make it easier to read the IR.
+  auto intTy = getType().dyn_cast<IntType>();
+
+  // Otherwise, build a complex name with the value and type.
+  SmallString<32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << 'c';
+  if (intTy) {
+    value().print(specialName, /*isSigned:*/ intTy.isSigned());
+
+    specialName << (intTy.isSigned() ? "_si" : "_ui");
+    auto width = intTy.getWidthOrSentinel();
+    if (width != -1)
+      specialName << width;
+  } else {
+    value().print(specialName, /*isSigned:*/ false);
+  }
+  setNameFn(getResult(), specialName.str());
+}
+
 void SpecialConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
@@ -2281,6 +2367,22 @@ ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
   auto valueAttr = parser.getBuilder().getBoolAttr(value == 1);
   result.addAttribute("value", valueAttr);
   return success();
+}
+
+void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << 'c';
+  specialName << static_cast<unsigned>(value());
+  auto type = getType();
+  if (type.isa<ClockType>()) {
+    specialName << "_clock";
+  } else if (type.isa<ResetType>()) {
+    specialName << "_reset";
+  } else if (type.isa<AsyncResetType>()) {
+    specialName << "_asyncreset";
+  }
+  setNameFn(getResult(), specialName.str());
 }
 
 static LogicalResult verifySubfieldOp(SubfieldOp op) {
