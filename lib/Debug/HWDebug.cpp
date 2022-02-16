@@ -589,7 +589,7 @@ public:
 
   void visitSV(circt::sv::WireOp op) {
     if (hasDebug(op)) {
-      auto var = builder.createVarDef(op);
+      auto *var = builder.createVarDef(op);
       module->variables.emplace_back(var);
 
       if (currentScope) {
