@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_MSFT_DEVICEDB_H
 
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/DenseMap.h"
@@ -90,7 +91,7 @@ public:
   /// already placed at that location.
   LogicalResult addPlacement(PhysLocationAttr, PlacedInstance);
   /// Assign an operation to a physical region. Return false on failure.
-  LogicalResult addPlacement(PhysicalRegionRefAttr, PlacedInstance);
+  LogicalResult addPlacement(PDPhysRegionOp, PlacedInstance);
   /// Using the operation attributes, add the proper placements to the database.
   /// Return the number of placements which weren't added due to conflicts.
   size_t addPlacements(const hw::SymbolCache &globalRefs,
@@ -124,8 +125,7 @@ public:
                       Optional<WalkOrder> = {});
 
   /// Walk the region placement information.
-  void walkRegionPlacements(
-      function_ref<void(PhysicalRegionRefAttr, PlacedInstance)>);
+  void walkRegionPlacements(function_ref<void(PDPhysRegionOp, PlacedInstance)>);
 
 private:
   MLIRContext *ctxt;
@@ -135,7 +135,7 @@ private:
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
-  using InstanceAndRegion = std::pair<PhysicalRegionRefAttr, PlacedInstance>;
+  using InstanceAndRegion = std::pair<PDPhysRegionOp, PlacedInstance>;
   using RegionPlacements = SmallVector<InstanceAndRegion>;
 
   /// Get the leaf node. Abstract this out to make it easier to change the

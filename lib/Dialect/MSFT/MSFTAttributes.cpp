@@ -50,27 +50,6 @@ void PhysLocationAttr::print(AsmPrinter &p) const {
     << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 
-Attribute PhysicalRegionRefAttr::parse(AsmParser &p, Type type) {
-  StringAttr physicalRegion;
-  NamedAttrList attrs;
-  if (p.parseLess() ||
-      p.parseSymbolName(physicalRegion, "physicalRegion", attrs) ||
-      p.parseGreater()) {
-    llvm::SMLoc loc = p.getCurrentLocation();
-    p.emitError(loc, "unable to parse PhysicalRegion reference");
-    return Attribute();
-  }
-
-  auto physicalRegionAttr =
-      FlatSymbolRefAttr::get(p.getContext(), physicalRegion.getValue());
-
-  return PhysicalRegionRefAttr::get(p.getContext(), physicalRegionAttr);
-}
-
-void PhysicalRegionRefAttr::print(AsmPrinter &p) const {
-  p << "<" << getPhysicalRegion() << '>';
-}
-
 Attribute PhysicalBoundsAttr::parse(AsmParser &p, Type type) {
   uint64_t xMin, xMax, yMin, yMax;
   if (p.parseLess() || p.parseKeyword("x") || p.parseColon() ||

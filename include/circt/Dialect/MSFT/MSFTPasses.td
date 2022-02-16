@@ -40,3 +40,9 @@ def WireCleanup: Pass<"msft-wire-cleanup", "mlir::ModuleOp"> {
   let constructor = "circt::msft::createWireCleanupPass()";
   let dependentDialects = [];
 }
+
+def LowerInstances: Pass<"msft-lower-instances", "mlir::ModuleOp"> {
+  let summary = "Lower dynamic instances";
+  let constructor = "circt::msft::createLowerInstancesPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}

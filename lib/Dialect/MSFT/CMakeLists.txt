@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTMSFT
   DeviceDB.cpp
   MSFTAttributes.cpp
   MSFTDialect.cpp
+  MSFTOpInterfaces.cpp
   MSFTOps.cpp
   MSFTPasses.cpp
   ExportQuartusTcl.cpp

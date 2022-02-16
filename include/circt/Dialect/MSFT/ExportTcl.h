@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_MSFT_EXPORTTCL_H
 #define CIRCT_DIALECT_MSFT_EXPORTTCL_H
 
+#include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -24,9 +25,24 @@ class SymbolCache;
 namespace msft {
 class MSFTModuleOp;
 
-/// Export TCL for a specific hw module.
-mlir::LogicalResult exportQuartusTcl(Operation *module,
-                                     StringRef outputFile = "");
+/// Instantiate for all Tcl emissions. We want to cache the symbols and binned
+/// ops -- this helper class provides that caching.
+class TclEmitter {
+public:
+  TclEmitter(mlir::ModuleOp topLevel);
+  LogicalResult emit(Operation *forMod, StringRef outputFile);
+
+  Operation *getDefinition(FlatSymbolRefAttr);
+
+private:
+  mlir::ModuleOp topLevel;
+
+  bool populated;
+  hw::SymbolCache topLevelSymbols;
+  DenseMap<Operation *, SmallVector<DynInstDataOpInterface, 0>> tclOpsForMod;
+
+  LogicalResult populate();
+};
 
 } // namespace msft
 } // namespace circt
