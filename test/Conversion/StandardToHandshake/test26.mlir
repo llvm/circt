@@ -10,10 +10,10 @@
 // CHECK:           %[[VAL_6:.*]] = constant %[[VAL_1]]#0 {value = 20 : index} : index
 // CHECK:           %[[VAL_7:.*]] = arith.addi %[[VAL_5]], %[[VAL_6]] : index
 // CHECK:           %[[VAL_8:.*]] = arith.cmpi sge, %[[VAL_7]], %[[VAL_3]]#1 : index
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = cf.cond_br %[[VAL_8]], %[[VAL_1]]#3 : none
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = cond_br %[[VAL_8]], %[[VAL_1]]#3 : none
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = control_merge %[[VAL_9]] : none
 // CHECK:           sink %[[VAL_12]] : index
-// CHECK:           %[[VAL_13:.*]] = cf.br %[[VAL_11]] : none
+// CHECK:           %[[VAL_13:.*]] = br %[[VAL_11]] : none
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = control_merge %[[VAL_13]], %[[VAL_10]] : none
 // CHECK:           sink %[[VAL_15]] : index
 // CHECK:           return %[[VAL_14]] : none

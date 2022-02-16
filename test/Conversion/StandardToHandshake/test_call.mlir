@@ -45,9 +45,9 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_1]] : i32
 // CHECK:           %[[VAL_6:.*]] = merge %[[VAL_2]] : i1
 // CHECK:           %[[VAL_7:.*]]:3 = fork [3] %[[VAL_6]] : i1
-// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cf.cond_br %[[VAL_7]]#2, %[[VAL_4]] : i32
-// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = cf.cond_br %[[VAL_7]]#1, %[[VAL_5]] : i32
-// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cf.cond_br %[[VAL_7]]#0, %[[VAL_3]] : none
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = cond_br %[[VAL_7]]#2, %[[VAL_4]] : i32
+// CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = cond_br %[[VAL_7]]#1, %[[VAL_5]] : i32
+// CHECK:           %[[VAL_12:.*]], %[[VAL_13:.*]] = cond_br %[[VAL_7]]#0, %[[VAL_3]] : none
 // CHECK:           %[[VAL_14:.*]] = merge %[[VAL_8]] : i32
 // CHECK:           %[[VAL_15:.*]] = merge %[[VAL_10]] : i32
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none
@@ -55,8 +55,8 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           sink %[[VAL_17]] : index
 // CHECK:           %[[VAL_19:.*]]:2 = instance @add(%[[VAL_14]], %[[VAL_15]], %[[VAL_18]]#1) : (i32, i32, none) -> (i32, none)
 // CHECK:           sink %[[VAL_19]]#1 : none
-// CHECK:           %[[VAL_20:.*]] = cf.br %[[VAL_18]]#0 : none
-// CHECK:           %[[VAL_21:.*]] = cf.br %[[VAL_19]]#0 : i32
+// CHECK:           %[[VAL_20:.*]] = br %[[VAL_18]]#0 : none
+// CHECK:           %[[VAL_21:.*]] = br %[[VAL_19]]#0 : i32
 // CHECK:           %[[VAL_22:.*]] = merge %[[VAL_9]] : i32
 // CHECK:           %[[VAL_23:.*]] = merge %[[VAL_11]] : i32
 // CHECK:           %[[VAL_24:.*]], %[[VAL_25:.*]] = control_merge %[[VAL_13]] : none
@@ -64,8 +64,8 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           sink %[[VAL_25]] : index
 // CHECK:           %[[VAL_27:.*]]:2 = instance @sub(%[[VAL_22]], %[[VAL_23]], %[[VAL_26]]#1) : (i32, i32, none) -> (i32, none)
 // CHECK:           sink %[[VAL_27]]#1 : none
-// CHECK:           %[[VAL_28:.*]] = cf.br %[[VAL_26]]#0 : none
-// CHECK:           %[[VAL_29:.*]] = cf.br %[[VAL_27]]#0 : i32
+// CHECK:           %[[VAL_28:.*]] = br %[[VAL_26]]#0 : none
+// CHECK:           %[[VAL_29:.*]] = br %[[VAL_27]]#0 : i32
 // CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = control_merge %[[VAL_28]], %[[VAL_20]] : none
 // CHECK:           %[[VAL_32:.*]] = mux %[[VAL_31]] {{\[}}%[[VAL_29]], %[[VAL_21]]] : index, i32
 // CHECK:           return %[[VAL_32]], %[[VAL_30]] : i32, none

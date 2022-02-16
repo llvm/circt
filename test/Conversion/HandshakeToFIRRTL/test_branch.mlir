@@ -14,6 +14,6 @@
 // CHECK: firrtl.module @test_branch(in %[[VAL_8:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_9:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_10:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_11:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_12:.*]]: !firrtl.clock, in %[[VAL_13:.*]]: !firrtl.uint<1>) {
 // CHECK:   %[[VAL_14:.*]], %[[VAL_15:.*]] = firrtl.instance handshake_br0  @handshake_br_in_ui64_out_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 handshake.func @test_branch(%arg0: index, %arg1: none, ...) -> (index, none) {
-  %0 = cf.br %arg0 : index
+  %0 = cf %arg0 : index
   return %0, %arg1 : index, none
 }

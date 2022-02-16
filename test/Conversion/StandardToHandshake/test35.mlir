@@ -13,10 +13,10 @@
 // CHECK:           %[[VAL_15:.*]], %[[VAL_8]] = load {{\[}}%[[VAL_14]]#0] %[[VAL_5]]#0, %[[VAL_9]]#1 : index, f32
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : f32
 // CHECK:           %[[VAL_2]], %[[VAL_3]] = store {{\[}}%[[VAL_14]]#1] %[[VAL_16]]#1, %[[VAL_9]]#0 : index, f32
-// CHECK:           %[[VAL_17:.*]] = cf.br %[[VAL_11]] : none
-// CHECK:           %[[VAL_18:.*]] = cf.br %[[VAL_12]] : index
-// CHECK:           %[[VAL_19:.*]] = cf.br %[[VAL_14]]#2 : index
-// CHECK:           %[[VAL_20:.*]] = cf.br %[[VAL_16]]#0 : f32
+// CHECK:           %[[VAL_17:.*]] = br %[[VAL_11]] : none
+// CHECK:           %[[VAL_18:.*]] = br %[[VAL_12]] : index
+// CHECK:           %[[VAL_19:.*]] = br %[[VAL_14]]#2 : index
+// CHECK:           %[[VAL_20:.*]] = br %[[VAL_16]]#0 : f32
 // CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]] = control_merge %[[VAL_17]] : none
 // CHECK:           %[[VAL_23:.*]]:3 = fork [3] %[[VAL_22]] : index
 // CHECK:           %[[VAL_24:.*]] = buffer [1] %[[VAL_25:.*]] {initValues = [0], sequential = true} : i1
@@ -33,12 +33,12 @@
 // CHECK:           %[[VAL_25]] = merge %[[VAL_40:.*]]#0 : i1
 // CHECK:           %[[VAL_41:.*]] = arith.cmpi slt, %[[VAL_39]]#0, %[[VAL_32]]#0 : index
 // CHECK:           %[[VAL_40]]:5 = fork [5] %[[VAL_41]] : i1
-// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cf.cond_br %[[VAL_40]]#4, %[[VAL_32]]#1 : index
+// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cond_br %[[VAL_40]]#4, %[[VAL_32]]#1 : index
 // CHECK:           sink %[[VAL_43]] : index
-// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cf.cond_br %[[VAL_40]]#3, %[[VAL_34]] : f32
+// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cond_br %[[VAL_40]]#3, %[[VAL_34]] : f32
 // CHECK:           sink %[[VAL_45]] : f32
-// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cf.cond_br %[[VAL_40]]#2, %[[VAL_27]] : none
-// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cf.cond_br %[[VAL_40]]#1, %[[VAL_39]]#1 : index
+// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cond_br %[[VAL_40]]#2, %[[VAL_27]] : none
+// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cond_br %[[VAL_40]]#1, %[[VAL_39]]#1 : index
 // CHECK:           sink %[[VAL_49]] : index
 // CHECK:           %[[VAL_50:.*]] = merge %[[VAL_48]] : index
 // CHECK:           %[[VAL_51:.*]] = merge %[[VAL_44]] : f32
@@ -55,10 +55,10 @@
 // CHECK:           %[[VAL_62:.*]], %[[VAL_4]] = load {{\[}}%[[VAL_61]]#2] %[[VAL_1]]#0, %[[VAL_56]]#0 : index, f32
 // CHECK:           %[[VAL_63:.*]] = arith.addf %[[VAL_52]]#1, %[[VAL_62]] : f32
 // CHECK:           %[[VAL_6]], %[[VAL_7]] = store {{\[}}%[[VAL_61]]#1] %[[VAL_63]], %[[VAL_56]]#1 : index, f32
-// CHECK:           %[[VAL_35]] = cf.br %[[VAL_52]]#0 : f32
-// CHECK:           %[[VAL_31]] = cf.br %[[VAL_53]] : index
-// CHECK:           %[[VAL_28]] = cf.br %[[VAL_58]] : none
-// CHECK:           %[[VAL_38]] = cf.br %[[VAL_61]]#0 : index
+// CHECK:           %[[VAL_35]] = br %[[VAL_52]]#0 : f32
+// CHECK:           %[[VAL_31]] = br %[[VAL_53]] : index
+// CHECK:           %[[VAL_28]] = br %[[VAL_58]] : none
+// CHECK:           %[[VAL_38]] = br %[[VAL_61]]#0 : index
 // CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = control_merge %[[VAL_47]] : none
 // CHECK:           sink %[[VAL_65]] : index
 // CHECK:           return %[[VAL_64]] : none

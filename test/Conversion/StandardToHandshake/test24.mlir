@@ -12,8 +12,8 @@
 // CHECK:           %[[VAL_8:.*]] = arith.addi %[[VAL_6]]#1, %[[VAL_7]] : index
 // CHECK:           %[[VAL_9:.*]] = arith.cmpi sge, %[[VAL_8]], %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_10:.*]]:2 = fork [2] %[[VAL_9]] : i1
-// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = cf.cond_br %[[VAL_10]]#1, %[[VAL_1]]#3 : none
-// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = cf.cond_br %[[VAL_10]]#0, %[[VAL_6]]#0 : index
+// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = cond_br %[[VAL_10]]#1, %[[VAL_1]]#3 : none
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = cond_br %[[VAL_10]]#0, %[[VAL_6]]#0 : index
 // CHECK:           %[[VAL_15:.*]] = merge %[[VAL_13]] : index
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_11]] : none
 // CHECK:           %[[VAL_18:.*]]:3 = fork [3] %[[VAL_16]] : none
@@ -22,13 +22,13 @@
 // CHECK:           %[[VAL_20:.*]] = constant %[[VAL_18]]#0 {value = -10 : index} : index
 // CHECK:           %[[VAL_21:.*]] = arith.addi %[[VAL_15]], %[[VAL_20]] : index
 // CHECK:           %[[VAL_22:.*]] = arith.cmpi sge, %[[VAL_21]], %[[VAL_19]] : index
-// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cf.cond_br %[[VAL_22]], %[[VAL_18]]#2 : none
+// CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cond_br %[[VAL_22]], %[[VAL_18]]#2 : none
 // CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = control_merge %[[VAL_23]] : none
 // CHECK:           sink %[[VAL_26]] : index
-// CHECK:           %[[VAL_27:.*]] = cf.br %[[VAL_25]] : none
+// CHECK:           %[[VAL_27:.*]] = br %[[VAL_25]] : none
 // CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = control_merge %[[VAL_27]], %[[VAL_24]] : none
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           %[[VAL_30:.*]] = cf.br %[[VAL_28]] : none
+// CHECK:           %[[VAL_30:.*]] = br %[[VAL_28]] : none
 // CHECK:           %[[VAL_31:.*]] = merge %[[VAL_14]] : index
 // CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = control_merge %[[VAL_12]] : none
 // CHECK:           %[[VAL_34:.*]]:3 = fork [3] %[[VAL_32]] : none
@@ -37,13 +37,13 @@
 // CHECK:           %[[VAL_36:.*]] = constant %[[VAL_34]]#0 {value = -10 : index} : index
 // CHECK:           %[[VAL_37:.*]] = arith.addi %[[VAL_31]], %[[VAL_36]] : index
 // CHECK:           %[[VAL_38:.*]] = arith.cmpi sge, %[[VAL_37]], %[[VAL_35]] : index
-// CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = cf.cond_br %[[VAL_38]], %[[VAL_34]]#2 : none
+// CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = cond_br %[[VAL_38]], %[[VAL_34]]#2 : none
 // CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]] = control_merge %[[VAL_39]] : none
 // CHECK:           sink %[[VAL_42]] : index
-// CHECK:           %[[VAL_43:.*]] = cf.br %[[VAL_41]] : none
+// CHECK:           %[[VAL_43:.*]] = br %[[VAL_41]] : none
 // CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = control_merge %[[VAL_43]], %[[VAL_40]] : none
 // CHECK:           sink %[[VAL_45]] : index
-// CHECK:           %[[VAL_46:.*]] = cf.br %[[VAL_44]] : none
+// CHECK:           %[[VAL_46:.*]] = br %[[VAL_44]] : none
 // CHECK:           %[[VAL_47:.*]], %[[VAL_48:.*]] = control_merge %[[VAL_46]], %[[VAL_30]] : none
 // CHECK:           sink %[[VAL_48]] : index
 // CHECK:           return %[[VAL_47]] : none

@@ -10,17 +10,17 @@
 // CHECK:           %[[VAL_6:.*]] = constant %[[VAL_1]]#0 {value = 20 : index} : index
 // CHECK:           %[[VAL_7:.*]] = arith.addi %[[VAL_5]], %[[VAL_6]] : index
 // CHECK:           %[[VAL_8:.*]] = arith.cmpi sge, %[[VAL_7]], %[[VAL_2]] : index
-// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = cf.cond_br %[[VAL_8]], %[[VAL_1]]#3 : none
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = cond_br %[[VAL_8]], %[[VAL_1]]#3 : none
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = control_merge %[[VAL_9]] : none
 // CHECK:           %[[VAL_13:.*]]:4 = fork [4] %[[VAL_11]] : none
 // CHECK:           sink %[[VAL_12]] : index
 // CHECK:           %[[VAL_14:.*]] = constant %[[VAL_13]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_15:.*]] = constant %[[VAL_13]]#1 {value = 42 : index} : index
 // CHECK:           %[[VAL_16:.*]] = constant %[[VAL_13]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_17:.*]] = cf.br %[[VAL_13]]#3 : none
-// CHECK:           %[[VAL_18:.*]] = cf.br %[[VAL_14]] : index
-// CHECK:           %[[VAL_19:.*]] = cf.br %[[VAL_15]] : index
-// CHECK:           %[[VAL_20:.*]] = cf.br %[[VAL_16]] : index
+// CHECK:           %[[VAL_17:.*]] = br %[[VAL_13]]#3 : none
+// CHECK:           %[[VAL_18:.*]] = br %[[VAL_14]] : index
+// CHECK:           %[[VAL_19:.*]] = br %[[VAL_15]] : index
+// CHECK:           %[[VAL_20:.*]] = br %[[VAL_16]] : index
 // CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]] = control_merge %[[VAL_17]] : none
 // CHECK:           %[[VAL_23:.*]]:3 = fork [3] %[[VAL_22]] : index
 // CHECK:           %[[VAL_24:.*]] = buffer [1] %[[VAL_25:.*]] {initValues = [0], sequential = true} : i1
@@ -37,12 +37,12 @@
 // CHECK:           %[[VAL_25]] = merge %[[VAL_40:.*]]#0 : i1
 // CHECK:           %[[VAL_41:.*]] = arith.cmpi slt, %[[VAL_39]]#0, %[[VAL_32]]#0 : index
 // CHECK:           %[[VAL_40]]:5 = fork [5] %[[VAL_41]] : i1
-// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cf.cond_br %[[VAL_40]]#4, %[[VAL_32]]#1 : index
+// CHECK:           %[[VAL_42:.*]], %[[VAL_43:.*]] = cond_br %[[VAL_40]]#4, %[[VAL_32]]#1 : index
 // CHECK:           sink %[[VAL_43]] : index
-// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cf.cond_br %[[VAL_40]]#3, %[[VAL_34]] : index
+// CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = cond_br %[[VAL_40]]#3, %[[VAL_34]] : index
 // CHECK:           sink %[[VAL_45]] : index
-// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cf.cond_br %[[VAL_40]]#2, %[[VAL_27]] : none
-// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cf.cond_br %[[VAL_40]]#1, %[[VAL_39]]#1 : index
+// CHECK:           %[[VAL_46:.*]], %[[VAL_47:.*]] = cond_br %[[VAL_40]]#2, %[[VAL_27]] : none
+// CHECK:           %[[VAL_48:.*]], %[[VAL_49:.*]] = cond_br %[[VAL_40]]#1, %[[VAL_39]]#1 : index
 // CHECK:           sink %[[VAL_49]] : index
 // CHECK:           %[[VAL_50:.*]] = merge %[[VAL_48]] : index
 // CHECK:           %[[VAL_51:.*]]:2 = fork [2] %[[VAL_50]] : index
@@ -56,19 +56,19 @@
 // CHECK:           %[[VAL_59:.*]] = arith.addi %[[VAL_51]]#1, %[[VAL_58]] : index
 // CHECK:           %[[VAL_60:.*]] = arith.cmpi sge, %[[VAL_59]], %[[VAL_57]] : index
 // CHECK:           %[[VAL_61:.*]]:4 = fork [4] %[[VAL_60]] : i1
-// CHECK:           %[[VAL_62:.*]], %[[VAL_63:.*]] = cf.cond_br %[[VAL_61]]#3, %[[VAL_51]]#0 : index
-// CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = cf.cond_br %[[VAL_61]]#2, %[[VAL_52]] : index
-// CHECK:           %[[VAL_66:.*]], %[[VAL_67:.*]] = cf.cond_br %[[VAL_61]]#1, %[[VAL_53]] : index
-// CHECK:           %[[VAL_68:.*]], %[[VAL_69:.*]] = cf.cond_br %[[VAL_61]]#0, %[[VAL_56]]#2 : none
+// CHECK:           %[[VAL_62:.*]], %[[VAL_63:.*]] = cond_br %[[VAL_61]]#3, %[[VAL_51]]#0 : index
+// CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = cond_br %[[VAL_61]]#2, %[[VAL_52]] : index
+// CHECK:           %[[VAL_66:.*]], %[[VAL_67:.*]] = cond_br %[[VAL_61]]#1, %[[VAL_53]] : index
+// CHECK:           %[[VAL_68:.*]], %[[VAL_69:.*]] = cond_br %[[VAL_61]]#0, %[[VAL_56]]#2 : none
 // CHECK:           %[[VAL_70:.*]] = merge %[[VAL_62]] : index
 // CHECK:           %[[VAL_71:.*]] = merge %[[VAL_64]] : index
 // CHECK:           %[[VAL_72:.*]] = merge %[[VAL_66]] : index
 // CHECK:           %[[VAL_73:.*]], %[[VAL_74:.*]] = control_merge %[[VAL_68]] : none
 // CHECK:           sink %[[VAL_74]] : index
-// CHECK:           %[[VAL_75:.*]] = cf.br %[[VAL_70]] : index
-// CHECK:           %[[VAL_76:.*]] = cf.br %[[VAL_71]] : index
-// CHECK:           %[[VAL_77:.*]] = cf.br %[[VAL_72]] : index
-// CHECK:           %[[VAL_78:.*]] = cf.br %[[VAL_73]] : none
+// CHECK:           %[[VAL_75:.*]] = br %[[VAL_70]] : index
+// CHECK:           %[[VAL_76:.*]] = br %[[VAL_71]] : index
+// CHECK:           %[[VAL_77:.*]] = br %[[VAL_72]] : index
+// CHECK:           %[[VAL_78:.*]] = br %[[VAL_73]] : none
 // CHECK:           %[[VAL_79:.*]] = mux %[[VAL_80:.*]]#2 {{\[}}%[[VAL_75]], %[[VAL_63]]] : index, index
 // CHECK:           %[[VAL_81:.*]] = mux %[[VAL_80]]#1 {{\[}}%[[VAL_76]], %[[VAL_65]]] : index, index
 // CHECK:           %[[VAL_82:.*]]:2 = fork [2] %[[VAL_81]] : index
@@ -76,23 +76,23 @@
 // CHECK:           %[[VAL_84:.*]], %[[VAL_85:.*]] = control_merge %[[VAL_78]], %[[VAL_69]] : none
 // CHECK:           %[[VAL_80]]:3 = fork [3] %[[VAL_85]] : index
 // CHECK:           %[[VAL_86:.*]] = arith.addi %[[VAL_79]], %[[VAL_82]]#1 : index
-// CHECK:           %[[VAL_35]] = cf.br %[[VAL_82]]#0 : index
-// CHECK:           %[[VAL_31]] = cf.br %[[VAL_83]] : index
-// CHECK:           %[[VAL_28]] = cf.br %[[VAL_84]] : none
-// CHECK:           %[[VAL_38]] = cf.br %[[VAL_86]] : index
+// CHECK:           %[[VAL_35]] = br %[[VAL_82]]#0 : index
+// CHECK:           %[[VAL_31]] = br %[[VAL_83]] : index
+// CHECK:           %[[VAL_28]] = br %[[VAL_84]] : none
+// CHECK:           %[[VAL_38]] = br %[[VAL_86]] : index
 // CHECK:           %[[VAL_87:.*]], %[[VAL_88:.*]] = control_merge %[[VAL_47]] : none
 // CHECK:           sink %[[VAL_88]] : index
-// CHECK:           %[[VAL_89:.*]] = cf.br %[[VAL_87]] : none
+// CHECK:           %[[VAL_89:.*]] = br %[[VAL_87]] : none
 // CHECK:           %[[VAL_90:.*]], %[[VAL_91:.*]] = control_merge %[[VAL_89]], %[[VAL_10]] : none
 // CHECK:           %[[VAL_92:.*]]:4 = fork [4] %[[VAL_90]] : none
 // CHECK:           sink %[[VAL_91]] : index
 // CHECK:           %[[VAL_93:.*]] = constant %[[VAL_92]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_94:.*]] = constant %[[VAL_92]]#1 {value = 42 : index} : index
 // CHECK:           %[[VAL_95:.*]] = constant %[[VAL_92]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_96:.*]] = cf.br %[[VAL_92]]#3 : none
-// CHECK:           %[[VAL_97:.*]] = cf.br %[[VAL_93]] : index
-// CHECK:           %[[VAL_98:.*]] = cf.br %[[VAL_94]] : index
-// CHECK:           %[[VAL_99:.*]] = cf.br %[[VAL_95]] : index
+// CHECK:           %[[VAL_96:.*]] = br %[[VAL_92]]#3 : none
+// CHECK:           %[[VAL_97:.*]] = br %[[VAL_93]] : index
+// CHECK:           %[[VAL_98:.*]] = br %[[VAL_94]] : index
+// CHECK:           %[[VAL_99:.*]] = br %[[VAL_95]] : index
 // CHECK:           %[[VAL_100:.*]] = mux %[[VAL_101:.*]]#2 {{\[}}%[[VAL_102:.*]], %[[VAL_98]]] : index, index
 // CHECK:           %[[VAL_103:.*]]:2 = fork [2] %[[VAL_100]] : index
 // CHECK:           %[[VAL_104:.*]] = mux %[[VAL_101]]#1 {{\[}}%[[VAL_105:.*]], %[[VAL_99]]] : index, index
@@ -102,12 +102,12 @@
 // CHECK:           %[[VAL_111:.*]]:2 = fork [2] %[[VAL_109]] : index
 // CHECK:           %[[VAL_112:.*]] = arith.cmpi slt, %[[VAL_111]]#1, %[[VAL_103]]#1 : index
 // CHECK:           %[[VAL_113:.*]]:4 = fork [4] %[[VAL_112]] : i1
-// CHECK:           %[[VAL_114:.*]], %[[VAL_115:.*]] = cf.cond_br %[[VAL_113]]#3, %[[VAL_103]]#0 : index
+// CHECK:           %[[VAL_114:.*]], %[[VAL_115:.*]] = cond_br %[[VAL_113]]#3, %[[VAL_103]]#0 : index
 // CHECK:           sink %[[VAL_115]] : index
-// CHECK:           %[[VAL_116:.*]], %[[VAL_117:.*]] = cf.cond_br %[[VAL_113]]#2, %[[VAL_104]] : index
+// CHECK:           %[[VAL_116:.*]], %[[VAL_117:.*]] = cond_br %[[VAL_113]]#2, %[[VAL_104]] : index
 // CHECK:           sink %[[VAL_117]] : index
-// CHECK:           %[[VAL_118:.*]], %[[VAL_119:.*]] = cf.cond_br %[[VAL_113]]#1, %[[VAL_106]] : none
-// CHECK:           %[[VAL_120:.*]], %[[VAL_121:.*]] = cf.cond_br %[[VAL_113]]#0, %[[VAL_111]]#0 : index
+// CHECK:           %[[VAL_118:.*]], %[[VAL_119:.*]] = cond_br %[[VAL_113]]#1, %[[VAL_106]] : none
+// CHECK:           %[[VAL_120:.*]], %[[VAL_121:.*]] = cond_br %[[VAL_113]]#0, %[[VAL_111]]#0 : index
 // CHECK:           sink %[[VAL_121]] : index
 // CHECK:           %[[VAL_122:.*]] = merge %[[VAL_120]] : index
 // CHECK:           %[[VAL_123:.*]]:2 = fork [2] %[[VAL_122]] : index
@@ -121,10 +121,10 @@
 // CHECK:           %[[VAL_131:.*]] = arith.addi %[[VAL_123]]#1, %[[VAL_130]] : index
 // CHECK:           %[[VAL_132:.*]] = arith.cmpi sge, %[[VAL_131]], %[[VAL_129]] : index
 // CHECK:           %[[VAL_133:.*]]:4 = fork [4] %[[VAL_132]] : i1
-// CHECK:           %[[VAL_134:.*]], %[[VAL_135:.*]] = cf.cond_br %[[VAL_133]]#3, %[[VAL_123]]#0 : index
-// CHECK:           %[[VAL_136:.*]], %[[VAL_137:.*]] = cf.cond_br %[[VAL_133]]#2, %[[VAL_124]] : index
-// CHECK:           %[[VAL_138:.*]], %[[VAL_139:.*]] = cf.cond_br %[[VAL_133]]#1, %[[VAL_125]] : index
-// CHECK:           %[[VAL_140:.*]], %[[VAL_141:.*]] = cf.cond_br %[[VAL_133]]#0, %[[VAL_128]]#2 : none
+// CHECK:           %[[VAL_134:.*]], %[[VAL_135:.*]] = cond_br %[[VAL_133]]#3, %[[VAL_123]]#0 : index
+// CHECK:           %[[VAL_136:.*]], %[[VAL_137:.*]] = cond_br %[[VAL_133]]#2, %[[VAL_124]] : index
+// CHECK:           %[[VAL_138:.*]], %[[VAL_139:.*]] = cond_br %[[VAL_133]]#1, %[[VAL_125]] : index
+// CHECK:           %[[VAL_140:.*]], %[[VAL_141:.*]] = cond_br %[[VAL_133]]#0, %[[VAL_128]]#2 : none
 // CHECK:           %[[VAL_142:.*]] = merge %[[VAL_134]] : index
 // CHECK:           %[[VAL_143:.*]] = merge %[[VAL_136]] : index
 // CHECK:           %[[VAL_144:.*]] = merge %[[VAL_138]] : index
@@ -134,13 +134,13 @@
 // CHECK:           %[[VAL_148:.*]] = constant %[[VAL_147]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_149:.*]] = constant %[[VAL_147]]#1 {value = 42 : index} : index
 // CHECK:           %[[VAL_150:.*]] = constant %[[VAL_147]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_151:.*]] = cf.br %[[VAL_142]] : index
-// CHECK:           %[[VAL_152:.*]] = cf.br %[[VAL_143]] : index
-// CHECK:           %[[VAL_153:.*]] = cf.br %[[VAL_144]] : index
-// CHECK:           %[[VAL_154:.*]] = cf.br %[[VAL_147]]#3 : none
-// CHECK:           %[[VAL_155:.*]] = cf.br %[[VAL_148]] : index
-// CHECK:           %[[VAL_156:.*]] = cf.br %[[VAL_149]] : index
-// CHECK:           %[[VAL_157:.*]] = cf.br %[[VAL_150]] : index
+// CHECK:           %[[VAL_151:.*]] = br %[[VAL_142]] : index
+// CHECK:           %[[VAL_152:.*]] = br %[[VAL_143]] : index
+// CHECK:           %[[VAL_153:.*]] = br %[[VAL_144]] : index
+// CHECK:           %[[VAL_154:.*]] = br %[[VAL_147]]#3 : none
+// CHECK:           %[[VAL_155:.*]] = br %[[VAL_148]] : index
+// CHECK:           %[[VAL_156:.*]] = br %[[VAL_149]] : index
+// CHECK:           %[[VAL_157:.*]] = br %[[VAL_150]] : index
 // CHECK:           %[[VAL_158:.*]] = mux %[[VAL_159:.*]]#5 {{\[}}%[[VAL_160:.*]], %[[VAL_156]]] : index, index
 // CHECK:           %[[VAL_161:.*]]:2 = fork [2] %[[VAL_158]] : index
 // CHECK:           %[[VAL_162:.*]] = mux %[[VAL_159]]#4 {{\[}}%[[VAL_163:.*]], %[[VAL_157]]] : index, index
@@ -153,15 +153,15 @@
 // CHECK:           %[[VAL_175:.*]]:2 = fork [2] %[[VAL_173]] : index
 // CHECK:           %[[VAL_176:.*]] = arith.cmpi slt, %[[VAL_175]]#1, %[[VAL_161]]#1 : index
 // CHECK:           %[[VAL_177:.*]]:7 = fork [7] %[[VAL_176]] : i1
-// CHECK:           %[[VAL_178:.*]], %[[VAL_179:.*]] = cf.cond_br %[[VAL_177]]#6, %[[VAL_161]]#0 : index
+// CHECK:           %[[VAL_178:.*]], %[[VAL_179:.*]] = cond_br %[[VAL_177]]#6, %[[VAL_161]]#0 : index
 // CHECK:           sink %[[VAL_179]] : index
-// CHECK:           %[[VAL_180:.*]], %[[VAL_181:.*]] = cf.cond_br %[[VAL_177]]#5, %[[VAL_162]] : index
+// CHECK:           %[[VAL_180:.*]], %[[VAL_181:.*]] = cond_br %[[VAL_177]]#5, %[[VAL_162]] : index
 // CHECK:           sink %[[VAL_181]] : index
-// CHECK:           %[[VAL_182:.*]], %[[VAL_183:.*]] = cf.cond_br %[[VAL_177]]#4, %[[VAL_164]] : index
-// CHECK:           %[[VAL_184:.*]], %[[VAL_185:.*]] = cf.cond_br %[[VAL_177]]#3, %[[VAL_166]] : index
-// CHECK:           %[[VAL_186:.*]], %[[VAL_187:.*]] = cf.cond_br %[[VAL_177]]#2, %[[VAL_168]] : index
-// CHECK:           %[[VAL_188:.*]], %[[VAL_189:.*]] = cf.cond_br %[[VAL_177]]#1, %[[VAL_170]] : none
-// CHECK:           %[[VAL_190:.*]], %[[VAL_191:.*]] = cf.cond_br %[[VAL_177]]#0, %[[VAL_175]]#0 : index
+// CHECK:           %[[VAL_182:.*]], %[[VAL_183:.*]] = cond_br %[[VAL_177]]#4, %[[VAL_164]] : index
+// CHECK:           %[[VAL_184:.*]], %[[VAL_185:.*]] = cond_br %[[VAL_177]]#3, %[[VAL_166]] : index
+// CHECK:           %[[VAL_186:.*]], %[[VAL_187:.*]] = cond_br %[[VAL_177]]#2, %[[VAL_168]] : index
+// CHECK:           %[[VAL_188:.*]], %[[VAL_189:.*]] = cond_br %[[VAL_177]]#1, %[[VAL_170]] : none
+// CHECK:           %[[VAL_190:.*]], %[[VAL_191:.*]] = cond_br %[[VAL_177]]#0, %[[VAL_175]]#0 : index
 // CHECK:           sink %[[VAL_191]] : index
 // CHECK:           %[[VAL_192:.*]] = merge %[[VAL_190]] : index
 // CHECK:           %[[VAL_193:.*]] = merge %[[VAL_180]] : index
@@ -173,22 +173,22 @@
 // CHECK:           %[[VAL_199:.*]], %[[VAL_200:.*]] = control_merge %[[VAL_188]] : none
 // CHECK:           sink %[[VAL_200]] : index
 // CHECK:           %[[VAL_201:.*]] = arith.addi %[[VAL_192]], %[[VAL_194]]#1 : index
-// CHECK:           %[[VAL_163]] = cf.br %[[VAL_194]]#0 : index
-// CHECK:           %[[VAL_160]] = cf.br %[[VAL_195]] : index
-// CHECK:           %[[VAL_165]] = cf.br %[[VAL_196]] : index
-// CHECK:           %[[VAL_167]] = cf.br %[[VAL_197]] : index
-// CHECK:           %[[VAL_169]] = cf.br %[[VAL_198]] : index
-// CHECK:           %[[VAL_172]] = cf.br %[[VAL_199]] : none
-// CHECK:           %[[VAL_174]] = cf.br %[[VAL_201]] : index
+// CHECK:           %[[VAL_163]] = br %[[VAL_194]]#0 : index
+// CHECK:           %[[VAL_160]] = br %[[VAL_195]] : index
+// CHECK:           %[[VAL_165]] = br %[[VAL_196]] : index
+// CHECK:           %[[VAL_167]] = br %[[VAL_197]] : index
+// CHECK:           %[[VAL_169]] = br %[[VAL_198]] : index
+// CHECK:           %[[VAL_172]] = br %[[VAL_199]] : none
+// CHECK:           %[[VAL_174]] = br %[[VAL_201]] : index
 // CHECK:           %[[VAL_202:.*]] = merge %[[VAL_183]] : index
 // CHECK:           %[[VAL_203:.*]] = merge %[[VAL_185]] : index
 // CHECK:           %[[VAL_204:.*]] = merge %[[VAL_187]] : index
 // CHECK:           %[[VAL_205:.*]], %[[VAL_206:.*]] = control_merge %[[VAL_189]] : none
 // CHECK:           sink %[[VAL_206]] : index
-// CHECK:           %[[VAL_207:.*]] = cf.br %[[VAL_202]] : index
-// CHECK:           %[[VAL_208:.*]] = cf.br %[[VAL_203]] : index
-// CHECK:           %[[VAL_209:.*]] = cf.br %[[VAL_204]] : index
-// CHECK:           %[[VAL_210:.*]] = cf.br %[[VAL_205]] : none
+// CHECK:           %[[VAL_207:.*]] = br %[[VAL_202]] : index
+// CHECK:           %[[VAL_208:.*]] = br %[[VAL_203]] : index
+// CHECK:           %[[VAL_209:.*]] = br %[[VAL_204]] : index
+// CHECK:           %[[VAL_210:.*]] = br %[[VAL_205]] : none
 // CHECK:           %[[VAL_211:.*]] = mux %[[VAL_212:.*]]#2 {{\[}}%[[VAL_207]], %[[VAL_135]]] : index, index
 // CHECK:           %[[VAL_213:.*]] = mux %[[VAL_212]]#1 {{\[}}%[[VAL_208]], %[[VAL_137]]] : index, index
 // CHECK:           %[[VAL_214:.*]]:2 = fork [2] %[[VAL_213]] : index
@@ -196,10 +196,10 @@
 // CHECK:           %[[VAL_216:.*]], %[[VAL_217:.*]] = control_merge %[[VAL_210]], %[[VAL_141]] : none
 // CHECK:           %[[VAL_212]]:3 = fork [3] %[[VAL_217]] : index
 // CHECK:           %[[VAL_218:.*]] = arith.addi %[[VAL_211]], %[[VAL_214]]#1 : index
-// CHECK:           %[[VAL_105]] = cf.br %[[VAL_214]]#0 : index
-// CHECK:           %[[VAL_102]] = cf.br %[[VAL_215]] : index
-// CHECK:           %[[VAL_108]] = cf.br %[[VAL_216]] : none
-// CHECK:           %[[VAL_110]] = cf.br %[[VAL_218]] : index
+// CHECK:           %[[VAL_105]] = br %[[VAL_214]]#0 : index
+// CHECK:           %[[VAL_102]] = br %[[VAL_215]] : index
+// CHECK:           %[[VAL_108]] = br %[[VAL_216]] : none
+// CHECK:           %[[VAL_110]] = br %[[VAL_218]] : index
 // CHECK:           %[[VAL_219:.*]], %[[VAL_220:.*]] = control_merge %[[VAL_119]] : none
 // CHECK:           sink %[[VAL_220]] : index
 // CHECK:           return %[[VAL_219]] : none

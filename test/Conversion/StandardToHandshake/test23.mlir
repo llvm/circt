@@ -32,13 +32,13 @@
 // CHECK:           %[[VAL_32:.*]] = arith.addi %[[VAL_9]], %[[VAL_31]] : index
 // CHECK:           %[[VAL_33:.*]] = arith.cmpi eq, %[[VAL_32]], %[[VAL_12]]#5 : index
 // CHECK:           %[[VAL_34:.*]] = arith.andi %[[VAL_30]], %[[VAL_33]] : i1
-// CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = cf.cond_br %[[VAL_34]], %[[VAL_10]]#7 : none
+// CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = cond_br %[[VAL_34]], %[[VAL_10]]#7 : none
 // CHECK:           %[[VAL_37:.*]], %[[VAL_38:.*]] = control_merge %[[VAL_35]] : none
 // CHECK:           sink %[[VAL_38]] : index
-// CHECK:           %[[VAL_39:.*]] = cf.br %[[VAL_37]] : none
+// CHECK:           %[[VAL_39:.*]] = br %[[VAL_37]] : none
 // CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = control_merge %[[VAL_36]] : none
 // CHECK:           sink %[[VAL_41]] : index
-// CHECK:           %[[VAL_42:.*]] = cf.br %[[VAL_40]] : none
+// CHECK:           %[[VAL_42:.*]] = br %[[VAL_40]] : none
 // CHECK:           %[[VAL_43:.*]], %[[VAL_44:.*]] = control_merge %[[VAL_42]], %[[VAL_39]] : none
 // CHECK:           sink %[[VAL_44]] : index
 // CHECK:           return %[[VAL_43]] : none

@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_21:.*]] = arith.cmpi slt, %[[VAL_20]]#1, %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_22:.*]] = select %[[VAL_21]], %[[VAL_3]]#0, %[[VAL_20]]#0 : index
 // CHECK:           %[[VAL_23:.*]] = constant %[[VAL_4]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_24:.*]] = cf.br %[[VAL_4]]#2 : none
-// CHECK:           %[[VAL_25:.*]] = cf.br %[[VAL_5]] : index
-// CHECK:           %[[VAL_26:.*]] = cf.br %[[VAL_22]] : index
-// CHECK:           %[[VAL_27:.*]] = cf.br %[[VAL_23]] : index
+// CHECK:           %[[VAL_24:.*]] = br %[[VAL_4]]#2 : none
+// CHECK:           %[[VAL_25:.*]] = br %[[VAL_5]] : index
+// CHECK:           %[[VAL_26:.*]] = br %[[VAL_22]] : index
+// CHECK:           %[[VAL_27:.*]] = br %[[VAL_23]] : index
 // CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = control_merge %[[VAL_24]] : none
 // CHECK:           %[[VAL_30:.*]]:3 = fork [3] %[[VAL_29]] : index
 // CHECK:           %[[VAL_31:.*]] = buffer [1] %[[VAL_32:.*]] {initValues = [0], sequential = true} : i1
@@ -45,12 +45,12 @@
 // CHECK:           %[[VAL_32]] = merge %[[VAL_47:.*]]#0 : i1
 // CHECK:           %[[VAL_48:.*]] = arith.cmpi slt, %[[VAL_46]]#0, %[[VAL_39]]#0 : index
 // CHECK:           %[[VAL_47]]:5 = fork [5] %[[VAL_48]] : i1
-// CHECK:           %[[VAL_49:.*]], %[[VAL_50:.*]] = cf.cond_br %[[VAL_47]]#4, %[[VAL_39]]#1 : index
+// CHECK:           %[[VAL_49:.*]], %[[VAL_50:.*]] = cond_br %[[VAL_47]]#4, %[[VAL_39]]#1 : index
 // CHECK:           sink %[[VAL_50]] : index
-// CHECK:           %[[VAL_51:.*]], %[[VAL_52:.*]] = cf.cond_br %[[VAL_47]]#3, %[[VAL_41]] : index
+// CHECK:           %[[VAL_51:.*]], %[[VAL_52:.*]] = cond_br %[[VAL_47]]#3, %[[VAL_41]] : index
 // CHECK:           sink %[[VAL_52]] : index
-// CHECK:           %[[VAL_53:.*]], %[[VAL_54:.*]] = cf.cond_br %[[VAL_47]]#2, %[[VAL_34]] : none
-// CHECK:           %[[VAL_55:.*]], %[[VAL_56:.*]] = cf.cond_br %[[VAL_47]]#1, %[[VAL_46]]#1 : index
+// CHECK:           %[[VAL_53:.*]], %[[VAL_54:.*]] = cond_br %[[VAL_47]]#2, %[[VAL_34]] : none
+// CHECK:           %[[VAL_55:.*]], %[[VAL_56:.*]] = cond_br %[[VAL_47]]#1, %[[VAL_46]]#1 : index
 // CHECK:           sink %[[VAL_56]] : index
 // CHECK:           %[[VAL_57:.*]] = merge %[[VAL_55]] : index
 // CHECK:           %[[VAL_58:.*]] = merge %[[VAL_51]] : index
@@ -59,10 +59,10 @@
 // CHECK:           %[[VAL_61:.*]], %[[VAL_62:.*]] = control_merge %[[VAL_53]] : none
 // CHECK:           sink %[[VAL_62]] : index
 // CHECK:           %[[VAL_63:.*]] = arith.addi %[[VAL_57]], %[[VAL_59]]#1 : index
-// CHECK:           %[[VAL_42]] = cf.br %[[VAL_59]]#0 : index
-// CHECK:           %[[VAL_38]] = cf.br %[[VAL_60]] : index
-// CHECK:           %[[VAL_35]] = cf.br %[[VAL_61]] : none
-// CHECK:           %[[VAL_45]] = cf.br %[[VAL_63]] : index
+// CHECK:           %[[VAL_42]] = br %[[VAL_59]]#0 : index
+// CHECK:           %[[VAL_38]] = br %[[VAL_60]] : index
+// CHECK:           %[[VAL_35]] = br %[[VAL_61]] : none
+// CHECK:           %[[VAL_45]] = br %[[VAL_63]] : index
 // CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = control_merge %[[VAL_54]] : none
 // CHECK:           sink %[[VAL_65]] : index
 // CHECK:           return %[[VAL_64]] : none
@@ -70,17 +70,17 @@
 func @min_reduction_tree(%arg0: index) {
   %c0 = arith.constant 0 : index
   %0 = arith.cmpi slt, %arg0, %arg0 : index
-  %1 = select %0, %arg0, %arg0 : index
+  %1 = arith.select %0, %arg0, %arg0 : index
   %2 = arith.cmpi slt, %1, %arg0 : index
-  %3 = select %2, %1, %arg0 : index
+  %3 = arith.select %2, %1, %arg0 : index
   %4 = arith.cmpi slt, %3, %arg0 : index
-  %5 = select %4, %3, %arg0 : index
+  %5 = arith.select %4, %3, %arg0 : index
   %6 = arith.cmpi slt, %5, %arg0 : index
-  %7 = select %6, %5, %arg0 : index
+  %7 = arith.select %6, %5, %arg0 : index
   %8 = arith.cmpi slt, %7, %arg0 : index
-  %9 = select %8, %7, %arg0 : index
+  %9 = arith.select %8, %7, %arg0 : index
   %10 = arith.cmpi slt, %9, %arg0 : index
-  %11 = select %10, %9, %arg0 : index
+  %11 = arith.select %10, %9, %arg0 : index
   %c1 = arith.constant 1 : index
   cf.br ^bb1(%c0 : index)
 ^bb1(%12: index):     // 2 preds: ^bb0, ^bb2

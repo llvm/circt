@@ -9,6 +9,6 @@
 // CHECK:           return %[[VAL_7]], %[[VAL_3]] : i32, none
 // CHECK:         }
 func @main(%c : i1, %a : i32, %b : i32) -> i32 {
-  %0 = std.select %c, %a, %b : i32
+  %0 = arith.select %c, %a, %b : i32
   return %0 : i32
 }

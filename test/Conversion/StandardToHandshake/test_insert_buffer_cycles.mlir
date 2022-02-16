@@ -3,7 +3,7 @@
 
 // CHECK-LABEL:   handshake.func @simple_loop(
 // CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"], resNames = ["outCtrl"]} {
-// CHECK:           %[[VAL_1:.*]] = cf.br %[[VAL_0]] : none
+// CHECK:           %[[VAL_1:.*]] = br %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = control_merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]] = buffer [2] %[[VAL_3]] {sequential = false} : index
 // CHECK:           %[[VAL_5:.*]] = buffer [2] %[[VAL_2]] {sequential = false} : none
@@ -11,9 +11,9 @@
 // CHECK:           sink %[[VAL_4]] : index
 // CHECK:           %[[VAL_7:.*]] = constant %[[VAL_6]]#1 {value = 1 : index} : index
 // CHECK:           %[[VAL_8:.*]] = constant %[[VAL_6]]#0 {value = 42 : index} : index
-// CHECK:           %[[VAL_9:.*]] = cf.br %[[VAL_6]]#2 : none
-// CHECK:           %[[VAL_10:.*]] = cf.br %[[VAL_7]] : index
-// CHECK:           %[[VAL_11:.*]] = cf.br %[[VAL_8]] : index
+// CHECK:           %[[VAL_9:.*]] = br %[[VAL_6]]#2 : none
+// CHECK:           %[[VAL_10:.*]] = br %[[VAL_7]] : index
+// CHECK:           %[[VAL_11:.*]] = br %[[VAL_8]] : index
 // CHECK:           %[[VAL_12:.*]] = mux %[[VAL_13:.*]]#1 {{\[}}%[[VAL_14:.*]], %[[VAL_11]]] : index, index
 // CHECK:           %[[VAL_15:.*]] = buffer [2] %[[VAL_12]] {sequential = true} : index
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : index
@@ -26,10 +26,10 @@
 // CHECK:           %[[VAL_25:.*]]:2 = fork [2] %[[VAL_24]] : index
 // CHECK:           %[[VAL_26:.*]] = arith.cmpi slt, %[[VAL_25]]#1, %[[VAL_16]]#1 : index
 // CHECK:           %[[VAL_27:.*]]:3 = fork [3] %[[VAL_26]] : i1
-// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cf.cond_br %[[VAL_27]]#2, %[[VAL_16]]#0 : index
+// CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = cond_br %[[VAL_27]]#2, %[[VAL_16]]#0 : index
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cf.cond_br %[[VAL_27]]#1, %[[VAL_21]] : none
-// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cf.cond_br %[[VAL_27]]#0, %[[VAL_25]]#0 : index
+// CHECK:           %[[VAL_30:.*]], %[[VAL_31:.*]] = cond_br %[[VAL_27]]#1, %[[VAL_21]] : none
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = cond_br %[[VAL_27]]#0, %[[VAL_25]]#0 : index
 // CHECK:           sink %[[VAL_33]] : index
 // CHECK:           %[[VAL_34:.*]] = merge %[[VAL_32]] : index
 // CHECK:           %[[VAL_35:.*]] = buffer [2] %[[VAL_34]] {sequential = false} : index
@@ -42,9 +42,9 @@
 // CHECK:           sink %[[VAL_40]] : index
 // CHECK:           %[[VAL_43:.*]] = constant %[[VAL_42]]#0 {value = 1 : index} : index
 // CHECK:           %[[VAL_44:.*]] = arith.addi %[[VAL_35]], %[[VAL_43]] : index
-// CHECK:           %[[VAL_14]] = cf.br %[[VAL_37]] : index
-// CHECK:           %[[VAL_19]] = cf.br %[[VAL_42]]#1 : none
-// CHECK:           %[[VAL_23]] = cf.br %[[VAL_44]] : index
+// CHECK:           %[[VAL_14]] = br %[[VAL_37]] : index
+// CHECK:           %[[VAL_19]] = br %[[VAL_42]]#1 : none
+// CHECK:           %[[VAL_23]] = br %[[VAL_44]] : index
 // CHECK:           %[[VAL_45:.*]], %[[VAL_46:.*]] = control_merge %[[VAL_31]] : none
 // CHECK:           %[[VAL_47:.*]] = buffer [2] %[[VAL_46]] {sequential = false} : index
 // CHECK:           %[[VAL_48:.*]] = buffer [2] %[[VAL_45]] {sequential = false} : none
@@ -53,15 +53,15 @@
 // CHECK:         }
 module {
   handshake.func @simple_loop(%arg0: none, ...) -> none {
-    %0 = cf.br %arg0 : none
+    %0 = br %arg0 : none
     %1:2 = control_merge %0 : none
     %2:3 = fork [3] %1#0 : none
     sink %1#1 : index
     %3 = constant %2#1 {value = 1 : index} : index
     %4 = constant %2#0 {value = 42 : index} : index
-    %5 = cf.br %2#2 : none
-    %6 = cf.br %3 : index
-    %7 = cf.br %4 : index
+    %5 = br %2#2 : none
+    %6 = br %3 : index
+    %7 = br %4 : index
     %8 = mux %11#1 [%22, %7] : index, index
     %9:2 = fork [2] %8 : index
     %10:2 = control_merge %23, %5 : none  
@@ -70,10 +70,10 @@ module {
     %13:2 = fork [2] %12 : index
     %14 = arith.cmpi slt, %13#1, %9#1 : index
     %15:3 = fork [3] %14 : i1
-    %trueResult, %falseResult = cf.cond_br %15#2, %9#0 : index
+    %trueResult, %falseResult = cond_br %15#2, %9#0 : index
     sink %falseResult : index
-    %trueResult_0, %falseResult_1 = cf.cond_br %15#1, %10#0 : none
-    %trueResult_2, %falseResult_3 = cf.cond_br %15#0, %13#0 : index
+    %trueResult_0, %falseResult_1 = cond_br %15#1, %10#0 : none
+    %trueResult_2, %falseResult_3 = cond_br %15#0, %13#0 : index
     sink %falseResult_3 : index
     %16 = merge %trueResult_2 : index
     %17 = merge %trueResult : index
@@ -82,9 +82,9 @@ module {
     sink %18#1 : index
     %20 = constant %19#0 {value = 1 : index} : index
     %21 = arith.addi %16, %20 : index
-    %22 = cf.br %17 : index
-    %23 = cf.br %19#1 : none
-    %24 = cf.br %21 : index
+    %22 = br %17 : index
+    %23 = br %19#1 : none
+    %24 = br %21 : index
     %25:2 = control_merge %falseResult_1 : none
     sink %25#1 : index
     return %25#0 : none
