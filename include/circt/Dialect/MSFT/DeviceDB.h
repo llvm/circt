@@ -110,12 +110,7 @@ public:
   /// Walk the placement information in some sort of reasonable order. Bounds
   /// restricts the walk to a rectangle of [xmin, xmax, ymin, ymax] (inclusive),
   /// with -1 meaning unbounded.
-  void walkPlacements(function_ref<void(PhysLocationAttr, Placement)>,
-                      std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
-                          std::make_tuple(-1, -1, -1, -1),
-                      Optional<PrimitiveType> primType = {},
-                      Optional<WalkOrder> = {});
-  void walkPlacements(function_ref<void(PDPhysLocationOp)>,
+  void walkPlacements(function_ref<void(PhysLocationAttr, PDPhysLocationOp)>,
                       std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
                           std::make_tuple(-1, -1, -1, -1),
                       Optional<PrimitiveType> primType = {},

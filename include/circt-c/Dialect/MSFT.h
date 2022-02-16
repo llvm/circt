@@ -98,7 +98,8 @@ MLIR_CAPI_EXPORTED MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
     CirctMSFTPlacementDB, CirctMSFTPrimitiveType prim, uint64_t column,
     uint64_t nearestToY);
 
-typedef void (*CirctMSFTPlacementCallback)(MlirOperation locOp, void *userData);
+typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
+                                           MlirOperation locOp, void *userData);
 /// Walk all the placements within 'bounds' ([xmin, xmax, ymin, ymax], inclusive
 /// on all sides), with -1 meaning unbounded.
 MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(

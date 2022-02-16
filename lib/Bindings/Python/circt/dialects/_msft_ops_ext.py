@@ -146,3 +146,12 @@ class EntityExternOp:
     symbol_attr = support.var_to_attribute(symbol)
     metadata_attr = support.var_to_attribute(metadata)
     return _msft.EntityExternOp(symbol_attr, metadata_attr)
+
+
+class DynamicInstanceOp:
+
+  @staticmethod
+  def create(appid):
+    inst = _msft.DynamicInstanceOp(appid)
+    inst.body.blocks.append()
+    return inst

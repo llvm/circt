@@ -83,12 +83,11 @@ PlacementDB::PlacementDB(Operation *top, const PrimitiveDB &seed)
 PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
                                     PhysLocationAttr loc, StringRef subPath,
                                     Location srcLoc) {
-
   StringAttr subPathAttr;
   if (!subPath.empty())
     subPathAttr = StringAttr::get(inst->getContext(), subPath);
   PDPhysLocationOp locOp =
-      OpBuilder::atBlockEnd(&inst.body().front())
+      OpBuilder(inst.body())
           .create<PDPhysLocationOp>(srcLoc, loc, subPathAttr,
                                     FlatSymbolRefAttr());
   if (succeeded(insertPlacement(locOp)))
@@ -104,8 +103,8 @@ LogicalResult PlacementDB::insertPlacement(PDPhysLocationOp locOp) {
            << locOp.loc();
   if (leaf->locOp != nullptr)
     return locOp->emitOpError("Could not apply placement ")
-           << locOp.loc() << ". Position already occupied by " << leaf->locOp
-           << ".";
+           << locOp.loc() << ". Position already occupied by "
+           << cast<DynamicInstanceOp>(leaf->locOp->getParentOp()).appid();
 
   leaf->locOp = locOp;
   return success();
@@ -162,8 +161,9 @@ PDPhysLocationOp PlacementDB::removePlacement(PhysLocationAttr loc) {
   Placement *leaf = getLeaf(loc);
   if (!leaf)
     return {};
+  auto ret = leaf->locOp;
   leaf->locOp = {};
-  return leaf->locOp;
+  return ret;
 }
 
 /// Move the placement at a given location to a new location. Returns failure
@@ -177,10 +177,18 @@ LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
 
   if (!oldLeaf || !newLeaf)
     return failure();
+
+  if (oldLeaf->locOp == nullptr)
+    return locOp.emitError("cannot move from a location not occupied by "
+                           "specified op. Currently unoccupied");
+  if (oldLeaf->locOp != locOp)
+    return locOp.emitError("cannot move from a location not occupied by "
+                           "specified op. Currently occupied by ")
+           << oldLeaf->locOp;
   if (newLeaf->locOp)
     return locOp.emitError(
                "cannot move to new location since location is occupied by ")
-           << newLeaf->locOp;
+           << cast<DynamicInstanceOp>(newLeaf->locOp->getParentOp()).appid();
 
   locOp.locAttr(newLoc);
   newLeaf->locOp = locOp;
@@ -205,8 +213,8 @@ PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
   // Simplest possible algorithm.
   PhysLocationAttr nearest = {};
   walkPlacements(
-      [&nearest, nearestToY](PhysLocationAttr loc, Placement p) {
-        if (p.locOp)
+      [&nearest, nearestToY](PhysLocationAttr loc, PDPhysLocationOp locOp) {
+        if (locOp)
           return;
         if (!nearest) {
           nearest = loc;
@@ -239,7 +247,7 @@ PlacementDB::Placement *PlacementDB::getLeaf(PhysLocationAttr loc) {
 
 /// Walker for placements.
 void PlacementDB::walkPlacements(
-    function_ref<void(PhysLocationAttr, Placement)> callback,
+    function_ref<void(PhysLocationAttr, PDPhysLocationOp)> callback,
     std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
     Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
   uint64_t xmin = std::get<0>(bounds) < 0 ? 0 : std::get<0>(bounds);
@@ -304,24 +312,11 @@ void PlacementDB::walkPlacements(
           // Marshall and run the callback.
           PhysLocationAttr loc = PhysLocationAttr::get(
               ctxt, PrimitiveTypeAttr::get(ctxt, devtype), x, y, num);
-          callback(loc, inst);
+          callback(loc, inst.locOp);
         }
       }
     }
   }
-}
-
-/// Walker for placements.
-void PlacementDB::walkPlacements(
-    function_ref<void(PDPhysLocationOp)> callback,
-    std::tuple<int64_t, int64_t, int64_t, int64_t> bounds,
-    Optional<PrimitiveType> primType, Optional<WalkOrder> walkOrder) {
-  walkPlacements(
-      [callback](PhysLocationAttr, Placement p) {
-        if (p.locOp)
-          callback(p.locOp);
-      },
-      bounds, primType, walkOrder);
 }
 
 /// Walk the region placement information.

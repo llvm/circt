@@ -110,8 +110,8 @@ MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
     void *userData) {
 
   PlacementDB *db = unwrap(cdb);
-  auto cb = [ccb, userData](PDPhysLocationOp locOp) {
-    ccb(wrap(locOp), userData);
+  auto cb = [ccb, userData](PhysLocationAttr loc, PDPhysLocationOp locOp) {
+    ccb(wrap(loc), wrap(locOp), userData);
   };
   Optional<PrimitiveType> primTypeFilter;
   if (cPrimTypeFilter >= 0)

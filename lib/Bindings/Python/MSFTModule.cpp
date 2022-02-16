@@ -106,10 +106,10 @@ public:
 
     circtMSFTPlacementDBWalkPlacements(
         db,
-        [](MlirOperation locOp, void *userData) {
+        [](MlirAttribute loc, MlirOperation locOp, void *userData) {
           py::gil_scoped_acquire gil;
           py::function pycb = *((py::function *)(userData));
-          pycb(locOp);
+          pycb(loc, locOp);
         },
         cBounds, cPrim, cWalkOrder, &pycb);
   }
@@ -197,8 +197,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")
       .def("place", &PlacementDB::place, "Inform the DB about a new placement.",
-           py::arg("location"), py::arg("path"), py::arg("subpath"),
-           py::arg("op"))
+           py::arg("dyn_inst"), py::arg("location"), py::arg("subpath"),
+           py::arg("src_location"))
       .def("remove_placement", &PlacementDB::removePlacement,
            "Remove a placment from the DB.", py::arg("location"))
       .def("move_placement", &PlacementDB::movePlacement,
