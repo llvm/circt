@@ -13,10 +13,10 @@
 // CHECK:           %[[VAL_15:.*]], %[[VAL_8]] = load {{\[}}%[[VAL_14]]#0] %[[VAL_5]]#0, %[[VAL_9]]#1 : index, f32
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : f32
 // CHECK:           %[[VAL_2]], %[[VAL_3]] = store {{\[}}%[[VAL_14]]#1] %[[VAL_16]]#1, %[[VAL_9]]#0 : index, f32
-// CHECK:           %[[VAL_17:.*]] = br %[[VAL_11]] : none
-// CHECK:           %[[VAL_18:.*]] = br %[[VAL_12]] : index
-// CHECK:           %[[VAL_19:.*]] = br %[[VAL_14]]#2 : index
-// CHECK:           %[[VAL_20:.*]] = br %[[VAL_16]]#0 : f32
+// CHECK:           %[[VAL_17:.*]] = cf.br %[[VAL_11]] : none
+// CHECK:           %[[VAL_18:.*]] = cf.br %[[VAL_12]] : index
+// CHECK:           %[[VAL_19:.*]] = cf.br %[[VAL_14]]#2 : index
+// CHECK:           %[[VAL_20:.*]] = cf.br %[[VAL_16]]#0 : f32
 // CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]] = control_merge %[[VAL_17]] : none
 // CHECK:           %[[VAL_23:.*]]:3 = fork [3] %[[VAL_22]] : index
 // CHECK:           %[[VAL_24:.*]] = buffer [1] %[[VAL_25:.*]] {initValues = [0], sequential = true} : i1
@@ -55,10 +55,10 @@
 // CHECK:           %[[VAL_62:.*]], %[[VAL_4]] = load {{\[}}%[[VAL_61]]#2] %[[VAL_1]]#0, %[[VAL_56]]#0 : index, f32
 // CHECK:           %[[VAL_63:.*]] = arith.addf %[[VAL_52]]#1, %[[VAL_62]] : f32
 // CHECK:           %[[VAL_6]], %[[VAL_7]] = store {{\[}}%[[VAL_61]]#1] %[[VAL_63]], %[[VAL_56]]#1 : index, f32
-// CHECK:           %[[VAL_35]] = br %[[VAL_52]]#0 : f32
-// CHECK:           %[[VAL_31]] = br %[[VAL_53]] : index
-// CHECK:           %[[VAL_28]] = br %[[VAL_58]] : none
-// CHECK:           %[[VAL_38]] = br %[[VAL_61]]#0 : index
+// CHECK:           %[[VAL_35]] = cf.br %[[VAL_52]]#0 : f32
+// CHECK:           %[[VAL_31]] = cf.br %[[VAL_53]] : index
+// CHECK:           %[[VAL_28]] = cf.br %[[VAL_58]] : none
+// CHECK:           %[[VAL_38]] = cf.br %[[VAL_61]]#0 : index
 // CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = control_merge %[[VAL_47]] : none
 // CHECK:           sink %[[VAL_65]] : index
 // CHECK:           return %[[VAL_64]] : none
@@ -70,7 +70,7 @@ func @test() {
   %c10 = arith.constant 10 : index
   %5 = memref.load %10[%c10] : memref<10xf32>
   memref.store %5, %11[%c10] : memref<10xf32>
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
   cond_br %2, ^bb2, ^bb3
@@ -80,7 +80,7 @@ func @test() {
   %7 = memref.load %11[%3] : memref<10xf32>
   %8 = arith.addf %5, %7 : f32
   memref.store %8, %10[%3] : memref<10xf32>
-  br ^bb1(%3 : index)
+  cf.br ^bb1(%3 : index)
 ^bb3: // pred: ^bb1
   return
 }

@@ -3,7 +3,7 @@
 module {
   handshake.func @simple_loop(%arg0: none, ...) -> none {
     // CHECK: buffer
-    %0 = br %arg0 : none
+    %0 = cf.br %arg0 : none
     // CHECK: buffer
     %1:2 = control_merge %0 : none
     // CHECK: buffer
@@ -15,11 +15,11 @@ module {
     // CHECK: buffer
     %4 = constant %2#0 {value = 42 : index} : index
     // CHECK: buffer
-    %5 = br %2#2 : none
+    %5 = cf.br %2#2 : none
     // CHECK: buffer
-    %6 = br %3 : index
+    %6 = cf.br %3 : index
     // CHECK: buffer
-    %7 = br %4 : index
+    %7 = cf.br %4 : index
     // CHECK: buffer
     // CHECK: buffer
     // CHECK: buffer
@@ -71,11 +71,11 @@ module {
     // CHECK: buffer
     %21 = arith.addi %16, %20 : index
     // CHECK: buffer
-    %22 = br %17 : index
+    %22 = cf.br %17 : index
     // CHECK: buffer
-    %23 = br %19#1 : none
+    %23 = cf.br %19#1 : none
     // CHECK: buffer
-    %24 = br %21 : index
+    %24 = cf.br %21 : index
     // CHECK: buffer
     %25:2 = control_merge %falseResult_1 : none
     // CHECK: buffer

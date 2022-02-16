@@ -12,7 +12,7 @@ llhd.entity @root () -> () {
 }
 
 llhd.proc @p () -> (%a : !llhd.sig<i1>) {
-  br ^wait
+  cf.br ^wait
 ^wait:
   %1 = llhd.prb %a : !llhd.sig<i1>
   %allset = hw.constant 1 : i1

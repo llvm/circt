@@ -2,13 +2,13 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 // CHECK-LABEL:   handshake.func @simple_loop(
 // CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
-// CHECK:           %[[VAL_1:.*]] = br %[[VAL_0]] : none
+// CHECK:           %[[VAL_1:.*]] = cf.br %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = control_merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]]:2 = fork [2] %[[VAL_2]] : none
 // CHECK:           sink %[[VAL_3]] : index
 // CHECK:           %[[VAL_5:.*]] = constant %[[VAL_4]]#0 {value = 42 : index} : index
-// CHECK:           %[[VAL_6:.*]] = br %[[VAL_4]]#1 : none
-// CHECK:           %[[VAL_7:.*]] = br %[[VAL_5]] : index
+// CHECK:           %[[VAL_6:.*]] = cf.br %[[VAL_4]]#1 : none
+// CHECK:           %[[VAL_7:.*]] = cf.br %[[VAL_5]] : index
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = control_merge %[[VAL_6]] : none
 // CHECK:           %[[VAL_10:.*]] = buffer [1] %[[VAL_11:.*]] {initValues = [0], sequential = true} : i1
 // CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_10]] : i1
@@ -30,25 +30,25 @@
 // CHECK:           sink %[[VAL_29]] : index
 // CHECK:           %[[VAL_30:.*]] = constant %[[VAL_28]]#0 {value = 62 : index} : index
 // CHECK:           sink %[[VAL_30]] : index
-// CHECK:           %[[VAL_17]] = br %[[VAL_25]] : index
-// CHECK:           %[[VAL_14]] = br %[[VAL_28]]#2 : none
+// CHECK:           %[[VAL_17]] = cf.br %[[VAL_25]] : index
+// CHECK:           %[[VAL_14]] = cf.br %[[VAL_28]]#2 : none
 // CHECK:           %[[VAL_31:.*]], %[[VAL_32:.*]] = control_merge %[[VAL_24]] : none
 // CHECK:           sink %[[VAL_32]] : index
 // CHECK:           return %[[VAL_31]] : none
 // CHECK:         }
 func @simple_loop() {
 ^bb0:
-  br ^bb1
+  cf.br ^bb1
 ^bb1:	// pred: ^bb0
   %c42 = arith.constant 42 : index
-  br ^bb2
+  cf.br ^bb2
 ^bb2:	// 2 preds: ^bb1, ^bb3
   %1 = arith.cmpi slt, %c42, %c42 : index
   cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c52 = arith.constant 52 : index
   %c62 = arith.constant 62 : index
-  br ^bb2
+  cf.br ^bb2
 ^bb4:	// pred: ^bb2
   return
 }

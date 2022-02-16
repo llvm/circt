@@ -8,9 +8,9 @@
 // CHECK:           %[[VAL_8:.*]]:3 = fork [3] %[[VAL_0]] : none
 // CHECK:           %[[VAL_9:.*]] = constant %[[VAL_8]]#1 {value = 0 : index} : index
 // CHECK:           %[[VAL_10:.*]] = constant %[[VAL_8]]#0 {value = 10 : index} : index
-// CHECK:           %[[VAL_11:.*]] = br %[[VAL_8]]#2 : none
-// CHECK:           %[[VAL_12:.*]] = br %[[VAL_9]] : index
-// CHECK:           %[[VAL_13:.*]] = br %[[VAL_10]] : index
+// CHECK:           %[[VAL_11:.*]] = cf.br %[[VAL_8]]#2 : none
+// CHECK:           %[[VAL_12:.*]] = cf.br %[[VAL_9]] : index
+// CHECK:           %[[VAL_13:.*]] = cf.br %[[VAL_10]] : index
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = control_merge %[[VAL_11]] : none
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_15]] : index
 // CHECK:           %[[VAL_17:.*]] = buffer [1] %[[VAL_18:.*]] {initValues = [0], sequential = true} : i1
@@ -49,9 +49,9 @@
 // CHECK:           %[[VAL_53:.*]] = join %[[VAL_42]]#0, %[[VAL_7]]#0 : none
 // CHECK:           %[[VAL_54:.*]], %[[VAL_5]] = load {{\[}}%[[VAL_46]]#1] %[[VAL_1]]#1, %[[VAL_53]] : index, f32
 // CHECK:           sink %[[VAL_54]] : f32
-// CHECK:           %[[VAL_24]] = br %[[VAL_39]] : index
-// CHECK:           %[[VAL_21]] = br %[[VAL_44]] : none
-// CHECK:           %[[VAL_28]] = br %[[VAL_48]]#0 : index
+// CHECK:           %[[VAL_24]] = cf.br %[[VAL_39]] : index
+// CHECK:           %[[VAL_21]] = cf.br %[[VAL_44]] : none
+// CHECK:           %[[VAL_28]] = cf.br %[[VAL_48]]#0 : index
 // CHECK:           %[[VAL_55:.*]], %[[VAL_56:.*]] = control_merge %[[VAL_35]] : none
 // CHECK:           sink %[[VAL_56]] : index
 // CHECK:           return %[[VAL_55]] : none
@@ -60,7 +60,7 @@ func @test() {
   %10 = memref.alloc() : memref<10xf32>
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
   cond_br %2, ^bb2, ^bb3
@@ -71,7 +71,7 @@ func @test() {
   %8 = arith.addf %7, %7 : f32
   memref.store %8, %10[%3] : memref<10xf32>
   %5 = memref.load %10[%c1] : memref<10xf32>
-  br ^bb1(%3 : index)
+  cf.br ^bb1(%3 : index)
 ^bb3: // pred: ^bb1
   return
 }

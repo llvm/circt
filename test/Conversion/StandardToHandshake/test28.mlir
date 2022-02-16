@@ -11,11 +11,11 @@
 // CHECK:           %[[VAL_11:.*]] = constant %[[VAL_10]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_12:.*]] = constant %[[VAL_10]]#1 {value = 10 : index} : index
 // CHECK:           %[[VAL_13:.*]] = constant %[[VAL_10]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_14:.*]] = br %[[VAL_9]] : index
-// CHECK:           %[[VAL_15:.*]] = br %[[VAL_10]]#3 : none
-// CHECK:           %[[VAL_16:.*]] = br %[[VAL_11]] : index
-// CHECK:           %[[VAL_17:.*]] = br %[[VAL_12]] : index
-// CHECK:           %[[VAL_18:.*]] = br %[[VAL_13]] : index
+// CHECK:           %[[VAL_14:.*]] = cf.br %[[VAL_9]] : index
+// CHECK:           %[[VAL_15:.*]] = cf.br %[[VAL_10]]#3 : none
+// CHECK:           %[[VAL_16:.*]] = cf.br %[[VAL_11]] : index
+// CHECK:           %[[VAL_17:.*]] = cf.br %[[VAL_12]] : index
+// CHECK:           %[[VAL_18:.*]] = cf.br %[[VAL_13]] : index
 // CHECK:           %[[VAL_19:.*]], %[[VAL_20:.*]] = control_merge %[[VAL_15]] : none
 // CHECK:           %[[VAL_21:.*]]:4 = fork [4] %[[VAL_20]] : index
 // CHECK:           %[[VAL_22:.*]] = buffer [1] %[[VAL_23:.*]] {initValues = [0], sequential = true} : i1
@@ -65,11 +65,11 @@
 // CHECK:           %[[VAL_72:.*]] = arith.addf %[[VAL_69]], %[[VAL_71]] : f32
 // CHECK:           %[[VAL_73:.*]] = join %[[VAL_62]]#0, %[[VAL_6]]#0 : none
 // CHECK:           %[[VAL_3]], %[[VAL_4]] = store {{\[}}%[[VAL_68]]#0] %[[VAL_72]], %[[VAL_73]] : index, f32
-// CHECK:           %[[VAL_33]] = br %[[VAL_56]]#0 : index
-// CHECK:           %[[VAL_36]] = br %[[VAL_58]]#0 : index
-// CHECK:           %[[VAL_29]] = br %[[VAL_59]] : index
-// CHECK:           %[[VAL_26]] = br %[[VAL_64]] : none
-// CHECK:           %[[VAL_39]] = br %[[VAL_70]] : index
+// CHECK:           %[[VAL_33]] = cf.br %[[VAL_56]]#0 : index
+// CHECK:           %[[VAL_36]] = cf.br %[[VAL_58]]#0 : index
+// CHECK:           %[[VAL_29]] = cf.br %[[VAL_59]] : index
+// CHECK:           %[[VAL_26]] = cf.br %[[VAL_64]] : none
+// CHECK:           %[[VAL_39]] = cf.br %[[VAL_70]] : index
 // CHECK:           %[[VAL_74:.*]], %[[VAL_75:.*]] = control_merge %[[VAL_50]] : none
 // CHECK:           sink %[[VAL_75]] : index
 // CHECK:           return %[[VAL_74]] : none
@@ -80,7 +80,7 @@ func @affine_load(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
   cond_br %2, ^bb2, ^bb3
@@ -93,7 +93,7 @@ func @affine_load(%arg0: index) {
   %7 = memref.load %10[%4] : memref<10xf32>
   %8 = arith.addf %5, %7 : f32
   memref.store %8, %10[%4] : memref<10xf32>
-  br ^bb1(%6 : index)
+  cf.br ^bb1(%6 : index)
 ^bb3: // pred: ^bb1
   return
 }

@@ -32,7 +32,7 @@ func @non_canon_loop(%arg0 : memref<100xi32>, %arg1 : i32) -> i32 {
     cond_br %c, ^bb1(%c0 : index) , ^bbx
 ^bbx:
   // Jump directly to the loop body, skipping the header
-  br ^bb2(%c0 : index)
+  cf.br ^bb2(%c0 : index)
 ^bb1(%0: index):  // Actual loop header. 2 preds: ^bb0, ^bb2
   %1 = arith.cmpi slt, %0, %c100 : index
   cond_br %1, ^bb2(%c0 : index), ^bb3
@@ -40,7 +40,7 @@ func @non_canon_loop(%arg0 : memref<100xi32>, %arg1 : i32) -> i32 {
   %2 = arith.index_cast %i : index to i32
   memref.store %2, %arg0[%i] : memref<100xi32>
   %3 = arith.addi %i, %c1 : index
-  br ^bb1(%3 : index)
+  cf.br ^bb1(%3 : index)
 ^bb3:  // pred: ^bb1
   return %c0_i32 : i32
 }

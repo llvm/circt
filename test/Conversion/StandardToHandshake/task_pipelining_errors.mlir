@@ -9,7 +9,7 @@ func @main(%cond : i1) -> index {
   %c1 = arith.constant 1 : index
   %c42 = arith.constant 42 : index
   %c1_0 = arith.constant 1 : index
-  br ^bb1(%c1 : index)
+  cf.br ^bb1(%c1 : index)
 ^bb1(%0: index):	// 2 preds: ^bb0, ^bb2
   %1 = arith.cmpi slt, %0, %c42 : index
   cond_br %1, ^bb2, ^bb3
@@ -31,10 +31,10 @@ func @main(%cond : i1) -> index {
   %c1 = arith.constant 1 : index
   %c42 = arith.constant 42 : index
   %c1_0 = arith.constant 1 : index
-  br ^bb1(%c1 : index)
+  cf.br ^bb1(%c1 : index)
 ^bb1(%0: index):
   %1 = arith.cmpi slt, %0, %c42 : index
-  br ^bb2
+  cf.br ^bb2
 ^bb2:	
   %2 = arith.addi %0, %c1_0 : index
   cond_br %cond, ^bb3, ^bb4
@@ -55,10 +55,10 @@ func @main(%cond : i1) -> index {
   %c1 = arith.constant 1 : index
   %c42 = arith.constant 42 : index
   %c1_0 = arith.constant 1 : index
-  br ^bb1(%c1 : index)
+  cf.br ^bb1(%c1 : index)
 ^bb1(%0: index):
   %1 = arith.cmpi slt, %0, %c42 : index
-  br ^bb2
+  cf.br ^bb2
 ^bb2:	
   %2 = arith.addi %0, %c1_0 : index
   cond_br %cond, ^bb1(%2 : index), ^bb3

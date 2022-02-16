@@ -60,10 +60,10 @@ func @dummy_subsig(%0 : !llhd.sig<i10>) {
 // CHECK:         }
 llhd.proc @convert_persistent_i1 () -> () {
   %0 = hw.constant 0 : i1
-  br ^resume
+  cf.br ^resume
 ^resume:
   call @dummy_i1(%0) : (i1) -> ()
-  br ^resume
+  cf.br ^resume
 }
 
 // CHECK-LABEL:   llvm.func @convert_persistent_i32(
@@ -101,10 +101,10 @@ llhd.proc @convert_persistent_i1 () -> () {
 
 llhd.proc @convert_persistent_i32 () -> () {
   %0 = hw.constant 0 : i32
-  br ^resume
+  cf.br ^resume
 ^resume:
   call @dummy_i32(%0) : (i32) -> ()
-  br ^resume
+  cf.br ^resume
 }
 
 // CHECK-LABEL:   llvm.func @convert_persistent_time(
@@ -141,10 +141,10 @@ llhd.proc @convert_persistent_i32 () -> () {
 // CHECK:         }
 llhd.proc @convert_persistent_time () -> () {
   %0 = llhd.constant_time #llhd.time<0ns, 0d, 1e>
-  br ^resume
+  cf.br ^resume
 ^resume:
   call @dummy_time(%0) : (!llhd.time) -> ()
-  br ^resume
+  cf.br ^resume
 }
 
 // CHECK-LABEL:   llvm.func @convert_persistent_ptr(
@@ -185,10 +185,10 @@ llhd.proc @convert_persistent_time () -> () {
 llhd.proc @convert_persistent_ptr () -> () {
   %0 = hw.constant 0 : i32
   %1 = llhd.var %0 : i32
-  br ^resume
+  cf.br ^resume
 ^resume:
   call @dummy_ptr(%1) : (!llhd.ptr<i32>) -> ()
-  br ^resume
+  cf.br ^resume
 }
 
 // CHECK-LABEL:   llvm.func @convert_persistent_subsig(
@@ -256,10 +256,10 @@ llhd.proc @convert_persistent_ptr () -> () {
 llhd.proc @convert_persistent_subsig () -> (%out : !llhd.sig<i32>) {
   %zero = hw.constant 0 : i5
   %0 = llhd.sig.extract %out from %zero : (!llhd.sig<i32>) -> !llhd.sig<i10>
-  br ^resume
+  cf.br ^resume
 ^resume:
   call @dummy_subsig(%0) : (!llhd.sig<i10>) -> ()
-  br ^resume
+  cf.br ^resume
 }
 
 // CHECK-LABEL:   llvm.func @convert_persistent_block_argument(
@@ -302,9 +302,9 @@ llhd.proc @convert_persistent_subsig () -> (%out : !llhd.sig<i32>) {
 // CHECK:         }
 llhd.proc @convert_persistent_block_argument () -> () {
     %1 = hw.constant 0 : i32
-    br ^argBB(%1 : i32)
+    cf.br ^argBB(%1 : i32)
 ^argBB(%i : i32):
-    br ^end
+    cf.br ^end
 ^end:
     call @dummy_i32(%i) : (i32) -> ()
     llhd.halt
@@ -364,7 +364,7 @@ llhd.proc @convert_ptr_redirect () -> () {
   %1 = hw.constant 0 : i32
   %var = llhd.var %1 : i32
   llhd.store %var, %1 : !llhd.ptr<i32>
-  br ^bb0
+  cf.br ^bb0
 ^bb0:
   llhd.store %var, %1 : !llhd.ptr<i32>
   llhd.halt

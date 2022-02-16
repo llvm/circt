@@ -15,12 +15,12 @@
 // CHECK:           %[[VAL_16:.*]] = constant %[[VAL_12]]#1 {value = 10 : index} : index
 // CHECK:           %[[VAL_17:.*]], %[[VAL_8]] = load {{\[}}%[[VAL_15]]#0] %[[VAL_7]]#0, %[[VAL_11]]#0 : index, f32
 // CHECK:           %[[VAL_18:.*]] = constant %[[VAL_12]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_19:.*]] = br %[[VAL_10]] : index
-// CHECK:           %[[VAL_20:.*]] = br %[[VAL_13]] : none
-// CHECK:           %[[VAL_21:.*]] = br %[[VAL_15]]#1 : index
-// CHECK:           %[[VAL_22:.*]] = br %[[VAL_16]] : index
-// CHECK:           %[[VAL_23:.*]] = br %[[VAL_17]] : f32
-// CHECK:           %[[VAL_24:.*]] = br %[[VAL_18]] : index
+// CHECK:           %[[VAL_19:.*]] = cf.br %[[VAL_10]] : index
+// CHECK:           %[[VAL_20:.*]] = cf.br %[[VAL_13]] : none
+// CHECK:           %[[VAL_21:.*]] = cf.br %[[VAL_15]]#1 : index
+// CHECK:           %[[VAL_22:.*]] = cf.br %[[VAL_16]] : index
+// CHECK:           %[[VAL_23:.*]] = cf.br %[[VAL_17]] : f32
+// CHECK:           %[[VAL_24:.*]] = cf.br %[[VAL_18]] : index
 // CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = control_merge %[[VAL_20]] : none
 // CHECK:           %[[VAL_27:.*]]:5 = fork [5] %[[VAL_26]] : index
 // CHECK:           %[[VAL_28:.*]] = buffer [1] %[[VAL_29:.*]] {initValues = [0], sequential = true} : i1
@@ -78,12 +78,12 @@
 // CHECK:           sink %[[VAL_86]] : f32
 // CHECK:           %[[VAL_87:.*]] = join %[[VAL_75]]#0, %[[VAL_6]]#0 : none
 // CHECK:           %[[VAL_3]], %[[VAL_4]] = store {{\[}}%[[VAL_81]]#0] %[[VAL_85]], %[[VAL_87]] : index, f32
-// CHECK:           %[[VAL_39]] = br %[[VAL_67]]#0 : index
-// CHECK:           %[[VAL_42]] = br %[[VAL_69]]#0 : index
-// CHECK:           %[[VAL_45]] = br %[[VAL_71]]#0 : f32
-// CHECK:           %[[VAL_35]] = br %[[VAL_72]] : index
-// CHECK:           %[[VAL_32]] = br %[[VAL_77]] : none
-// CHECK:           %[[VAL_48]] = br %[[VAL_83]] : index
+// CHECK:           %[[VAL_39]] = cf.br %[[VAL_67]]#0 : index
+// CHECK:           %[[VAL_42]] = cf.br %[[VAL_69]]#0 : index
+// CHECK:           %[[VAL_45]] = cf.br %[[VAL_71]]#0 : f32
+// CHECK:           %[[VAL_35]] = cf.br %[[VAL_72]] : index
+// CHECK:           %[[VAL_32]] = cf.br %[[VAL_77]] : none
+// CHECK:           %[[VAL_48]] = cf.br %[[VAL_83]] : index
 // CHECK:           %[[VAL_88:.*]], %[[VAL_89:.*]] = control_merge %[[VAL_61]] : none
 // CHECK:           sink %[[VAL_89]] : index
 // CHECK:           return %[[VAL_88]] : none
@@ -95,7 +95,7 @@ func @affine_load(%arg0: index) {
   %c10 = arith.constant 10 : index
   %9 = memref.load %0[%c0] : memref<10xf32>
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
   cond_br %2, ^bb2, ^bb3
@@ -109,7 +109,7 @@ func @affine_load(%arg0: index) {
   %8 = arith.addf %5, %7 : f32
   %11 = arith.addf %9, %9 : f32
   memref.store %8, %10[%4] : memref<10xf32>
-  br ^bb1(%6 : index)
+  cf.br ^bb1(%6 : index)
 ^bb3: // pred: ^bb1
   return
 }

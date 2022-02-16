@@ -13,16 +13,16 @@
 // CHECK:           %[[VAL_9:.*]] = constant %[[VAL_3]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_10:.*]] = constant %[[VAL_3]]#1 {value = 10 : index} : index
 // CHECK:           %[[VAL_11:.*]] = constant %[[VAL_3]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_12:.*]] = br %[[VAL_2]] : index
-// CHECK:           %[[VAL_13:.*]] = br %[[VAL_3]]#5 : none
-// CHECK:           %[[VAL_14:.*]] = br %[[VAL_4]] : memref<100xf32>
-// CHECK:           %[[VAL_15:.*]] = br %[[VAL_5]] : memref<100xf32, 2>
-// CHECK:           %[[VAL_16:.*]] = br %[[VAL_6]] : memref<1xi32>
-// CHECK:           %[[VAL_17:.*]] = br %[[VAL_7]] : index
-// CHECK:           %[[VAL_18:.*]] = br %[[VAL_8]] : index
-// CHECK:           %[[VAL_19:.*]] = br %[[VAL_9]] : index
-// CHECK:           %[[VAL_20:.*]] = br %[[VAL_10]] : index
-// CHECK:           %[[VAL_21:.*]] = br %[[VAL_11]] : index
+// CHECK:           %[[VAL_12:.*]] = cf.br %[[VAL_2]] : index
+// CHECK:           %[[VAL_13:.*]] = cf.br %[[VAL_3]]#5 : none
+// CHECK:           %[[VAL_14:.*]] = cf.br %[[VAL_4]] : memref<100xf32>
+// CHECK:           %[[VAL_15:.*]] = cf.br %[[VAL_5]] : memref<100xf32, 2>
+// CHECK:           %[[VAL_16:.*]] = cf.br %[[VAL_6]] : memref<1xi32>
+// CHECK:           %[[VAL_17:.*]] = cf.br %[[VAL_7]] : index
+// CHECK:           %[[VAL_18:.*]] = cf.br %[[VAL_8]] : index
+// CHECK:           %[[VAL_19:.*]] = cf.br %[[VAL_9]] : index
+// CHECK:           %[[VAL_20:.*]] = cf.br %[[VAL_10]] : index
+// CHECK:           %[[VAL_21:.*]] = cf.br %[[VAL_11]] : index
 // CHECK:           %[[VAL_22:.*]], %[[VAL_23:.*]] = control_merge %[[VAL_13]] : none
 // CHECK:           %[[VAL_24:.*]]:9 = fork [9] %[[VAL_23]] : index
 // CHECK:           %[[VAL_25:.*]] = buffer [1] %[[VAL_26:.*]] {initValues = [0], sequential = true} : i1
@@ -96,16 +96,16 @@
 // CHECK:           %[[VAL_104:.*]] = arith.addi %[[VAL_84]]#1, %[[VAL_103]] : index
 // CHECK:           memref.dma_start %[[VAL_86]]#1{{\[}}%[[VAL_102]]], %[[VAL_88]]#1{{\[}}%[[VAL_104]]], %[[VAL_90]]#1, %[[VAL_92]]#1{{\[}}%[[VAL_94]]#1] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
 // CHECK:           %[[VAL_105:.*]] = arith.addi %[[VAL_82]]#0, %[[VAL_96]]#1 : index
-// CHECK:           %[[VAL_36]] = br %[[VAL_84]]#0 : index
-// CHECK:           %[[VAL_39]] = br %[[VAL_86]]#0 : memref<100xf32>
-// CHECK:           %[[VAL_42]] = br %[[VAL_88]]#0 : memref<100xf32, 2>
-// CHECK:           %[[VAL_45]] = br %[[VAL_90]]#0 : index
-// CHECK:           %[[VAL_48]] = br %[[VAL_92]]#0 : memref<1xi32>
-// CHECK:           %[[VAL_51]] = br %[[VAL_94]]#0 : index
-// CHECK:           %[[VAL_54]] = br %[[VAL_96]]#0 : index
-// CHECK:           %[[VAL_32]] = br %[[VAL_97]] : index
-// CHECK:           %[[VAL_29]] = br %[[VAL_100]]#2 : none
-// CHECK:           %[[VAL_57]] = br %[[VAL_105]] : index
+// CHECK:           %[[VAL_36]] = cf.br %[[VAL_84]]#0 : index
+// CHECK:           %[[VAL_39]] = cf.br %[[VAL_86]]#0 : memref<100xf32>
+// CHECK:           %[[VAL_42]] = cf.br %[[VAL_88]]#0 : memref<100xf32, 2>
+// CHECK:           %[[VAL_45]] = cf.br %[[VAL_90]]#0 : index
+// CHECK:           %[[VAL_48]] = cf.br %[[VAL_92]]#0 : memref<1xi32>
+// CHECK:           %[[VAL_51]] = cf.br %[[VAL_94]]#0 : index
+// CHECK:           %[[VAL_54]] = cf.br %[[VAL_96]]#0 : index
+// CHECK:           %[[VAL_32]] = cf.br %[[VAL_97]] : index
+// CHECK:           %[[VAL_29]] = cf.br %[[VAL_100]]#2 : none
+// CHECK:           %[[VAL_57]] = cf.br %[[VAL_105]] : index
 // CHECK:           %[[VAL_106:.*]], %[[VAL_107:.*]] = control_merge %[[VAL_78]] : none
 // CHECK:           sink %[[VAL_107]] : index
 // CHECK:           return %[[VAL_106]] : none
@@ -119,7 +119,7 @@ func @affine_dma_start(%arg0: index) {
   %c0_0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0_0 : index)
+  cf.br ^bb1(%c0_0 : index)
 ^bb1(%3: index):      // 2 preds: ^bb0, ^bb2
   %4 = arith.cmpi slt, %3, %c10 : index
   cond_br %4, ^bb2, ^bb3
@@ -130,7 +130,7 @@ func @affine_dma_start(%arg0: index) {
   %6 = arith.addi %arg0, %c11 : index
   memref.dma_start %0[%5], %1[%6], %c64, %2[%c0] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
   %7 = arith.addi %3, %c1 : index
-  br ^bb1(%7 : index)
+  cf.br ^bb1(%7 : index)
 ^bb3: // pred: ^bb1
   return
 }

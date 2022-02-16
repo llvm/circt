@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_21:.*]] = arith.cmpi slt, %[[VAL_20]]#1, %[[VAL_3]]#1 : index
 // CHECK:           %[[VAL_22:.*]] = select %[[VAL_21]], %[[VAL_3]]#0, %[[VAL_20]]#0 : index
 // CHECK:           %[[VAL_23:.*]] = constant %[[VAL_4]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_24:.*]] = br %[[VAL_4]]#2 : none
-// CHECK:           %[[VAL_25:.*]] = br %[[VAL_5]] : index
-// CHECK:           %[[VAL_26:.*]] = br %[[VAL_22]] : index
-// CHECK:           %[[VAL_27:.*]] = br %[[VAL_23]] : index
+// CHECK:           %[[VAL_24:.*]] = cf.br %[[VAL_4]]#2 : none
+// CHECK:           %[[VAL_25:.*]] = cf.br %[[VAL_5]] : index
+// CHECK:           %[[VAL_26:.*]] = cf.br %[[VAL_22]] : index
+// CHECK:           %[[VAL_27:.*]] = cf.br %[[VAL_23]] : index
 // CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = control_merge %[[VAL_24]] : none
 // CHECK:           %[[VAL_30:.*]]:3 = fork [3] %[[VAL_29]] : index
 // CHECK:           %[[VAL_31:.*]] = buffer [1] %[[VAL_32:.*]] {initValues = [0], sequential = true} : i1
@@ -59,10 +59,10 @@
 // CHECK:           %[[VAL_61:.*]], %[[VAL_62:.*]] = control_merge %[[VAL_53]] : none
 // CHECK:           sink %[[VAL_62]] : index
 // CHECK:           %[[VAL_63:.*]] = arith.addi %[[VAL_57]], %[[VAL_59]]#1 : index
-// CHECK:           %[[VAL_42]] = br %[[VAL_59]]#0 : index
-// CHECK:           %[[VAL_38]] = br %[[VAL_60]] : index
-// CHECK:           %[[VAL_35]] = br %[[VAL_61]] : none
-// CHECK:           %[[VAL_45]] = br %[[VAL_63]] : index
+// CHECK:           %[[VAL_42]] = cf.br %[[VAL_59]]#0 : index
+// CHECK:           %[[VAL_38]] = cf.br %[[VAL_60]] : index
+// CHECK:           %[[VAL_35]] = cf.br %[[VAL_61]] : none
+// CHECK:           %[[VAL_45]] = cf.br %[[VAL_63]] : index
 // CHECK:           %[[VAL_64:.*]], %[[VAL_65:.*]] = control_merge %[[VAL_54]] : none
 // CHECK:           sink %[[VAL_65]] : index
 // CHECK:           return %[[VAL_64]] : none
@@ -82,13 +82,13 @@ func @min_reduction_tree(%arg0: index) {
   %10 = arith.cmpi slt, %9, %arg0 : index
   %11 = select %10, %9, %arg0 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%12: index):     // 2 preds: ^bb0, ^bb2
   %13 = arith.cmpi slt, %12, %11 : index
   cond_br %13, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %14 = arith.addi %12, %c1 : index
-  br ^bb1(%14 : index)
+  cf.br ^bb1(%14 : index)
 ^bb3: // pred: ^bb1
   return
 }

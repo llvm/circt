@@ -51,9 +51,9 @@ module {
     %0 = arith.cmpi slt, %arg0, %arg1 : i32
     cond_br %0, ^bb1, ^bb2
   ^bb1:
-    br ^bb3(%arg0 : i32)
+    cf.br ^bb3(%arg0 : i32)
   ^bb2:
-    br ^bb3(%arg1 : i32)
+    cf.br ^bb3(%arg1 : i32)
   ^bb3(%1 : i32):
     return %1 : i32
   }

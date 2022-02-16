@@ -11,8 +11,8 @@
 // CHECK:         }
 handshake.func @simple(%arg0: none, ...) -> none {
   %0 = constant %arg0 {value = 1 : index} : index
-  %1 = br %arg0 : none
-  %2 = br %0 : index
+  %1 = cf.br %arg0 : none
+  %2 = cf.br %0 : index
   %3 = merge %1 : none
   %4 = merge %2 : index
   %5:2 = fork [2] %3 : none

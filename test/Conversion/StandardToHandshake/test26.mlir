@@ -13,7 +13,7 @@
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = cond_br %[[VAL_8]], %[[VAL_1]]#3 : none
 // CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = control_merge %[[VAL_9]] : none
 // CHECK:           sink %[[VAL_12]] : index
-// CHECK:           %[[VAL_13:.*]] = br %[[VAL_11]] : none
+// CHECK:           %[[VAL_13:.*]] = cf.br %[[VAL_11]] : none
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = control_merge %[[VAL_13]], %[[VAL_10]] : none
 // CHECK:           sink %[[VAL_15]] : index
 // CHECK:           return %[[VAL_14]] : none
@@ -27,7 +27,7 @@
     %3 = arith.cmpi sge, %2, %c0 : index
     cond_br %3, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
-    br ^bb2
+    cf.br ^bb2
   ^bb2: // 2 preds: ^bb0, ^bb1
     return
   }

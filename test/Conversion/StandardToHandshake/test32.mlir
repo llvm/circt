@@ -11,10 +11,10 @@
 // CHECK:           %[[VAL_11:.*]] = constant %[[VAL_8]]#0 {value = 10 : index} : index
 // CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_11]] : index
 // CHECK:           %[[VAL_13:.*]], %[[VAL_4]] = load {{\[}}%[[VAL_12]]#0] %[[VAL_1]]#0, %[[VAL_7]]#0 : index, f32
-// CHECK:           %[[VAL_14:.*]] = br %[[VAL_9]] : none
-// CHECK:           %[[VAL_15:.*]] = br %[[VAL_10]] : index
-// CHECK:           %[[VAL_16:.*]] = br %[[VAL_12]]#1 : index
-// CHECK:           %[[VAL_17:.*]] = br %[[VAL_13]] : f32
+// CHECK:           %[[VAL_14:.*]] = cf.br %[[VAL_9]] : none
+// CHECK:           %[[VAL_15:.*]] = cf.br %[[VAL_10]] : index
+// CHECK:           %[[VAL_16:.*]] = cf.br %[[VAL_12]]#1 : index
+// CHECK:           %[[VAL_17:.*]] = cf.br %[[VAL_13]] : f32
 // CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]] = control_merge %[[VAL_14]] : none
 // CHECK:           %[[VAL_20:.*]]:3 = fork [3] %[[VAL_19]] : index
 // CHECK:           %[[VAL_21:.*]] = buffer [1] %[[VAL_22:.*]] {initValues = [0], sequential = true} : i1
@@ -54,10 +54,10 @@
 // CHECK:           %[[VAL_60:.*]] = arith.addf %[[VAL_49]]#1, %[[VAL_59]] : f32
 // CHECK:           %[[VAL_61:.*]] = join %[[VAL_53]]#0, %[[VAL_6]]#0 : none
 // CHECK:           %[[VAL_2]], %[[VAL_3]] = store {{\[}}%[[VAL_58]]#1] %[[VAL_60]], %[[VAL_61]] : index, f32
-// CHECK:           %[[VAL_32]] = br %[[VAL_49]]#0 : f32
-// CHECK:           %[[VAL_28]] = br %[[VAL_50]] : index
-// CHECK:           %[[VAL_25]] = br %[[VAL_55]] : none
-// CHECK:           %[[VAL_35]] = br %[[VAL_58]]#0 : index
+// CHECK:           %[[VAL_32]] = cf.br %[[VAL_49]]#0 : f32
+// CHECK:           %[[VAL_28]] = cf.br %[[VAL_50]] : index
+// CHECK:           %[[VAL_25]] = cf.br %[[VAL_55]] : none
+// CHECK:           %[[VAL_35]] = cf.br %[[VAL_58]]#0 : index
 // CHECK:           %[[VAL_62:.*]], %[[VAL_63:.*]] = control_merge %[[VAL_44]] : none
 // CHECK:           sink %[[VAL_63]] : index
 // CHECK:           return %[[VAL_62]] : none
@@ -67,7 +67,7 @@ func @test() {
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %5 = memref.load %10[%c10] : memref<10xf32>
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
   cond_br %2, ^bb2, ^bb3
@@ -77,7 +77,7 @@ func @test() {
   %7 = memref.load %10[%3] : memref<10xf32>
   %8 = arith.addf %5, %7 : f32
   memref.store %8, %10[%3] : memref<10xf32>
-  br ^bb1(%3 : index)
+  cf.br ^bb1(%3 : index)
 ^bb3: // pred: ^bb1
   return
 }

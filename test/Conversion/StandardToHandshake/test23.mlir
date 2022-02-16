@@ -35,10 +35,10 @@
 // CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = cond_br %[[VAL_34]], %[[VAL_10]]#7 : none
 // CHECK:           %[[VAL_37:.*]], %[[VAL_38:.*]] = control_merge %[[VAL_35]] : none
 // CHECK:           sink %[[VAL_38]] : index
-// CHECK:           %[[VAL_39:.*]] = br %[[VAL_37]] : none
+// CHECK:           %[[VAL_39:.*]] = cf.br %[[VAL_37]] : none
 // CHECK:           %[[VAL_40:.*]], %[[VAL_41:.*]] = control_merge %[[VAL_36]] : none
 // CHECK:           sink %[[VAL_41]] : index
-// CHECK:           %[[VAL_42:.*]] = br %[[VAL_40]] : none
+// CHECK:           %[[VAL_42:.*]] = cf.br %[[VAL_40]] : none
 // CHECK:           %[[VAL_43:.*]], %[[VAL_44:.*]] = control_merge %[[VAL_42]], %[[VAL_39]] : none
 // CHECK:           sink %[[VAL_44]] : index
 // CHECK:           return %[[VAL_43]] : none
@@ -69,9 +69,9 @@ func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
     %16 = arith.andi %13, %15 : i1
     cond_br %16, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb2: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
     return
   }

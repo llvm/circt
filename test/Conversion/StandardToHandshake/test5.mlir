@@ -4,8 +4,8 @@
 // CHECK-SAME:                                    %[[VAL_0:.*]]: none, ...) -> (i32, none) attributes {argNames = ["inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]]:2 = fork [2] %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]] = constant %[[VAL_1]]#0 {value = 42 : i32} : i32
-// CHECK:           %[[VAL_3:.*]] = br %[[VAL_1]]#1 : none
-// CHECK:           %[[VAL_4:.*]] = br %[[VAL_2]] : i32
+// CHECK:           %[[VAL_3:.*]] = cf.br %[[VAL_1]]#1 : none
+// CHECK:           %[[VAL_4:.*]] = cf.br %[[VAL_2]] : i32
 // CHECK:           %[[VAL_5:.*]] = merge %[[VAL_6:.*]] : i32
 // CHECK:           %[[VAL_7:.*]] = merge %[[VAL_8:.*]] : i32
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = control_merge %[[VAL_11:.*]] : none
@@ -16,18 +16,18 @@
 // CHECK:           %[[VAL_16:.*]]:2 = fork [2] %[[VAL_14]] : none
 // CHECK:           sink %[[VAL_15]] : index
 // CHECK:           %[[VAL_17:.*]] = constant %[[VAL_16]]#0 {value = 55 : i32} : i32
-// CHECK:           %[[VAL_6]] = br %[[VAL_13]] : i32
-// CHECK:           %[[VAL_11]] = br %[[VAL_16]]#1 : none
-// CHECK:           %[[VAL_8]] = br %[[VAL_17]] : i32
+// CHECK:           %[[VAL_6]] = cf.br %[[VAL_13]] : i32
+// CHECK:           %[[VAL_11]] = cf.br %[[VAL_16]]#1 : none
+// CHECK:           %[[VAL_8]] = cf.br %[[VAL_17]] : i32
 // CHECK:           return %[[VAL_12]], %[[VAL_9]] : i32, none
 // CHECK:         }
 func @dfs_block_order() -> (i32) {
   %0 = arith.constant 42 : i32
-  br ^bb2
+  cf.br ^bb2
 ^bb1:
   %2 = arith.addi %0, %1 : i32
   return %2 : i32
 ^bb2:
   %1 = arith.constant 55 : i32
-  br ^bb1
+  cf.br ^bb1
 }

@@ -25,10 +25,10 @@
 // CHECK:           %[[VAL_23:.*]], %[[VAL_24:.*]] = cond_br %[[VAL_22]], %[[VAL_18]]#2 : none
 // CHECK:           %[[VAL_25:.*]], %[[VAL_26:.*]] = control_merge %[[VAL_23]] : none
 // CHECK:           sink %[[VAL_26]] : index
-// CHECK:           %[[VAL_27:.*]] = br %[[VAL_25]] : none
+// CHECK:           %[[VAL_27:.*]] = cf.br %[[VAL_25]] : none
 // CHECK:           %[[VAL_28:.*]], %[[VAL_29:.*]] = control_merge %[[VAL_27]], %[[VAL_24]] : none
 // CHECK:           sink %[[VAL_29]] : index
-// CHECK:           %[[VAL_30:.*]] = br %[[VAL_28]] : none
+// CHECK:           %[[VAL_30:.*]] = cf.br %[[VAL_28]] : none
 // CHECK:           %[[VAL_31:.*]] = merge %[[VAL_14]] : index
 // CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = control_merge %[[VAL_12]] : none
 // CHECK:           %[[VAL_34:.*]]:3 = fork [3] %[[VAL_32]] : none
@@ -40,10 +40,10 @@
 // CHECK:           %[[VAL_39:.*]], %[[VAL_40:.*]] = cond_br %[[VAL_38]], %[[VAL_34]]#2 : none
 // CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]] = control_merge %[[VAL_39]] : none
 // CHECK:           sink %[[VAL_42]] : index
-// CHECK:           %[[VAL_43:.*]] = br %[[VAL_41]] : none
+// CHECK:           %[[VAL_43:.*]] = cf.br %[[VAL_41]] : none
 // CHECK:           %[[VAL_44:.*]], %[[VAL_45:.*]] = control_merge %[[VAL_43]], %[[VAL_40]] : none
 // CHECK:           sink %[[VAL_45]] : index
-// CHECK:           %[[VAL_46:.*]] = br %[[VAL_44]] : none
+// CHECK:           %[[VAL_46:.*]] = cf.br %[[VAL_44]] : none
 // CHECK:           %[[VAL_47:.*]], %[[VAL_48:.*]] = control_merge %[[VAL_46]], %[[VAL_30]] : none
 // CHECK:           sink %[[VAL_48]] : index
 // CHECK:           return %[[VAL_47]] : none
@@ -63,9 +63,9 @@
     %5 = arith.cmpi sge, %4, %c0_0 : index
     cond_br %5, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
-    br ^bb3
+    cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
-    br ^bb7
+    cf.br ^bb7
   ^bb4: // pred: ^bb0
     %c0_1 = arith.constant 0 : index
     %c-10_2 = arith.constant -10 : index
@@ -73,9 +73,9 @@
     %7 = arith.cmpi sge, %6, %c0_1 : index
     cond_br %7, ^bb5, ^bb6
   ^bb5: // pred: ^bb4
-    br ^bb6
+    cf.br ^bb6
   ^bb6: // 2 preds: ^bb4, ^bb5
-    br ^bb7
+    cf.br ^bb7
   ^bb7: // 2 preds: ^bb3, ^bb6
     return
   }

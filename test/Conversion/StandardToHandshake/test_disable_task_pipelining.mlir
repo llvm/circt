@@ -3,15 +3,15 @@
 
 // CHECK-LABEL:   handshake.func @simple_loop(
 // CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
-// CHECK:           %[[VAL_1:.*]] = br %[[VAL_0]] : none
+// CHECK:           %[[VAL_1:.*]] = cf.br %[[VAL_0]] : none
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = control_merge %[[VAL_1]] : none
 // CHECK:           %[[VAL_4:.*]]:3 = fork [3] %[[VAL_2]] : none
 // CHECK:           sink %[[VAL_3]] : index
 // CHECK:           %[[VAL_5:.*]] = constant %[[VAL_4]]#1 {value = 1 : index} : index
 // CHECK:           %[[VAL_6:.*]] = constant %[[VAL_4]]#0 {value = 42 : index} : index
-// CHECK:           %[[VAL_7:.*]] = br %[[VAL_4]]#2 : none
-// CHECK:           %[[VAL_8:.*]] = br %[[VAL_5]] : index
-// CHECK:           %[[VAL_9:.*]] = br %[[VAL_6]] : index
+// CHECK:           %[[VAL_7:.*]] = cf.br %[[VAL_4]]#2 : none
+// CHECK:           %[[VAL_8:.*]] = cf.br %[[VAL_5]] : index
+// CHECK:           %[[VAL_9:.*]] = cf.br %[[VAL_6]] : index
 // CHECK:           %[[VAL_10:.*]] = mux %[[VAL_11:.*]]#1 {{\[}}%[[VAL_12:.*]], %[[VAL_9]]] : index, index
 // CHECK:           %[[VAL_13:.*]]:2 = fork [2] %[[VAL_10]] : index
 // CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]] = control_merge %[[VAL_16:.*]], %[[VAL_7]] : none
@@ -32,27 +32,27 @@
 // CHECK:           sink %[[VAL_31]] : index
 // CHECK:           %[[VAL_33:.*]] = constant %[[VAL_32]]#0 {value = 1 : index} : index
 // CHECK:           %[[VAL_34:.*]] = arith.addi %[[VAL_28]], %[[VAL_33]] : index
-// CHECK:           %[[VAL_12]] = br %[[VAL_29]] : index
-// CHECK:           %[[VAL_16]] = br %[[VAL_32]]#1 : none
-// CHECK:           %[[VAL_18]] = br %[[VAL_34]] : index
+// CHECK:           %[[VAL_12]] = cf.br %[[VAL_29]] : index
+// CHECK:           %[[VAL_16]] = cf.br %[[VAL_32]]#1 : none
+// CHECK:           %[[VAL_18]] = cf.br %[[VAL_34]] : index
 // CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = control_merge %[[VAL_25]] : none
 // CHECK:           sink %[[VAL_36]] : index
 // CHECK:           return %[[VAL_35]] : none
 // CHECK:         }
 func @simple_loop() {
 ^bb0:
-  br ^bb1
+  cf.br ^bb1
 ^bb1:	// pred: ^bb0
   %c1 = arith.constant 1 : index
   %c42 = arith.constant 42 : index
-  br ^bb2(%c1 : index)
+  cf.br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
   %1 = arith.cmpi slt, %0, %c42 : index
   cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = arith.constant 1 : index
   %2 = arith.addi %0, %c1_0 : index
-  br ^bb2(%2 : index)
+  cf.br ^bb2(%2 : index)
 ^bb4:	// pred: ^bb2
   return
 }

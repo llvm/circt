@@ -6,10 +6,10 @@
 // CHECK:           %[[VAL_2:.*]] = constant %[[VAL_1]]#2 {value = 0 : index} : index
 // CHECK:           %[[VAL_3:.*]] = constant %[[VAL_1]]#1 {value = 42 : index} : index
 // CHECK:           %[[VAL_4:.*]] = constant %[[VAL_1]]#0 {value = 1 : index} : index
-// CHECK:           %[[VAL_5:.*]] = br %[[VAL_1]]#3 : none
-// CHECK:           %[[VAL_6:.*]] = br %[[VAL_2]] : index
-// CHECK:           %[[VAL_7:.*]] = br %[[VAL_3]] : index
-// CHECK:           %[[VAL_8:.*]] = br %[[VAL_4]] : index
+// CHECK:           %[[VAL_5:.*]] = cf.br %[[VAL_1]]#3 : none
+// CHECK:           %[[VAL_6:.*]] = cf.br %[[VAL_2]] : index
+// CHECK:           %[[VAL_7:.*]] = cf.br %[[VAL_3]] : index
+// CHECK:           %[[VAL_8:.*]] = cf.br %[[VAL_4]] : index
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = control_merge %[[VAL_5]] : none
 // CHECK:           %[[VAL_11:.*]]:3 = fork [3] %[[VAL_10]] : index
 // CHECK:           %[[VAL_12:.*]] = buffer [1] %[[VAL_13:.*]] {initValues = [0], sequential = true} : i1
@@ -42,13 +42,13 @@
 // CHECK:           %[[VAL_44:.*]] = constant %[[VAL_43]]#2 {value = 7 : index} : index
 // CHECK:           %[[VAL_45:.*]] = constant %[[VAL_43]]#1 {value = 56 : index} : index
 // CHECK:           %[[VAL_46:.*]] = constant %[[VAL_43]]#0 {value = 2 : index} : index
-// CHECK:           %[[VAL_47:.*]] = br %[[VAL_38]] : index
-// CHECK:           %[[VAL_48:.*]] = br %[[VAL_39]] : index
-// CHECK:           %[[VAL_49:.*]] = br %[[VAL_40]] : index
-// CHECK:           %[[VAL_50:.*]] = br %[[VAL_43]]#3 : none
-// CHECK:           %[[VAL_51:.*]] = br %[[VAL_44]] : index
-// CHECK:           %[[VAL_52:.*]] = br %[[VAL_45]] : index
-// CHECK:           %[[VAL_53:.*]] = br %[[VAL_46]] : index
+// CHECK:           %[[VAL_47:.*]] = cf.br %[[VAL_38]] : index
+// CHECK:           %[[VAL_48:.*]] = cf.br %[[VAL_39]] : index
+// CHECK:           %[[VAL_49:.*]] = cf.br %[[VAL_40]] : index
+// CHECK:           %[[VAL_50:.*]] = cf.br %[[VAL_43]]#3 : none
+// CHECK:           %[[VAL_51:.*]] = cf.br %[[VAL_44]] : index
+// CHECK:           %[[VAL_52:.*]] = cf.br %[[VAL_45]] : index
+// CHECK:           %[[VAL_53:.*]] = cf.br %[[VAL_46]] : index
 // CHECK:           %[[VAL_54:.*]] = mux %[[VAL_55:.*]]#5 {{\[}}%[[VAL_56:.*]], %[[VAL_52]]] : index, index
 // CHECK:           %[[VAL_57:.*]]:2 = fork [2] %[[VAL_54]] : index
 // CHECK:           %[[VAL_58:.*]] = mux %[[VAL_55]]#4 {{\[}}%[[VAL_59:.*]], %[[VAL_53]]] : index, index
@@ -81,13 +81,13 @@
 // CHECK:           %[[VAL_95:.*]], %[[VAL_96:.*]] = control_merge %[[VAL_84]] : none
 // CHECK:           sink %[[VAL_96]] : index
 // CHECK:           %[[VAL_97:.*]] = arith.addi %[[VAL_88]], %[[VAL_90]]#1 : index
-// CHECK:           %[[VAL_59]] = br %[[VAL_90]]#0 : index
-// CHECK:           %[[VAL_56]] = br %[[VAL_91]] : index
-// CHECK:           %[[VAL_61]] = br %[[VAL_92]] : index
-// CHECK:           %[[VAL_63]] = br %[[VAL_93]] : index
-// CHECK:           %[[VAL_65]] = br %[[VAL_94]] : index
-// CHECK:           %[[VAL_68]] = br %[[VAL_95]] : none
-// CHECK:           %[[VAL_70]] = br %[[VAL_97]] : index
+// CHECK:           %[[VAL_59]] = cf.br %[[VAL_90]]#0 : index
+// CHECK:           %[[VAL_56]] = cf.br %[[VAL_91]] : index
+// CHECK:           %[[VAL_61]] = cf.br %[[VAL_92]] : index
+// CHECK:           %[[VAL_63]] = cf.br %[[VAL_93]] : index
+// CHECK:           %[[VAL_65]] = cf.br %[[VAL_94]] : index
+// CHECK:           %[[VAL_68]] = cf.br %[[VAL_95]] : none
+// CHECK:           %[[VAL_70]] = cf.br %[[VAL_97]] : index
 // CHECK:           %[[VAL_98:.*]] = merge %[[VAL_79]] : index
 // CHECK:           %[[VAL_99:.*]] = merge %[[VAL_81]] : index
 // CHECK:           %[[VAL_100:.*]]:2 = fork [2] %[[VAL_99]] : index
@@ -95,10 +95,10 @@
 // CHECK:           %[[VAL_102:.*]], %[[VAL_103:.*]] = control_merge %[[VAL_85]] : none
 // CHECK:           sink %[[VAL_103]] : index
 // CHECK:           %[[VAL_104:.*]] = arith.addi %[[VAL_98]], %[[VAL_100]]#1 : index
-// CHECK:           %[[VAL_23]] = br %[[VAL_100]]#0 : index
-// CHECK:           %[[VAL_19]] = br %[[VAL_101]] : index
-// CHECK:           %[[VAL_16]] = br %[[VAL_102]] : none
-// CHECK:           %[[VAL_26]] = br %[[VAL_104]] : index
+// CHECK:           %[[VAL_23]] = cf.br %[[VAL_100]]#0 : index
+// CHECK:           %[[VAL_19]] = cf.br %[[VAL_101]] : index
+// CHECK:           %[[VAL_16]] = cf.br %[[VAL_102]] : none
+// CHECK:           %[[VAL_26]] = cf.br %[[VAL_104]] : index
 // CHECK:           %[[VAL_105:.*]], %[[VAL_106:.*]] = control_merge %[[VAL_35]] : none
 // CHECK:           sink %[[VAL_106]] : index
 // CHECK:           return %[[VAL_105]] : none
@@ -107,7 +107,7 @@ func @imperfectly_nested_loops() {
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
   %1 = arith.cmpi slt, %0, %c42 : index
   cond_br %1, ^bb2, ^bb6
@@ -115,16 +115,16 @@ func @imperfectly_nested_loops() {
   %c7 = arith.constant 7 : index
   %c56 = arith.constant 56 : index
   %c2 = arith.constant 2 : index
-  br ^bb3(%c7 : index)
+  cf.br ^bb3(%c7 : index)
 ^bb3(%2: index):      // 2 preds: ^bb2, ^bb4
   %3 = arith.cmpi slt, %2, %c56 : index
   cond_br %3, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %4 = arith.addi %2, %c2 : index
-  br ^bb3(%4 : index)
+  cf.br ^bb3(%4 : index)
 ^bb5: // pred: ^bb3
   %5 = arith.addi %0, %c1 : index
-  br ^bb1(%5 : index)
+  cf.br ^bb1(%5 : index)
 ^bb6: // pred: ^bb1
   return
 }
