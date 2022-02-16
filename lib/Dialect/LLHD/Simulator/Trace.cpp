@@ -72,9 +72,6 @@ void Trace::pushAllChanges(unsigned instIndex, unsigned sigIndex) {
 }
 
 void Trace::addChange(unsigned sigIndex) {
-  if (mode == TraceMode::None)
-    return;
-
   currentTime = state->getTime();
   if (isTraced[sigIndex]) {
     if (mode == TraceMode::Full) {
@@ -121,9 +118,7 @@ void Trace::sortChanges() {
 }
 
 void Trace::flush(bool force) {
-  if (mode == TraceMode::None)
-    return;
-  else if (mode == TraceMode::Full || mode == TraceMode::Reduced)
+  if (mode == TraceMode::Full || mode == TraceMode::Reduced)
     flushFull();
   else if (mode == TraceMode::Merged || mode == TraceMode::MergedReduce ||
            mode == TraceMode::NamedOnly)

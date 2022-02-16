@@ -66,7 +66,6 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
 
   Trace trace(state, out, traceMode);
 
-  // FIXME: This 1 sized vector looks weired
   SmallVector<void *, 1> arg({&state});
   // Initialize tbe simulation state.
   auto res = engine->invokePacked("llhd_init", arg);
@@ -106,13 +105,14 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
     const auto &event = state->popEvent();
 
     // Interrupt the simulation if a stop condition is met.
-    if (cycle >= maxCycle || event.getTimeTime() >= maxTime)
+    if (cycle >= maxCycle || event.getTimeTime() > maxTime)
       break;
 
     // Update the simulation time.
     state->updateTime(event.getTime());
 
-    trace.flush();
+    if (traceMode != TraceMode::None)
+      trace.flush();
 
     // Process signal changes.
     size_t i = 0, e = event.getNumChanges();
@@ -126,7 +126,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
 
       // Apply the changes to the buffer until we reach the next signal.
       while (i < e && event.getChange(i).first == change.first) {
-        const auto &buffer = event.getChangedBuffer(change.second);
+        const auto &buffer = event.getChangedBuffer(event.getChange(i).second);
         const auto &drive = buffer.second;
         if (drive.getBitWidth() < buff.getBitWidth())
           buff.insertBits(drive, buffer.first);
@@ -148,8 +148,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
         auto &inst = state->getInstance(ii);
         // Skip if the process is not currently sensible to the signal.
         if (inst.isProc()) {
-          // FIXME: It may have bug in original logic here!
-          if (!inst.isWaitingOnSignal(change.first))
+          if (inst.isWaitingOnSignal(change.first))
             continue;
 
           // Invalidate scheduled wakeup
@@ -159,7 +158,8 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
       }
 
       // Dump the updated signal.
-      trace.addChange(change.first);
+      if (traceMode != TraceMode::None)
+        trace.addChange(change.first);
     }
 
     // Add scheduled process resumes to the wakeup queue.
@@ -182,7 +182,8 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
   }
 
   // Force flush any remaining changes
-  trace.flush(true);
+  if (traceMode != TraceMode::None)
+    trace.flush(true);
 
   llvm::errs() << "Finished at " << state->getTime().toString()
                << " (" << cycle << " cycles)\n";

@@ -205,7 +205,7 @@ public:
 
 private:
   // A map from signal indexes to change buffers. Makes it easy to sort the
-  // changes such that we can process one signal at a time.
+  // changes such that we can process one signal at a time. <sigIdx, bufIdx> pair
   llvm::SmallVector<std::pair<unsigned, unsigned>, 32> changes;
   // Buffers for the signal changes.
   llvm::SmallVector<std::pair<unsigned, llvm::APInt>, 32> buffers;
