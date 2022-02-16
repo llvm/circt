@@ -3499,6 +3499,152 @@ bool NonLocalAnchor::isModule() { return !ref(); }
 /// to a module or an instance of a module);
 bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 
+
+//===----------------------------------------------------------------------===//
+// Various namers.
+//===----------------------------------------------------------------------===//
+
+ static void genericAsmResultNames(Operation *op, OpAsmSetValueNameFn setNameFn) {
+
+    // Many firrtl dialect operations have an optional 'name' attribute.  If
+    // present, use it.
+    if (op->getNumResults() == 1)
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        setNameFn(op->getResult(0), nameAttr.getValue());
+  }
+
+  void AddPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void AndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void AsClockPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void AsSIntPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void AsUIntPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void BitsPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void CatPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void CvtPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void DShlPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void DShlwPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void DShrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void DivPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void EQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void GEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void LTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void MulPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void MultibitMuxOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void MuxPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void NEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void NegPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void NotPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void OrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void OrRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void PadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void RemPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void ShlPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+  void ShrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void SubPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void TailPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+  void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+    genericAsmResultNames(*this, setNameFn);
+  }
+
+
+
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//

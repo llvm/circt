@@ -20,7 +20,7 @@ def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
 // A common base class for operations that implement type inference and parsed
 // argument validation.
 class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
-    FIRRTLOp<mnemonic, traits # [InferTypeOpInterface, NoSideEffect]> {
+    FIRRTLOp<mnemonic, traits # [HasCustomSSAName, InferTypeOpInterface, NoSideEffect]> {
 
   // The narrow operation-specific type inference method. Operations can
   // override this with an inline declaration for the class header, or just
