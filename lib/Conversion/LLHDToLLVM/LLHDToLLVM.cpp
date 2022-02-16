@@ -22,6 +22,7 @@
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -2684,6 +2685,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
+  cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
 
   // Apply the partial conversion.
   if (failed(
