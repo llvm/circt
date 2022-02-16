@@ -117,38 +117,38 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
     // Process signal changes.
     size_t i = 0, e = event.getNumChanges();
     while (i < e) {
-      const auto change = event.getChange(i);
-      const auto &signal = state->getSignal(change.first);
-      APInt buff(
+      const auto sigIdx = event.getChangedSignalIndex(i);
+      const auto &signal = state->getSignal(sigIdx);
+      APInt newSignal(
           signal.Size() * 8,
           llvm::makeArrayRef(reinterpret_cast<uint64_t *>(signal.Value()),
                              llvm::divideCeil(signal.Size(), 8)));
 
       // Apply the changes to the buffer until we reach the next signal.
-      while (i < e && event.getChange(i).first == change.first) {
-        const auto &buffer = event.getChangedBuffer(event.getChange(i).second);
-        const auto &drive = buffer.second;
-        if (drive.getBitWidth() < buff.getBitWidth())
-          buff.insertBits(drive, buffer.first);
-        else
-          buff = drive;
+      while (i < e && event.getChangedSignalIndex(i) == sigIdx) {
+        const auto &changedSignal = event.getChangedSignal(i);
+        if (changedSignal.getBitWidth() < newSignal.getBitWidth()) {
+          newSignal.insertBits(changedSignal, event.getChangedSignalInsPos(i));
+        } else {
+          newSignal = changedSignal;
+        }
 
         ++i;
       }
 
       // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(signal.Value(), buff.getRawData(), signal.Size()) == 0)
+      if (std::memcmp(signal.Value(), newSignal.getRawData(), signal.Size()) == 0)
         continue;
 
       // Apply the signal update.
-      std::memcpy(signal.Value(), buff.getRawData(), signal.Size());
+      std::memcpy(signal.Value(), newSignal.getRawData(), signal.Size());
 
       // Add sensitive instances.
       for (auto ii : signal.getTriggeredInstanceIndices()) {
         auto &inst = state->getInstance(ii);
         // Skip if the process is not currently sensible to the signal.
         if (inst.isProc()) {
-          if (inst.isWaitingOnSignal(change.first))
+          if (inst.isWaitingOnSignal(sigIdx))
             continue;
 
           // Invalidate scheduled wakeup
@@ -159,7 +159,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
 
       // Dump the updated signal.
       if (traceMode != TraceMode::None)
-        trace.addChange(change.first);
+        trace.addChange(sigIdx);
     }
 
     // Add scheduled process resumes to the wakeup queue.

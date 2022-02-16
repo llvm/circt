@@ -21,47 +21,8 @@ using namespace llvm;
 using namespace circt::llhd::sim;
 
 //===----------------------------------------------------------------------===//
-// Time
-//===----------------------------------------------------------------------===//
-
-bool Time::operator<(const Time &rhs) const {
-  return time < rhs.time || (time == rhs.time && delta < rhs.delta) ||
-         (time == rhs.time && delta == rhs.delta && eps < rhs.eps);
-}
-
-bool Time::operator==(const Time &rhs) const {
-  return time == rhs.time && delta == rhs.delta && eps == rhs.eps;
-}
-
-Time Time::operator+(const Time &rhs) const {
-  return Time(time + rhs.time, delta + rhs.delta, eps + rhs.eps);
-}
-
-bool Time::isZero() { return time == 0 && delta == 0 && eps == 0; }
-
-std::string Time::toString() {
-  return std::to_string(time) + "ps " + std::to_string(delta) + "d " +
-    std::to_string(eps) + "e";
-}
-
-//===----------------------------------------------------------------------===//
 // Signal
 //===----------------------------------------------------------------------===//
-
-bool Signal::operator==(const Signal &rhs) const {
-  if (owner != rhs.owner || name != rhs.name || size != rhs.size)
-    return false;
-  return std::memcmp(value, rhs.value, size);
-}
-
-bool Signal::operator<(const Signal &rhs) const {
-  if (owner < rhs.owner)
-    return true;
-  if (owner == rhs.owner && name < rhs.name)
-    return true;
-  return false;
-}
-
 std::string Signal::toHexString() const {
   std::string ret;
   raw_string_ostream ss(ret);
@@ -87,36 +48,26 @@ std::string Signal::toHexString(unsigned elemIndex) const {
 //===----------------------------------------------------------------------===//
 // Slot
 //===----------------------------------------------------------------------===//
-
-bool Slot::operator<(const Slot &rhs) const { return time < rhs.time; }
-
-bool Slot::operator>(const Slot &rhs) const { return rhs.time < time; }
-
 void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
                         unsigned width) {
-  // Get the amount of 64 bit words required to store the value in an APInt.
-  auto size = llvm::divideCeil(width, 64);
-
   auto obj = std::make_pair(
       bitOffset,
-      APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes), size)));
-
-  if (changesSize >= buffers.size()) {
-    // Create a new change buffer if we don't have any unused one available for
-    // reuse.
-    buffers.push_back(obj);
-  } else {
-    // Reuse the first available buffer.
-    buffers[changesSize] = obj;
-  }
+      APInt(width, makeArrayRef(reinterpret_cast<uint64_t *>(bytes),
+                                llvm::divideCeil(width, 64))));
 
   // Map the signal index to the change buffer so we can retrieve
   // it after sorting.
-  changes.push_back(std::make_pair(index, changesSize));
+  // Create a new change buffer if we don't have any unused one available for
+  // reuse.
+  if (changesSize >= changes.size()) {
+    changes.push_back(std::make_pair(index, obj));
+  } else {
+    // Reuse the first available buffer.
+    changes[changesSize] = std::make_pair(index, obj);
+  }
+
   ++changesSize;
 }
-
-void Slot::insertChange(unsigned inst) { scheduled.push_back(inst); }
 
 //===----------------------------------------------------------------------===//
 // UpdateQueue
