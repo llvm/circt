@@ -298,16 +298,16 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   void gatherTap(Annotation anno, Port port) {
     auto key = getKey(anno);
     annos.insert({key, anno});
-    auto it = tappedPorts.insert({key, port});
-    assert(it.second && "ambiguous tap annotation");
+    tappedPorts.insert({key, port});
+    assert(tappedPorts.find(key)->second && "ambiguous tap annotation");
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
   void gatherTap(Annotation anno, Operation *op) {
     auto key = getKey(anno);
     annos.insert({key, anno});
-    auto it = tappedOps.insert({key, op});
-    assert(it.second && "ambiguous tap annotation");
+    tappedOps.insert({key, op});
+    assert(tappedOps.find(key)->second && "ambiguous tap annotation");
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
       deadNLAs.insert(sym.getAttr());
   }
