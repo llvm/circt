@@ -1188,31 +1188,32 @@ void GrandCentralPass::runOnOperation() {
     return Optional(id);
   };
 
+  /// TODO: Handle this differently to allow construction of an optionsl
+  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
+  instancePaths = &instancePathCache;
+
   // Maybe return the lone instance of a module.  Generate errors on the op if
   // the module is not instantiated or is multiply instantiated.
   auto exactlyOneInstance = [&](FModuleOp op,
                                 StringRef msg) -> Optional<InstanceOp> {
-    auto uses = getSymbolTable().getSymbolUses(op, circuitOp);
+    auto *node = instancePaths->instanceGraph[op];
 
-    auto instances = llvm::make_filter_range(uses.getValue(), [&](auto u) {
-      return (isa<InstanceOp>(u.getUser()));
-    });
-
-    if (instances.empty()) {
+    switch (node->getNumUses()) {
+    case 0:
       op->emitOpError() << "is marked as a GrandCentral '" << msg
                         << "', but is never instantiated";
       return None;
+    case 1:
+      return (*node->uses().begin())->getInstance();
+    default:
+      auto diag = op->emitOpError()
+                  << "is marked as a GrandCentral '" << msg
+                  << "', but it is instantiated more than once";
+      for (auto *instance : node->uses())
+        diag.attachNote(instance->getInstance()->getLoc())
+            << "parent is instantiated here";
+      return None;
     }
-
-    if (llvm::hasSingleElement(instances))
-      return cast<InstanceOp>((*(instances.begin())).getUser());
-
-    auto diag = op->emitOpError() << "is marked as a GrandCentral '" << msg
-                                  << "', but it is instantiated more than once";
-    for (auto instance : instances)
-      diag.attachNote(instance.getUser()->getLoc())
-          << "parent is instantiated here";
-    return None;
   };
 
   /// Walk the circuit and extract all information related to scattered
@@ -1493,10 +1494,6 @@ void GrandCentralPass::runOnOperation() {
       }
     }
   });
-
-  /// TODO: Handle this differently to allow construction of an optionsl
-  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
-  instancePaths = &instancePathCache;
 
   // Now, iterate over the worklist of interface-encoding annotations to create
   // the interface and all its sub-interfaces (interfaces that it instantiates),
