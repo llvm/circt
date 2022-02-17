@@ -517,6 +517,21 @@ Example:
 }
 ```
 
+### [NoCircuitDedupAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/NoCircuitDedupAnnotation$.html)
+
+| Property   | Type   | Description                                  |
+| ---------- | ------ | -------------                                |
+| class      | string | `firrtl.transforms.NoCircuitDedupAnnotation` |
+
+This annotations will skip running the deduplication pass on the circuit.
+
+Example:
+```json
+{
+  "class": "firrtl.transforms.NoCircuitDedupAnnotation"
+}
+```
+
 ### OMIRFileAnnotation
 
 | Property   | Type   | Description                                           |

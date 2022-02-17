@@ -413,3 +413,19 @@ firrtl.circuit "NoDedup" {
     firrtl.instance simple1 @Simple1()
   }
 }
+
+// Don't deduplicate modules with when the circuit is NoDedup.
+// CHECK-LABEL: firrtl.circuit "NoCircuitDedup"
+firrtl.circuit "NoCircuitDedup" attributes {annotations = [
+    // CHECK-NOT: "firrtl.transforms.NoCircuitDedupAnnotation"
+    {class = "firrtl.transforms.NoCircuitDedupAnnotation"}]} {
+  // CHECK: firrtl.module @Simple0
+  firrtl.module @Simple0() { }
+  // CHECK: firrtl.module @Simple1
+  firrtl.module @Simple1() { }
+  // CHECK: firrtl.module @NoCircuitDedup 
+  firrtl.module @NoCircuitDedup() {
+    firrtl.instance simple0 @Simple0()
+    firrtl.instance simple1 @Simple1()
+  }
+}

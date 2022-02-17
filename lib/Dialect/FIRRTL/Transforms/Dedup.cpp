@@ -939,6 +939,12 @@ class DedupPass : public DedupBase<DedupPass> {
   void runOnOperation() override {
     auto *context = &getContext();
     auto circuit = getOperation();
+
+    // If this circuit is marked "NoDedup" skip this pass.
+    if (AnnotationSet::removeAnnotations(
+            circuit, "firrtl.transforms.NoCircuitDedupAnnotation"))
+      return markAllAnalysesPreserved();
+
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     SymbolTable symbolTable(circuit);
     NLAMap nlaMap = createNLAMap(circuit);
