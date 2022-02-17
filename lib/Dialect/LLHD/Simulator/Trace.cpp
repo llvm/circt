@@ -60,7 +60,7 @@ void Trace::pushChange(unsigned instIndex, unsigned sigIndex, int elem = -1) {
 
 void Trace::pushAllChanges(unsigned instIndex, unsigned sigIndex) {
   auto &sig = state->getSignal(sigIndex);
-  if (sig.hasElement() > 0) {
+  if (sig.hasElement()) {
     // Push changes for all signal elements.
     for (size_t i = 0, e = sig.getElementSize(); i < e; ++i) {
       pushChange(instIndex, sigIndex, i);
@@ -72,7 +72,7 @@ void Trace::pushAllChanges(unsigned instIndex, unsigned sigIndex) {
 }
 
 void Trace::addChange(unsigned sigIndex) {
-  currentTime = state->getTime();
+  currentTime = state->getSimTime();
   if (isTraced[sigIndex]) {
     if (mode == TraceMode::Full) {
       auto &sig = state->getSignal(sigIndex);
@@ -92,7 +92,7 @@ void Trace::addChange(unsigned sigIndex) {
 
 void Trace::addChangeMerged(unsigned sigIndex) {
   auto &sig = state->getSignal(sigIndex);
-  if (sig.getElementSize() > 0) {
+  if (sig.hasElement()) {
     // Add a change for all sub-elements
     for (size_t i = 0, e = sig.getElementSize(); i < e; ++i) {
       auto valueDump = sig.toHexString(i);
@@ -122,7 +122,7 @@ void Trace::flush(bool force) {
     flushFull();
   else if (mode == TraceMode::Merged || mode == TraceMode::MergedReduce ||
            mode == TraceMode::NamedOnly)
-    if (state->getTime().getTime() > currentTime.getTime() || force)
+    if (state->getSimTime().getTime() > currentTime.getTime() || force)
       flushMerged();
 }
 

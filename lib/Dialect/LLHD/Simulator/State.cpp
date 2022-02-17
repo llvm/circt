@@ -72,17 +72,6 @@ void Slot::insertChange(int index, int bitOffset, uint8_t *bytes,
 //===----------------------------------------------------------------------===//
 // UpdateQueue
 //===----------------------------------------------------------------------===//
-void UpdateQueue::insertOrUpdate(Time time, int index, int bitOffset,
-                                 uint8_t *bytes, unsigned width) {
-  auto &slot = getOrCreateSlot(time);
-  slot.insertChange(index, bitOffset, bytes, width);
-}
-
-void UpdateQueue::insertOrUpdate(Time time, unsigned inst) {
-  auto &slot = getOrCreateSlot(time);
-  slot.insertChange(inst);
-}
-
 Slot &UpdateQueue::getOrCreateSlot(Time time) {
   auto &top = begin()[topSlot];
 
@@ -162,32 +151,20 @@ void UpdateQueue::pop() {
 //===----------------------------------------------------------------------===//
 // State
 //===----------------------------------------------------------------------===//
-
-llvm::SmallVectorTemplateCommon<Instance>::iterator
-State::findInstanceByName(std::string name) {
-  auto II =
-      std::find_if(instances.begin(), instances.end(),
-                   [&](const auto &inst) { return name == inst.getName(); });
-
-  assert(II != instances.end() && "instance does not exist!");
-
-  return II;
-}
-
 int State::addSignalData(int index, std::string owner, uint8_t *value,
                          uint64_t size) {
   auto II = findInstanceByName(owner);
 
-  uint64_t globalIdx = II->getSensiSigIndex(index);
+  uint64_t globalIdx = II->getSignalGlobalIndex(index);
   auto &sig = signals[globalIdx];
 
-  // Add pointer and size to global signal table entry.
-  sig.update(value, size);
+  // Store actual signal value pointer and size to global signal table entry.
+  sig.store(value, size);
 
-  // Add the value pointer to the signal detail struct for each instance this
+  // Add the signal value to the signal detail struct for each instance this
   // signal appears in.
-  for (auto idx : signals[globalIdx].getTriggeredInstanceIndices()) {
-    instances[idx].updateSignalDetail(globalIdx, sig.Value());
+  for (auto idx : sig.getTriggeredInstanceIndices()) {
+    instances[idx].updateSignalDetail(globalIdx, value);
   }
   return globalIdx;
 }
@@ -199,7 +176,7 @@ void State::addSignalElement(unsigned index, unsigned offset, unsigned size) {
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
   for (auto instIdx : sig.getTriggeredInstanceIndices()) {
-    out << time.toString() << "  " << instances[instIdx].getPath() << "/"
+    out << simTime.toString() << "  " << instances[instIdx].getPath() << "/"
         << sig.getName() << "  " << sig.toHexString() << "\n";
   }
 }

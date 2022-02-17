@@ -109,7 +109,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
       break;
 
     // Update the simulation time.
-    state->updateTime(event.getTime());
+    state->updateSimTime(event.getTime());
 
     if (traceMode != TraceMode::None)
       trace.flush();
@@ -118,7 +118,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
     size_t i = 0, e = event.getNumChanges();
     while (i < e) {
       const auto sigIdx = event.getChangedSignalIndex(i);
-      const auto &signal = state->getSignal(sigIdx);
+      auto &signal = state->getSignal(sigIdx);
       APInt newSignal(
           signal.Size() * 8,
           llvm::makeArrayRef(reinterpret_cast<uint64_t *>(signal.Value()),
@@ -136,24 +136,20 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
         ++i;
       }
 
-      // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(signal.Value(), newSignal.getRawData(), signal.Size()) == 0)
+      if (!signal.updateWhenChanged(newSignal.getRawData()))
         continue;
 
-      // Apply the signal update.
-      std::memcpy(signal.Value(), newSignal.getRawData(), signal.Size());
-
-      // Add sensitive instances.
+      // Add sensitive instances to wakeup list
       for (auto ii : signal.getTriggeredInstanceIndices()) {
-        auto &inst = state->getInstance(ii);
+        auto &instance = state->getInstance(ii);
         // Skip if the process is not currently sensible to the signal.
-        if (inst.isProc()) {
-          if (inst.isWaitingOnSignal(sigIdx))
+        if (instance.isProc()) {
+          if (instance.isWaitingOnSignal(sigIdx))
             continue;
 
-          // Invalidate scheduled wakeup
-          inst.invalidWakeupTime();
+          instance.invalidWakeupTime();
         }
+
         wakeupQueue.push_back(ii);
       }
 
@@ -163,21 +159,23 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
     }
 
     // Add scheduled process resumes to the wakeup queue.
-    for (auto ii : event.getScheduledWakups()) {
-      if (state->getInstance(i).shouldWakeup(state->getTime()))
+    for (auto ii : event.getScheduledWakeups()) {
+      if (state->getInstance(ii).shouldWakeup(state->getSimTime()))
         wakeupQueue.push_back(ii);
     }
 
+    // Sort the instance index and deduplicate(~3% of total simulation time)
     std::sort(wakeupQueue.begin(), wakeupQueue.end());
-    wakeupQueue.erase(std::unique(wakeupQueue.begin(), wakeupQueue.end()),
-                      wakeupQueue.end());
+    auto pivot = std::unique(wakeupQueue.begin(), wakeupQueue.end());
+    wakeupQueue.erase(pivot, wakeupQueue.end());
 
     // Run the instances present in the wakeup queue.
     for (auto i : wakeupQueue)
-      state->getInstance(i).run(reinterpret_cast<void*>(&state));
+      state->getInstance(i).run(reinterpret_cast<void *>(&state));
 
     // Clear wakeup queue.
     wakeupQueue.clear();
+
     ++cycle;
   }
 
@@ -185,7 +183,7 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
   if (traceMode != TraceMode::None)
     trace.flush(true);
 
-  llvm::errs() << "Finished at " << state->getTime().toString()
+  llvm::errs() << "Finished at " << state->getSimTime().toString()
                << " (" << cycle << " cycles)\n";
   return 0;
 }
@@ -251,7 +249,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
             auto it = std::find_if(
                 child.getSensitivityList().begin(),
                 child.getSensitivityList().end(),
-                [&](SignalDetail &detail) {
+                [&](const SignalDetail &detail) {
                   auto& outSig = state->getSignal(detail.globalIndex);
                   return outSig.getName() == sig.name() &&
                          outSig.getOwner() == child.getName();

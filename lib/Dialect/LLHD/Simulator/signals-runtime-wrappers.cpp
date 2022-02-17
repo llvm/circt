@@ -25,9 +25,7 @@ using namespace circt::llhd::sim;
 int allocSignal(State *state, int index, char *owner, uint8_t *value,
                 int64_t size) {
   assert(state && "alloc_signal: state not found");
-  std::string sOwner(owner);
-
-  return state->addSignalData(index, sOwner, value, size);
+  return state->addSignalData(index, std::string(owner), value, size);
 }
 
 void addSigArrayElements(State *state, unsigned index, unsigned size,

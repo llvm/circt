@@ -51,7 +51,6 @@ public:
     return Time(time + rhs.time, delta + rhs.delta, eps + rhs.eps);
   }
 
-  /// TODO: Use StringRef instead?
   /// Convert to human readable string
   std::string toString() const {
     return std::to_string(time) + "ps " + std::to_string(delta) + "d " +
@@ -69,9 +68,12 @@ private:
 
 /// Detail structure that can be easily accessed by the lowered code.
 struct SignalDetail {
+  // Signal value
   uint8_t *value;
   uint64_t offset;
+  // Index to instances which the signal is used in
   uint64_t instIndex;
+  // Signal index to global simulation signal storage(state->signals)
   uint64_t globalIndex;
 };
 
@@ -135,10 +137,56 @@ public:
     elements.push_back(val);
   }
 
-  /// Update signal value and size
-  void update(uint8_t *v, uint64_t s) {
+  /// Store JIT allocated signal pointer and size
+  void store(uint8_t *v, uint64_t s) {
     value = v;
     size = s;
+  }
+
+  /// Update signal value when it is changed, the width of incoming signal
+  /// value and the stored signal value are identical.
+  /// As majority signals are smaller than 64 bits, this implementation
+  /// is much faster as it avoided memcpy in most cases.
+  /// @param v Pointer to signal value
+  /// @return return true when signal is updated, false when not
+  bool updateWhenChanged(const uint64_t *v) {
+    switch (size) {
+    case 1: {
+      const uint8_t* newVal = reinterpret_cast<const uint8_t*>(v);
+      if (*value == *newVal)
+        return false;
+      *value = *newVal;
+      break;
+    }
+    case 2:  {
+      const uint16_t* newVal = reinterpret_cast<const uint16_t*>(v);
+      if (*(uint16_t*)value == *newVal)
+        return false;
+      *(uint16_t*)value = *newVal;
+      break;
+    }
+    case 4: {
+      const uint32_t* newVal = reinterpret_cast<const uint32_t*>(v);
+      if (*(uint32_t*)value == *newVal)
+        return false;
+      *(uint32_t*)value = *newVal;
+      break;
+    }
+    case 8: {
+      if (*(uint64_t*)value == *v)
+        return false;
+      *(uint64_t*)value = *v;
+      break;
+    }
+    default: {
+      if (std::memcmp(value, v, size) == 0)
+        return false;
+      std::memcpy(value, v, size);
+      break;
+    }
+    }
+
+    return true;
   }
 
   /// Return the value of the signal in hexadecimal string format.
@@ -155,9 +203,13 @@ private:
   std::vector<unsigned> instanceIndices;
   uint64_t size;
   uint8_t *value;
+  // Modeling SystemVerilog elements(event regions)?
   std::vector<std::pair<unsigned, unsigned>> elements;
 };
 
+/// FIXME: This should be a subclass of UpdateQueue, and this class
+/// should be renamed to ScheduleSlot.
+/// Contains signals that should be fired at the same time.
 /// The simulator's internal representation of one queue slot.
 class Slot {
 public:
@@ -219,7 +271,7 @@ public:
     time = Time();
   }
 
-  llvm::SmallVector<unsigned, 4> getScheduledWakups() const {
+  llvm::SmallVector<unsigned, 4> getScheduledWakeups() const {
     return scheduled;
   }
 
@@ -233,7 +285,11 @@ private:
 
   // Processes with scheduled wakeup.
   llvm::SmallVector<unsigned, 4> scheduled;
+
+  // The time when the signals in this slot should be fired.
   Time time;
+
+  // Is this slot used.
   bool unused = false;
 };
 
@@ -256,12 +312,16 @@ public:
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the new change to it, else create a new slot and push it to the queue.
   void insertOrUpdate(Time time, int index, int bitOffset, uint8_t *bytes,
-                      unsigned width);
+                      unsigned width) {
+    getOrCreateSlot(time).insertChange(index, bitOffset, bytes, width);
+  }
 
   /// Check wheter a slot for the given time already exists. If that's the case,
   /// add the scheduled wakeup to it, else create a new slot and push it to the
   /// queue.
-  void insertOrUpdate(Time time, unsigned inst);
+  void insertOrUpdate(Time time, unsigned inst) {
+    getOrCreateSlot(time).insertChange(inst);
+  }
 
   /// Get a reference to the current top of the queue (the earliest event
   /// available).
@@ -299,13 +359,13 @@ public:
   const std::string getPath() const { return path; }
   const std::string getBaseUnitName() const { return unit; }
 
-  uint64_t getSensiSigIndex(int index) const {
-    return sensitivityList[index + numArgs].globalIndex;
+  uint64_t getSignalGlobalIndex(int index) const {
+    return sensitivityList[numArgs + index].globalIndex;
   }
 
-  void updateSignalDetail(uint64_t index, uint8_t *value) {
+  void updateSignalDetail(uint64_t globalIndex, uint8_t *value) {
     for (auto &I : sensitivityList) {
-      if (I.globalIndex == index)
+      if (I.globalIndex == globalIndex)
         I.value = value;
     }
   }
@@ -315,7 +375,7 @@ public:
         SignalDetail({nullptr, 0, sensitivityList.size(), globalIndex}));
   }
 
-  SignalDetail &getSignalDetail(unsigned index) {
+  const SignalDetail &getSignalDetail(unsigned index) const {
     return sensitivityList[index];
   }
 
@@ -333,7 +393,7 @@ public:
            procState->senses[IT - sensitivityList.begin()] == 0;
   }
 
-  llvm::SmallVector<SignalDetail, 0> &getSensitivityList() {
+  const llvm::SmallVector<SignalDetail, 0> &getSensitivityList() const {
     return sensitivityList;
   }
 
@@ -417,7 +477,7 @@ public:
 
   /// Push a new scheduled wakeup event in the event queue.
   void pushEvent(Time t, unsigned instIndex) {
-    Time newTime = time + t;
+    Time newTime = simTime + t;
     events.insertOrUpdate(newTime, instIndex);
     instances[instIndex].setWakeupTime(newTime);
   }
@@ -436,11 +496,9 @@ public:
     return signals.size() - 1;
   }
 
-  /// TODO: This function should be part of signal class.
   int addSignalData(int index, std::string owner, uint8_t *value,
                     uint64_t size);
 
-  /// TODO: This function should be part of signal class
   void addSignalElement(unsigned, unsigned, unsigned);
 
   size_t getInstanceSize() const { return instances.size(); }
@@ -450,9 +508,9 @@ public:
   /// FIXME: We should return iterators
   const llvm::SmallVector<Signal, 0> &getSignals() const { return signals; }
 
-  const Signal &getSignal(int index) const { return signals[index]; }
+  Signal& getSignal(int index) { return signals[index]; }
 
-  Instance &getInstance(unsigned idx) { return instances[idx]; }
+  Instance& getInstance(unsigned idx) { return instances[idx]; }
 
   void pushInstance(Instance &i) { instances.push_back(std::move(i)); }
 
@@ -468,13 +526,13 @@ public:
     II->setProcState(state);
   }
 
-  /// Spawn a new event.
+  /// Spawn a new event(signal).
   void spawnEvent(SignalDetail *SD, Time t, uint8_t *sigValue,
                   uint64_t sigWidth) {
     int bitOffset =
         (SD->value - signals[SD->globalIndex].Value()) * 8 + SD->offset;
 
-    events.insertOrUpdate(time + t, SD->globalIndex, bitOffset, sigValue,
+    events.insertOrUpdate(simTime + t, SD->globalIndex, bitOffset, sigValue,
                           sigWidth);
   }
 
@@ -489,11 +547,11 @@ public:
   }
 
   // Update current simulation time
-  void updateTime(Time t) { time = t; }
+  void updateSimTime(Time t) { simTime = t; }
 
   std::string getRoot() const { return root; }
 
-  Time getTime() const { return time; }
+  Time getSimTime() const { return simTime; }
 
   /// Dump a signal to the out stream. One entry is added for every instance
   /// the signal appears in.
@@ -506,16 +564,30 @@ public:
   void dumpSignalTriggers();
 
 private:
-  /// Find an instance in the instances list by name and return an
+  /// Find an instance from the instances list by it's name and return an
   /// iterator for it.
   llvm::SmallVectorTemplateCommon<Instance>::iterator
-  findInstanceByName(std::string name);
+  findInstanceByName(std::string name) {
+    auto II =
+        std::find_if(instances.begin(), instances.end(),
+                    [&](const auto &inst) { return name == inst.getName(); });
+
+    assert(II != instances.end() && "instance does not exist!");
+
+    return II;
+  }
 
 private:
-  Time time;
+  // Current simulation timestamp
+  Time simTime;
   std::string root;
+  // All instances in the simulation
   llvm::SmallVector<Instance, 0> instances;
+  // All signals in the simulation
   llvm::SmallVector<Signal, 0> signals;
+  // Index to instances for which should be wakeup in next tick
+  llvm::SmallVector<unsigned, 8> wakeupInstanceIndices;
+  // Signal scheduling event queue
   UpdateQueue events;
 };
 

@@ -17,41 +17,43 @@
 
 extern "C" {
 
+using namespace circt::llhd::sim;
+
 //===----------------------------------------------------------------------===//
 // Runtime interfaces
 //===----------------------------------------------------------------------===//
 
 /// Allocate a new signal. The index of the new signal in the state's list of
 /// signals is returned.
-int allocSignal(circt::llhd::sim::State *state, int index, char *owner,
+/// @param state Simulation context
+/// @param index Signal index in global signal container
+/// @param value Actual signal value
+/// @param size  The size of signal in bytes
+int allocSignal(State *state, int index, char *owner,
                 uint8_t *value, int64_t size);
 
 /// Add offset and size information for the elements of an array signal.
-void addSigArrayElements(circt::llhd::sim::State *state, unsigned index,
+void addSigArrayElements(State *state, unsigned index,
                          unsigned size, unsigned numElements);
 
 /// Add offset and size information for one element of a struct signal. Elements
 /// are assumed to be added (by calling this function) in sequential order, from
 /// first to last.
-void addSigStructElement(circt::llhd::sim::State *state, unsigned index,
+void addSigStructElement(State *state, unsigned index,
                          unsigned offset, unsigned size);
 
 /// Add allocated constructs to a process instance.
-void allocProc(circt::llhd::sim::State *state, char *owner,
-               circt::llhd::sim::ProcState *procState);
+void allocProc(State *state, char *owner, ProcState *procState);
 
 /// Add allocated entity state to the given instance.
-void allocEntity(circt::llhd::sim::State *state, char *owner,
-                 uint8_t *entityState);
+void allocEntity(State *state, char *owner, uint8_t *entityState);
 
 /// Drive a value onto a signal.
-void driveSignal(circt::llhd::sim::State *state,
-                 circt::llhd::sim::SignalDetail *index, uint8_t *value,
+void driveSignal(State *state, SignalDetail *index, uint8_t *value,
                  uint64_t width, int time, int delta, int eps);
 
 /// Suspend a process.
-void llhdSuspend(circt::llhd::sim::State *state,
-                 circt::llhd::sim::ProcState *procState,
+void llhdSuspend(State *state, ProcState *procState,
                  int time, int delta, int eps);
 }
 
