@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Visitors.h"
 
@@ -44,7 +45,7 @@ void ProcessLoweringPass::runOnOperation() {
             "Process-lowering: The second block (containing the "
             "llhd.wait) is not allowed to have arguments.");
       }
-      if (!isa<mlir::BranchOp>(first.getTerminator())) {
+      if (!isa<mlir::cf::BranchOp>(first.getTerminator())) {
         return op.emitOpError(
             "Process-lowering: The first block has to be terminated "
             "by a BranchOp from the standard dialect.");

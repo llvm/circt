@@ -22,6 +22,9 @@ set(ESI_LinkLibs
   MLIRIR
   MLIRTransforms
   MLIRTranslation
+  MLIRControlFlow
+  MLIRStandard
+  MLIRArithmetic
 )
 
 set(ESI_Deps

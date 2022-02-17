@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
                       hw::HWDialect, comb::CombDialect>();
   mlir::registerLLVMDialectTranslation(context);
 
-  OwningModuleRef module(parseSourceFile(mgr, &context));
+  mlir::OwningOpRef<mlir::ModuleOp> module(parseSourceFile(mgr, &context));
 
   if (dumpMLIR) {
     module->dump();

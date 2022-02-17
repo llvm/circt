@@ -32,7 +32,8 @@ StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 ParseResult parseModuleFunctionSignature(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    SmallVectorImpl<Location> &argLocs, bool &isVariadic,
+    SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames);
 

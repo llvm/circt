@@ -14,7 +14,7 @@
 #define CIRCT_DIALECT_CALYX_OPS_H
 
 #include "circt/Dialect/Calyx/CalyxDialect.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"

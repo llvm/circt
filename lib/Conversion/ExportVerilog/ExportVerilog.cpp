@@ -185,7 +185,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
   // Check for input ports.
   if (portArgNum < numInputs) {
     if (auto argAttr = module->getAttrOfType<ArrayAttr>(
-            mlir::function_like_impl::getArgDictAttrName()))
+            mlir::function_interface_impl::getArgDictAttrName()))
       if (auto argDict = argAttr[portArgNum].cast<DictionaryAttr>())
         if (auto updatedName = argDict.get(verilogNameAttr))
           return updatedName.cast<StringAttr>().getValue();
@@ -198,7 +198,7 @@ StringRef getPortVerilogName(Operation *module, ssize_t portArgNum) {
   // If its an output port, get the index into the output port array.
   portId = portArgNum - numInputs;
   if (auto argAttr = module->getAttrOfType<ArrayAttr>(
-          mlir::function_like_impl::getResultDictAttrName()))
+          mlir::function_interface_impl::getResultDictAttrName()))
     if (auto argDict = argAttr[portId].cast<DictionaryAttr>())
       if (auto updatedName = argDict.get(verilogNameAttr))
         return updatedName.cast<StringAttr>().getValue();

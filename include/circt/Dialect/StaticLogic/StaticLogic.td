@@ -45,8 +45,11 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
 
   let builders = [OpBuilder<(ins "ValueRange":$operands, "ValueRange":$results), [{
     SmallVector<Type, 4> argTypes;
-    for (auto value : operands)
+    SmallVector<Location, 4> argLocs;
+    for (auto value : operands) {
       argTypes.push_back(value.getType());
+      argLocs.push_back(value.getLoc());
+    }
 
     SmallVector<Type, 4> resultTypes;
     for (auto value : results)
@@ -55,7 +58,7 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
     Region *bodyRegion = odsState.addRegion();
     Block *body = new Block();
     bodyRegion->push_back(body);
-    body->addArguments(argTypes);
+    body->addArguments(argTypes, argLocs);
 
     odsState.addOperands(operands);
     odsState.addTypes(resultTypes);
@@ -126,13 +129,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     SizedRegion<1>:$stages
   );
 
-  let parser = [{
-    return parse$cppClass(parser, result);
-  }];
-
-  let printer = [{
-    print$cppClass(p, *this);
-  }];
+  let hasCustomAssemblyFormat = 1;
 
   let verifier = [{
     return ::verify$cppClass(*this);

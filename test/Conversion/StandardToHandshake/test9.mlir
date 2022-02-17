@@ -88,17 +88,17 @@ func @affine_dma_wait(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %3 = arith.addi %1, %arg0 : index
   %c17 = arith.constant 17 : index
   %4 = arith.addi %3, %c17 : index
   memref.dma_wait %0[%4], %c64 : memref<1xi32>
   %5 = arith.addi %1, %c1 : index
-  br ^bb1(%5 : index)
+  cf.br ^bb1(%5 : index)
 ^bb3: // pred: ^bb1
   return
 }

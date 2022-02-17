@@ -17,6 +17,10 @@ namespace arith {
 class ArithmeticDialect;
 } // namespace arith
 
+namespace cf {
+class ControlFlowDialect;
+} // namespace cf
+
 namespace memref {
 class MemRefDialect;
 } // namespace memref

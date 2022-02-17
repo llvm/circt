@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Base class for Calyx primitives.
-class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
+class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
   CalyxCell<mnemonic, traits> {
     let assemblyFormat = "$instanceName attr-dict `:` qualified(type(results))";
     let arguments = (ins FlatSymbolRefAttr:$instanceName);
@@ -116,7 +116,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   }];
 }
 
-class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+class CalyxLibraryOp<string mnemonic, list<Trait> traits = []> :
   CalyxPrimitive<"std_" # mnemonic, traits> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
@@ -170,7 +170,7 @@ def SneqLibOp : BoolBinaryLibraryOp<"sneq"> {}
 def SgeLibOp  : BoolBinaryLibraryOp<"sge"> {}
 def SleLibOp  : BoolBinaryLibraryOp<"sle"> {}
 
-class ArithBinaryLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+class ArithBinaryLibraryOp<string mnemonic, list<Trait> traits = []> :
   CalyxLibraryOp<mnemonic, !listconcat(traits, [
     SameTypeConstraint<"left", "right">
   ])> {}

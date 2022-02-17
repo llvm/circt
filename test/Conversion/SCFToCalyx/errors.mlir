@@ -23,10 +23,10 @@ module {
 // -----
 
 func @main() {
-  br ^bb1
+  cf.br ^bb1
 ^bb1:
-  br ^bb2
+  cf.br ^bb2
 ^bb2:
   // expected-error @+1 {{CFG backedge detected. Loops must be raised to 'scf.while' or 'scf.for' operations.}}
-  br ^bb1
+  cf.br ^bb1
 }

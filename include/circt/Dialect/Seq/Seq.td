@@ -33,7 +33,7 @@ def SeqDialect : Dialect {
 }
 
 // Base class for the operation in this dialect.
-class SeqOp<string mnemonic, list<OpTrait> traits = []> :
+class SeqOp<string mnemonic, list<Trait> traits = []> :
     Op<SeqDialect, mnemonic, traits>;
 
 def CompRegOp : SeqOp<"compreg",
@@ -49,9 +49,7 @@ def CompRegOp : SeqOp<"compreg",
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
     OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs AnyType:$data);
-
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {

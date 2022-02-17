@@ -176,6 +176,10 @@ void CombMemOp::build(OpBuilder &builder, OperationState &result,
         annotations, innerSym);
 }
 
+void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
 //===----------------------------------------------------------------------===//
 // SeqMemOp
 //===----------------------------------------------------------------------===//
@@ -199,6 +203,10 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
         name, annotations, innerSym);
 }
 
+void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
 //===----------------------------------------------------------------------===//
 // CHIRRTL Dialect
 //===----------------------------------------------------------------------===//
@@ -208,8 +216,7 @@ void SeqMemOp::build(OpBuilder &builder, OperationState &result,
 namespace {
 struct CHIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
-  void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {
+  void getAsmResultNames(Operation *op, OpAsmSetValueNameFn setNameFn) const {
     // Many CHIRRTL dialect operations have an optional 'name' attribute.  If
     // present, use it.
     if (op->getNumResults() == 1)

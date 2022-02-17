@@ -130,7 +130,8 @@ class Operation;
 class OpFoldResult;
 class OpOperand;
 class OpResult;
-class OwningModuleRef;
+template <typename OpTy>
+class OwningOpRef;
 class ParseResult;
 class Pass;
 class PatternRewriter;
@@ -241,7 +242,7 @@ using mlir::OpFoldResult;              // NOLINT(misc-unused-using-decls)
 using mlir::OpOperand;                 // NOLINT(misc-unused-using-decls)
 using mlir::OpResult;                  // NOLINT(misc-unused-using-decls)
 using mlir::OpRewritePattern;          // NOLINT(misc-unused-using-decls)
-using mlir::OwningModuleRef;           // NOLINT(misc-unused-using-decls)
+using mlir::OwningOpRef;               // NOLINT(misc-unused-using-decls)
 using mlir::ParseResult;               // NOLINT(misc-unused-using-decls)
 using mlir::Pass;                      // NOLINT(misc-unused-using-decls)
 using mlir::PatternRewriter;           // NOLINT(misc-unused-using-decls)

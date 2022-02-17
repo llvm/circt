@@ -521,7 +521,7 @@ parseEntitySignature(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
+ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr entityName;
   SmallVector<OpAsmParser::OperandType, 4> args;
   SmallVector<Type, 4> argTypes;
@@ -557,20 +557,21 @@ static void printArgumentList(OpAsmPrinter &printer,
   printer << ")";
 }
 
-static void printEntityOp(OpAsmPrinter &printer, llhd::EntityOp op) {
+void llhd::EntityOp::print(OpAsmPrinter &printer) {
   std::vector<BlockArgument> ins, outs;
-  uint64_t n_ins = op.insAttr().getInt();
-  for (uint64_t i = 0; i < op.body().front().getArguments().size(); ++i) {
+  uint64_t nIns = insAttr().getInt();
+  for (uint64_t i = 0; i < body().front().getArguments().size(); ++i) {
     // no furter verification for the attribute type is required, already
     // handled by verify.
-    if (i < n_ins) {
-      ins.push_back(op.body().front().getArguments()[i]);
+    if (i < nIns) {
+      ins.push_back(body().front().getArguments()[i]);
     } else {
-      outs.push_back(op.body().front().getArguments()[i]);
+      outs.push_back(body().front().getArguments()[i]);
     }
   }
   auto entityName =
-      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+      (*this)
+          ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
   printer << " ";
   printer.printSymbolName(entityName);
@@ -579,11 +580,11 @@ static void printEntityOp(OpAsmPrinter &printer, llhd::EntityOp op) {
   printer << " -> ";
   printArgumentList(printer, outs);
   printer.printOptionalAttrDictWithKeyword(
-      op->getAttrs(),
+      (*this)->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
                         llhd::EntityOp::getTypeAttrName(), "ins"});
   printer << " ";
-  printer.printRegion(op.body(), false, false);
+  printer.printRegion(body(), false, false);
 }
 
 static LogicalResult verify(llhd::EntityOp op) {
@@ -667,7 +668,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
   }
 
   // Check that all operands are of signal type
-  for (int i = 0, e = getNumFuncArguments(); i < e; ++i) {
+  for (int i = 0, e = getNumArguments(); i < e; ++i) {
     if (!getArgument(i).getType().isa<llhd::SigType>()) {
       return emitOpError("usage of invalid argument type, was ")
              << getArgument(i).getType() << ", expected LLHD signal type";
@@ -746,7 +747,7 @@ parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
   return success();
 }
 
-static ParseResult parseProcOp(OpAsmParser &parser, OperationState &result) {
+ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr procName;
   SmallVector<OpAsmParser::OperandType, 8> argNames;
   SmallVector<Type, 8> argTypes;
@@ -785,7 +786,8 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   auto printList = [&](unsigned i, unsigned max) -> void {
     for (; i < max; ++i) {
       p << body.front().getArgument(i) << " : " << types[i];
-      p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
+      p.printOptionalAttrDict(
+          ::mlir::function_interface_impl::getArgAttrs(op, i));
 
       if (i < max - 1)
         p << ", ";
@@ -799,14 +801,14 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   p << ')';
 }
 
-static void printProcOp(OpAsmPrinter &printer, llhd::ProcOp op) {
-  FunctionType type = op.getType();
+void llhd::ProcOp::print(OpAsmPrinter &printer) {
+  FunctionType type = getType();
   printer << ' ';
-  printer.printSymbolName(op.getName());
-  printProcArguments(printer, op.getOperation(), type.getInputs(),
-                     op.insAttr().getInt());
+  printer.printSymbolName(getName());
+  printProcArguments(printer, getOperation(), type.getInputs(),
+                     insAttr().getInt());
   printer << " ";
-  printer.printRegion(op.body(), false, true);
+  printer.printRegion(body(), false, true);
 }
 
 Region *llhd::ProcOp::getCallableRegion() {
@@ -891,7 +893,7 @@ LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
 // RegOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
+ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType signal;
   Type signalType;
   SmallVector<OpAsmParser::OperandType, 8> valueOperands;
@@ -982,25 +984,25 @@ static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printRegOp(OpAsmPrinter &printer, llhd::RegOp op) {
-  printer << " " << op.signal();
-  for (size_t i = 0, e = op.values().size(); i < e; ++i) {
+void llhd::RegOp::print(OpAsmPrinter &printer) {
+  printer << " " << signal();
+  for (size_t i = 0, e = values().size(); i < e; ++i) {
     Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
-        op.modes().getValue()[i].cast<IntegerAttr>().getInt());
+        modes().getValue()[i].cast<IntegerAttr>().getInt());
     if (!mode) {
-      op.emitError("invalid RegMode");
+      emitError("invalid RegMode");
       return;
     }
-    printer << ", (" << op.values()[i] << ", \""
-            << llhd::stringifyRegMode(mode.getValue()) << "\" "
-            << op.triggers()[i] << " after " << op.delays()[i];
-    if (op.hasGate(i))
-      printer << " if " << op.getGateAt(i);
-    printer << " : " << op.values()[i].getType() << ")";
+    printer << ", (" << values()[i] << ", \""
+            << llhd::stringifyRegMode(mode.getValue()) << "\" " << triggers()[i]
+            << " after " << delays()[i];
+    if (hasGate(i))
+      printer << " if " << getGateAt(i);
+    printer << " : " << values()[i].getType() << ")";
   }
-  printer.printOptionalAttrDict(op->getAttrs(),
+  printer.printOptionalAttrDict((*this)->getAttrs(),
                                 {"modes", "gateMask", "operand_segment_sizes"});
-  printer << " : " << op.signal().getType();
+  printer << " : " << signal().getType();
 }
 
 static LogicalResult verify(llhd::RegOp op) {

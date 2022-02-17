@@ -519,7 +519,7 @@ def VerbosityIntAttr : DefaultValuedAttr<Confined<I8Attr,
   [IntMinValue<0>, IntMaxValue<2>]>, "1">;
 
 /// Commonalities between `StopOp` and `FinishOp`.
-class FinishOrStopOp<string mnemonic, list<OpTrait> traits = []> :
+class FinishOrStopOp<string mnemonic, list<Trait> traits = []> :
     SVOp<mnemonic, [ProceduralOp] # traits> {
   let arguments = (ins VerbosityIntAttr:$verbosity);
   let assemblyFormat = "$verbosity attr-dict";
@@ -594,7 +594,7 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
 }
 
 /// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
-class NonfatalMessageOp<string mnemonic, list<OpTrait> traits = []> :
+class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
     SVOp<mnemonic, [ProceduralOp] # traits> {
   string messageDescription = [{
     If present, the optional message is printed with any additional operands

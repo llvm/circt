@@ -341,31 +341,8 @@ option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
 
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   message(STATUS "CIRCT Python bindings are enabled.")
-
   include(MLIRDetectPythonEnv)
-  # After CMake 3.18, we are able to limit the scope of the search to just
-  # Development.Module. Searching for Development will fail in situations where
-  # the Python libraries are not available. When possible, limit to just
-  # Development.Module.
-  # See https://pybind11.readthedocs.io/en/stable/compiling.html#findpython-mode
-  if(CMAKE_VERSION VERSION_LESS "3.18.0")
-    set(_python_development_component Development)
-  else()
-    set(_python_development_component Development.Module)
-  endif()
-  find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION}
-    COMPONENTS Interpreter ${_python_development_component} REQUIRED)
-  unset(_python_development_component)
-  message(STATUS "Found Python include dirs: ${Python3_INCLUDE_DIRS}")
-  message(STATUS "Found Python libraries: ${Python3_LIBRARIES}")
-  message(STATUS "Found Python executable: ${Python3_EXECUTABLE}")
-
-  mlir_detect_pybind11_install()
-  find_package(pybind11 2.6 CONFIG REQUIRED)
-  message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIR}")
-  message(STATUS "Python prefix = '${PYTHON_MODULE_PREFIX}', "
-                 "suffix = '${PYTHON_MODULE_SUFFIX}', "
-                 "extension = '${PYTHON_MODULE_EXTENSION}'")
+  mlir_configure_python_dev_packages()
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
 endif()

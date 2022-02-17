@@ -107,23 +107,23 @@
 func @affine_apply_loops_shorthand(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
   %1 = arith.cmpi slt, %0, %arg0 : index
-  cond_br %1, ^bb2, ^bb6
+  cf.cond_br %1, ^bb2, ^bb6
 ^bb2: // pred: ^bb1
   %c42 = arith.constant 42 : index
   %c1_0 = arith.constant 1 : index
-  br ^bb3(%0 : index)
+  cf.br ^bb3(%0 : index)
 ^bb3(%2: index):      // 2 preds: ^bb2, ^bb4
   %3 = arith.cmpi slt, %2, %c42 : index
-  cond_br %3, ^bb4, ^bb5
+  cf.cond_br %3, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %4 = arith.addi %2, %c1_0 : index
-  br ^bb3(%4 : index)
+  cf.br ^bb3(%4 : index)
 ^bb5: // pred: ^bb3
   %5 = arith.addi %0, %c1 : index
-  br ^bb1(%5 : index)
+  cf.br ^bb1(%5 : index)
 ^bb6: // pred: ^bb1
   return
 }

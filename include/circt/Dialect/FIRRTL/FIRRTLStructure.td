@@ -69,6 +69,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
@@ -105,8 +106,6 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
@@ -139,8 +138,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                                   mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let verifier = "return ::verifyFExtModuleOp(*this);";
 }
 

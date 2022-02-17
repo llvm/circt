@@ -31,7 +31,7 @@ def NoMessageVerif : PredOpTrait<"has no message",
   CPred<"!$message && $operands.empty()">>;
 
 /// Immediate verification operations defined by the SV standard.
-class ImmediateVerifOp<string mnemonic, list<OpTrait> traits = []> :
+class ImmediateVerifOp<string mnemonic, list<Trait> traits = []> :
     SVOp<mnemonic, [ProceduralOp] # traits> {
   let arguments = (ins
     I1:$expression,
@@ -89,7 +89,7 @@ def CoverOp : ImmediateVerifOp<"cover", [NoMessageVerif]> {
 }
 
 /// Concurrent verification operations defined by the SV standard.
-class ConcurrentVerifOp<string mnemonic, list<OpTrait> traits = []> :
+class ConcurrentVerifOp<string mnemonic, list<Trait> traits = []> :
     SVOp<mnemonic, traits> {
   let arguments = (ins
     EventControlAttr:$event, I1:$clock, I1:$property,

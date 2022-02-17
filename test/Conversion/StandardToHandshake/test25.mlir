@@ -28,11 +28,11 @@
     %c20 = arith.constant 20 : index
     %2 = arith.addi %1, %c20 : index
     %3 = arith.cmpi sge, %2, %c0 : index
-    cond_br %3, ^bb1, ^bb2
+    cf.cond_br %3, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb2: // pred: ^bb0
-    br ^bb3
+    cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
     return
   }

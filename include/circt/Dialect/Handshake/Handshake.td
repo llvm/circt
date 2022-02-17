@@ -16,6 +16,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/Handshake/HandshakeInterfaces.td"
@@ -26,7 +27,7 @@ def Handshake_Dialect : Dialect {
 }
 
 // Base class for Handshake dialect ops.
-class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
+class Handshake_Op<string mnemonic, list<Trait> traits = []>
     : Op<Handshake_Dialect, mnemonic,
          traits #[HasParent<"handshake::FuncOp">,
          DeclareOpInterfaceMethods<NamedIOInterface>,

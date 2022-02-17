@@ -32,8 +32,7 @@ struct CalyxOpAsmDialectInterface : public OpAsmDialectInterface {
 
   /// Get a special name to use when printing the given operation. See
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
-  void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {}
+  void getAsmResultNames(Operation *op, OpAsmSetValueNameFn setNameFn) const {}
 };
 
 } // end anonymous namespace

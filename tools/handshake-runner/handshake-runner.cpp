@@ -71,7 +71,8 @@ int main(int argc, char **argv) {
 
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
-  mlir::OwningModuleRef module(mlir::parseSourceFile(source_mgr, &context));
+  mlir::OwningOpRef<mlir::ModuleOp> module(
+      mlir::parseSourceFile(source_mgr, &context));
   if (!module)
     return 1;
 

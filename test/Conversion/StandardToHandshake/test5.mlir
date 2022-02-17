@@ -23,11 +23,11 @@
 // CHECK:         }
 func @dfs_block_order() -> (i32) {
   %0 = arith.constant 42 : i32
-  br ^bb2
+  cf.br ^bb2
 ^bb1:
   %2 = arith.addi %0, %1 : i32
   return %2 : i32
 ^bb2:
   %1 = arith.constant 55 : i32
-  br ^bb1
+  cf.br ^bb1
 }

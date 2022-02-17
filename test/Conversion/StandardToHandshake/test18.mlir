@@ -21,6 +21,6 @@ func @affine_apply_mod(%arg0: index) -> index {
     %c0 = arith.constant 0 : index
     %1 = arith.cmpi slt, %0, %c0 : index
     %2 = arith.addi %0, %c42 : index
-    %3 = select %1, %2, %0 : index
+    %3 = arith.select %1, %2, %0 : index
     return %3 : index
   }

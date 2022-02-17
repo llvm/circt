@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -96,7 +97,7 @@ LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // later remove We have already replaced these ops with their handshake
       // equivalents
       // TODO: should we use other indicator for op that has been erased?
-      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+      if (isa<mlir::cf::CondBranchOp, mlir::cf::BranchOp, memref::LoadOp,
               mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
         continue;
 

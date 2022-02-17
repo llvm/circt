@@ -9,7 +9,7 @@
 include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.
-class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
+class MSFTOp<string mnemonic, list<Trait> traits = []> :
     Op<MSFTDialect, mnemonic, traits>;
 
 def InstanceOp : MSFTOp<"instance", [
@@ -64,7 +64,7 @@ def OneOrNoBlocksRegion : Region<
   "region with at most 1 block">;
 
 def MSFTModuleOp : MSFTOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
+      [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
        HasParent<"mlir::ModuleOp">,
        SingleBlockImplicitTerminator<"OutputOp">,
        OpAsmOpInterface]>{
@@ -89,8 +89,8 @@ def MSFTModuleOp : MSFTOp<"module",
   ];
 
   let extraClassDeclaration = [{
-    using FunctionLike::front;
-    using FunctionLike::getBody;
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::front;
+    using mlir::detail::FunctionOpInterfaceTrait<MSFTModuleOp>::getBody;
 
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) {
@@ -126,19 +126,19 @@ def MSFTModuleOp : MSFTOp<"module",
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<MSFTModuleOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    /// safely.
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -146,11 +146,9 @@ def MSFTModuleOp : MSFTOp<"module",
                            "' attribute of function type");
       return success();
     }
-  public:
   }];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def MSFTModuleExternOp : MSFTOp<"module.extern",
@@ -174,8 +172,7 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let hasCustomAssemblyFormat = 1;
   let verifier = "return ::verify$cppClass(*this);";
 
   let extraClassDeclaration = [{

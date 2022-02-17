@@ -17,6 +17,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -198,7 +199,7 @@ public:
                     std::vector<Any> &results, std::vector<double> &resultTimes,
                     std::vector<std::vector<Any>> &store,
                     std::vector<double> &storeTimes,
-                    mlir::OwningModuleRef &module);
+                    mlir::OwningOpRef<mlir::ModuleOp> &module);
 
   bool succeeded() const { return successFlag; }
 
@@ -244,8 +245,9 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(memref::AllocOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::BranchOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::CondBranchOp, std::vector<Any> &,
+  LogicalResult execute(mlir::cf::BranchOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::cf::CondBranchOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(mlir::ReturnOp, std::vector<Any> &, std::vector<Any> &);
   LogicalResult execute(handshake::ReturnOp, std::vector<Any> &,
@@ -264,7 +266,7 @@ private:
   std::vector<std::vector<Any>> &store;
   std::vector<double> &storeTimes;
   double time;
-  mlir::OwningModuleRef *module = nullptr;
+  mlir::OwningOpRef<mlir::ModuleOp> *module = nullptr;
 
   /// Flag indicating whether execution was successful.
   bool successFlag = true;
@@ -483,7 +485,7 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::AllocOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::BranchOp branchOp,
+LogicalResult HandshakeExecuter::execute(mlir::cf::BranchOp branchOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   mlir::Block *dest = branchOp.getDest();
@@ -496,7 +498,7 @@ LogicalResult HandshakeExecuter::execute(mlir::BranchOp branchOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
+LogicalResult HandshakeExecuter::execute(mlir::cf::CondBranchOp condBranchOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   APInt condition = any_cast<APInt>(in[0]);
@@ -698,11 +700,11 @@ HandshakeExecuter::HandshakeExecuter(
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);
             })
-            .Case<mlir::BranchOp, mlir::CondBranchOp, mlir::CallOpInterface>(
-                [&](auto op) {
-                  strat = ExecuteStrategy::Continue;
-                  return execute(op, inValues, outValues);
-                })
+            .Case<mlir::cf::BranchOp, mlir::cf::CondBranchOp,
+                  mlir::CallOpInterface>([&](auto op) {
+              strat = ExecuteStrategy::Continue;
+              return execute(op, inValues, outValues);
+            })
             .Case<mlir::ReturnOp>([&](auto op) {
               strat = ExecuteStrategy::Return;
               return execute(op, inValues, outValues);
@@ -736,7 +738,7 @@ HandshakeExecuter::HandshakeExecuter(
     handshake::FuncOp &func, llvm::DenseMap<mlir::Value, Any> &valueMap,
     llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
     std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
-    std::vector<double> &storeTimes, mlir::OwningModuleRef &module)
+    std::vector<double> &storeTimes, mlir::OwningOpRef<mlir::ModuleOp> &module)
     : valueMap(valueMap), timeMap(timeMap), results(results),
       resultTimes(resultTimes), store(store), storeTimes(storeTimes),
       module(&module) {
@@ -882,7 +884,7 @@ HandshakeExecuter::HandshakeExecuter(
 //===----------------------------------------------------------------------===//
 
 bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
-              mlir::OwningModuleRef &module, mlir::MLIRContext &) {
+              mlir::OwningOpRef<mlir::ModuleOp> &module, mlir::MLIRContext &) {
   // The store associates each allocation in the program
   // (represented by a int) with a vector of values which can be
   // accessed by it.  Currently values are assumed to be an integer.
