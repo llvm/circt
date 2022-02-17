@@ -15,7 +15,6 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "mlir/Transforms/Utils.h"
 
 using namespace mlir;
 using namespace circt;

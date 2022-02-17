@@ -18,6 +18,7 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -30,6 +31,7 @@
 using namespace llvm;
 using namespace mlir;
 using namespace mlir::arith;
+using namespace mlir::cf;
 
 namespace circt {
 
@@ -1394,7 +1396,9 @@ class InlineExecuteRegionOpPattern
     auto *sinkBlock = rewriter.splitBlock(
         execOp->getBlock(),
         execOp.getOperation()->getIterator()->getNextNode()->getIterator());
-    sinkBlock->addArguments(yieldTypes);
+    sinkBlock->addArguments(
+        yieldTypes,
+        SmallVector<Location, 4>(yieldTypes.size(), rewriter.getUnknownLoc()));
     for (auto res : enumerate(execOp.getResults()))
       res.value().replaceAllUsesWith(sinkBlock->getArgument(res.index()));
 

@@ -27,7 +27,7 @@ def ESI_Dialect : Dialect {
   let hasConstantMaterializer = 1;
 }
 
-class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
+class ESI_Op<string mnemonic, list<Trait> traits = []> :
     Op<ESI_Dialect, mnemonic, traits>;
 
 // Divide all ESI ops into abstract and physical. Abstract ops are ones which
@@ -37,9 +37,9 @@ class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
 // ops are generally trivial to lower to HW -- they represent concrete
 // constructs with no decisions left to be made.
 
-class ESI_Abstract_Op<string mnemonic, list<OpTrait> traits = []> :
+class ESI_Abstract_Op<string mnemonic, list<Trait> traits = []> :
     ESI_Op<mnemonic, traits>;
-class ESI_Physical_Op<string mnemonic, list<OpTrait> traits = []> :
+class ESI_Physical_Op<string mnemonic, list<Trait> traits = []> :
     ESI_Op<mnemonic, traits>;
 
 include "circt/Dialect/ESI/ESIPorts.td"

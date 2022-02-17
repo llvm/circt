@@ -626,7 +626,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   if (auto mod = dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBody();
     // Append the new argument.
-    newValue = body->insertArgument(insertPt, field.type);
+    newValue = body->insertArgument(insertPt, field.type, oldArg.loc);
   }
 
   // Save the name attribute for the new argument.

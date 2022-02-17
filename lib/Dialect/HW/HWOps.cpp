@@ -140,7 +140,7 @@ StringAttr hw::getArgSym(Operation *op, unsigned i) {
          "Can only get module ports from an instance or module");
   StringAttr sym = {};
   auto argAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getArgDictAttrName());
+      mlir::function_interface_impl::getArgDictAttrName());
   if (argAttrs && (i < argAttrs.size()))
     if (auto s = argAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
@@ -155,7 +155,7 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
          "Can only get module ports from an instance or module");
   StringAttr sym = {};
   auto resAttrs = op->getAttrOfType<ArrayAttr>(
-      mlir::function_like_impl::getResultDictAttrName());
+      mlir::function_interface_impl::getResultDictAttrName());
   if (resAttrs && (i < resAttrs.size()))
     if (auto s = resAttrs[i].cast<DictionaryAttr>())
       if (auto symRef = s.get("hw.exportPort"))
@@ -167,14 +167,13 @@ StringAttr hw::getResultSym(Operation *op, unsigned i) {
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
-static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
+void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttribute(op.valueAttr());
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+  p.printAttribute(valueAttr());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
-static ParseResult parseConstantOp(OpAsmParser &parser,
-                                   OperationState &result) {
+ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   IntegerAttr valueAttr;
 
   if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
@@ -352,7 +351,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                         ArrayAttr parameters,
                         ArrayRef<NamedAttribute> attributes,
                         StringAttr comment) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
@@ -397,9 +396,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute(mlir::function_like_impl::getArgDictAttrName(),
+  result.addAttribute(mlir::function_interface_impl::getArgDictAttrName(),
                       builder.getArrayAttr(argAttrs));
-  result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
+  result.addAttribute(mlir::function_interface_impl::getResultDictAttrName(),
                       builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
   if (!comment)
@@ -423,7 +422,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports.inputs)
-    body->addArgument(elt.type);
+    body->addArgument(elt.type, builder.getUnknownLoc());
 
   HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -626,7 +625,7 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
 
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   auto loc = parser.getCurrentLocation();
 
@@ -634,6 +633,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
+  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -657,8 +657,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> resultNames;
   if (parseOptionalParameters(parser, parameters) ||
       module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames) ||
+          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
+          resultTypes, resultAttrs, resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
@@ -716,13 +716,17 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseHWModuleExternOp(OpAsmParser &parser,
-                                         OperationState &result) {
+ParseResult HWModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseHWModuleOp(parser, result);
+}
+
+ParseResult HWModuleExternOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
   return parseHWModuleOp(parser, result, ExternMod);
 }
 
-static ParseResult parseHWModuleGeneratedOp(OpAsmParser &parser,
-                                            OperationState &result) {
+ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
+                                       OperationState &result) {
   return parseHWModuleOp(parser, result, GenMod);
 }
 
@@ -750,7 +754,7 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
 
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   FunctionType fnType = getHWModuleOpType(op);
   auto argTypes = fnType.getInputs();
@@ -785,18 +789,18 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           omittedAttrs);
 }
 
-static void printHWModuleExternOp(OpAsmPrinter &p, HWModuleExternOp op) {
-  printModuleOp(p, op, ExternMod);
+void HWModuleExternOp::print(OpAsmPrinter &p) {
+  printModuleOp(p, *this, ExternMod);
 }
-static void printHWModuleGeneratedOp(OpAsmPrinter &p, HWModuleGeneratedOp op) {
-  printModuleOp(p, op, GenMod);
+void HWModuleGeneratedOp::print(OpAsmPrinter &p) {
+  printModuleOp(p, *this, GenMod);
 }
 
-static void printHWModuleOp(OpAsmPrinter &p, HWModuleOp op) {
-  printModuleOp(p, op, PlainMod);
+void HWModuleOp::print(OpAsmPrinter &p) {
+  printModuleOp(p, *this, PlainMod);
 
   // Print the body if this is not an external function.
-  Region &body = op.getBody();
+  Region &body = getBody();
   if (!body.empty()) {
     p << " ";
     p.printRegion(body, /*printEntryBlockArgs=*/false,
@@ -1086,8 +1090,7 @@ LogicalResult InstanceOp::verifyCustom() {
   return success();
 }
 
-static ParseResult parseInstanceOp(OpAsmParser &parser,
-                                   OperationState &result) {
+ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = result.getContext();
   StringAttr instanceNameAttr;
   StringAttr sym_nameAttr;
@@ -1156,8 +1159,8 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   return success();
 }
 
-static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
-  ModulePortInfo portInfo = getModulePortInfo(op);
+void InstanceOp::print(OpAsmPrinter &p) {
+  ModulePortInfo portInfo = getModulePortInfo(*this);
   size_t nextInputPort = 0, nextOutputPort = 0;
 
   auto printPortName = [&](size_t &nextPort, SmallVector<PortInfo> &portList) {
@@ -1172,27 +1175,27 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
   };
 
   p << ' ';
-  p.printAttributeWithoutType(op.instanceNameAttr());
-  if (auto attr = op.inner_symAttr()) {
+  p.printAttributeWithoutType(instanceNameAttr());
+  if (auto attr = inner_symAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
   p << ' ';
-  p.printAttributeWithoutType(op.moduleNameAttr());
-  printParameterList(op.parameters(), p);
+  p.printAttributeWithoutType(moduleNameAttr());
+  printParameterList(parameters(), p);
   p << '(';
-  llvm::interleaveComma(op.inputs(), p, [&](Value op) {
+  llvm::interleaveComma(inputs(), p, [&](Value op) {
     printPortName(nextInputPort, portInfo.inputs);
     p << op << ": " << op.getType();
   });
   p << ") -> (";
-  llvm::interleaveComma(op.getResults(), p, [&](Value res) {
+  llvm::interleaveComma(getResults(), p, [&](Value res) {
     printPortName(nextOutputPort, portInfo.outputs);
     p << res.getType();
   });
   p << ')';
   p.printOptionalAttrDict(
-      op->getAttrs(),
+      (*this)->getAttrs(),
       /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
                        "moduleName", "argNames", "resultNames", "parameters"});
 }
@@ -1334,8 +1337,8 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
       // TODO: Doesn't yet work for symbls on FIRRTL module ports. Need to
       // implement an interface.
       if (isa<HWModuleOp, HWModuleExternOp>(mod)) {
-        if (auto argAttrs =
-                mod->getAttr(mlir::function_like_impl::getArgDictAttrName()))
+        if (auto argAttrs = mod->getAttr(
+                mlir::function_interface_impl::getArgDictAttrName()))
           for (auto attr :
                argAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))
@@ -1343,8 +1346,8 @@ LogicalResult GlobalRefOp::verifyGlobalRef() {
                 if (hasGlobalRef(attr.get(GlobalRefAttr::DialectAttrName)))
                   return success();
 
-        if (auto resAttrs =
-                mod->getAttr(mlir::function_like_impl::getResultDictAttrName()))
+        if (auto resAttrs = mod->getAttr(
+                mlir::function_interface_impl::getResultDictAttrName()))
           for (auto attr :
                resAttrs.cast<ArrayAttr>().getAsRange<DictionaryAttr>())
             if (auto symRef = attr.get("hw.exportPort"))
@@ -1384,8 +1387,7 @@ static void printSliceTypes(OpAsmPrinter &p, Operation *, Type srcType,
   p.printType(srcType);
 }
 
-static ParseResult parseArrayCreateOp(OpAsmParser &parser,
-                                      OperationState &result) {
+ParseResult ArrayCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   llvm::SmallVector<OpAsmParser::OperandType, 16> operands;
   Type elemType;
@@ -1406,11 +1408,11 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void printArrayCreateOp(OpAsmPrinter &p, ArrayCreateOp op) {
+void ArrayCreateOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printOperands(op.inputs());
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.inputs()[0].getType();
+  p.printOperands(inputs());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << inputs()[0].getType();
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
@@ -1482,8 +1484,7 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructCreateOp(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult StructCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
   Type declOrAliasType;
@@ -1508,20 +1509,20 @@ static ParseResult parseStructCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void printStructCreateOp(OpAsmPrinter &printer, hw::StructCreateOp op) {
+void StructCreateOp::print(OpAsmPrinter &printer) {
   printer << " (";
-  printer.printOperands(op.input());
+  printer.printOperands(input());
   printer << ")";
-  printer.printOptionalAttrDict(op->getAttrs());
-  printer << " : " << op.getType();
+  printer.printOptionalAttrDict((*this)->getAttrs());
+  printer << " : " << getType();
 }
 
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructExplodeOp(OpAsmParser &parser,
-                                        OperationState &result) {
+ParseResult StructExplodeOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
   OpAsmParser::OperandType operand;
   Type declType;
 
@@ -1543,12 +1544,11 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
   return success();
 }
 
-static void printStructExplodeOp(OpAsmPrinter &printer,
-                                 hw::StructExplodeOp op) {
+void StructExplodeOp::print(OpAsmPrinter &printer) {
   printer << " ";
-  printer.printOperand(op.input());
-  printer.printOptionalAttrDict(op->getAttrs());
-  printer << " : " << op.input().getType();
+  printer.printOperand(input());
+  printer.printOptionalAttrDict((*this)->getAttrs());
+  printer << " : " << input().getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1597,14 +1597,13 @@ static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << " : " << op.input().getType();
 }
 
-static ParseResult parseStructExtractOp(OpAsmParser &parser,
-                                        OperationState &result) {
+ParseResult StructExtractOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
   return parseExtractOp<StructType>(parser, result);
 }
 
-static void printStructExtractOp(OpAsmPrinter &printer,
-                                 hw::StructExtractOp op) {
-  printExtractOp(printer, op);
+void StructExtractOp::print(OpAsmPrinter &printer) {
+  printExtractOp(printer, *this);
 }
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
@@ -1636,8 +1635,7 @@ OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
 // StructInjectOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructInjectOp(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand, val;
   StringAttr fieldName;
@@ -1667,21 +1665,20 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
   return success();
 }
 
-static void printStructInjectOp(OpAsmPrinter &printer, hw::StructInjectOp op) {
+void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " ";
-  printer.printOperand(op.input());
-  printer << "[\"" << op.field() << "\"], ";
-  printer.printOperand(op.newValue());
-  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
-  printer << " : " << op.input().getType();
+  printer.printOperand(input());
+  printer << "[\"" << field() << "\"], ";
+  printer.printOperand(newValue());
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
+  printer << " : " << input().getType();
 }
 
 //===----------------------------------------------------------------------===//
 // UnionCreateOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseUnionCreateOp(OpAsmParser &parser,
-                                      OperationState &result) {
+ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   Type declOrAliasType;
   StringAttr field;
   OpAsmParser::OperandType input;
@@ -1711,24 +1708,23 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void printUnionCreateOp(OpAsmPrinter &printer, hw::UnionCreateOp op) {
-  printer << " \"" << op.field() << "\", ";
-  printer.printOperand(op.input());
-  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
-  printer << " : " << op.getType();
+void UnionCreateOp::print(OpAsmPrinter &printer) {
+  printer << " \"" << field() << "\", ";
+  printer.printOperand(input());
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
+  printer << " : " << getType();
 }
 
 //===----------------------------------------------------------------------===//
 // UnionExtractOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseUnionExtractOp(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult UnionExtractOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseExtractOp<UnionType>(parser, result);
 }
 
-static void printUnionExtractOp(OpAsmPrinter &printer, hw::UnionExtractOp op) {
-  printExtractOp(printer, op);
+void UnionExtractOp::print(OpAsmPrinter &printer) {
+  printExtractOp(printer, *this);
 }
 
 //===----------------------------------------------------------------------===//

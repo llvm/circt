@@ -11,6 +11,7 @@ add_circt_library(CIRCTStandardToHandshake
   MLIRIR
   MLIRPass
   MLIRArithmetic
+  MLIRControlFlow
   MLIRStandard
   MLIRSupport
   MLIRTransforms

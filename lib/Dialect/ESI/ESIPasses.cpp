@@ -452,8 +452,10 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     newArgNames.push_back(argNameAttr);
     newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
     // Add the BlockArguments.
-    Value data = mod.front().insertArgument(blockArgNum, chanTy.getInner());
-    Value valid = mod.front().insertArgument(blockArgNum + 1, i1);
+    Value data = mod.front().insertArgument(blockArgNum, chanTy.getInner(),
+                                            mod.getArgument(argNum).getLoc());
+    Value valid = mod.front().insertArgument(blockArgNum + 1, i1,
+                                             mod.getArgument(argNum).getLoc());
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
     auto wrap = modBuilder.create<WrapValidReady>(data, valid);
@@ -493,7 +495,8 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
     }
 
     // Lower the output, adding ready signals directly to the arg list.
-    Value ready = mod.front().addArgument(i1); // Ready block arg.
+    Value ready = mod.front().addArgument(
+        i1, modBuilder.getUnknownLoc()); // Ready block arg.
     auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
     newOutputOperands.push_back(unwrap.rawOutput());
     newOutputOperands.push_back(unwrap.valid());

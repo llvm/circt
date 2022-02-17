@@ -25,8 +25,8 @@ using namespace circt::staticlogic;
 // PipelineWhileOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
-                                        OperationState &result) {
+ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
   // Parse initiation interval.
   IntegerAttr ii;
   if (parser.parseKeyword("II") || parser.parseEqual() ||
@@ -67,30 +67,30 @@ static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
   return success();
 }
 
-static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
+void PipelineWhileOp::print(OpAsmPrinter &p) {
   // Print the initiation interval.
-  p << " II = " << ' ' << op.II();
+  p << " II = " << ' ' << II();
 
   // Print iter_args assignment list.
   p << " iter_args(";
   llvm::interleaveComma(
-      llvm::zip(op.stages().getArguments(), op.iterArgs()), p,
+      llvm::zip(stages().getArguments(), iterArgs()), p,
       [&](auto it) { p << std::get<0>(it) << " = " << std::get<1>(it); });
   p << ") : ";
 
   // Print function type from iter_args to results.
-  auto type = FunctionType::get(op.getContext(), op.stages().getArgumentTypes(),
-                                op.getResultTypes());
+  auto type = FunctionType::get(getContext(), stages().getArgumentTypes(),
+                                getResultTypes());
   p.printType(type);
 
   // Print condition region.
   p << ' ';
-  p.printRegion(op.condition(), /*printEntryBlockArgs=*/false);
+  p.printRegion(condition(), /*printEntryBlockArgs=*/false);
   p << " do";
 
   // Print stages region.
   p << ' ';
-  p.printRegion(op.stages(), /*printEntryBlockArgs=*/false);
+  p.printRegion(stages(), /*printEntryBlockArgs=*/false);
 }
 
 static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
@@ -104,7 +104,7 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
 
     if (!isa<arith::AddIOp, arith::AndIOp, arith::BitcastOp, arith::CmpIOp,
              arith::ConstantOp, arith::IndexCastOp, arith::MulIOp, arith::OrIOp,
-             SelectOp, arith::ShLIOp, arith::ExtSIOp, arith::CeilDivSIOp,
+             arith::SelectOp, arith::ShLIOp, arith::ExtSIOp, arith::CeilDivSIOp,
              arith::DivSIOp, arith::FloorDivSIOp, arith::RemSIOp,
              arith::ShRSIOp, arith::SubIOp, arith::TruncIOp, arith::DivUIOp,
              arith::RemUIOp, arith::ShRUIOp, arith::XOrIOp, arith::ExtUIOp>(
@@ -176,13 +176,17 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 
   Region *condRegion = state.addRegion();
   Block &condBlock = condRegion->emplaceBlock();
-  condBlock.addArguments(iterArgs.getTypes());
+
+  SmallVector<Location, 4> argLocs;
+  for (auto arg : iterArgs)
+    argLocs.push_back(arg.getLoc());
+  condBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&condBlock);
   builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 
   Region *stagesRegion = state.addRegion();
   Block &stagesBlock = stagesRegion->emplaceBlock();
-  stagesBlock.addArguments(iterArgs.getTypes());
+  stagesBlock.addArguments(iterArgs.getTypes(), argLocs);
   builder.setInsertionPointToEnd(&stagesBlock);
   builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
                                        ValueRange());

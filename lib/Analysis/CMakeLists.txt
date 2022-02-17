@@ -9,6 +9,7 @@ add_circt_library(CIRCTDependenceAnalysis
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRAffineUtils
   MLIRTransformUtils
   )
 

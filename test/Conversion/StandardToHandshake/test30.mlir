@@ -94,10 +94,10 @@ func @affine_load(%arg0: index) {
   %c10 = arith.constant 10 : index
   %9 = memref.load %0[%c0] : memref<10xf32>
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %3 = arith.addi %1, %arg0 : index
   %c7 = arith.constant 7 : index
@@ -108,7 +108,7 @@ func @affine_load(%arg0: index) {
   %8 = arith.addf %5, %7 : f32
   %11 = arith.addf %9, %9 : f32
   memref.store %8, %0[%4] : memref<10xf32>
-  br ^bb1(%6 : index)
+  cf.br ^bb1(%6 : index)
 ^bb3: // pred: ^bb1
   return
 }

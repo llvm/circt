@@ -35,8 +35,6 @@
 using namespace circt;
 using namespace firrtl;
 using mlir::FailureOr;
-using mlir::function_like_impl::getArgAttrDict;
-using mlir::function_like_impl::setAllArgAttrDicts;
 
 //===----------------------------------------------------------------------===//
 // PointerLikeTypeTraits

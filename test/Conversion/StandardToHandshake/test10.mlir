@@ -119,10 +119,10 @@ func @affine_dma_start(%arg0: index) {
   %c0_0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0_0 : index)
+  cf.br ^bb1(%c0_0 : index)
 ^bb1(%3: index):      // 2 preds: ^bb0, ^bb2
   %4 = arith.cmpi slt, %3, %c10 : index
-  cond_br %4, ^bb2, ^bb3
+  cf.cond_br %4, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c7 = arith.constant 7 : index
   %5 = arith.addi %3, %c7 : index
@@ -130,7 +130,7 @@ func @affine_dma_start(%arg0: index) {
   %6 = arith.addi %arg0, %c11 : index
   memref.dma_start %0[%5], %1[%6], %c64, %2[%c0] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
   %7 = arith.addi %3, %c1 : index
-  br ^bb1(%7 : index)
+  cf.br ^bb1(%7 : index)
 ^bb3: // pred: ^bb1
   return
 }

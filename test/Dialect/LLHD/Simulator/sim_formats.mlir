@@ -102,7 +102,7 @@ llhd.entity @root () -> () {
 }
 
 llhd.proc @foo () -> (%s : !llhd.sig<i8>) {
-  br ^entry
+  cf.br ^entry
 ^entry:
   %1 = llhd.prb %s : !llhd.sig<i8>
   %2 = comb.add %1, %1 : i8

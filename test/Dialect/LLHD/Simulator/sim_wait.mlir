@@ -27,7 +27,7 @@ llhd.entity @root () -> () {
 }
 
 llhd.proc @proc () -> (%a : !llhd.sig<i32>, %b : !llhd.sig<i32>) {
-  br ^timed
+  cf.br ^timed
 ^timed:
   %t1 = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   %t2 = llhd.constant_time #llhd.time<0ns, 0d, 2e>

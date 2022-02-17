@@ -133,31 +133,31 @@ func @loop_min_max(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb5
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb2, ^bb6
+  cf.cond_br %1, ^bb2, ^bb6
 ^bb2: // pred: ^bb1
   %c-1 = arith.constant -1 : index
   %2 = arith.muli %0, %c-1 : index
   %3 = arith.addi %2, %arg0 : index
   %4 = arith.cmpi sgt, %0, %3 : index
-  %5 = select %4, %0, %3 : index
+  %5 = arith.select %4, %0, %3 : index
   %c10 = arith.constant 10 : index
   %6 = arith.addi %0, %c10 : index
   %7 = arith.cmpi slt, %arg0, %6 : index
-  %8 = select %7, %arg0, %6 : index
+  %8 = arith.select %7, %arg0, %6 : index
   %c1_0 = arith.constant 1 : index
-  br ^bb3(%5 : index)
+  cf.br ^bb3(%5 : index)
 ^bb3(%9: index):      // 2 preds: ^bb2, ^bb4
   %10 = arith.cmpi slt, %9, %8 : index
-  cond_br %10, ^bb4, ^bb5
+  cf.cond_br %10, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %11 = arith.addi %9, %c1_0 : index
-  br ^bb3(%11 : index)
+  cf.br ^bb3(%11 : index)
 ^bb5: // pred: ^bb3
   %12 = arith.addi %0, %c1 : index
-  br ^bb1(%12 : index)
+  cf.br ^bb1(%12 : index)
 ^bb6: // pred: ^bb1
   return
 }

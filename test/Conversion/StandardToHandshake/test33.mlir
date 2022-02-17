@@ -57,10 +57,10 @@ func @test() {
   %10 = memref.alloc() : memref<10xf32>
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
   %2 = arith.cmpi slt, %1, %c10 : index
-  cond_br %2, ^bb2, ^bb3
+  cf.cond_br %2, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %c1 = arith.constant 1 : index
   %5 = memref.load %10[%c1] : memref<10xf32>
@@ -68,7 +68,7 @@ func @test() {
   %7 = memref.load %10[%3] : memref<10xf32>
   %8 = arith.addf %5, %7 : f32
   memref.store %8, %10[%3] : memref<10xf32>
-  br ^bb1(%3 : index)
+  cf.br ^bb1(%3 : index)
 ^bb3: // pred: ^bb1
   return
 }

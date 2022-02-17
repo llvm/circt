@@ -25,9 +25,9 @@
     %c20 = arith.constant 20 : index
     %2 = arith.addi %1, %c20 : index
     %3 = arith.cmpi sge, %2, %c0 : index
-    cond_br %3, ^bb1, ^bb2
+    cf.cond_br %3, ^bb1, ^bb2
   ^bb1: // pred: ^bb0
-    br ^bb2
+    cf.br ^bb2
   ^bb2: // 2 preds: ^bb0, ^bb1
     return
   }

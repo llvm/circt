@@ -127,7 +127,8 @@ static LogicalResult execute(MLIRContext &context) {
 
   // Parse the input file.
   VERBOSE(llvm::errs() << "Reading input\n");
-  OwningModuleRef module = parseSourceFile(inputFilename, &context);
+  mlir::OwningOpRef<mlir::ModuleOp> module =
+      parseSourceFile(inputFilename, &context);
   if (!module)
     return failure();
 
@@ -168,7 +169,7 @@ static LogicalResult execute(MLIRContext &context) {
       // Apply the pattern to the subset of operations selected by `rangeBase`
       // and `rangeLength`.
       size_t opIdx = 0;
-      OwningModuleRef newModule = module->clone();
+      mlir::OwningOpRef<mlir::ModuleOp> newModule = module->clone();
       pattern.beforeReduction(*newModule);
       newModule->walk([&](Operation *op) {
         if (!pattern.match(op))

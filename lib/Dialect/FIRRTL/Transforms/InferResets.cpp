@@ -1557,7 +1557,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
                  << "- Skipping (has async reset) " << regOp << "\n");
       // The following performs the logic of `CheckResets` in the original Scala
       // source code.
-      if (failed(regOp.verify()))
+      if (failed(regOp.verifyInvariants()))
         signalPassFailure();
       return;
     }

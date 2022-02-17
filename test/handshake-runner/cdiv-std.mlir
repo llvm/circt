@@ -18,17 +18,17 @@ module {
     %8 = memref.alloc() : memref<100xi32>
     %9 = memref.alloc() : memref<100xi32>
     %10 = memref.alloc() : memref<100xi1>
-    br ^bb1(%c0 : index)
+    cf.br ^bb1(%c0 : index)
   ^bb1(%11: index):	// 2 preds: ^bb0, ^bb5
     %12 = arith.cmpi slt, %11, %c10 : index
-    cond_br %12, ^bb2, ^bb6
+    cf.cond_br %12, ^bb2, ^bb6
   ^bb2:	// pred: ^bb1
     %13 = memref.load %0[%11] : memref<100xi32>
     %14 = memref.load %2[%11] : memref<100xi32>
     %15 = memref.load %0[%11] : memref<100xi32>
     %16 = memref.load %2[%11] : memref<100xi32>
     %17 = memref.load %10[%11] : memref<100xi1>
-    cond_br %17, ^bb3, ^bb4
+    cf.cond_br %17, ^bb3, ^bb4
   ^bb3:	// pred: ^bb2
     %18 = memref.load %6[%11] : memref<100xi32>
     %19 = memref.load %9[%11] : memref<100xi32>
@@ -40,7 +40,7 @@ module {
     %25 = arith.muli %23, %19 : i32
     memref.store %24, %5[%11] : memref<100xi32>
     memref.store %25, %4[%11] : memref<100xi32>
-    br ^bb5
+    cf.br ^bb5
   ^bb4:	// pred: ^bb2
     %26 = memref.load %7[%11] : memref<100xi32>
     %27 = memref.load %8[%11] : memref<100xi32>
@@ -52,10 +52,10 @@ module {
     %33 = arith.muli %31, %27 : i32
     memref.store %32, %5[%11] : memref<100xi32>
     memref.store %33, %4[%11] : memref<100xi32>
-    br ^bb5
+    cf.br ^bb5
   ^bb5:	// 2 preds: ^bb3, ^bb4
     %34 = arith.addi %11, %c1 : index
-    br ^bb1(%34 : index)
+    cf.br ^bb1(%34 : index)
   ^bb6:	// pred: ^bb1
     return %c0 : index
   }

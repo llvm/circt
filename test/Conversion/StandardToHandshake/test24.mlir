@@ -55,27 +55,27 @@
     %c20 = arith.constant 20 : index
     %2 = arith.addi %1, %c20 : index
     %3 = arith.cmpi sge, %2, %c0 : index
-    cond_br %3, ^bb1, ^bb4
+    cf.cond_br %3, ^bb1, ^bb4
   ^bb1: // pred: ^bb0
     %c0_0 = arith.constant 0 : index
     %c-10 = arith.constant -10 : index
     %4 = arith.addi %1, %c-10 : index
     %5 = arith.cmpi sge, %4, %c0_0 : index
-    cond_br %5, ^bb2, ^bb3
+    cf.cond_br %5, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
-    br ^bb3
+    cf.br ^bb3
   ^bb3: // 2 preds: ^bb1, ^bb2
-    br ^bb7
+    cf.br ^bb7
   ^bb4: // pred: ^bb0
     %c0_1 = arith.constant 0 : index
     %c-10_2 = arith.constant -10 : index
     %6 = arith.addi %1, %c-10_2 : index
     %7 = arith.cmpi sge, %6, %c0_1 : index
-    cond_br %7, ^bb5, ^bb6
+    cf.cond_br %7, ^bb5, ^bb6
   ^bb5: // pred: ^bb4
-    br ^bb6
+    cf.br ^bb6
   ^bb6: // 2 preds: ^bb4, ^bb5
-    br ^bb7
+    cf.br ^bb7
   ^bb7: // 2 preds: ^bb3, ^bb6
     return
   }

@@ -126,126 +126,6 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-// We implement the OpAsmDialectInterface so that FIRRTL dialect operations
-// automatically interpret the name attribute on function arguments and
-// on operations as their SSA name.
-struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
-  using OpAsmDialectInterface::OpAsmDialectInterface;
-
-  /// Get a special name to use when printing the given operation. See
-  /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
-  void getAsmResultNames(Operation *op,
-                         OpAsmSetValueNameFn setNameFn) const override {
-
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      StringRef base;
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        base = nameAttr.getValue();
-      if (base.empty())
-        base = "inst";
-
-      for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
-        setNameFn(instance.getResult(i),
-                  (base + "_" + instance.getPortNameStr(i)).str());
-      }
-      return;
-    }
-
-    if (auto memory = dyn_cast<MemOp>(op)) {
-      StringRef base;
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        base = nameAttr.getValue();
-      if (base.empty())
-        base = "mem";
-
-      for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
-        setNameFn(memory.getResult(i),
-                  (base + "_" + memory.getPortNameStr(i)).str());
-      }
-      return;
-    }
-
-    // For constants in particular, propagate the value into the result name to
-    // make it easier to read the IR.
-    if (auto constant = dyn_cast<ConstantOp>(op)) {
-      auto intTy = constant.getType().dyn_cast<IntType>();
-
-      // Otherwise, build a complex name with the value and type.
-      SmallString<32> specialNameBuffer;
-      llvm::raw_svector_ostream specialName(specialNameBuffer);
-      specialName << 'c';
-      if (intTy) {
-        constant.value().print(specialName, /*isSigned:*/ intTy.isSigned());
-
-        specialName << (intTy.isSigned() ? "_si" : "_ui");
-        auto width = intTy.getWidthOrSentinel();
-        if (width != -1)
-          specialName << width;
-      } else {
-        constant.value().print(specialName, /*isSigned:*/ false);
-      }
-      setNameFn(constant.getResult(), specialName.str());
-      return;
-    }
-
-    if (auto specialConstant = dyn_cast<SpecialConstantOp>(op)) {
-      SmallString<32> specialNameBuffer;
-      llvm::raw_svector_ostream specialName(specialNameBuffer);
-      specialName << 'c';
-      specialName << static_cast<unsigned>(specialConstant.value());
-      auto type = specialConstant.getType();
-      if (type.isa<ClockType>()) {
-        specialName << "_clock";
-      } else if (type.isa<ResetType>()) {
-        specialName << "_reset";
-      } else if (type.isa<AsyncResetType>()) {
-        specialName << "_asyncreset";
-      }
-      setNameFn(specialConstant.getResult(), specialName.str());
-      return;
-    }
-
-    // Set invalid values to have a distinct name.
-    if (auto invalid = dyn_cast<InvalidValueOp>(op)) {
-      std::string name;
-      if (auto ty = invalid.getType().dyn_cast<IntType>()) {
-        const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
-        auto width = ty.getWidthOrSentinel();
-        if (width == -1)
-          name = base;
-        else
-          name = (Twine(base) + Twine(width)).str();
-      } else if (auto ty = invalid.getType().dyn_cast<AnalogType>()) {
-        auto width = ty.getWidthOrSentinel();
-        if (width == -1)
-          name = "invalid_analog";
-        else
-          name = ("invalid_analog" + Twine(width)).str();
-      } else if (invalid.getType().isa<AsyncResetType>())
-        name = "invalid_asyncreset";
-      else if (invalid.getType().isa<ResetType>())
-        name = "invalid_reset";
-      else if (invalid.getType().isa<ClockType>())
-        name = "invalid_clock";
-      else
-        name = "invalid";
-
-      setNameFn(invalid.getResult(), name);
-      return;
-    }
-
-    // Many firrtl dialect operations have an optional 'name' attribute.  If
-    // present, use it.
-    if (op->getNumResults() == 1)
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-        setNameFn(op->getResult(0), nameAttr.getValue());
-  }
-};
-
-} // end anonymous namespace
-
 void FIRRTLDialect::initialize() {
   // Register types and attributes.
   registerTypes();
@@ -256,9 +136,6 @@ void FIRRTLDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/FIRRTL/FIRRTL.cpp.inc"
       >();
-
-  // Register interface implementations.
-  addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
 
 /// Registered hook to materialize a single constant operation from a given

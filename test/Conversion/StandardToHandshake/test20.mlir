@@ -70,25 +70,25 @@
 func @min_reduction_tree(%arg0: index) {
   %c0 = arith.constant 0 : index
   %0 = arith.cmpi slt, %arg0, %arg0 : index
-  %1 = select %0, %arg0, %arg0 : index
+  %1 = arith.select %0, %arg0, %arg0 : index
   %2 = arith.cmpi slt, %1, %arg0 : index
-  %3 = select %2, %1, %arg0 : index
+  %3 = arith.select %2, %1, %arg0 : index
   %4 = arith.cmpi slt, %3, %arg0 : index
-  %5 = select %4, %3, %arg0 : index
+  %5 = arith.select %4, %3, %arg0 : index
   %6 = arith.cmpi slt, %5, %arg0 : index
-  %7 = select %6, %5, %arg0 : index
+  %7 = arith.select %6, %5, %arg0 : index
   %8 = arith.cmpi slt, %7, %arg0 : index
-  %9 = select %8, %7, %arg0 : index
+  %9 = arith.select %8, %7, %arg0 : index
   %10 = arith.cmpi slt, %9, %arg0 : index
-  %11 = select %10, %9, %arg0 : index
+  %11 = arith.select %10, %9, %arg0 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%12: index):     // 2 preds: ^bb0, ^bb2
   %13 = arith.cmpi slt, %12, %11 : index
-  cond_br %13, ^bb2, ^bb3
+  cf.cond_br %13, ^bb2, ^bb3
 ^bb2: // pred: ^bb1
   %14 = arith.addi %12, %c1 : index
-  br ^bb1(%14 : index)
+  cf.br ^bb1(%14 : index)
 ^bb3: // pred: ^bb1
   return
 }

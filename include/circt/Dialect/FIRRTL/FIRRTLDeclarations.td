@@ -10,8 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
+
 def InstanceOp : FIRRTLOp<"instance", [
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -33,8 +36,7 @@ def InstanceOp : FIRRTLOp<"instance", [
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let verifier = "return ::verifyInstanceOp(*this);";
-  let printer = "printInstanceOp(p, *this);";
-  let parser = "return parseInstanceOp(parser, result);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
@@ -91,7 +93,7 @@ def InstanceOp : FIRRTLOp<"instance", [
   }];
 }
 
-def MemOp : FIRRTLOp<"mem"> {
+def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -176,7 +178,7 @@ def MemOp : FIRRTLOp<"mem"> {
 }
 
 def NodeOp : FIRRTLOp<"node",
-                      [SameOperandsAndResultType, InferTypeOpInterface]> {
+      [SameOperandsAndResultType, InferTypeOpInterface, HasCustomSSAName]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -223,7 +225,7 @@ def NodeOp : FIRRTLOp<"node",
   }];
 }
 
-def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
+def RegOp : FIRRTLOp<"reg", [HasCustomSSAName/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -256,7 +258,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
+def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName/*MemAlloc*/]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -292,7 +294,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
   let hasCanonicalizer = true;
 }
 
-def WireOp : FIRRTLOp<"wire", []> {
+def WireOp : FIRRTLOp<"wire", [HasCustomSSAName]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:

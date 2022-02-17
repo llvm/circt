@@ -134,9 +134,11 @@ static ParseResult parseForkOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printForkOp(OpAsmPrinter &p, ForkOp op) {
-  sost::printOp(p, op, true);
+ParseResult ForkOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseForkOp(parser, result);
 }
+
+void ForkOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, true); }
 
 namespace {
 
@@ -232,14 +234,11 @@ void LazyForkOp::build(OpBuilder &builder, OperationState &result,
   sost::addAttributes(result, outputs, type, isControl);
 }
 
-static ParseResult parseLazyForkOp(OpAsmParser &parser,
-                                   OperationState &result) {
+ParseResult LazyForkOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseForkOp(parser, result);
 }
 
-static void printLazyForkOp(OpAsmPrinter &p, LazyForkOp op) {
-  sost::printOp(p, op, true);
-}
+void LazyForkOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, true); }
 
 void MergeOp::build(OpBuilder &builder, OperationState &result,
                     ValueRange operands) {
@@ -251,7 +250,7 @@ void MergeOp::build(OpBuilder &builder, OperationState &result,
   sost::addAttributes(result, operands.size(), type);
 }
 
-static ParseResult parseMergeOp(OpAsmParser &parser, OperationState &result) {
+ParseResult MergeOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
@@ -270,7 +269,7 @@ static ParseResult parseMergeOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void printMergeOp(OpAsmPrinter &p, MergeOp op) { sost::printOp(p, op, false); }
+void MergeOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
 void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
@@ -360,7 +359,7 @@ std::string handshake::MuxOp::getOperandName(unsigned int idx) {
   return idx == 0 ? "select" : defaultOperandName(idx - 1);
 }
 
-static ParseResult parseMuxOp(OpAsmParser &parser, OperationState &result) {
+ParseResult MuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType selectOperand;
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type selectType, dataType;
@@ -387,16 +386,15 @@ static ParseResult parseMuxOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printMuxOp(OpAsmPrinter &p, MuxOp op) {
-  Type dataType = op->getAttrOfType<TypeAttr>("dataType").getValue();
-  Type selectType = op.selectOperand().getType();
-  auto ops = op.getOperands();
+void MuxOp::print(OpAsmPrinter &p) {
+  Type selectType = selectOperand().getType();
+  auto ops = getOperands();
   p << ' ' << ops.front();
   p << " [";
   p.printOperands(ops.drop_front());
   p << "]";
-  p.printOptionalAttrDict((op)->getAttrs(), {"dataType", "size", "control"});
-  p << " : " << selectType << ", " << dataType;
+  p.printOptionalAttrDict((*this)->getAttrs(), {"dataType", "size", "control"});
+  p << " : " << selectType << ", " << dataType();
 }
 
 static LogicalResult verify(MuxOp op) {
@@ -455,8 +453,7 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
   sost::addAttributes(result, operands.size(), type);
 }
 
-static ParseResult parseControlMergeOp(OpAsmParser &parser,
-                                       OperationState &result) {
+ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
@@ -477,9 +474,7 @@ static ParseResult parseControlMergeOp(OpAsmParser &parser,
   return success();
 }
 
-void printControlMergeOp(OpAsmPrinter &p, ControlMergeOp op) {
-  sost::printOp(p, op, false);
-}
+void ControlMergeOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
 static ParseResult verifyFuncOp(handshake::FuncOp op) {
   // If this function is external there is nothing to do.
@@ -529,8 +524,8 @@ static ParseResult verifyFuncOp(handshake::FuncOp op) {
 }
 
 /// Parses a FuncOp signature using
-/// mlir::function_like_impl::parseFunctionSignature while getting access to the
-/// parsed SSA names to store as attributes.
+/// mlir::function_interface_impl::parseFunctionSignature while getting access
+/// to the parsed SSA names to store as attributes.
 static ParseResult parseFuncOpArgs(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Attribute> &argNames,
@@ -538,10 +533,14 @@ static ParseResult parseFuncOpArgs(
     SmallVectorImpl<NamedAttrList> &resAttrs) {
   auto *context = parser.getContext();
 
+  SmallVector<Location, 4> argLocs(
+      entryArgs.size(),
+      parser.getEncodedSourceLoc(parser.getCurrentLocation()));
+
   bool isVariadic;
-  if (mlir::function_like_impl::parseFunctionSignature(
+  if (mlir::function_interface_impl::parseFunctionSignature(
           parser, /*allowVariadic=*/true, entryArgs, argTypes, argAttrs,
-          isVariadic, resTypes, resAttrs)
+          argLocs, isVariadic, resTypes, resAttrs)
           .failed())
     return failure();
 
@@ -625,7 +624,7 @@ void handshake::FuncOp::resolveArgAndResNames() {
   resolveNames(fallbackResNames, resNames, "resNames");
 }
 
-static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
+ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
   StringAttr nameAttr;
   SmallVector<OpAsmParser::OperandType, 4> args;
@@ -639,8 +638,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
       parseFuncOpArgs(parser, args, argTypes, argNames, argAttributes, resTypes,
                       resAttributes))
     return failure();
-  mlir::function_like_impl::addArgAndResultAttrs(builder, result, argAttributes,
-                                                 resAttributes);
+  mlir::function_interface_impl::addArgAndResultAttrs(
+      builder, result, argAttributes, resAttributes);
 
   // Set function type
   result.addAttribute(
@@ -665,11 +664,11 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   return parser.parseRegion(*body, args, argTypes);
 }
 
-static void printFuncOp(OpAsmPrinter &p, handshake::FuncOp op) {
-  FunctionType fnType = op.getType();
-  mlir::function_like_impl::printFunctionLikeOp(p, op, fnType.getInputs(),
-                                                /*isVariadic=*/true,
-                                                fnType.getResults());
+void FuncOp::print(OpAsmPrinter &p) {
+  FunctionType fnType = getType();
+  mlir::function_interface_impl::printFunctionOp(p, *this, fnType.getInputs(),
+                                                 /*isVariadic=*/true,
+                                                 fnType.getResults());
 }
 
 namespace {
@@ -736,12 +735,12 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
   sost::addAttributes(result, 1, type, isControl);
 }
 
-void handshake::BranchOp::getCanonicalizationPatterns(
-    RewritePatternSet &results, MLIRContext *context) {
+void BranchOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
 
-static ParseResult parseBranchOp(OpAsmParser &parser, OperationState &result) {
+ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
@@ -760,12 +759,10 @@ static ParseResult parseBranchOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printBranchOp(OpAsmPrinter &p, BranchOp op) {
-  sost::printOp(p, op, false);
-}
+void BranchOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
-static ParseResult parseConditionalBranchOp(OpAsmParser &parser,
-                                            OperationState &result) {
+ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
+                                       OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type dataType;
   SmallVector<Type> operandTypes;
@@ -792,10 +789,10 @@ static ParseResult parseConditionalBranchOp(OpAsmParser &parser,
   return success();
 }
 
-static void printConditionalBranchOp(OpAsmPrinter &p, ConditionalBranchOp op) {
-  Type type = op.dataOperand().getType();
-  p << " " << op->getOperands();
-  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
+void ConditionalBranchOp::print(OpAsmPrinter &p) {
+  Type type = dataOperand().getType();
+  p << " " << getOperands();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
   p << " : " << type;
 }
 
@@ -829,7 +826,7 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
     result.addAttribute("control", builder.getBoolAttr(true));
 }
 
-static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
+ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type dataType;
   SmallVector<Type> operandTypes;
@@ -857,10 +854,10 @@ static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printSelectOp(OpAsmPrinter &p, SelectOp op) {
-  Type type = op.trueOperand().getType();
-  p << " " << op->getOperands();
-  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
+void SelectOp::print(OpAsmPrinter &p) {
+  Type type = trueOperand().getType();
+  p << " " << getOperands();
+  p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
   p << " : " << type;
 }
 
@@ -921,7 +918,7 @@ void SinkOp::build(OpBuilder &builder, OperationState &odsState,
   odsState.addTypes(resultTypes);
 }
 
-static ParseResult parseSinkOp(OpAsmParser &parser, OperationState &result) {
+ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
@@ -936,9 +933,7 @@ static ParseResult parseSinkOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printSinkOp(OpAsmPrinter &p, SinkOp op) {
-  sost::printOp(p, op, false);
-}
+void SinkOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
 std::string handshake::ConstantOp::getOperandName(unsigned int idx) {
   assert(idx == 0);
@@ -954,14 +949,14 @@ void SourceOp::build(OpBuilder &builder, OperationState &result) {
   setupSourceOp(result);
 }
 
-static ParseResult parseSourceOp(OpAsmParser &parser, OperationState &result) {
+ParseResult SourceOp::parse(OpAsmParser &parser, OperationState &result) {
   parser.parseOptionalAttrDict(result.attributes);
   setupSourceOp(result);
   return success();
 }
 
-static void printSourceOp(OpAsmPrinter &p, SourceOp op) {
-  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
+void SourceOp::print(OpAsmPrinter &p) {
+  p.printOptionalAttrDict((*this)->getAttrs(), {"size", "dataType", "control"});
 }
 
 static ParseResult verifyConstantOp(handshake::ConstantOp op) {
@@ -1026,7 +1021,7 @@ void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
                       BoolAttr::get(builder.getContext(), sequential));
 }
 
-static ParseResult parseBufferOp(OpAsmParser &parser, OperationState &result) {
+ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
@@ -1042,9 +1037,7 @@ static ParseResult parseBufferOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printBufferOp(OpAsmPrinter &p, BufferOp op) {
-  sost::printOp(p, op, true);
-}
+void BufferOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, true); }
 
 static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {
   std::string name;
@@ -1327,11 +1320,11 @@ static void printMemoryAccessOp(OpAsmPrinter &p, MemOp op) {
   p << ", " << op.data().getType();
 }
 
-static ParseResult parseLoadOp(OpAsmParser &parser, OperationState &result) {
+ParseResult LoadOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseMemoryAccessOp(parser, result);
 }
 
-void printLoadOp(OpAsmPrinter &p, LoadOp op) { printMemoryAccessOp(p, op); }
+void LoadOp::print(OpAsmPrinter &p) { printMemoryAccessOp(p, *this); }
 
 std::string handshake::StoreOp::getOperandName(unsigned int idx) {
   unsigned nAddresses = addresses().size();
@@ -1386,13 +1379,11 @@ static LogicalResult verifyStoreOp(handshake::StoreOp op) {
   return verifyMemoryAccessOp(op);
 }
 
-static ParseResult parseStoreOp(OpAsmParser &parser, OperationState &result) {
+ParseResult StoreOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseMemoryAccessOp(parser, result);
 }
 
-static void printStoreOp(OpAsmPrinter &p, StoreOp &op) {
-  return printMemoryAccessOp(p, op);
-}
+void StoreOp::print(OpAsmPrinter &p) { return printMemoryAccessOp(p, *this); }
 
 void JoinOp::build(OpBuilder &builder, OperationState &result,
                    ArrayRef<Value> operands) {
@@ -1403,7 +1394,7 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
   sost::addAttributes(result, operands.size(), type);
 }
 
-static ParseResult parseJoinOp(OpAsmParser &parser, OperationState &result) {
+ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
@@ -1421,7 +1412,7 @@ static ParseResult parseJoinOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void printJoinOp(OpAsmPrinter &p, JoinOp op) { sost::printOp(p, op, false); }
+void JoinOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
 static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
   if (op->getNumOperands() == 0)

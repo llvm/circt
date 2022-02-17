@@ -30,6 +30,7 @@ def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> 
   let dependentDialects = [
     "circt::staticlogic::StaticLogicDialect",
     "mlir::arith::ArithmeticDialect",
+    "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
     "mlir::scf::SCFDialect",
     "mlir::StandardOpsDialect"

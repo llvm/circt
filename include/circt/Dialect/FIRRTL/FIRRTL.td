@@ -16,9 +16,10 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
-include "mlir/IR/RegionKindInterface.td"
 
 include "FIRRTLDialect.td"
 include "FIRRTLAttributes.td"

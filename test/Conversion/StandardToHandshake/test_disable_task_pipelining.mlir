@@ -41,18 +41,18 @@
 // CHECK:         }
 func @simple_loop() {
 ^bb0:
-  br ^bb1
+  cf.br ^bb1
 ^bb1:	// pred: ^bb0
   %c1 = arith.constant 1 : index
   %c42 = arith.constant 42 : index
-  br ^bb2(%c1 : index)
+  cf.br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb3, ^bb4
+  cf.cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
   %c1_0 = arith.constant 1 : index
   %2 = arith.addi %0, %c1_0 : index
-  br ^bb2(%2 : index)
+  cf.br ^bb2(%2 : index)
 ^bb4:	// pred: ^bb2
   return
 }
