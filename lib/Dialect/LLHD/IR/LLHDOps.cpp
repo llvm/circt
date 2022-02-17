@@ -559,11 +559,11 @@ static void printArgumentList(OpAsmPrinter &printer,
 
 void llhd::EntityOp::print(OpAsmPrinter &printer) {
   std::vector<BlockArgument> ins, outs;
-  uint64_t n_ins = insAttr().getInt();
+  uint64_t nIns = insAttr().getInt();
   for (uint64_t i = 0; i < body().front().getArguments().size(); ++i) {
     // no furter verification for the attribute type is required, already
     // handled by verify.
-    if (i < n_ins) {
+    if (i < nIns) {
       ins.push_back(body().front().getArguments()[i]);
     } else {
       outs.push_back(body().front().getArguments()[i]);
