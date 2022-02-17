@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Support/Timing.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/YAMLTraits.h"
@@ -1051,6 +1052,10 @@ void GrandCentralPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "===- Running Grand Central Views/Interface Pass "
                              "-----------------------------===\n");
 
+  mlir::DefaultTimingManager tm;
+  tm.setEnabled(true);
+  auto rootScope = tm.getRootScope();
+
   CircuitOp circuitOp = getOperation();
 
   // Look at the circuit annotaitons to do two things:
@@ -1060,6 +1065,7 @@ void GrandCentralPass::runOnOperation() {
   //
   // Remove annotations encoding interfaces, but leave extraction information as
   // this may be needed by later passes.
+  auto circuitAnnoScope = rootScope.nest("Circuit Annotations");
   SmallVector<Annotation> worklist;
   bool removalError = false;
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
@@ -1136,9 +1142,12 @@ void GrandCentralPass::runOnOperation() {
     }
     return false;
   });
+  circuitAnnoScope.stop();
 
   if (removalError)
     return signalPassFailure();
+
+  auto walkScope = rootScope.nest("Circuit Walk");
 
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.
@@ -1409,6 +1418,8 @@ void GrandCentralPass::runOnOperation() {
         });
   });
 
+  walkScope.stop();
+
   if (removalError)
     return signalPassFailure();
 
@@ -1495,6 +1506,8 @@ void GrandCentralPass::runOnOperation() {
     }
   });
 
+  auto interfaceScope = rootScope.nest("Interface Generation");
+
   // Now, iterate over the worklist of interface-encoding annotations to create
   // the interface and all its sub-interfaces (interfaces that it instantiates),
   // instantiate the top-level interface, and generate a "mappings file" that
@@ -1578,6 +1591,10 @@ void GrandCentralPass::runOnOperation() {
                       maybeExtractInfo.getValue().bindFilename.getValue(),
                       /*excludeFromFileList=*/true));
   }
+
+  interfaceScope.stop();
+
+  auto yamlScope = rootScope.nest("YAML Generation");
 
   // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
   // representation of the interfaces that we produced with the filename that
