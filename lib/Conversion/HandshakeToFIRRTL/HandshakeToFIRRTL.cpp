@@ -218,7 +218,7 @@ getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op) {
 /// operator which references the memref input argument.
 static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
                                       Value blockArg, bool flip) {
-  assert(blockArg.getType().dyn_cast<MemRefType>() &&
+  assert(blockArg.getType().isa<MemRefType>() &&
          "expected blockArg to be a memref");
 
   auto extmemUsers = blockArg.getUsers();
