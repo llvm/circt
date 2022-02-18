@@ -1,3 +1,5 @@
+# Find and enter a Visual Studio development environment.
+# Required to use Ninja instead of msbuild on our build agents.
 function Enter-VsDevEnv {
     [CmdletBinding()]
     param(
