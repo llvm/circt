@@ -584,6 +584,28 @@ void TestLPSchedulerPass::runOnOperation() {
     return;
   }
 
+  if (problemToTest == "CyclicProblem") {
+    auto prob = CyclicProblem::get(func);
+    constructProblem(prob, func);
+    constructCyclicProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleLP(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("lpInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
+    emitSchedule(prob, "lpStartTime", builder);
+    return;
+  }
+
   llvm_unreachable("Unsupported scheduling problem");
 }
 
