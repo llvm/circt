@@ -62,8 +62,8 @@ public:
     auto cSubpath = mlirStringRefCreate(subpath.c_str(), subpath.size());
     return circtMSFTPlacementDBPlace(db, instOp, loc, cSubpath, srcLoc);
   }
-  MlirOperation removePlacement(MlirAttribute loc) {
-    return circtMSFTPlacementDBRemovePlacement(db, loc);
+  void removePlacement(MlirOperation locOp) {
+    circtMSFTPlacementDBRemovePlacement(db, locOp);
   }
   bool movePlacement(MlirOperation locOp, MlirAttribute newLoc) {
     return mlirLogicalResultIsSuccess(
@@ -196,14 +196,14 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("seed") = nullptr)
       .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")
-      .def("place", &PlacementDB::place, "Inform the DB about a new placement.",
+      .def("place", &PlacementDB::place, "Place a dynamic instance.",
            py::arg("dyn_inst"), py::arg("location"), py::arg("subpath"),
            py::arg("src_location"))
       .def("remove_placement", &PlacementDB::removePlacement,
-           "Remove a placment from the DB.", py::arg("location"))
+           "Remove a placement.", py::arg("location"))
       .def("move_placement", &PlacementDB::movePlacement,
-           "Move a placement to another location in the DB.",
-           py::arg("old_location"), py::arg("new_location"))
+           "Move a placement to another location.", py::arg("old_location"),
+           py::arg("new_location"))
       .def("get_nearest_free_in_column", &PlacementDB::getNearestFreeInColumn,
            "Find the nearest free primitive location in column.",
            py::arg("prim_type"), py::arg("column"), py::arg("nearest_to_y"))

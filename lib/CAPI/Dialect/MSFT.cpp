@@ -78,10 +78,9 @@ MlirOperation circtMSFTPlacementDBPlace(CirctMSFTPlacementDB db,
                                 unwrap(loc).cast<PhysLocationAttr>(),
                                 unwrap(subpath), unwrap(srcLoc)));
 }
-MlirOperation circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
-                                                  MlirAttribute loc) {
-  return wrap(
-      unwrap(db)->removePlacement(unwrap(loc).cast<PhysLocationAttr>()));
+void circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB db,
+                                         MlirOperation locOp) {
+  unwrap(db)->removePlacement(cast<PDPhysLocationOp>(unwrap(locOp)));
 }
 MlirLogicalResult circtMSFTPlacementDBMovePlacement(CirctMSFTPlacementDB db,
                                                     MlirOperation locOp,

@@ -58,18 +58,14 @@ private:
 /// placements.
 ///
 /// Holds pointers into the IR, which may become invalid as a result of IR
-/// transforms. As a result, this class should only be used for analysis and
-/// then thrown away. It is permissible to persist it through transformations so
-/// long as it is maintained along with the transformations.
+/// transforms. As a result, this class is intended to be short-lived -- created
+/// just before loading placements and destroyed immediatetly after things are
+/// placed.
 class PlacementDB {
 public:
   /// Create a DB treating 'top' as the root module.
   PlacementDB(Operation *top);
   PlacementDB(Operation *top, const PrimitiveDB &seed);
-
-  struct Placement {
-    PDPhysLocationOp locOp;
-  };
 
   /// Contains the order to iterate in each dimension for walkPlacements. The
   /// dimensions are visited with columns first, then rows, then numbers within
@@ -92,9 +88,8 @@ public:
   /// failed to load due to invalid specifications.
   size_t addDesignPlacements();
 
-  /// Remove the placement at a given location. Returns the removed op if one
-  /// was removed. Null otherwise.
-  PDPhysLocationOp removePlacement(PhysLocationAttr);
+  /// Remove the placement from the DB and IR. Erases the op.
+  void removePlacement(PDPhysLocationOp);
   /// Move a placement location to a new location. Returns failure if something
   /// is already placed at the new location.
   LogicalResult movePlacement(PDPhysLocationOp, PhysLocationAttr);
@@ -120,10 +115,16 @@ public:
   void walkRegionPlacements(function_ref<void(PDPhysRegionOp)>);
 
 private:
+  /// A memory slot. Useful to distinguish the memory location from the
+  /// reference stored there.
+  struct PlacementCell {
+    PDPhysLocationOp locOp;
+  };
+
   MLIRContext *ctxt;
   Operation *top;
 
-  using DimDevType = DenseMap<PrimitiveType, Placement>;
+  using DimDevType = DenseMap<PrimitiveType, PlacementCell>;
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
@@ -131,7 +132,7 @@ private:
 
   /// Get the leaf node. Abstract this out to make it easier to change the
   /// underlying data structure.
-  Placement *getLeaf(PhysLocationAttr);
+  PlacementCell *getLeaf(PhysLocationAttr);
 
   DimXMap placements;
   RegionPlacements regionPlacements;

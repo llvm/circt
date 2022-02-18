@@ -79,7 +79,7 @@ PlacementDB::PlacementDB(Operation *top, const PrimitiveDB &seed)
 }
 
 /// Assign an instance to a primitive. Return false if another instance is
-/// already placed at that location.
+/// already placed at that location
 PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
                                     PhysLocationAttr loc, StringRef subPath,
                                     Location srcLoc) {
@@ -97,7 +97,7 @@ PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
 }
 
 LogicalResult PlacementDB::insertPlacement(PDPhysLocationOp locOp) {
-  Placement *leaf = getLeaf(locOp.loc());
+  PlacementCell *leaf = getLeaf(locOp.loc());
   if (!leaf)
     return locOp->emitOpError("Could not apply placement. Invalid location: ")
            << locOp.loc();
@@ -157,13 +157,12 @@ size_t PlacementDB::addDesignPlacements() {
 
 /// Remove the placement at a given location. Returns failure if nothing was
 /// placed there.
-PDPhysLocationOp PlacementDB::removePlacement(PhysLocationAttr loc) {
-  Placement *leaf = getLeaf(loc);
-  if (!leaf)
-    return {};
-  auto ret = leaf->locOp;
+void PlacementDB::removePlacement(PDPhysLocationOp locOp) {
+  PlacementCell *leaf = getLeaf(locOp.loc());
+  assert(leaf && "Could not find op at location specified by op");
+  assert(leaf->locOp == locOp);
   leaf->locOp = {};
-  return ret;
+  locOp.erase();
 }
 
 /// Move the placement at a given location to a new location. Returns failure
@@ -172,8 +171,8 @@ PDPhysLocationOp PlacementDB::removePlacement(PhysLocationAttr loc) {
 LogicalResult PlacementDB::movePlacement(PDPhysLocationOp locOp,
                                          PhysLocationAttr newLoc) {
   PhysLocationAttr oldLoc = locOp.locAttr();
-  Placement *oldLeaf = getLeaf(oldLoc);
-  Placement *newLeaf = getLeaf(newLoc);
+  PlacementCell *oldLeaf = getLeaf(oldLoc);
+  PlacementCell *newLeaf = getLeaf(newLoc);
 
   if (!oldLeaf || !newLeaf)
     return failure();
@@ -230,7 +229,7 @@ PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
   return nearest;
 }
 
-PlacementDB::Placement *PlacementDB::getLeaf(PhysLocationAttr loc) {
+PlacementDB::PlacementCell *PlacementDB::getLeaf(PhysLocationAttr loc) {
   PrimitiveType primType = loc.getPrimitiveType().getValue();
 
   DimNumMap &nums = placements[loc.getX()][loc.getY()];
@@ -307,7 +306,7 @@ void PlacementDB::walkPlacements(
           PrimitiveType devtype = devF->getFirst();
           if (primType && devtype != *primType)
             continue;
-          Placement &inst = devF->getSecond();
+          PlacementCell &inst = devF->getSecond();
 
           // Marshall and run the callback.
           PhysLocationAttr loc = PhysLocationAttr::get(

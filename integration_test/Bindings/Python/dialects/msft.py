@@ -221,26 +221,23 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   old_loc_op = pdb.place(dyn_inst, old_location, "", ir.Location.current)
   assert pdb.get_instance_at(old_location) == old_loc_op
-  rc = pdb.remove_placement(new_location)
-  assert rc == None
-  rc = pdb.remove_placement(old_location)
-  assert rc == old_loc_op
+  pdb.remove_placement(old_loc_op)
   assert pdb.get_instance_at(old_location) is None
-  old_loc_op.erase()
 
   old_loc_op = pdb.place(dyn_inst, old_location, "", ir.Location.current)
   rc = pdb.move_placement(old_loc_op, new_location)
-  assert rc == True
-  old_loc_op = pdb.place(dyn_inst, old_location, "", ir.Location.current)
-  pdb.place(dyn_inst, new_location, "", ir.Location.current)
-  rc = pdb.move_placement(old_loc_op, new_location)
-  assert rc == False
-  pdb.remove_placement(new_location)
-  rc = pdb.move_placement(old_loc_op, new_location)
-  assert rc == True
+  assert rc
+  old_loc_repl = pdb.place(dyn_inst, old_location, "", ir.Location.current)
+  conflict_loc = pdb.place(dyn_inst, new_location, "", ir.Location.current)
+  assert conflict_loc is None
+  rc = pdb.move_placement(old_loc_repl, new_location)
+  assert not rc
+  pdb.remove_placement(old_loc_op)
+  rc = pdb.move_placement(old_loc_repl, new_location)
+  assert rc
   should_be_none = pdb.get_instance_at(old_location)
   assert should_be_none is None
-  assert pdb.get_instance_at(new_location) == old_loc_op
+  assert pdb.get_instance_at(new_location) == old_loc_repl
 
   print("=== Errors:", file=sys.stderr)
   # TODO: Python's sys.stderr doesn't seem to be shared with C++ errors.
