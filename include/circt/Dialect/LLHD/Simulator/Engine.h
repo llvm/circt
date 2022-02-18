@@ -57,10 +57,10 @@ public:
   const State *getState() const { return state.get(); }
 
   /// Dump the instance layout stored in the State.
-  void dumpStateLayout();
+  void dumpStateLayout() { state->dumpLayout(); }
 
   /// Dump the instances each signal triggers.
-  void dumpStateSignalTriggers();
+  void dumpStateSignalTriggers() { state->dumpSignalTriggers(); }
 
 private:
   /// Recursively walk given `entity` and it's children to collect signals and

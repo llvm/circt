@@ -56,10 +56,6 @@ Engine::Engine(
 
 Engine::~Engine() = default;
 
-void Engine::dumpStateLayout() { state->dumpLayout(); }
-
-void Engine::dumpStateSignalTriggers() { state->dumpSignalTriggers(); }
-
 int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
   assert(engine && "engine not found");
   assert(state && "state not found");
@@ -91,13 +87,13 @@ int Engine::simulate(uint64_t maxCycle, uint64_t maxTime) {
   // function pointers to all of the instances to make them readily available.
   for (size_t i = 0, e = state->getInstanceSize(); i < e; ++i) {
     wakeupQueue.push_back(i);
-    auto &inst = state->getInstance(i);
-    auto expectedFPtr = engine->lookupPacked(inst.getBaseUnitName());
+    auto &instOp = state->getInstance(i);
+    auto expectedFPtr = engine->lookupPacked(instOp.getBaseUnitName());
     if (!expectedFPtr) {
-      llvm::errs() << "Could not lookup " << inst.getBaseUnitName() << "!\n";
+      llvm::errs() << "Could not lookup " << instOp.getBaseUnitName() << "!\n";
       return -1;
     }
-    inst.registerRunner(*expectedFPtr);
+    instOp.registerRunner(*expectedFPtr);
   }
 
   uint64_t cycle = 0;
@@ -193,86 +189,88 @@ void Engine::buildLayout(ModuleOp module) {
   auto rootEntity = module.lookupSymbol<EntityOp>(root);
   assert(rootEntity && "root entity not found!");
 
-  // Build root instance, the parent and instance names are the same for the
-  // root.
-  Instance rootInst(state->getRoot(), root, root);
+  // Build root instance(always an entity type), the parent and instance names
+  // are the same for the root.
+  Instance rootInst(state->getRoot(), root, root, Instance::Entity);
 
   // Recursively walk the units starting at root.
   walkEntity(rootEntity, rootInst);
 
-  // The root is always an instance.
-  rootInst.setType(Instance::Entity);
   // Store the root instance.
   state->pushInstance(rootInst);
-  // Add triggers to signals.
-  state->associateTrigger2Signal();
+  // Bind signals and instances
+  state->bindSignalWithInstance();
 }
 
-void Engine::walkEntity(EntityOp entity, Instance &child) {
+void Engine::walkEntity(EntityOp entity, Instance &instance) {
   entity.walk([&](Operation *op) {
     assert(op);
 
-    // Add a signal to the signal table.
-    if (auto sig = dyn_cast<SigOp>(op)) {
-      uint64_t index = state->addSignal(sig.name().str(), child.getName());
-      child.initSignalDetail(index);
-    }
+    if (auto sigOp = dyn_cast<SigOp>(op)) {
+      // Collect signal information in current instance.
+      uint64_t index = state->addSignal(instance, sigOp.name().str());
+      instance.initSignalDetail(index);
+    } else if (auto instOp = dyn_cast<InstOp>(op)) {
+      // Build (recursive) instance layout.
 
-    // Build (recursive) instance layout.
-    if (auto inst = dyn_cast<InstOp>(op)) {
       // Skip self-recursion.
-      if (inst.callee() == child.getName())
+      if (instOp.callee() == instance.getName())
         return;
 
       if (auto sym =
-            op->getParentOfType<ModuleOp>().lookupSymbol(inst.callee())) {
-        std::string instName = child.getBaseUnitName() + '.' + inst.name().str();
-        std::string instPath = child.getPath() + "/" + inst.name().str();
-        Instance newChild(instName, instPath, inst.callee().str(),
-                          inst.getNumOperands());
+            op->getParentOfType<ModuleOp>().lookupSymbol(instOp.callee())) {
+        std::string instName = instance.getBaseUnitName() + '.' +
+            instOp.name().str();
+        std::string instPath = instance.getPath() + "/" + instOp.name().str();
+        Instance childInst(instName, instPath, instOp.callee().str(),
+                           instOp.getNumOperands());
+
+        // Current instance global index in simulation context
+        size_t instIdx = state->getInstanceSize() - 1;
 
         // Add instance arguments to sensitivity list. The first numArgs signals
         // in the sensitivity list represent the unit's arguments(inputs), while
         // the following ones represent the unit-defined signals(outputs).
-        llvm::SmallVector<Value, 8> args;
-        args.insert(args.end(), inst.inputs().begin(), inst.inputs().end());
-        args.insert(args.end(), inst.outputs().begin(), inst.outputs().end());
 
-        for (size_t i = 0, e = args.size(); i < e; ++i) {
-          // The signal comes from an instance's argument.
-          if (auto blockArg = args[i].dyn_cast<BlockArgument>()) {
-            auto detail = child.getSignalDetail(blockArg.getArgNumber());
-            detail.instIndex = i;
-            newChild.pushSignalDetail(detail);
-          } else if (auto sig = dyn_cast<SigOp>(args[i].getDefiningOp())) {
-            // The signal comes from one of the instance's owned signals.
-            auto it = std::find_if(
-                child.getSensitivityList().begin(),
-                child.getSensitivityList().end(),
-                [&](const SignalDetail &detail) {
-                  auto& outSig = state->getSignal(detail.globalIndex);
-                  return outSig.getName() == sig.name() &&
-                         outSig.getOwner() == child.getName();
-                });
-            if (it != child.getSensitivityList().end()) {
-              auto detail = *it;
-              detail.instIndex = i;
-              newChild.pushSignalDetail(detail);
-            }
+        // The signal comes from parent instance's argument.
+        for (size_t i = 0, e = instOp.inputs().size(); i < e; ++i) {
+          auto detail = instance.getSignalDetail(i);
+          // detail.instIndex = instIdx;
+          childInst.pushSignalDetail(detail);
+        }
+
+        // The signal comes from parent instance's owned signals.
+        for (auto output : instOp.outputs()) {
+          auto sigOp = cast<SigOp>(output.getDefiningOp());
+
+          auto SDI = std::find_if(
+              instance.getSensitivityList().begin(),
+              instance.getSensitivityList().end(),
+              [&](const SignalDetail &detail) {
+                auto& outSig = state->getSignal(detail.globalIndex);
+                return outSig.getName() == sigOp.name() &&
+                       outSig.getOwner() == instance.getName();
+              });
+
+          // FIXME: This caused sim_wait.mlir test failures due free() issue.
+          if (SDI != instance.getSensitivityList().end()) {
+            // auto detail = *SDI;
+            // detail.instIndex = instIdx;
+            childInst.pushSignalDetail(*SDI);
           }
         }
 
         // Recursively walk a new entity, otherwise it is a process and cannot
         // define new signals or instances.
-        if (auto ent = dyn_cast<EntityOp>(sym)) {
-          newChild.setType(Instance::Entity);
-          walkEntity(ent, newChild);
+        if (auto entityOp = dyn_cast<EntityOp>(sym)) {
+          childInst.setType(Instance::Entity);
+          walkEntity(entityOp, childInst);
         } else {
-          newChild.setType(Instance::Proc);
+          childInst.setType(Instance::Proc);
         }
 
         // Store the created instance.
-        state->pushInstance(newChild);
+        state->pushInstance(childInst);
       }
     }
   });
