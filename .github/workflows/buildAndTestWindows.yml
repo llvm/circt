@@ -53,7 +53,7 @@ jobs:
         run: |
           mkdir llvm/build
           cd llvm/build
-          cmake ..\llvm -G "Visual Studio 16 2019" `
+          cmake ..\llvm -GNinja `
             -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=OFF `
             -DLLVM_TARGETS_TO_BUILD="host" -DCMAKE_BUILD_TYPE=Release -Thost=x64 `
             -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON `
@@ -71,12 +71,11 @@ jobs:
         run: |
           mkdir build_release
           cd build_release
-          cmake ../ `
+          cmake ../ -GNinja `
             -DLLVM_ENABLE_ASSERTIONS=ON `
             -DMLIR_DIR="$(pwd)/../llvm/build/lib/cmake/mlir/" `
             -DLLVM_DIR="$(pwd)/../llvm/build/lib/cmake/llvm/" `
             -DLLVM_EXTERNAL_LIT="$(pwd)/../llvm/build/Release/bin/llvm-lit.py" `
-            -G "Visual Studio 16 2019" `
             -DCMAKE_BUILD_TYPE=Release -Thost=x64 -DCMAKE_BUILD_TYPE=Release
           cmake --build . --config Release
 
