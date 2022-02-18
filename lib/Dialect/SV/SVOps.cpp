@@ -587,6 +587,13 @@ bool CaseZPattern::isDefault() const {
   return true;
 }
 
+bool CaseZPattern::isConstant() const {
+  for (size_t i = 0, e = getWidth(); i != e; ++i)
+    if (getBit(i) == CaseZPatternBit::Any)
+      return false;
+  return true;
+}
+
 static SmallVector<CaseZPatternBit> getPatternBitsForValue(const APInt &value) {
   SmallVector<CaseZPatternBit> result;
   result.reserve(value.getBitWidth());
@@ -621,20 +628,24 @@ CaseZPattern::CaseZPattern(ArrayRef<CaseZPatternBit> bits,
   attr = IntegerAttr::get(patternType, pattern);
 }
 
-auto CaseZOp::getCases() -> SmallVector<CaseZInfo, 4> {
+template <typename ConcreteType>
+SmallVector<CaseZInfo, 4> CaseLikeOp<ConcreteType>::getCases() {
+  auto *op = static_cast<ConcreteType *>(this);
   SmallVector<CaseZInfo, 4> result;
-  assert(casePatterns().size() == getNumRegions() &&
+  assert(op->casePatterns().size() == op->getNumRegions() &&
          "case pattern / region count mismatch");
   size_t nextRegion = 0;
-  for (auto elt : casePatterns()) {
-    result.push_back({CaseZPattern(elt.cast<IntegerAttr>()),
-                      &getRegion(nextRegion++).front()});
+  for (auto elt : op->casePatterns()) {
+    result.push_back({CaseZPattern(elt.template cast<IntegerAttr>()),
+                      &op->getRegion(nextRegion++).front()});
   }
 
   return result;
 }
 
-static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
+template <typename ConcreteType>
+ParseResult CaseLikeOp<ConcreteType>::parse(OpAsmParser &parser,
+                                            OperationState &result) {
   auto &builder = parser.getBuilder();
 
   OpAsmParser::OperandType condOperand;
@@ -716,11 +727,14 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
-  p << ' ' << op.cond() << " : " << op.cond().getType();
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+template <typename ConcreteType>
+void CaseLikeOp<ConcreteType>::print1(OpAsmPrinter &p) {
+  auto *op = static_cast<ConcreteType *>(this);
+  p << ' ' << op->cond() << " : " << op->cond().getType();
+  p.printOptionalAttrDict((*op)->getAttrs(),
+                          /*elidedAttrs=*/{"casePatterns"});
 
-  for (auto caseInfo : op.getCases()) {
+  for (auto caseInfo : op->getCases()) {
     p.printNewline();
     auto pattern = caseInfo.pattern;
     if (pattern.isDefault()) {
@@ -738,12 +752,11 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
   }
 }
 
-static LogicalResult verifyCaseZOp(CaseZOp op) {
-  // Ensure that the number of regions and number of case values match.
-  if (op.casePatterns().size() != op.getNumRegions())
-    return op.emitOpError("case pattern / region count mismatch");
-  return success();
+ParseResult CaseZOp::parse(OpAsmParser &parser, OperationState &result) {
+  return CaseLikeOp::parse(parser, result);
 }
+
+void CaseZOp::print(OpAsmPrinter &p) { CaseLikeOp::print1(p); };
 
 /// This ctor allows you to build a CaseZ with some number of cases, getting
 /// a callback for each case.
@@ -762,6 +775,45 @@ void CaseZOp::build(OpBuilder &builder, OperationState &result, Value cond,
   }
 
   result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
+}
+
+ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
+  return CaseLikeOp::parse(parser, result);
+}
+
+void CaseOp::print(OpAsmPrinter &p) { CaseLikeOp::print1(p); }
+
+void CaseOp::build(OpBuilder &builder, OperationState &result,
+                   CaseZOp caseZOp) {
+  result.addOperands(caseZOp.cond());
+
+  SmallVector<Attribute> casePatterns;
+  auto caseZInfos = caseZOp.getCases();
+  casePatterns.reserve(caseZInfos.size());
+
+  OpBuilder::InsertionGuard guard(builder);
+
+  for (auto info : caseZInfos) {
+    casePatterns.push_back(info.pattern.attr);
+    // block
+    builder.createBlock(result.addRegion());
+    auto *block = builder.getBlock();
+    block->getOperations().splice(block->end(), info.block->getOperations());
+  }
+
+  result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
+}
+
+LogicalResult CaseOp::verify() {
+  auto caseZInfos = getCases();
+  return caseZInfos.end() ==
+                 llvm::find_if_not(caseZInfos,
+                                   [](sv::CaseZInfo info) {
+                                     return info.pattern.isDefault() ||
+                                            info.pattern.isConstant();
+                                   })
+             ? success()
+             : failure();
 }
 
 //===----------------------------------------------------------------------===//

@@ -2456,6 +2456,9 @@ private:
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseZOp op);
+  LogicalResult visitSV(CaseOp op);
+  template <typename CaseLike>
+  LogicalResult visitSV(CaseLike op, StringRef name);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(VerbatimOp op);
 
@@ -3261,10 +3264,21 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(CaseZOp op) {
+  return visitSV<decltype(op)>(op, "casez");
+}
+
+LogicalResult StmtEmitter::visitSV(CaseOp op) {
+  return visitSV<decltype(op)>(op, "case");
+}
+
+template <typename CaseLike>
+LogicalResult StmtEmitter::visitSV(CaseLike op, StringRef name) {
+  static_assert(std::is_base_of<CaseLike, CaseOp>::value ||
+                std::is_base_of<CaseLike, CaseZOp>::value);
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
 
-  indent() << "casez (";
+  indent() << name << " (";
   emitExpression(op.cond(), ops);
   os << ')';
   emitLocationInfoAndNewLine(ops);

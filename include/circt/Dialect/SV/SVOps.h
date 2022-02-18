@@ -57,6 +57,9 @@ struct CaseZPattern {
   /// Return true if this pattern always matches.
   bool isDefault() const;
 
+  /// Return true if this pattern doesn't has X/Z.
+  bool isConstant() const;
+
   /// Get a CaseZPattern from a specified list of CaseZPatternBit.  Bits are
   /// specified in most least significant order - element zero is the least
   /// significant bit.
@@ -112,6 +115,24 @@ class NonProceduralOp
 public:
   static LogicalResult verifyTrait(Operation *op) {
     return verifyInNonProceduralRegion(op);
+  }
+};
+
+template <typename ConcreteType>
+class CaseLikeOp : public mlir::OpTrait::TraitBase<ConcreteType, CaseLikeOp> {
+public:
+  SmallVector<CaseZInfo, 4> getCases();
+
+  static ParseResult parse(OpAsmParser &parser, OperationState &result);
+
+  void print1(OpAsmPrinter &p);
+
+  static LogicalResult verifyTrait(Operation *op) {
+    auto caseLikeOp = static_cast<ConcreteType>(op);
+    // Ensure that the number of regions and number of case values match.
+    if (caseLikeOp.casePatterns().size() != caseLikeOp.getNumRegions())
+      return caseLikeOp.emitOpError("case pattern / region count mismatch");
+    return success();
   }
 };
 

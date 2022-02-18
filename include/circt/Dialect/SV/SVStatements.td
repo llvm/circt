@@ -292,7 +292,7 @@ def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
 }
 
 def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
-                             ProceduralRegion, ProceduralOp]> {
+                             ProceduralRegion, ProceduralOp, CaseLikeOp]> {
   let summary = "'casez (cond)' block";
   let description = "See SystemVerilog 2017 12.5.1.";
 
@@ -300,9 +300,7 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
   let results = (outs);
 
-  let parser = "return parseCaseZOp(parser, result);";
-  let printer = "printCaseZOp(p, *this);";
-  let verifier = "return ::verifyCaseZOp(*this);";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     /// This ctor allows you to build a CaseZ with some number of cases, getting
@@ -310,12 +308,24 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
     OpBuilder<(ins "Value":$cond, "size_t":$numCases,
                "std::function<CaseZPattern(size_t)>":$caseCtor)>
   ];
+}
 
-  let extraClassDeclaration = [{
-    SmallVector<CaseZInfo, 4> getCases();
+def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
+                             ProceduralRegion, ProceduralOp, CaseLikeOp]> {
+  let summary = "'case (cond)' block";
+  let description = "See SystemVerilog 2017 12.5.2.";
 
-    // void addCase(...)
-  }];
+  let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
+  let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
+  let results = (outs);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    /// This ctor allows you to build a Case with CaseZ
+    OpBuilder<(ins "CaseZOp":$caseZOp)>
+  ];
 }
 
 //===----------------------------------------------------------------------===//
