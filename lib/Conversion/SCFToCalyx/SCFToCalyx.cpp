@@ -1433,13 +1433,13 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
   MemRefType memrefType = memref.getType().cast<MemRefType>();
 
   auto getMemoryInterfaceAttr = [&](StringRef tag,
-                                    Optional<unsigned> tagID = {}) {
+                                    Optional<unsigned> addrIdx = {}) {
     auto attrs = SmallVector<NamedAttribute>{
         rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
         rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
-    if (tagID.hasValue())
+    if (addrIdx.hasValue())
       attrs.push_back(rewriter.getNamedAttr(
-          "tagID", rewriter.getI32IntegerAttr(tagID.getValue())));
+          "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
 
     return rewriter.getNamedAttr("mem", rewriter.getDictionaryAttr(attrs));
   };
