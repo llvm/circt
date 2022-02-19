@@ -63,6 +63,13 @@ LogicalResult scheduleSimplex(ChainingProblem &prob, Operation *lastOp,
 /// the dependence graph contains cycles.
 LogicalResult scheduleLP(Problem &prob, Operation *lastOp);
 
+/// Solve the resource-free cyclic problem using integer linear programming and
+/// an external ILP solver. The objectives are to determine the smallest
+/// feasible initiation interval, and to minimize the start time of the given \p
+/// lastOp. Fails if the dependence graph contains cycles that do not include at
+/// least one edge with a non-zero distance.
+LogicalResult scheduleLP(CyclicProblem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 

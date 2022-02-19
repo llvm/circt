@@ -75,3 +75,71 @@ LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
 
   return success();
 }
+
+LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
+  Operation *containingOp = prob.getContainingOp();
+
+  MPSolver::OptimizationProblemType probType;
+  if (!MPSolver::ParseSolverType("CBC_MIXED_INTEGER_PROGRAMMING", &probType) ||
+      !MPSolver::SupportsProblemType(probType))
+    return containingOp->emitError("Solver is unavailable");
+
+  MPSolver solver("CyclicProblem", probType);
+  double infinity = solver.infinity();
+
+  // Create II variable.
+  MPVariable *ii = solver.MakeIntVar(1, infinity, "II");
+
+  // Create start time variables (and collect latencies to compute upper bound
+  // for the latest start time).
+  DenseMap<Operation *, MPVariable *> t;
+  unsigned upperBound = 0;
+  unsigned i = 0;
+  for (auto *op : prob.getOperations()) {
+    t[op] = solver.MakeIntVar(0, infinity, (Twine("t_") + Twine(i)).str());
+    upperBound += *prob.getLatency(*prob.getLinkedOperatorType(op));
+    ++i;
+  }
+
+  // The objective is to minimize the II as well as the start time of the last
+  // operation. We use a weighted sum to encode both objectives in a single
+  // linear expression.
+  MPObjective *objective = solver.MutableObjective();
+  objective->SetCoefficient(ii, upperBound);
+  objective->SetCoefficient(t[lastOp], 1);
+  objective->SetMinimization();
+
+  // Construct a linear constraint for each dependence.
+  for (auto *op : prob.getOperations())
+    for (auto dep : prob.getDependences(op)) {
+      Operation *src = dep.getSource();
+      Operation *dst = dep.getDestination();
+
+      //     t_src + t_src.linkedOperatorType.latency <= t_dst + e.distance * II
+      // <=> 1 * t_src + -1 * t_dst + -e.distance * II <= -latency
+      unsigned latency = *prob.getLatency(*prob.getLinkedOperatorType(src));
+      MPConstraint *constraint =
+          solver.MakeRowConstraint(-infinity, -((double)latency));
+      if (src != dst) { // Handle self-arcs.
+        constraint->SetCoefficient(t[src], 1);
+        constraint->SetCoefficient(t[dst], -1);
+      }
+      constraint->SetCoefficient(
+          ii, -((double)prob.getDistance(dep).getValueOr(0)));
+    }
+
+  // Invoke solver. The ILP is infeasible if the scheduling problem contained
+  // dependence graph contains cycles that do not include at least one edge with
+  // a non-zero distance. Otherwise, we expect the result to be optimal.
+  MPSolver::ResultStatus result = solver.Solve();
+  if (result == MPSolver::INFEASIBLE)
+    return containingOp->emitError() << "dependence cycle detected";
+  assert(result == MPSolver::OPTIMAL);
+
+  // Retrieve II and start times.
+  prob.setInitiationInterval(std::round(ii->solution_value()));
+  for (auto *op : prob.getOperations())
+    prob.setStartTime(op, std::round(t[op]->solution_value()));
+
+  return success();
+}
