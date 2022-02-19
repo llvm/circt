@@ -293,6 +293,11 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false));
 
+static cl::opt<bool> stripDebugInfo(
+    "strip-debug-info",
+    cl::desc("Disable source locator information in output Verilog"),
+    cl::init(false));
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -539,6 +544,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
 
+    if (stripDebugInfo)
+      pm.addPass(mlir::createStripDebugInfoPass());
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     default:
