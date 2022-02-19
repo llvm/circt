@@ -15,6 +15,7 @@
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
+#include "mlir/Dialect/Affine/Analysis/LoopAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/LoopUtils.h"
@@ -24,13 +25,13 @@
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
-#include <mlir/IR/BuiltinDialect.h>
 
 #define DEBUG_TYPE "affine-to-staticlogic"
 
@@ -372,7 +373,14 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   iterArgs.append(innerLoop.getIterOperands().begin(),
                   innerLoop.getIterOperands().end());
 
-  auto pipeline = builder.create<PipelineWhileOp>(resultTypes, ii, iterArgs);
+  // If possible, attach a constant trip count attribute. This could be
+  // generalized to support non-constant trip counts by supporting an AffineMap.
+  Optional<IntegerAttr> tripCountAttr;
+  if (auto tripCount = getConstantTripCount(forOp))
+    tripCountAttr = builder.getI64IntegerAttr(*tripCount);
+
+  auto pipeline =
+      builder.create<PipelineWhileOp>(resultTypes, ii, tripCountAttr, iterArgs);
 
   // Create the condition, which currently just compares the induction variable
   // to the upper bound.
