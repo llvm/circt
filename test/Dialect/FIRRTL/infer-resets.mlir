@@ -361,8 +361,8 @@ firrtl.circuit "Top" {
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
     portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-    // CHECK: %reg1 = firrtl.regreset %clock, %extraReset, %c0_ui8
-    %reg1 = firrtl.reg %clock : !firrtl.uint<8>
+    // CHECK: %reg1 = firrtl.regreset sym @reg1 %clock, %extraReset, %c0_ui8
+    %reg1 = firrtl.reg sym @reg1 %clock : !firrtl.uint<8>
     firrtl.connect %reg1, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Existing async reset remains untouched.
