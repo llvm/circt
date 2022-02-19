@@ -291,4 +291,7 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
     $appid $body attr-dict
   }];
 
+  let extraClassDeclaration = [{
+    bool isRootedIn(Operation *top);
+  }];
 }

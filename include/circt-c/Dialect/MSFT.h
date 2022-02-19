@@ -31,13 +31,6 @@ typedef int32_t CirctMSFTPrimitiveType;
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//
 
-/// Add a physical location attribute with the given entity name, device type, x
-/// and y coordinates, and number.
-MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
-                                                    const char *entityName,
-                                                    CirctMSFTPrimitiveType type,
-                                                    long x, long y, long num);
-
 MLIR_CAPI_EXPORTED bool
     circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute
@@ -81,13 +74,6 @@ typedef struct {
   void *ptr;
 } CirctMSFTPlacementDB;
 
-typedef struct {
-  MlirAttribute path; // RootedInstancePathAttr.
-  const char *subpath;
-  size_t subpathLength;
-  MlirOperation op;
-} CirctMSFTPlacedInstance;
-
 enum CirctMSFTDirection { NONE = 0, ASC = 1, DESC = 2 };
 typedef struct {
   CirctMSFTDirection columns;
@@ -99,22 +85,21 @@ circtMSFTCreatePlacementDB(MlirOperation top, CirctMSFTPrimitiveDB seed);
 MLIR_CAPI_EXPORTED void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
 MLIR_CAPI_EXPORTED
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
-MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPlacementDBAddPlacement(
-    CirctMSFTPlacementDB, MlirAttribute loc, CirctMSFTPlacedInstance inst);
-MLIR_CAPI_EXPORTED MlirLogicalResult
-circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB, MlirAttribute loc);
+MLIR_CAPI_EXPORTED MlirOperation circtMSFTPlacementDBPlace(
+    CirctMSFTPlacementDB, MlirOperation inst, MlirAttribute loc,
+    MlirStringRef subpath, MlirLocation srcLoc);
+MLIR_CAPI_EXPORTED void
+circtMSFTPlacementDBRemovePlacement(CirctMSFTPlacementDB, MlirOperation locOp);
 MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPlacementDBMovePlacement(
-    CirctMSFTPlacementDB, MlirAttribute oldLoc, MlirAttribute newLoc);
-MLIR_CAPI_EXPORTED bool
-circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB, MlirAttribute loc,
-                                     CirctMSFTPlacedInstance *out);
+    CirctMSFTPlacementDB, MlirOperation locOp, MlirAttribute newLoc);
+MLIR_CAPI_EXPORTED MlirOperation
+circtMSFTPlacementDBGetInstanceAt(CirctMSFTPlacementDB, MlirAttribute loc);
 MLIR_CAPI_EXPORTED MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
     CirctMSFTPlacementDB, CirctMSFTPrimitiveType prim, uint64_t column,
     uint64_t nearestToY);
 
 typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
-                                           CirctMSFTPlacedInstance,
-                                           void *userData);
+                                           MlirOperation locOp, void *userData);
 /// Walk all the placements within 'bounds' ([xmin, xmax, ymin, ymax], inclusive
 /// on all sides), with -1 meaning unbounded.
 MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(

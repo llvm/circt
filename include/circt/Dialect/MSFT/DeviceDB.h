@@ -58,25 +58,14 @@ private:
 /// placements.
 ///
 /// Holds pointers into the IR, which may become invalid as a result of IR
-/// transforms. As a result, this class should only be used for analysis and
-/// then thrown away. It is permissible to persist it through transformations so
-/// long as it is maintained along with the transformations.
+/// transforms. As a result, this class is intended to be short-lived -- created
+/// just before loading placements and destroyed immediatetly after things are
+/// placed.
 class PlacementDB {
 public:
   /// Create a DB treating 'top' as the root module.
   PlacementDB(Operation *top);
   PlacementDB(Operation *top, const PrimitiveDB &seed);
-
-  // TODO: Add calls to model the device primitive locations.
-
-  /// In addition to an Operation which is the instance at the level being
-  /// modeled in MLIR, the instance path within the MLIR instance is often
-  /// necessary as most often the instance is an extern module.
-  struct PlacedInstance {
-    ArrayAttr path;
-    StringAttr subpath;
-    Operation *op;
-  };
 
   /// Contains the order to iterate in each dimension for walkPlacements. The
   /// dimensions are visited with columns first, then rows, then numbers within
@@ -89,26 +78,24 @@ public:
 
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
-  LogicalResult addPlacement(PhysLocationAttr, PlacedInstance);
+  PDPhysLocationOp place(DynamicInstanceOp inst, PhysLocationAttr,
+                         StringRef subpath, Location srcLoc);
   /// Assign an operation to a physical region. Return false on failure.
-  LogicalResult addPlacement(PDPhysRegionOp, PlacedInstance);
-  /// Using the operation attributes, add the proper placements to the database.
-  /// Return the number of placements which weren't added due to conflicts.
-  size_t addPlacements(const hw::SymbolCache &globalRefs,
-                       FlatSymbolRefAttr rootMod, mlir::Operation *);
-  /// Walk the entire design adding placements root at the top module.
+  PDPhysRegionOp placeIn(DynamicInstanceOp inst, DeclPhysicalRegionOp,
+                         StringRef subPath, Location srcLoc);
+
+  /// Load the database from the IR. Return the number of placements which
+  /// failed to load due to invalid specifications.
   size_t addDesignPlacements();
 
-  /// Remove the placement at a given location. Returns failure if nothing was
-  /// placed there.
-  LogicalResult removePlacement(PhysLocationAttr);
-  /// Move the placement at a given location to a new location. Returns failure
-  /// if nothing was placed at the previous location or something is already
-  /// placed at the new location.
-  LogicalResult movePlacement(PhysLocationAttr, PhysLocationAttr);
+  /// Remove the placement from the DB and IR. Erases the op.
+  void removePlacement(PDPhysLocationOp);
+  /// Move a placement location to a new location. Returns failure if something
+  /// is already placed at the new location.
+  LogicalResult movePlacement(PDPhysLocationOp, PhysLocationAttr);
 
   /// Lookup the instance at a particular location.
-  Optional<PlacedInstance> getInstanceAt(PhysLocationAttr);
+  PDPhysLocationOp getInstanceAt(PhysLocationAttr);
 
   /// Find the nearest unoccupied primitive location to 'nearestToY' in
   /// 'column'.
@@ -118,33 +105,43 @@ public:
   /// Walk the placement information in some sort of reasonable order. Bounds
   /// restricts the walk to a rectangle of [xmin, xmax, ymin, ymax] (inclusive),
   /// with -1 meaning unbounded.
-  void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>,
+  void walkPlacements(function_ref<void(PhysLocationAttr, PDPhysLocationOp)>,
                       std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
                           std::make_tuple(-1, -1, -1, -1),
                       Optional<PrimitiveType> primType = {},
                       Optional<WalkOrder> = {});
 
   /// Walk the region placement information.
-  void walkRegionPlacements(function_ref<void(PDPhysRegionOp, PlacedInstance)>);
+  void walkRegionPlacements(function_ref<void(PDPhysRegionOp)>);
 
 private:
+  /// A memory slot. Useful to distinguish the memory location from the
+  /// reference stored there.
+  struct PlacementCell {
+    PDPhysLocationOp locOp;
+  };
+
   MLIRContext *ctxt;
   Operation *top;
 
-  using DimDevType = DenseMap<PrimitiveType, PlacedInstance>;
+  using DimDevType = DenseMap<PrimitiveType, PlacementCell>;
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
-  using InstanceAndRegion = std::pair<PDPhysRegionOp, PlacedInstance>;
-  using RegionPlacements = SmallVector<InstanceAndRegion>;
+  using RegionPlacements = SmallVector<PDPhysRegionOp>;
 
   /// Get the leaf node. Abstract this out to make it easier to change the
   /// underlying data structure.
-  Optional<PlacedInstance *> getLeaf(PhysLocationAttr);
+  PlacementCell *getLeaf(PhysLocationAttr);
 
   DimXMap placements;
   RegionPlacements regionPlacements;
   bool seeded;
+
+  /// Load the placements from `inst`.  Return the number of placements which
+  /// weren't added due to conflicts.
+  size_t addPlacements(DynamicInstanceOp inst);
+  LogicalResult insertPlacement(PDPhysLocationOp locOp);
 };
 
 } // namespace msft

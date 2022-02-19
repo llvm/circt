@@ -72,6 +72,13 @@ void PDPhysRegionOp::setGlobalRef(hw::GlobalRefOp ref) {
 }
 FlatSymbolRefAttr PDPhysRegionOp::getGlobalRefSym() { return refAttr(); }
 
+bool DynamicInstanceOp::isRootedIn(Operation *hwMod) {
+  if (appid().empty())
+    return false;
+
+  return SymbolTable::getSymbolName(hwMod) ==
+         appid()[0].cast<hw::InnerRefAttr>().getModule();
+}
 //===----------------------------------------------------------------------===//
 // Module/Instance stuff, mostly copied from HW dialect.
 //===----------------------------------------------------------------------===//
