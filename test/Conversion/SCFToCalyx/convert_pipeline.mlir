@@ -31,14 +31,14 @@
 // CHECK-NEXT:          calyx.par
 // CHECK-NEXT:            calyx.enable @[[COMPUTE_GROUP]]
 // CHECK-NEXT:          }
-// CHECK-NEXT:        }
+// CHECK-NEXT:        } {bound = 10 : i64}
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 func @minimal() {
   %c0_i64 = arith.constant 0 : i64
   %c10_i64 = arith.constant 10 : i64
   %c1_i64 = arith.constant 1 : i64
-  staticlogic.pipeline.while II =  1 iter_args(%arg0 = %c0_i64) : (i64) -> () {
+  staticlogic.pipeline.while II =  1 trip_count = 10 iter_args(%arg0 = %c0_i64) : (i64) -> () {
     %0 = arith.cmpi ult, %arg0, %c10_i64 : i64
     staticlogic.pipeline.register %0 : i1
   } do {
