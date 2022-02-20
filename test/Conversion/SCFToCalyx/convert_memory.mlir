@@ -460,14 +460,14 @@ module {
 
 // CHECK:         calyx.group @bb0_0  {
 // CHECK-NEXT:         calyx.assign %std_slice_1.in = %in0 : i32
-// CHECK-NEXT:         calyx.assign %mem_0.addr0 = %std_slice_1.out : i0
+// CHECK-NEXT:         calyx.assign %mem_0.addr0 = %std_slice_1.out : i1
 // CHECK-NEXT:         calyx.assign %load_0_reg.in = %mem_0.read_data : i32
 // CHECK-NEXT:         calyx.assign %load_0_reg.write_en = %true : i1
 // CHECK-NEXT:         calyx.group_done %load_0_reg.done : i1
 // CHECK-NEXT:      }
 // CHECK-NEXT:      calyx.group @bb0_1  {
 // CHECK-NEXT:        calyx.assign %std_slice_0.in = %in0 : i32
-// CHECK-NEXT:        calyx.assign %mem_0.addr0 = %std_slice_0.out : i0
+// CHECK-NEXT:        calyx.assign %mem_0.addr0 = %std_slice_0.out : i1
 // CHECK-NEXT:        calyx.assign %mem_0.write_data = %c1_i32 : i32
 // CHECK-NEXT:        calyx.assign %mem_0.write_en = %true : i1
 // CHECK-NEXT:        calyx.group_done %mem_0.done : i1
@@ -492,5 +492,24 @@ module {
     %c0 = arith.constant 0 : index
     %0 = memref.load %mem[%c0] : memref<33xi32>
     return %0 : i32
+  }
+}
+
+// -----
+
+// Check nonzero-width memref address ports for memrefs with some dimension = 1
+// See: https://github.com/llvm/circt/issues/2660 and https://github.com/llvm/circt/pull/2661
+
+// CHECK-DAG:       %std_slice_3.in, %std_slice_3.out = calyx.std_slice @std_slice_3 : i32, i1
+// CHECK-DAG:       %std_slice_2.in, %std_slice_2.out = calyx.std_slice @std_slice_2 : i32, i1
+// CHECK-DAG:           calyx.assign %mem_0.addr0 = %std_slice_3.out : i1
+// CHECK-DAG:           calyx.assign %mem_0.addr1 = %std_slice_2.out : i1
+module {
+  func @main() {
+    %c1_32 = arith.constant 1 : i32
+    %i = arith.constant 0 : index
+    %0 = memref.alloc() : memref<1x1x1x1xi32>
+    memref.store %c1_32, %0[%i, %i, %i, %i] : memref<1x1x1x1xi32>
+    return
   }
 }
