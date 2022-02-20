@@ -53,12 +53,14 @@ static T &operator<<(T &os, InstancePathRef path) {
   return os;
 }
 
+#ifndef NDEBUG
 static StringRef getTail(InstancePathRef path) {
   if (path.empty())
     return "$root";
   auto last = path.back();
   return last.name();
 }
+#endif
 
 namespace {
 /// A reset domain.

@@ -557,8 +557,7 @@ private:
         if (innerRef.getModule() == fromName) {
           auto to = renameMap[innerRef.getName()];
           assert(to && "should have been renamed");
-          namepath.push_back(
-              InnerRefAttr::get(toName, renameMap[innerRef.getName()]));
+          namepath.push_back(InnerRefAttr::get(toName, to));
         } else
           namepath.push_back(element);
       } else if (element == fromRef) {

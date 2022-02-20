@@ -265,8 +265,8 @@ public:
 
   /// Registers a unique name for a given operation using a provided prefix.
   void setUniqueName(Operation *op, StringRef prefix) {
-    auto it = opNames.find(op);
-    assert(it == opNames.end() && "A unique name was already set for op");
+    assert(opNames.find(op) == opNames.end() &&
+           "A unique name was already set for op");
     opNames[op] = getUniqueName(prefix);
   }
 
@@ -2490,8 +2490,7 @@ public:
   }
 
   LogicalResult runPartialPattern(RewritePatternSet &pattern, bool runOnce) {
-    auto &nativePatternSet = pattern.getNativePatterns();
-    assert(nativePatternSet.size() == 1 &&
+    assert(pattern.getNativePatterns().size() == 1 &&
            "Should only apply 1 partial lowering pattern at once");
 
     // During component creation, the function body is inlined into the
