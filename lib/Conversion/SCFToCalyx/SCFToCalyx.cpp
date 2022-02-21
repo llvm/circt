@@ -1427,27 +1427,50 @@ class InlineExecuteRegionOpPattern
 
 static void
 appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
-                             Value memref,
+                             Value memref, unsigned memoryID,
                              SmallVectorImpl<calyx::PortInfo> &inPorts,
                              SmallVectorImpl<calyx::PortInfo> &outPorts) {
   MemRefType memrefType = memref.getType().cast<MemRefType>();
 
+  /// Ports constituting a memory interface are added a set of attributes under
+  /// a "mem : {...}" dictionary. These attributes allows for deducing which
+  /// top-level I/O signals constitutes a unique memory interface.
+  auto getMemoryInterfaceAttr = [&](StringRef tag,
+                                    Optional<unsigned> addrIdx = {}) {
+    auto attrs = SmallVector<NamedAttribute>{
+        /// "id" denotes a unique memory interface.
+        rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
+        /// "tag" denotes the function of this signal.
+        rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
+    if (addrIdx.hasValue())
+      /// "addr_idx" denotes the address index of this signal, for
+      /// multi-dimensional memory interfaces.
+      attrs.push_back(rewriter.getNamedAttr(
+          "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
+
+    return rewriter.getNamedAttr("mem", rewriter.getDictionaryAttr(attrs));
+  };
+
   /// Read data
-  inPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_read_data"),
-                      memrefType.getElementType(), calyx::Direction::Input,
-                      DictionaryAttr::get(rewriter.getContext(), {})});
+  inPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_read_data"),
+      memrefType.getElementType(), calyx::Direction::Input,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("read_data")})});
 
   /// Done
-  inPorts.push_back(calyx::PortInfo{
-      rewriter.getStringAttr(memName + "_done"), rewriter.getI1Type(),
-      calyx::Direction::Input, DictionaryAttr::get(rewriter.getContext(), {})});
+  inPorts.push_back(
+      calyx::PortInfo{rewriter.getStringAttr(memName + "_done"),
+                      rewriter.getI1Type(), calyx::Direction::Input,
+                      DictionaryAttr::get(rewriter.getContext(),
+                                          {getMemoryInterfaceAttr("done")})});
 
   /// Write data
-  outPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_write_data"),
-                      memrefType.getElementType(), calyx::Direction::Output,
-                      DictionaryAttr::get(rewriter.getContext(), {})});
+  outPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_write_data"),
+      memrefType.getElementType(), calyx::Direction::Output,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("write_data")})});
 
   /// Memory address outputs
   for (auto dim : enumerate(memrefType.getShape())) {
@@ -1455,14 +1478,16 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
         rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
         rewriter.getIntegerType(llvm::Log2_64_Ceil(dim.value())),
         calyx::Direction::Output,
-        DictionaryAttr::get(rewriter.getContext(), {})});
+        DictionaryAttr::get(rewriter.getContext(),
+                            {getMemoryInterfaceAttr("addr", dim.index())})});
   }
 
   /// Write enable
-  outPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_write_en"),
-                      rewriter.getI1Type(), calyx::Direction::Output,
-                      DictionaryAttr::get(rewriter.getContext(), {})});
+  outPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_write_en"), rewriter.getI1Type(),
+      calyx::Direction::Output,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("write_en")})});
 }
 
 /// Creates a new Calyx component for each FuncOp in the program.
@@ -1492,6 +1517,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// which port index each function argument will eventually map to.
     SmallVector<calyx::PortInfo> inPorts, outPorts;
     FunctionType funcType = funcOp.getType();
+    unsigned extMemCounter = 0;
     for (auto &arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
         /// External memories
@@ -1499,8 +1525,8 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
             "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
         extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
                                                  outPorts.size()};
-        appendPortsForExternalMemref(rewriter, memName, arg.value(), inPorts,
-                                     outPorts);
+        appendPortsForExternalMemref(rewriter, memName, arg.value(),
+                                     extMemCounter++, inPorts, outPorts);
       } else {
         /// Single-port arguments
         auto inName = "in" + std::to_string(arg.index());
