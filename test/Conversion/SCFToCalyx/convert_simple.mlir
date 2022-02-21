@@ -125,3 +125,25 @@ module {
     return %0 : i32
   }
 }
+
+// -----
+
+// CHECK:       calyx.group @ret_assign_0 {
+// CHECK-DAG:      calyx.assign %ret_arg0_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg1_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg1_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg2_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg2_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg3_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg3_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg4_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg4_reg.write_en = %true : i1
+// CHECK-DAG:      %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done, %ret_arg2_reg.done, %ret_arg3_reg.done, %ret_arg4_reg.done : i1
+// CHECK-DAG:      calyx.group_done %0 ? %true : i1
+// CHECK-NEXT: }
+module {
+  func @main(%a0 : i32) -> (i32, i32, i32, i32, i32) {
+    return %a0, %a0, %a0, %a0, %a0 : i32, i32, i32, i32, i32
+  }
+}

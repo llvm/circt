@@ -2357,19 +2357,19 @@ struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
     if (groupDoneOps.size() <= 1)
       return failure();
 
-    /// Create an and-tree of all calyx::GroupDoneOp's.
+    /// 'and' all of the calyx::GroupDoneOp's.
     rewriter.setInsertionPointToEnd(groupDoneOps[0]->getBlock());
-    Value acc = groupDoneOps[0].src();
-    for (auto groupDoneOp : llvm::makeArrayRef(groupDoneOps).drop_front(1)) {
-      auto newAndOp = rewriter.create<comb::AndOp>(groupDoneOp.getLoc(), acc,
-                                                   groupDoneOp.src());
-      acc = newAndOp.getResult();
-    }
+    SmallVector<Value> doneOpSrcs;
+    llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
+                    [](calyx::GroupDoneOp op) { return op.src(); });
+    Value allDone =
+        rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(), doneOpSrcs);
 
     /// Create a group done op with the complex expression as a guard.
     rewriter.create<calyx::GroupDoneOp>(
         groupOp.getLoc(),
-        rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)), acc);
+        rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)),
+        allDone);
     for (auto groupDoneOp : groupDoneOps)
       rewriter.eraseOp(groupDoneOp);
 
