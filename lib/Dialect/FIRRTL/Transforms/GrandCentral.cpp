@@ -1665,8 +1665,7 @@ void GrandCentralPass::runOnOperation() {
       if (annotations.empty())
         continue;
 
-      SmallVector<Attribute> newAnnotations;
-      auto isDead = [&](Annotation anno) -> bool {
+     auto isDead = [&](Annotation anno) -> bool {
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!sym)
           return false;
@@ -1674,14 +1673,12 @@ void GrandCentralPass::runOnOperation() {
       };
 
       annotations.removeAnnotations(isDead);
-      annotations.addAnnotations(newAnnotations);
       annotations.applyToOperation(&op);
 
+      SmallVector<Attribute> newAnnotations;
       SmallVector<Attribute> newPortAnnotations;
       for (auto port : fmodule.getPorts()) {
-        newAnnotations.clear();
         port.annotations.removeAnnotations(isDead);
-        port.annotations.addAnnotations(newAnnotations);
         newPortAnnotations.push_back(
             ArrayAttr::get(op.getContext(), port.annotations.getArray()));
       }
