@@ -184,8 +184,7 @@ static LogicalResult verifyUTVariadicOp(Operation *op) {
 bool XorOp::isBinaryNot() {
   if (getNumOperands() != 2)
     return false;
-  if (auto cst =
-          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
+  if (auto cst = getOperand(1).getDefiningOp<hw::ConstantOp>())
     if (cst.getValue().isAllOnes())
       return true;
   return false;

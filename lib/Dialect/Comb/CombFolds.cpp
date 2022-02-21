@@ -1227,6 +1227,32 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
+  // Check De Morgan's laws
+  if (op.isBinaryNot()) {
+    auto getNegations = [&](auto term) {
+      SmallVector<Value, 2> negations;
+      auto operands = term->getOperands();
+      negations.reserve(operands.size());
+      llvm::transform(operands, std::back_inserter(negations), [&](Value x) {
+        auto allOnes =
+            rewriter.create<hw::ConstantOp>(op.getLoc(), x.getType(), -1);
+        return rewriter.create<XorOp>(x.getLoc(), x, allOnes);
+      });
+      return negations;
+    };
+    auto sub = inputs.front();
+    if (auto disjunction = sub.getDefiningOp<OrOp>()) {
+      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(),
+                                         getNegations(disjunction));
+      return success();
+    }
+    if (auto conjunction = sub.getDefiningOp<AndOp>()) {
+      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(),
+                                        getNegations(conjunction));
+      return success();
+    }
+  }
+
   // xor(..., x, x) -> xor (...) -- idempotent
   if (inputs[size - 1] == inputs[size - 2]) {
     assert(size > 2 &&
