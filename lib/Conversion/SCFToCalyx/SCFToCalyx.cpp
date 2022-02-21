@@ -1432,12 +1432,19 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                              SmallVectorImpl<calyx::PortInfo> &outPorts) {
   MemRefType memrefType = memref.getType().cast<MemRefType>();
 
+  /// Ports constituting a memory interface are added a set of attributes under
+  /// a "mem : {...}" dictionary. These attributes allows for deducing which
+  /// top-level I/O signals constitutes a unique memory interface.
   auto getMemoryInterfaceAttr = [&](StringRef tag,
                                     Optional<unsigned> addrIdx = {}) {
     auto attrs = SmallVector<NamedAttribute>{
+        /// "id" denotes a unique memory interface.
         rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
+        /// "tag" denotes the function of this signal.
         rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
     if (addrIdx.hasValue())
+      /// "addr_idx" denotes the address index of this signal, for
+      /// multi-dimensional memory interfaces.
       attrs.push_back(rewriter.getNamedAttr(
           "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
 
