@@ -1659,32 +1659,17 @@ void GrandCentralPass::runOnOperation() {
     if (!fmodule)
       continue;
 
-    // Visit module bodies to remove any dead NLAs.
-    for (auto &op : *fmodule.getBody()) {
-      AnnotationSet annotations(&op);
-      if (annotations.empty())
-        continue;
+    auto isDead = [&](Annotation anno) -> bool {
+      auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+      if (!sym)
+        return false;
+      return deadNLAs.count(sym.getAttr());
+    };
 
-     auto isDead = [&](Annotation anno) -> bool {
-        auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (!sym)
-          return false;
-        return deadNLAs.count(sym.getAttr());
-      };
+    // Visit module bodies to remove any dead NLA breadcrumbs.
+    for (auto op : fmodule.getBody()->getOps<InstanceOp>())
+      AnnotationSet::removeAnnotations(op, isDead);
 
-      annotations.removeAnnotations(isDead);
-      annotations.applyToOperation(&op);
-
-      SmallVector<Attribute> newAnnotations;
-      SmallVector<Attribute> newPortAnnotations;
-      for (auto port : fmodule.getPorts()) {
-        port.annotations.removeAnnotations(isDead);
-        newPortAnnotations.push_back(
-            ArrayAttr::get(op.getContext(), port.annotations.getArray()));
-      }
-      fmodule->setAttr("portAnnotations",
-                       ArrayAttr::get(op.getContext(), newPortAnnotations));
-    }
   }
 
   // Signal pass failure if any errors were found while examining circuit
