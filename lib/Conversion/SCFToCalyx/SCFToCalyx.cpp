@@ -406,6 +406,16 @@ public:
   }
 
   /// Get the pipeline prologue.
+  SmallVector<SmallVector<StringAttr>> getPipelineProlouge(Operation *op) {
+    return pipelinePrologue[op];
+  }
+
+  /// Get the pipeline epilogue.
+  SmallVector<SmallVector<StringAttr>> getPipelineEpilouge(Operation *op) {
+    return pipelineEpilogue[op];
+  }
+
+  /// Create the pipeline prologue.
   void createPipelinePrologue(Operation *op, PatternRewriter &rewriter) {
     auto stages = pipelinePrologue[op];
     for (size_t i = 0, e = stages.size(); i < e; ++i) {
@@ -418,7 +428,7 @@ public:
     }
   }
 
-  /// Get the pipeline epilogue.
+  /// Create the pipeline epilogue.
   void createPipelineEpilogue(Operation *op, PatternRewriter &rewriter) {
     auto stages = pipelineEpilogue[op];
     for (size_t i = 0, e = stages.size(); i < e; ++i) {
@@ -2197,8 +2207,13 @@ private:
     auto whileCtrlOp = rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
 
     /// If a bound was specified, add it.
-    if (auto bound = whileOp.getBound())
-      whileCtrlOp->setAttr("bound", rewriter.getI64IntegerAttr(*bound));
+    if (auto bound = whileOp.getBound()) {
+      // Subtract the number of iterations unrolled into the prologue.
+      auto prologue =
+          getComponentState().getPipelineProlouge(whileOp.getOperation());
+      auto unrolledBound = *bound - prologue.size();
+      whileCtrlOp->setAttr("bound", rewriter.getI64IntegerAttr(unrolledBound));
+    }
 
     return whileCtrlOp;
   }

@@ -145,7 +145,7 @@ func @minimal() {
 // CHECK-NEXT:              calyx.enable @[[S1_GROUP0]]
 // CHECK-NEXT:              calyx.enable @[[S2_GROUP0]]
 // CHECK-NEXT:            }
-// CHECK-NEXT:          }
+// CHECK-NEXT:          } {bound = 3 : i64}
 // CHECK-NEXT:          calyx.par  {
 // CHECK-NEXT:            calyx.enable @[[S1_GROUP0]]
 // CHECK-NEXT:            calyx.enable @[[S2_GROUP0]]
@@ -163,7 +163,7 @@ func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   %c0 = arith.constant 0 : index
   %c64 = arith.constant 64 : index
   %c1 = arith.constant 1 : index
-  %0 = staticlogic.pipeline.while II =  1 iter_args(%arg2 = %c0, %arg3 = %c0_i32) : (index, i32) -> i32 {
+  %0 = staticlogic.pipeline.while II =  1 trip_count = 5 iter_args(%arg2 = %c0, %arg3 = %c0_i32) : (index, i32) -> i32 {
     %1 = arith.cmpi ult, %arg2, %c64 : index
     staticlogic.pipeline.register %1 : i1
   } do {
