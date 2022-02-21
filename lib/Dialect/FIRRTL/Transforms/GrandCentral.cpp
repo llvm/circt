@@ -799,22 +799,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         }
 
         // Append the path encoded in the NLA (if an NLA exists).
-        //
-        // TODO: Improve the performance of this.  This is doing linear search
-        // of all instances in each module to find an instance whose name
-        // matches the reference part of an NLA.
         if (nla)
           for (size_t i = 0, e = nla.namepath().size() - 1; i != e; ++i) {
             path += '.';
-            InstanceOp found;
-            for (auto *inst :
-                 *(instancePaths->instanceGraph.lookup(nla.modPart(i)))) {
-              found = inst->getInstance();
-              if (found.nameAttr() == nla.refPart(i))
-                break;
-            }
-            assert(found && "did not find instance in module");
-            path += getInnerRefTo(found);
+            path += nla.namepath()[i];
           }
 
         // Add the leaf value to the path.
