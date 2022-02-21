@@ -678,10 +678,12 @@ void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
   }
 }
 
+#ifndef NDEBUG
 inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const LinIneq &l) {
   l.print(os);
   return os;
 }
+#endif
 
 /// Compute the canonicalized linear inequality expression starting at `expr`,
 /// for the `var` as the left hand side `x` of the inequality. `seenVars` is
@@ -811,10 +813,9 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                               unsigned indent = 1) {
   // See if we have a memoized result we can return.
-  bool isTrivial = isa<KnownExpr>(expr);
   if (expr->solution) {
     LLVM_DEBUG({
-      if (!isTrivial)
+      if (!isa<KnownExpr>(expr))
         llvm::dbgs().indent(indent * 2)
             << "- Cached " << *expr << " = " << *expr->solution << "\n";
     });
@@ -823,7 +824,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
 
   // Otherwise compute the value of the expression.
   LLVM_DEBUG({
-    if (!isTrivial)
+    if (!isa<KnownExpr>(expr))
       llvm::dbgs().indent(indent * 2) << "- Solving " << *expr << "\n";
   });
   auto solution =
@@ -884,7 +885,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
 
   // Produce some useful debug prints.
   LLVM_DEBUG({
-    if (!isTrivial) {
+    if (!isa<KnownExpr>(expr)) {
       if (solution.first)
         llvm::dbgs().indent(indent * 2)
             << "= Solved " << *expr << " = " << *solution.first;

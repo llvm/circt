@@ -964,10 +964,10 @@ void LoopNetworkRewriter::buildExitNetwork(Block *loopHeader,
         condBr &&
         "Expected a conditional control branch op in the loop condition block");
     Operation *trueUser = *condBr.trueResult().getUsers().begin();
-    Operation *falseUser = *condBr.falseResult().getUsers().begin();
     bool isTrueParity = trueUser->getBlock() == exitBlock;
-    bool isFalseParity = falseUser->getBlock() == exitBlock;
-    assert(isTrueParity ^ isFalseParity &&
+    assert(isTrueParity ^
+               ((*condBr.falseResult().getUsers().begin())->getBlock() ==
+                exitBlock) &&
            "The user of either the true or the false result should be in the "
            "exit block");
 

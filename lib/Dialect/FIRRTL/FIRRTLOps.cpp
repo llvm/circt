@@ -621,7 +621,6 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   if (portIndices.empty())
     return;
-  unsigned numPorts = getNumPorts();
 
   // Drop the direction markers for dead ports.
   SmallVector<Direction> portDirections =
@@ -630,11 +629,11 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   ArrayRef<Attribute> portTypes = this->getPortTypes();
   ArrayRef<Attribute> portAnnos = this->getPortAnnotations();
   ArrayRef<Attribute> portSyms = this->getPortSymbols();
-  assert(portDirections.size() == numPorts);
-  assert(portNames.size() == numPorts);
-  assert(portAnnos.size() == numPorts || portAnnos.empty());
-  assert(portTypes.size() == numPorts);
-  assert(portSyms.size() == numPorts || portSyms.empty());
+  assert(portDirections.size() == getNumPorts());
+  assert(portNames.size() == getNumPorts());
+  assert(portAnnos.size() == getNumPorts() || portAnnos.empty());
+  assert(portTypes.size() == getNumPorts());
+  assert(portSyms.size() == getNumPorts() || portSyms.empty());
 
   SmallVector<Direction> newPortDirections =
       removeElementsAtIndices<Direction>(portDirections, portIndices);

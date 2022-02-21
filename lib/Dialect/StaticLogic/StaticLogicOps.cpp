@@ -108,7 +108,8 @@ void PipelineWhileOp::print(OpAsmPrinter &p) {
 static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
   // Verify trip count is not negative.
   if (op.tripCount() && *op.tripCount() < 0)
-    return op.emitOpError("trip count must not be negative, found ") << op.II();
+    return op.emitOpError("trip count must not be negative, found ")
+           << *op.tripCount();
 
   // Verify the condition block is "combinational" based on an allowlist of
   // Arithmetic ops.

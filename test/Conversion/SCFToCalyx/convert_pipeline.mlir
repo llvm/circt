@@ -54,7 +54,7 @@ func @minimal() {
 // -----
 
 // CHECK:     calyx.program "dot"
-// CHECK:       calyx.component @dot(%[[MEM0_READ:.+]]: i32, {{.+}}, %[[MEM1_READ:.+]]: i32, {{.+}}) -> ({{.+}} %[[MEM0_ADDR:.+]]: i6, {{.+}} %[[MEM1_ADDR:.+]]: i6, {{.+}} %[[OUT:.+]]: i32, {{.+}}) {
+// CHECK:       calyx.component @dot(%[[MEM0_READ:.+]]: i32 {mem = {id = 0 : i32, tag = "read_data"}}, {{.+}}, %[[MEM1_READ:.+]]: i32 {mem = {id = 1 : i32, tag = "read_data"}}, {{.+}}) -> ({{.+}} %[[MEM0_ADDR:.+]]: i6 {mem = {addr_idx = 0 : i32, id = 0 : i32, tag = "addr"}}, {{.+}} %[[MEM1_ADDR:.+]]: i6 {mem = {addr_idx = 0 : i32, id = 1 : i32, tag = "addr"}}, {{.+}} %[[OUT:.+]]: i32, {{.+}}) {
 // CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
 // CHECK-DAG:     %[[C0:.+]] = hw.constant 0 : i32
 // CHECK-DAG:     %[[C64:.+]] = hw.constant 64 : i32

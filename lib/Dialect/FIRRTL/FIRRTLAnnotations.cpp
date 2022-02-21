@@ -612,8 +612,7 @@ Attribute
 OpAnnoTarget::getNLAReference(ModuleNamespace &moduleNamespace) const {
   // If the op is a module, just return the module name.
   if (auto module = llvm::dyn_cast<FModuleLike>(getOp())) {
-    auto moduleName = module.moduleNameAttr();
-    assert(moduleName && "invalid NLA reference");
+    assert(module.moduleNameAttr() && "invalid NLA reference");
     return FlatSymbolRefAttr::get(module.moduleNameAttr());
   }
   // Return an inner-ref to the target.
