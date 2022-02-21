@@ -34,6 +34,14 @@ ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
     return failure();
   result.addAttribute("II", ii);
 
+  // Parse optional trip count.
+  if (succeeded(parser.parseOptionalKeyword("trip_count"))) {
+    IntegerAttr tripCount;
+    if (parser.parseEqual() || parser.parseAttribute(tripCount))
+      return failure();
+    result.addAttribute("tripCount", tripCount);
+  }
+
   // Parse iter_args assignment list.
   SmallVector<OpAsmParser::OperandType> regionArgs, operands;
   if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
@@ -71,6 +79,10 @@ void PipelineWhileOp::print(OpAsmPrinter &p) {
   // Print the initiation interval.
   p << " II = " << ' ' << II();
 
+  // Print the optional tripCount.
+  if (tripCount())
+    p << " trip_count = " << ' ' << *tripCount();
+
   // Print iter_args assignment list.
   p << " iter_args(";
   llvm::interleaveComma(
@@ -94,6 +106,11 @@ void PipelineWhileOp::print(OpAsmPrinter &p) {
 }
 
 static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
+  // Verify trip count is not negative.
+  if (op.tripCount() && *op.tripCount() < 0)
+    return op.emitOpError("trip count must not be negative, found ")
+           << *op.tripCount();
+
   // Verify the condition block is "combinational" based on an allowlist of
   // Arithmetic ops.
   Block &conditionBlock = op.condition().front();
@@ -167,11 +184,14 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
 
 void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
                             TypeRange resultTypes, IntegerAttr ii,
+                            Optional<IntegerAttr> tripCount,
                             ValueRange iterArgs) {
   OpBuilder::InsertionGuard g(builder);
 
   state.addTypes(resultTypes);
   state.addAttribute("II", ii);
+  if (tripCount)
+    state.addAttribute("tripCount", *tripCount);
   state.addOperands(iterArgs);
 
   Region *condRegion = state.addRegion();
