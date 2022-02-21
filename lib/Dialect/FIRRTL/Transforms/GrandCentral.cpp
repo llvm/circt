@@ -1669,7 +1669,6 @@ void GrandCentralPass::runOnOperation() {
     // Visit module bodies to remove any dead NLA breadcrumbs.
     for (auto op : fmodule.getBody()->getOps<InstanceOp>())
       AnnotationSet::removeAnnotations(op, isDead);
-
   }
 
   // Signal pass failure if any errors were found while examining circuit
