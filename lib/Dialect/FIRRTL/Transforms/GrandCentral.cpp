@@ -792,13 +792,14 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 ? enclosing
                 : srcPaths[0][0]->getParentOfType<FModuleLike>()));
 
-        // Add the source path up to the enclosing module.
+        // Add the source path from the enclosing module to the root.
         for (auto inst : srcPaths[0]) {
           path += '.';
           path += getInnerRefTo(inst);
         }
 
-        // Append the path encoded in the NLA (if an NLA exists).
+        // If this is an NLA, append the path from the enclosing module down to
+        // the module that contains the NLA.
         if (nla)
           for (size_t i = 0, e = nla.namepath().size() - 1; i != e; ++i) {
             path += '.';
