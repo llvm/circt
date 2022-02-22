@@ -474,11 +474,19 @@ void ExportTclPass::runOnOperation() {
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
-  for (auto moduleName : tops) {
+  for (std::string moduleName : tops) {
     Operation *hwmod =
         emitter.getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
-    if (!hwmod || failed(emitter.emit(hwmod, tclFile)))
-      return signalPassFailure();
+    if (!hwmod) {
+      top.emitError("Failed to find module '") << moduleName << "'";
+      signalPassFailure();
+      return;
+    }
+    if (failed(emitter.emit(hwmod, tclFile))) {
+      hwmod->emitError("failed to emit tcl");
+      signalPassFailure();
+      return;
+    }
   }
 
   ConversionTarget target(*ctxt);

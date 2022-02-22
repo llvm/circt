@@ -74,10 +74,7 @@ class Instance:
 
   @property
   def name_attr(self):
-    if isinstance(self.instOp, msft.InstanceOp):
-      return ir.StringAttr(self.instOp.sym_name)
-    elif isinstance(self.instOp, seq.CompRegOp):
-      return ir.StringAttr(self.instOp.innerSym)
+    return ir.StringAttr(self.instOp.sym_name)
 
   @property
   def is_root(self):
