@@ -1520,7 +1520,7 @@ void GrandCentralPass::runOnOperation() {
     for (auto id : ids) {
       auto fieldRef = leafMap.lookup(id).field;
       auto value = fieldRef.getValue();
-      auto fieldID = fieldRef.getValue();
+      auto fieldID = fieldRef.getFieldID();
       if (auto blockArg = value.dyn_cast<BlockArgument>()) {
         FModuleOp module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
         llvm::dbgs() << "  - " << id.getValue() << ": "
