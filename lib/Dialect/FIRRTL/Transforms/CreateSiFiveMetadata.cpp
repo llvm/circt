@@ -218,21 +218,18 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     if (auto dir = dirAnno.getMember<StringAttr>("dirname"))
       metadataDir = dir.getValue();
 
-  if (testBenchJsonBuffer != "[]") {
-    // Use unknown loc to avoid printing the location in the metadata files.
-    auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
-                                                       testBenchJsonBuffer);
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
-    tbVerbatimOp->setAttr("output_file", fileAttr);
-  }
-  if (dutJsonBuffer != "[]") {
-    auto dutVerbatimOp =
-        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
-    dutVerbatimOp->setAttr("output_file", fileAttr);
-  }
+  // Use unknown loc to avoid printing the location in the metadata files.
+  auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
+                                                     testBenchJsonBuffer);
+  auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+      context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
+  tbVerbatimOp->setAttr("output_file", fileAttr);
+  auto dutVerbatimOp =
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
+  fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+      context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
+  dutVerbatimOp->setAttr("output_file", fileAttr);
+
   if (!seqMemConfStr.empty()) {
     auto confVerbatimOp =
         builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
