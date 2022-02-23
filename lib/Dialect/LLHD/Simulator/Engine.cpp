@@ -225,18 +225,13 @@ void Engine::walkEntity(EntityOp entity, Instance &instance) {
         Instance childInst(instName, instPath, instOp.callee().str(),
                            instOp.getNumOperands());
 
-        // Current instance global index in simulation context
-        size_t instIdx = state->getInstanceSize() - 1;
-
         // Add instance arguments to sensitivity list. The first numArgs signals
         // in the sensitivity list represent the unit's arguments(inputs), while
         // the following ones represent the unit-defined signals(outputs).
 
         // The signal comes from parent instance's argument.
         for (size_t i = 0, e = instOp.inputs().size(); i < e; ++i) {
-          auto detail = instance.getSignalDetail(i);
-          // detail.instIndex = instIdx;
-          childInst.pushSignalDetail(detail);
+          childInst.pushSignalDetail(instance.getSignalDetail(i));
         }
 
         // The signal comes from parent instance's owned signals.
@@ -252,10 +247,7 @@ void Engine::walkEntity(EntityOp entity, Instance &instance) {
                        outSig.getOwner() == instance.getName();
               });
 
-          // FIXME: This caused sim_wait.mlir test failures due free() issue.
           if (SDI != instance.getSensitivityList().end()) {
-            // auto detail = *SDI;
-            // detail.instIndex = instIdx;
             childInst.pushSignalDetail(*SDI);
           }
         }
