@@ -480,7 +480,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
   DenseSet<StringAttr> alreadyAddedNLAs;
   if (!annotations || annotations.empty())
     return ArrayAttr::get(ctxt, retval);
-  bool isGroundType = (field.type.isGround());
+  bool isGroundType = field.type.isGround();
   // symAttr is the new symbol assigned to the lowered field. This is required
   // to fixup the NLA.
   StringAttr symAttr = StringAttr::get(ctxt, sym);
