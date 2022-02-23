@@ -718,7 +718,8 @@ ParseResult CaseZOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void CaseZOp::print(OpAsmPrinter &p) {
   p << ' ' << cond() << " : " << cond().getType();
-  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"casePatterns"});
 
   for (auto caseInfo : getCases()) {
     p.printNewline();
