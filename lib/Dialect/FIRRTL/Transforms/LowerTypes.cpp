@@ -522,7 +522,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     auto hasDontTouch = Annotation(opAttr).getClass() ==
                         "firrtl.transforms.DontTouchAnnotation";
 
-    // If its a valid NLA and it is not a DontTouch and  we have already added
+    // If its a valid NLA and it is not a DontTouch and we have already added
     // an entry for this NLA with this field's symbol, ignore this NLA. This is
     // required such that there is only a single entry for a pair of NLA and
     // lowered symbol. This means, there can be multiple entries for the same
