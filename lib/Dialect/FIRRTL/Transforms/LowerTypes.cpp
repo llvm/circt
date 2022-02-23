@@ -490,7 +490,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     // create a record of the NLA name that needs to be fixed and the
     // corresponding lowered symbol, which should be the new leaf for the NLA.
     // Furthermore, an NLA can be shared among multiple fields, each of which
-    // can will be a new leaf after lowering, but they had the same symbol
+    // will be a new leaf after lowering, but they had the same symbol
     // corresponding to the bundle before lowering. This means, a new NLA needs
     // to be created to refer to the unique ops created after lowering. Hence,
     // nlaNameToNewSymList, will have multiple entries with the same NLA name in
