@@ -226,7 +226,8 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    BoolAttr:$sequential,
+    UnitAttr:$sequential,
+    UnitAttr:$FIFO,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
@@ -235,7 +236,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return (*this)->getAttrOfType<BoolAttr>("sequential").getValue();
+      return this->sequential();
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
@@ -337,7 +338,7 @@ def MergeOp : Handshake_Op<"merge", [
 def MuxOp : Handshake_Op<"mux", [
   NoSideEffect, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]> 
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "mux operation";
   let description = [{
@@ -505,7 +506,7 @@ def SelectOp : Handshake_Op<"select", [
                        AnyType : $trueOperand, AnyType : $falseOperand);
   let results = (outs AnyType : $result);
 
-  let builders = [OpBuilder<(ins 
+  let builders = [OpBuilder<(ins
     "Value":$condOperand, "Value":$trueOperand, "Value":$falseOperand)>];
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
@@ -520,7 +521,7 @@ def SinkOp
 
     Example:
     ```mlir
-    sink %data : i32 
+    sink %data : i32
     ```
   }];
   let arguments = (ins AnyType:$operand);
@@ -528,8 +529,8 @@ def SinkOp
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$operand)>,
-    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns. 
-    OpBuilder<(ins 
+    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns.
+    OpBuilder<(ins
       "TypeRange":$resultTypes, "ValueRange":$operands, "ArrayRef<::mlir::NamedAttribute>":$attributes)>
   ];
   let hasCustomAssemblyFormat = 1;
@@ -784,7 +785,7 @@ def JoinOp : Handshake_Op<"join", [
   let description = [{
     A control-only synchronizer.  Produces a valid output when all
     inputs become available.
-    
+
     Example:
     ```mlir
     %0 = join %a, %b, %c : i32

@@ -1017,8 +1017,10 @@ void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(operand);
   sost::addAttributes(result, size, innerType);
   result.addTypes({innerType});
-  result.addAttribute("sequential",
-                      BoolAttr::get(builder.getContext(), sequential));
+  if (sequential)
+    result.addAttribute("sequential", builder.getUnitAttr());
+  else
+    result.addAttribute("FIFO", builder.getUnitAttr());
 }
 
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
