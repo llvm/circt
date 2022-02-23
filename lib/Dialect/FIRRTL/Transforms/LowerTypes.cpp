@@ -502,12 +502,13 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           updateAnnotationFieldID(ctxt, opAttr, field.fieldID, cache.i64ty));
       // Check for ground type, to ensure spurious entries are not created for
       // intermediate ops generated during lowering of nested aggregate types.
-      if (isGroundType)
-        if (auto nlaRef = Annotation(opAttr).getMember("circt.nonlocal")) {
-          auto nlaAttr = nlaRef.cast<FlatSymbolRefAttr>().getAttr();
-          if (alreadyAddedNLAs.insert(nlaAttr).second)
-            nlaNameToNewSymList.push_back({nlaAttr, symAttr});
-        }
+      if (!isGroundType)
+        continue;
+      if (auto nlaAttr =
+              Annotation(opAttr).getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+        if (alreadyAddedNLAs.insert(nlaAttr.getAttr()).second)
+          nlaNameToNewSymList.push_back({nlaAttr.getAttr(), symAttr});
+
       continue;
     }
     /* subAnno handling... */
@@ -519,8 +520,8 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
 
     auto nlaRef =
         subAnno.getAnnotations().getAs<FlatSymbolRefAttr>("circt.nonlocal");
-    auto hasDontTouch = Annotation(opAttr).getClass() ==
-                        "firrtl.transforms.DontTouchAnnotation";
+    auto isDontTouch = Annotation(opAttr).getClass() ==
+                       "firrtl.transforms.DontTouchAnnotation";
 
     // If its a valid NLA and it is not a DontTouch and we have already added
     // an entry for this NLA with this field's symbol, ignore this NLA. This is
@@ -528,7 +529,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     // lowered symbol. This means, there can be multiple entries for the same
     // NLA and DontTouch. Since, DontTouch NLAs can be simply deleted, there is
     // no need to create a unique entry.
-    if (nlaRef && !hasDontTouch &&
+    if (nlaRef && !isDontTouch &&
         !alreadyAddedNLAs.insert(nlaRef.getAttr()).second)
       nlaRef = {};
     // Apply annotations to all elements if fieldID is equal to zero.
@@ -546,7 +547,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
           SubAnnotationAttr::get(ctxt, newFieldID, subAnno.getAnnotations()));
       continue;
     }
-    if (hasDontTouch) {
+    if (isDontTouch) {
       needsSym = true;
       // If this is a nonlocal DontTouch, then,
       // 1. Drop the annotation and the circt.nonlocal reference.
@@ -1592,8 +1593,8 @@ void LowerTypesPass::runOnOperation() {
                                 ? AnnotationSet::forPort(pathOp, iter->portIdx)
                                 : AnnotationSet(pathOp);
       annos.removeAnnotations([&](Annotation anno) {
-        if (auto nlaRef = anno.getMember("circt.nonlocal"))
-          if (oldNLAname == nlaRef.cast<FlatSymbolRefAttr>().getAttr()) {
+        if (auto nlaRef = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
+          if (oldNLAname == nlaRef.getAttr()) {
             // Found the NLA, now delete it if removeNLA is true.
             // Else, record its contents with the updated NLA reference.
             if (removeNLA)
