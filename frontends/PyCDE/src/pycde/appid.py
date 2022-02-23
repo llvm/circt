@@ -17,7 +17,6 @@ class AppID:
   through hierarchy changes."""
 
   def __init__(self, *appid: Tuple[str]):
-    assert len(appid) > 0
     self._parts = list()
     for p in appid:
       assert isinstance(p, str)
@@ -25,6 +24,8 @@ class AppID:
 
   @property
   def head(self) -> str:
+    if len(self._parts) == 0:
+      return ""
     return self._parts[0]
 
   @property
