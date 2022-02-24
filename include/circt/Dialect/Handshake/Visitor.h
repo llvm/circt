@@ -31,8 +31,8 @@ public:
         .template Case<
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
-            EndOp, ForkOp, FuncOp, CallOp, JoinOp, LazyForkOp, LoadOp,
-            MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
+            EndOp, ForkOp, FuncOp, CallOp, JoinOp, LazyForkOp, LoadOp, MemoryOp,
+            ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
             handshake::SelectOp, SourceOp, StartOp, StoreOp, TerminatorOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitHandshake(opNode, args...);
