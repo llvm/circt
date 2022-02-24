@@ -4,17 +4,17 @@
 // expected-error @+1 {{'builtin.module' op cannot deduce top level function - cycle detected in instance graph (bar->baz->foo->bar).}}
 module {
   handshake.func @bar(%ctrl : none) -> (none) {
-    %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
+    %0 = call @baz(%ctrl) : (none) -> (none)
     return %0: none
   }
 
   handshake.func @foo(%ctrl : none) -> (none) {
-    %0 = handshake.instance @bar(%ctrl) : (none) -> (none)
+    %0 = call @bar(%ctrl) : (none) -> (none)
     return %0: none  
   }
   
   handshake.func @baz(%ctrl : none) -> (none) {
-    %0 = handshake.instance @foo(%ctrl) : (none) -> (none)
+    %0 = call @foo(%ctrl) : (none) -> (none)
     return %0: none  
   }
 }
@@ -25,12 +25,12 @@ module {
 // expected-error @+1 {{'builtin.module' op multiple candidate top-level modules detected (bar, foo). Please remove one of these from the source program.}}
 module {
   handshake.func @bar(%ctrl : none) -> (none) {
-    %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
+    %0 = call @baz(%ctrl) : (none) -> (none)
     return %0: none
   }
 
   handshake.func @foo(%ctrl : none) -> (none) {
-    %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
+    %0 = call @baz(%ctrl) : (none) -> (none)
     return %0: none  
   }
   

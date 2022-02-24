@@ -344,8 +344,8 @@ static std::string getBareSubModuleName(Operation *oldOp) {
 
 /// Construct a name for creating FIRRTL sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
-  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
-    return instanceOp.getModule().str();
+  if (auto callOp = dyn_cast<handshake::CallOp>(oldOp); callOp)
+    return callOp.getModule().str();
 
   std::string subModuleName = getBareSubModuleName(oldOp);
 
@@ -683,9 +683,9 @@ static FModuleOp checkSubModuleOp(CircuitOp circuitOp, StringRef modName) {
 static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
   auto moduleOp = checkSubModuleOp(circuitOp, getSubModuleName(oldOp));
 
-  if (isa<handshake::InstanceOp>(oldOp))
+  if (isa<handshake::CallOp>(oldOp))
     assert(moduleOp &&
-           "handshake.instance target modules should always have been lowered "
+           "handshake.call target functions should always have been lowered "
            "before the modules that reference them!");
   return moduleOp;
 }
@@ -2792,9 +2792,9 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
   rewriter.eraseOp(oldOp);
 }
 
-static std::string getInstanceName(Operation *op) {
-  auto instOp = dyn_cast<handshake::InstanceOp>(op);
-  return instOp ? instOp.getModule().str() : getBareSubModuleName(op);
+static std::string getCallName(Operation *op) {
+  auto callOp = dyn_cast<handshake::CallOp>(op);
+  return callOp ? callOp.getModule().str() : getBareSubModuleName(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2839,8 +2839,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     auto topModuleOp =
         createTopModuleOp(funcOp, /*numClocks=*/1, rewriter, setFlattenAttr);
 
-    NameUniquer instanceUniquer = [&](Operation *op) {
-      std::string instName = getInstanceName(op);
+    NameUniquer callUniquer = [&](Operation *op) {
+      std::string instName = getCallName(op);
 
       if (auto idAttr = op->getAttrOfType<IntegerAttr>("handshake_id");
           idAttr) {
@@ -2886,7 +2886,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
         // Instantiate the new created sub-module.
         createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0, rewriter,
-                     instanceUniquer);
+                     callUniquer);
       }
     }
     rewriter.eraseOp(funcOp);

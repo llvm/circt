@@ -18,12 +18,12 @@ module {
   }
 
   handshake.func @bar(%a: i32, %ctrl : none) -> (i32, none) {
-    %c, %ctrlOut = handshake.instance @baz(%a, %ctrl) : (i32, none) -> (i32, none)
+    %c, %ctrlOut = call @baz(%a, %ctrl) : (i32, none) -> (i32, none)
     return %c, %ctrlOut : i32, none
   }
 
   handshake.func @foo(%a: i32, %ctrl : none) -> (i32, none) {
-    %b:2 = handshake.instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
+    %b:2 = call @bar(%a, %ctrl) : (i32, none) -> (i32, none)
     return %b#0, %b#1 : i32, none
   }
 }

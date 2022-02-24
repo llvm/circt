@@ -204,7 +204,7 @@ public:
 
   // Partial lowering driver. This function will instantiate a new
   // partial lowering call, creating a conversion rewriter context which is then
-  // passed to the instance of the member function referenced.
+  // passed to the call of the member function referenced.
   template <typename F, typename... TArgs>
   LogicalResult runPartialLowering(F &&memberFunc, TArgs &...args) {
     return partiallyLowerFuncOp<handshake::FuncOp>(
@@ -628,7 +628,7 @@ bool isLiveOut(Value val) {
 }
 
 // A value can have multiple branches in a single successor block
-// (for instance, there can be an SSA phi and a merge that we insert)
+// (for call, there can be an SSA phi and a merge that we insert)
 // This function determines the number of branches to insert based on the
 // value uses in successor blocks
 int getBranchCount(Value val, Block *block) {
@@ -1782,20 +1782,20 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
 LogicalResult
 FuncOpLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
   for (Block &block : f) {
-    /// An instance is activated whenever control arrives at the basic block of
+    /// An call is activated whenever control arrives at the basic block of
     /// the source callOp.
     Value blockEntryControl = getBlockEntryControl(&block);
     for (Operation &op : block) {
-      if (auto callOp = dyn_cast<CallOp>(op)) {
+      if (auto callOp = dyn_cast<mlir::CallOp>(op)) {
         llvm::SmallVector<Value> operands;
         llvm::copy(callOp.getOperands(), std::back_inserter(operands));
         operands.push_back(blockEntryControl);
         rewriter.setInsertionPoint(callOp);
-        auto instanceOp = rewriter.create<handshake::InstanceOp>(
+        auto hsCallOp = rewriter.create<handshake::CallOp>(
             callOp.getLoc(), callOp.getCallee(), callOp.getResultTypes(),
             operands);
         // Replace all results of the source callOp.
-        for (auto it : llvm::zip(callOp.getResults(), instanceOp.getResults()))
+        for (auto it : llvm::zip(callOp.getResults(), hsCallOp.getResults()))
           std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
         rewriter.eraseOp(callOp);
       }

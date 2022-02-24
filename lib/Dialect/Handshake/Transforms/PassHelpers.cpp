@@ -39,7 +39,7 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
   // Create use graph
   auto walkFuncOps = [&](handshake::FuncOp funcOp) {
     auto &funcUses = instanceGraph[funcOp.getName().str()];
-    funcOp.walk([&](handshake::InstanceOp instanceOp) {
+    funcOp.walk([&](handshake::CallOp instanceOp) {
       funcUses.insert(instanceOp.getModule().str());
     });
   };

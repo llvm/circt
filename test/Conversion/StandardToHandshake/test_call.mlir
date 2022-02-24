@@ -15,7 +15,7 @@ func @bar(%0 : i32) -> i32 {
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i32
 // CHECK:           %[[VAL_3:.*]]:2 = fork [2] %[[VAL_1]] : none
-// CHECK:           %[[VAL_4:.*]]:2 = instance @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)
+// CHECK:           %[[VAL_4:.*]]:2 = call @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)
 // CHECK:           sink %[[VAL_4]]#1 : none
 // CHECK:           return %[[VAL_4]]#0, %[[VAL_3]]#1 : i32, none
 // CHECK:         }
@@ -53,7 +53,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_16:.*]], %[[VAL_17:.*]] = control_merge %[[VAL_12]] : none
 // CHECK:           %[[VAL_18:.*]]:2 = fork [2] %[[VAL_16]] : none
 // CHECK:           sink %[[VAL_17]] : index
-// CHECK:           %[[VAL_19:.*]]:2 = instance @add(%[[VAL_14]], %[[VAL_15]], %[[VAL_18]]#1) : (i32, i32, none) -> (i32, none)
+// CHECK:           %[[VAL_19:.*]]:2 = call @add(%[[VAL_14]], %[[VAL_15]], %[[VAL_18]]#1) : (i32, i32, none) -> (i32, none)
 // CHECK:           sink %[[VAL_19]]#1 : none
 // CHECK:           %[[VAL_20:.*]] = br %[[VAL_18]]#0 : none
 // CHECK:           %[[VAL_21:.*]] = br %[[VAL_19]]#0 : i32
@@ -62,7 +62,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_24:.*]], %[[VAL_25:.*]] = control_merge %[[VAL_13]] : none
 // CHECK:           %[[VAL_26:.*]]:2 = fork [2] %[[VAL_24]] : none
 // CHECK:           sink %[[VAL_25]] : index
-// CHECK:           %[[VAL_27:.*]]:2 = instance @sub(%[[VAL_22]], %[[VAL_23]], %[[VAL_26]]#1) : (i32, i32, none) -> (i32, none)
+// CHECK:           %[[VAL_27:.*]]:2 = call @sub(%[[VAL_22]], %[[VAL_23]], %[[VAL_26]]#1) : (i32, i32, none) -> (i32, none)
 // CHECK:           sink %[[VAL_27]]#1 : none
 // CHECK:           %[[VAL_28:.*]] = br %[[VAL_26]]#0 : none
 // CHECK:           %[[VAL_29:.*]] = br %[[VAL_27]]#0 : i32

@@ -36,9 +36,9 @@ handshake.func @foo(%ctrl : none) -> none{
   return %ctrl : none
 }
 
-handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.instance' op last operand must be a control (none-typed) operand.}}
-  instance @foo(%ctrl, %arg0) : (none, i32) -> ()
+handshake.func @invalid_call_op(%arg0 : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op last operand must be a control (none-typed) operand.}}
+  call @foo(%ctrl, %arg0) : (none, i32) -> ()
   return %ctrl : none
 }
 
@@ -48,9 +48,9 @@ handshake.func @foo(%ctrl : none) -> none{
   return %ctrl : none
 }
 
-handshake.func @invalid_instance_op(%ctrl : none) -> none {
-  // expected-error @+1 {{'handshake.instance' op must provide at least a control operand.}}
-  instance @foo() : () -> ()
+handshake.func @invalid_call_op(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op must provide at least a control operand.}}
+  call @foo() : () -> ()
   return %ctrl : none
 }
 

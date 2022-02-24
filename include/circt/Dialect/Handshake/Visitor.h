@@ -31,7 +31,7 @@ public:
         .template Case<
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
-            EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
+            EndOp, ForkOp, FuncOp, CallOp, JoinOp, LazyForkOp, LoadOp,
             MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
             handshake::SelectOp, SourceOp, StartOp, StoreOp, TerminatorOp>(
             [&](auto opNode) -> ResultType {
@@ -68,7 +68,7 @@ public:
   HANDLE(EndOp);
   HANDLE(ForkOp);
   HANDLE(FuncOp);
-  HANDLE(InstanceOp);
+  HANDLE(CallOp);
   HANDLE(JoinOp);
   HANDLE(LazyForkOp);
   HANDLE(LoadOp);

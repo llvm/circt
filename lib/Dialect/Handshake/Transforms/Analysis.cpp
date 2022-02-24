@@ -484,12 +484,12 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
   os << "label=\"\"\n";
   os << "peripheries=0\n";
   for (Operation &op : *bodyBlock) {
-    if (!isa<handshake::InstanceOp, handshake::ReturnOp>(op)) {
+    if (!isa<handshake::CallOp, handshake::ReturnOp>(op)) {
       // Regular node in the diagram.
       opNameMap[&op] = dotPrintNode(os, instanceName, &op, opIDs);
       continue;
     }
-    auto instOp = dyn_cast<handshake::InstanceOp>(op);
+    auto instOp = dyn_cast<handshake::CallOp>(op);
     if (instOp) {
       // Recurse into instantiated submodule.
       auto calledFuncOp =

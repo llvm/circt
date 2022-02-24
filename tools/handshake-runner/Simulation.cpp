@@ -254,7 +254,7 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(mlir::CallOpInterface, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(handshake::InstanceOp, std::vector<Any> &,
+  LogicalResult execute(handshake::CallOp, std::vector<Any> &,
                         std::vector<Any> &);
 
 private:
@@ -589,43 +589,41 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
+LogicalResult HandshakeExecuter::execute(handshake::CallOp callOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
-  // Execute the instance op and create associations in the current
+  // Execute the call op and create associations in the current
   // scope's value and time maps for the returned values.
 
-  if (auto funcSym = instanceOp->getAttr("module").cast<SymbolRefAttr>()) {
+  if (auto funcSym = callOp->getAttr("module").cast<SymbolRefAttr>()) {
     if (handshake::FuncOp func =
             (*module)->lookupSymbol<handshake::FuncOp>(funcSym)) {
-      /// Prepare an InstanceOp for execution by creating a valueMap
+      /// Prepare a CallOp for execution by creating a valueMap
       /// containing associations between the arguments provided to the
-      /// intanceOp - available in the enclosing scope value map - and the
-      /// argument SSA values within the called function of the InstanceOp.
+      /// CallOp - available in the enclosing scope value map - and the
+      /// argument SSA values within the called function of the CallOp.
 
       const unsigned nRealFuncOuts = func.getType().getNumResults() - 1;
       mlir::Block &entryBlock = func.getBody().front();
-      mlir::Block::BlockArgListType instanceBlockArgs =
-          entryBlock.getArguments();
+      mlir::Block::BlockArgListType callBlockArgs = entryBlock.getArguments();
 
       // Create a new value map containing only the arguments of the
-      // InstanceOp. This will be the value and time map for the callee scope of
-      // the function pointed to by the InstanceOp.
+      // CallOp. This will be the value and time map for the callee scope of
+      // the function pointed to by the CallOp.
       llvm::DenseMap<mlir::Value, Any> scopeValueMap;
       llvm::DenseMap<mlir::Value, double> scopeTimeMap;
 
       // Associate each input argument with the arguments of the called
       // function
       for (auto inIt : enumerate(in)) {
-        scopeValueMap[instanceBlockArgs[inIt.index()]] = inIt.value();
-        scopeTimeMap[instanceBlockArgs[inIt.index()]] =
-            timeMap[instanceOp.getOperand(inIt.index())];
+        scopeValueMap[callBlockArgs[inIt.index()]] = inIt.value();
+        scopeTimeMap[callBlockArgs[inIt.index()]] =
+            timeMap[callOp.getOperand(inIt.index())];
       }
 
       // ... and the implicit none argument
       APInt apnonearg(1, 0);
-      scopeValueMap[instanceBlockArgs[instanceBlockArgs.size() - 1]] =
-          apnonearg;
+      scopeValueMap[callBlockArgs[callBlockArgs.size() - 1]] = apnonearg;
       std::vector<Any> nestedResults(nRealFuncOuts);
       std::vector<double> nestedResTimes(nRealFuncOuts);
 
@@ -636,24 +634,22 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
       // Place the output arguments in the caller scope.
       for (auto nestedRes : enumerate(nestedResults)) {
         out[nestedRes.index()] = nestedRes.value();
-        valueMap[instanceOp.getResults()[nestedRes.index()]] =
-            nestedRes.value();
-        timeMap[instanceOp.getResults()[nestedRes.index()]] =
+        valueMap[callOp.getResults()[nestedRes.index()]] = nestedRes.value();
+        timeMap[callOp.getResults()[nestedRes.index()]] =
             nestedResTimes[nestedRes.index()];
       }
       // ... and the implicit none argument
-      unsigned ctrlResultIdx = instanceOp.getNumResults() - 1;
-      valueMap[instanceOp->getResult(ctrlResultIdx)] = apnonearg;
+      unsigned ctrlResultIdx = callOp.getNumResults() - 1;
+      valueMap[callOp->getResult(ctrlResultIdx)] = apnonearg;
       out[ctrlResultIdx] = apnonearg;
 
       return success();
     } else {
-      return instanceOp.emitOpError()
+      return callOp.emitOpError()
              << "Function '" << funcSym << "' not found in module";
     }
   } else
-    return instanceOp.emitOpError()
-           << "Missing 'module' attribute for InstanceOp";
+    return callOp.emitOpError() << "Missing 'module' attribute for CallOp";
 
   llvm_unreachable("Fatal error reached before this point");
 }
@@ -847,7 +843,7 @@ HandshakeExecuter::HandshakeExecuter(
                   mlir::arith::DivSIOp, mlir::arith::DivUIOp,
                   mlir::arith::DivFOp, mlir::arith::IndexCastOp,
                   mlir::arith::ExtSIOp, mlir::arith::ExtUIOp,
-                  mlir::arith::XOrIOp, handshake::InstanceOp>([&](auto op) {
+                  mlir::arith::XOrIOp, handshake::CallOp>([&](auto op) {
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);
             })

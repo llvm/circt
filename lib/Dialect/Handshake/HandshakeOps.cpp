@@ -1414,7 +1414,7 @@ ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void JoinOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
-static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
+static LogicalResult verifyCallOp(handshake::CallOp op) {
   if (op->getNumOperands() == 0)
     return op.emitOpError() << "must provide at least a control operand.";
 
