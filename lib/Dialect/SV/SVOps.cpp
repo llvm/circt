@@ -634,7 +634,7 @@ auto CaseZOp::getCases() -> SmallVector<CaseZInfo, 4> {
   return result;
 }
 
-static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
+ParseResult CaseZOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
   OpAsmParser::OperandType condOperand;
@@ -716,11 +716,12 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
-  p << ' ' << op.cond() << " : " << op.cond().getType();
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+void CaseZOp::print(OpAsmPrinter &p) {
+  p << ' ' << cond() << " : " << cond().getType();
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"casePatterns"});
 
-  for (auto caseInfo : op.getCases()) {
+  for (auto caseInfo : getCases()) {
     p.printNewline();
     auto pattern = caseInfo.pattern;
     if (pattern.isDefault()) {
