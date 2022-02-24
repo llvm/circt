@@ -145,6 +145,7 @@ class InstanceOp:
   def moduleName(self):
     return _ir.FlatSymbolRefAttr(self.attributes["moduleName"])
 
+
 class EntityExternOp:
 
   @staticmethod
