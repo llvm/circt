@@ -376,15 +376,15 @@ private:
     while (!workList.empty()) {
       auto [newValue, oldType] = workList.pop_back_val();
       auto newType = newValue.getType();
+      // If the two types are identical, we don't need to do anything.
+      if (oldType == newType)
+        continue;
       for (auto *op : llvm::make_early_inc_range(newValue.getUsers())) {
-        // If the two types are identical, we don't need to do anything.
-        if (oldType == newType)
-          continue;
         if (auto subfield = dyn_cast<SubfieldOp>(op)) {
           // Rewrite a subfield op to return the correct type.
           auto index = subfield.fieldIndex();
-          auto newResultType = newType.cast<BundleType>().getElementType(index);
           auto result = subfield.getResult();
+          auto newResultType = newType.cast<BundleType>().getElementType(index);
           workList.emplace_back(result, result.getType());
           subfield.getResult().setType(newResultType);
           continue;
