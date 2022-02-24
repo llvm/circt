@@ -2605,6 +2605,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
 
+  size_t width = 0;
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
@@ -2626,6 +2627,12 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     if (emitDeclarationForTemporary(op))
       return;
     os << " = ";
+    if (auto add = dyn_cast<AddOp>(op))
+      width = add.getType().getWidth();
+    if (auto mul = dyn_cast<MulOp>(op))
+      width = mul.getType().getWidth();
+    if (width)
+      os << width << "'(";
   }
 
   // Emit the expression with a special precedence level so it knows to do a
@@ -2633,6 +2640,8 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // name.
   SmallPtrSet<Operation *, 8> emittedExprs;
   emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
+  if (width)
+    os << ")";
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
 }
@@ -3610,8 +3619,18 @@ bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   emitter.expressionsEmittedIntoDecl.insert(op);
 
   os << " = ";
+  size_t width = 0;
+  if (auto add = dyn_cast<AddOp>(op))
+    width = add.getType().getWidth();
+  if (auto mul = dyn_cast<MulOp>(op))
+    width = mul.getType().getWidth();
+  if (width)
+    os << width << "'(";
+
   SmallPtrSet<Operation *, 8> emittedExprs;
   emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
+  if (width)
+    os << ")";
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
   return true;
