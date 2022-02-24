@@ -71,12 +71,6 @@ class Instance:
   def appid(self):
     return AppID(*[i.name for i in self.path])
 
-  # @classmethod
-  # def get_global_ref_symbol(cls):
-  #   counter = cls.global_ref_counter
-  #   cls.global_ref_counter += 1
-  #   return ir.StringAttr.get("ref" + str(counter))
-
   def __repr__(self):
     path_names = map(lambda i: i.name, self.path)
     return "<instance: [" + ", ".join(path_names) + "]>"
@@ -98,78 +92,26 @@ class Instance:
     for child in self.children():
       child.walk(callback)
 
-  #   circt_mod = self.sys._get_circt_mod(self.module)
-  #   if isinstance(circt_mod, msft.MSFTModuleExternOp):
-  #     return
-  #   for op in circt_mod.entry_block:
-  #     if isinstance(op, seq.CompRegOp):
-  #       inst = Instance(circt_mod, op, self, self.sys)
-  #       callback(inst)
-  #       continue
-
-  #     if not isinstance(op, msft.InstanceOp):
-  #       continue
-
-  #     assert "moduleName" in op.attributes
-  #     tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
-  #     tgt_mod = self.sys._get_symbol_module(tgt_modname).modcls
-  #     assert tgt_mod is not None
-  #     inst = Instance(tgt_mod, op, self, self.sys)
-  #     callback(inst)
-  #     inst.walk(callback)
-
-  def _attach_attribute(self, sub_path: str, attr):
+  def _attach_attribute(self, attr):
     import pycde.devicedb as devdb
-    if isinstance(attr, devdb.PhysLocation):
-      self._root._placedb.place(self, attr, sub_path)
+
+    assert isinstance(attr, tuple), "Only (subpath, loc) are supported"
+    if isinstance(attr[1], devdb.PhysLocation):
+      self._root._placedb.place(self, attr[1], attr[0])
     else:
       assert False
 
-  #   db = self.root_instance.placedb._db
-  #   rc = db.add_placement(attr, self.path_attr, sub_path, self.instOp.operation)
-  #   if not rc:
-  #     raise ValueError("Failed to place")
-
-  #   # Create a global ref to this path.
-  #   global_ref_symbol = Instance.get_global_ref_symbol()
-  #   path_attr = self.path_attr
-  #   with ir.InsertionPoint(self.sys.mod.body):
-  #     global_ref = hw.GlobalRefOp(global_ref_symbol, path_attr)
-
-  #   # Attach the attribute to the global ref.
-  #   global_ref.attributes["loc:" + sub_path] = attr
-
-  #   # Add references to the global ref for each instance through the hierarchy.
-  #   for instance in self.path:
-  #     # Find any existing global refs.
-  #     if "circt.globalRef" in instance.instOp.attributes:
-  #       global_refs = [
-  #           ref for ref in ir.ArrayAttr(
-  #               instance.instOp.attributes["circt.globalRef"])
-  #       ]
-  #     else:
-  #       global_refs = []
-
-  #     # Add the new global ref.
-  #     global_refs.append(hw.GlobalRefAttr.get(global_ref_symbol))
-  #     global_refs_attr = ir.ArrayAttr.get(global_refs)
-  #     instance.instOp.attributes["circt.globalRef"] = global_refs_attr
-
-  #     # Set the expected inner_sym attribute on the instance to abide by the
-  #     # global ref contract.
-  #     instance.instOp.attributes["inner_sym"] = instance.name_attr
-
   def place(self,
-            subpath: Union[str, list[str]],
             devtype: msft.PrimitiveType,
             x: int,
             y: int,
-            num: int = 0):
+            num: int = 0,
+            subpath: Union[str, list[str]] = ""):
     import pycde.devicedb as devdb
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
-    loc = devdb.PhysLocation(devtype, x, y, num, subpath)
-    self._root.placedb.place(self, loc)
+    loc = devdb.PhysLocation(devtype, x, y, num)
+    self._root.placedb.place(self, loc, subpath)
 
 
 class RootInstance(Instance):
