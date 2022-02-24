@@ -299,9 +299,7 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
   let results = (outs);
-
-  let parser = "return parseCaseZOp(parser, result);";
-  let printer = "printCaseZOp(p, *this);";
+  let hasCustomAssemblyFormat = 1;
   let verifier = "return ::verifyCaseZOp(*this);";
 
   let builders = [
