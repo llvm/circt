@@ -1610,6 +1610,51 @@ private:
 };
 } // end anonymous namespace
 
+/// If the specified extension is a zero extended version of another value,
+/// return the shorter value, otherwise return null.
+static Value isZeroExtension(Value value) {
+  auto concat = value.getDefiningOp<ConcatOp>();
+  if (!concat || concat.getNumOperands() != 2)
+    return {};
+
+  auto constant = concat.getOperand(0).getDefiningOp<ConstantOp>();
+  if (constant && constant.getValue().isZero())
+    return concat.getOperand(1);
+  return {};
+}
+
+static Value discardBitExtension(Value value) {
+  auto defOp = value.getDefiningOp();
+  if (!defOp)
+    return value;
+  auto concat = dyn_cast<ConcatOp>(defOp);
+  auto replicate = dyn_cast<ReplicateOp>(defOp);
+  if (!concat && !replicate)
+    return value;
+  if (concat) {
+    // If its a concat, check if the prefix is either a zero or sign extension.
+    auto prefix = concat.getOperand(0).getDefiningOp();
+    if (auto constant = dyn_cast_or_null<ConstantOp>(prefix)) {
+      // If this is a zero extension, then discard the prefix, and just return
+      // the suffix of the concat.
+      if (constant.getValue().isZero())
+        return concat.getOperand(1);
+    } else if (auto repl = dyn_cast_or_null<ReplicateOp>(prefix)) {
+      // Prefix can also be the Replication of the sign bit.
+      prefix = repl.getOperand().getDefiningOp();
+    }
+    // If prefix is an extract op of 1 bit, then this is a sign extension.
+    if (auto extr = dyn_cast_or_null<ExtractOp>(prefix))
+      if (extr.getType().getWidth() == 1)
+        return concat.getOperand(1);
+
+  } else if (auto repl = replicate.input())
+    if (repl.getType().cast<IntegerType>().getWidth() == 1)
+      // If this is a replicate op of 1 bit
+      return replicate.getOperand();
+  return value;
+}
+
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     unsigned emitBinaryFlags) {
@@ -1617,8 +1662,10 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     os << "$signed(";
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
-  auto lhsInfo =
-      emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
+  Value op0 = op->getOperand(0);
+  if (isa<MulOp, AddOp>(op))
+    op0 = discardBitExtension(op0);
+  auto lhsInfo = emitSubExpr(op0, prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
 
   // Right associative operators are already generally variadic, we need to
@@ -1638,10 +1685,12 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     rhsIsUnsignedValueWithSelfDeterminedWidth = true;
     operandSignReq = NoRequirement;
   }
+  Value op1 = op->getOperand(1);
+  if (isa<MulOp, AddOp>(op))
+    op1 = discardBitExtension(op1);
 
-  auto rhsInfo =
-      emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq,
-                  rhsIsUnsignedValueWithSelfDeterminedWidth);
+  auto rhsInfo = emitSubExpr(op1, rhsPrec, OOLBinary, operandSignReq,
+                             rhsIsUnsignedValueWithSelfDeterminedWidth);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1725,19 +1774,6 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
 
   // Remember that this subexpr needs to be emitted independently.
   tooLargeSubExpressions.push_back(op);
-}
-
-/// If the specified extension is a zero extended version of another value,
-/// return the shorter value, otherwise return null.
-static Value isZeroExtension(Value value) {
-  auto concat = value.getDefiningOp<ConcatOp>();
-  if (!concat || concat.getNumOperands() != 2)
-    return {};
-
-  auto constant = concat.getOperand(0).getDefiningOp<ConstantOp>();
-  if (constant && constant.getValue().isZero())
-    return concat.getOperand(1);
-  return {};
 }
 
 /// Emit the specified value `exp` as a subexpression to the stream.  The
@@ -2605,7 +2641,6 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
 
-  size_t width = 0;
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
@@ -2627,12 +2662,6 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     if (emitDeclarationForTemporary(op))
       return;
     os << " = ";
-    if (auto add = dyn_cast<AddOp>(op))
-      width = add.getType().getWidth();
-    if (auto mul = dyn_cast<MulOp>(op))
-      width = mul.getType().getWidth();
-    if (width)
-      os << width << "'(";
   }
 
   // Emit the expression with a special precedence level so it knows to do a
@@ -2640,8 +2669,6 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // name.
   SmallPtrSet<Operation *, 8> emittedExprs;
   emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
-  if (width)
-    os << ")";
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
 }
@@ -3619,18 +3646,8 @@ bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   emitter.expressionsEmittedIntoDecl.insert(op);
 
   os << " = ";
-  size_t width = 0;
-  if (auto add = dyn_cast<AddOp>(op))
-    width = add.getType().getWidth();
-  if (auto mul = dyn_cast<MulOp>(op))
-    width = mul.getType().getWidth();
-  if (width)
-    os << width << "'(";
-
   SmallPtrSet<Operation *, 8> emittedExprs;
   emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
-  if (width)
-    os << ")";
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
   return true;

@@ -1057,8 +1057,7 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   // CHECK: initial begin
   sv.initial {
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
-    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + {{..}}31{really_really_long_port[10]}},
-    // CHECK-SAME: really_really_long_port};
+    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + really_really_long_port
     // CHECK: automatic logic [41:0] [[MANYTHING:.+]] =
     // CHECK-SAME: [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
     // CHECK:  [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
