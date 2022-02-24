@@ -430,3 +430,22 @@ firrtl.circuit "NoDedup" {
     firrtl.instance simple1 @Simple1()
   }
 }
+
+// Check that modules marked MustDedup have been deduped.
+// CHECK-LABEL: firrtl.circuit "MustDedup"
+firrtl.circuit "MustDedup" attributes {annotations = [{
+    // The annotation should be removed.
+    // CHECK-NOT: class = "firrtl.transforms.MustDeduplicateAnnotation"
+    class = "firrtl.transforms.MustDeduplicateAnnotation",
+    modules = ["~MustDedup|Simple0", "~MustDedup|Simple1"]}]
+   } {
+  // CHECK: @Simple0
+  firrtl.module @Simple0() { }
+  // CHECK-NOT: @Simple1
+  firrtl.module @Simple1() { }
+  // CHECK: firrtl.module @MustDedup 
+  firrtl.module @MustDedup() {
+    firrtl.instance simple0 @Simple0()
+    firrtl.instance simple1 @Simple1()
+  }
+}

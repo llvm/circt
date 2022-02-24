@@ -952,6 +952,13 @@ class DedupPass : public DedupBase<DedupPass> {
     // A map of all the module hashes that we have calculated so far.
     llvm::StringMap<Operation *> moduleHashes;
 
+    // We track the "group" that each module is deduped into, so that we can
+    // make sure all modules which are marked "must dedup" with each other all
+    // belong to the same group.
+    DenseMap<Attribute, unsigned> groupMap;
+    // This is the next unused group ID.
+    unsigned currentGroup = 0;
+
     // We must iterate the modules from the bottom up so that we can properly
     // deduplicate the modules. We have to store the visit order first so that
     // we can safely delete nodes as we go from the instance graph.
@@ -965,20 +972,82 @@ class DedupPass : public DedupBase<DedupPass> {
       // Check if there a module with the same hash.
       auto it = moduleHashes.find(h);
       if (it != moduleHashes.end()) {
-        deduper.dedup(it->second, module);
+        auto original = cast<FModuleLike>(it->second);
+        deduper.dedup(original, module);
+        // Record the group ID of the other module.
+        groupMap[module.moduleNameAttr()] = groupMap[original.moduleNameAttr()];
         erasedModules++;
         anythingChanged = true;
         continue;
       }
-
       // Any module not deduplicated must be recorded.
       deduper.record(module);
-
-      // TODO: if the module is marked must dedup, error here.
-
-      // Record the module's hash if it has not been removed.
+      // Add the module to a new dedup group.
+      groupMap[module.moduleNameAttr()] = currentGroup++;
+      // Record the module's hash.
       moduleHashes[h] = module;
     }
+
+    // This part verifies that all modules marked by "MustDedup" have been
+    // properly deduped with each other. For this check to succeed, all modules
+    // have to belong to the same dedup group. If a module is in a different
+    // dedup group, then it was either not deduped or deduped with the wrong
+    // thing.
+
+    // Get the group number from a module path.
+    auto failed = false;
+    auto getGroup = [&](Attribute path) -> unsigned {
+      // Each module is listed as a target "~Circuit|Module" which we have to
+      // parse.
+      auto [_, rhs] = path.cast<StringAttr>().getValue().split('|');
+      auto module = StringAttr::get(context, rhs);
+      auto it = groupMap.find(module);
+      if (it == groupMap.end()) {
+        auto diag =
+            circuit->emitError("MustDeduplicateAnnotation references module ")
+            << module << " which does not exist";
+        failed = true;
+        return 0;
+      }
+      return it->second;
+    };
+
+    AnnotationSet::removeAnnotations(circuit, [&](Annotation annotation) {
+      // If we have already failed, don't process any more annotations.
+      if (failed)
+        return false;
+      if (!annotation.isClass("firrtl.transforms.MustDeduplicateAnnotation"))
+        return false;
+      auto modules = annotation.getMember<ArrayAttr>("modules");
+      if (!modules) {
+        circuit->emitError(
+            "MustDeduplicateAnnotation missing \"modules\" member");
+        failed = true;
+        return false;
+      }
+      // Empty module list has nothing to process.
+      if (modules.size() == 0)
+        return true;
+      // Get the first element.
+      auto first = getGroup(modules[0]);
+      if (failed)
+        return false;
+      // Verify that the remaining elements are all the same as the first.
+      for (auto attr : modules.getValue().drop_front()) {
+        auto next = getGroup(attr);
+        if (failed)
+          return false;
+        if (first != next) {
+          circuit->emitError("module ")
+              << attr << " not deduplicated with " << modules[0];
+          failed = true;
+          return false;
+        }
+      }
+      return true;
+    });
+    if (failed)
+      return signalPassFailure();
 
     if (!anythingChanged)
       markAllAnalysesPreserved();
