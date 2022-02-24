@@ -59,7 +59,7 @@ public:
   mlir::StringRef filename;
   uint32_t line = 0;
   uint32_t column = 0;
-  mlir::StringRef condition;
+  mlir::StringAttr condition;
 
   HWDebugScope *parent = nullptr;
 
@@ -100,8 +100,8 @@ protected:
     if (type() == HWDebugScopeType::Block && !filename.empty()) {
       res["filename"] = filename;
     }
-    if (!condition.empty()) {
-      res["condition"] = condition;
+    if (condition && condition.size() != 0) {
+      res["condition"] = condition.strref();
     }
     return res;
   }
@@ -132,8 +132,8 @@ struct HWDebugLineInfo : HWDebugScope {
 
   [[nodiscard]] llvm::json::Value toJSON() const override {
     auto res = getScopeJSON(false);
-    if (!condition.empty()) {
-      res["condition"] = condition;
+    if (condition && condition.size() != 0) {
+      res["condition"] = condition.strref();
     }
     return res;
   }
@@ -451,14 +451,15 @@ private:
 // for now this is not an issue since Chisel is already doing this (somewhat)
 class DebugExprPrinter
     : public circt::comb::CombinationalVisitor<DebugExprPrinter>,
-      public circt::hw::TypeOpVisitor<DebugExprPrinter> {
+      public circt::hw::TypeOpVisitor<DebugExprPrinter>,
+      public circt::sv::Visitor<DebugExprPrinter> {
 public:
   explicit DebugExprPrinter(llvm::raw_ostream &os, HWModuleInfo *module)
       : os(os), module(module) {}
 
   void printExpr(mlir::Value value) {
     auto *op = value.getDefiningOp();
-    if (op && ExportVerilog::isVerilogExpression(op)) {
+    if (op) {
       auto name = getSymOpName(op);
       if (!name.empty()) {
         os << name;
@@ -473,6 +474,7 @@ public:
     }
   }
   // comb ops
+  using CombinationalVisitor::visitComb;
   // supported
   void visitComb(circt::comb::AddOp op) { visitBinary(op, "+"); }
   void visitComb(circt::comb::SubOp op) { visitBinary(op, "-"); }
@@ -503,32 +505,28 @@ public:
     visitBinary(op, symop[pred]);
   }
 
-  // unsupported
-  void visitComb(circt::comb::MuxOp op) { visitUnsupported(op); }
-  void visitComb(circt::comb::ShlOp op) { visitUnsupported(op); }
-  void visitComb(circt::comb::ShrUOp op) { visitUnsupported(op); }
-  void visitComb(circt::comb::ShrSOp op) { visitUnsupported(op); }
-
-  void visitComb(circt::comb::ParityOp op) { visitUnsupported(op); }
-
-  void visitComb(circt::comb::ReplicateOp op) { visitUnsupported(op); }
-  void visitComb(circt::comb::ConcatOp op) { visitUnsupported(op); }
-  void visitComb(circt::comb::ExtractOp op) { visitUnsupported(op); }
-
   // type ops
+  using TypeOpVisitor::visitTypeOp;
+  // supported
   void visitTypeOp(circt::hw::ConstantOp op) { os << op.value(); }
   void visitTypeOp(circt::hw::ParamValueOp op) { os << op.value(); }
-  // unsupported
-  void visitTypeOp(circt::hw::BitcastOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::ArraySliceOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::ArrayGetOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::ArrayCreateOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::ArrayConcatOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::StructCreateOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::StructExtractOp op) { visitUnsupported(op); }
-  void visitTypeOp(circt::hw::StructInjectOp op) { visitUnsupported(op); }
-  // noop
+
+  // SV ops
+  using Visitor::visitSV;
+  void visitSV(circt::sv::ReadInOutOp op) {
+    auto value = op->getOperand(0);
+    printExpr(value);
+  }
+
+  // dispatch
   void visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
+  void visitInvalidTypeOp(Operation *op) { return dispatchSVVisitor(op); }
+
+  // handle some sv construct
+  void visitInvalidSV(Operation *op) {
+    op->emitOpError("Unsupported operation in debug expression");
+    abort();
+  }
 
   void visitBinary(mlir::Operation *op, mlir::StringRef opStr) {
     // always emit paraphrases
@@ -553,10 +551,6 @@ public:
 private:
   llvm::raw_ostream &os;
   HWModuleInfo *module;
-
-  static void visitUnsupported(mlir::Operation *op) {
-    op->emitError("Unsupported op in debug expression");
-  }
 };
 
 class DebugStmtVisitor : public circt::hw::StmtVisitor<DebugStmtVisitor>,
@@ -565,6 +559,8 @@ public:
   DebugStmtVisitor(HWDebugBuilder &builder, HWModuleInfo *module)
       : builder(builder), module(module), currentScope(module) {}
 
+  using StmtVisitor::visitStmt;
+
   void visitStmt(circt::hw::InstanceOp op) {
     auto instNameRef = ::getSymOpName(op);
     // need to find definition names
@@ -572,6 +568,8 @@ public:
     auto moduleNameStr = circt::hw::getVerilogModuleNameAttr(mod).strref();
     module->instances.insert(std::make_pair(instNameRef, moduleNameStr));
   }
+
+  using Visitor::visitSV;
 
   void visitSV(circt::sv::RegOp op) {
     // we treat this as a generator variable
@@ -603,28 +601,19 @@ public:
   // we only care about the target of the assignment
   void visitSV(circt::sv::AssignOp op) {
     if (hasDebug(op)) {
-      auto target = op.dest();
-      auto *assign = builder.createAssign(target, op);
-      if (assign)
-        currentScope->scopes.emplace_back(assign);
+      handleAssign(op.dest(), op.src(), op.src().getDefiningOp(), op);
     }
   }
 
   void visitSV(circt::sv::BPAssignOp op) {
     if (hasDebug(op)) {
-      auto target = op.dest();
-      auto *assign = builder.createAssign(target, op);
-      if (assign)
-        currentScope->scopes.emplace_back(assign);
+      handleAssign(op.dest(), op.src(), op.src().getDefiningOp(), op);
     }
   }
 
   void visitSV(circt::sv::PAssignOp op) {
     if (hasDebug(op)) {
-      auto target = op.dest();
-      auto *assign = builder.createAssign(target, op);
-      if (assign)
-        currentScope->scopes.emplace_back(assign);
+      handleAssign(op.dest(), op.src(), op.src().getDefiningOp(), op);
     }
   }
 
@@ -726,12 +715,12 @@ public:
       return;
     }
 
-    auto addScope = [this](const std::string caseCond, mlir::Block *block) {
+    auto addScope = [op, this](const std::string caseCond, mlir::Block *block) {
       // use nullptr since it's auxiliary
       auto *scope = builder.createScope(nullptr, currentScope);
       auto *temp = currentScope;
       currentScope = scope;
-      scope->condition = caseCond;
+      scope->condition = StringAttr::get(op->getContext(), caseCond);
       visitBlock(*block);
       currentScope = temp;
     };
@@ -765,62 +754,13 @@ public:
     }
   }
 
-  // noop HW visit functions
-  void visitStmt(circt::hw::ProbeOp) {}
-  void visitStmt(circt::hw::TypedeclOp) {}
-
-  void visitStmt(circt::hw::TypeScopeOp op) {}
-
-  // noop SV visit functions
-  void visitSV(circt::sv::ReadInOutOp) {}
-  void visitSV(circt::sv::ArrayIndexInOutOp) {}
-  void visitSV(circt::sv::VerbatimExprOp) {}
-  void visitSV(circt::sv::VerbatimExprSEOp) {}
-  void visitSV(circt::sv::IndexedPartSelectInOutOp) {}
-  void visitSV(circt::sv::IndexedPartSelectOp) {}
-  void visitSV(circt::sv::StructFieldInOutOp) {}
-  void visitSV(circt::sv::ConstantXOp) {}
-  void visitSV(circt::sv::ConstantZOp) {}
-  void visitSV(circt::sv::LocalParamOp) {}
-  void visitSV(circt::sv::XMROp) {}
-  void visitSV(circt::sv::IfDefOp) {}
-  void visitSV(circt::sv::IfDefProceduralOp) {}
-  void visitSV(circt::sv::ForceOp) {}
-  void visitSV(circt::sv::ReleaseOp) {}
-  void visitSV(circt::sv::AliasOp) {}
-  void visitSV(circt::sv::FWriteOp) {}
-  void visitSV(circt::sv::VerbatimOp) {}
-  void visitSV(circt::sv::InterfaceOp) {}
-  void visitSV(circt::sv::InterfaceSignalOp) {}
-  void visitSV(circt::sv::InterfaceModportOp) {}
-  void visitSV(circt::sv::InterfaceInstanceOp) {}
-  void visitSV(circt::sv::GetModportOp) {}
-  void visitSV(circt::sv::AssignInterfaceSignalOp) {}
-  void visitSV(circt::sv::ReadInterfaceSignalOp) {}
-  void visitSV(circt::sv::AssertOp) {}
-  void visitSV(circt::sv::AssumeOp) {}
-  void visitSV(circt::sv::CoverOp) {}
-  void visitSV(circt::sv::AssertConcurrentOp) {}
-  void visitSV(circt::sv::AssumeConcurrentOp) {}
-  void visitSV(circt::sv::CoverConcurrentOp) {}
-  void visitSV(circt::sv::BindOp) {}
-  void visitSV(circt::sv::StopOp) {}
-  void visitSV(circt::sv::FinishOp) {}
-  void visitSV(circt::sv::ExitOp) {}
-  void visitSV(circt::sv::FatalOp) {}
-  void visitSV(circt::sv::ErrorOp) {}
-  void visitSV(circt::sv::WarningOp) {}
-  void visitSV(circt::sv::InfoOp) {}
-  void visitSV(circt::sv::SampledOp) {}
-
   // ignore invalid stuff
-  void visitInvalidStmt(Operation *) {}
+  void visitInvalidStmt(Operation *op) { dispatchSVVisitor(op); }
   void visitInvalidSV(Operation *) {}
+  void visitUnhandledStmt(Operation *) {}
+  void visitUnhandledSV(Operation *) {}
 
-  void dispatch(mlir::Operation *op) {
-    dispatchStmtVisitor(op);
-    dispatchSVVisitor(op);
-  }
+  void dispatch(mlir::Operation *op) { dispatchStmtVisitor(op); }
 
   void visitBlock(mlir::Block &block) {
     for (auto &op : block) {
@@ -844,6 +784,55 @@ private:
     DebugExprPrinter p(os, module);
     p.printExpr(value);
     return cond;
+  }
+
+  // NOLINTNEXTLINE
+  void handleAssign(mlir::Value target, mlir::Value value, mlir::Operation *op,
+                    mlir::Operation *assignOp) {
+    bool handled = false;
+    if (op) {
+      mlir::TypeSwitch<Operation *, void>(op).Case<circt::comb::MuxOp>(
+          [&](circt::comb::MuxOp mux) {
+            // create a new scope, which can be merged later on
+            auto *temp = currentScope;
+            // true
+            {
+              auto *scope =
+                  builder.createScope(mux.getOperation(), currentScope);
+              auto cond = getCondString(mux.cond());
+              if (cond.empty()) {
+                mux->emitError("Unable to obtain mux condition expression");
+              }
+              scope->condition = StringAttr::get(op->getContext(), cond);
+              currentScope = scope;
+              handleAssign(target, mux.trueValue(),
+                           mux.trueValue().getDefiningOp(), assignOp);
+            }
+            currentScope = temp;
+
+            {
+              auto *scope =
+                  builder.createScope(mux.getOperation(), currentScope);
+              auto cond = getCondString(mux.cond());
+              if (cond.empty()) {
+                mux->emitError("Unable to obtain mux condition expression");
+              }
+              scope->condition =
+                  mlir::StringAttr::get(op->getContext(), "!" + cond);
+              currentScope = scope;
+              handleAssign(target, mux.falseValue(),
+                           mux.falseValue().getDefiningOp(), assignOp);
+            }
+            currentScope = temp;
+            handled = true;
+          });
+    }
+    // not handled yet, create an assignment
+    if (!handled) {
+      auto *assign = builder.createAssign(target, op ? op : assignOp);
+      if (assign)
+        currentScope->scopes.emplace_back(assign);
+    }
   }
 };
 
@@ -888,7 +877,7 @@ void setScopeFilename(HWDebugScope *scope, HWDebugBuilder &builder) {
   // merge scopes with the same filename
   // we assume at this stage most of the entries are block entry now
   // we can only merge
-  llvm::DenseMap<std::pair<mlir::StringRef, mlir::StringRef>, HWDebugScope *>
+  llvm::DenseMap<std::pair<mlir::StringRef, mlir::StringAttr>, HWDebugScope *>
       filenameMapping;
   for (auto i = 0u; i < scope->scopes.size(); i++) {
     auto *entry = scope->scopes[i];
