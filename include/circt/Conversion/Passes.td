@@ -129,6 +129,19 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// HandshakeToHW
+//===----------------------------------------------------------------------===//
+
+def HandshakeToHW : Pass<"lower-handshake-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower Handshake to ESI/HW/Comb/Seq";
+  let description = [{
+    Lower Handshake to ESI/HW/Comb/Seq.
+  }];
+  let constructor = "circt::createHandshakeToHWPass()";
+  let dependentDialects = ["hw::HWDialect", "esi::ESIDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // HandshakeToFIRRTL
 //===----------------------------------------------------------------------===//
 
