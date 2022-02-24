@@ -132,8 +132,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     // (2) the done signal of this group is not high.
     auto eqCmp = builder.create<comb::ICmpOp>(
         wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmCurrentState);
-    auto notDone =
-        builder.create<comb::XorOp>(wires->getLoc(), doneOpValue, oneConstant);
+    auto notDone = comb::createOrFoldNot(wires->getLoc(), doneOpValue, builder);
     auto groupGoGuard =
         builder.create<comb::AndOp>(wires->getLoc(), eqCmp, notDone);
 

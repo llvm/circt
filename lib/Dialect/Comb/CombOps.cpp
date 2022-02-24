@@ -45,6 +45,15 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
   return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
 }
 
+Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
+  auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
+  return builder.createOrFold<XorOp>(loc, value, allOnes);
+}
+
+Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
+  return createOrFoldNot(builder.getLoc(), value, builder);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
