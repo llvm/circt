@@ -10,6 +10,7 @@
 #define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
