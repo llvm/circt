@@ -1312,10 +1312,10 @@ static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
 
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
-  // FIXME
-  if (cache)
-    if (auto *result = cache->getDefinition(instance().getName()))
-      return dyn_cast<hw::InstanceOp>(result);
+  if (cache) {
+    auto result = cache->getDefinition(instance());
+    return cast<hw::InstanceOp>(result.getOp());
+  }
 
   // Otherwise, resolve the instance by looking up the hw.module...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
