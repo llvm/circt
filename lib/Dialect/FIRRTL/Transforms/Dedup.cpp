@@ -322,9 +322,9 @@ private:
     }
     // Check if they are bundle types.
     if (auto dstOldBundle = dstOldType.dyn_cast<BundleType>()) {
-      auto dstNewBundle = dstOldType.cast<BundleType>();
-      auto srcNewBundle = dstNewType.cast<BundleType>();
+      auto dstNewBundle = dstNewType.cast<BundleType>();
       auto srcOldBundle = srcOldType.cast<BundleType>();
+      auto srcNewBundle = srcNewType.cast<BundleType>();
       for (auto &pair : llvm::enumerate(dstOldBundle)) {
         // Find a matching field in the old type.
         auto dstField = pair.value();

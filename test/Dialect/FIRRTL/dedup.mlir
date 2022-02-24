@@ -355,6 +355,23 @@ firrtl.circuit "Bundle" {
   }
 }
 
+// This is testing an issue in partial connect fixup from a spelling mistake in
+// the pass.
+firrtl.circuit "PartialIssue" {
+  firrtl.module @A(out %a: !firrtl.bundle<member: bundle<a: bundle<clock: clock, reset: asyncreset>>>) { }
+  firrtl.module @B(out %b: !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>) { }
+  firrtl.module @PartialIssue() {
+    %a = firrtl.instance a @A(out a: !firrtl.bundle<member: bundle<a: bundle<clock: clock, reset: asyncreset>>>)
+    %b = firrtl.instance b @B(out b: !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>)
+    %wb = firrtl.wire : !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>
+    firrtl.partialconnect %wb, %b : !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>, !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>
+    // CHECK: %0 = firrtl.subfield %wb(0)
+    // CHECK: %1 = firrtl.subfield %0(0)
+    // CHECK: %2 = firrtl.subfield %b_a(0)
+    // CHECK: %3 = firrtl.subfield %2(0)
+    // CHECK: firrtl.partialconnect %1, %3
+  }
+}
 
 // Make sure flipped fields are handled properly. This should pass flow
 // verification checking.
