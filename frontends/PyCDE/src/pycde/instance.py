@@ -44,6 +44,8 @@ class Instance:
 
   @property
   def _dyn_inst(self) -> msft.DynamicInstanceOp:
+    """Return the raw CIRCT op backing this Instance.
+       DANGEROUS! If used, take care to not hold on to the result object."""
     return self._root._create_or_get_dyn_inst(self)
 
   @property
@@ -115,6 +117,13 @@ class Instance:
 
 
 class RootInstance(Instance):
+  """
+  A root of an instance hierarchy starting at top-level 'module'.
+
+  Provides:
+    - The placement database.
+    - A (necessary) level of indirection into CIRCT IR.
+  """
   import pycde.system as system
   import pycde.devicedb as devdb
   from .module import _SpecializedModule
@@ -123,6 +132,8 @@ class RootInstance(Instance):
       "_module", "_placedb", "_subsymbol_cache", "_inst_to_static_op_cache",
       "_inst_to_dyn_op_cache", "_system"
   ]
+
+  # TODO: Support rebuilding the caches.
 
   @staticmethod
   def _get(module: _SpecializedModule, sys: system.System):
@@ -136,6 +147,13 @@ class RootInstance(Instance):
     self._inst_to_dyn_op_cache = {}
     self._child_cache = None
     return self
+
+  def _clear_cache(self):
+    """Clear out all of the Operation* references."""
+    self._subsymbol_cache = None
+    self._inst_to_static_op_cache = None
+    self._inst_to_dyn_op_cache = None
+    self._child_cache = None
 
   def createdb(self, primdb: devdb.PrimitiveDB = None):
     import pycde.devicedb as devdb
