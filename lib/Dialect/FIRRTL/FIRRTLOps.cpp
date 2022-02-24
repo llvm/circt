@@ -621,7 +621,6 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   if (portIndices.empty())
     return;
-  unsigned numPorts = getNumPorts();
 
   // Drop the direction markers for dead ports.
   SmallVector<Direction> portDirections =
@@ -630,11 +629,11 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   ArrayRef<Attribute> portTypes = this->getPortTypes();
   ArrayRef<Attribute> portAnnos = this->getPortAnnotations();
   ArrayRef<Attribute> portSyms = this->getPortSymbols();
-  assert(portDirections.size() == numPorts);
-  assert(portNames.size() == numPorts);
-  assert(portAnnos.size() == numPorts || portAnnos.empty());
-  assert(portTypes.size() == numPorts);
-  assert(portSyms.size() == numPorts || portSyms.empty());
+  assert(portDirections.size() == getNumPorts());
+  assert(portNames.size() == getNumPorts());
+  assert(portAnnos.size() == getNumPorts() || portAnnos.empty());
+  assert(portTypes.size() == getNumPorts());
+  assert(portSyms.size() == getNumPorts() || portSyms.empty());
 
   SmallVector<Direction> newPortDirections =
       removeElementsAtIndices<Direction>(portDirections, portIndices);
@@ -939,20 +938,18 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
-static void printFExtModuleOp(OpAsmPrinter &p, FExtModuleOp op) {
-  printFModuleLikeOp(p, op);
-}
+void FExtModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
-static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
-  printFModuleLikeOp(p, op);
+void FModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp(p, *this);
 
   // Print the body if this is not an external function. Since this block does
   // not have terminators, printing the terminator actually just prints the last
   // operation.
-  Region &body = op.body();
-  if (!body.empty()) {
+  Region &fbody = body();
+  if (!fbody.empty()) {
     p << " ";
-    p.printRegion(body, /*printEntryBlockArgs=*/false,
+    p.printRegion(fbody, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
   }
 }
@@ -1085,12 +1082,11 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   return success();
 }
 
-static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
+ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
 }
 
-static ParseResult parseFExtModuleOp(OpAsmParser &parser,
-                                     OperationState &result) {
+ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
@@ -1415,11 +1411,11 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
-static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
+void InstanceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
   p << " ";
-  p.printKeywordOrString(op.name());
-  if (auto attr = op.inner_symAttr()) {
+  p.printKeywordOrString(name());
+  if (auto attr = inner_symAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
@@ -1429,29 +1425,27 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
   SmallVector<StringRef, 4> omittedAttrs = {
       "moduleName",      "name",     "portDirections", "portNames", "portTypes",
       "portAnnotations", "inner_sym"};
-  if (!op.lowerToBind())
+  if (!lowerToBind())
     omittedAttrs.push_back("lowerToBind");
-  if (op.annotations().empty())
+  if (annotations().empty())
     omittedAttrs.push_back("annotations");
-  p.printOptionalAttrDict(op->getAttrs(), omittedAttrs);
+  p.printOptionalAttrDict((*this)->getAttrs(), omittedAttrs);
 
   // Print the module name.
   p << " ";
-  p.printSymbolName(op.moduleName());
+  p.printSymbolName(moduleName());
 
   // Collect all the result types as TypeAttrs for printing.
   SmallVector<Attribute> portTypes;
-  portTypes.reserve(op->getNumResults());
-  llvm::transform(op->getResultTypes(), std::back_inserter(portTypes),
+  portTypes.reserve(getNumResults());
+  llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
-  auto portDirections = direction::unpackAttribute(op.portDirectionsAttr());
-  printModulePorts(p, /*block=*/nullptr, portDirections,
-                   op.portNames().getValue(), portTypes,
-                   op.portAnnotations().getValue(), {});
+  auto portDirections = direction::unpackAttribute(portDirectionsAttr());
+  printModulePorts(p, /*block=*/nullptr, portDirections, portNames().getValue(),
+                   portTypes, portAnnotations().getValue(), {});
 }
 
-static ParseResult parseInstanceOp(OpAsmParser &parser,
-                                   OperationState &result) {
+ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
   auto &resultAttrs = result.attributes;
 
@@ -1509,6 +1503,16 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       [](Attribute typeAttr) { return typeAttr.cast<TypeAttr>().getValue(); });
 
   return success();
+}
+
+void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "inst";
+
+  for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
+    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+  }
 }
 
 void MemOp::build(OpBuilder &builder, OperationState &result,
@@ -1886,14 +1890,27 @@ FirMemory MemOp::getSummary() {
           continue;
         auto clockPort = a->getResult(0);
         for (auto *b : clockPort.getUsers()) {
-          auto connect = dyn_cast<ConnectOp>(b);
-          if (!connect || connect.dest() != clockPort)
-            continue;
-          auto result = clockToLeader.insert({connect.src(), numWritePorts});
-          if (result.second) {
-            writeClockIDs.push_back(numWritePorts);
-          } else {
-            writeClockIDs.push_back(result.first->second);
+          if (auto connect = dyn_cast<ConnectOp>(b)) {
+            if (connect.dest() == clockPort) {
+              auto result =
+                  clockToLeader.insert({connect.src(), numWritePorts});
+              if (result.second) {
+                writeClockIDs.push_back(numWritePorts);
+              } else {
+                writeClockIDs.push_back(result.first->second);
+              }
+            }
+          }
+          if (auto connect = dyn_cast<StrictConnectOp>(b)) {
+            if (connect.dest() == clockPort) {
+              auto result =
+                  clockToLeader.insert({connect.src(), numWritePorts});
+              if (result.second) {
+                writeClockIDs.push_back(numWritePorts);
+              } else {
+                writeClockIDs.push_back(result.first->second);
+              }
+            }
           }
         }
         break;
@@ -1931,6 +1948,16 @@ FirMemory MemOp::getSummary() {
           op.getMaskBits() > 1, op.getLoc()};
 }
 
+void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "mem";
+
+  for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
+    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+  }
+}
+
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
@@ -1943,6 +1970,22 @@ LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
                                        SmallVectorImpl<Type> &results) {
   results.push_back(operands[0].getType());
   return success();
+}
+
+void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
+void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
+void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
+}
+
+void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), name());
 }
 
 //===----------------------------------------------------------------------===//
@@ -2038,6 +2081,43 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
   return success();
 }
 
+static LogicalResult verifyStrictConnectOp(StrictConnectOp connect) {
+  FIRRTLType type = connect.dest().getType().cast<FIRRTLType>();
+
+  // Analog types cannot be connected and must be attached.
+  if (type.isa<AnalogType>())
+    return connect.emitError("analog types may not be connected");
+  if (auto destBundle = type.dyn_cast<BundleType>())
+    if (destBundle.containsAnalog())
+      return connect.emitError("analog types may not be connected");
+
+  // TODO: Relax this to allow reads from output ports,
+  // instance/memory input ports.
+  if (foldFlow(connect.src()) == Flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(connect.src());
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto diag =
+          connect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(connect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(connect.dest()) == Flow::Source) {
+    auto diag = connect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(connect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   elseRegion().push_back(new Block());
@@ -2112,16 +2192,43 @@ bool firrtl::isExpression(Operation *op) {
   return IsExprClassifier().dispatchExprVisitor(op);
 }
 
-static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << " ";
-  p.printAttributeWithoutType(op.valueAttr());
-  p << " : ";
-  p.printType(op.getType());
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+void InvalidValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // Set invalid values to have a distinct name.
+  std::string name;
+  if (auto ty = getType().dyn_cast<IntType>()) {
+    const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
+    auto width = ty.getWidthOrSentinel();
+    if (width == -1)
+      name = base;
+    else
+      name = (Twine(base) + Twine(width)).str();
+  } else if (auto ty = getType().dyn_cast<AnalogType>()) {
+    auto width = ty.getWidthOrSentinel();
+    if (width == -1)
+      name = "invalid_analog";
+    else
+      name = ("invalid_analog" + Twine(width)).str();
+  } else if (getType().isa<AsyncResetType>())
+    name = "invalid_asyncreset";
+  else if (getType().isa<ResetType>())
+    name = "invalid_reset";
+  else if (getType().isa<ClockType>())
+    name = "invalid_clock";
+  else
+    name = "invalid";
+
+  setNameFn(getResult(), name);
 }
 
-static ParseResult parseConstantOp(OpAsmParser &parser,
-                                   OperationState &result) {
+void ConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttributeWithoutType(valueAttr());
+  p << " : ";
+  p.printType(getType());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the constant value, without knowing its width.
   APInt value;
   auto loc = parser.getCurrentLocation();
@@ -2203,17 +2310,39 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
-static void printSpecialConstantOp(OpAsmPrinter &p, SpecialConstantOp &op) {
-  p << " ";
-  // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
-  p << static_cast<unsigned>(op.value());
-  p << " : ";
-  p.printType(op.getType());
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+void ConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // For constants in particular, propagate the value into the result name to
+  // make it easier to read the IR.
+  auto intTy = getType().dyn_cast<IntType>();
+
+  // Otherwise, build a complex name with the value and type.
+  SmallString<32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << 'c';
+  if (intTy) {
+    value().print(specialName, /*isSigned:*/ intTy.isSigned());
+
+    specialName << (intTy.isSigned() ? "_si" : "_ui");
+    auto width = intTy.getWidthOrSentinel();
+    if (width != -1)
+      specialName << width;
+  } else {
+    value().print(specialName, /*isSigned:*/ false);
+  }
+  setNameFn(getResult(), specialName.str());
 }
 
-static ParseResult parseSpecialConstantOp(OpAsmParser &parser,
-                                          OperationState &result) {
+void SpecialConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
+  p << static_cast<unsigned>(value());
+  p << " : ";
+  p.printType(getType());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
   // Parse the constant value.  SpecialConstant uses bool attributes, but it
   // prints as an integer.
   APInt value;
@@ -2237,6 +2366,22 @@ static ParseResult parseSpecialConstantOp(OpAsmParser &parser,
   auto valueAttr = parser.getBuilder().getBoolAttr(value == 1);
   result.addAttribute("value", valueAttr);
   return success();
+}
+
+void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << 'c';
+  specialName << static_cast<unsigned>(value());
+  auto type = getType();
+  if (type.isa<ClockType>()) {
+    specialName << "_clock";
+  } else if (type.isa<ResetType>()) {
+    specialName << "_reset";
+  } else if (type.isa<AsyncResetType>()) {
+    specialName << "_asyncreset";
+  }
+  setNameFn(getResult(), specialName.str());
 }
 
 static LogicalResult verifySubfieldOp(SubfieldOp op) {
@@ -2355,8 +2500,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
   return {};
 }
 
-static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
-                                      OperationState &result) {
+ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType index;
   llvm::SmallVector<OpAsmParser::OperandType, 16> inputs;
   Type indexType, elemType;
@@ -2376,11 +2520,11 @@ static ParseResult parseMultibitMuxOp(OpAsmParser &parser,
   return parser.resolveOperands(inputs, elemType, result.operands);
 }
 
-static void printMultibitMuxOp(OpAsmPrinter &p, MultibitMuxOp op) {
-  p << " " << op.index() << ", ";
-  p.printOperands(op.inputs());
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : " << op.index().getType() << ", " << op.getType();
+void MultibitMuxOp::print(OpAsmPrinter &p) {
+  p << " " << index() << ", ";
+  p.printOperands(inputs());
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << index().getType() << ", " << getType();
 }
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
@@ -3353,6 +3497,149 @@ bool NonLocalAnchor::isModule() { return !ref(); }
 /// Returns true if this NLA targets something inside a module (as opposed
 /// to a module or an instance of a module);
 bool NonLocalAnchor::isComponent() { return (bool)ref(); }
+
+//===----------------------------------------------------------------------===//
+// Various namers.
+//===----------------------------------------------------------------------===//
+
+static void genericAsmResultNames(Operation *op,
+                                  OpAsmSetValueNameFn setNameFn) {
+
+  // Many firrtl dialect operations have an optional 'name' attribute.  If
+  // present, use it.
+  if (op->getNumResults() == 1)
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      setNameFn(op->getResult(0), nameAttr.getValue());
+}
+
+void AddPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void AndPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AsClockPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AsSIntPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AsUIntPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void BitsPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void CatPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void CvtPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void DShlPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void DShlwPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void DShrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void DivPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void EQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void GEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void LEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void LTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void MulPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void MultibitMuxOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void MuxPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void NEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void NegPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void NotPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void OrRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void PadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void RemPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void ShlPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void ShrPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void SubPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void TailPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.

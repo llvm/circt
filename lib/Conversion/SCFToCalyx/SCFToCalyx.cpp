@@ -18,6 +18,7 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -30,6 +31,7 @@
 using namespace llvm;
 using namespace mlir;
 using namespace mlir::arith;
+using namespace mlir::cf;
 
 namespace circt {
 
@@ -89,6 +91,12 @@ struct WhileOpInterface {
   }
 
   bool isPipelined() { return isa<staticlogic::PipelineWhileOp>(impl); }
+
+  Optional<uint64_t> getBound() {
+    return TypeSwitch<Operation *, Optional<uint64_t>>(impl)
+        .Case([](staticlogic::PipelineWhileOp op) { return op.tripCount(); })
+        .Default([](auto op) { return None; });
+  }
 
   Operation *getOperation() { return impl; }
 
@@ -263,8 +271,8 @@ public:
 
   /// Registers a unique name for a given operation using a provided prefix.
   void setUniqueName(Operation *op, StringRef prefix) {
-    auto it = opNames.find(op);
-    assert(it == opNames.end() && "A unique name was already set for op");
+    assert(opNames.find(op) == opNames.end() &&
+           "A unique name was already set for op");
     opNames[op] = getUniqueName(prefix);
   }
 
@@ -398,6 +406,16 @@ public:
   }
 
   /// Get the pipeline prologue.
+  SmallVector<SmallVector<StringAttr>> getPipelineProlouge(Operation *op) {
+    return pipelinePrologue[op];
+  }
+
+  /// Get the pipeline epilogue.
+  SmallVector<SmallVector<StringAttr>> getPipelineEpilouge(Operation *op) {
+    return pipelineEpilogue[op];
+  }
+
+  /// Create the pipeline prologue.
   void createPipelinePrologue(Operation *op, PatternRewriter &rewriter) {
     auto stages = pipelinePrologue[op];
     for (size_t i = 0, e = stages.size(); i < e; ++i) {
@@ -410,7 +428,7 @@ public:
     }
   }
 
-  /// Get the pipeline epilogue.
+  /// Create the pipeline epilogue.
   void createPipelineEpilogue(Operation *op, PatternRewriter &rewriter) {
     auto stages = pipelineEpilogue[op];
     for (size_t i = 0, e = stages.size(); i < e; ++i) {
@@ -799,7 +817,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
-                             IndexCastOp,
+                             DivUIOp, RemUIOp, IndexCastOp,
                              /// static logic
                              staticlogic::PipelineTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
@@ -832,6 +850,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, DivUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, RemUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -908,6 +928,43 @@ private:
         getComponentState().getProgramState().blockName(block));
     return createGroup<TGroupOp>(rewriter, getComponentState().getComponentOp(),
                                  block->front().getLoc(), groupName);
+  }
+
+  /// buildLibraryBinaryPipeOp will build a TCalyxLibBinaryPipeOp, to
+  /// deal with MulIOp, DivUIOp and RemUIOp.
+  template <typename TOpType, typename TSrcOp>
+  LogicalResult buildLibraryBinaryPipeOp(PatternRewriter &rewriter, TSrcOp op,
+                                         TOpType opPipe, Value out) const {
+    StringRef opName = TSrcOp::getOperationName().split(".").second;
+    Location loc = op.getLoc();
+    Type width = op.getResult().getType();
+    // Pass the result from the Operation to the Calyx primitive.
+    op.getResult().replaceAllUsesWith(out);
+    auto reg = createReg(getComponentState(), rewriter, op.getLoc(),
+                         getComponentState().getUniqueName(opName),
+                         width.getIntOrFloatBitWidth());
+    // Operation pipelines are not combinational, so a GroupOp is required.
+    auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
+    getComponentState().addBlockScheduleable(op->getBlock(), group);
+
+    rewriter.setInsertionPointToEnd(group.getBody());
+    rewriter.create<calyx::AssignOp>(loc, opPipe.left(), op.getLhs());
+    rewriter.create<calyx::AssignOp>(loc, opPipe.right(), op.getRhs());
+    // Write the output to this register.
+    rewriter.create<calyx::AssignOp>(loc, reg.in(), out);
+    // The write enable port is high when the pipeline is done.
+    rewriter.create<calyx::AssignOp>(loc, reg.write_en(), opPipe.done());
+    rewriter.create<calyx::AssignOp>(
+        loc, opPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
+    // The group is done when the register write is complete.
+    rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+
+    // Register the values for the pipeline.
+    getComponentState().registerEvaluatingGroup(out, group);
+    getComponentState().registerEvaluatingGroup(opPipe.left(), group);
+    getComponentState().registerEvaluatingGroup(opPipe.right(), group);
+
+    return success();
   }
 
   /// Creates assignments within the provided group to the address ports of the
@@ -1002,36 +1059,35 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      MulIOp mul) const {
   Location loc = mul.getLoc();
   Type width = mul.getResult().getType(), one = rewriter.getI1Type();
-  auto multPipe =
+  auto mulPipe =
       getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
           rewriter, loc, {width, width, one, one, one, width, one});
-  // Pass the result from the MulIOp to the Calyx primitive.
-  mul.getResult().replaceAllUsesWith(multPipe.out());
-  auto reg = createReg(getComponentState(), rewriter, mul.getLoc(),
-                       getComponentState().getUniqueName("mult_reg"),
-                       width.getIntOrFloatBitWidth());
-  // Multiplication pipelines are not combinational, so a GroupOp is required.
-  auto group = createGroupForOp<calyx::GroupOp>(rewriter, mul);
-  getComponentState().addBlockScheduleable(mul->getBlock(), group);
+  return buildLibraryBinaryPipeOp<calyx::MultPipeLibOp>(rewriter, mul, mulPipe,
+                                                        /*out=*/mulPipe.out());
+}
 
-  rewriter.setInsertionPointToEnd(group.getBody());
-  rewriter.create<calyx::AssignOp>(loc, multPipe.left(), mul.getLhs());
-  rewriter.create<calyx::AssignOp>(loc, multPipe.right(), mul.getRhs());
-  // Write the output to this register.
-  rewriter.create<calyx::AssignOp>(loc, reg.in(), multPipe.out());
-  // The write enable port is high when the pipeline is done.
-  rewriter.create<calyx::AssignOp>(loc, reg.write_en(), multPipe.done());
-  rewriter.create<calyx::AssignOp>(
-      loc, multPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
-  // The group is done when the register write is complete.
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     DivUIOp div) const {
+  Location loc = div.getLoc();
+  Type width = div.getResult().getType(), one = rewriter.getI1Type();
+  auto divPipe =
+      getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
+          rewriter, loc, {width, width, one, one, one, width, width, one});
+  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
+      rewriter, div, divPipe,
+      /*out=*/divPipe.out_quotient());
+}
 
-  // Register the values for the pipeline.
-  getComponentState().registerEvaluatingGroup(multPipe.out(), group);
-  getComponentState().registerEvaluatingGroup(multPipe.left(), group);
-  getComponentState().registerEvaluatingGroup(multPipe.right(), group);
-
-  return success();
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     RemUIOp rem) const {
+  Location loc = rem.getLoc();
+  Type width = rem.getResult().getType(), one = rewriter.getI1Type();
+  auto remPipe =
+      getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
+          rewriter, loc, {width, width, one, one, one, width, width, one});
+  return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
+      rewriter, rem, remPipe,
+      /*out=*/remPipe.out_remainder());
 }
 
 template <typename TAllocOp>
@@ -1356,7 +1412,9 @@ class InlineExecuteRegionOpPattern
     auto *sinkBlock = rewriter.splitBlock(
         execOp->getBlock(),
         execOp.getOperation()->getIterator()->getNextNode()->getIterator());
-    sinkBlock->addArguments(yieldTypes);
+    sinkBlock->addArguments(
+        yieldTypes,
+        SmallVector<Location, 4>(yieldTypes.size(), rewriter.getUnknownLoc()));
     for (auto res : enumerate(execOp.getResults()))
       res.value().replaceAllUsesWith(sinkBlock->getArgument(res.index()));
 
@@ -1385,27 +1443,50 @@ class InlineExecuteRegionOpPattern
 
 static void
 appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
-                             Value memref,
+                             Value memref, unsigned memoryID,
                              SmallVectorImpl<calyx::PortInfo> &inPorts,
                              SmallVectorImpl<calyx::PortInfo> &outPorts) {
   MemRefType memrefType = memref.getType().cast<MemRefType>();
 
+  /// Ports constituting a memory interface are added a set of attributes under
+  /// a "mem : {...}" dictionary. These attributes allows for deducing which
+  /// top-level I/O signals constitutes a unique memory interface.
+  auto getMemoryInterfaceAttr = [&](StringRef tag,
+                                    Optional<unsigned> addrIdx = {}) {
+    auto attrs = SmallVector<NamedAttribute>{
+        /// "id" denotes a unique memory interface.
+        rewriter.getNamedAttr("id", rewriter.getI32IntegerAttr(memoryID)),
+        /// "tag" denotes the function of this signal.
+        rewriter.getNamedAttr("tag", rewriter.getStringAttr(tag))};
+    if (addrIdx.hasValue())
+      /// "addr_idx" denotes the address index of this signal, for
+      /// multi-dimensional memory interfaces.
+      attrs.push_back(rewriter.getNamedAttr(
+          "addr_idx", rewriter.getI32IntegerAttr(addrIdx.getValue())));
+
+    return rewriter.getNamedAttr("mem", rewriter.getDictionaryAttr(attrs));
+  };
+
   /// Read data
-  inPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_read_data"),
-                      memrefType.getElementType(), calyx::Direction::Input,
-                      DictionaryAttr::get(rewriter.getContext(), {})});
+  inPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_read_data"),
+      memrefType.getElementType(), calyx::Direction::Input,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("read_data")})});
 
   /// Done
-  inPorts.push_back(calyx::PortInfo{
-      rewriter.getStringAttr(memName + "_done"), rewriter.getI1Type(),
-      calyx::Direction::Input, DictionaryAttr::get(rewriter.getContext(), {})});
+  inPorts.push_back(
+      calyx::PortInfo{rewriter.getStringAttr(memName + "_done"),
+                      rewriter.getI1Type(), calyx::Direction::Input,
+                      DictionaryAttr::get(rewriter.getContext(),
+                                          {getMemoryInterfaceAttr("done")})});
 
   /// Write data
-  outPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_write_data"),
-                      memrefType.getElementType(), calyx::Direction::Output,
-                      DictionaryAttr::get(rewriter.getContext(), {})});
+  outPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_write_data"),
+      memrefType.getElementType(), calyx::Direction::Output,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("write_data")})});
 
   /// Memory address outputs
   for (auto dim : enumerate(memrefType.getShape())) {
@@ -1413,14 +1494,16 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
         rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
         rewriter.getIntegerType(llvm::Log2_64_Ceil(dim.value())),
         calyx::Direction::Output,
-        DictionaryAttr::get(rewriter.getContext(), {})});
+        DictionaryAttr::get(rewriter.getContext(),
+                            {getMemoryInterfaceAttr("addr", dim.index())})});
   }
 
   /// Write enable
-  outPorts.push_back(
-      calyx::PortInfo{rewriter.getStringAttr(memName + "_write_en"),
-                      rewriter.getI1Type(), calyx::Direction::Output,
-                      DictionaryAttr::get(rewriter.getContext(), {})});
+  outPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_write_en"), rewriter.getI1Type(),
+      calyx::Direction::Output,
+      DictionaryAttr::get(rewriter.getContext(),
+                          {getMemoryInterfaceAttr("write_en")})});
 }
 
 /// Creates a new Calyx component for each FuncOp in the program.
@@ -1450,6 +1533,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// which port index each function argument will eventually map to.
     SmallVector<calyx::PortInfo> inPorts, outPorts;
     FunctionType funcType = funcOp.getType();
+    unsigned extMemCounter = 0;
     for (auto &arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
         /// External memories
@@ -1457,8 +1541,8 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
             "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
         extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
                                                  outPorts.size()};
-        appendPortsForExternalMemref(rewriter, memName, arg.value(), inPorts,
-                                     outPorts);
+        appendPortsForExternalMemref(rewriter, memName, arg.value(),
+                                     extMemCounter++, inPorts, outPorts);
       } else {
         /// Single-port arguments
         auto inName = "in" + std::to_string(arg.index());
@@ -2122,6 +2206,15 @@ private:
         StringAttr::get(getContext(), condGroup.sym_name()));
     auto whileCtrlOp = rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
 
+    /// If a bound was specified, add it.
+    if (auto bound = whileOp.getBound()) {
+      // Subtract the number of iterations unrolled into the prologue.
+      auto prologue =
+          getComponentState().getPipelineProlouge(whileOp.getOperation());
+      auto unrolledBound = *bound - prologue.size();
+      whileCtrlOp->setAttr("bound", rewriter.getI64IntegerAttr(unrolledBound));
+    }
+
     return whileCtrlOp;
   }
 };
@@ -2189,8 +2282,8 @@ private:
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
-              src.getDefiningOp()))
+              arith::ConstantOp, calyx::MultPipeLibOp, calyx::DivPipeLibOp,
+              scf::WhileOp>(src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
@@ -2315,19 +2408,19 @@ struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
     if (groupDoneOps.size() <= 1)
       return failure();
 
-    /// Create an and-tree of all calyx::GroupDoneOp's.
+    /// 'and' all of the calyx::GroupDoneOp's.
     rewriter.setInsertionPointToEnd(groupDoneOps[0]->getBlock());
-    Value acc = groupDoneOps[0].src();
-    for (auto groupDoneOp : llvm::makeArrayRef(groupDoneOps).drop_front(1)) {
-      auto newAndOp = rewriter.create<comb::AndOp>(groupDoneOp.getLoc(), acc,
-                                                   groupDoneOp.src());
-      acc = newAndOp.getResult();
-    }
+    SmallVector<Value> doneOpSrcs;
+    llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
+                    [](calyx::GroupDoneOp op) { return op.src(); });
+    Value allDone =
+        rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(), doneOpSrcs);
 
     /// Create a group done op with the complex expression as a guard.
     rewriter.create<calyx::GroupDoneOp>(
         groupOp.getLoc(),
-        rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)), acc);
+        rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)),
+        allDone);
     for (auto groupDoneOp : groupDoneOps)
       rewriter.eraseOp(groupDoneOp);
 
@@ -2407,7 +2500,8 @@ public:
     target.addIllegalDialect<ArithmeticDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
-                      MulIOp, ReturnOp, arith::ConstantOp, IndexCastOp>();
+                      MulIOp, DivUIOp, RemUIOp, ReturnOp, arith::ConstantOp,
+                      IndexCastOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
@@ -2447,8 +2541,7 @@ public:
   }
 
   LogicalResult runPartialPattern(RewritePatternSet &pattern, bool runOnce) {
-    auto &nativePatternSet = pattern.getNativePatterns();
-    assert(nativePatternSet.size() == 1 &&
+    assert(pattern.getNativePatterns().size() == 1 &&
            "Should only apply 1 partial lowering pattern at once");
 
     // During component creation, the function body is inlined into the

@@ -334,7 +334,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i3, %ext_mem0_write_en: i1, %done: i1 {done}) {
+// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32 {mem = {id = 0 : i32, tag = "read_data"}}, %ext_mem0_done: i1 {mem = {id = 0 : i32, tag = "done"}}, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32 {mem = {id = 0 : i32, tag = "write_data"}}, %ext_mem0_addr0: i3 {mem = {addr_idx = 0 : i32, id = 0 : i32, tag = "addr"}}, %ext_mem0_write_en: i1 {mem = {id = 0 : i32, tag = "write_en"}}, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
 // CHECK-NEXT:       calyx.wires  {
@@ -367,7 +367,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i3, %ext_mem0_write_en: i1, %out0: i32, %done: i1 {done}) {
+// CHECK:        calyx.component @main(%in0: i32, %ext_mem0_read_data: i32 {mem = {id = 0 : i32, tag = "read_data"}}, %ext_mem0_done: i1 {mem = {id = 0 : i32, tag = "done"}}, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32 {mem = {id = 0 : i32, tag = "write_data"}}, %ext_mem0_addr0: i3 {mem = {addr_idx = 0 : i32, id = 0 : i32, tag = "addr"}}, %ext_mem0_write_en: i1 {mem = {id = 0 : i32, tag = "write_en"}}, %out0: i32, %done: i1 {done}) {
 // CHECK:            %true = hw.constant true
 // CHECK:            %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
 // CHECK:            %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
@@ -402,7 +402,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK:        calyx.component @main(%in0: i32, %in1: i32, %ext_mem0_read_data: i32, %ext_mem0_done: i1, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32, %ext_mem0_addr0: i3, %ext_mem0_write_en: i1, %out0: i32, %out1: i32, %done: i1 {done}) {
+// CHECK:        calyx.component @main(%in0: i32, %in1: i32, %ext_mem0_read_data: i32 {mem = {id = 0 : i32, tag = "read_data"}}, %ext_mem0_done: i1 {mem = {id = 0 : i32, tag = "done"}}, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%ext_mem0_write_data: i32 {mem = {id = 0 : i32, tag = "write_data"}}, %ext_mem0_addr0: i3 {mem = {addr_idx = 0 : i32, id = 0 : i32, tag = "addr"}}, %ext_mem0_write_en: i1 {mem = {id = 0 : i32, tag = "write_en"}}, %out0: i32, %out1: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %std_slice_1.in, %std_slice_1.out = calyx.std_slice @std_slice_1 : i32, i3
 // CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3

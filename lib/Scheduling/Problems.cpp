@@ -55,6 +55,28 @@ Problem::DependenceRange Problem::getDependences(Operation *op) {
                          DependenceIterator(*this, op, /*end=*/true));
 }
 
+Problem::PropertyStringVector Problem::getProperties(Operation *op) {
+  PropertyStringVector psv;
+  if (auto linkedOpr = getLinkedOperatorType(op))
+    psv.emplace_back("linkedOpr", (*linkedOpr).str());
+  if (auto startTime = getStartTime(op))
+    psv.emplace_back("startTime", std::to_string(*startTime));
+  return psv;
+}
+
+Problem::PropertyStringVector Problem::getProperties(Dependence dep) {
+  return {};
+}
+
+Problem::PropertyStringVector Problem::getProperties(OperatorType opr) {
+  PropertyStringVector psv;
+  if (auto latency = getLatency(opr))
+    psv.emplace_back("latency", std::to_string(*latency));
+  return psv;
+}
+
+Problem::PropertyStringVector Problem::getProperties() { return {}; }
+
 LogicalResult Problem::checkLinkedOperatorType(Operation *op) {
   if (!getLinkedOperatorType(op))
     return op->emitError("Operation is not linked to an operator type");
@@ -124,6 +146,20 @@ LogicalResult Problem::verify() {
 // CyclicProblem
 //===----------------------------------------------------------------------===//
 
+Problem::PropertyStringVector CyclicProblem::getProperties(Dependence dep) {
+  auto psv = Problem::getProperties(dep);
+  if (auto distance = getDistance(dep))
+    psv.emplace_back("distance", std::to_string(*distance));
+  return psv;
+}
+
+Problem::PropertyStringVector CyclicProblem::getProperties() {
+  auto psv = Problem::getProperties();
+  if (auto ii = getInitiationInterval())
+    psv.emplace_back("II", std::to_string(*ii));
+  return psv;
+}
+
 LogicalResult CyclicProblem::verifyPrecedence(Dependence dep) {
   Operation *i = dep.getSource();
   Operation *j = dep.getDestination();
@@ -160,6 +196,22 @@ LogicalResult CyclicProblem::verify() {
 //===----------------------------------------------------------------------===//
 // ChainingProblem
 //===----------------------------------------------------------------------===//
+
+Problem::PropertyStringVector ChainingProblem::getProperties(Operation *op) {
+  auto psv = Problem::getProperties(op);
+  if (auto stic = getStartTimeInCycle(op))
+    psv.emplace_back("start time in cycle", std::to_string(*stic));
+  return psv;
+}
+
+Problem::PropertyStringVector ChainingProblem::getProperties(OperatorType opr) {
+  auto psv = Problem::getProperties(opr);
+  if (auto incDelay = getIncomingDelay(opr))
+    psv.emplace_back("incoming delay", std::to_string(*incDelay));
+  if (auto outDelay = getOutgoingDelay(opr))
+    psv.emplace_back("outgoing delay", std::to_string(*outDelay));
+  return psv;
+}
 
 LogicalResult ChainingProblem::checkDelays(OperatorType opr) {
   auto incomingDelay = getIncomingDelay(opr);
@@ -257,6 +309,14 @@ LogicalResult ChainingProblem::verify() {
 //===----------------------------------------------------------------------===//
 // SharedOperatorsProblem
 //===----------------------------------------------------------------------===//
+
+Problem::PropertyStringVector
+SharedOperatorsProblem::getProperties(OperatorType opr) {
+  auto psv = Problem::getProperties(opr);
+  if (auto limit = getLimit(opr))
+    psv.emplace_back("limit", std::to_string(*limit));
+  return psv;
+}
 
 LogicalResult SharedOperatorsProblem::checkLatency(OperatorType opr) {
   if (failed(Problem::checkLatency(opr)))

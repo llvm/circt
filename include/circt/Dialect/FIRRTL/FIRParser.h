@@ -40,9 +40,9 @@ struct FIRParserOptions {
   unsigned numAnnotationFiles;
 };
 
-mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,
-                                    mlir::MLIRContext *context,
-                                    FIRParserOptions options = {});
+mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
+                                                mlir::MLIRContext *context,
+                                                FIRParserOptions options = {});
 
 // Decode a source locator string `spelling`, returning a pair indicating that
 // the the `spelling` was correct and an optional location attribute.  The

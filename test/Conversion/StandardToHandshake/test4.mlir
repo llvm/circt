@@ -43,7 +43,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
   %5 = arith.divui %arg2, %arg3 : i32
   %6 = arith.remsi %arg2, %arg3 : i32
   %7 = arith.remui %arg2, %arg3 : i32
-  %8 = select %2, %arg2, %arg3 : i32
+  %8 = arith.select %2, %arg2, %arg3 : i32
   %9 = arith.divf %arg0, %arg1 : f32
   %10 = arith.remf %arg0, %arg1 : f32
   %11 = arith.andi %arg2, %arg3 : i32

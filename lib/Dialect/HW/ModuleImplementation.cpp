@@ -68,15 +68,16 @@ ParseResult module_like_impl::parseFunctionResultList(
 ParseResult module_like_impl::parseModuleFunctionSignature(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    SmallVectorImpl<Location> &argLocs, bool &isVariadic,
+    SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
 
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
   bool allowArgAttrs = true;
   bool allowVariadic = false;
   if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
-                                argTypes, argAttrs, isVariadic))
+                                argTypes, argAttrs, argLocs, isVariadic))
     return failure();
 
   if (succeeded(parser.parseOptionalArrow()))
@@ -90,7 +91,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
                                             bool isVariadic,
                                             ArrayRef<Type> resultTypes,
                                             bool &needArgNamesAttr) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();

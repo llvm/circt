@@ -14,11 +14,11 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/AnalysisManager.h"
-#include "mlir/Transforms/LoopUtils.h"
 #include <limits>
 
 using namespace mlir;

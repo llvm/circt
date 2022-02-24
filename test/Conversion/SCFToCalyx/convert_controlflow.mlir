@@ -49,11 +49,11 @@
 module {
   func @main(%arg0 : i32, %arg1 : i32) -> i32 {
     %0 = arith.cmpi slt, %arg0, %arg1 : i32
-    cond_br %0, ^bb1, ^bb2
+    cf.cond_br %0, ^bb1, ^bb2
   ^bb1:
-    br ^bb3(%arg0 : i32)
+    cf.br ^bb3(%arg0 : i32)
   ^bb2:
-    br ^bb3(%arg1 : i32)
+    cf.br ^bb3(%arg1 : i32)
   ^bb3(%1 : i32):
     return %1 : i32
   }
@@ -179,7 +179,7 @@ module {
     ^bb0(%arg3: i32, %arg4: i32, %arg5: i32):  // no predecessors
       %1:2 = scf.execute_region -> (i32, i32) {
         %4 = arith.cmpi slt, %arg4, %arg5 : i32
-        cond_br %4, ^bb0, ^bb1
+        cf.cond_br %4, ^bb0, ^bb1
       ^bb0:
         %3 = arith.addi %arg4, %arg5 : i32
         scf.yield %3, %3 : i32, i32
@@ -314,7 +314,7 @@ module {
     ^bb0(%arg3: i32, %arg4: i32, %arg5: i32):  // no predecessors
       %1:2 = scf.execute_region -> (i32, i32) {
         %4 = arith.cmpi slt, %arg4, %arg5 : i32
-        cond_br %4, ^bb0, ^bb1
+        cf.cond_br %4, ^bb0, ^bb1
       ^bb0:
         %3 = arith.addi %arg4, %arg5 : i32
         scf.yield %3, %3 : i32, i32
@@ -385,7 +385,7 @@ module {
     %0 = arith.addi %a0, %a1 : i32
     %1 = arith.addi %0, %a1 : i32
     %b = arith.cmpi uge, %1, %a2 : i32
-    cond_br %b, ^bb1, ^bb2
+    cf.cond_br %b, ^bb1, ^bb2
   ^bb1:
     return %a1 : i32
   ^bb2:

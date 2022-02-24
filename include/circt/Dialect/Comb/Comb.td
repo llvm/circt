@@ -31,7 +31,7 @@ def CombDialect : Dialect {
 }
 
 // Base class for the operation in this dialect.
-class CombOp<string mnemonic, list<OpTrait> traits = []> :
+class CombOp<string mnemonic, list<Trait> traits = []> :
     Op<CombDialect, mnemonic, traits>;
 
 include "circt/Dialect/HW/HWTypes.td"

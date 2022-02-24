@@ -14,12 +14,13 @@
 #define MSFT_TD
 
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
-include "mlir/Pass/PassBase.td"
+include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Pass/PassBase.td"
 
 def MSFTDialect : Dialect {
   let name = "msft";
@@ -40,6 +41,7 @@ def MSFTDialect : Dialect {
 }
 
 include "circt/Dialect/MSFT/MSFTAttributes.td"
+include "circt/Dialect/MSFT/MSFTOpInterfaces.td"
 include "circt/Dialect/MSFT/MSFTOps.td"
 include "circt/Dialect/MSFT/MSFTPasses.td"
 

@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Dominance.h"
 #include <set>
@@ -65,9 +66,9 @@ static void addBlockOperandToTerminator(Operation *terminator,
                                         Block *successsor, Value toAppend) {
   if (auto wait = dyn_cast<llhd::WaitOp>(terminator)) {
     wait.destOpsMutable().append(toAppend);
-  } else if (auto br = dyn_cast<mlir::BranchOp>(terminator)) {
+  } else if (auto br = dyn_cast<mlir::cf::BranchOp>(terminator)) {
     br.getDestOperandsMutable().append(toAppend);
-  } else if (auto condBr = dyn_cast<mlir::CondBranchOp>(terminator)) {
+  } else if (auto condBr = dyn_cast<mlir::cf::CondBranchOp>(terminator)) {
     if (condBr.getFalseDest() == successsor) {
       condBr.getFalseDestOperandsMutable().append(toAppend);
     } else {
@@ -133,7 +134,8 @@ void MemoryToBlockArgumentPass::runOnOperation() {
     for (Block *jp : joinPoints) {
       // Add a block argument for the variable at each join point
       BlockArgument phi = jp->addArgument(
-          var.getType().cast<llhd::PtrType>().getUnderlyingType());
+          var.getType().cast<llhd::PtrType>().getUnderlyingType(),
+          var.getLoc());
 
       // Add a load at the end of every predecessor and pass the loaded value as
       // the block argument

@@ -83,13 +83,14 @@ static void constructProblem(Problem &prob, FuncOp func) {
   // of integer attributes
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
     auto &ops = prob.getOperations();
-    unsigned nOps = ops.size();
     for (auto &elemArr : parseArrayOfArrays(attr)) {
-      assert(elemArr.size() >= 2 && elemArr[0] < nOps && elemArr[1] < nOps);
+      assert(elemArr.size() >= 2 && elemArr[0] < ops.size() &&
+             elemArr[1] < ops.size());
       Operation *from = ops[elemArr[0]];
       Operation *to = ops[elemArr[1]];
       auto res = prob.insertDependence(std::make_pair(from, to));
       assert(succeeded(res));
+      (void)res;
     }
   }
 }
@@ -580,6 +581,28 @@ void TestLPSchedulerPass::runOnOperation() {
       return signalPassFailure();
     }
 
+    emitSchedule(prob, "lpStartTime", builder);
+    return;
+  }
+
+  if (problemToTest == "CyclicProblem") {
+    auto prob = CyclicProblem::get(func);
+    constructProblem(prob, func);
+    constructCyclicProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleLP(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("lpInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
     emitSchedule(prob, "lpStartTime", builder);
     return;
   }

@@ -988,10 +988,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when cond:
       printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}", value)
       stop(clock, enable, 1)
-    ; CHECK: [[TMP1:%.+]] = firrtl.xorr %cond
+    ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
+    ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
     ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
-    ; CHECK-NEXT: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
-    ; CHECK-NEXT: [[TMP:%.+]] = firrtl.not [[TMP3]]
+    ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: format = "sva"
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
@@ -1012,10 +1012,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when cond:
       printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}", value)
       stop(clock, enable, 1)
-    ; CHECK: [[TMP1:%.+]] = firrtl.xorr %cond
+    ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
+    ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
     ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
-    ; CHECK-NEXT: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
-    ; CHECK-NEXT: [[TMP:%.+]] = firrtl.not [[TMP3]]
+    ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_voodoo"

@@ -21,7 +21,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/SV/SVDialect.td"
 
 // Base class for the operation in this dialect.
-class SVOp<string mnemonic, list<OpTrait> traits = []> :
+class SVOp<string mnemonic, list<Trait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
 
 def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {

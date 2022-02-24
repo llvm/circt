@@ -286,7 +286,7 @@ void EmitOMIRPass::runOnOperation() {
             dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
         removeTempNLAs.push_back(tracker.nla);
       }
-      if (sramIDs.erase(tracker.id))
+      if (sramIDs.erase(tracker.id) && !tracker.nla)
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
@@ -781,15 +781,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       target.append(addSymbol(module));
 
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
-        auto nameAttr = innerRef.getName();
         // Find an instance with the given name in this module. Ensure it has a
         // symbol that we can refer to.
         auto instOp = instancesByName.lookup(innerRef);
         if (!instOp)
           continue;
-        LLVM_DEBUG(llvm::dbgs()
-                   << "Marking NLA-participating instance " << nameAttr
-                   << " in module " << modName << " as dont-touch\n");
+        LLVM_DEBUG(llvm::dbgs() << "Marking NLA-participating instance "
+                                << innerRef.getName() << " in module "
+                                << modName << " as dont-touch\n");
         instName = getInnerRefTo(instOp);
       }
     }

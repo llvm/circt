@@ -162,35 +162,35 @@ func @more_imperfectly_nested_loops() {
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
   %c1 = arith.constant 1 : index
-  br ^bb1(%c0 : index)
+  cf.br ^bb1(%c0 : index)
 ^bb1(%0: index):      // 2 preds: ^bb0, ^bb8
   %1 = arith.cmpi slt, %0, %c42 : index
-  cond_br %1, ^bb2, ^bb9
+  cf.cond_br %1, ^bb2, ^bb9
 ^bb2: // pred: ^bb1
   %c7 = arith.constant 7 : index
   %c56 = arith.constant 56 : index
   %c2 = arith.constant 2 : index
-  br ^bb3(%c7 : index)
+  cf.br ^bb3(%c7 : index)
 ^bb3(%2: index):      // 2 preds: ^bb2, ^bb4
   %3 = arith.cmpi slt, %2, %c56 : index
-  cond_br %3, ^bb4, ^bb5
+  cf.cond_br %3, ^bb4, ^bb5
 ^bb4: // pred: ^bb3
   %4 = arith.addi %2, %c2 : index
-  br ^bb3(%4 : index)
+  cf.br ^bb3(%4 : index)
 ^bb5: // pred: ^bb3
   %c18 = arith.constant 18 : index
   %c37 = arith.constant 37 : index
   %c3 = arith.constant 3 : index
-  br ^bb6(%c18 : index)
+  cf.br ^bb6(%c18 : index)
 ^bb6(%5: index):      // 2 preds: ^bb5, ^bb7
   %6 = arith.cmpi slt, %5, %c37 : index
-  cond_br %6, ^bb7, ^bb8
+  cf.cond_br %6, ^bb7, ^bb8
 ^bb7: // pred: ^bb6
   %7 = arith.addi %5, %c3 : index
-  br ^bb6(%7 : index)
+  cf.br ^bb6(%7 : index)
 ^bb8: // pred: ^bb6
   %8 = arith.addi %0, %c1 : index
-  br ^bb1(%8 : index)
+  cf.br ^bb1(%8 : index)
 ^bb9: // pred: ^bb1
   return
 }

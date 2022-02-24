@@ -80,14 +80,70 @@ module {
 module {
   func @main(%a0 : i32, %a1 : i32) -> i32 {
 // CHECK:       calyx.group @bb0_0  {
-// CHECK-DAG:    calyx.assign %mult_reg_0_reg.in = %std_mult_pipe_0.out : i32
-// CHECK-DAG:    calyx.assign %mult_reg_0_reg.write_en = %std_mult_pipe_0.done : i1
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.right = %in1 : i32
+// CHECK-DAG:    calyx.assign %muli_0_reg.in = %std_mult_pipe_0.out : i32
+// CHECK-DAG:    calyx.assign %muli_0_reg.write_en = %std_mult_pipe_0.done : i1
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.go = %true : i1
-// CHECK-DAG:    calyx.group_done %mult_reg_0_reg.done : i1
+// CHECK-DAG:    calyx.group_done %muli_0_reg.done : i1
 // CHECK-NEXT:  }
     %0 = arith.muli %a0, %a1 : i32
     return %0 : i32
+  }
+}
+
+// -----
+
+module {
+  func @main(%a0 : i32, %a1 : i32) -> i32 {
+// CHECK:       calyx.group @bb0_0  {
+// CHECK-DAG:    calyx.assign %std_div_pipe_0.left = %in0 : i32
+// CHECK-DAG:    calyx.assign %std_div_pipe_0.right = %in1 : i32
+// CHECK-DAG:    calyx.assign %divui_0_reg.in = %std_div_pipe_0.out_quotient : i32
+// CHECK-DAG:    calyx.assign %divui_0_reg.write_en = %std_div_pipe_0.done : i1
+// CHECK-DAG:    calyx.assign %std_div_pipe_0.go = %true : i1
+// CHECK-DAG:    calyx.group_done %divui_0_reg.done : i1
+// CHECK-NEXT:  }
+    %0 = arith.divui %a0, %a1 : i32
+    return %0 : i32
+  }
+}
+
+// -----
+
+module {
+  func @main(%a0 : i32, %a1 : i32) -> i32 {
+// CHECK:       calyx.group @bb0_0  {
+// CHECK-DAG:    calyx.assign %std_div_pipe_0.left = %in0 : i32
+// CHECK-DAG:    calyx.assign %std_div_pipe_0.right = %in1 : i32
+// CHECK-DAG:    calyx.assign %remui_0_reg.in = %std_div_pipe_0.out_remainder : i32
+// CHECK-DAG:    calyx.assign %remui_0_reg.write_en = %std_div_pipe_0.done : i1
+// CHECK-DAG:    calyx.assign %std_div_pipe_0.go = %true : i1
+// CHECK-DAG:    calyx.group_done %remui_0_reg.done : i1
+// CHECK-NEXT:  }
+    %0 = arith.remui %a0, %a1 : i32
+    return %0 : i32
+  }
+}
+
+// -----
+
+// CHECK:       calyx.group @ret_assign_0 {
+// CHECK-DAG:      calyx.assign %ret_arg0_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg1_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg1_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg2_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg2_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg3_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg3_reg.write_en = %true : i1
+// CHECK-DAG:      calyx.assign %ret_arg4_reg.in = %in0 : i32
+// CHECK-DAG:      calyx.assign %ret_arg4_reg.write_en = %true : i1
+// CHECK-DAG:      %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done, %ret_arg2_reg.done, %ret_arg3_reg.done, %ret_arg4_reg.done : i1
+// CHECK-DAG:      calyx.group_done %0 ? %true : i1
+// CHECK-NEXT: }
+module {
+  func @main(%a0 : i32) -> (i32, i32, i32, i32, i32) {
+    return %a0, %a0, %a0, %a0, %a0 : i32, i32, i32, i32, i32
   }
 }

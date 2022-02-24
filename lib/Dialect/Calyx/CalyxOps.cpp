@@ -399,9 +399,10 @@ SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
       *this, [](const PortInfo &port) { return port.direction == Input; });
 }
 
-static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
+void ComponentOp::print(OpAsmPrinter &p) {
   auto componentName =
-      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+      (*this)
+          ->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
           .getValue();
   p << " ";
   p.printSymbolName(componentName);
@@ -418,18 +419,18 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
     });
     p << ")";
   };
-  printPortDefList(op.getInputPortInfo());
+  printPortDefList(getInputPortInfo());
   p << " -> ";
-  printPortDefList(op.getOutputPortInfo());
+  printPortDefList(getOutputPortInfo());
 
   p << " ";
-  p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
+  p.printRegion(body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
 
   SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
                                         "portDirections", "sym_name", "type"};
-  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 }
 
 /// Parses the ports of a Calyx component signature, and adds the corresponding
@@ -507,12 +508,12 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseComponentOp(OpAsmParser &parser,
-                                    OperationState &result) {
-  using namespace mlir::function_like_impl;
+ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
+  using namespace mlir::function_interface_impl;
 
   StringAttr componentName;
-  if (parser.parseSymbolName(componentName, SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(componentName,
+                             ::mlir::SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
@@ -609,7 +610,7 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
@@ -650,7 +651,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   region->push_back(body);
 
   // Add all ports to the body.
-  body->addArguments(portTypes);
+  body->addArguments(portTypes, SmallVector<Location, 4>(
+                                    portTypes.size(), builder.getUnknownLoc()));
 
   // Insert the WiresOp and ControlOp.
   IRRewriter::InsertionGuard guard(builder);
@@ -1086,7 +1088,7 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
   return success();
 }
 
-static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
+ParseResult AssignOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType destination;
   if (parser.parseOperand(destination) || parser.parseEqual())
     return failure();
@@ -1129,13 +1131,13 @@ static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printAssignOp(OpAsmPrinter &p, AssignOp op) {
-  p << " " << op.dest() << " = ";
+void AssignOp::print(OpAsmPrinter &p) {
+  p << " " << dest() << " = ";
 
-  Value guard = op.guard(), source = op.src();
+  Value bguard = guard(), source = src();
   // The guard is optional.
-  if (guard)
-    p << guard << " ? ";
+  if (bguard)
+    p << bguard << " ? ";
 
   // We only need to print a single type; the destination and source are
   // guaranteed to be the same type.
@@ -1272,11 +1274,9 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), resultName);
 }
 
-static void printGroupGoOp(OpAsmPrinter &p, GroupGoOp op) {
-  printGroupPort(p, op);
-}
+void GroupGoOp::print(OpAsmPrinter &p) { printGroupPort(p, *this); }
 
-static ParseResult parseGroupGoOp(OpAsmParser &parser, OperationState &result) {
+ParseResult GroupGoOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseGroupPort(parser, result))
     return failure();
 
@@ -1306,12 +1306,9 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
   return verifyNotComplexSource(doneOp);
 }
 
-static void printGroupDoneOp(OpAsmPrinter &p, GroupDoneOp op) {
-  printGroupPort(p, op);
-}
+void GroupDoneOp::print(OpAsmPrinter &p) { printGroupPort(p, *this); }
 
-static ParseResult parseGroupDoneOp(OpAsmParser &parser,
-                                    OperationState &result) {
+ParseResult GroupDoneOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseGroupPort(parser, result);
 }
 

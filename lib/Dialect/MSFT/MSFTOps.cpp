@@ -19,7 +19,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -58,6 +58,27 @@ static void printPhysLoc(OpAsmPrinter &p, Operation *, PhysLocationAttr loc) {
     << " x: " << loc.getX() << " y: " << loc.getY() << " n: " << loc.getNum();
 }
 
+//===----------------------------------------------------------------------===//
+// Misc MSFT ops
+//===----------------------------------------------------------------------===//
+
+void PDPhysLocationOp::setGlobalRef(hw::GlobalRefOp ref) {
+  refAttr(FlatSymbolRefAttr::get(ref));
+}
+FlatSymbolRefAttr PDPhysLocationOp::getGlobalRefSym() { return refAttr(); }
+
+void PDPhysRegionOp::setGlobalRef(hw::GlobalRefOp ref) {
+  refAttr(FlatSymbolRefAttr::get(ref));
+}
+FlatSymbolRefAttr PDPhysRegionOp::getGlobalRefSym() { return refAttr(); }
+
+bool DynamicInstanceOp::isRootedIn(Operation *hwMod) {
+  if (appid().empty())
+    return false;
+
+  return SymbolTable::getSymbolName(hwMod) ==
+         appid()[0].cast<hw::InnerRefAttr>().getModule();
+}
 //===----------------------------------------------------------------------===//
 // Module/Instance stuff, mostly copied from HW dialect.
 //===----------------------------------------------------------------------===//
@@ -165,7 +186,8 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   for (auto ttPair : inputs) {
     modifiedArgNames.push_back(ttPair.first);
     modifiedArgs.push_back(ttPair.second);
-    newBlockArgs.push_back(body->addArgument(ttPair.second));
+    newBlockArgs.push_back(
+        body->addArgument(ttPair.second, Builder(ctxt).getUnknownLoc()));
   }
   argNamesAttr(ArrayAttr::get(ctxt, modifiedArgNames));
 
@@ -254,7 +276,7 @@ SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
 // TODO: Unify code once a `ModuleLike` op interface exists.
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const hw::ModulePortInfo &ports) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
@@ -297,9 +319,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
   result.addAttribute("parameters", builder.getDictionaryAttr({}));
-  result.addAttribute(mlir::function_like_impl::getArgDictAttrName(),
+  result.addAttribute(mlir::function_interface_impl::getArgDictAttrName(),
                       builder.getArrayAttr(argAttrs));
-  result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
+  result.addAttribute(mlir::function_interface_impl::getResultDictAttrName(),
                       builder.getArrayAttr(resultAttrs));
   result.addRegion();
 }
@@ -316,7 +338,7 @@ void MSFTModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports.inputs)
-    body->addArgument(elt.type);
+    body->addArgument(elt.type, builder.getUnknownLoc());
 
   MSFTModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -354,9 +376,8 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
-static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
-                                     OperationState &result) {
-  using namespace mlir::function_like_impl;
+ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  using namespace mlir::function_interface_impl;
 
   auto loc = parser.getCurrentLocation();
 
@@ -364,6 +385,7 @@ static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
+  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   auto &builder = parser.getBuilder();
 
@@ -383,8 +405,8 @@ static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
   if (hw::module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames))
+          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
+          resultTypes, resultAttrs, resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -435,25 +457,25 @@ static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
   return success();
 }
 
-static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
-  using namespace mlir::function_like_impl;
+void MSFTModuleOp::print(OpAsmPrinter &p) {
+  using namespace mlir::function_interface_impl;
 
-  FunctionType fnType = mod.getType();
+  FunctionType fnType = getType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
   // Print the operation and the function name.
   p << ' ';
-  p.printSymbolName(SymbolTable::getSymbolName(mod).getValue());
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
 
   // Print the parameterization.
   p << ' ';
-  p.printAttribute(mod.parametersAttr());
+  p.printAttribute(parametersAttr());
 
   p << ' ';
   bool needArgNamesAttr = false;
   hw::module_like_impl::printModuleSignature(
-      p, mod, argTypes, /*isVariadic=*/false, resultTypes, needArgNamesAttr);
+      p, *this, argTypes, /*isVariadic=*/false, resultTypes, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
@@ -461,14 +483,14 @@ static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
 
-  printFunctionAttributes(p, mod, argTypes.size(), resultTypes.size(),
+  printFunctionAttributes(p, *this, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 
   // Print the body if this is not an external function.
-  Region &body = mod.getBody();
-  if (!body.empty()) {
+  Region &mbody = body();
+  if (!mbody.empty()) {
     p << ' ';
-    p.printRegion(body, /*printEntryBlockArgs=*/false,
+    p.printRegion(mbody, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
   }
 }
@@ -603,9 +625,9 @@ static LogicalResult checkParameterInContext(Attribute value, Operation *module,
   return failure();
 }
 
-static ParseResult parseMSFTModuleExternOp(OpAsmParser &parser,
-                                           OperationState &result) {
-  using namespace mlir::function_like_impl;
+ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  using namespace mlir::function_interface_impl;
 
   auto loc = parser.getCurrentLocation();
 
@@ -613,6 +635,7 @@ static ParseResult parseMSFTModuleExternOp(OpAsmParser &parser,
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
+  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -628,8 +651,8 @@ static ParseResult parseMSFTModuleExternOp(OpAsmParser &parser,
   SmallVector<Attribute> resultNames;
   if (parseParameterList(parser, parameters) ||
       hw::module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames) ||
+          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
+          resultTypes, resultAttrs, resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
@@ -680,24 +703,24 @@ static ParseResult parseMSFTModuleExternOp(OpAsmParser &parser,
   return success();
 }
 
-static void printMSFTModuleExternOp(OpAsmPrinter &p, MSFTModuleExternOp op) {
-  using namespace mlir::function_like_impl;
+void MSFTModuleExternOp::print(OpAsmPrinter &p) {
+  using namespace mlir::function_interface_impl;
 
-  auto typeAttr = op->getAttrOfType<TypeAttr>(getTypeAttrName());
+  auto typeAttr = (*this)->getAttrOfType<TypeAttr>(getTypeAttrName());
   FunctionType fnType = typeAttr.getValue().cast<FunctionType>();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
   // Print the operation and the function name.
   p << ' ';
-  p.printSymbolName(SymbolTable::getSymbolName(op).getValue());
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
 
   // Print the parameter list if present.
-  printParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
+  printParameterList(p, *this, (*this)->getAttrOfType<ArrayAttr>("parameters"));
 
   bool needArgNamesAttr = false;
   hw::module_like_impl::printModuleSignature(
-      p, op, argTypes, /*isVariadic=*/false, resultTypes, needArgNamesAttr);
+      p, *this, argTypes, /*isVariadic=*/false, resultTypes, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
@@ -705,12 +728,12 @@ static void printMSFTModuleExternOp(OpAsmPrinter &p, MSFTModuleExternOp op) {
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
 
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
+  printFunctionAttributes(p, *this, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 }
 
 static LogicalResult verifyMSFTModuleExternOp(MSFTModuleExternOp module) {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
   auto typeAttr = module->getAttrOfType<TypeAttr>(getTypeAttrName());
   auto moduleType = typeAttr.getValue().cast<FunctionType>();
   auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
@@ -754,7 +777,7 @@ static LogicalResult verifyMSFTModuleExternOp(MSFTModuleExternOp module) {
 }
 
 hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
-  using namespace mlir::function_like_impl;
+  using namespace mlir::function_interface_impl;
 
   SmallVector<hw::PortInfo> inputs, outputs;
 

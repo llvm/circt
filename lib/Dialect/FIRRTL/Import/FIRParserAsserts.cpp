@@ -505,6 +505,8 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       return failure();
 
     Value predicate = whenStmt.condition();
+    predicate = builder.create<NotPrimOp>(
+        predicate); // assertion triggers when predicate fails
     switch (predMod) {
     case PredicateModifier::NoMod:
       // Leave the predicate unmodified.
@@ -578,8 +580,6 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
 
     // Build the verification op itself.
     Operation *op;
-    predicate = builder.create<NotPrimOp>(
-        predicate); // assertion triggers when predicate fails
     // TODO: The "ifElseFatal" variant isn't actually a concurrent assertion,
     // but downstream logic assumes that isConcurrent is set.
     if (flavor == VerifFlavor::VerifLibAssert)

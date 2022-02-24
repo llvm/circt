@@ -595,9 +595,7 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
                                     /* narrowTrailingBits= */ true, rewriter);
       })
       .Case<MuxOp>([&](MuxOp innerOp) {
-        Type type = innerOp.getType();
-
-        assert(type.isa<IntegerType>() &&
+        assert(innerOp.getType().isa<IntegerType>() &&
                "extract() requires input to be of type IntegerType!");
 
         auto cond = innerOp.cond();

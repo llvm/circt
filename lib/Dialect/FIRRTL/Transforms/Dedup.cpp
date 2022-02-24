@@ -557,8 +557,7 @@ private:
         if (innerRef.getModule() == fromName) {
           auto to = renameMap[innerRef.getName()];
           assert(to && "should have been renamed");
-          namepath.push_back(
-              InnerRefAttr::get(toName, renameMap[innerRef.getName()]));
+          namepath.push_back(InnerRefAttr::get(toName, to));
         } else
           namepath.push_back(element);
       } else if (element == fromRef) {
@@ -873,6 +872,8 @@ private:
   // NOLINTNEXTLINE(misc-no-recursion)
   void mergeOps(RenameMap &renameMap, FModuleLike toModule, Operation *to,
                 FModuleLike fromModule, Operation *from) {
+    // Merge the operation locations.
+    to->setLoc(FusedLoc::get(context, {to->getLoc(), from->getLoc()}));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))

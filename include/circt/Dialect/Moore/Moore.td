@@ -21,11 +21,11 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/Moore/MooreDialect.td"
 
 // Base class for the operations in this dialect.
-class MooreOp<string mnemonic, list<OpTrait> traits = []> :
+class MooreOp<string mnemonic, list<Trait> traits = []> :
   Op<MooreDialect, mnemonic, traits>;
 
 // Base class for the MIR operations in this dialect.
-class MIROp<string mnemonic, list<OpTrait> traits = []> :
+class MIROp<string mnemonic, list<Trait> traits = []> :
   MooreOp<"mir." # mnemonic, traits>;
 
 include "circt/Dialect/Moore/MooreTypesImpl.td"

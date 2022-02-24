@@ -14,6 +14,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -155,27 +156,28 @@ struct ReturnOpConversion : public OpConversionPattern<mlir::ReturnOp> {
   }
 };
 
-struct CondBranchOpConversion : public OpConversionPattern<mlir::CondBranchOp> {
+struct CondBranchOpConversion
+    : public OpConversionPattern<mlir::cf::CondBranchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::CondBranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::CondBranchOp>(
+    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
         op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
         adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };
 
-struct BranchOpConversion : public OpConversionPattern<mlir::BranchOp> {
+struct BranchOpConversion : public OpConversionPattern<mlir::cf::BranchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::BranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(mlir::cf::BranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::BranchOp>(op, op.getDest(),
-                                                adaptor.getDestOperands());
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, op.getDest(),
+                                                    adaptor.getDestOperands());
     return success();
   }
 };
@@ -241,8 +243,8 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
   target.addDynamicallyLegalOp<memref::LoadOp>(
       [](memref::LoadOp op) { return op.getIndices().size() == 1; });
 
-  addGenericLegalityConstraint<mlir::CondBranchOp>(target);
-  addGenericLegalityConstraint<mlir::BranchOp>(target);
+  addGenericLegalityConstraint<mlir::cf::CondBranchOp>(target);
+  addGenericLegalityConstraint<mlir::cf::BranchOp>(target);
   addGenericLegalityConstraint<mlir::CallOp>(target);
   addGenericLegalityConstraint<mlir::ReturnOp>(target);
 
@@ -310,7 +312,8 @@ public:
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
                  CallOpConversion>(typeConverter, ctx);
-    populateFunctionLikeTypeConversionPattern<FuncOp>(patterns, typeConverter);
+    populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
+                                                             typeConverter);
 
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);

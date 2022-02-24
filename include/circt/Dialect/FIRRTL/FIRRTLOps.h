@@ -19,7 +19,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"

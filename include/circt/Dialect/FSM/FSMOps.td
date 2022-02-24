@@ -15,7 +15,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
-def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
+def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterface,
       Symbol, SymbolTable, IsolatedFromAbove, NoTerminator]> {
   let summary = "Define a finite-state machine";
   let description = [{
@@ -40,21 +40,19 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
     /// Get the port information of the machine.
     void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);
 
-  private:
-    /// This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<MachineOp>;
+    /// Returns the type of this function.
+    FunctionType getType() { 
+      return getTypeAttr().getValue().cast<FunctionType>();
+    }
 
-    /// Returns the number of arguments. This is a hook for
-    /// OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
 
-    /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
 
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type. Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    /// safely.
+    /// Verify the type attribute of this function. Returns failure and emits
+    /// an error if the attribute is invalid.
     LogicalResult verifyType() {
       auto type = getTypeAttr().getValue();
       if (!type.isa<FunctionType>())
@@ -64,8 +62,7 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
     }
   }];
 
-  let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ return ::print(*this, p); }];
+  let hasCustomAssemblyFormat = 1;
   let verifier = [{ return ::verify$cppClass(*this); }];
 }
 

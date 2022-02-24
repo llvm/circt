@@ -70,8 +70,8 @@ void HWToLLHDPass::runOnOperation() {
   // Rewrite `hw.module`, `hw.output`, and `hw.instance`.
   HWToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
-  mlir::populateFunctionLikeTypeConversionPattern<HWModuleOp>(patterns,
-                                                              typeConverter);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<HWModuleOp>(
+      patterns, typeConverter);
   patterns.add<ConvertHWModule>(&context);
   patterns.add<ConvertInstance>(&context);
   patterns.add<ConvertOutput>(&context);
@@ -143,7 +143,9 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     rewriter.updateRootInPlace(entity, [&] {
       entity->setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
       entity.setName(module.getName());
-      entityBodyRegion.addArguments(moduleOutputs);
+      entityBodyRegion.addArguments(
+          moduleOutputs, SmallVector<Location, 4>(moduleOutputs.size(),
+                                                  rewriter.getUnknownLoc()));
     });
 
     // Erase the HW module.

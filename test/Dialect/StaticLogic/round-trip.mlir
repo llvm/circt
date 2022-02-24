@@ -180,3 +180,17 @@ func @test5(%arg0: memref<?xi32>) {
   }
   return
 }
+
+func @trip_count_attr() {
+  %false = arith.constant 0 : i1
+  // CHECK: staticlogic.pipeline.while II = 1 trip_count = 3
+  staticlogic.pipeline.while II = 1 trip_count = 3 iter_args(%arg0 = %false) : (i1) -> () {
+    staticlogic.pipeline.register %arg0 : i1
+  } do {
+    %0 = staticlogic.pipeline.stage start = 0 {
+      staticlogic.pipeline.register %arg0 : i1
+    } : i1
+    staticlogic.pipeline.terminator iter_args(%0), results() : (i1) -> ()
+  }
+  return
+}

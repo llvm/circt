@@ -20,7 +20,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -218,8 +217,8 @@ getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op) {
 /// operator which references the memref input argument.
 static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
                                       Value blockArg, bool flip) {
-  auto memrefType = blockArg.getType().dyn_cast<MemRefType>();
-  assert(memrefType && "expected blockArg to be a memref");
+  assert(blockArg.getType().isa<MemRefType>() &&
+         "expected blockArg to be a memref");
 
   auto extmemUsers = blockArg.getUsers();
   assert(std::distance(extmemUsers.begin(), extmemUsers.end()) == 1 &&

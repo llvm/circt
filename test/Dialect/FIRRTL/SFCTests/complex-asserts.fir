@@ -89,7 +89,7 @@ circuit Foo:
       stop(clock, enable, 1)
 
     ; assert with predicate option for X-passing
-    ; CHECK-NEXT: wire [[TMP3:.+]] = ~enable | ~(~predicate7 | ~predicate7 === 1'bx);
+    ; CHECK-NEXT: wire [[TMP3:.+]] = ~enable | predicate7 | predicate7 === 1'bx;
     ; CHECK-NEXT: assert__verif_library_2: assert property (@(posedge clock) [[TMP3]])
     ; CHECK-SAME:   else $error("Assertion failed (verification library): X-passing assert example");
     when not(predicate7) :

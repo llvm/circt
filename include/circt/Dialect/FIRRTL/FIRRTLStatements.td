@@ -59,6 +59,25 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
     "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 }
 
+def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands]> {
+  let summary = "Connect two signals";
+  let description =  [{
+    Connect two values with strict constraints:
+    ```
+      firrtl.strictconnect %dest, %src : t1
+    ```
+    }];
+
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let results = (outs);
+  let hasCanonicalizeMethod = true;
+
+  let verifier = "return ::verifyStrictConnectOp(*this);";
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` qualified(type($dest))";
+}
+
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
@@ -109,7 +128,7 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
-class VerifOp<string mnemonic, list<OpTrait> traits = []> :
+class VerifOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<mnemonic, traits> {
   let arguments = (ins
     ClockType:$clock,
