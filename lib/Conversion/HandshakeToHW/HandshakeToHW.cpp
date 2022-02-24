@@ -356,6 +356,10 @@ namespace {
 using TypeTransformer = llvm::function_ref<Type(Type)>;
 static Type defaultTypeTransformer(Type t) { return t; }
 
+/// The ValueMapping class facilitates the definition and connection of SSA
+/// def-use chains between two separate regions - a 'from' region (defining
+/// use-def chains) and a 'to' region (where new operations are created based on
+/// the 'from' region).
 class ValueMapping {
 public:
   explicit ValueMapping(BackedgeBuilder &bb) : bb(bb) {}
