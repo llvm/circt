@@ -203,6 +203,14 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
 }
 
+// Here use StrEnumAttr to better suit the BufferOp sequential
+// attribute for it can only be seq or fifo.
+def StrCaseSeq: StrEnumAttrCase<"seq">;
+def StrCaseFIFO: StrEnumAttrCase<"fifo">;
+
+def SequentialStrEnum: StrEnumAttr<
+  "SequentialStrEnum", "BufferOp seq or fifo", [StrCaseSeq, StrCaseFIFO]>;
+
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
@@ -226,8 +234,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    UnitAttr:$sequential,
-    UnitAttr:$FIFO,
+    SequentialStrEnum:$sequential,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
@@ -236,7 +243,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return this->sequential();
+      return this->sequential() == "seq";
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();

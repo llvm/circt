@@ -96,9 +96,13 @@ static void printOp(OpAsmPrinter &p, Operation *op, bool explicitSize) {
     int size = op->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
     p << " [" << size << "]";
   }
+  if (isa<BufferOp>(op)) {
+    p << " " << op->getAttrOfType<StringAttr>("sequential").getValue();
+  }
   Type type = op->getAttrOfType<TypeAttr>("dataType").getValue();
   p << " " << op->getOperands();
-  p.printOptionalAttrDict((op)->getAttrs(), {"size", "dataType", "control"});
+  p.printOptionalAttrDict((op)->getAttrs(),
+                          {"size", "dataType", "control", "sequential"});
   p << " : " << type;
 }
 } // namespace sost
@@ -1013,14 +1017,12 @@ void handshake::BufferOp::getCanonicalizationPatterns(
 
 void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
                                 Type innerType, int size, Value operand,
-                                bool sequential) {
+                                bool sequential) { // TODO
   result.addOperands(operand);
   sost::addAttributes(result, size, innerType);
   result.addTypes({innerType});
-  if (sequential)
-    result.addAttribute("sequential", builder.getUnitAttr());
-  else
-    result.addAttribute("FIFO", builder.getUnitAttr());
+  result.addAttribute("sequential",
+                      builder.getStringAttr(sequential ? "seq" : "fifo"));
 }
 
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {

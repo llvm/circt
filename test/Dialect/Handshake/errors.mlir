@@ -110,7 +110,7 @@ handshake.func @invalid_constant_value(%ctrl : none) -> none {
 
 handshake.func @invalid_buffer_init1(%arg0 : i32, %ctrl : none) -> (i32, none) {
   // expected-error @+1 {{'handshake.buffer' op expected 2 init values but got 1.}}
-  %0 = buffer [2] %arg0 {initValues = [1], sequential} : i32
+  %0 = buffer [2] seq %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }
 
@@ -118,6 +118,6 @@ handshake.func @invalid_buffer_init1(%arg0 : i32, %ctrl : none) -> (i32, none) {
 
 handshake.func @invalid_buffer_init2(%arg0 : i32, %ctrl : none) -> (i32, none) {
   // expected-error @+1 {{'handshake.buffer' op only sequential buffers are allowed to have initial values.}}
-  %0 = buffer [1] %arg0 {initValues = [1], FIFO} : i32
+  %0 = buffer [1] fifo %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }

@@ -11,7 +11,7 @@
 // CHECK:           %[[VAL_5:.*]] = buffer [2] %[[VAL_4]]#1 {FIFO} : i32
 // CHECK:           %[[VAL_6:.*]] = buffer [2] %[[VAL_4]]#0 {FIFO} : i32
 // CHECK:           %[[VAL_7:.*]] = mux %[[VAL_6]] {{\[}}%[[VAL_5]], %[[VAL_8:.*]]] : i32, i32
-// CHECK:           %[[VAL_9:.*]] = buffer [2] %[[VAL_7]] {sequential} : i32
+// CHECK:           %[[VAL_9:.*]] = buffer [2] seq %[[VAL_7]] : i32
 // CHECK:           %[[VAL_10:.*]]:2 = fork [2] %[[VAL_9]] : i32
 // CHECK:           %[[VAL_11:.*]] = buffer [2] %[[VAL_10]]#1 {FIFO} : i32
 // CHECK:           %[[VAL_8]] = buffer [2] %[[VAL_10]]#0 {FIFO} : i32
