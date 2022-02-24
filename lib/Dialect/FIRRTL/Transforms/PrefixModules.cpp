@@ -344,6 +344,49 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
   applyPrefixToNameAndDefName(extModule, prefixes.front());
 }
 
+/// Mutate circuit-level annotations to add prefix information to Grand Central
+/// (SystemVerilog) interfaces.  Add a "prefix" field to each interface
+/// definition (an annotation with class "AugmentedBundleType") that holds the
+/// prefix that was determined during runOnModule.  It is assumed that this
+/// field did not exist before.
+void PrefixModulesPass::prefixGrandCentralInterfaces() {
+  // Early exit if no interfaces need prefixes.
+  if (interfacePrefixMap.empty())
+    return;
+
+  auto circuit = getOperation();
+  OpBuilder builder(circuit);
+
+  SmallVector<Attribute> newCircuitAnnotations;
+  for (auto anno : AnnotationSet(circuit)) {
+    // Only mutate this annotation if it is an AugmentedBundleType and
+    // interfacePrefixMap has prefix information for it.
+    StringRef prefix;
+    if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
+      if (auto id = anno.getMember<IntegerAttr>("id"))
+        prefix = interfacePrefixMap[id];
+    }
+
+    // Nothing to do.  Copy the annotation.
+    if (prefix.empty()) {
+      newCircuitAnnotations.push_back(anno.getDict());
+      continue;
+    }
+
+    // Add a "prefix" field with the prefix for this interface.  This is safe to
+    // put at the back and do a `getWithSorted` because the last field is
+    // conveniently called "name".
+    NamedAttrList newAnno(anno.getDict().getValue());
+    newAnno.append("prefix", builder.getStringAttr(prefix));
+    newCircuitAnnotations.push_back(
+        DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
+  }
+
+  // Overwrite the old circuit annotation with the new one created here.
+  AnnotationSet(newCircuitAnnotations, builder.getContext())
+      .applyToOperation(circuit);
+}
+
 void PrefixModulesPass::runOnOperation() {
   auto *context = &getContext();
   instanceGraph = &getAnalysis<InstanceGraph>();
@@ -388,49 +431,6 @@ void PrefixModulesPass::runOnOperation() {
   interfacePrefixMap.clear();
   if (!anythingChanged)
     markAllAnalysesPreserved();
-}
-
-/// Mutate circuit-level annotations to add prefix information to Grand Central
-/// (SystemVerilog) interfaces.  Add a "prefix" field to each interface
-/// definition (an annotation with class "AugmentedBundleType") that holds the
-/// prefix that was determined during runOnModule.  It is assumed that this
-/// field did not exist before.
-void PrefixModulesPass::prefixGrandCentralInterfaces() {
-  // Early exit if no interfaces need prefixes.
-  if (interfacePrefixMap.empty())
-    return;
-
-  auto circuit = getOperation();
-  OpBuilder builder(circuit);
-
-  SmallVector<Attribute> newCircuitAnnotations;
-  for (auto anno : AnnotationSet(circuit)) {
-    // Only mutate this annotation if it is an AugmentedBundleType and
-    // interfacePrefixMap has prefix information for it.
-    StringRef prefix;
-    if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
-      if (auto id = anno.getMember<IntegerAttr>("id"))
-        prefix = interfacePrefixMap[id];
-    }
-
-    // Nothing to do.  Copy the annotation.
-    if (prefix.empty()) {
-      newCircuitAnnotations.push_back(anno.getDict());
-      continue;
-    }
-
-    // Add a "prefix" field with the prefix for this interface.  This is safe to
-    // put at the back and do a `getWithSorted` because the last field is
-    // conveniently called "name".
-    NamedAttrList newAnno(anno.getDict().getValue());
-    newAnno.append("prefix", builder.getStringAttr(prefix));
-    newCircuitAnnotations.push_back(
-        DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
-  }
-
-  // Overwrite the old circuit annotation with the new one created here.
-  AnnotationSet(newCircuitAnnotations, builder.getContext())
-      .applyToOperation(circuit);
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createPrefixModulesPass() {
