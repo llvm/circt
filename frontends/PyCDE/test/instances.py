@@ -63,6 +63,7 @@ UnParameterized.print()
 
 # CHECK-LABEL: === Hierarchy
 print("=== Hierarchy")
+# CHECK-NEXT: <instance: []>
 # CHECK-NEXT: <instance: [UnParameterized]>
 # CHECK-NEXT: <instance: [UnParameterized, Nothing]>
 # CHECK-NEXT: <instance: [UnParameterized_1]>

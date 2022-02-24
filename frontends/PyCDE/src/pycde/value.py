@@ -51,7 +51,7 @@ class Value:
                            clk=clk,
                            reset=rst,
                            name=name,
-                           inner_sym=name)
+                           sym_name=name)
 
   @property
   def _namehint_attrname(self):

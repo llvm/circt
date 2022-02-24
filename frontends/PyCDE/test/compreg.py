@@ -26,7 +26,7 @@ class CompReg:
                             clk=ports.clk,
                             input=ports.input,
                             name="reg",
-                            inner_sym="reg")
+                            sym_name="reg")
     ports.output = compreg
 
 
@@ -37,7 +37,9 @@ appid.lookup(pycde.AppID("reg")).add_attribute(loc)
 mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])
 mod.print()
 mod.generate()
-mod.get_instance(CompReg).walk(appid.apply_attributes_visitor)
+top_inst = mod.get_instance(CompReg)
+top_inst.createdb()
+top_inst.walk(appid.apply_attributes_visitor)
 mod.print()
 mod.emit_outputs()
 
