@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_STATE_H
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
