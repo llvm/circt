@@ -359,7 +359,7 @@ static Type defaultTypeTransformer(Type t) { return t; }
 /// The ValueMapping class facilitates the definition and connection of SSA
 /// def-use chains between two separate regions - a 'from' region (defining
 /// use-def chains) and a 'to' region (where new operations are created based on
-/// the 'from' region).
+/// the 'from' region).´
 class ValueMapping {
 public:
   explicit ValueMapping(BackedgeBuilder &bb) : bb(bb) {}
@@ -397,7 +397,7 @@ public:
   void set(Value from, Value to) {
     auto it = mapping.find(from);
     if (it != mapping.end()) {
-      if (auto backedge = std::get_if<Backedge>(&it->second)) {
+      if (auto *backedge = std::get_if<Backedge>(&it->second)) {
         backedge->setValue(to);
       } else {
         assert(false && "'from' was already mapped to a final value!");
@@ -527,7 +527,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       if (isa<hw::OutputOp>(op)) {
         // Skip the default created HWModule terminator, for now.
         continue;
-      } else if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
+      }
+      if (auto returnOp = dyn_cast<handshake::ReturnOp>(op)) {
         convertReturnOp(returnOp, ls, rewriter);
       } else {
         // Regular operation.
@@ -579,7 +580,7 @@ public:
     for (auto funcName : llvm::reverse(sortedFuncs)) {
       RewritePatternSet patterns(op.getContext());
       patterns.insert<HandshakeFuncOpLowering>(op.getContext());
-      auto funcOp = op.lookupSymbol(funcName);
+      auto *funcOp = op.lookupSymbol(funcName);
       assert(funcOp && "Symbol not found in module!");
       if (failed(applyPartialConversion(funcOp, target, std::move(patterns)))) {
         signalPassFailure();
