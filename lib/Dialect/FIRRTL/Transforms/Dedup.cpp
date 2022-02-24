@@ -998,7 +998,7 @@ class DedupPass : public DedupBase<DedupPass> {
     auto getGroup = [&](Attribute path) -> unsigned {
       // Each module is listed as a target "~Circuit|Module" which we have to
       // parse.
-      auto [lhs, rhs] = path.cast<StringAttr>().getValue().split('|');
+      auto [_, rhs] = path.cast<StringAttr>().getValue().split('|');
       auto module = StringAttr::get(context, rhs);
       auto it = groupMap.find(module);
       if (it == groupMap.end()) {
