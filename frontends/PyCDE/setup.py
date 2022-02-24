@@ -55,7 +55,7 @@ class CMakeBuild(build_py):
     cfg = "Release"
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
-        "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
+        "-DPython3_EXECUTABLE={}".format(sys.executable),
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DLLVM_ENABLE_ASSERTIONS=ON",
         "-DLLVM_ENABLE_PROJECTS=mlir",
