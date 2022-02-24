@@ -6,6 +6,7 @@ add_circt_library(CIRCTHandshakeToHW
 
   LINK_LIBS PUBLIC
   CIRCTHW
+  CIRCTESI
   CIRCTHandshake
   CIRCTHandshakeTransforms
   MLIRIR
