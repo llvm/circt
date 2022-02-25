@@ -21,6 +21,9 @@ def FIRRTLDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
+  let dependentDialects = [
+    "circt::hw::HWDialect"
+  ];
   let cppNamespace = "::circt::firrtl";
   let extraClassDeclaration = [{
     /// Register all FIRRTL types.

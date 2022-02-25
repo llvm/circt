@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_DIALECT_H
 #define CIRCT_DIALECT_FIRRTL_DIALECT_H
 
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
