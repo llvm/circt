@@ -11,7 +11,7 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    runs-on: windows-latest
+    runs-on: windows-2019
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH

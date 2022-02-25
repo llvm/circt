@@ -397,7 +397,6 @@ void PrefixModulesPass::runOnOperation() {
     for (auto n : nlaTable->lookup(oldModName))
       if (n.root() == oldModName)
         nlaTable->updateModuleInNLA(n, oldModName, newMainModuleName);
-    //    nlaTable->renameModule(oldModName, newMainModuleName);
   }
 
   // Walk all Modules in a top-down order.  For each module, look at the list of

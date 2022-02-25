@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1311,10 +1312,10 @@ static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
 
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
-  // FIXME
-  if (cache)
-    if (auto *result = cache->getDefinition(instance().getName()))
-      return dyn_cast<hw::InstanceOp>(result);
+  if (cache) {
+    auto result = cache->getDefinition(instance());
+    return cast<hw::InstanceOp>(result.getOp());
+  }
 
   // Otherwise, resolve the instance by looking up the hw.module...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();

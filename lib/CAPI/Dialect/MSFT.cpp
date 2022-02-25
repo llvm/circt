@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
