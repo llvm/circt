@@ -1647,4 +1647,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:   %[[v0:.+]] = comb.and %rEn, %wMask : i1
   // CHECK-NEXT:   %tbMemoryKind1.R0_data = hw.instance "tbMemoryKind1" @tbMemoryKind1_ext(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, W0_addr: %rAddr: i4, W0_en: %[[v0]]: i1, W0_clk: %clock: i1, W0_data: %wData: i8) -> (R0_data: i8)
   // CHECK-NEXT:   hw.output %tbMemoryKind1.R0_data : i8
+
+  // CHECK-LABEL: hw.module @eliminateSingleOutputConnects
+  // CHECK-NOT:     [[WIRE:%.+]] = sv.wire
+  // CHECK-NEXT:    hw.output %a : i1
+  firrtl.module @eliminateSingleOutputConnects(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+  }
 }
