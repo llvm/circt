@@ -599,7 +599,7 @@ StringAttr OpAnnoTarget::getInnerSym(ModuleNamespace &moduleNamespace) const {
     // Try to come up with a reasonable name.
     StringRef name = "inner_sym";
     auto nameAttr = getOp()->getAttrOfType<StringAttr>("name");
-    if (nameAttr)
+    if (nameAttr && !nameAttr.getValue().empty())
       name = nameAttr.getValue();
     innerSym = StringAttr::get(context, moduleNamespace.newName(name));
     getOp()->setAttr("inner_sym", innerSym);
