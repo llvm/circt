@@ -1,4 +1,4 @@
-; RUN: firtool --firrtl-grand-central --verilog %s | FileCheck %s
+; RUN: firtool --firrtl-grand-central --disable-name-preservation --verilog %s | FileCheck %s
 ; See https://github.com/llvm/circt/issues/2691
 
 circuit Top : %[[{
