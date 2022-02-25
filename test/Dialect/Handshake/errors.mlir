@@ -117,7 +117,7 @@ handshake.func @invalid_buffer_init1(%arg0 : i32, %ctrl : none) -> (i32, none) {
 // -----
 
 handshake.func @invalid_buffer_init2(%arg0 : i32, %ctrl : none) -> (i32, none) {
-  // expected-error @+1 {{'handshake.buffer' op only sequential buffers are allowed to have initial values.}}
+  // expected-error @+1 {{'handshake.buffer' op only bufferType buffers are allowed to have initial values.}}
   %0 = buffer [1] fifo %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }
@@ -125,7 +125,7 @@ handshake.func @invalid_buffer_init2(%arg0 : i32, %ctrl : none) -> (i32, none) {
 // -----
 
 handshake.func @invalid_buffer_init3(%arg0 : i32, %ctrl : none) -> (i32, none) {
-  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'sequential' [seq, fifo].}}
+  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'bufferType' [seq, fifo].}}
   %0 = buffer [1]  %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }
@@ -133,7 +133,7 @@ handshake.func @invalid_buffer_init3(%arg0 : i32, %ctrl : none) -> (i32, none) {
 // -----
 
 handshake.func @invalid_buffer_init4(%arg0 : i32, %ctrl : none) -> (i32, none) {
-  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'sequential' [seq, fifo].}}
+  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'bufferType' [seq, fifo].}}
   %0 = buffer [1] SEQ %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }

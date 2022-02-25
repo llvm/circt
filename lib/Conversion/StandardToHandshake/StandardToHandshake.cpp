@@ -879,7 +879,7 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // must be followed by the loop exit network.
   auto primingRegister =
       rewriter->create<BufferOp>(loc, rewriter->getI1Type(), /*size=*/1,
-                                 loopPrimingInput, /*sequential=*/true);
+                                 loopPrimingInput, /*bufferType=*/"seq");
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 

@@ -205,11 +205,11 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 
 // Here use StrEnumAttr to better suit the BufferOp sequential
 // attribute for it can only be seq or fifo.
-def StrCaseSeq: StrEnumAttrCase<"seq">;
-def StrCaseFIFO: StrEnumAttrCase<"fifo">;
+def BufferCaseSeq: StrEnumAttrCase<"seq">;
+def BufferCaseFIFO: StrEnumAttrCase<"fifo">;
 
-def SequentialStrEnum: StrEnumAttr<
-  "SequentialStrEnum", "BufferOp seq or fifo", [StrCaseSeq, StrCaseFIFO]>;
+def BufferTypeEnum: StrEnumAttr<
+  "BufferTypeEnum", "BufferOp seq or fifo", [BufferCaseSeq, BufferCaseFIFO]>;
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
@@ -218,8 +218,8 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let description = [{
     The buffer operation represents a buffer operation. $slots
-    must be an unsigned integer larger than 0. $sequantial=True indicates a
-    nontransparent buffer, while $sequantial=False indicates a transparent
+    must be an unsigned integer larger than 0. $bufferType="seq" indicates a
+    nontransparent buffer, while $bufferType="fifo" indicates a transparent
     buffer.
 
     An 'initValues' attribute containing a list of integer values may be provided.
@@ -234,16 +234,16 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    SequentialStrEnum:$sequential,
+    BufferTypeEnum:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Type":$dataType, "int":$size,
-    "Value":$operand, "bool":$sequential)>];
+    "Value":$operand, "StringRef":$bufferType)>];
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return this->sequential() == "seq";
+      return this->bufferType() == "seq";
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
