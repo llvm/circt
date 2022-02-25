@@ -390,3 +390,88 @@ firrtl.circuit "NLAGarbageCollection" {
     } @DUT()
   }
 }
+
+// -----
+
+// Check that NLAs are used to wire up the data tap port connections properly.
+// See https://github.com/llvm/circt/issues/2691.
+
+// CHECK-LABEL: firrtl.circuit "NLAUsedInWiring"
+firrtl.circuit "NLAUsedInWiring"  {
+  // CHECK-NOT: @nla_1
+  // CHECK-NOT: @nla_2
+  firrtl.nla @nla_1 [#hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@f>]
+  firrtl.nla @nla_2 [#hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@g>]
+
+  // CHECK-LABEL: firrtl.module @DataTap
+  // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
+  // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@f>]
+  // CHECK-NEXT: firrtl.connect %b, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
+  // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@foo>, #hw.innerNameRef<@Foo::@g>]
+  // CHECK-NEXT: firrtl.connect %c, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: [[TMP:%.+]] = firrtl.verbatim.expr
+  // CHECK-SAME:   symbols = [@NLAUsedInWiring, #hw.innerNameRef<@NLAUsedInWiring::@k>]
+  // CHECK-NEXT: firrtl.connect %d, [[TMP]] : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.extmodule @DataTap(
+    out b: !firrtl.uint<1> sym @b [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 1 : i64,
+      type = "portName"
+    }],
+    out c: !firrtl.uint<1> sym @c [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 2 : i64,
+      type = "portName"
+    }],
+    out d: !firrtl.uint<1> sym @d [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 3 : i64,
+      type = "portName"
+    }]
+  ) attributes {
+    annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}],
+    defname = "DataTap"
+  }
+
+  firrtl.module @Foo(
+    out %g: !firrtl.uint<1> sym @g [{
+      circt.nonlocal = @nla_2,
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 2 : i64,
+      type = "source"
+    }]
+  ) {
+    %f = firrtl.wire sym @f {annotations = [{
+      circt.nonlocal = @nla_1,
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 1 : i64,
+      type = "source"
+    }]} : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %g, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %f, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  firrtl.module @NLAUsedInWiring() {
+    %foo_g = firrtl.instance foo sym @foo {annotations = [
+      {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
+      {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
+    ]} @Foo(out g: !firrtl.uint<1>)
+    %bar_g = firrtl.instance bar @Foo(out g: !firrtl.uint<1>)
+    %k = firrtl.wire sym @k {annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 3 : i64,
+      type = "source"
+    }]} : !firrtl.uint<1>
+    %dataTap_b, %dataTap_c, %dataTap_d = firrtl.instance dataTap @DataTap(out b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d: !firrtl.uint<1>)
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %k, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
