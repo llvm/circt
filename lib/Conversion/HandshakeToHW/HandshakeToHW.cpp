@@ -90,6 +90,18 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
       });
 }
 
+// Wraps a type into an ESI ChannelPort type. The inner type is converted to
+// ensure comprehensability by the RTL dialects.
+static Type esiWrapper(Type t) {
+  // Translate none- and index types to something HW understands.
+  if (t.isa<NoneType>())
+    t = IntegerType::get(t.getContext(), 0);
+  else if (t.isa<IndexType>())
+    t = IntegerType::get(t.getContext(), 64);
+
+  return esi::ChannelPort::get(t.getContext(), t);
+};
+
 /// Get type name. Currently we only support integer or index types.
 /// The emitted type aligns with the getFIRRTLType() method. Thus all integers
 /// other than signed integers will be emitted as unsigned.
@@ -265,23 +277,20 @@ static llvm::SmallVector<PortInfo>
 getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op,
                  TypeRange inputs, TypeRange outputs) {
   llvm::SmallVector<PortInfo> ports;
-  auto *ctx = rewriter.getContext();
   HandshakePortNameGenerator portNames(op);
 
   // Add all inputs of funcOp.
   unsigned inIdx = 0;
   for (auto &arg : llvm::enumerate(inputs)) {
     ports.push_back({portNames.inputName(arg.index()), PortDirection::INPUT,
-                     esi::ChannelPort::get(ctx, arg.value()), arg.index(),
-                     StringAttr{}});
+                     esiWrapper(arg.value()), arg.index(), StringAttr{}});
     inIdx++;
   }
 
   // Add all outputs of funcOp.
   for (auto res : llvm::enumerate(outputs)) {
     ports.push_back({portNames.outputName(res.index()), PortDirection::OUTPUT,
-                     esi::ChannelPort::get(ctx, res.value()), res.index(),
-                     StringAttr{}});
+                     esiWrapper(res.value()), res.index(), StringAttr{}});
   }
 
   // Add clock and reset signals.
@@ -435,10 +444,6 @@ static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
                                      Operation *op) {
   OpBuilder::InsertionGuard g(rewriter);
   rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
-
-  auto esiWrapper = [&](Type t) {
-    return esi::ChannelPort::get(rewriter.getContext(), t);
-  };
 
   // Create a mapping between the operands of 'op' and the replacement operands
   // in the target hwModule. For any missing operands, we create a new backedge.
