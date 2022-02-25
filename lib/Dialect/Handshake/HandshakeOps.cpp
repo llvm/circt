@@ -95,7 +95,7 @@ parseOperation(OpAsmParser &parser,
       } else {
         return parser.emitError(
             loc, "expected string or keyword containing one of the following "
-                 "enum values for attribute 'predicate' [seq, fifo].");
+                 "enum values for attribute 'sequential' [seq, fifo].");
       }
     }
     if (!attrStr.empty()) {
