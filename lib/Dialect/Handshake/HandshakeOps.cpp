@@ -74,11 +74,40 @@ static ParseResult
 parseOperation(OpAsmParser &parser,
                SmallVectorImpl<OpAsmParser::OperandType> &operands,
                OperationState &result, int &size, Type &type, bool explicitSize,
-               bool alwaysControl = false) {
+               bool alwaysControl = false, bool isBufferOp = false) {
   if (explicitSize)
     if (parseIntInSquareBrackets(parser, size))
       return failure();
 
+  if (isBufferOp) {
+    StringRef attrStr;
+    NamedAttrList attrStorage;
+    auto loc = parser.getCurrentLocation();
+    if (parser.parseOptionalKeyword(&attrStr, {"seq", "fifo"})) {
+      StringAttr attrVal;
+      mlir::OptionalParseResult parseResult = parser.parseOptionalAttribute(
+          attrVal, parser.getBuilder().getNoneType(), "sequential",
+          attrStorage);
+      if (parseResult.hasValue()) {
+        if (failed(*parseResult))
+          return failure();
+        attrStr = attrVal.getValue();
+      } else {
+        return parser.emitError(
+            loc, "expected string or keyword containing one of the following "
+                 "enum values for attribute 'predicate' [seq, fifo]");
+      }
+    }
+    if (!attrStr.empty()) {
+      auto attrOptional = symbolizeSequentialStrEnum(attrStr);
+      if (!attrOptional)
+        return parser.emitError(loc, "invalid ")
+               << "sequential attribute specification: \"" << attrStr << '"';
+
+      result.addAttribute("sequential",
+                          parser.getBuilder().getStringAttr(attrStr));
+    }
+  }
   if (parser.parseOperandList(operands) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(type))
@@ -1017,7 +1046,7 @@ void handshake::BufferOp::getCanonicalizationPatterns(
 
 void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
                                 Type innerType, int size, Value operand,
-                                bool sequential) { // TODO
+                                bool sequential) {
   result.addOperands(operand);
   sost::addAttributes(result, size, innerType);
   result.addTypes({innerType});
@@ -1031,7 +1060,8 @@ ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   ArrayRef<Type> operandTypes(type);
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
   int size;
-  if (sost::parseOperation(parser, allOperands, result, size, type, true))
+  if (sost::parseOperation(parser, allOperands, result, size, type, true, false,
+                           true))
     return failure();
 
   result.addTypes({type});
