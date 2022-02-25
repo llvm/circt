@@ -191,11 +191,13 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
 
       // Fixup this instance op to use the prefixed module name.  Note that the
       // referenced FModuleOp will be renamed later.
-      auto newTarget = (prefix + getPrefix(target) + target.moduleName()).str();
+      auto newTarget = StringAttr::get(context, prefix + getPrefix(target) +
+                                                    target.moduleName());
       AnnotationSet instAnnos(instanceOp);
       // If the instance has NonLocalAnchor, then update its module name also.
       // There can be multiple NonLocalAnchors attached to the instance op.
 
+      StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
           auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
@@ -204,8 +206,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
             instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
           else {
             auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
-            StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
-            nlaOp.updateModule(oldModName, StringAttr::get(context, newTarget));
+            nlaOp.updateModule(oldModName, newTarget);
           }
         }
       }
@@ -403,12 +404,12 @@ void PrefixModulesPass::runOnOperation() {
   auto prefix = getPrefix(mainModule);
   if (!prefix.empty()) {
     auto oldModName = mainModule.moduleNameAttr();
-    auto newMainModuleName = ((prefix + circuitOp.name()).str());
-    circuitOp.nameAttr(StringAttr::get(context, newMainModuleName));
+    auto newMainModuleName =
+        StringAttr::get(context, (prefix + circuitOp.name()).str());
+    circuitOp.nameAttr(newMainModuleName);
     // Now update all the NLAs that have the top level module symbol.
     for (auto &n : nlaRootMap[oldModName])
-      cast<NonLocalAnchor>(n).updateModule(
-          oldModName, StringAttr::get(context, newMainModuleName));
+      cast<NonLocalAnchor>(n).updateModule(oldModName, newMainModuleName);
     nlaRootMap.erase(oldModName);
   }
 
