@@ -401,16 +401,16 @@ void PrefixModulesPass::runOnOperation() {
   // If the main module is prefixed, we have to update the CircuitOp.
   auto mainModule = instanceGraph->getTopLevelModule();
   auto prefix = getPrefix(mainModule);
-  auto oldModName = mainModule.moduleNameAttr();
   if (!prefix.empty()) {
+    auto oldModName = mainModule.moduleNameAttr();
     auto newMainModuleName = ((prefix + circuitOp.name()).str());
     circuitOp.nameAttr(StringAttr::get(context, newMainModuleName));
     // Now update all the NLAs that have the top level module symbol.
     for (auto &n : nlaRootMap[oldModName])
       cast<NonLocalAnchor>(n).updateModule(
           oldModName, StringAttr::get(context, newMainModuleName));
+    nlaRootMap.erase(oldModName);
   }
-  nlaRootMap.erase(oldModName);
 
   // Walk all Modules in a top-down order.  For each module, look at the list of
   // required prefixes to be applied.
