@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_HANDSHAKETOHW_H_
-#define CIRCT_CONVERSION_HANDSHAKETOHW_H_
+#ifndef CIRCT_CONVERSION_HANDSHAKETOHW_H
+#define CIRCT_CONVERSION_HANDSHAKETOHW_H
 
 #include <memory>
 
@@ -24,4 +24,4 @@ namespace circt {
 std::unique_ptr<mlir::Pass> createHandshakeToHWPass();
 } // namespace circt
 
-#endif // MLIR_CONVERSION_HANDSHAKETOHW_H_
+#endif // CIRCT_CONVERSION_HANDSHAKETOHW_H

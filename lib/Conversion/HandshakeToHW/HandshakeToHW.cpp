@@ -257,14 +257,14 @@ static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
                                    StringRef modName) {
   if (auto mod = parentModule.lookupSymbol<HWModuleOp>(modName))
     return mod;
-  else if (auto mod = parentModule.lookupSymbol<HWModuleExternOp>(modName))
+  if (auto mod = parentModule.lookupSymbol<HWModuleExternOp>(modName))
     return mod;
   return nullptr;
 }
 
 static Operation *checkSubModuleOp(mlir::ModuleOp parentModule,
                                    Operation *oldOp) {
-  auto moduleOp = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
+  auto *moduleOp = checkSubModuleOp(parentModule, getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
     assert(moduleOp &&
@@ -288,7 +288,7 @@ getPortInfoForOp(ConversionPatternRewriter &rewriter, Operation *op,
   }
 
   // Add all outputs of funcOp.
-  for (auto res : llvm::enumerate(outputs)) {
+  for (auto &res : llvm::enumerate(outputs)) {
     ports.push_back({portNames.outputName(res.index()), PortDirection::OUTPUT,
                      esiWrapper(res.value()), res.index(), StringAttr{}});
   }
@@ -582,7 +582,7 @@ public:
     // graph. This ensures that any referenced submodules (through
     // handshake.instance) has already been lowered, and their HW module
     // equivalents are available.
-    for (auto funcName : llvm::reverse(sortedFuncs)) {
+    for (auto &funcName : llvm::reverse(sortedFuncs)) {
       RewritePatternSet patterns(op.getContext());
       patterns.insert<HandshakeFuncOpLowering>(op.getContext());
       auto *funcOp = op.lookupSymbol(funcName);
