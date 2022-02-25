@@ -377,11 +377,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
   // region.
-  auto full =
-      rewriter.create<hw::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
-  Value ops[] = {full, op.cond()};
-  auto cond =
-      rewriter.createOrFold<comb::XorOp>(op.getLoc(), op.cond().getType(), ops);
+  auto cond = comb::createOrFoldNot(op.getLoc(), op.cond(), rewriter);
   op.setOperand(cond);
 
   auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
@@ -1266,11 +1262,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   // conditional procedural assign.  We've ensured that this is the only write
   // of the register.
   if (trueBranch) {
-    auto one =
-        rewriter.create<hw::ConstantOp>(mux.getLoc(), mux.cond().getType(), -1);
-    Value ops[] = {mux.cond(), one};
-    auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
-                                                   mux.cond().getType(), ops);
+    auto cond = comb::createOrFoldNot(mux.getLoc(), mux.cond(), rewriter);
     rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
       rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
     });

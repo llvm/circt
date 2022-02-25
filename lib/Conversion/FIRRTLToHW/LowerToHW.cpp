@@ -3645,7 +3645,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     }
 
     auto boolType = IntegerType::get(builder.getContext(), 1);
-    auto allOnes = builder.create<hw::ConstantOp>(APInt::getAllOnesValue(1));
 
     // Handle the `ifElseFatal` format, which does not emit an SVA but
     // rather a process that uses $error and $fatal to perform the checks.
@@ -3653,7 +3652,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     // option that the user of this pass can choose.
     auto format = op->template getAttrOfType<StringAttr>("format");
     if (format && format.getValue() == "ifElseFatal") {
-      predicate = builder.createOrFold<comb::XorOp>(predicate, allOnes);
+      predicate = comb::createOrFoldNot(predicate, builder);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
       addToAlwaysBlock(clock, [&]() {
         addToIfDefProceduralBlock("SYNTHESIS", {}, [&]() {
@@ -3674,7 +3673,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     }
 
     // Formulate the `enable -> predicate` as `!enable | predicate`.
-    auto notEnable = builder.createOrFold<comb::XorOp>(enable, allOnes);
+    auto notEnable = comb::createOrFoldNot(enable, builder);
     predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
 
     // Handle the regular SVA case.
