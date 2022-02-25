@@ -38,6 +38,22 @@ firrtl.circuit "Simple" {
 }
 
 
+// Should pick a valid symbol when a wire has no name.
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top"  {
+  firrtl.module @Top() {
+    %a1_x = firrtl.instance a1  @A(out x: !firrtl.uint<1>)
+    %a2_x = firrtl.instance a2  @A_(out x: !firrtl.uint<1>)
+  }
+  firrtl.module @A(out %x: !firrtl.uint<1>) {
+    // CHECK: %0 = firrtl.wire sym @inner_sym
+    %0 = firrtl.wire  {annotations = [{class = "hello"}]} : !firrtl.uint<1>
+  }
+  firrtl.module @A_(out %x: !firrtl.uint<1>) {
+    %0 = firrtl.wire  : !firrtl.uint<1>
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "PrimOps"
 firrtl.circuit "PrimOps" {
   // CHECK: firrtl.module @PrimOps0
