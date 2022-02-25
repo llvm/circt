@@ -74,7 +74,7 @@ void NLATable::updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
                                  StringAttr newModule) {
   nlaOp.updateModule(oldModule, newModule);
   auto &nlas = nodeMap[oldModule];
-  auto iter = std::find(nlas.begin(), nlas.end(), nlaOp);
+  auto *iter = std::find(nlas.begin(), nlas.end(), nlaOp);
   if (iter != nlas.end()) {
     nlas.erase(iter);
     nodeMap[newModule].push_back(nlaOp);
@@ -82,12 +82,12 @@ void NLATable::updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
 }
 
 NonLocalAnchor NLATable::getNLA(StringAttr name) {
-  auto n = symToOp.lookup(name);
+  auto *n = symToOp.lookup(name);
   return dyn_cast_or_null<NonLocalAnchor>(n);
 }
 
 FModuleLike NLATable::getModule(StringAttr name) {
-  auto n = symToOp.lookup(name);
+  auto *n = symToOp.lookup(name);
   return dyn_cast_or_null<FModuleLike>(n);
 }
 
