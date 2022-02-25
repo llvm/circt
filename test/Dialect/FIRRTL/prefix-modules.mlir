@@ -291,7 +291,7 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
 // Test the the NonLocalAnchor is properly updated.
 // CHECK-LABEL: firrtl.circuit "FixNLA" {
   firrtl.circuit "FixNLA"   {
-    firrtl.nla @nla_1 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
+     firrtl.nla @nla_1 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
     // CHECK:   firrtl.nla @nla_1 [#hw.innerNameRef<@FixNLA::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
     firrtl.nla @nla_2 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@s1>]
     // CHECK:   firrtl.nla @nla_2 [#hw.innerNameRef<@FixNLA::@foo>, #hw.innerNameRef<@X_Foo::@bar>, #hw.innerNameRef<@X_Bar::@baz>, #hw.innerNameRef<@X_Baz::@s1>]

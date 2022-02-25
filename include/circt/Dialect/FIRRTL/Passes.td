@@ -353,6 +353,12 @@ def PrintInstanceGraph
   let constructor =  "circt::firrtl::createPrintInstanceGraphPass()";
 }
 
+def PrintNLATable
+    : Pass<"firrtl-print-nla-table", "firrtl::CircuitOp"> {
+  let summary = "Print the NLA Table.";
+  let constructor =  "circt::firrtl::createPrintNLATablePass()";
+}
+
 def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
   let summary = "Remove Grand Central Annotations";
   let description = [{

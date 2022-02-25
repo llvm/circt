@@ -68,6 +68,8 @@ std::unique_ptr<mlir::Pass> createPrefixModulesPass();
 
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 
+std::unique_ptr<mlir::Pass> createPrintNLATablePass();
+
 std::unique_ptr<mlir::Pass>
 createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {},
                          llvm::Optional<StringRef> resourcePrefix = {});
