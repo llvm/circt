@@ -397,6 +397,9 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markMemOp(mem);
     else if (isAggregate(&op))
       markOverdefined(op.getResult(0));
+    else if (auto cast = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+      for (auto result : cast.getResults())
+        markOverdefined(result);
   }
 }
 
@@ -405,7 +408,8 @@ void IMConstPropPass::markWireRegOp(Operation *wireOrReg) {
   // handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
-  if (!resultValue.getType().cast<FIRRTLBaseType>().getPassiveType().isGround())
+  auto type = resultValue.getType().dyn_cast<FIRRTLType>();
+  if (!type || !type.cast<FIRRTLBaseType>().getPassiveType().isGround())
     return markOverdefined(resultValue);
 
   // Otherwise, this starts out as InvalidValue and is upgraded by connects.
@@ -491,8 +495,13 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 }
 
 void IMConstPropPass::visitConnectLike(FConnectLike connect) {
-  auto destType = getBaseType(connect.getDest().getType().cast<FIRRTLType>())
-                      .getPassiveType();
+  // Mark foreign types as overdefined.
+  auto destTypeFIRRTL = connect.getDest().getType().dyn_cast<FIRRTLType>();
+  if (!destTypeFIRRTL) {
+    markOverdefined(connect.getSrc());
+    return markOverdefined(connect.getDest());
+  }
+  auto destType = getBaseType(destTypeFIRRTL).getPassiveType();
 
   // Handle implicit extensions.
   auto srcValue = getExtendedLatticeValue(connect.getSrc(), destType);

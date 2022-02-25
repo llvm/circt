@@ -53,13 +53,6 @@ firrtl.circuit "" {
 // -----
 
 firrtl.circuit "foo" {
-// expected-error @+1 {{ports should all be FIRRTL types}}
-firrtl.module @foo(in %a: i1) {}
-}
-
-// -----
-
-firrtl.circuit "foo" {
 // expected-error @+1 {{requires 1 port directions}}
 firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portDirections = 3 : i2} {}
 }
@@ -922,17 +915,6 @@ firrtl.circuit "NonRefRegister" {
   firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive base type that does not contain analog}}
     %r = firrtl.reg %clock : !firrtl.ref<uint<8>>
-  }
-}
-
-// -----
-// Wire ops cannot have reference type
-
-firrtl.circuit "MyView" {
-  firrtl.module @MyView() {
-  // expected-error @+1 {{'firrtl.wire' op result #0 must be a base type, but got '!firrtl.ref<uint<1>>'}}
-    %ref_in1 = firrtl.wire : !firrtl.ref<uint<1>>
-    %in1 = firrtl.wire : !firrtl.uint<1>
   }
 }
 

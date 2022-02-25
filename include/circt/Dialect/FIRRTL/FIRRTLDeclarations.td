@@ -40,7 +40,7 @@ def InstanceOp : ReferableDeclOp<"instance", [HasParent<"firrtl::FModuleOp, firr
                        UnitAttr:$lowerToBind,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
-  let results = (outs Variadic<FIRRTLType>:$results);
+  let results = (outs Variadic<AnyType>:$results);
 
   let hasCustomAssemblyFormat = 1;
 
@@ -354,7 +354,7 @@ def WireOp : ReferableDeclOp<"wire"> {
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
-  let results = (outs FIRRTLBaseType:$result);
+  let results = (outs AnyType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
