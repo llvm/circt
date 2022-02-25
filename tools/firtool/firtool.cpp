@@ -102,6 +102,11 @@ static cl::opt<bool> disableAnnotationsUnknown(
     "disable-annotation-unknown",
     cl::desc("Ignore unknown annotations when parsing"), cl::init(false));
 
+static cl::opt<bool> disableNamePreservation(
+    "disable-name-preservation",
+    cl::desc("Don't generate debug taps for named FIRRTL wires and nodes"),
+    cl::init(false));
+
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
@@ -381,6 +386,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     options.ignoreInfoLocators = ignoreFIRLocations;
     options.rawAnnotations = newAnno;
     options.numAnnotationFiles = numAnnotationFiles;
+    options.disableNamePreservation = disableNamePreservation;
     module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
