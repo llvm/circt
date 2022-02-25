@@ -35,6 +35,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using hw::InnerRefAttr;
 using mlir::FailureOr;
 
 //===----------------------------------------------------------------------===//
@@ -94,7 +95,8 @@ struct PortWiring {
   using Target = hw::SymbolCache::Item;
 
   unsigned portNum;
-  /// The different instance paths that lead to this port.
+  /// The different instance paths that lead to this port. If the NLA field is
+  /// set, these are the different instance paths to the root of the NLA path.
   ArrayRef<InstancePath> prefices;
   /// The operation or module port being wire to this data tap module port.
   Target target;
@@ -102,6 +104,8 @@ struct PortWiring {
   SmallString<16> suffix;
   /// If set, the port should output a constant literal.
   Literal literal;
+  /// The non-local anchor further specifying where to connect.
+  NonLocalAnchor nla;
 
   PortWiring() : target(nullptr) {}
 };
@@ -317,10 +321,10 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   StringAttr getOrAddInnerSym(FModuleLike module, size_t portIdx);
   /// Obtain an inner reference to an operation, possibly adding an `inner_sym`
   /// to that operation.
-  hw::InnerRefAttr getInnerRefTo(Operation *op);
+  InnerRefAttr getInnerRefTo(Operation *op);
   /// Obtain an inner reference to a module port, possibly adding an `inner_sym`
   /// to that port.
-  hw::InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
+  InnerRefAttr getInnerRefTo(FModuleLike module, size_t portIdx);
 
   /// Get the cached namespace for a module.
   ModuleNamespace &getModuleNamespace(FModuleLike module) {
@@ -346,11 +350,16 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   /// NLAs which were removed while this pass ran.  These will be garbage
   /// collected before the pass exits.
   DenseSet<StringAttr> deadNLAs;
+
+  /// The circuit symbol table, used to look up NLAs.
+  SymbolTable *circuitSymbols;
 };
 
 void GrandCentralTapsPass::runOnOperation() {
   auto circuitOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
+  SymbolTable symtbl(circuitOp);
+  circuitSymbols = &symtbl;
 
   // Here's a rough idea of what the Scala code is doing:
   // - Gather the `source` of all `keys` of all `DataTapsAnnotation`s throughout
@@ -488,7 +497,12 @@ void GrandCentralTapsPass::runOnOperation() {
       for (auto wiring : portWiring) {
         llvm::dbgs() << "- Port " << wiring.portNum << ":\n";
         for (auto path : wiring.prefices) {
-          llvm::dbgs() << "  - " << path << "." << wiring.suffix << "\n";
+          llvm::dbgs() << "  - " << path;
+          if (wiring.nla)
+            llvm::dbgs() << "." << wiring.nla.namepathAttr();
+          if (!wiring.suffix.empty())
+            llvm::dbgs() << " $ " << wiring.suffix;
+          llvm::dbgs() << "\n";
         }
       }
     });
@@ -587,7 +601,10 @@ void GrandCentralTapsPass::runOnOperation() {
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
-        if (port.target.getOp()) {
+        if (port.nla) {
+          for (auto sym : port.nla.namepath())
+            addSymbol(sym);
+        } else if (port.target.getOp()) {
           if (port.target.hasPort())
             addSymbol(
                 getInnerRefTo(port.target.getOp(), port.target.getPort()));
@@ -598,7 +615,17 @@ void GrandCentralTapsPass::runOnOperation() {
           hname += '.';
           hname += port.suffix;
         }
-        LLVM_DEBUG(llvm::dbgs() << "  - Connecting as " << hname << "\n");
+        LLVM_DEBUG({
+          llvm::dbgs() << "  - Connecting as " << hname;
+          if (!symbols.empty()) {
+            llvm::dbgs() << " (";
+            llvm::interleave(
+                symbols, llvm::dbgs(),
+                [&](Attribute sym) { llvm::dbgs() << sym; }, ".");
+            llvm::dbgs() << ")";
+          }
+          llvm::dbgs() << "\n";
+        });
 
         // Add a verbatim op that assigns this module port.
         auto arg = impl.getArgument(port.portNum);
@@ -710,11 +737,28 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   auto targetAnno =
       targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
 
+  // If the annotation is non-local, look up the corresponding NLA operation to
+  // find the exact instance path. We basically make the `wiring.prefices` array
+  // of instance paths list all the possible paths to the beginning of the NLA
+  // path. During wiring of the ports, we generate hierarchical names of the
+  // form `<prefix>.<nla-path>.<suffix>`. If we don't have an NLA, we leave it
+  // to the key-class-specific code below to come up with the possible prefices.
+  NonLocalAnchor nla;
+  if (auto nlaSym = targetAnno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+    nla = dyn_cast<NonLocalAnchor>(circuitSymbols->lookup(nlaSym.getAttr()));
+    assert(nla);
+    // Find all paths to the root of the NLA.
+    Operation *root = circuitSymbols->lookup(nla.root());
+    wiring.nla = nla;
+    wiring.prefices = instancePaths.getAbsolutePaths(root);
+  }
+
   // Handle data taps on signals and ports.
   if (targetAnno.isClass(referenceKeyClass)) {
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
-      wiring.prefices = instancePaths.getAbsolutePaths(port.first);
+      if (!nla)
+        wiring.prefices = instancePaths.getAbsolutePaths(port.first);
       wiring.target = PortWiring::Target(port.first, port.second);
       portWiring.push_back(std::move(wiring));
       return;
@@ -732,8 +776,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
         return;
       }
 
-      wiring.prefices =
-          instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+      if (!nla)
+        wiring.prefices =
+            instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
       wiring.target = PortWiring::Target(op);
       portWiring.push_back(std::move(wiring));
       return;
@@ -771,7 +816,8 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       return;
     }
 
-    wiring.prefices = instancePaths.getAbsolutePaths(op);
+    if (!nla)
+      wiring.prefices = instancePaths.getAbsolutePaths(op);
     wiring.suffix = internalPath.getValue();
     portWiring.push_back(std::move(wiring));
     return;
@@ -833,8 +879,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     // we generate memory impls out-of-line already, and memories coming
     // from an external generator are even worse. This needs a special node
     // in the IR that can properly inject the memory array on emission.
-    wiring.prefices =
-        instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+    if (!nla)
+      wiring.prefices =
+          instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
     wiring.target = PortWiring::Target(op);
     ("Memory[" + Twine(word.getValue().getLimitedValue()) + "]")
         .toVector(wiring.suffix);
@@ -870,16 +917,16 @@ StringAttr GrandCentralTapsPass::getOrAddInnerSym(FModuleLike module,
   return attr;
 }
 
-hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
-  return hw::InnerRefAttr::get(
+InnerRefAttr GrandCentralTapsPass::getInnerRefTo(Operation *op) {
+  return InnerRefAttr::get(
       SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
       getOrAddInnerSym(op));
 }
 
-hw::InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
-                                                     size_t portIdx) {
-  return hw::InnerRefAttr::get(SymbolTable::getSymbolName(module),
-                               getOrAddInnerSym(module, portIdx));
+InnerRefAttr GrandCentralTapsPass::getInnerRefTo(FModuleLike module,
+                                                 size_t portIdx) {
+  return InnerRefAttr::get(SymbolTable::getSymbolName(module),
+                           getOrAddInnerSym(module, portIdx));
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralTapsPass() {
