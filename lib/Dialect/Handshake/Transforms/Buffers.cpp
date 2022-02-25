@@ -144,7 +144,8 @@ struct HandshakeInsertBuffersPass
 
   // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy(handshake::FuncOp f, OpBuilder &builder,
-                            unsigned numSlots, StringRef /*bufferType*/ = "seq") {
+                            unsigned numSlots,
+                            StringRef /*bufferType*/ = "seq") {
     // Cycles can only occur at merge-like operations so those are our buffering
     // targets. Placing the buffer at the output of the merge-like op,
     // as opposed to naivly placing buffers *whenever* cycles are detected
