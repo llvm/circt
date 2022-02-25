@@ -1040,22 +1040,25 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   if (flipValue.getType().isa<AnalogType>())
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
 
-  ConnectOp theConnect;
-  for (auto *use : flipValue.getUsers()) {
-    // We only know about 'connect' uses, where this is the destination.
-    auto connect = dyn_cast<ConnectOp>(use);
-    if (!connect || connect.src() == flipValue ||
-        // We only support things with a single connect.
-        theConnect)
+  Operation *connectOp = nullptr;
+  for (auto &use : flipValue.getUses()) {
+    // We only know how to deal with connects where this value is the
+    // destination.
+    if (use.getOperandNumber() != 0)
+      return {};
+    if (!isa<ConnectOp, StrictConnectOp>(use.getOwner()))
       return {};
 
-    theConnect = connect;
+    // We only support things with a single connect.
+    if (connectOp)
+      return {};
+    connectOp = use.getOwner();
   }
 
   // We don't have an HW equivalent of "poison" so just don't special case
   // the case where there are no connects other uses of an output.
-  if (!theConnect)
-    return {}; // TODO: Emit an sv.constantz here since it is unconnected.
+  if (!connectOp)
+    return {}; // TODO: Emit an sv.constant here since it is unconnected.
 
   // Don't special case zero-bit results.
   auto loweredType = lowerType(flipValue.getType());
@@ -1066,7 +1069,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // output.
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
-  auto connectSrc = theConnect.src();
+  auto connectSrc = connectOp->getOperand(1);
 
   // Convert fliped sources to passive sources.
   if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
@@ -1095,7 +1098,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   }
 
   // Remove the connect and use its source as the value for the output.
-  theConnect.erase();
+  connectOp->erase();
 
   // Convert from FIRRTL type to builtin type.
   return castFromFIRRTLType(connectSrc, loweredType, builder);
