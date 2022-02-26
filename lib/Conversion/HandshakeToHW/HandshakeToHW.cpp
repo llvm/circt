@@ -239,8 +239,9 @@ static std::string getSubModuleName(Operation *oldOp) {
                      std::to_string(oldOp->getNumResults()) + "outs";
     subModuleName += "_ctrl";
   } else {
-    assert((!inTypes.empty() || !outTypes.empty()) &&
-           "Non-control operators must provide discriminating type info");
+    assert(
+        (!inTypes.empty() || !outTypes.empty()) &&
+        "Insufficient discriminating type info generated for the operation!");
   }
 
   return subModuleName;
