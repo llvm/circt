@@ -52,6 +52,10 @@ class HandshakeDialect;
 class FuncOp;
 } // namespace handshake
 
+namespace esi {
+class ESIDialect;
+} // namespace esi
+
 namespace moore {
 class MooreDialect;
 } // namespace moore
