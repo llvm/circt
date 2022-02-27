@@ -356,15 +356,18 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
       matchPattern(op.input(),
                    m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
                                      m_Constant(&amountAttr)))) {
+    // Use APInt for index to keep the original bitwidth, zero-extend amount to
+    // add it to index without requiring the same bitwidth and using the width
+    // of index
     APInt index = indexAttr.getValue();
-    APInt amount = amountAttr.getValue();
+    uint64_t amount = amountAttr.getValue().getZExtValue();
     auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
     unsigned baseWidth = shrOp.getBaseWidth();
     unsigned hiddenWidth = shrOp.getHiddenWidth();
 
     // with amt + index < baseWidth
     //   => llhd.sig.array_get(base, amt + index)
-    if (amount.getZExtValue() + index.getZExtValue() < baseWidth) {
+    if (amount + index.getZExtValue() < baseWidth) {
       op.inputMutable().assign(shrOp.base());
       Value newIndex =
           rewriter.create<hw::ConstantOp>(op->getLoc(), amount + index);
@@ -375,8 +378,7 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
 
     // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
     //   => llhd.sig.array_get(hidden, amt + index - baseWidth)
-    if (amount.getZExtValue() + index.getZExtValue() <
-        baseWidth + hiddenWidth) {
+    if (amount + index.getZExtValue() < baseWidth + hiddenWidth) {
       op.inputMutable().assign(shrOp.hidden());
       Value newIndex = rewriter.create<hw::ConstantOp>(
           op->getLoc(), amount + index - baseWidth);
