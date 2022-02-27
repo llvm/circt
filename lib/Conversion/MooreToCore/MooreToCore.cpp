@@ -44,8 +44,8 @@ struct AssignOpConv;
 
 static Type convertMooreType(Type type) {
   return TypeSwitch<Type, Type>(type)
-      .Case<moore::IntType>([](moore::IntType ty) {
-        return IntegerType::get(ty.getContext(), 32);
+      .Case<moore::IntType>([](auto type) {
+        return IntegerType::get(type.getContext(), type.getBitSize());
       })
       .Case<moore::RValueType>(
           [](auto type) { return convertMooreType(type.getNestedType()); })
