@@ -33,7 +33,7 @@ circuit Foo:
       stop(clock, enable, 1)
 
     ; assume with when
-    ; CHECK-NEXT: {{assume__verif_library.*}}: assume property (@(posedge clock) ~other | ~enable | predicate3 | reset)
+    ; CHECK-NEXT: {{assume__verif_library.*}}: assume property (@(posedge clock) ~(other & enable) | predicate3 | reset)
     ; CHECK-SAME:   else $error("Assumption does not hold (verification library): assume with when");
     when other :
       when not(or(predicate3, asUInt(reset))) :

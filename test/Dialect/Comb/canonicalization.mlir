@@ -1332,17 +1332,3 @@ hw.module @muxCommonOp(%cond: i1,
   // CHECK: hw.output [[O1]], [[O2]], [[O3]]
   hw.output %o1, %o2, %o3 : i128, i128, i128
 }
-
-// CHECK-LABEL: @deMorgan
-hw.module @deMorgan(%a: i1, %b: i1) -> (c: i1, d: i1) {
-// CHECK-NEXT: %0 = comb.and %a, %b : i1
-// CHECK-NEXT: %1 = comb.or %a, %b : i1
-  %true = hw.constant true
-  %0 = comb.xor %true, %a : i1
-  %1 = comb.xor %true, %b : i1
-  %2 = comb.or %0, %1 : i1
-  %3 = comb.and %0, %1 : i1
-  %4 = comb.xor %true, %2 : i1
-  %5 = comb.xor %true, %3 : i1
-  hw.output %4, %5 : i1, i1
-}
