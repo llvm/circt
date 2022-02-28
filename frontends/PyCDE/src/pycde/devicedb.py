@@ -7,7 +7,7 @@ import typing
 
 from circt.dialects import msft
 
-from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
+from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr, Location
 
 PrimitiveType = msft.PrimitiveType
 
@@ -19,8 +19,7 @@ class PhysLocation:
                prim_type: typing.Union[str, PrimitiveType],
                x: int,
                y: int,
-               num: typing.Union[int, None] = None,
-               sub_path: str = ""):
+               num: typing.Union[int, None] = None):
 
     if isinstance(prim_type, str):
       prim_type = getattr(PrimitiveType, prim_type)
@@ -32,7 +31,7 @@ class PhysLocation:
     assert isinstance(x, int)
     assert isinstance(y, int)
     assert isinstance(num, int)
-    self._loc = msft.PhysLocationAttr.get(prim_type, x, y, num, sub_path)
+    self._loc = msft.PhysLocationAttr.get(prim_type, x, y, num)
 
   def __str__(self) -> str:
     loc = self._loc
@@ -126,6 +125,10 @@ class PlacementDB:
     path = ArrayAttr.get([ref])
     subpath = ""
     self._db.add_placement(loc._loc, path, subpath, entity._entity_extern)
+
+  def place(self, inst, loc: PhysLocation, subpath: str = ""):
+    self._db.place(inst._dyn_inst.operation, loc._loc, subpath,
+                   Location.current)
 
 
 class EntityExtern:

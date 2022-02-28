@@ -19,5 +19,5 @@ def placement(subpath: Union[str, list[str]],
               num: int = 0):
   if isinstance(subpath, list):
     subpath = "|".join(subpath)
-  loc = PhysLocation(devtype, x, y, num, subpath)
-  return (f"loc:{subpath}", loc)
+  loc = PhysLocation(devtype, x, y, num)
+  return (subpath, loc)

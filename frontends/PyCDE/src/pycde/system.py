@@ -6,7 +6,7 @@ from pycde.devicedb import EntityExtern, PrimitiveDB, PhysicalRegion
 
 from .module import _SpecializedModule
 from .pycde_types import types
-from .instance import Instance
+from .instance import Instance, RootInstance
 
 import mlir
 import mlir.ir as ir
@@ -35,12 +35,12 @@ class System:
 
   __slots__ = [
       "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue", "_primdb",
-      "_output_directory", "files"
+      "_old_system_token", "_symbols", "_generate_queue", "_output_directory",
+      "files", "_instance_cache"
   ]
 
   PASSES = """
-    msft-partition,
+    msft-lower-instances, msft-partition,
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
     msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
@@ -48,7 +48,6 @@ class System:
 
   def __init__(self,
                modules,
-               primdb: PrimitiveDB = None,
                name: str = "PyCDESystem",
                output_directory: str = None):
     self.passed = False
@@ -59,9 +58,8 @@ class System:
     self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
+    self._instance_cache: dict[_SpecializedModule, RootInstance] = {}
     self.files: typing.Set[str] = set()
-
-    self._primdb = primdb
 
     if output_directory is None:
       output_directory = os.path.join(os.getcwd(), self.name)
@@ -72,6 +70,10 @@ class System:
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
+
+  @staticmethod
+  def set_debug():
+    ir._GlobalDebug.flag = True
 
   # TODO: Return a read-only proxy.
   @property
@@ -129,6 +131,8 @@ class System:
 
   def _get_symbol_module(self, symbol):
     """Get the _SpecializedModule for a symbol."""
+    if isinstance(symbol, ir.FlatSymbolRefAttr):
+      symbol = symbol.value
     return self._symbol_modules[symbol]
 
   def _get_module_symbol(self, spec_mod):
@@ -201,7 +205,10 @@ class System:
     return len(self._generate_queue)
 
   def get_instance(self, mod_cls: object) -> Instance:
-    return Instance(mod_cls, None, None, self, self._primdb)
+    mod = mod_cls._pycde_mod
+    if mod not in self._instance_cache:
+      self._instance_cache[mod] = RootInstance._get(mod, self)
+    return self._instance_cache[mod]
 
   class DevNull:
 

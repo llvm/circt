@@ -17,7 +17,6 @@ class AppID:
   through hierarchy changes."""
 
   def __init__(self, *appid: Tuple[str]):
-    assert len(appid) > 0
     self._parts = list()
     for p in appid:
       assert isinstance(p, str)
@@ -25,6 +24,8 @@ class AppID:
 
   @property
   def head(self) -> str:
+    if len(self._parts) == 0:
+      return ""
     return self._parts[0]
 
   @property
@@ -40,7 +41,7 @@ class AppID:
     return AppID(*self._parts, part)
 
 
-class AppIDIndex(dict):
+class AppIDIndex(list):
   """Model the AppID hierarchy. Provides the ability to attach attributes to
   AppIDs rather than instances, to get applied once the design is fully
   generated."""
@@ -57,7 +58,7 @@ class AppIDIndex(dict):
     return self._children[appid.head].lookup(appid.tail)
 
   def add_attribute(self, attr: Tuple[str, ir.Attribute]) -> None:
-    self[attr[0]] = attr[1]
+    self.append(attr)
 
   def find_unused(self) -> Union[AppIDIndex, Dict[str, AppIDIndex]]:
     if not self._used and len(self) > 0:
@@ -76,7 +77,7 @@ class AppIDIndex(dict):
     def _visit(idx, inst: Instance):
       attrs = idx.lookup(inst.appid)
       attrs._used = True
-      for (akey, attr) in attrs.items():
-        inst._attach_attribute(akey, attr)
+      for attr in attrs:
+        inst._attach_attribute(attr)
 
     return lambda i, idx=self: _visit(idx, i)
