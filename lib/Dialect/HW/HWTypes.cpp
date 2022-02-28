@@ -97,6 +97,9 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
         int64_t elementBitWidth = getBitWidth(a.getElementType());
         if (elementBitWidth < 0)
           return elementBitWidth;
+        int64_t dimBitWidth = a.getSize();
+        if (dimBitWidth < 0)
+          return dimBitWidth;
         return (int64_t)a.getSize() * elementBitWidth;
       })
       .Case<StructType>([](StructType s) {
@@ -311,33 +314,56 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 // ArrayType
 //===----------------------------------------------------------------------===//
 
-Type ArrayType::parse(AsmParser &p) {
-  SmallVector<int64_t, 2> dims;
-  Type inner;
-  if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
-      parseHWElementType(inner, p) || p.parseGreater())
+template <typename TArray>
+static Type parseArray(AsmParser &p) {
+  if (p.parseLess())
     return Type();
-  if (dims.size() != 1) {
-    p.emitError(p.getNameLoc(), "hw.array only supports one dimension");
+
+  Attribute dim;
+  Type inner;
+  uint64_t dimLiteral;
+  auto int32Type = p.getBuilder().getIntegerType(32);
+
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.hasValue()) {
+    dim = p.getBuilder().getI32IntegerAttr(dimLiteral);
+  } else if (!p.parseOptionalAttribute(dim, int32Type).hasValue())
+    return Type();
+
+  if (!dim.isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>()) {
+    p.emitError(p.getNameLoc(), "unsupported dimension kind in hw.array");
     return Type();
   }
 
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner,
-                    dims[0])))
+  if (p.parseXInDimensionList() || parseHWElementType(inner, p) ||
+      p.parseGreater())
     return Type();
 
-  return get(p.getContext(), inner, dims[0]);
+  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  if (failed(TArray::verify(mlir::detail::getDefaultDiagnosticEmitFn(loc),
+                            inner, dim)))
+    return Type();
+
+  return TArray::get(inner.getContext(), inner, dim);
 }
 
+Type ArrayType::parse(AsmParser &p) { return parseArray<ArrayType>(p); }
+
 void ArrayType::print(AsmPrinter &p) const {
-  p << "<" << getSize() << "x";
+  p << "<";
+  p.printAttributeWithoutType(getSizeAttr());
+  p << "x";
   printHWElementType(getElementType(), p);
   p << '>';
 }
 
+int64_t ArrayType::getSize() const {
+  if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
+    return intAttr.getInt();
+  return -1;
+}
+
 LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                Type innerType, size_t size) {
+                                Type innerType, Attribute size) {
   if (hasHWInOutType(innerType))
     return emitError() << "hw.array cannot contain InOut types";
   return success();
@@ -348,37 +374,27 @@ LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 //===----------------------------------------------------------------------===//
 
 Type UnpackedArrayType::parse(AsmParser &p) {
-  SmallVector<int64_t, 2> dims;
-  Type inner;
-  if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
-      parseHWElementType(inner, p) || p.parseGreater())
-    return Type();
-
-  if (dims.size() != 1) {
-    p.emitError(p.getNameLoc(), "uarray only supports one dimension");
-    return Type();
-  }
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner,
-                    dims[0])))
-    return Type();
-
-  return get(p.getContext(), inner, dims[0]);
+  return parseArray<UnpackedArrayType>(p);
 }
 
 void UnpackedArrayType::print(AsmPrinter &p) const {
-  p << "<" << getSize() << "x";
+  p << "<";
+  p.printAttributeWithoutType(getSizeAttr());
+  p << "x";
   printHWElementType(getElementType(), p);
   p << '>';
 }
 
 LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
-                          Type innerType, size_t size) {
+                          Type innerType, Attribute size) {
   if (!isHWValueType(innerType))
     return emitError() << "invalid element for uarray type";
   return success();
+}
+
+int64_t UnpackedArrayType::getSize() const {
+  return getSizeAttr().cast<IntegerAttr>().getInt();
 }
 
 //===----------------------------------------------------------------------===//

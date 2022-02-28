@@ -172,6 +172,7 @@ hw.module @parameterizedCombSeq<param: i32>
   %1 = seq.compreg %0, %clk: !hw.int<#hw.param.decl.ref<"param">>
 }
 
+<<<<<<< HEAD
 // CHECK-LABEL: hw.module @CLog2Expression<param: i32>() {
 hw.module @CLog2Expression<param: i32>() {
   // CHECK-NEXT: %0 = hw.param.value i32 = 0
@@ -188,4 +189,12 @@ hw.module @CLog2Expression<param: i32>() {
 
   // CHECK-NEXT: %4 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
   %4 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
+}
+
+// CHECK-LABEL: hw.module @parameterizedArrays<param: i32, N: i32>(
+hw.module @parameterizedArrays<param: i32, N: i32>
+// CHECK-SAME:%a: !hw.array<42xint<#hw.param.decl.ref<"param">>>,
+  (%a: !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
+// CHECK-SAME: %b: !hw.array<#hw.param.decl.ref<"N">xint<#hw.param.decl.ref<"param">>>
+   %b: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
 }

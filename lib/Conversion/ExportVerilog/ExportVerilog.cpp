@@ -1120,8 +1120,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
-        dims.push_back(
-            getInt32Attr(arrayType.getContext(), arrayType.getSize()));
+        dims.push_back(arrayType.getSizeAttr());
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter);
