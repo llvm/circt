@@ -37,13 +37,17 @@ using namespace circt::hw::detail;
 //===----------------------------------------------------------------------===/
 
 /// Return true if the specified type is a value HW Integer type.  This checks
-/// that it is a signless standard dialect type, that it isn't zero bits.
+/// that it is a signless standard dialect type, that it isn't zero bits, or a
+/// hw::IntType.
 bool circt::hw::isHWIntegerType(mlir::Type type) {
   Type canonicalType;
   if (auto typeAlias = type.dyn_cast<TypeAliasType>())
     canonicalType = typeAlias.getCanonicalType();
   else
     canonicalType = type;
+
+  if (canonicalType.isa<hw::IntType>())
+    return true;
 
   auto intType = canonicalType.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())

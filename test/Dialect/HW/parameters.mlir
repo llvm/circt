@@ -143,5 +143,16 @@ hw.module @parameterizedTypes<param: i32>
 
   // CHECK: %paramWire = sv.wire : !hw.inout<int<#hw.param.decl.ref<"param">>>
   %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
+}
 
+// CHECK-LABEL: hw.module @parameterizedCombSeq<param: i32>(
+hw.module @parameterizedCombSeq<param: i32>
+// CHECK-SAME: %a: !hw.int<#hw.param.decl.ref<"param">>
+  (%a: !hw.int<#hw.param.decl.ref<"param">>,
+    %clk : i1) {
+
+  // CHECK: %0 = comb.add %a, %a : !hw.int<#hw.param.decl.ref<"param">>
+  %0 = comb.add %a, %a : !hw.int<#hw.param.decl.ref<"param">>
+  // CHECK: %1 = seq.compreg %0, %clk : !hw.int<#hw.param.decl.ref<"param">>
+  %1 = seq.compreg %0, %clk: !hw.int<#hw.param.decl.ref<"param">>
 }
