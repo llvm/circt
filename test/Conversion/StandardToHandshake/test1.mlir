@@ -13,7 +13,7 @@
 // CHECK:           %[[VAL_9:.*]] = br %[[VAL_6]] : index
 // CHECK:           %[[VAL_10:.*]], %[[VAL_11:.*]] = control_merge %[[VAL_7]] : none
 // CHECK:           %[[VAL_12:.*]]:2 = fork [2] %[[VAL_11]] : index
-// CHECK:           %[[VAL_13:.*]] = buffer [1] %[[VAL_14:.*]] {initValues = [0], sequential = true} : i1
+// CHECK:           %[[VAL_13:.*]] = buffer [1] seq %[[VAL_14:.*]] {initValues = [0]} : i1
 // CHECK:           %[[VAL_15:.*]]:3 = fork [3] %[[VAL_13]] : i1
 // CHECK:           %[[VAL_16:.*]] = mux %[[VAL_15]]#2 {{\[}}%[[VAL_10]], %[[VAL_17:.*]]] : i1, none
 // CHECK:           %[[VAL_18:.*]] = mux %[[VAL_12]]#1 {{\[}}%[[VAL_9]]] : index, index

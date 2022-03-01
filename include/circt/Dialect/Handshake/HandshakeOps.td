@@ -204,6 +204,14 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
 }
 
+// Here use StrEnumAttr to better suit the BufferOp sequential
+// attribute for it can only be seq or fifo.
+def BufferCaseSeq: StrEnumAttrCase<"seq">;
+def BufferCaseFIFO: StrEnumAttrCase<"fifo">;
+
+def BufferTypeEnum: StrEnumAttr<
+  "BufferTypeEnum", "BufferOp seq or fifo", [BufferCaseSeq, BufferCaseFIFO]>;
+
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>]> {
@@ -211,8 +219,8 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let description = [{
     The buffer operation represents a buffer operation. $slots
-    must be an unsigned integer larger than 0. $sequantial=True indicates a
-    nontransparent buffer, while $sequantial=False indicates a transparent
+    must be an unsigned integer larger than 0. $bufferType=BufferTypeEnum::seq indicates a
+    nontransparent buffer, while $bufferType=BufferTypeEnum::fifo indicates a transparent
     buffer.
 
     An 'initValues' attribute containing a list of integer values may be provided.
@@ -227,16 +235,16 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    BoolAttr:$sequential,
+    BufferTypeEnum:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Type":$dataType, "int":$size,
-    "Value":$operand, "bool":$sequential)>];
+    "Value":$operand, "BufferTypeEnum":$bufferType)>];
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return (*this)->getAttrOfType<BoolAttr>("sequential").getValue();
+      return symbolizeBufferTypeEnum(this->bufferType()) == BufferTypeEnum::seq;
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
@@ -338,7 +346,7 @@ def MergeOp : Handshake_Op<"merge", [
 def MuxOp : Handshake_Op<"mux", [
   NoSideEffect, MergeLikeOpInterface,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]> 
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "mux operation";
   let description = [{
@@ -506,7 +514,7 @@ def SelectOp : Handshake_Op<"select", [
                        AnyType : $trueOperand, AnyType : $falseOperand);
   let results = (outs AnyType : $result);
 
-  let builders = [OpBuilder<(ins 
+  let builders = [OpBuilder<(ins
     "Value":$condOperand, "Value":$trueOperand, "Value":$falseOperand)>];
   let skipDefaultBuilders = 1;
   let hasCustomAssemblyFormat = 1;
@@ -521,7 +529,7 @@ def SinkOp
 
     Example:
     ```mlir
-    sink %data : i32 
+    sink %data : i32
     ```
   }];
   let arguments = (ins AnyType:$operand);
@@ -529,8 +537,8 @@ def SinkOp
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "Value":$operand)>,
-    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns. 
-    OpBuilder<(ins 
+    // Like ODS-generated builder, needed for instantiation through declarative rewrite patterns.
+    OpBuilder<(ins
       "TypeRange":$resultTypes, "ValueRange":$operands, "ArrayRef<::mlir::NamedAttribute>":$attributes)>
   ];
   let hasCustomAssemblyFormat = 1;
@@ -785,7 +793,7 @@ def JoinOp : Handshake_Op<"join", [
   let description = [{
     A control-only synchronizer.  Produces a valid output when all
     inputs become available.
-    
+
     Example:
     ```mlir
     %0 = join %a, %b, %c : i32

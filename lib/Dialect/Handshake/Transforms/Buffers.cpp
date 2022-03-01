@@ -62,11 +62,11 @@ struct HandshakeInsertBuffersPass
   }
 
   void insertBuffer(Location loc, Value operand, OpBuilder &builder,
-                    unsigned numSlots, bool sequential) {
+                    unsigned numSlots, BufferTypeEnum bufferType) {
     auto ip = builder.saveInsertionPoint();
     builder.setInsertionPointAfterValue(operand);
     auto bufferOp = builder.create<handshake::BufferOp>(
-        loc, operand.getType(), numSlots, operand, sequential);
+        loc, operand.getType(), numSlots, operand, bufferType);
     operand.replaceUsesWithIf(
         bufferOp,
         function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -77,7 +77,7 @@ struct HandshakeInsertBuffersPass
 
   // Inserts a buffer at a specific operand use.
   void bufferOperand(OpOperand &use, OpBuilder &builder, size_t numSlots,
-                     bool sequential) {
+                     BufferTypeEnum bufferType) {
     auto *usingOp = use.getOwner();
     Value usingValue = use.get();
 
@@ -85,40 +85,41 @@ struct HandshakeInsertBuffersPass
     auto buffer = builder.create<handshake::BufferOp>(
         usingValue.getLoc(), usingValue.getType(),
         /*slots=*/numSlots, usingValue,
-        /*sequential=*/sequential);
+        /*bufferType=*/bufferType);
     usingOp->setOperand(use.getOperandNumber(), buffer);
   }
 
   // Inserts buffers at all operands of an operation.
   void bufferOperands(Operation *op, OpBuilder builder, size_t numSlots,
-                      bool sequential) {
+                      BufferTypeEnum bufferType) {
     for (auto &use : op->getOpOperands()) {
       auto *srcOp = use.get().getDefiningOp();
       if (isa_and_nonnull<handshake::BufferOp>(srcOp))
         continue;
-      bufferOperand(use, builder, numSlots, sequential);
+      bufferOperand(use, builder, numSlots, bufferType);
     }
   }
 
   // Inserts buffers at all results of an operation
   void bufferResults(OpBuilder &builder, Operation *op, unsigned numSlots,
-                     bool sequential) {
+                     BufferTypeEnum bufferType) {
     for (auto res : op->getResults()) {
       Operation *user = *res.getUsers().begin();
       if (isa<handshake::BufferOp>(user))
         continue;
-      insertBuffer(op->getLoc(), res, builder, numSlots, sequential);
+      insertBuffer(op->getLoc(), res, builder, numSlots, bufferType);
     }
   };
 
   // Add a buffer to any un-buffered channel.
   void bufferAllStrategy(handshake::FuncOp f, OpBuilder &builder,
-                         unsigned numSlots, bool sequential = true) {
+                         unsigned numSlots,
+                         BufferTypeEnum bufferType = BufferTypeEnum::seq) {
 
     for (auto &arg : f.getArguments()) {
       if (!shouldBufferArgument(arg))
         continue;
-      insertBuffer(arg.getLoc(), arg, builder, numSlots, sequential);
+      insertBuffer(arg.getLoc(), arg, builder, numSlots, bufferType);
     }
 
     for (auto &defOp : f.getOps()) {
@@ -126,7 +127,7 @@ struct HandshakeInsertBuffersPass
         for (auto *useOp : res.getUsers()) {
           if (!isUnbufferedChannel(&defOp, useOp))
             continue;
-          insertBuffer(res.getLoc(), res, builder, numSlots, sequential);
+          insertBuffer(res.getLoc(), res, builder, numSlots, bufferType);
         }
       }
     }
@@ -137,14 +138,18 @@ struct HandshakeInsertBuffersPass
   // connections.
   void bufferAllFIFOStrategy(handshake::FuncOp f, OpBuilder &builder) {
     // First, buffer cycles with sequential buffers
-    bufferCyclesStrategy(f, builder, /*numSlots=*/2, /*sequential=*/true);
+    bufferCyclesStrategy(f, builder, /*numSlots=*/2,
+                         /*bufferType=*/BufferTypeEnum::seq);
     // Then, buffer remaining channels with transparent FIFO buffers
-    bufferAllStrategy(f, builder, bufferSize, /*sequential=*/false);
+    bufferAllStrategy(f, builder, bufferSize,
+                      /*bufferType=*/BufferTypeEnum::fifo);
   }
 
   // Perform a depth first search and insert buffers when cycles are detected.
-  void bufferCyclesStrategy(handshake::FuncOp f, OpBuilder &builder,
-                            unsigned numSlots, bool /*sequential*/ = true) {
+  void
+  bufferCyclesStrategy(handshake::FuncOp f, OpBuilder &builder,
+                       unsigned numSlots,
+                       BufferTypeEnum /*bufferType*/ = BufferTypeEnum::seq) {
     // Cycles can only occur at merge-like operations so those are our buffering
     // targets. Placing the buffer at the output of the merge-like op,
     // as opposed to naivly placing buffers *whenever* cycles are detected
@@ -160,7 +165,8 @@ struct HandshakeInsertBuffersPass
       // within a cycle (to break combinational cycles). Else, place a FIFO
       // buffer.
       bool sequential = inCycle(mergeOp, isSeqBuffer);
-      bufferResults(builder, mergeOp, numSlots, sequential);
+      bufferResults(builder, mergeOp, numSlots,
+                    sequential ? BufferTypeEnum::seq : BufferTypeEnum::fifo);
     }
   }
 

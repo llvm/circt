@@ -5,16 +5,16 @@
 // CHECK-LABEL:   handshake.func @foo(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
 // CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none)
-// CHECK:           %[[VAL_2:.*]] = buffer [2] %[[VAL_1]] {sequential = false} : none
-// CHECK:           %[[VAL_3:.*]] = buffer [2] %[[VAL_0]] {sequential = false} : i32
+// CHECK:           %[[VAL_2:.*]] = buffer [2] fifo %[[VAL_1]] : none
+// CHECK:           %[[VAL_3:.*]] = buffer [2] fifo %[[VAL_0]] : i32
 // CHECK:           %[[VAL_4:.*]]:2 = fork [2] %[[VAL_3]] : i32
-// CHECK:           %[[VAL_5:.*]] = buffer [2] %[[VAL_4]]#1 {sequential = false} : i32
-// CHECK:           %[[VAL_6:.*]] = buffer [2] %[[VAL_4]]#0 {sequential = false} : i32
+// CHECK:           %[[VAL_5:.*]] = buffer [2] fifo %[[VAL_4]]#1 : i32
+// CHECK:           %[[VAL_6:.*]] = buffer [2] fifo %[[VAL_4]]#0 : i32
 // CHECK:           %[[VAL_7:.*]] = mux %[[VAL_6]] {{\[}}%[[VAL_5]], %[[VAL_8:.*]]] : i32, i32
-// CHECK:           %[[VAL_9:.*]] = buffer [2] %[[VAL_7]] {sequential = true} : i32
+// CHECK:           %[[VAL_9:.*]] = buffer [2] seq %[[VAL_7]] : i32
 // CHECK:           %[[VAL_10:.*]]:2 = fork [2] %[[VAL_9]] : i32
-// CHECK:           %[[VAL_11:.*]] = buffer [2] %[[VAL_10]]#1 {sequential = false} : i32
-// CHECK:           %[[VAL_8]] = buffer [2] %[[VAL_10]]#0 {sequential = false} : i32
+// CHECK:           %[[VAL_11:.*]] = buffer [2] fifo %[[VAL_10]]#1 : i32
+// CHECK:           %[[VAL_8]] = buffer [2] fifo %[[VAL_10]]#0 : i32
 // CHECK:           return %[[VAL_11]], %[[VAL_2]] : i32, none
 // CHECK:         }
 

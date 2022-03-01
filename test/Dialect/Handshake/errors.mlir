@@ -1,8 +1,9 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
+
 handshake.func @invalid_merge_like_wrong_type(%arg0: i1, %arg1: i32, %arg2: i64) { // expected-note {{prior use here}}
   // expected-error @+1 {{use of value '%arg2' expects different type than prior uses: 'i32' vs 'i64'}}
-  %0 = mux %arg0 [%arg1, %arg2] : i1, i32 
+  %0 = mux %arg0 [%arg1, %arg2] : i1, i32
   return %0 : i32
 }
 
@@ -102,14 +103,30 @@ handshake.func @invalid_constant_value(%ctrl : none) -> none {
 
 handshake.func @invalid_buffer_init1(%arg0 : i32, %ctrl : none) -> (i32, none) {
   // expected-error @+1 {{'handshake.buffer' op expected 2 init values but got 1.}}
-  %0 = buffer [2] %arg0 {initValues = [1], sequential=true} : i32
+  %0 = buffer [2] seq %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }
 
 // -----
 
 handshake.func @invalid_buffer_init2(%arg0 : i32, %ctrl : none) -> (i32, none) {
-  // expected-error @+1 {{'handshake.buffer' op only sequential buffers are allowed to have initial values.}}
-  %0 = buffer [1] %arg0 {initValues = [1], sequential=false} : i32
+  // expected-error @+1 {{'handshake.buffer' op only bufferType buffers are allowed to have initial values.}}
+  %0 = buffer [1] fifo %arg0 {initValues = [1]} : i32
+  return %0, %ctrl : i32, none
+}
+
+// -----
+
+handshake.func @invalid_buffer_init3(%arg0 : i32, %ctrl : none) -> (i32, none) {
+  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'bufferType' [seq, fifo].}}
+  %0 = buffer [1]  %arg0 {initValues = [1]} : i32
+  return %0, %ctrl : i32, none
+}
+
+// -----
+
+handshake.func @invalid_buffer_init4(%arg0 : i32, %ctrl : none) -> (i32, none) {
+  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'bufferType' [seq, fifo].}}
+  %0 = buffer [1] SEQ %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }

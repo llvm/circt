@@ -995,7 +995,7 @@ static ParseResult verifyBufferOp(handshake::BufferOp op) {
   if (op.initValues().hasValue()) {
     if (!op.isSequential())
       return op.emitOpError()
-             << "only sequential buffers are allowed to have initial values.";
+             << "only bufferType buffers are allowed to have initial values.";
 
     auto nInits = op.initValues().getValue().size();
     if (nInits != op.size())
@@ -1013,12 +1013,12 @@ void handshake::BufferOp::getCanonicalizationPatterns(
 
 void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
                                 Type innerType, int size, Value operand,
-                                bool sequential) {
+                                BufferTypeEnum bufferType) {
   result.addOperands(operand);
   sost::addAttributes(result, size, innerType);
   result.addTypes({innerType});
-  result.addAttribute("sequential",
-                      BoolAttr::get(builder.getContext(), sequential));
+  result.addAttribute(
+      "bufferType", builder.getStringAttr(stringifyBufferTypeEnum(bufferType)));
 }
 
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1027,9 +1027,35 @@ ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   ArrayRef<Type> operandTypes(type);
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
   int size;
-  if (sost::parseOperation(parser, allOperands, result, size, type, true))
+  if (sost::parseIntInSquareBrackets(parser, size))
     return failure();
 
+  StringRef bufferTypeStr;
+  NamedAttrList attrStorage;
+  auto loc = parser.getCurrentLocation();
+  if (parser.parseOptionalKeyword(&bufferTypeStr, {"seq", "fifo"})) {
+    StringAttr attrVal;
+    mlir::OptionalParseResult parseResult = parser.parseOptionalAttribute(
+        attrVal, parser.getBuilder().getNoneType(), "bufferType", attrStorage);
+    if (parseResult.hasValue()) {
+      if (failed(*parseResult))
+        return failure();
+      bufferTypeStr = attrVal.getValue();
+    } else {
+      return parser.emitError(
+          loc, "expected string or keyword containing one of the following "
+               "enum values for attribute 'bufferType' [seq, fifo].");
+    }
+  }
+  result.addAttribute("bufferType",
+                      parser.getBuilder().getStringAttr(bufferTypeStr));
+
+  if (parser.parseOperandList(allOperands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  sost::addAttributes(result, size, type, false);
   result.addTypes({type});
   if (parser.resolveOperands(allOperands, operandTypes, allOperandLoc,
                              result.operands))
@@ -1037,7 +1063,17 @@ ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void BufferOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, true); }
+void BufferOp::print(OpAsmPrinter &p) {
+  int size =
+      (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
+  p << " [" << size << "]";
+  p << " " << (*this)->getAttrOfType<StringAttr>("bufferType").getValue();
+  Type type = (*this)->getAttrOfType<TypeAttr>("dataType").getValue();
+  p << " " << (*this)->getOperands();
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          {"size", "dataType", "control", "bufferType"});
+  p << " : " << type;
+}
 
 static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {
   std::string name;

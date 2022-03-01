@@ -2309,7 +2309,7 @@ bool HandshakeBuilder::visitHandshake(BufferOp op) {
   Value reset = portList[3][0];
 
   // For now, we only support sequential buffers.
-  if (op.sequential()) {
+  if (op.isSequential()) {
     SmallVector<int64_t> initValues = {};
     if (op.initValues())
       initValues = op.getInitValues();
