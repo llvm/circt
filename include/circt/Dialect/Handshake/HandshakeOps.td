@@ -218,8 +218,8 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let description = [{
     The buffer operation represents a buffer operation. $slots
-    must be an unsigned integer larger than 0. $bufferType="seq" indicates a
-    nontransparent buffer, while $bufferType="fifo" indicates a transparent
+    must be an unsigned integer larger than 0. $bufferType=BufferTypeEnum::seq indicates a
+    nontransparent buffer, while $bufferType=BufferTypeEnum::fifo indicates a transparent
     buffer.
 
     An 'initValues' attribute containing a list of integer values may be provided.
@@ -239,11 +239,11 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Type":$dataType, "int":$size,
-    "Value":$operand, "StringRef":$bufferType)>];
+    "Value":$operand, "BufferTypeEnum":$bufferType)>];
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return this->bufferType() == "seq";
+      return symbolizeBufferTypeEnum(this->bufferType()) == BufferTypeEnum::seq;
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();

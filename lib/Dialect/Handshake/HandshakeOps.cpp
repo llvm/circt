@@ -1013,11 +1013,12 @@ void handshake::BufferOp::getCanonicalizationPatterns(
 
 void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
                                 Type innerType, int size, Value operand,
-                                StringRef bufferType) {
+                                BufferTypeEnum bufferType) {
   result.addOperands(operand);
   sost::addAttributes(result, size, innerType);
   result.addTypes({innerType});
-  result.addAttribute("bufferType", builder.getStringAttr(bufferType));
+  result.addAttribute(
+      "bufferType", builder.getStringAttr(stringifyBufferTypeEnum(bufferType)));
 }
 
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1029,32 +1030,25 @@ ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   if (sost::parseIntInSquareBrackets(parser, size))
     return failure();
 
-  StringRef bufferType;
+  StringRef bufferTypeStr;
   NamedAttrList attrStorage;
   auto loc = parser.getCurrentLocation();
-  if (parser.parseOptionalKeyword(&bufferType, {"seq", "fifo"})) {
+  if (parser.parseOptionalKeyword(&bufferTypeStr, {"seq", "fifo"})) {
     StringAttr attrVal;
     mlir::OptionalParseResult parseResult = parser.parseOptionalAttribute(
         attrVal, parser.getBuilder().getNoneType(), "bufferType", attrStorage);
     if (parseResult.hasValue()) {
       if (failed(*parseResult))
         return failure();
-      bufferType = attrVal.getValue();
+      bufferTypeStr = attrVal.getValue();
     } else {
       return parser.emitError(
           loc, "expected string or keyword containing one of the following "
                "enum values for attribute 'bufferType' [seq, fifo].");
     }
   }
-  if (!bufferType.empty()) {
-    auto attrOptional = symbolizeBufferTypeEnum(bufferType);
-    if (!attrOptional)
-      return parser.emitError(loc, "invalid ")
-             << "bufferType attribute specification: \"" << bufferType << '"';
-
-    result.addAttribute("bufferType",
-                        parser.getBuilder().getStringAttr(bufferType));
-  }
+  result.addAttribute("bufferType",
+                      parser.getBuilder().getStringAttr(bufferTypeStr));
 
   if (parser.parseOperandList(allOperands) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
