@@ -9,6 +9,7 @@ add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLOps.cpp
   FIRRTLTypes.cpp
   InstanceGraph.cpp
+  NLATable.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/FIRRTL

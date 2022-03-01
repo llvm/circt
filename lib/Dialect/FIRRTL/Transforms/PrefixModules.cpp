@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
@@ -110,11 +111,8 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// Cached instance graph analysis.
   InstanceGraph *instanceGraph = nullptr;
 
-  /// Map of symbol name to NonLocalAnchor op.
-  llvm::StringMap<Operation *> nlaMap;
-
-  /// Map of root module name to NonLocalAnchor op.
-  DenseMap<Attribute, SmallVector<Operation *>> nlaRootMap;
+  /// Cached nla table analysis.
+  NLATable *nlaTable = nullptr;
 
   /// Boolean keeping track of any name changes.
   bool anythingChanged = false;
@@ -141,14 +139,13 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
     auto nla = anno.getMember("circt.nonlocal");
     if (!nla)
       return false;
-    auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-    auto nlaIter = nlaMap.find(nlaName);
-    if (nlaIter == nlaMap.end()) {
-      op->emitError("cannot find NonLocalAnchor :" + nlaName);
+    auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+    auto nlaOp = nlaTable->getNLA(nlaName);
+    if (!nlaOp) {
+      op->emitError("cannot find NonLocalAnchor :" + nlaName.getValue());
       return true;
     }
 
-    auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
     bool isValid = false;
     if (isa<InstanceOp>(op))
       isValid = nlaOp.hasModule(thisMod);
@@ -200,14 +197,8 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       StringAttr oldModName = instanceOp.moduleNameAttr().getAttr();
       for (Annotation anno : instAnnos) {
         if (auto nla = anno.getMember("circt.nonlocal")) {
-          auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-          auto nlaIter = nlaMap.find(nlaName);
-          if (nlaIter == nlaMap.end())
-            instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
-          else {
-            auto nlaOp = dyn_cast<NonLocalAnchor>(nlaIter->second);
-            nlaOp.updateModule(oldModName, newTarget);
-          }
+          auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+          nlaTable->updateModuleInNLA(nlaName, oldModName, newTarget);
         }
       }
 
@@ -245,10 +236,9 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &firstPrefix = prefixes.front();
 
   auto fixNLAsRootedAt = [&](StringAttr oldModName, StringAttr newModuleName) {
-    auto iter = nlaRootMap.find(oldModName);
-    if (iter != nlaRootMap.end())
-      for (auto &n : iter->second)
-        cast<NonLocalAnchor>(n).updateModule(oldModName, newModuleName);
+    for (auto n : nlaTable->lookup(oldModName))
+      if (n.root() == oldModName)
+        n.updateModule(oldModName, newModuleName);
   };
   // Rename the module for each required prefix. This will clone the module
   // once for each prefix but the first.
@@ -391,13 +381,8 @@ void PrefixModulesPass::prefixGrandCentralInterfaces() {
 void PrefixModulesPass::runOnOperation() {
   auto *context = &getContext();
   instanceGraph = &getAnalysis<InstanceGraph>();
+  nlaTable = &getAnalysis<NLATable>();
   auto circuitOp = getOperation();
-
-  // Record all the NLA ops in the circt.
-  for (auto nla : circuitOp.body().getOps<NonLocalAnchor>()) {
-    nlaMap[nla.sym_name()] = nla;
-    nlaRootMap[nla.root()].push_back(nla);
-  }
 
   // If the main module is prefixed, we have to update the CircuitOp.
   auto mainModule = instanceGraph->getTopLevelModule();
@@ -407,10 +392,11 @@ void PrefixModulesPass::runOnOperation() {
     auto newMainModuleName =
         StringAttr::get(context, (prefix + circuitOp.name()).str());
     circuitOp.nameAttr(newMainModuleName);
+
     // Now update all the NLAs that have the top level module symbol.
-    for (auto &n : nlaRootMap[oldModName])
-      cast<NonLocalAnchor>(n).updateModule(oldModName, newMainModuleName);
-    nlaRootMap.erase(oldModName);
+    for (auto n : nlaTable->lookup(oldModName))
+      if (n.root() == oldModName)
+        nlaTable->updateModuleInNLA(n, oldModName, newMainModuleName);
   }
 
   // Walk all Modules in a top-down order.  For each module, look at the list of

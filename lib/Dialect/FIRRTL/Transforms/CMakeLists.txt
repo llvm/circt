@@ -20,6 +20,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
+  PrintNLATable.cpp
   RemoveResets.cpp
   RemoveUnusedPorts.cpp
   WireDFT.cpp
