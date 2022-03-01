@@ -66,8 +66,10 @@ void NLATable::updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
   auto &nlas = nodeMap[oldModule];
   auto *iter = std::find(nlas.begin(), nlas.end(), nlaOp);
   if (iter != nlas.end()) {
-    nodeMap[newModule].push_back(nlaOp);
     nlas.erase(iter);
+    nodeMap[newModule].push_back(nlaOp);
+    if (nlas.empty())
+      nodeMap.erase(oldModule);
   }
 }
 
