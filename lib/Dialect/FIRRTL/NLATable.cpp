@@ -1,4 +1,3 @@
-
 //===- NLATable.cpp - Non-Local Anchor Table --------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -38,15 +37,6 @@ NLATable::NLATable(Operation *operation) {
   }
 }
 
-// void NLATable::replaceInstance(InstanceOp oldInst, InstanceOp newInst) {
-//     assert(oldInst.moduleName() == newInst.moduleName() && "module targets
-//     mismatch"); assert(oldInst->getParentOfType<FModuleOp>() ==
-//     newInst->getParentOfType<FModuleOp>() && "module targets mismatch"); auto
-//     nlas = nodeMap.equal_range(oldInst->getParentOfType<FModuleOp>()); for
-//     (auto i = nlas.first, e = nlas.second; i != e; ++i)
-//         i->second.updateInstance(oldInst, newInst);
-// }
-
 void NLATable::renameModule(StringAttr oldModName, StringAttr newModName) {
   auto op = symToOp.find(oldModName);
   if (op == symToOp.end())
@@ -76,8 +66,8 @@ void NLATable::updateModuleInNLA(NonLocalAnchor nlaOp, StringAttr oldModule,
   auto &nlas = nodeMap[oldModule];
   auto *iter = std::find(nlas.begin(), nlas.end(), nlaOp);
   if (iter != nlas.end()) {
-    nlas.erase(iter);
     nodeMap[newModule].push_back(nlaOp);
+    nlas.erase(iter);
   }
 }
 

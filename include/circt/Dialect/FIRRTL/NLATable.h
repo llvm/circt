@@ -37,7 +37,7 @@ public:
   /// Lookup all NLAs an operation participates in
   ArrayRef<NonLocalAnchor> lookup(StringAttr name);
 
-  /// Resolve an symbol to an NLA
+  /// Resolve a symbol to an NLA
   NonLocalAnchor getNLA(StringAttr name);
 
   /// Resolve a symbol to a Module
