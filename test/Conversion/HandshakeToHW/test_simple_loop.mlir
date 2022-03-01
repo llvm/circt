@@ -51,7 +51,7 @@ handshake.func @main(%arg0: none, ...) -> (i64, none) attributes {argNames = ["i
   %1 = constant %0#2 {value = 1 : i64} : i64
   %2 = constant %0#1 {value = 42 : i64} : i64
   %3 = constant %0#0 {value = 1 : i64} : i64
-  %4 = buffer [1] %13#0 {initValues = [0], sequential = true} : i1
+  %4 = buffer [1] seq %13#0 {initValues = [0]} : i1
   %5:4 = fork [4] %4 : i1
   %6 = mux %5#3 [%0#3, %trueResult_2] : i1, none
   %7 = mux %5#2 [%2, %trueResult] : i1, i64
