@@ -456,7 +456,7 @@ sv.verbatim "{{0}} {{{0}}}" {symbols = [@CheckNestedBracesSymbol]}
 
 
 sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
-// CHECK-LABL: module BindEmissionInstance()
+// CHECK-LABEL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
   hw.output
 }
@@ -468,6 +468,18 @@ hw.module @BindEmission() -> () {
   hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint = true}
   hw.output
 }
+
+// Check for instance name matching module name
+sv.bind #hw.innerNameRef<@BindEmission2::@BindEmissionInstance> {output_file = #hw.output_file<"BindTest/BindEmissionInstance2.sv", excludeFromFileList>}
+// CHECK-LABEL: module BindEmission2()
+hw.module @BindEmission2() -> () {
+  // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+  // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
+  // CHECK-NEXT: */
+  hw.instance "BindEmissionInstance" sym @BindEmissionInstance @BindEmissionInstance() -> ()  {doNotPrint = true}
+  hw.output
+}
+
 
 hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
   // CHECK-LABEL: module bind_rename_port

@@ -38,6 +38,22 @@ firrtl.circuit "Simple" {
 }
 
 
+// Should pick a valid symbol when a wire has no name.
+// CHECK-LABEL: firrtl.circuit "Top"
+firrtl.circuit "Top"  {
+  firrtl.module @Top() {
+    %a1_x = firrtl.instance a1  @A(out x: !firrtl.uint<1>)
+    %a2_x = firrtl.instance a2  @A_(out x: !firrtl.uint<1>)
+  }
+  firrtl.module @A(out %x: !firrtl.uint<1>) {
+    // CHECK: %0 = firrtl.wire sym @inner_sym
+    %0 = firrtl.wire  {annotations = [{class = "hello"}]} : !firrtl.uint<1>
+  }
+  firrtl.module @A_(out %x: !firrtl.uint<1>) {
+    %0 = firrtl.wire  : !firrtl.uint<1>
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "PrimOps"
 firrtl.circuit "PrimOps" {
   // CHECK: firrtl.module @PrimOps0
@@ -355,6 +371,23 @@ firrtl.circuit "Bundle" {
   }
 }
 
+// This is testing an issue in partial connect fixup from a spelling mistake in
+// the pass.
+firrtl.circuit "PartialIssue" {
+  firrtl.module @A(out %a: !firrtl.bundle<member: bundle<a: bundle<clock: clock, reset: asyncreset>>>) { }
+  firrtl.module @B(out %b: !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>) { }
+  firrtl.module @PartialIssue() {
+    %a = firrtl.instance a @A(out a: !firrtl.bundle<member: bundle<a: bundle<clock: clock, reset: asyncreset>>>)
+    %b = firrtl.instance b @B(out b: !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>)
+    %wb = firrtl.wire : !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>
+    firrtl.partialconnect %wb, %b : !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>, !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>
+    // CHECK: %0 = firrtl.subfield %wb(0)
+    // CHECK: %1 = firrtl.subfield %0(0)
+    // CHECK: %2 = firrtl.subfield %b_a(0)
+    // CHECK: %3 = firrtl.subfield %2(0)
+    // CHECK: firrtl.partialconnect %1, %3
+  }
+}
 
 // Make sure flipped fields are handled properly. This should pass flow
 // verification checking.
@@ -409,6 +442,25 @@ firrtl.circuit "NoDedup" {
   firrtl.module @Simple1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
   // CHECK: firrtl.module @NoDedup 
   firrtl.module @NoDedup() {
+    firrtl.instance simple0 @Simple0()
+    firrtl.instance simple1 @Simple1()
+  }
+}
+
+// Check that modules marked MustDedup have been deduped.
+// CHECK-LABEL: firrtl.circuit "MustDedup"
+firrtl.circuit "MustDedup" attributes {annotations = [{
+    // The annotation should be removed.
+    // CHECK-NOT: class = "firrtl.transforms.MustDeduplicateAnnotation"
+    class = "firrtl.transforms.MustDeduplicateAnnotation",
+    modules = ["~MustDedup|Simple0", "~MustDedup|Simple1"]}]
+   } {
+  // CHECK: @Simple0
+  firrtl.module @Simple0() { }
+  // CHECK-NOT: @Simple1
+  firrtl.module @Simple1() { }
+  // CHECK: firrtl.module @MustDedup 
+  firrtl.module @MustDedup() {
     firrtl.instance simple0 @Simple0()
     firrtl.instance simple1 @Simple1()
   }

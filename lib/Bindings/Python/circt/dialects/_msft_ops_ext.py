@@ -139,6 +139,13 @@ class PhysicalRegionOp:
     self.attributes["bounds"] = new_bounds
 
 
+class InstanceOp:
+
+  @property
+  def moduleName(self):
+    return _ir.FlatSymbolRefAttr(self.attributes["moduleName"])
+
+
 class EntityExternOp:
 
   @staticmethod

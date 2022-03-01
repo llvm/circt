@@ -104,6 +104,21 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   // CHECK: sv.verbatim "[\22DUTBlackbox1\22,\22DUTBlackbox2\22]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>, symbols = []}
 }
 
+//===----------------------------------------------------------------------===//
+// MemoryMetadata
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: firrtl.circuit "top"
+firrtl.circuit "top" 
+{
+  firrtl.module @top() { }
+  // When there are no memories, we still need to emit the seq_mems.json
+  // metadata, but not the memory.conf metadata.
+  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
+  // CHECK: sv.verbatim "[]" {output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []}
+  // CHECK-NOT: {output_file = #hw.output_file<"\22metadata/dut.conf\22", excludeFromFileList>, symbols = []}
+}
+
 // CHECK-LABEL: firrtl.circuit "top"
 firrtl.circuit "top" 
 {

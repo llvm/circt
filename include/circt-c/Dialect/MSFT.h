@@ -33,9 +33,8 @@ typedef int32_t CirctMSFTPrimitiveType;
 
 MLIR_CAPI_EXPORTED bool
     circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
-MLIR_CAPI_EXPORTED MlirAttribute
-circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType, uint64_t x,
-                             uint64_t y, uint64_t num, MlirStringRef subPath);
+MLIR_CAPI_EXPORTED MlirAttribute circtMSFTPhysLocationAttrGet(
+    MlirContext, CirctMSFTPrimitiveType, uint64_t x, uint64_t y, uint64_t num);
 MLIR_CAPI_EXPORTED CirctMSFTPrimitiveType
     circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
 MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);

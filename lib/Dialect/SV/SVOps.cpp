@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -376,11 +377,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 
   // Otherwise, invert the condition and move the 'else' block to the 'then'
   // region.
-  auto full =
-      rewriter.create<hw::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
-  Value ops[] = {full, op.cond()};
-  auto cond =
-      rewriter.createOrFold<comb::XorOp>(op.getLoc(), op.cond().getType(), ops);
+  auto cond = comb::createOrFoldNot(op.getLoc(), op.cond(), rewriter);
   op.setOperand(cond);
 
   auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
@@ -634,7 +631,7 @@ auto CaseZOp::getCases() -> SmallVector<CaseZInfo, 4> {
   return result;
 }
 
-static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
+ParseResult CaseZOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
   OpAsmParser::OperandType condOperand;
@@ -716,11 +713,12 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
-  p << ' ' << op.cond() << " : " << op.cond().getType();
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+void CaseZOp::print(OpAsmPrinter &p) {
+  p << ' ' << cond() << " : " << cond().getType();
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"casePatterns"});
 
-  for (auto caseInfo : op.getCases()) {
+  for (auto caseInfo : getCases()) {
     p.printNewline();
     auto pattern = caseInfo.pattern;
     if (pattern.isDefault()) {
@@ -1264,11 +1262,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   // conditional procedural assign.  We've ensured that this is the only write
   // of the register.
   if (trueBranch) {
-    auto one =
-        rewriter.create<hw::ConstantOp>(mux.getLoc(), mux.cond().getType(), -1);
-    Value ops[] = {mux.cond(), one};
-    auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
-                                                   mux.cond().getType(), ops);
+    auto cond = comb::createOrFoldNot(mux.getLoc(), mux.cond(), rewriter);
     rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
       rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
     });
@@ -1310,10 +1304,10 @@ static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
 
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
-  // FIXME
-  if (cache)
-    if (auto *result = cache->getDefinition(instance().getName()))
-      return dyn_cast<hw::InstanceOp>(result);
+  if (cache) {
+    auto result = cache->getDefinition(instance());
+    return cast<hw::InstanceOp>(result.getOp());
+  }
 
   // Otherwise, resolve the instance by looking up the hw.module...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();

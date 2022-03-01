@@ -490,6 +490,27 @@ Example:
 }
 ```
 
+### MustDeduplicateAnnotation
+
+| Property   | Type   | Description                                      |
+| ---------- | ------ | -------------                                    |
+| class      | string | `firrtl.transforms.MustDeduplicateAnnotation`    |
+| modules    | array  | A list of module targets which must deduplicate. |
+
+This annotation causes the deduplication pass to check that the listed modules
+are deduplicated with each other.
+
+Example:
+```json
+{
+  "class":"firrtl.transforms.MustDeduplicateAnnotation",
+  "modules":[
+    "~Top|A"
+    "~Top|B"
+  ]
+}
+```
+
 ### NestedPrefixModulesAnnotation
 
 | Property   | Type   | Description                                              |

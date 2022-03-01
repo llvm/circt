@@ -135,6 +135,8 @@ struct constant_int_all_ones_matcher {
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
+  else if (auto ptr = type.dyn_cast<llhd::PtrType>())
+    type = ptr.getUnderlyingType();
   if (auto array = type.dyn_cast<hw::ArrayType>())
     return array.getSize();
   if (auto tup = type.dyn_cast<hw::StructType>())
@@ -145,6 +147,8 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 Type circt::llhd::getLLHDElementType(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
+  else if (auto ptr = type.dyn_cast<llhd::PtrType>())
+    type = ptr.getUnderlyingType();
   if (auto array = type.dyn_cast<hw::ArrayType>())
     return array.getElementType();
   return type;
@@ -162,6 +166,10 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
     return sameKindArbitraryWidth(
         sig.getUnderlyingType(),
         rhsType.cast<llhd::SigType>().getUnderlyingType());
+  if (auto ptr = lhsType.dyn_cast<llhd::PtrType>())
+    return sameKindArbitraryWidth(
+        ptr.getUnderlyingType(),
+        rhsType.cast<llhd::PtrType>().getUnderlyingType());
 
   if (auto array = lhsType.dyn_cast<hw::ArrayType>())
     return array.getElementType() ==
@@ -348,15 +356,18 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
       matchPattern(op.input(),
                    m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
                                      m_Constant(&amountAttr)))) {
+    // Use APInt for index to keep the original bitwidth, zero-extend amount to
+    // add it to index without requiring the same bitwidth and using the width
+    // of index
     APInt index = indexAttr.getValue();
-    APInt amount = amountAttr.getValue();
+    uint64_t amount = amountAttr.getValue().getZExtValue();
     auto shrOp = op.input().template getDefiningOp<llhd::ShrOp>();
     unsigned baseWidth = shrOp.getBaseWidth();
     unsigned hiddenWidth = shrOp.getHiddenWidth();
 
     // with amt + index < baseWidth
     //   => llhd.sig.array_get(base, amt + index)
-    if (amount.getZExtValue() + index.getZExtValue() < baseWidth) {
+    if (amount + index.getZExtValue() < baseWidth) {
       op.inputMutable().assign(shrOp.base());
       Value newIndex =
           rewriter.create<hw::ConstantOp>(op->getLoc(), amount + index);
@@ -367,8 +378,7 @@ static LogicalResult canonicalizeSigPtrArrayGetOp(Op op,
 
     // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
     //   => llhd.sig.array_get(hidden, amt + index - baseWidth)
-    if (amount.getZExtValue() + index.getZExtValue() <
-        baseWidth + hiddenWidth) {
+    if (amount + index.getZExtValue() < baseWidth + hiddenWidth) {
       op.inputMutable().assign(shrOp.hidden());
       Value newIndex = rewriter.create<hw::ConstantOp>(
           op->getLoc(), amount + index - baseWidth);

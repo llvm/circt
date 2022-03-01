@@ -20,7 +20,8 @@ def FuncOp : Op<Handshake_Dialect, "func", [
    FunctionOpInterface,
    Symbol,
    RegionKindInterface,
-   OpAsmOpInterface
+   OpAsmOpInterface,
+   HasClock
 ]> {
   let summary = "Handshake dialect function.";
   let description = [{

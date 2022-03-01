@@ -21,6 +21,7 @@ target_link_libraries(circt-opt
   CIRCTFSM
   CIRCTHandshake
   CIRCTHandshakeToFIRRTL
+  CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM

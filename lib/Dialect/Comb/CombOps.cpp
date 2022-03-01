@@ -45,6 +45,15 @@ Value comb::createOrFoldSExt(Value value, Type destTy,
   return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
 }
 
+Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder) {
+  auto allOnes = builder.create<hw::ConstantOp>(loc, value.getType(), -1);
+  return builder.createOrFold<XorOp>(loc, value, allOnes);
+}
+
+Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder) {
+  return createOrFoldNot(builder.getLoc(), value, builder);
+}
+
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
@@ -184,8 +193,7 @@ static LogicalResult verifyUTVariadicOp(Operation *op) {
 bool XorOp::isBinaryNot() {
   if (getNumOperands() != 2)
     return false;
-  if (auto cst =
-          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
+  if (auto cst = getOperand(1).getDefiningOp<hw::ConstantOp>())
     if (cst.getValue().isAllOnes())
       return true;
   return false;

@@ -504,6 +504,13 @@ struct CompanionInfo {
   FModuleOp mapping;
 };
 
+/// Stores a reference to a ground type and an optional NLA associated with
+/// that field.
+struct FieldAndNLA {
+  FieldRef field;
+  FlatSymbolRefAttr nlaSym;
+};
+
 /// Generate SystemVerilog interfaces from Grand Central annotations.  This pass
 /// roughly works in the following three phases:
 ///
@@ -525,8 +532,9 @@ private:
   /// templates for AugmentedTypes.
   Optional<Attribute> fromAttr(Attribute attr);
 
-  /// Mapping of ID to leaf ground type associated with that ID.
-  DenseMap<Attribute, FieldRef> leafMap;
+  /// Mapping of ID to leaf ground type and an optional non-local annotation
+  /// associated with that ID.
+  DenseMap<Attribute, FieldAndNLA> leafMap;
 
   /// Mapping of ID to parent instance and module.  If this module is the top
   /// module, then the first tuple member will be None.
@@ -538,6 +546,13 @@ private:
   /// An optional prefix applied to all interfaces in the design.  This is set
   /// based on a PrefixInterfacesAnnotation.
   StringRef interfacePrefix;
+
+  /// Map of NLA symbol to NLA.
+  DenseMap<StringAttr, NonLocalAnchor> nlaMap;
+
+  /// The set of NLAs that are dead after this pass.  These will be removed
+  /// before the pass finishes.
+  DenseSet<StringAttr> deadNLAs;
 
   /// Return a string containing the name of an interface.  Apply correct
   /// prefixing from the interfacePrefix and module-level prefix parameter.
@@ -569,7 +584,7 @@ private:
                                            VerbatimBuilder &path);
 
   /// Return the module associated with this value.
-  FModuleLike getEnclosingModule(Value value);
+  FModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -746,7 +761,10 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                                      VerbatimBuilder &path) {
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](auto ground) {
-        FieldRef fieldRef = leafMap.lookup(ground.getID());
+        auto [fieldRef, sym] = leafMap.lookup(ground.getID());
+        NonLocalAnchor nla;
+        if (sym)
+          nla = nlaMap[sym.getAttr()];
         Value leafValue = fieldRef.getValue();
         unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
@@ -754,7 +772,15 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto builder =
             OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
-        auto enclosing = getEnclosingModule(leafValue);
+        // The enclosing module is either the module where the leaf lives or its
+        // the root of the NLA.  After computing this, the enclosing module
+        // should be singly-instantiated.
+        FModuleLike enclosing;
+        if (!nla)
+          enclosing = getEnclosingModule(leafValue, sym);
+        else
+          enclosing = getSymbolTable().lookup<FModuleOp>(nla.root());
+
         auto srcPaths = instancePaths->getAbsolutePaths(enclosing);
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
@@ -766,11 +792,19 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                 ? enclosing
                 : srcPaths[0][0]->getParentOfType<FModuleLike>()));
 
-        // Add the source path.
+        // Add the source path from the enclosing module to the root.
         for (auto inst : srcPaths[0]) {
           path += '.';
           path += getInnerRefTo(inst);
         }
+
+        // If this is an NLA, append the path from the enclosing module down to
+        // the module that contains the NLA.
+        if (nla)
+          for (size_t i = 0, e = nla.namepath().size() - 1; i != e; ++i) {
+            path += '.';
+            path += nla.namepath()[i];
+          }
 
         // Add the leaf value to the path.
         auto uloc = builder.getUnknownLoc();
@@ -875,7 +909,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             // Traverse to generate mappings.
             if (!traverseField(field, id, path))
               return None;
-            auto fieldRef = leafMap.lookup(ground.getID());
+            FieldRef fieldRef = leafMap.lookup(ground.getID()).field;
             auto value = fieldRef.getValue();
             auto fieldID = fieldRef.getFieldID();
             auto tpe = value.getType().cast<FIRRTLType>().getFinalTypeByFieldID(
@@ -1035,7 +1069,8 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-FModuleLike GrandCentralPass::getEnclosingModule(Value value) {
+FModuleLike GrandCentralPass::getEnclosingModule(Value value,
+                                                 FlatSymbolRefAttr sym) {
   if (auto blockArg = value.dyn_cast<BlockArgument>())
     return cast<FModuleOp>(blockArg.getOwner()->getParentOp());
 
@@ -1217,6 +1252,10 @@ void GrandCentralPass::runOnOperation() {
     }
   };
 
+  /// Populate the NLA map with Symbol -> NLA.
+  for (NonLocalAnchor nla : circuitOp.getBody()->getOps<NonLocalAnchor>())
+    nlaMap.insert({nla.sym_nameAttr(), nla});
+
   /// Walk the circuit and extract all information related to scattered
   /// Grand Central annotations.  This is used to populate: (1) the
   /// companionIDMap, (2) the parentIDMap, and (3) the leafMap.
@@ -1234,8 +1273,12 @@ void GrandCentralPass::runOnOperation() {
             auto maybeID = getID(op, annotation);
             if (!maybeID)
               return false;
-            leafMap[maybeID.getValue()] = {op.getResult(),
-                                           annotation.getFieldID()};
+            auto sym =
+                annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+            leafMap[maybeID.getValue()] = {
+                {op.getResult(), annotation.getFieldID()}, sym};
+            if (sym)
+              deadNLAs.insert(sym.getAttr());
             return true;
           });
         })
@@ -1289,9 +1332,12 @@ void GrandCentralPass::runOnOperation() {
                 auto maybeID = getID(op, annotation);
                 if (!maybeID)
                   return false;
-                leafMap[maybeID.getValue()] = {op.getArgument(i),
-                                               annotation.getFieldID()};
-
+                auto sym =
+                    annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+                leafMap[maybeID.getValue()] = {
+                    {op.getArgument(i), annotation.getFieldID()}, sym};
+                if (sym)
+                  deadNLAs.insert(sym.getAttr());
                 return true;
               });
 
@@ -1472,9 +1518,9 @@ void GrandCentralPass::runOnOperation() {
     sort();
     llvm::dbgs() << "leafMap:\n";
     for (auto id : ids) {
-      auto fieldRef = leafMap.lookup(id);
+      auto fieldRef = leafMap.lookup(id).field;
       auto value = fieldRef.getValue();
-      auto fieldID = fieldRef.getValue();
+      auto fieldID = fieldRef.getFieldID();
       if (auto blockArg = value.dyn_cast<BlockArgument>()) {
         FModuleOp module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
         llvm::dbgs() << "  - " << id.getValue() << ": "
@@ -1597,6 +1643,33 @@ void GrandCentralPass::runOnOperation() {
                       maybeHierarchyFileYAML.getValue().getValue(),
                       /*excludFromFileList=*/true));
     LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
+  }
+
+  // Garbage collect dead NLAs.
+  for (auto &op :
+       llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
+
+    // Remove NLA operations.
+    if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
+      if (deadNLAs.count(nla.sym_nameAttr()))
+        nla.erase();
+      continue;
+    }
+
+    auto fmodule = dyn_cast<FModuleOp>(op);
+    if (!fmodule)
+      continue;
+
+    auto isDead = [&](Annotation anno) -> bool {
+      auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+      if (!sym)
+        return false;
+      return deadNLAs.count(sym.getAttr());
+    };
+
+    // Visit module bodies to remove any dead NLA breadcrumbs.
+    for (auto op : fmodule.getBody()->getOps<InstanceOp>())
+      AnnotationSet::removeAnnotations(op, isDead);
   }
 
   // Signal pass failure if any errors were found while examining circuit

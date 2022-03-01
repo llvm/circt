@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"

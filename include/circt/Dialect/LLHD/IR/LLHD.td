@@ -73,11 +73,16 @@ def LLHD_AnySigType : LLHD_SigType<[LLHD_AnyUnderlyingType]>;
 
 // LLHD ptr type
 class LLHD_PtrType<list<Type> allowedTypes>
-    : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
-                    "$_self.cast<PtrType>().getUnderlyingType()",
-                    "LLHD pointer type">;
+  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
+    "$_self.cast<PtrType>().getUnderlyingType()", "LLHD pointer type">;
 
 def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
+
+// LLHD sig or ptr type
+class LLHD_SigOrPtrType<list<Type> allowedTypes>
+  : AnyTypeOf<[LLHD_SigType<allowedTypes>, LLHD_PtrType<allowedTypes>]>;
+
+def LLHD_AnySigOrPtrType : LLHD_SigOrPtrType<[LLHD_AnyUnderlyingType]>;
 
 //===----------------------------------------------------------------------===//
 // LLHD op definition

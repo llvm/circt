@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
@@ -149,8 +150,8 @@ bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute attr) {
 }
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
                                            CirctMSFTPrimitiveType devType,
-                                           uint64_t x, uint64_t y, uint64_t num,
-                                           MlirStringRef subPath) {
+                                           uint64_t x, uint64_t y,
+                                           uint64_t num) {
   auto *ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
       ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));

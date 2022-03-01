@@ -688,6 +688,22 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   return true;
 }
 
+static StringRef getOperandName(Value operand) {
+  if (BlockArgument arg = operand.dyn_cast<BlockArgument>()) {
+    auto op = arg.getParentBlock()->getParentOp();
+    if (op && hw::isAnyModule(op))
+      return hw::getModuleArgumentName(op, arg.getArgNumber());
+  } else {
+    auto srcOp = operand.getDefiningOp();
+    if (auto instOp = dyn_cast<InstanceOp>(srcOp))
+      return instOp.instanceName();
+
+    if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
+      return srcName.getValue();
+  }
+  return "";
+}
+
 /// Create a reasonable name for a SV interface instance.
 static std::string &constructInstanceName(Value operand, InterfaceOp iface,
                                           std::string &name) {
@@ -706,12 +722,9 @@ static std::string &constructInstanceName(Value operand, InterfaceOp iface,
   }
 
   // Indicate to where the sink is connected.
-  auto srcOp = operand.getDefiningOp();
-  if (auto instOp = dyn_cast<InstanceOp>(srcOp))
-    s << "From" << llvm::toUpper(instOp.instanceName()[0])
-      << instOp.instanceName().substr(1);
-  if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
-    s << "From" << srcName.getValue();
+  StringRef operName = getOperandName(operand);
+  if (!operName.empty())
+    s << "From" << llvm::toUpper(operName[0]) << operName.substr(1);
   return s.str();
 }
 

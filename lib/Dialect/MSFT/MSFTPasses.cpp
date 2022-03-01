@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -157,7 +158,8 @@ LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
     }
   }
   if (symNotFound)
-    return failure();
+    return rewriter.notifyMatchFailure(
+        inst, "Could not find operation corresponding to appid");
 
   // Relocate all my children.
   rewriter.setInsertionPointAfter(inst);
@@ -474,11 +476,19 @@ void ExportTclPass::runOnOperation() {
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
-  for (auto moduleName : tops) {
+  for (std::string moduleName : tops) {
     Operation *hwmod =
         emitter.getDefinition(FlatSymbolRefAttr::get(ctxt, moduleName));
-    if (!hwmod || failed(emitter.emit(hwmod, tclFile)))
-      return signalPassFailure();
+    if (!hwmod) {
+      top.emitError("Failed to find module '") << moduleName << "'";
+      signalPassFailure();
+      return;
+    }
+    if (failed(emitter.emit(hwmod, tclFile))) {
+      hwmod->emitError("failed to emit tcl");
+      signalPassFailure();
+      return;
+    }
   }
 
   ConversionTarget target(*ctxt);
@@ -624,13 +634,10 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
 
 /// Fill a symbol cache with all the top level symbols.
 void PassCommon::populateSymbolCache(mlir::ModuleOp mod) {
-  for (Operation &op : mod.getBody()->getOperations()) {
-    StringAttr symName = SymbolTable::getSymbolName(&op);
-    if (!symName)
-      continue;
-    // Add the symbol to the cache.
-    topLevelSyms.addDefinition(symName, &op);
-  }
+  for (Operation &op : mod.getBody()->getOperations())
+    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+      if (auto name = symOp.getNameAttr())
+        topLevelSyms.addDefinition(name, symOp);
   topLevelSyms.freeze();
 }
 

@@ -1923,11 +1923,6 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   // If we got a hit, then go ahead and simplify it!
   Value cond = op.cond();
 
-  auto invertBoolValue = [&](Value value) -> Value {
-    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-    return rewriter.createOrFold<XorOp>(op.getLoc(), value, one);
-  };
-
   // `mux(cond, a, mux(cond2, a, b))` -> `mux(cond|cond2, a, b)`
   // `mux(cond, a, mux(cond2, b, a))` -> `mux(cond|~cond2, a, b)`
   // `mux(cond, mux(cond2, a, b), a)` -> `mux(~cond|cond2, a, b)`
@@ -1941,7 +1936,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
       otherValue = subMux.falseValue();
     else if (subMux.falseValue() == commonValue) {
       otherValue = subMux.trueValue();
-      subCond = invertBoolValue(subCond);
+      subCond = createOrFoldNot(op.getLoc(), subCond, rewriter);
     } else {
       // We can't fold `mux(cond, a, mux(a, x, y))`.
       return false;
@@ -1949,7 +1944,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
 
     // Invert the outer cond if needed, and combine the mux conditions.
     if (!isTrueOperand)
-      cond = invertBoolValue(cond);
+      cond = createOrFoldNot(op.getLoc(), cond, rewriter);
     cond = rewriter.createOrFold<OrOp>(op.getLoc(), cond, subCond);
     rewriter.replaceOpWithNewOp<MuxOp>(op, cond, commonValue, otherValue);
     return true;
@@ -1959,7 +1954,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   // TrueOperand, And inverts for False operand.
   bool isaAndOp = isa<AndOp>(subExpr);
   if (isTrueOperand ^ isaAndOp)
-    cond = invertBoolValue(cond);
+    cond = createOrFoldNot(op.getLoc(), cond, rewriter);
 
   auto extendedCond =
       rewriter.createOrFold<ReplicateOp>(op.getLoc(), op.getType(), cond);
@@ -2097,9 +2092,7 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     if (value.getBitWidth() == 1) {
       // mux(a, 0, b) -> and(~a, b) for single-bit values.
       if (value.isZero()) {
-        auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-        auto notCond =
-            rewriter.createOrFold<XorOp>(op.getLoc(), op.cond(), one);
+        auto notCond = createOrFoldNot(op.getLoc(), op.cond(), rewriter);
         rewriter.replaceOpWithNewOp<AndOp>(op, notCond, op.falseValue());
         return success();
       }

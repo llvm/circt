@@ -49,6 +49,10 @@ Value createOrFoldSExt(Location loc, Value value, Type destTy,
                        OpBuilder &builder);
 Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
 
+/// Create a ``Not'' gate on a value.
+Value createOrFoldNot(Location loc, Value value, OpBuilder &builder);
+Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder);
+
 } // namespace comb
 } // namespace circt
 

@@ -4120,14 +4120,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name, op);
       // HACK: This is to make interface-related operations work as they are at
       // the moment, with names being stored in `sym_name` instead of
       // `inner_sym`.
       if (auto instOp = dyn_cast<InterfaceInstanceOp>(op))
         if (auto attr = instOp.sym_nameAttr())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), attr.getValue(),
-                                    op);
+          symbolCache.addDefinition(moduleOp.getNameAttr(), attr, op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
@@ -4138,12 +4137,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
         if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
                                     moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
         if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
                                     moduleOp, p + numArgs);
   };
 

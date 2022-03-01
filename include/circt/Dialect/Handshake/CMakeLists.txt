@@ -1,5 +1,5 @@
 add_circt_dialect(Handshake handshake)
-add_circt_doc(Handshake -gen-op-doc Handshake Dialects/)
+add_circt_doc(Handshake -gen-dialect-doc Handshake Dialects/)
 add_circt_interface(HandshakeInterfaces)
 
 set(LLVM_TARGET_DEFINITIONS Handshake.td)
