@@ -223,7 +223,7 @@ struct Deduper {
     if (auto to = dyn_cast<FModuleOp>(*toModule))
       rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
     else
-      rewriteExtModuleNLAs(toModule.moduleNameAttr(),
+      rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
                            fromModule.moduleNameAttr());
 
     // Replace all instance of one module with the other.  If the module returns
@@ -660,16 +660,10 @@ private:
 
   // Update all NLAs which the "from" external module participates in to the
   // "toName".
-  void rewriteExtModuleNLAs(StringAttr toName, StringAttr fromName) {
-    for (auto nla : nlaMap[fromName]) {
-      SmallVector<Attribute> namepath;
-      // External modules are guaranteed to be the final element of the NLA,
-      // since they do not have any bodies.
-      llvm::copy(nla.namepath().getValue().drop_back(),
-                 std::back_inserter(namepath));
-      namepath.push_back(FlatSymbolRefAttr::get(toName));
-      nla.namepathAttr(ArrayAttr::get(context, namepath));
-    }
+  void rewriteExtModuleNLAs(RenameMap &renameMap, StringAttr toName,
+                            StringAttr fromName) {
+    for (auto nla : nlaMap[fromName])
+      renameModuleInNLA(renameMap, toName, fromName, nla);
   }
 
   /// Take an annotation, and update it to be a non-local annotation.  If the
