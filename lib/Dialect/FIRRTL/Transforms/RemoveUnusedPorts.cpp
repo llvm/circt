@@ -82,12 +82,14 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       } else if (arg.hasOneUse()) {
         // If the port has a single use, check the port is only connected to
         // invalid or constant
-        auto connect = dyn_cast<ConnectOp>(*arg.user_begin());
-        if (!connect || !isa_and_nonnull<InvalidValueOp, ConstantOp>(
-                            connect.src().getDefiningOp()))
+        Operation *op = arg.use_begin().getUser();
+        bool connectLike = isa<ConnectOp, StrictConnectOp>(op);
+        if (!connectLike)
+          continue;
+        auto *srcOp = op->getOperand(1).getDefiningOp();
+        if (!isa_and_nonnull<InvalidValueOp, ConstantOp>(srcOp))
           continue;
 
-        Operation *srcOp = connect.src().getDefiningOp();
         if (auto constant = dyn_cast<ConstantOp>(srcOp))
           outputPortConstants.push_back(constant.value());
         else {
@@ -96,7 +98,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         }
 
         // Erase connect op because we are going to remove this output ports.
-        connect.erase();
+        op->erase();
 
         if (srcOp->use_empty())
           srcOp->erase();
@@ -138,12 +140,14 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
           if (auto connect = dyn_cast<ConnectOp>(op))
             return connect.dest() == result;
+          if (auto strictconnect = dyn_cast<StrictConnectOp>(op))
+            return strictconnect.dest() == result;
           return false;
         });
 
         result.replaceUsesWithIf(wire, [&](OpOperand &op) -> bool {
           // Connects can be deleted directly.
-          if (onlyWritten && isa<ConnectOp>(op.getOwner())) {
+          if (onlyWritten && isa<ConnectOp, StrictConnectOp>(op.getOwner())) {
             op.getOwner()->erase();
             return false;
           }
@@ -157,7 +161,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         continue;
       }
 
-      // Output port.  Replace with the output port with an invalid or constan
+      // Output port. Replace with the output port with an invalid or constant
       // value.
       auto portConstant = outputPortConstants[outputPortIndex++];
       Value value;

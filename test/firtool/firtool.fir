@@ -77,6 +77,8 @@ circuit test_mod : %[[{"a": "a"}]]
     multibitMux.a <= vec
     multibitMux.sel <= b
 
+    inst unusedPortsMod of UnusedPortsMod
+    unusedPortsMod.in <= a
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>) {
 ; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
@@ -105,6 +107,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
+; MLIR-NEXT:    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.instance unusedPortsMod @UnusedPortsMod()
 ; MLIR-NEXT:  }
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
@@ -155,6 +159,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:     .sel (b),
 ; VERILOG-NEXT:     .b   (multibitMux_b)
 ; VERILOG-NEXT:    );
+; VERILOG-NEXT:    UnusedPortsMod unusedPortsMod ();
 ; VERILOG-NEXT:  endmodule
 
 ; Check that we canonicalize the HW output of lowering.
@@ -247,3 +252,9 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-LABEL: module MultibitMux(
 ; VERILOG-CHECK: wire [2:0] [[T:.*]] = {{a_2}, {a_1}, {a_0}};
 ; VERILOG-CHECK-NEXT: assign b = [[T]][sel];
+
+  module UnusedPortsMod :
+    input in : UInt<1>
+    output out : UInt<1>
+    out is invalid
+; VERILOG-LABEL: module UnusedPortsMod();
