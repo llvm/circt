@@ -311,4 +311,16 @@ firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl
   chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
 }
+
+// Ensure that larger than 32-bit memories work
+firrtl.module @LargeMem(in %clock: !firrtl.clock, in %addr: !firrtl.uint<35>, out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: @LargeMem
+  %testharness = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 34359738368>
+  // CHECK: %testharness_r = firrtl.mem Undefined  {depth = 34359738368 : i64, name = "testharness"
+  %r_data, %r_port = chirrtl.memoryport Infer %testharness  {name = "r"} : (!chirrtl.cmemory<uint<1>, 34359738368>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
+  %addr_node = firrtl.node %addr  : !firrtl.uint<35>
+  chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<35>, !firrtl.clock
+  firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }
