@@ -911,14 +911,17 @@ struct VectorTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-FIRRTLType FVectorType::get(FIRRTLType elementType, VectorIndexType numElements) {
+FIRRTLType FVectorType::get(FIRRTLType elementType,
+                            VectorIndexType numElements) {
   return Base::get(elementType.getContext(),
                    std::make_pair(elementType, numElements));
 }
 
 FIRRTLType FVectorType::getElementType() { return getImpl()->value.first; }
 
-VectorIndexType FVectorType::getNumElements() { return getImpl()->value.second; }
+VectorIndexType FVectorType::getNumElements() {
+  return getImpl()->value.second;
+}
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {

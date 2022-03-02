@@ -195,8 +195,8 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 }
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
-                     FIRRTLType elementType, VectorIndexType numElements, RUWAttr ruw,
-                     StringRef name, ArrayAttr annotations,
+                     FIRRTLType elementType, VectorIndexType numElements,
+                     RUWAttr ruw, StringRef name, ArrayAttr annotations,
                      StringAttr innerSym) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
