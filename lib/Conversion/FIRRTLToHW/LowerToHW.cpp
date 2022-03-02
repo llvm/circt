@@ -3234,7 +3234,30 @@ LogicalResult FIRRTLLowering::visitExpr(MultibitMuxOp op) {
     loweredInputs.push_back(lowered);
   }
   Value array = builder.create<hw::ArrayCreateOp>(loweredInputs);
-  return setLoweringTo<hw::ArrayGetOp>(op, array, index);
+  Value inBoundsRead = builder.create<hw::ArrayGetOp>(array, index);
+
+  // If the multi-bit mux can never have an out-of-bounds read, then lower it
+  // into a HW multi-bit mux.
+  if (llvm::isPowerOf2_64(op.inputs().size()))
+    return setLowering(op, inBoundsRead);
+
+  // If the multi-bit mux can have an out-of-bounds read (the size of the array
+  // is not a power-of-two), then generate a mux that will return the zeroth
+  // element for any out-of-bounds reads.  This is done to match SFC behavior
+  // for subaccesses.
+  //
+  // TODO: Explore alternatives that don't rely on SFC-exact behavior or guard
+  // against this situation happeneing, e.g., by emitting an SV assertion to
+  // error if an out-of-bounds read ever occurs.
+  Value zerothRead = builder.create<hw::ArrayGetOp>(
+      array,
+      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(), 0));
+  Value isOutOfBounds = builder.create<comb::ICmpOp>(
+      ICmpPredicate::uge, index,
+      getOrCreateIntConstant(index.getType().getIntOrFloatBitWidth(),
+                             op.inputs().size()));
+  return setLoweringTo<comb::MuxOp>(op, inBoundsRead.getType(), isOutOfBounds,
+                                    zerothRead, inBoundsRead);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
