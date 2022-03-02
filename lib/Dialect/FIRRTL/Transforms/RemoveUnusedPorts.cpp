@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-remove-unused-ports"
@@ -36,7 +37,7 @@ void RemoveUnusedPortsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
   // Iterate in the reverse order of instance graph iterator, i.e. from leaves
   // to top.
-  for (auto *node : llvm::reverse(instanceGraph))
+  for (auto *node : llvm::post_order(&instanceGraph))
     if (auto module = dyn_cast<FModuleOp>(node->getModule()))
       // Don't prune the main module.
       if (circuit.getMainModule() != module)
