@@ -27,6 +27,12 @@ struct RemoveUnusedPortsPass
   void runOnOperation() override;
   void removeUnusedModulePorts(FModuleOp module,
                                InstanceGraphNode *instanceGraphNode);
+
+  /// If true, the pass will remove unused ports even if they have carry a
+  /// symbol or annotations. This is likely to break the IR, but may be useful
+  /// for `circt-reduce` where preserving functional correctness of the IR is
+  /// not important.
+  bool ignoreDontTouch = false;
 };
 } // namespace
 
@@ -62,7 +68,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
     // If the port is don't touch or has unprocessed annotations, we cannot
     // remove the port. Maybe we can allow annotations though.
-    if (hasDontTouch(arg) || !port.annotations.empty())
+    if ((hasDontTouch(arg) || !port.annotations.empty()) && !ignoreDontTouch)
       continue;
 
     // TODO: Handle inout ports.
@@ -183,6 +189,9 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   numRemovedPorts += removalPortIndexes.size();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createRemoveUnusedPortsPass() {
-  return std::make_unique<RemoveUnusedPortsPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createRemoveUnusedPortsPass(bool ignoreDontTouch) {
+  auto pass = std::make_unique<RemoveUnusedPortsPass>();
+  pass->ignoreDontTouch = ignoreDontTouch;
+  return pass;
 }

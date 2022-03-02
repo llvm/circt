@@ -39,7 +39,8 @@ std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
-std::unique_ptr<mlir::Pass> createRemoveUnusedPortsPass();
+std::unique_ptr<mlir::Pass>
+createRemoveUnusedPortsPass(bool ignoreDontTouch = false);
 
 std::unique_ptr<mlir::Pass> createInlinerPass();
 
