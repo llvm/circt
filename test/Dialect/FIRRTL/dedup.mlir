@@ -132,14 +132,14 @@ firrtl.circuit "Annotations" {
 // Check that module and memory port annotations are merged correctly.
 // CHECK-LABEL: firrtl.circuit "PortAnnotations"
 firrtl.circuit "PortAnnotations" {
-  // CHECK: firrtl.nla [[NLA3:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos0>, #hw.innerNameRef<@PortAnnotations0::@in>]
-  // CHECK: firrtl.nla [[NLA2:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos1>, #hw.innerNameRef<@PortAnnotations0::@in>]
+  // CHECK: firrtl.nla [[NLA3:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos0>, #hw.innerNameRef<@PortAnnotations0::@a>]
+  // CHECK: firrtl.nla [[NLA2:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos1>, #hw.innerNameRef<@PortAnnotations0::@a>]
   // CHECK: firrtl.nla [[NLA1:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos0>, #hw.innerNameRef<@PortAnnotations0::@bar>]
   // CHECK: firrtl.nla [[NLA0:@nla.*]] [#hw.innerNameRef<@PortAnnotations::@portannos1>, #hw.innerNameRef<@PortAnnotations0::@bar>]
-  // CHECK: firrtl.module @PortAnnotations0(in %in: !firrtl.uint<1> sym @in [
+  // CHECK: firrtl.module @PortAnnotations0(in %a: !firrtl.uint<1> sym @a [
   // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "port1"},
   // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "port0"}]) {
-  firrtl.module @PortAnnotations0(in %in : !firrtl.uint<1> [{class = "port0"}]) {
+  firrtl.module @PortAnnotations0(in %a : !firrtl.uint<1> [{class = "port0"}]) {
     // CHECK: %bar_r = firrtl.mem sym @bar
     // CHECK-SAME: portAnnotations =
     // CHECK-SAME:  {circt.nonlocal = [[NLA0]], class = "mem1"},
@@ -147,18 +147,17 @@ firrtl.circuit "PortAnnotations" {
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{class = "mem0"}]], portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
   // CHECK-NOT: firrtl.module @PortAnnotations1
-  firrtl.module @PortAnnotations1(in %in : !firrtl.uint<1> [{class = "port1"}])  {
+  firrtl.module @PortAnnotations1(in %b : !firrtl.uint<1> [{class = "port1"}])  {
     %bar_r = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{class = "mem1"}]], portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
   // CHECK: firrtl.module @PortAnnotations
   firrtl.module @PortAnnotations() {
     // CHECK: annotations = [{circt.nonlocal = [[NLA1]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA3]], class = "circt.nonlocal"}]
-    %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in in: !firrtl.uint<1>)
+    %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in a: !firrtl.uint<1>)
     // CHECK: annotations = [{circt.nonlocal = [[NLA0]], class = "circt.nonlocal"}, {circt.nonlocal = [[NLA2]], class = "circt.nonlocal"}]
-    %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in in: !firrtl.uint<1>)
+    %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in b: !firrtl.uint<1>)
   }
 }
-
 
 // Non-local annotations should have their path updated and bread crumbs should
 // not be turned into non-local annotations. Note that this should not create
@@ -295,6 +294,23 @@ firrtl.circuit "ExtModuleTest" {
     firrtl.instance e0 @ExtMod0()
     // CHECK: firrtl.instance e1 sym @e1  {annotations = [{circt.nonlocal = @ext_nla, class = "circt.nonlocal"}]} @ExtMod0()
     firrtl.instance e1 sym @e1 {annotations = [{circt.nonlocal = @ext_nla, class = "circt.nonlocal"}]} @ExtMod1()
+  }
+}
+
+
+// External modules with NLAs on ports should be properly rewritten. 
+// https://github.com/llvm/circt/issues/2713
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo"  {
+  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@b>, #hw.innerNameRef<@A::@a>]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@b>, #hw.innerNameRef<@B::@b>]
+  // CHECK: firrtl.extmodule @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
+  firrtl.extmodule @A(out a: !firrtl.clock)
+  firrtl.extmodule @B(out b: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}])
+  firrtl.module @Foo() {
+    %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
+    // CHECK: firrtl.instance b sym @b  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @A(out a: !firrtl.clock)
+    %b1_out = firrtl.instance b sym @b {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @B(out b: !firrtl.clock)
   }
 }
 
