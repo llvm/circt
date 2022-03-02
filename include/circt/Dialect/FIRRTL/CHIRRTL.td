@@ -59,11 +59,11 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
   }];
 
   let parameters = (ins "firrtl::FIRRTLType":$elementType,
-                        "unsigned":$numElements);
+                        "uint64_t":$numElements);
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLType":$elementType,
-                                        "unsigned":$numElements), [{
+                                        "uint64_t":$numElements), [{
       return $_get(elementType.getContext(), elementType, numElements);
     }]>
   ];
@@ -108,7 +108,7 @@ def CombMemOp : CHIRRTLOp<"combmem", [HasCustomSSAName]> {
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "(`sym` $inner_sym^)? custom<CombMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "mlir::StringRef":$name, "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
@@ -126,7 +126,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "uint64_t":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
                    "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>

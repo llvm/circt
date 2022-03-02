@@ -1056,3 +1056,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[NOT_ENABLE:%.+]] = firrtl.not %enable
     ; CHECK-NEXT: [[NOT_COND:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]]
+
+  module LargeMem :
+    smem testharness : UInt<8>[16] [34359738368]

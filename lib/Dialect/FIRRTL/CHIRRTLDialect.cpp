@@ -168,7 +168,7 @@ static void printCombMemOp(OpAsmPrinter &p, Operation *op,
 }
 
 void CombMemOp::build(OpBuilder &builder, OperationState &result,
-                      FIRRTLType elementType, unsigned numElements,
+                      FIRRTLType elementType, uint64_t numElements,
                       StringRef name, ArrayAttr annotations,
                       StringAttr innerSym) {
   build(builder, result,
@@ -195,7 +195,7 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 }
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
-                     FIRRTLType elementType, unsigned numElements, RUWAttr ruw,
+                     FIRRTLType elementType, uint64_t numElements, RUWAttr ruw,
                      StringRef name, ArrayAttr annotations,
                      StringAttr innerSym) {
   build(builder, result,
@@ -264,7 +264,7 @@ void CMemoryType::print(AsmPrinter &printer) const {
 
 Type CMemoryType::parse(AsmParser &parser) {
   FIRRTLType elementType;
-  unsigned numElements;
+  uint64_t numElements;
   if (parser.parseLess() || firrtl::parseNestedType(elementType, parser) ||
       parser.parseComma() || parser.parseInteger(numElements) ||
       parser.parseGreater())
@@ -274,7 +274,7 @@ Type CMemoryType::parse(AsmParser &parser) {
 
 LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
                                   FIRRTLType elementType,
-                                  unsigned numElements) {
+                                  uint64_t numElements) {
   if (!elementType.isPassive()) {
     return emitError() << "behavioral memory element type must be passive";
   }
