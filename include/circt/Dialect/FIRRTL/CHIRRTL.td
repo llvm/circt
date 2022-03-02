@@ -59,11 +59,11 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
   }];
 
   let parameters = (ins "firrtl::FIRRTLType":$elementType,
-                        "unsigned":$numElements);
+                        "firrtl::VectorIndexType":$numElements);
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "firrtl::FIRRTLType":$elementType,
-                                        "unsigned":$numElements), [{
+                                        "firrtl::VectorIndexType":$numElements), [{
       return $_get(elementType.getContext(), elementType, numElements);
     }]>
   ];
@@ -126,7 +126,7 @@ def SeqMemOp : CHIRRTLOp<"seqmem", [HasCustomSSAName]> {
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "(`sym` $inner_sym^)? $ruw custom<SeqMemOp>(attr-dict) `:` qualified(type($result))";
   let builders = [
-    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "unsigned":$numElements,
+    OpBuilder<(ins "firrtl::FIRRTLType":$elementType, "firrtl::VectorIndexType":$numElements,
                    "RUWAttr":$ruw, "mlir::StringRef":$name,
                    "ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>

@@ -885,7 +885,7 @@ namespace circt {
 namespace firrtl {
 namespace detail {
 struct VectorTypeStorage : mlir::TypeStorage {
-  using KeyTy = std::pair<FIRRTLType, unsigned>;
+  using KeyTy = std::pair<FIRRTLType, VectorIndexType>;
 
   VectorTypeStorage(KeyTy value) : value(value) {
     auto properties = value.first.getRecursiveTypeProperties();
@@ -911,14 +911,14 @@ struct VectorTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
+FIRRTLType FVectorType::get(FIRRTLType elementType, VectorIndexType numElements) {
   return Base::get(elementType.getContext(),
                    std::make_pair(elementType, numElements));
 }
 
 FIRRTLType FVectorType::getElementType() { return getImpl()->value.first; }
 
-unsigned FVectorType::getNumElements() { return getImpl()->value.second; }
+VectorIndexType FVectorType::getNumElements() { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {

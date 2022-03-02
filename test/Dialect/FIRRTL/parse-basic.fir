@@ -1056,3 +1056,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[NOT_ENABLE:%.+]] = firrtl.not %enable
     ; CHECK-NEXT: [[NOT_COND:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]]
+
+  ; CHECK-LABEL: firrtl.module @LargeMemorySize
+  module LargeMemorySize :
+    ; CHECK: %{{[^!]*}} !chirrtl.cmemory<vector<uint<8>, 16>, 34359738368>
+    smem testharness : UInt<8>[16] [34359738368]

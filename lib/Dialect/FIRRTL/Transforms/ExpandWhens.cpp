@@ -221,7 +221,7 @@ public:
           }
         })
         .template Case<FVectorType>([&](FVectorType vector) {
-          for (auto i : llvm::seq(0u, vector.getNumElements())) {
+          for (auto i : llvm::seq(static_cast<VectorIndexType>(0), vector.getNumElements())) {
             auto subindex =
                 builder.create<SubindexOp>(value.getLoc(), value, i);
             foreachSubelement(builder, subindex, fn);

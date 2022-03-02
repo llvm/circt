@@ -26,6 +26,8 @@ struct VectorTypeStorage;
 struct CMemoryTypeStorage;
 } // namespace detail.
 
+using VectorIndexType = uint64_t;
+
 class ClockType;
 class ResetType;
 class AsyncResetType;
@@ -371,10 +373,10 @@ class FVectorType : public FIRRTLType::TypeBase<FVectorType, FIRRTLType,
 public:
   using Base::Base;
 
-  static FIRRTLType get(FIRRTLType elementType, unsigned numElements);
+  static FIRRTLType get(FIRRTLType elementType, VectorIndexType numElements);
 
   FIRRTLType getElementType();
-  unsigned getNumElements();
+  VectorIndexType getNumElements();
 
   /// Return the recursive properties of the type.
   RecursiveTypeProperties getRecursiveTypeProperties();
