@@ -80,6 +80,71 @@ static bool onlyInvalidated(Value arg) {
   });
 }
 
+/// A tracker for track NLAs affected by a reduction. Performs the necessary
+/// cleanup steps in order to maintain IR validity after the reduction has
+/// applied. For example, removing an instance that forms part of an NLA path
+/// requires that NLA to be removed as well.
+struct NLARemover {
+  /// Clear the set of marked NLAs. Call this before attempting a reduction.
+  void clear() { nlasToRemove.clear(); }
+
+  /// Remove all marked annotations. Call this after applying a reduction in
+  /// order to validate the IR.
+  void remove(mlir::ModuleOp module) {
+    unsigned numRemoved = 0;
+    for (Operation &rootOp : *module.getBody()) {
+      if (!isa<firrtl::CircuitOp>(&rootOp))
+        continue;
+      SymbolTable symbolTable(&rootOp);
+      for (auto sym : nlasToRemove) {
+        if (auto *op = symbolTable.lookup(sym)) {
+          ++numRemoved;
+          op->erase();
+        }
+      }
+    }
+    LLVM_DEBUG({
+      unsigned numLost = nlasToRemove.size() - numRemoved;
+      if (numRemoved > 0 || numLost > 0) {
+        llvm::dbgs() << "Removed " << numRemoved << " NLAs";
+        if (numLost > 0)
+          llvm::dbgs() << " (" << numLost << " no longer there)";
+        llvm::dbgs() << "\n";
+      }
+    });
+  }
+
+  /// Mark all NLAs referenced in the given annotation as to be removed. This
+  /// can be an entire array or dictionary of annotations, and the function will
+  /// descend into child annotations appropriately.
+  void markNLAsInAnnotation(Attribute anno) {
+    if (auto dict = anno.dyn_cast<DictionaryAttr>()) {
+      if (auto field = dict.getAs<FlatSymbolRefAttr>("circt.nonlocal"))
+        nlasToRemove.insert(field.getAttr());
+      for (auto namedAttr : dict)
+        markNLAsInAnnotation(namedAttr.getValue());
+    } else if (auto array = anno.dyn_cast<ArrayAttr>()) {
+      for (auto attr : array)
+        markNLAsInAnnotation(attr);
+    } else if (auto subAnno = anno.dyn_cast<firrtl::SubAnnotationAttr>()) {
+      markNLAsInAnnotation(subAnno.getAnnotations());
+    }
+  }
+
+  /// Mark all NLAs referenced in an operation. Also traverses all nested
+  /// operations. Call this before removing an operation, to mark any associated
+  /// NLAs as to be removed as well.
+  void markNLAsInOperation(Operation *op) {
+    op->walk([&](Operation *op) {
+      if (auto annos = op->getAttrOfType<ArrayAttr>("annotations"))
+        markNLAsInAnnotation(annos);
+    });
+  }
+
+  /// The set of NLAs to remove, identified by their symbol.
+  llvm::DenseSet<StringAttr> nlasToRemove;
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction
 //===----------------------------------------------------------------------===//
@@ -118,9 +183,13 @@ std::string PassReduction::getName() const { return passName.str(); }
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
 struct ModuleExternalizer : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
   bool match(Operation *op) override { return isa<firrtl::FModuleOp>(op); }
   LogicalResult rewrite(Operation *op) override {
     auto module = cast<firrtl::FModuleOp>(op);
+    nlaRemover.markNLAsInOperation(op);
     OpBuilder builder(module);
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
@@ -130,6 +199,8 @@ struct ModuleExternalizer : public Reduction {
     return success();
   }
   std::string getName() const override { return "module-externalizer"; }
+
+  NLARemover nlaRemover;
 };
 
 /// Invalidate all the leaf fields of a value with a given flippedness by
@@ -197,6 +268,13 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
                      value);
     return;
   }
+  auto valueType = value.getType().dyn_cast<firrtl::FIRRTLType>();
+  if (!valueType)
+    return;
+  auto destWidth = type.getBitWidthOrSentinel();
+  auto valueWidth = valueType ? valueType.getBitWidthOrSentinel() : -1;
+  if (destWidth >= 0 && valueWidth >= 0 && destWidth < valueWidth)
+    value = builder.create<firrtl::HeadPrimOp>(value, destWidth);
   if (!type.isa<firrtl::UIntType>()) {
     if (type.isa<firrtl::SIntType>())
       value = builder.create<firrtl::AsSIntPrimOp>(value);
@@ -237,7 +315,11 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
 /// invalidated wires. This often shortcuts a long iterative process of connect
 /// invalidation, module externalization, and wire stripping
 struct InstanceStubber : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   bool match(Operation *op) override { return isa<firrtl::InstanceOp>(op); }
 
@@ -258,6 +340,7 @@ struct InstanceStubber : public Reduction {
     }
     auto tableOp = SymbolTable::getNearestSymbolTable(instOp);
     auto moduleOp = instOp.getReferencedModule(symbols.getSymbolTable(tableOp));
+    nlaRemover.markNLAsInOperation(instOp);
     instOp->erase();
     if (symbols.getSymbolUserMap(tableOp).useEmpty(moduleOp)) {
       LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
@@ -271,11 +354,14 @@ struct InstanceStubber : public Reduction {
   bool acceptSizeIncrease() const override { return true; }
 
   SymbolCache symbols;
+  NLARemover nlaRemover;
 };
 
 /// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
 /// wires.
 struct MemoryStubber : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
   bool match(Operation *op) override { return isa<firrtl::MemOp>(op); }
   LogicalResult rewrite(Operation *op) override {
     auto memOp = cast<firrtl::MemOp>(op);
@@ -328,11 +414,13 @@ struct MemoryStubber : public Reduction {
     for (auto output : outputs)
       connectToLeafs(builder, output, xorInputs);
 
+    nlaRemover.markNLAsInOperation(memOp);
     memOp->erase();
     return success();
   }
   std::string getName() const override { return "memory-stubber"; }
   bool acceptSizeIncrease() const override { return true; }
+  NLARemover nlaRemover;
 };
 
 /// Starting at the given `op`, traverse through it and its operands and erase
@@ -440,7 +528,9 @@ struct Constantifier : public Reduction {
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
   bool match(Operation *op) override {
-    return isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op) &&
+    return isa<firrtl::ConnectOp, firrtl::PartialConnectOp,
+               firrtl::StrictConnectOp>(op) &&
+           op->getOperand(1).getType().cast<firrtl::FIRRTLType>().isPassive() &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
   }
   LogicalResult rewrite(Operation *op) override {
@@ -482,14 +572,19 @@ struct OperationPruner : public Reduction {
 /// A sample reduction pattern that removes FIRRTL annotations from ports and
 /// operations.
 struct AnnotationRemover : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { nlaRemover.clear(); }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
   bool match(Operation *op) override {
     return op->hasAttr("annotations") || op->hasAttr("portAnnotations");
   }
   LogicalResult rewrite(Operation *op) override {
     auto emptyArray = ArrayAttr::get(op->getContext(), {});
-    if (op->hasAttr("annotations"))
+    if (auto annos = op->getAttr("annotations")) {
+      nlaRemover.markNLAsInAnnotation(annos);
       op->setAttr("annotations", emptyArray);
-    if (op->hasAttr("portAnnotations")) {
+    }
+    if (auto annos = op->getAttr("portAnnotations")) {
+      nlaRemover.markNLAsInAnnotation(annos);
       auto attr = emptyArray;
       if (isa<firrtl::InstanceOp>(op))
         attr = ArrayAttr::get(
@@ -500,6 +595,7 @@ struct AnnotationRemover : public Reduction {
     return success();
   }
   std::string getName() const override { return "annotation-remover"; }
+  NLARemover nlaRemover;
 };
 
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
@@ -534,7 +630,11 @@ struct RootPortPruner : public Reduction {
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public Reduction {
-  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
   bool match(Operation *op) override {
     if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
@@ -558,6 +658,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
       }
       replacementWires.push_back(wire);
     }
+    nlaRemover.markNLAsInOperation(instOp);
     instOp.replaceAllUsesWith(std::move(replacementWires));
     instOp->erase();
     return success();
@@ -566,6 +667,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
   bool acceptSizeIncrease() const override { return true; }
 
   SymbolCache symbols;
+  NLARemover nlaRemover;
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
@@ -664,8 +766,8 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
-  add(std::make_unique<PassReduction>(context,
-                                      firrtl::createRemoveUnusedPortsPass()));
+  add(std::make_unique<PassReduction>(
+      context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
   add(std::make_unique<InstanceStubber>());
   add(std::make_unique<MemoryStubber>());
   add(std::make_unique<ModuleExternalizer>());
