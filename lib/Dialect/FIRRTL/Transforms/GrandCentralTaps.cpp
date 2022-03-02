@@ -583,7 +583,7 @@ void GrandCentralTapsPass::runOnOperation() {
 
         // Determine the module at which the hierarchical name should start.
         Operation *opInRootModule =
-            shortestPrefix->empty() ? path.back() : shortestPrefix->front();
+            shortestPrefix->empty() ? path.front() : shortestPrefix->front();
         auto rootModule = opInRootModule->getParentOfType<FModuleLike>();
 
         SmallVector<Attribute> symbols;
