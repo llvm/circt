@@ -1018,6 +1018,29 @@ circuit Foo : %[[
 
 ; // -----
 
+; A module with an instance in its body which has the same name as the module
+; itself should not cause issues attaching annotations.
+; https://github.com/llvm/circt/issues/2709
+circuit Test : %[[
+  {
+    "class":"fake",
+    "target":"~Test|Test/Test:Example"
+  }
+]]
+  module Example :
+  module Test :
+    inst Test of Example
+
+; CHECK-LABEL:  firrtl.circuit "Test"
+; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@Test>, @Example]
+; CHECK: firrtl.module @Example() attributes {
+; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "fake"}]
+; CHECK: firrtl.module @Test()
+; CHECK:   firrtl.instance Test sym @Test
+; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]
+
+; // -----
+
 ; Multiple non-local Annotations are supported.
 
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
