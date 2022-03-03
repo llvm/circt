@@ -68,12 +68,12 @@ llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
 
 struct StructuralHasher {
   explicit StructuralHasher(MLIRContext *context) {
+    portTypesAttr = StringAttr::get(context, "portTypes");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
     nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
-    nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
     nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
@@ -120,8 +120,6 @@ private:
 
   void update(BlockArgument arg) {
     indexes[arg] = currentIndex++;
-    update(arg.getArgNumber());
-    update(arg.getType());
   }
 
   void update(OpResult result) {
@@ -139,12 +137,20 @@ private:
   void update(DictionaryAttr dict) {
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
+      auto value = namedAttr.getValue();
       // Skip names and annotations.
       if (nonessentialAttributes.contains(name))
         continue;
+      // Hash the port types.
+      if (name == portTypesAttr) {
+        auto portTypes = value.cast<ArrayAttr>().getAsValueRange<TypeAttr>();
+        for (auto type : portTypes)
+          update(type);
+        continue;
+      }
       // Hash the interned pointer.
       update(name.getAsOpaquePointer());
-      update(namedAttr.getValue().getAsOpaquePointer());
+      update(value.getAsOpaquePointer());
     }
   }
 
@@ -186,6 +192,8 @@ private:
 
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
+  // This is a cached "portTypes" string attr.
+  StringAttr portTypesAttr;
 
   // This is the actual running hash calculation. This is a stateful element
   // that should be reinitialized after each hash is produced.
