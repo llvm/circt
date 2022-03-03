@@ -123,8 +123,6 @@ expandNonLocal(StringRef target) {
     auto targetBase =
         target.take_until([](char c) { return c == '.' || c == '['; });
     std::tie(mod, name) = targetBase.split('>');
-    if (name.empty())
-      name = mod;
     retval.emplace_back((circuit + "|" + target).str(), mod, name);
   }
   return retval;
@@ -139,13 +137,14 @@ buildNLA(CircuitOp circuit, size_t nlaSuffix,
   MLIRContext *ctxt = circuit.getContext();
   SmallVector<Attribute> insts;
   for (auto &nla : nlas) {
-    if (std::get<1>(nla) == std::get<2>(nla))
-      insts.push_back(FlatSymbolRefAttr::get(ctxt, std::get<1>(nla)));
-    else
-      insts.push_back(hw::InnerRefAttr::get(
-          StringAttr::get(ctxt, std::get<1>(nla)) /*module name*/,
-          StringAttr::get(ctxt, std::get<2>(nla)) /*symbol name*/));
     // Assumption: Symbol name = Operation name.
+    auto module = std::get<1>(nla);
+    auto inst = std::get<2>(nla);
+    if (inst.empty())
+      insts.push_back(FlatSymbolRefAttr::get(ctxt, module));
+    else
+      insts.push_back(hw::InnerRefAttr::get(StringAttr::get(ctxt, module),
+                                            StringAttr::get(ctxt, inst)));
   }
   auto instAttr = ArrayAttr::get(ctxt, insts);
   auto nla = b.create<NonLocalAnchor>(
