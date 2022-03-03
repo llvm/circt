@@ -530,6 +530,25 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node f = UInt<4>(15)
     node g = UInt<4>(7)
 
+  ; NamePreservation should create attaches for analog typed elements.
+  ; https://github.com/llvm/circt/issues/2718
+  module Bar :
+    input a: {flip a: UInt<1>, b: Analog<1>}[1]
+    output b: {flip a: UInt<1>, b: Analog<1>}[1]
+
+    wire w: {flip a: UInt<1>, b: Analog<1>}[1]
+    a[0].a <= w[0].a
+    w[0].a <= b[0].a
+    
+    ; NAMES: [[B_0:%.+]] = firrtl.subindex %b[0]
+    ; NAMES: [[B_0_1:%.+]] = firrtl.subfield [[B_0]](1)
+    ; NAMES: [[A_0:%.+]] = firrtl.subindex %a[0]
+    ; NAMES: [[A_0_1]] = firrtl.subfield [[A_0]](1)
+    ; NAMES: [[W_0:%.+]] = firrtl.subindex %_w[0]
+    ; NAMES: [[W_0_1:%.+]] = firrtl.subfield [[W_0]](1)
+    ; NAMES: firrtl.attach [[A_0_1]], [[W_0_1]], [[B_0_1]]
+    attach(a[0].b, w[0].b, b[0].b)
+
   ; CHECK-LABEL: firrtl.module @subfield_implicit_cse
   module subfield_implicit_cse :
     input i: {x: UInt<1>}
