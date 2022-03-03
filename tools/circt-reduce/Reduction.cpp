@@ -737,6 +737,52 @@ struct ConnectSourceOperandForwarder : public Reduction {
   }
 };
 
+/// A sample reduction pattern that tries to remove aggregate wires by replacing
+/// all subaccesses with new independent wires. This can disentangle large
+/// unused wires that are otherwise difficult to collect due to the subaccesses.
+struct DetachSubaccesses : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override { opsToErase.clear(); }
+  void afterReduction(mlir::ModuleOp op) override {
+    for (auto *op : opsToErase)
+      op->dropAllReferences();
+    for (auto *op : opsToErase)
+      op->erase();
+  }
+  bool match(Operation *op) override {
+    // Only applies to wires and registers that are purely used in subaccess
+    // operations.
+    return isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(op) &&
+           llvm::all_of(op->getUses(), [](auto &use) {
+             return use.getOperandNumber() == 0 &&
+                    isa<firrtl::SubfieldOp, firrtl::SubindexOp,
+                        firrtl::SubaccessOp>(use.getOwner());
+           });
+  }
+  LogicalResult rewrite(Operation *op) override {
+    assert(match(op));
+    OpBuilder builder(op);
+    bool isWire = isa<firrtl::WireOp>(op);
+    Value invalidClock;
+    if (!isWire)
+      invalidClock = builder.create<firrtl::InvalidValueOp>(
+          op->getLoc(), firrtl::ClockType::get(op->getContext()));
+    for (Operation *user : llvm::make_early_inc_range(op->getUsers())) {
+      builder.setInsertionPoint(user);
+      auto type = user->getResult(0).getType();
+      auto replOp = isWire
+                        ? builder.create<firrtl::WireOp>(user->getLoc(), type)
+                        : builder.create<firrtl::RegOp>(user->getLoc(), type,
+                                                        invalidClock);
+      user->replaceAllUsesWith(replOp);
+      opsToErase.insert(user);
+    }
+    opsToErase.insert(op);
+    return success();
+  }
+  std::string getName() const override { return "detach-subaccesses"; }
+  llvm::DenseSet<Operation *> opsToErase;
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -782,6 +828,7 @@ void circt::createAllReductions(
   add(std::make_unique<OperandForwarder<1>>());
   add(std::make_unique<OperandForwarder<2>>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<DetachSubaccesses>());
   add(std::make_unique<AnnotationRemover>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
