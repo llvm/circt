@@ -70,7 +70,8 @@ private:
 static bool onlyInvalidated(Value arg) {
   return llvm::all_of(arg.getUses(), [](OpOperand &use) {
     auto *op = use.getOwner();
-    if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
+    if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp,
+             firrtl::StrictConnectOp>(op))
       return false;
     if (use.getOperandNumber() != 0)
       return false;
@@ -675,10 +676,9 @@ struct ExtmoduleInstanceRemover : public Reduction {
 template <unsigned OpNum>
 struct ConnectSourceOperandForwarder : public Reduction {
   bool match(Operation *op) override {
-    auto connect = dyn_cast<firrtl::ConnectOp>(op);
-    if (!connect)
+    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return false;
-    auto dest = connect.dest();
+    auto dest = op->getOperand(0);
     auto *destOp = dest.getDefiningOp();
 
     // Ensure that the destination is used only once.
@@ -686,7 +686,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
         !isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp>(destOp))
       return false;
 
-    auto *srcOp = connect.src().getDefiningOp();
+    auto *srcOp = op->getOperand(1).getDefiningOp();
     if (!srcOp || OpNum >= srcOp->getNumOperands())
       return false;
 
@@ -702,9 +702,8 @@ struct ConnectSourceOperandForwarder : public Reduction {
   }
 
   LogicalResult rewrite(Operation *op) override {
-    auto connect = cast<firrtl::ConnectOp>(op);
-    auto *destOp = connect.dest().getDefiningOp();
-    auto *srcOp = connect.src().getDefiningOp();
+    auto *destOp = op->getOperand(0).getDefiningOp();
+    auto *srcOp = op->getOperand(1).getDefiningOp();
     auto forwardedOperand = srcOp->getOperand(OpNum);
     ImplicitLocOpBuilder builder(destOp->getLoc(), destOp);
     Value newDest;
@@ -720,7 +719,10 @@ struct ConnectSourceOperandForwarder : public Reduction {
 
     // Create new connection between a new wire and the forwarded operand.
     builder.setInsertionPointAfter(op);
-    builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
+    if (isa<firrtl::ConnectOp>(op))
+      builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
+    else
+      builder.create<firrtl::StrictConnectOp>(newDest, forwardedOperand);
 
     // Remove the old connection and destination. We don't have to replace them
     // because destination has only one use.
