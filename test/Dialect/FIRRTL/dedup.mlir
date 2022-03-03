@@ -297,7 +297,6 @@ firrtl.circuit "ExtModuleTest" {
   }
 }
 
-
 // External modules with NLAs on ports should be properly rewritten. 
 // https://github.com/llvm/circt/issues/2713
 // CHECK-LABEL: firrtl.circuit "Foo"
@@ -311,6 +310,23 @@ firrtl.circuit "Foo"  {
     %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
     // CHECK: firrtl.instance b sym @b  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @A(out a: !firrtl.clock)
     %b1_out = firrtl.instance b sym @b {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @B(out b: !firrtl.clock)
+  }
+}
+
+// Extmodules should properly hash port types and not dedup when they differ.
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo"  {
+  // CHECK: firrtl.extmodule @Bar
+  firrtl.extmodule @Bar(
+    in clock: !firrtl.clock, out io: !firrtl.bundle<a: clock>)
+  // CHECK: firrtl.extmodule @Baz
+  firrtl.extmodule @Baz(
+    in clock: !firrtl.clock, out io: !firrtl.bundle<a flip: uint<1>, b flip: uint<16>, c: uint<1>>)
+  firrtl.module @Foo() {
+    %bar_clock, %bar_io = firrtl.instance bar @Bar(
+      in clock: !firrtl.clock, out io: !firrtl.bundle<a: clock>)
+    %baz_clock, %baz_io = firrtl.instance baz @Baz(
+      in clock: !firrtl.clock, out io: !firrtl.bundle<a flip: uint<1>, b flip: uint<16>, c: uint<1>>)
   }
 }
 
