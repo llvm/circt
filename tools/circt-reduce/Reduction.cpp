@@ -769,10 +769,12 @@ struct DetachSubaccesses : public Reduction {
     for (Operation *user : llvm::make_early_inc_range(op->getUsers())) {
       builder.setInsertionPoint(user);
       auto type = user->getResult(0).getType();
-      auto replOp = isWire
-                        ? builder.create<firrtl::WireOp>(user->getLoc(), type)
-                        : builder.create<firrtl::RegOp>(user->getLoc(), type,
-                                                        invalidClock);
+      Operation *replOp;
+      if (isWire)
+        replOp = builder.create<firrtl::WireOp>(user->getLoc(), type);
+      else
+        replOp =
+            builder.create<firrtl::RegOp>(user->getLoc(), type, invalidClock);
       user->replaceAllUsesWith(replOp);
       opsToErase.insert(user);
     }
