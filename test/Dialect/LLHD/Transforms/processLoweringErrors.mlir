@@ -61,3 +61,15 @@ llhd.proc @moreThanTwoBlocksNotAllowed() -> () {
 ^bb2:
   llhd.wait ^bb1
 }
+
+// -----
+
+llhd.proc @muxedSignal(%arg0 : !llhd.sig<i64>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<i1>) -> () {
+  cf.br ^bb1
+^bb1:
+  %cond = llhd.prb %arg2 : !llhd.sig<i1>
+  %sig = comb.mux %cond, %arg0, %arg1 : !llhd.sig<i64>
+  %0 = llhd.prb %sig : !llhd.sig<i64>
+  // expected-error @+1 {{Process-lowering: The wait terminator is required to have all probed signals as arguments!}}
+  llhd.wait (%arg0, %arg2 : !llhd.sig<i64>, !llhd.sig<i1>), ^bb1
+}
