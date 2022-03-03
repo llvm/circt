@@ -768,6 +768,8 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
+  add(std::make_unique<PassReduction>(context,
+                                      firrtl::createIMConstPropPass()));
   add(std::make_unique<PassReduction>(
       context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
   add(std::make_unique<InstanceStubber>());
