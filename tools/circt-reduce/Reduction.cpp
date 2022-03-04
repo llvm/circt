@@ -809,6 +809,9 @@ void circt::createAllReductions(
                                       true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createInferResetsPass(),
                                       true, true));
+  add(std::make_unique<ModuleExternalizer>());
+  add(std::make_unique<InstanceStubber>());
+  add(std::make_unique<MemoryStubber>());
   add(std::make_unique<PassReduction>(
       context, firrtl::createLowerFIRRTLTypesPass(), true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
@@ -820,9 +823,6 @@ void circt::createAllReductions(
                                       firrtl::createIMConstPropPass()));
   add(std::make_unique<PassReduction>(
       context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
-  add(std::make_unique<InstanceStubber>());
-  add(std::make_unique<MemoryStubber>());
-  add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<Constantifier>());
