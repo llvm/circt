@@ -439,6 +439,8 @@ void ExportVerilog::prepareHWModule(Block &block,
         if (auto read = expr.getDefiningOp<ReadInOutOp>())
           if (read.input().getDefiningOp<WireOp>())
             return;
+        if (auto inst = expr.getDefiningOp<InstanceOp>())
+          return;
         auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
         auto newWire = builder.create<WireOp>(expr.getType());
         builder.setInsertionPoint(&op);
