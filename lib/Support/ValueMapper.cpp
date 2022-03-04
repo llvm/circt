@@ -45,7 +45,7 @@ llvm::SmallVector<Value> ValueMapper::get(ValueRange from,
 
 // Set the mapped value of 'from' to 'to'. If 'from' is already mapped to a
 // backedge, replaces that backedge with 'to'.
-void ValueMapper::set(Value from, Value to) {
+void ValueMapper::set(Value from, Value to, bool override) {
   auto it = mapping.find(from);
   if (it != mapping.end()) {
     if (auto *backedge = std::get_if<Backedge>(&it->second)) {
@@ -58,8 +58,8 @@ void ValueMapper::set(Value from, Value to) {
   mapping[from] = to;
 }
 
-void ValueMapper::set(ValueRange from, ValueRange to) {
-  assert(from.size() == to.size() &&
+void ValueMapper::set(ValueRange from, ValueRange to, bool override) {
+  assert(from.size() == to.size() && !override &&
          "Expected # of 'from' values and # of 'to' values to be identical.");
   for (auto [f, t] : llvm::zip(from, to))
     set(f, t);

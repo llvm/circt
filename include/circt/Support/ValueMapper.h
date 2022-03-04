@@ -48,9 +48,10 @@ public:
       TypeTransformer typeTransformer = ValueMapper::identity);
 
   // Set the mapped value of 'from' to 'to'. If 'from' is already mapped to a
-  // backedge, replaces that backedge with 'to'.
-  void set(mlir::Value from, mlir::Value to);
-  void set(mlir::ValueRange from, mlir::ValueRange to);
+  // backedge, replaces that backedge with 'to'. If 'override' is not set, and a
+  // (non-backedge) mapping already exists, an assert is thrown.
+  void set(mlir::Value from, mlir::Value to, bool override = false);
+  void set(mlir::ValueRange from, mlir::ValueRange to, bool override = false);
 
 private:
   BackedgeBuilder *bb = nullptr;
