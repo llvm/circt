@@ -35,6 +35,7 @@
 using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
+using hw::PortDirection;
 
 static const char assertAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
@@ -582,11 +583,11 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
 
     auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
       ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_addr"),
-                       hw::INPUT, bAddrType, inputPin++});
-      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_en"), hw::INPUT,
-                       b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_clk"), hw::INPUT,
-                       b1Type, inputPin++});
+                       PortDirection::INPUT, bAddrType, inputPin++});
+      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_en"),
+                       PortDirection::INPUT, b1Type, inputPin++});
+      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_clk"),
+                       PortDirection::INPUT, b1Type, inputPin++});
     };
 
     Type bDataType =
@@ -598,31 +599,31 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
 
     for (size_t i = 0, e = mem.numReadPorts; i != e; ++i) {
       makePortCommon("R", i, bAddrType);
-      ports.push_back({b.getStringAttr("R" + Twine(i) + "_data"), hw::OUTPUT,
-                       bDataType, outputPin++});
+      ports.push_back({b.getStringAttr("R" + Twine(i) + "_data"),
+                       PortDirection::OUTPUT, bDataType, outputPin++});
     }
     for (size_t i = 0, e = mem.numReadWritePorts; i != e; ++i) {
       makePortCommon("RW", i, bAddrType);
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmode"), hw::INPUT,
-                       b1Type, inputPin++});
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wdata"), hw::INPUT,
-                       bDataType, inputPin++});
-      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"), hw::OUTPUT,
-                       bDataType, outputPin++});
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmode"),
+                       PortDirection::INPUT, b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wdata"),
+                       PortDirection::INPUT, bDataType, inputPin++});
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"),
+                       PortDirection::OUTPUT, bDataType, outputPin++});
       // Ignore mask port, if maskBits =1
       if (mem.isMasked)
-        ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"), hw::INPUT,
-                         maskType, inputPin++});
+        ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"),
+                         PortDirection::INPUT, maskType, inputPin++});
     }
 
     for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
       makePortCommon("W", i, bAddrType);
-      ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"), hw::INPUT,
-                       bDataType, inputPin++});
+      ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"),
+                       PortDirection::INPUT, bDataType, inputPin++});
       // Ignore mask port, if maskBits =1
       if (mem.isMasked)
-        ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"), hw::INPUT,
-                         maskType, inputPin++});
+        ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"),
+                         PortDirection::INPUT, maskType, inputPin++});
     }
 
     // Mask granularity is the number of data bits that each mask bit can

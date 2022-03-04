@@ -27,12 +27,15 @@
 namespace circt {
 namespace hw {
 
-/// A HW module ports direction.
-enum PortDirection {
+/// A module port direction.
+enum class PortDirection {
   INPUT = 1,
   OUTPUT = 2,
   INOUT = 3,
 };
+
+/// Flip a port direction.
+PortDirection flip(PortDirection direction);
 
 /// This holds the name, type, direction of a module's ports
 struct PortInfo {
@@ -49,7 +52,9 @@ struct PortInfo {
   StringAttr sym = {};
 
   StringRef getName() const { return name.getValue(); }
-  bool isOutput() const { return direction == OUTPUT; }
+  bool isInput() const { return direction == PortDirection::INPUT; }
+  bool isOutput() const { return direction == PortDirection::OUTPUT; }
+  bool isInOut() const { return direction == PortDirection::INOUT; }
 
   /// Return a unique numeric identifier for this port.
   ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
