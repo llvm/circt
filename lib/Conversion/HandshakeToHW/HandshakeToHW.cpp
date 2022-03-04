@@ -19,14 +19,13 @@
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Support/ValueMapper.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
-
-#include <variant>
 
 using namespace mlir;
 using namespace circt;
@@ -362,76 +361,10 @@ static LogicalResult verifyHandshakeFuncOp(handshake::FuncOp &funcOp) {
 
 namespace {
 
-using TypeTransformer = llvm::function_ref<Type(Type)>;
-static Type defaultTypeTransformer(Type t) { return t; }
-
-/// The ValueMapping class facilitates the definition and connection of SSA
-/// def-use chains between two separate regions - a 'from' region (defining
-/// use-def chains) and a 'to' region (where new operations are created based on
-/// the 'from' region).´
-class ValueMapping {
-public:
-  explicit ValueMapping(BackedgeBuilder &bb) : bb(bb) {}
-
-  // Get the mapped value of value 'from'. If no mapping has been registered, a
-  // new backedge is created. The type of the mapped value may optionally be
-  // modified through the 'typeTransformer'.
-  Value get(Value from,
-            TypeTransformer typeTransformer = defaultTypeTransformer) {
-    if (mapping.count(from) == 0) {
-      // Create a backedge which will be resolved at a later time once all
-      // operands are created.
-      mapping[from] = bb.get(typeTransformer(from.getType()));
-    }
-    auto operandMapping = mapping[from];
-    Value mappedOperand;
-    if (auto *v = std::get_if<Value>(&operandMapping))
-      mappedOperand = *v;
-    else
-      mappedOperand = std::get<Backedge>(operandMapping);
-    return mappedOperand;
-  }
-
-  llvm::SmallVector<Value>
-  get(ValueRange from,
-      TypeTransformer typeTransformer = defaultTypeTransformer) {
-    llvm::SmallVector<Value> to;
-    for (auto f : from)
-      to.push_back(get(f, typeTransformer));
-    return to;
-  }
-
-  // Set the mapped value of 'from' to 'to'. If 'from' is already mapped to a
-  // backedge, replaces that backedge with 'to'.
-  void set(Value from, Value to) {
-    auto it = mapping.find(from);
-    if (it != mapping.end()) {
-      if (auto *backedge = std::get_if<Backedge>(&it->second)) {
-        backedge->setValue(to);
-      } else {
-        assert(false && "'from' was already mapped to a final value!");
-      }
-    }
-    // Register the new mapping
-    mapping[from] = to;
-  }
-
-  void set(ValueRange from, ValueRange to) {
-    assert(from.size() == to.size() &&
-           "Expected # of 'from' values and # of 'to' values to be identical.");
-    for (auto [f, t] : llvm::zip(from, to))
-      set(f, t);
-  }
-
-private:
-  BackedgeBuilder &bb;
-  DenseMap<Value, std::variant<Value, Backedge>> mapping;
-};
-
 // Shared state used by various functions; captured in a struct to reduce the
 // number of arguments that we have to pass around.
 struct HandshakeLoweringState {
-  ValueMapping &mapping;
+  ValueMapper &mapper;
   ModuleOp parentModule;
   hw::HWModuleOp hwModuleOp;
   NameUniquer nameUniquer;
@@ -445,10 +378,10 @@ static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
   OpBuilder::InsertionGuard g(rewriter);
   rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
 
-  // Create a mapping between the operands of 'op' and the replacement operands
+  // Create a mapper between the operands of 'op' and the replacement operands
   // in the target hwModule. For any missing operands, we create a new backedge.
   llvm::SmallVector<Value> hwOperands =
-      ls.mapping.get(op->getOperands(), esiWrapper);
+      ls.mapper.get(op->getOperands(), esiWrapper);
 
   // Add clock and reset if needed.
   if (op->hasTrait<mlir::OpTrait::HasClock>())
@@ -470,7 +403,7 @@ static Operation *createOpInHWModule(ConversionPatternRewriter &rewriter,
 
   // Resolve any previously created backedges that referred to the results of
   // 'op'.
-  ls.mapping.set(op->getResults(), submoduleInstanceOp.getResults());
+  ls.mapper.set(op->getResults(), submoduleInstanceOp.getResults());
 
   return submoduleInstanceOp;
 }
@@ -479,7 +412,7 @@ static void convertReturnOp(handshake::ReturnOp op, HandshakeLoweringState &ls,
                             ConversionPatternRewriter &rewriter) {
   OpBuilder::InsertionGuard g(rewriter);
   rewriter.setInsertionPointToEnd(ls.hwModuleOp.getBodyBlock());
-  rewriter.create<hw::OutputOp>(op.getLoc(), ls.mapping.get(op.getOperands()));
+  rewriter.create<hw::OutputOp>(op.getLoc(), ls.mapper.get(op.getOperands()));
 }
 
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
@@ -518,14 +451,14 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
     // Initialize the Handshake lowering state.
     BackedgeBuilder bb(rewriter, funcOp.getLoc());
-    ValueMapping valueMapping(bb);
-    auto ls = HandshakeLoweringState{valueMapping,    parentModule, topModuleOp,
+    ValueMapper valuemapper(&bb);
+    auto ls = HandshakeLoweringState{valuemapper,     parentModule, topModuleOp,
                                      instanceUniquer, clockPort,    resetPort};
 
-    // Extend value mapping with input arguments. Drop the 2 last inputs from
+    // Extend value mapper with input arguments. Drop the 2 last inputs from
     // the HW module (clock and reset).
-    valueMapping.set(funcOp.getArguments(),
-                     topModuleOp.getArguments().drop_back(2));
+    valuemapper.set(funcOp.getArguments(),
+                    topModuleOp.getArguments().drop_back(2));
 
     // Traverse and convert each operation in funcOp.
     for (Operation &op : funcOp.front()) {

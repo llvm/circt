@@ -9,6 +9,7 @@ add_circt_library(CIRCTSupport
   LoweringOptions.cpp
   Path.cpp
   APInt.cpp
+  ValueMapper.cpp
 
   ADDITIONAL_HEADER_DIRS
 
