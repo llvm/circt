@@ -25,6 +25,19 @@
 using namespace circt;
 using namespace hw;
 
+/// Flip a port direction.
+PortDirection hw::flip(PortDirection direction) {
+  switch (direction) {
+  case PortDirection::INPUT:
+    return PortDirection::OUTPUT;
+  case PortDirection::OUTPUT:
+    return PortDirection::INPUT;
+  case PortDirection::INOUT:
+    return PortDirection::INOUT;
+  }
+  llvm_unreachable("unknown PortDirection");
+}
+
 /// Return true if the specified operation is a combinational logic op.
 bool hw::isCombinational(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
