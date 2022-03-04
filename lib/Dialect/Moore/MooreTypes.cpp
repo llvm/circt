@@ -1065,7 +1065,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
           llvm::function_ref<UnpackedType()> ifUnpacked) {
         if (subset.implied == Subset::Packed)
           return yieldPacked(ifPacked());
-        else if (subset.implied == Subset::Unpacked)
+        if (subset.implied == Subset::Unpacked)
           return yieldUnpacked(ifUnpacked());
         parser.emitError(loc)
             << "ambiguous packing; wrap `" << mnemonic

@@ -112,6 +112,7 @@ struct Range {
   }
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 inline llvm::hash_code hash_value(const Range &x) {
   return llvm::hash_combine(x.size, x.dir, x.offset);
 }
@@ -918,6 +919,7 @@ struct StructMember {
   }
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 inline llvm::hash_code hash_value(const StructMember &x) {
   return llvm::hash_combine(x.name, x.loc, x.type);
 }
