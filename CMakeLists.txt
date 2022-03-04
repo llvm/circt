@@ -74,6 +74,46 @@ endif ()
 
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
+
+  # Handle unittests when building out-of-tree against an installed version of
+  # LLVM/MLIR (not a build tree). Adapted from `llvm/flang/CMakeLists.txt`.
+  set(CIRCT_GTEST_AVAILABLE 0)
+  set(UNITTEST_DIR ${LLVM_BUILD_MAIN_SRC_DIR}/utils/unittest)
+  if (NOT EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
+    set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/llvm/utils/unittest)
+  endif()
+  if (EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
+    if (NOT TARGET gtest)
+      find_package(Threads)
+      add_llvm_library(gtest
+        ${UNITTEST_DIR}/googletest/src/gtest-all.cc
+        ${UNITTEST_DIR}/googlemock/src/gmock-all.cc
+        LINK_LIBS pthread
+        LINK_COMPONENTS Support # llvm::raw_ostream
+        BUILDTREE_ONLY
+      )
+      target_include_directories(gtest
+        PUBLIC
+        "${UNITTEST_DIR}/googletest/include"
+        "${UNITTEST_DIR}/googlemock/include"
+        PRIVATE
+        "${UNITTEST_DIR}/googletest"
+        "${UNITTEST_DIR}/googlemock"
+      )
+      add_llvm_library(gtest_main
+        ${UNITTEST_DIR}/UnitTestMain/TestMain.cpp
+        LINK_LIBS gtest
+        LINK_COMPONENTS Support # llvm::cl
+        BUILDTREE_ONLY
+      )
+    endif()
+    set(CIRCT_GTEST_AVAILABLE 1)
+  else()
+    message(WARNING "Skipping unittests since LLVM install does not include \
+      gtest headers and libraries")
+    set(CIRCT_GTEST_AVAILABLE 0)
+  endif()
+
 else()
   # CMake library generation settings.
   set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
@@ -369,7 +409,9 @@ endif()
 add_subdirectory(include/circt)
 add_subdirectory(lib)
 add_subdirectory(tools)
-#add_subdirectory(unittests)
+if (CIRCT_GTEST_AVAILABLE)
+  add_subdirectory(unittests)
+endif()
 add_subdirectory(test)
 add_subdirectory(integration_test)
 add_subdirectory(frontends)

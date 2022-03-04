@@ -30,12 +30,3 @@ class WrapperTypeBase<string name, string mnemo> : MooreType<name> {
 
 def LValueTypeImpl : WrapperTypeBase<"LValue", "lvalue">;
 def RValueTypeImpl : WrapperTypeBase<"RValue", "rvalue">;
-
-//===----------------------------------------------------------------------===//
-// Integer atom types
-//===----------------------------------------------------------------------===//
-
-def IntTypeImpl : MooreType<"Int"> {
-  let summary = "System-Verilog int type";
-  let mnemonic = "sv.int";
-}
