@@ -82,3 +82,27 @@ def ParamValueOp : HWOp<"param.value",
   let hasVerifier = 1;
   let hasFolder = true;
 }
+
+def HWGenerateOp : HWOp<"generate",
+  [RegionKindInterface, SingleBlock, NoTerminator, HasParent<"hw::HWModuleOp">]>{
+  let summary = "HW Generate";
+  let description = [{
+    The "hw.generate" operation represents a hardware generation construct.
+    The operation defines an SSACFG region wherein 'scf' dialect operations can
+    be used to build generated hardware pased on parameters of the parent
+    'hw.module' operation.
+  }];
+
+  let arguments = (ins);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = "$body attr-dict";
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::SSACFG;}
+  }];
+
+}
+

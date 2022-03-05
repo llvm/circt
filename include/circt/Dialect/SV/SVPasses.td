@@ -27,6 +27,11 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 
+def HWElaborateGenerate : Pass<"hw-elaborate-generate", "mlir::ModuleOp"> {
+  let summary = "Elaborates hw.generate operations into he.module bodies";
+  let constructor = "circt::sv::createHWElaborateGeneratePass()";
+}
+
 def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
   let summary = "Eliminate features marked unsupported in LoweringOptions";
   let description = [{
