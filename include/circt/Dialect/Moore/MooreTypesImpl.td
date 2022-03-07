@@ -12,8 +12,8 @@
 
 class MooreType<string name> : TypeDef<MooreDialect, name> { }
 
-class WrapperTypeBase<string name, string mnemo> : MooreType<name> {
-  let mnemonic = mnemo;
+def LValueTypeImpl : MooreType<"LValue"> {
+  let mnemonic = "lvalue";
   let parameters = (ins "::mlir::Type":$nestedType);
   let assemblyFormat = "`<` $nestedType `>`";
 
@@ -23,10 +23,3 @@ class WrapperTypeBase<string name, string mnemo> : MooreType<name> {
     }]>
   ];
 }
-
-//===----------------------------------------------------------------------===//
-// LValue / RValue wrapper types
-//===----------------------------------------------------------------------===//
-
-def LValueTypeImpl : WrapperTypeBase<"LValue", "lvalue">;
-def RValueTypeImpl : WrapperTypeBase<"RValue", "rvalue">;

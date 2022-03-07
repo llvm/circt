@@ -17,6 +17,22 @@ using namespace circt;
 using namespace circt::moore;
 
 //===----------------------------------------------------------------------===//
+// Custom LValue parser and printer
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseLValueType(OpAsmParser &p, Type &lValueType) {
+  Type type;
+  if (p.parseType(type))
+    return p.emitError(p.getCurrentLocation(), "expected type");
+  lValueType = LValueType::get(type);
+  return success();
+}
+
+static void printLValueType(OpAsmPrinter &p, Operation *, Type lValueType) {
+  p.printType(lValueType.cast<LValueType>().getNestedType());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
