@@ -65,6 +65,7 @@ struct Emitter {
   void emitStatement(SkipOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
+  void emitStatement(StrictConnectOp op);
   void emitStatement(PartialConnectOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
@@ -315,7 +316,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
               PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
               SeqMemOp, CombMemOp, MemoryPortOp, MemoryPortAccessOp>(
             [&](auto op) { emitStatement(op); })
@@ -447,6 +448,18 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
 }
 
 void Emitter::emitStatement(ConnectOp op) {
+  indent();
+  emitExpression(op.dest());
+  if (op.src().getDefiningOp<InvalidValueOp>()) {
+    os << " is invalid";
+  } else {
+    os << " <= ";
+    emitExpression(op.src());
+  }
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(StrictConnectOp op) {
   indent();
   emitExpression(op.dest());
   if (op.src().getDefiningOp<InvalidValueOp>()) {

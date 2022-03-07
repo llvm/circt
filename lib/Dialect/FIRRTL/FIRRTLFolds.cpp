@@ -1444,8 +1444,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
-  if (op.dest().getType() != op.src().getType() ||
-      getSingleConnectUserOf(op.dest()) != op)
+  if (getSingleConnectUserOf(op.dest()) != op)
     return failure();
 
   // Only do this if the connectee and the declaration are in the same block.
@@ -1471,7 +1470,9 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (srcValueOp) {
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
-      if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
+      if (op.dest().getType().isa<BundleType>())
+        failure();
+      else if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
         replacement = rewriter.create<SpecialConstantOp>(
             op.src().getLoc(), op.dest().getType(),
             rewriter.getBoolAttr(false));
