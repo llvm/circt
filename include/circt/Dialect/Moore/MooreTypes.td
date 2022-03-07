@@ -16,7 +16,15 @@
 include "circt/Dialect/Moore/MooreDialect.td"
 
 //===----------------------------------------------------------------------===//
-// LValue / RValue wrapper types
+// Integer atom types
+//===----------------------------------------------------------------------===//
+
+def MooreIntType : DialectType<MooreDialect,
+  CPred<"$_self.isa<moore::IntType>()">,
+  "an SystemVerilog int", "::circt::moore::IntType">;
+
+//===----------------------------------------------------------------------===//
+// LValue / RValue predicates
 //===----------------------------------------------------------------------===//
 
 class MooreLValueTypeOf<list<Type> allowedTypes>
@@ -24,21 +32,7 @@ class MooreLValueTypeOf<list<Type> allowedTypes>
     CPred<"$_self.isa<moore::LValueType>()">,
     "$_self.cast<moore::LValueType>().getNestedType()", "Moore LValue type">;
 
-class MooreRValueTypeOf<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>,
-    CPred<"$_self.isa<moore::RValueType>()">,
-    "$_self.cast<moore::RValueType>().getNestedType()", "Moore RValue type">;
-
-
 def MooreLValueType : MooreLValueTypeOf<[AnyType]>;
-def MooreRValueType : MooreRValueTypeOf<[AnyType]>;
-
-//===----------------------------------------------------------------------===//
-// Integer atom types
-//===----------------------------------------------------------------------===//
-
-def MooreIntType : DialectType<MooreDialect,
-  CPred<"$_self.isa<moore::IntType>()">,
-  "an SystemVerilog int", "::circt::moore::IntType">;
+def MooreRValueType : AnyTypeOf<[MooreIntType]>;
 
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

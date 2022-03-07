@@ -47,8 +47,6 @@ static Type convertMooreType(Type type) {
       .Case<moore::IntType>([](auto type) {
         return IntegerType::get(type.getContext(), type.getBitSize());
       })
-      .Case<moore::RValueType>(
-          [](auto type) { return convertMooreType(type.getNestedType()); })
       .Case<moore::LValueType>([](auto type) {
         return llhd::SigType::get(convertMooreType(type.getNestedType()));
       })
