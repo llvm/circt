@@ -327,6 +327,10 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(node->getModule());
     unsigned portNo = module.getNumPorts();
     module.insertPorts({{portNo, portInfo}});
+    auto arg = module.getArgument(portNo);
+
+    // Record the new signal.
+    signal = arg;
 
     // Attach the input signal to each instance of this module.
     for (auto *instanceNode : node->uses()) {
@@ -342,9 +346,7 @@ void WireDFTPass::runOnOperation() {
       builder.create<ConnectOp>(clone.getResult(portNo), signal);
     }
 
-    // Record and return the new signal.
-    signal = module.getArgument(portNo);
-    return signal;
+    return arg;
   };
 
   // Wire the signal to each clock gate using the helper above.
@@ -353,7 +355,7 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(parent->getModule());
     auto builder =
         ImplicitLocOpBuilder::atBlockEnd(module->getLoc(), module.getBody());
-    // Hard coded port result number; the clock gate test_en port is 1
+    // Hard coded port result number; the clock gate test_en port is 1.
     auto testEnPortNo = 1;
     builder.create<ConnectOp>(instance->getInstance().getResult(testEnPortNo),
                               getSignal(parent));
