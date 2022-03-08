@@ -356,7 +356,10 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<ConstantOp, LocalParamOp, ParamValueOp, FileDescriptorOp>(op))
+
+  assert(!isa<FileDescriptorOp>(op) && "file descriptors should be inlined");
+
+  if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
 
   // Interfaces instances use the name of the declared interface.
@@ -2266,6 +2269,10 @@ static bool isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
+    return true;
+
+  // Always emit constant file descriptors inline.
+  if (isa<FileDescriptorOp>(op))
     return true;
 
   // If this operation has multiple uses, we can't generally inline it unless

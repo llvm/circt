@@ -12,5 +12,9 @@ hw.module @top(%clock : i1, %reset: i1) -> () {
     sv.fwrite %1, "stderr once"
     // CHECK: $fwrite(32'h80000002, "stderr twice");
     sv.fwrite %1, "stderr twice"
+
+    // CHECK: $fwrite(32'h80000002, "direct fd");
+    %2 = hw.constant 0x80000002 : i32
+    sv.fwrite %2, "direct fd"
   }
 }

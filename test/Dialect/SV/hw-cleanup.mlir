@@ -1,17 +1,17 @@
 // RUN: circt-opt -hw-cleanup %s | FileCheck %s
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
-//CHECK-NEXT:   %0 = sv.fd stderr
+//CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
 //CHECK-NEXT:   sv.initial {
-//CHECK-NEXT:     sv.fwrite %0, "Middle\0A"
+//CHECK-NEXT:     sv.fwrite [[FD]], "Middle\0A"
 //CHECK-NEXT:   }
 //CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
-//CHECK-NEXT:     sv.fwrite %0, "A1"
-//CHECK-NEXT:     sv.fwrite %0, "A2"
+//CHECK-NEXT:     sv.fwrite [[FD]], "A1"
+//CHECK-NEXT:     sv.fwrite [[FD]], "A2"
 //CHECK-NEXT:   }
 //CHECK-NEXT:   sv.alwaysff(posedge %arg1)  {
-//CHECK-NEXT:     sv.fwrite %0, "B1"
-//CHECK-NEXT:     sv.fwrite %0, "B2"
+//CHECK-NEXT:     sv.fwrite [[FD]], "B1"
+//CHECK-NEXT:     sv.fwrite [[FD]], "B2"
 //CHECK-NEXT:   }
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
@@ -38,13 +38,13 @@ hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 }
 
 // CHECK-LABEL: hw.module @alwaysff_basic_reset(%arg0: i1, %arg1: i1) {
-// CHECK-NEXT:   %0 = sv.fd stderr
+// CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:     sv.fwrite %0, "A1"
-// CHECK-NEXT:     sv.fwrite %0, "A2"
+// CHECK-NEXT:     sv.fwrite [[FD]], "A1"
+// CHECK-NEXT:     sv.fwrite [[FD]], "A2"
 // CHECK-NEXT:   }(asyncreset : negedge %arg1)  {
-// CHECK-NEXT:     sv.fwrite %0, "B1"
-// CHECK-NEXT:     sv.fwrite %0, "B2"
+// CHECK-NEXT:     sv.fwrite [[FD]], "B1"
+// CHECK-NEXT:     sv.fwrite [[FD]], "B2"
 // CHECK-NEXT:   }
 // CHECK-NEXT:   hw.output
 // CHECK-NEXT: }
@@ -67,20 +67,20 @@ hw.module @alwaysff_basic_reset(%arg0: i1, %arg1: i1) {
 
 
 // CHECK-LABEL: hw.module @alwaysff_different_reset(%arg0: i1, %arg1: i1) {
-// CHECK-NEXT:   %0 = sv.fd stderr
+// CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:     sv.fwrite %0, "A1"
-// CHECK-NEXT:     sv.fwrite %0, "A2"
+// CHECK-NEXT:     sv.fwrite [[FD]], "A1"
+// CHECK-NEXT:     sv.fwrite [[FD]], "A2"
 // CHECK-NEXT:   }(asyncreset : negedge %arg1)  {
-// CHECK-NEXT:     sv.fwrite %0, "B1"
-// CHECK-NEXT:     sv.fwrite %0, "B2"
+// CHECK-NEXT:     sv.fwrite [[FD]], "B1"
+// CHECK-NEXT:     sv.fwrite [[FD]], "B2"
 // CHECK-NEXT:   }
 // CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:     sv.fwrite %0, "C1"
-// CHECK-NEXT:     sv.fwrite %0, "C2"
+// CHECK-NEXT:     sv.fwrite [[FD]], "C1"
+// CHECK-NEXT:     sv.fwrite [[FD]], "C2"
 // CHECK-NEXT:   }(asyncreset : posedge %arg1)  {
-// CHECK-NEXT:     sv.fwrite %0, "D1"
-// CHECK-NEXT:     sv.fwrite %0, "D2"
+// CHECK-NEXT:     sv.fwrite [[FD]], "D1"
+// CHECK-NEXT:     sv.fwrite [[FD]], "D2"
 // CHECK-NEXT:   }
 // CHECK-NEXT:   hw.output
 // CHECK-NEXT: }
@@ -112,11 +112,11 @@ hw.module @alwaysff_different_reset(%arg0: i1, %arg1: i1) {
 }
 
 //CHECK-LABEL: hw.module @alwaysff_ifdef(%arg0: i1) {
-//CHECK-NEXT:  %0 = sv.fd stderr
+//CHECK-NEXT:  [[FD:%.*]] = sv.fd stderr
 //CHECK-NEXT:  sv.ifdef "FOO" {
 //CHECK-NEXT:     sv.alwaysff(posedge %arg0)  {
-//CHECK-NEXT:       sv.fwrite %0, "A1"
-//CHECK-NEXT:       sv.fwrite %0, "B1"
+//CHECK-NEXT:       sv.fwrite [[FD]], "A1"
+//CHECK-NEXT:       sv.fwrite [[FD]], "B1"
 //CHECK-NEXT:     }
 //CHECK-NEXT:   }
 //CHECK-NEXT:   hw.output
@@ -137,11 +137,11 @@ hw.module @alwaysff_ifdef(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @ifdef_merge(%arg0: i1) {
-// CHECK-NEXT:    %0 = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:    sv.ifdef "FOO"  {
 // CHECK-NEXT:      sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:        sv.fwrite %0, "A1"
-// CHECK-NEXT:        sv.fwrite %0, "B1"
+// CHECK-NEXT:        sv.fwrite [[FD]], "A1"
+// CHECK-NEXT:        sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 hw.module @ifdef_merge(%arg0: i1) {
@@ -161,16 +161,16 @@ hw.module @ifdef_merge(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @ifdef_proc_merge(%arg0: i1) {
-// CHECK-NEXT:    %0 = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = hw.constant true
 // CHECK-NEXT:      %1 = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
-// CHECK-NEXT:        sv.fwrite %0, "A1"
-// CHECK-NEXT:        sv.fwrite %0, "%x"(%1) : i1
+// CHECK-NEXT:        sv.fwrite [[FD]], "A1"
+// CHECK-NEXT:        sv.fwrite [[FD]], "%x"(%1) : i1
 // CHECK-NEXT:      }
 // CHECK-NEXT:      sv.ifdef.procedural "BAR"  {
-// CHECK-NEXT:        sv.fwrite %0, "B1"
+// CHECK-NEXT:        sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 hw.module @ifdef_proc_merge(%arg0: i1) {
@@ -193,16 +193,16 @@ hw.module @ifdef_proc_merge(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @if_merge(%arg0: i1, %arg1: i1) {
-// CHECK-NEXT:    %0 = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = hw.constant true
 // CHECK-NEXT:      %1 = comb.xor %arg1, %true : i1
 // CHECK-NEXT:      sv.if %arg1  {
-// CHECK-NEXT:        sv.fwrite %0, "A1"
-// CHECK-NEXT:        sv.fwrite %0, "%x"(%1) : i1
+// CHECK-NEXT:        sv.fwrite [[FD]], "A1"
+// CHECK-NEXT:        sv.fwrite [[FD]], "%x"(%1) : i1
 // CHECK-NEXT:      }
 // CHECK-NEXT:      sv.if %1 {
-// CHECK-NEXT:        sv.fwrite %0, "B1"
+// CHECK-NEXT:        sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 hw.module @if_merge(%arg0: i1, %arg1: i1) {
@@ -226,10 +226,10 @@ hw.module @if_merge(%arg0: i1, %arg1: i1) {
 
 
 // CHECK-LABEL: hw.module @initial_merge(%arg0: i1) {
-// CHECK-NEXT:    %0 = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:    sv.initial {
-// CHECK-NEXT:      sv.fwrite %0, "A1"
-// CHECK-NEXT:      sv.fwrite %0, "B1"
+// CHECK-NEXT:      sv.fwrite [[FD]], "A1"
+// CHECK-NEXT:      sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:    }
 hw.module @initial_merge(%arg0: i1) {
   %fd = sv.fd stderr
@@ -244,17 +244,17 @@ hw.module @initial_merge(%arg0: i1) {
 }
 
 //CHECK-LABEL: hw.module @always_basic(%arg0: i1, %arg1: i1) {
-//CHECK-NEXT:   %0 = sv.fd stderr
+//CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
 //CHECK-NEXT:   sv.initial {
-//CHECK-NEXT:     sv.fwrite %0, "Middle\0A"
+//CHECK-NEXT:     sv.fwrite [[FD]], "Middle\0A"
 //CHECK-NEXT:   }
 //CHECK-NEXT:   sv.always   posedge %arg0   {
-//CHECK-NEXT:     sv.fwrite %0, "A1"
-//CHECK-NEXT:     sv.fwrite %0, "A2"
+//CHECK-NEXT:     sv.fwrite [[FD]], "A1"
+//CHECK-NEXT:     sv.fwrite [[FD]], "A2"
 //CHECK-NEXT:   }
 //CHECK-NEXT:   sv.always   posedge %arg1   {
-//CHECK-NEXT:     sv.fwrite %0, "B1"
-//CHECK-NEXT:     sv.fwrite %0, "B2"
+//CHECK-NEXT:     sv.fwrite [[FD]], "B1"
+//CHECK-NEXT:     sv.fwrite [[FD]], "B2"
 //CHECK-NEXT:   }
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
@@ -303,13 +303,13 @@ hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (x: i1, y: i1) {
 }
 
 // CHECK-LABEL: hw.module @nested_regions(
-// CHECK-NEXT:  %0 = sv.fd stderr
+// CHECK-NEXT:  [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:  sv.initial  {
 // CHECK-NEXT:    sv.ifdef.procedural "L1"  {
 // CHECK-NEXT:      sv.ifdef.procedural "L2"  {
 // CHECK-NEXT:        sv.ifdef.procedural "L3"  {
-// CHECK-NEXT:          sv.fwrite %0, "A"
-// CHECK-NEXT:          sv.fwrite %0, "B"
+// CHECK-NEXT:          sv.fwrite [[FD]], "A"
+// CHECK-NEXT:          sv.fwrite [[FD]], "B"
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }

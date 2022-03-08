@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
-  // CHECK: %0 = sv.fd stderr
+  // CHECK: [[FD:%.*]] = sv.fd stderr
   %fd = sv.fd stderr
 
   // CHECK: %param_x = sv.localparam : i42 {value = 11 : i42}
@@ -44,12 +44,12 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
   // CHECK-NEXT:     %1 = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
   // CHECK-NEXT:     sv.if %1 {
-  // CHECK-NEXT:       sv.fwrite %0, "Hi\0A"
+  // CHECK-NEXT:       sv.fwrite [[FD]], "Hi\0A"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.if %1 {
-  // CHECK-NEXT:       sv.fwrite %0, "%x"(%1) : i1
+  // CHECK-NEXT:       sv.fwrite [[FD]], "%x"(%1) : i1
   // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.fwrite %0, "There\0A"
+  // CHECK-NEXT:       sv.fwrite [[FD]], "There\0A"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -59,7 +59,7 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0)  {
-  // CHECK-NEXT:   sv.fwrite %0, "Yo\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Yo\0A"
   // CHECK-NEXT: }
 
   sv.alwaysff(posedge %arg0) {
@@ -69,9 +69,9 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0) {
-  // CHECK-NEXT:   sv.fwrite %0, "Sync Main Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Sync Main Block\0A"
   // CHECK-NEXT:  }(syncreset : posedge %arg1) {
-  // CHECK-NEXT:   sv.fwrite %0, "Sync Reset Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Sync Reset Block\0A"
   // CHECK-NEXT: }
 
   sv.alwaysff (posedge %arg0) {
@@ -81,9 +81,9 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0) {
-  // CHECK-NEXT:   sv.fwrite %0, "Async Main Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Async Main Block\0A"
   // CHECK-NEXT:  }(asyncreset : negedge %arg1) {
-  // CHECK-NEXT:   sv.fwrite %0, "Async Reset Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Async Reset Block\0A"
   // CHECK-NEXT: }
 
 // Smoke test generic syntax.
@@ -102,13 +102,13 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.casez %arg8 : i8
   // CHECK-NEXT:   case b0000001x: {
-  // CHECK-NEXT:     sv.fwrite %0, "x"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "x"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   case b000000x1: {
-  // CHECK-NEXT:     sv.fwrite %0, "y"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "y"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   default: {
-  // CHECK-NEXT:     sv.fwrite %0, "z"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "z"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   sv.initial {
@@ -127,10 +127,10 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.casez %arg1 : i1
   // CHECK-NEXT:   case b0: {
-  // CHECK-NEXT:     sv.fwrite %0, "zero"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "zero"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   case b1: {
-  // CHECK-NEXT:     sv.fwrite %0, "one"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "one"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   sv.initial {

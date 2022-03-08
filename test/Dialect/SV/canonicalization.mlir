@@ -1,12 +1,12 @@
 // RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
-// CHECK-NEXT:    %0 = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:    sv.always posedge %arg0  {
-// CHECK-NEXT:      sv.fwrite %0, "Reachable1"
-// CHECK-NEXT:      sv.fwrite %0, "Reachable2"
-// CHECK-NEXT:      sv.fwrite %0, "Reachable3"
-// CHECK-NEXT:      sv.fwrite %0, "Reachable4"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable1"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable2"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable3"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable4"
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
@@ -74,8 +74,8 @@ func @empy_op(%arg0: i1) {
 // CHECK-NEXT:    sv.initial  {
 // CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.if %0  {
-// CHECK-NEXT:        %1 = sv.fd stderr
-// CHECK-NEXT:        sv.fwrite %1, "Foo"
+// CHECK-NEXT:        [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:        sv.fwrite [[FD]], "Foo"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
