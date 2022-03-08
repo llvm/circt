@@ -328,7 +328,7 @@ void WireDFTPass::runOnOperation() {
     unsigned portNo = module.getNumPorts();
     module.insertPorts({{portNo, portInfo}});
     auto arg = module.getArgument(portNo);
-    
+
     // Record the new signal.
     signal = arg;
 
