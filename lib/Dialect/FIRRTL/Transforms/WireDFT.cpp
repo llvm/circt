@@ -327,9 +327,9 @@ void WireDFTPass::runOnOperation() {
     auto module = cast<FModuleOp>(node->getModule());
     unsigned portNo = module.getNumPorts();
     module.insertPorts({{portNo, portInfo}});
-
-    // Record the new signal and get a copy (reference will be invalidated).
     auto arg = module.getArgument(portNo);
+    
+    // Record the new signal.
     signal = arg;
 
     // Attach the input signal to each instance of this module.
