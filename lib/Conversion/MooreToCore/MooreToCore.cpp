@@ -85,15 +85,29 @@ struct AssignOpConv : public OpConversionPattern<moore::AssignOp> {
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
-static Type convertMooreType(Type type) {
-  return TypeSwitch<Type, Type>(type)
-      .Case<moore::IntType>([](auto type) {
-        return IntegerType::get(type.getContext(), type.getBitSize());
-      })
-      .Case<moore::LValueType>([](auto type) {
-        return llhd::SigType::get(convertMooreType(type.getNestedType()));
-      })
-      .Default([](Type type) { return type; });
+static void populateLegality(ConversionTarget &target) {
+  target.addIllegalDialect<moore::MooreDialect>();
+  target.addLegalDialect<hw::HWDialect>();
+  target.addLegalDialect<llhd::LLHDDialect>();
+  target.addLegalDialect<comb::CombDialect>();
+  target.addLegalOp<ModuleOp>();
+}
+
+static void populateTypeConversion(TypeConverter &typeConverter) {
+  typeConverter.addConversion([&](moore::IntType type) {
+    return mlir::IntegerType::get(type.getContext(), type.getBitSize());
+  });
+  typeConverter.addConversion([&](moore::LValueType type) {
+    auto inner = typeConverter.convertType(type.getNestedType());
+    return llhd::SigType::get(inner);
+  });
+}
+
+static void populateOpConversion(RewritePatternSet &patterns,
+                                 TypeConverter &typeConverter) {
+  auto *context = patterns.getContext();
+  patterns.add<ConstantOpConv, VariableDeclOpConv, AssignOpConv>(typeConverter,
+                                                                 context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -116,20 +130,12 @@ void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
 
-  // Mark all MIR ops as illegal such that they get rewritten.
   ConversionTarget target(context);
-  target.addIllegalDialect<moore::MooreDialect>();
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<llhd::LLHDDialect>();
-  target.addLegalDialect<comb::CombDialect>();
-  target.addLegalOp<ModuleOp>();
-
   TypeConverter typeConverter;
-  typeConverter.addConversion(convertMooreType);
   RewritePatternSet patterns(&context);
-
-  patterns.add<ConstantOpConv, VariableDeclOpConv, AssignOpConv>(typeConverter,
-                                                                 &context);
+  populateLegality(target);
+  populateTypeConversion(typeConverter);
+  populateOpConversion(patterns, typeConverter);
 
   if (failed(applyFullConversion(module, target, std::move(patterns))))
     signalPassFailure();
