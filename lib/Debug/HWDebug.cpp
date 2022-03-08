@@ -508,8 +508,7 @@ public:
   // type ops
   using TypeOpVisitor::visitTypeOp;
   // supported
-  void visitTypeOp(circt::hw::ConstantOp op) { os << op.value(); }
-  void visitTypeOp(circt::hw::ParamValueOp op) { os << op.value(); }
+  void visitTypeOp(circt::hw::ConstantOp op) { printConstant(op.value()); }
 
   // SV ops
   using Visitor::visitSV;
@@ -551,6 +550,21 @@ public:
 private:
   llvm::raw_ostream &os;
   HWModuleInfo *module;
+
+  void printConstant(const llvm::APInt &value) {
+    bool isNegated = false;
+    if (value.isNegative() && !value.isMinSignedValue()) {
+      os << '-';
+      isNegated = true;
+    }
+    SmallString<32> valueStr;
+    if (isNegated) {
+      (-value).toStringUnsigned(valueStr, 10);
+    } else {
+      value.toStringUnsigned(valueStr, 10);
+    }
+    os << valueStr;
+  }
 };
 
 class DebugStmtVisitor : public circt::hw::StmtVisitor<DebugStmtVisitor>,
