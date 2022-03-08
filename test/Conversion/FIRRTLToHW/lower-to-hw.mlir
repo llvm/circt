@@ -1121,7 +1121,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // present.
   // CHECK-NOT: firrtl.moduleHierarchyFile
   firrtl.module @FooDUT() attributes {annotations = [
-      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+
+    %chckcoverAnno_clock = firrtl.instance chkcoverAnno @chkcoverAnno(in clock: !firrtl.clock)
+  }
 
   // CHECK-LABEL: hw.module @MemoryWritePortBehavior
   firrtl.module @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
@@ -1230,8 +1233,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // chckcoverAnno is extracted because it is instantiated inside the DUT.
   // CHECK-LABEL: hw.module.extern @chkcoverAnno(%clock: i1)
   // CHECK-SAME: attributes {firrtl.extract.cover.extra}
+
+  firrtl.extmodule @chkcoverAnno2(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // checkcoverAnno2 is NOT extracted because it is not instantiated under the
+  // DUT.
+  // CHECK-LABEL: hw.module.extern @chkcoverAnno2(%clock: i1)
+  // CHECK-NOT: attributes {firrtl.extract.cover.extra}
 
   // CHECK-LABEL: hw.module.extern @InnerNamesExt
   // CHECK-SAME:  (
