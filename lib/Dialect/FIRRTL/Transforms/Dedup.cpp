@@ -975,9 +975,9 @@ class DedupPass : public DedupBase<DedupPass> {
       auto it = moduleHashes.find(h);
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
-        deduper.dedup(original, module);
         // Record the group ID of the other module.
         groupMap[module.moduleNameAttr()] = groupMap[original.moduleNameAttr()];
+        deduper.dedup(original, module);
         erasedModules++;
         anythingChanged = true;
         continue;
