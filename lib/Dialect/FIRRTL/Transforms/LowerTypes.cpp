@@ -1570,14 +1570,15 @@ void LowerTypesPass::runOnOperation() {
   auto updateNamepath = [&](NonLocalAnchor nla, StringAttr oldNLAname,
                             bool removeNLA) {
     FlatSymbolRefAttr newName = FlatSymbolRefAttr::get(nla);
-    // This starts from the leaf elemenet, such that if leaf is not updated,
+    // This starts from the leaf element, such that if the leaf is not updated,
     // none of the path should be updated.
     for (auto innerRef : nla.namepath().getAsRange<hw::InnerRefAttr>()) {
       // Binary search over the list of Ops, given the InnerRefAttr;
-      const auto *iter = std::lower_bound(opSymNames.begin(), opSymNames.end(),
-                                          InnerRefRecord(innerRef));
+      auto record = InnerRefRecord(innerRef);
+      const auto *iter =
+          std::lower_bound(opSymNames.begin(), opSymNames.end(), record);
       // The search will fail, if the NLA is dropped from the leaf element.
-      if (iter == opSymNames.end())
+      if (iter == opSymNames.end() || *iter != record)
         continue;
       auto *pathOp = iter->op;
       bool isInstanceOp = isa<InstanceOp>(pathOp);
@@ -1650,7 +1651,7 @@ void LowerTypesPass::runOnOperation() {
         ImplicitLocOpBuilder theBuilder(nla.getLoc(), nla);
         auto newNLAop = theBuilder.create<NonLocalAnchor>(
             circtNamespace.newName(nlaName.getValue()), newPath);
-        updateNamepath(newNLAop, nlaName, 0);
+        updateNamepath(newNLAop, nlaName, false);
       } else
         nla.namepathAttr(newPath);
     } else if (nlaName != prevNLA)
@@ -1671,7 +1672,7 @@ void LowerTypesPass::runOnOperation() {
     // nonlocal DontTouch is removed from the fields of a Bundle, the
     // corresponding NLA must also be removed. In this block, remove all the
     // references to the nla from the InstanceOps and erase the NLA.
-    auto nla = dyn_cast<NonLocalAnchor>(nlaOp);
+    auto nla = cast<NonLocalAnchor>(nlaOp);
     updateNamepath(nla, nla.getNameAttr(), true);
     nla->erase();
   }

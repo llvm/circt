@@ -202,6 +202,7 @@ struct InnerRefRecord {
   bool operator==(const InnerRefRecord &rhs) const {
     return (innerSym == rhs.innerSym && mod == rhs.mod);
   }
+  bool operator!=(const InnerRefRecord &rhs) const { return !(*this == rhs); }
 };
 
 // A data structure to record and lookup an InnerSym and the corresponding
@@ -212,7 +213,8 @@ struct InnerRefRecord {
 // insert-phase and lookup-phase based code.
 // TODO: Generalize this data structure.
 struct InnerRefList {
-  InnerRefList(MLIRContext* context) : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
+  InnerRefList(MLIRContext *context)
+      : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
 
   void sort() {
     llvm::sort(list);
