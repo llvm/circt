@@ -311,6 +311,24 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Icarus Verilog Configuration
+#-------------------------------------------------------------------------------
+
+# If Icarus Verilog hasn't been explicitly disabled, find it.
+option(IVERILOG_DISABLE "Disable the Icarus Verilog tests.")
+if (IVERILOG_DISABLE)
+  message(STATUS "Disabling Icarus Verilog tests.")
+else()
+  find_program(IVERILOG_PATH "iverilog")
+  if(EXISTS ${IVERILOG_PATH})
+    message(STATUS "Found iverilog at ${IVERILOG_PATH}.")
+  else()
+    set(IVERILOG_PATH "")
+    message(STATUS "Did not find iverilog.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # capnp Configuration
 #-------------------------------------------------------------------------------
 
