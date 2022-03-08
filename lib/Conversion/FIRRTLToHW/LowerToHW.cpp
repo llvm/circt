@@ -3526,8 +3526,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
 
       addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite.
-        builder.create<sv::FWriteOp>(op.formatString(), operands);
+        // Emit the sv.fwrite, writing to stderr by default.
+        Value stderr =
+            builder.create<sv::FileDescriptorOp>(sv::FileDescriptor::StdErr);
+        builder.create<sv::FWriteOp>(stderr, op.formatString(), operands);
       });
     });
   });

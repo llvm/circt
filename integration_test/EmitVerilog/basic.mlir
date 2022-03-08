@@ -9,7 +9,8 @@ module {
     %c1 = hw.instance "aaa" @AAA () -> (f: i1)
     %c1Shl = hw.instance "shl" @shl (a: %c1: i1) -> (b: i1)
     sv.always posedge %clk {
-      sv.fwrite "tick\n"
+      %fd = sv.fd stderr
+      sv.fwrite %fd, "tick\n"
     }
   }
 

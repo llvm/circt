@@ -222,7 +222,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
           StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
-          SampledOp>(op))
+          SampledOp, FileDescriptorOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -356,7 +356,7 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
+  if (isa<ConstantOp, LocalParamOp, ParamValueOp, FileDescriptorOp>(op))
     return "localparam";
 
   // Interfaces instances use the name of the declared interface.
@@ -1511,6 +1511,9 @@ private:
   // Sampled value functions
   SubExprInfo visitSV(SampledOp op);
 
+  // Standard file descriptor
+  SubExprInfo visitSV(FileDescriptorOp op);
+
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
@@ -2119,6 +2122,18 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   auto info = emitSubExpr(op.expression(), LowestPrecedence, OOLTopLevel);
   os << ")";
   return info;
+}
+
+SubExprInfo ExprEmitter::visitSV(FileDescriptorOp op) {
+  switch (op.fdAttr().getValue()) {
+  case FileDescriptor::StdOut:
+    os << "32'h80000001";
+    break;
+  case FileDescriptor::StdErr:
+    os << "32'h80000002";
+    break;
+  }
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
@@ -2792,7 +2807,11 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "$fwrite(32'h80000002, \"";
+  indent() << "$fwrite(";
+
+  emitExpression(op.fd(), ops);
+
+  os << ", \"";
   os.write_escaped(op.string());
   os << '"';
 
