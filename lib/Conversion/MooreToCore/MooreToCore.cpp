@@ -20,65 +20,12 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
-
-//===----------------------------------------------------------------------===//
-// Moore to Core Conversion Pass
-//===----------------------------------------------------------------------===//
+using namespace moore;
 
 namespace {
-struct MooreToCorePass : public ConvertMooreToCoreBase<MooreToCorePass> {
-  void runOnOperation() override;
-};
-} // namespace
-
-/// Create a Moore to core dialects conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
-  return std::make_unique<MooreToCorePass>();
-}
-
-namespace {
-/// Forward declarations
-struct ConstantOpConv;
-struct VariableDeclOpConv;
-struct AssignOpConv;
-
-static Type convertMooreType(Type type) {
-  return TypeSwitch<Type, Type>(type)
-      .Case<moore::IntType>([](auto type) {
-        return IntegerType::get(type.getContext(), type.getBitSize());
-      })
-      .Case<moore::LValueType>([](auto type) {
-        return llhd::SigType::get(convertMooreType(type.getNestedType()));
-      })
-      .Default([](Type type) { return type; });
-}
-
-/// This is the main entrypoint for the Moore to Core conversion pass.
-void MooreToCorePass::runOnOperation() {
-  MLIRContext &context = getContext();
-  ModuleOp module = getOperation();
-
-  // Mark all MIR ops as illegal such that they get rewritten.
-  ConversionTarget target(context);
-  target.addIllegalDialect<moore::MooreDialect>();
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<llhd::LLHDDialect>();
-  target.addLegalDialect<comb::CombDialect>();
-  target.addLegalOp<ModuleOp>();
-
-  TypeConverter typeConverter;
-  typeConverter.addConversion(convertMooreType);
-  RewritePatternSet patterns(&context);
-
-  patterns.add<ConstantOpConv, VariableDeclOpConv, AssignOpConv>(typeConverter,
-                                                                 &context);
-
-  if (failed(applyFullConversion(module, target, std::move(patterns))))
-    signalPassFailure();
-}
 
 //===----------------------------------------------------------------------===//
-// Operation conversion patterns
+// Expression Conversion
 //===----------------------------------------------------------------------===//
 
 struct ConstantOpConv : public OpConversionPattern<moore::ConstantOp> {
@@ -92,6 +39,10 @@ struct ConstantOpConv : public OpConversionPattern<moore::ConstantOp> {
     return success();
   }
 };
+
+//===----------------------------------------------------------------------===//
+// Statement Conversion
+//===----------------------------------------------------------------------===//
 
 struct VariableDeclOpConv : public OpConversionPattern<moore::VariableDeclOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -129,3 +80,57 @@ struct AssignOpConv : public OpConversionPattern<moore::AssignOp> {
 };
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Conversion Infrastructure
+//===----------------------------------------------------------------------===//
+
+static Type convertMooreType(Type type) {
+  return TypeSwitch<Type, Type>(type)
+      .Case<moore::IntType>([](auto type) {
+        return IntegerType::get(type.getContext(), type.getBitSize());
+      })
+      .Case<moore::LValueType>([](auto type) {
+        return llhd::SigType::get(convertMooreType(type.getNestedType()));
+      })
+      .Default([](Type type) { return type; });
+}
+
+//===----------------------------------------------------------------------===//
+// Moore to Core Conversion Pass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct MooreToCorePass : public ConvertMooreToCoreBase<MooreToCorePass> {
+  void runOnOperation() override;
+};
+} // namespace
+
+/// Create a Moore to core dialects conversion pass.
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertMooreToCorePass() {
+  return std::make_unique<MooreToCorePass>();
+}
+
+/// This is the main entrypoint for the Moore to Core conversion pass.
+void MooreToCorePass::runOnOperation() {
+  MLIRContext &context = getContext();
+  ModuleOp module = getOperation();
+
+  // Mark all MIR ops as illegal such that they get rewritten.
+  ConversionTarget target(context);
+  target.addIllegalDialect<moore::MooreDialect>();
+  target.addLegalDialect<hw::HWDialect>();
+  target.addLegalDialect<llhd::LLHDDialect>();
+  target.addLegalDialect<comb::CombDialect>();
+  target.addLegalOp<ModuleOp>();
+
+  TypeConverter typeConverter;
+  typeConverter.addConversion(convertMooreType);
+  RewritePatternSet patterns(&context);
+
+  patterns.add<ConstantOpConv, VariableDeclOpConv, AssignOpConv>(typeConverter,
+                                                                 &context);
+
+  if (failed(applyFullConversion(module, target, std::move(patterns))))
+    signalPassFailure();
+}
