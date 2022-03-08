@@ -16,6 +16,9 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MIROps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -28,11 +31,11 @@ namespace {
 // Expression Conversion
 //===----------------------------------------------------------------------===//
 
-struct ConstantOpConv : public OpConversionPattern<moore::ConstantOp> {
+struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(moore::ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.valueAttr());
@@ -44,13 +47,12 @@ struct ConstantOpConv : public OpConversionPattern<moore::ConstantOp> {
 // Statement Conversion
 //===----------------------------------------------------------------------===//
 
-struct VariableDeclOpConv : public OpConversionPattern<moore::VariableDeclOp> {
+struct VariableDeclOpConv : public OpConversionPattern<VariableDeclOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(moore::VariableDeclOp op, OpAdaptor adaptor,
+  matchAndRewrite(VariableDeclOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     Type resultType = typeConverter->convertType(op.result().getType());
     Value initVal =
         rewriter.create<hw::ConstantOp>(op->getLoc(), op.initAttr());
@@ -60,21 +62,68 @@ struct VariableDeclOpConv : public OpConversionPattern<moore::VariableDeclOp> {
   }
 };
 
-struct AssignOpConv : public OpConversionPattern<moore::AssignOp> {
+struct AssignOpConv : public OpConversionPattern<AssignOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(moore::AssignOp op, OpAdaptor adaptor,
+  matchAndRewrite(AssignOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     Value timeVal =
         rewriter.create<llhd::ConstantTimeOp>(op->getLoc(), 0, "s", 0, 1);
-    Type destType = typeConverter->convertType(op.dest().getType());
-    Type srcType = typeConverter->convertType(op.src().getType());
-    op.dest().setType(destType);
-    op.src().setType(srcType);
-    rewriter.replaceOpWithNewOp<llhd::DrvOp>(op, op.dest(), op.src(), timeVal,
-                                             Value());
+    rewriter.replaceOpWithNewOp<llhd::DrvOp>(op, adaptor.dest(), adaptor.src(),
+                                             timeVal, Value());
+    return success();
+  }
+};
+
+struct ReturnOpConversion : public OpConversionPattern<mlir::ReturnOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::ReturnOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, adaptor.operands());
+    return success();
+  }
+};
+
+struct CondBranchOpConversion
+    : public OpConversionPattern<mlir::cf::CondBranchOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
+        op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
+        adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
+    return success();
+  }
+};
+
+struct BranchOpConversion : public OpConversionPattern<mlir::cf::BranchOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::cf::BranchOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, op.getDest(),
+                                                    adaptor.getDestOperands());
+    return success();
+  }
+};
+
+struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::CallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    llvm::SmallVector<Type> convResTypes;
+    if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
+      return failure();
+    rewriter.replaceOpWithNewOp<mlir::CallOp>(
+        op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
     return success();
   }
 };
@@ -85,29 +134,69 @@ struct AssignOpConv : public OpConversionPattern<moore::AssignOp> {
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
+static bool isMooreType(Type type) {
+  return type.isa<UnpackedType>() || type.isa<IntType>() ||
+         type.isa<LValueType>();
+}
+
+static bool hasMooreType(TypeRange types) {
+  return llvm::any_of(types, isMooreType);
+}
+
+static bool hasMooreType(ValueRange values) {
+  return hasMooreType(values.getTypes());
+}
+
+template <typename Op>
+void addGenericLegality(ConversionTarget &target) {
+  target.addDynamicallyLegalOp<Op>([](Op op) {
+    return !hasMooreType(op->getOperands()) && !hasMooreType(op->getResults());
+  });
+}
+
 static void populateLegality(ConversionTarget &target) {
-  target.addIllegalDialect<moore::MooreDialect>();
+  target.addIllegalDialect<MooreDialect>();
+  target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<llhd::LLHDDialect>();
   target.addLegalDialect<comb::CombDialect>();
-  target.addLegalOp<ModuleOp>();
+
+  addGenericLegality<mlir::cf::CondBranchOp>(target);
+  addGenericLegality<mlir::cf::BranchOp>(target);
+  addGenericLegality<mlir::CallOp>(target);
+  addGenericLegality<mlir::ReturnOp>(target);
+
+  target.addDynamicallyLegalOp<mlir::FuncOp>([](mlir::FuncOp op) {
+    auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
+      return hasMooreType(block.getArguments());
+    });
+    auto resultsConverted = !hasMooreType(op.getType().getResults());
+    return argsConverted && resultsConverted;
+  });
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
-  typeConverter.addConversion([&](moore::IntType type) {
+  typeConverter.addConversion([&](IntType type) {
     return mlir::IntegerType::get(type.getContext(), type.getBitSize());
   });
-  typeConverter.addConversion([&](moore::LValueType type) {
+  typeConverter.addConversion([&](LValueType type) {
     auto inner = typeConverter.convertType(type.getNestedType());
     return llhd::SigType::get(inner);
   });
+
+  // Valid target types.
+  typeConverter.addConversion([](mlir::IntegerType type) { return type; });
 }
 
 static void populateOpConversion(RewritePatternSet &patterns,
                                  TypeConverter &typeConverter) {
   auto *context = patterns.getContext();
-  patterns.add<ConstantOpConv, VariableDeclOpConv, AssignOpConv>(typeConverter,
-                                                                 context);
+  patterns
+      .add<ConstantOpConv, VariableDeclOpConv, AssignOpConv, ReturnOpConversion,
+           CondBranchOpConversion, BranchOpConversion, CallOpConversion>(
+          typeConverter, context);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
+      patterns, typeConverter);
 }
 
 //===----------------------------------------------------------------------===//
