@@ -520,7 +520,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   if (tbdir) {
     if (auto dut = state.getDut()) {
       for (auto mod : state.oldToNewModuleMap) {
-        if (!state.getInstanceGraph()->isAncestor(mod.first, dut)) {
+        if (state.isInTestHarness(mod.first)) {
           auto outputFile = hw::OutputFileAttr::getAsDirectory(
               circuit.getContext(), tbdir.getValue(), false, true);
           mod.second->setAttr("output_file", outputFile);
