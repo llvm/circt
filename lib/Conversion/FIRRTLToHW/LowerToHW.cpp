@@ -292,6 +292,19 @@ struct CircuitLoweringState {
   FModuleOp getDut() { return dut; }
   void setDut(FModuleOp mod) { dut = mod; }
 
+  // Return true if this module is instantiated by the DUT.  Returns false if
+  // the module is not instantiated by the DUT or if the DUT is not known.
+  bool isInDUT(FModuleLike mod) {
+    if (!dut)
+      return false;
+    return getInstanceGraph()->isAncestor(mod, dut);
+  }
+
+  // Return true if this module is instantiated by the Test Harness.  Returns
+  // false if the module is not instantiated by the Test Harness or if the Test
+  // Harness is not known.
+  bool isInTestHarness(FModuleLike mod) { return !isInDUT(mod); }
+
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 
 private:
