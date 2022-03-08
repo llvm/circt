@@ -1639,7 +1639,10 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   if (tpe.isPassive()) {
     if (flow == Flow::Source || tpe.isa<AnalogType>())
       return;
-    builder.create<StrictConnectOp>(val, builder.create<InvalidValueOp>(tpe));
+    if (tpe.hasUninferredWidth())
+      builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
+    else
+      builder.create<StrictConnectOp>(val, builder.create<InvalidValueOp>(tpe));
     return;
   }
 
