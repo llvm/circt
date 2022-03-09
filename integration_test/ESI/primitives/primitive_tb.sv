@@ -1,5 +1,5 @@
 // REQUIRES: ieee-sim
-// UNSUPPORTED: iverilog
+// UNSUPPORTED: ieee-sim-iverilog
 // RUN: circt-rtl-sim.py --sim %ieee-sim %INC%/circt/Dialect/ESI/ESIPrimitives.sv %s
 
 //===- primitive_tb.sv - tests for ESI primitives -----------*- verilog -*-===//

@@ -1,5 +1,5 @@
 // REQUIRES: ieee-sim
-// UNSUPPORTED: iverilog
+// UNSUPPORTED: ieee-sim-iverilog
 // RUN: circt-opt %s --lower-std-to-handshake \ 
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \

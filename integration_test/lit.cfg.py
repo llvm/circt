@@ -88,6 +88,17 @@ if config.yosys_path != "":
   tools.append('yosys')
   config.available_features.add('yosys')
 
+# Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
+if config.iverilog_path != "":
+  tool_dirs.append(os.path.dirname(config.iverilog_path))
+  tools.append('iverilog')
+  tools.append('vvp')
+  config.available_features.add('iverilog')
+  config.available_features.add('ieee-sim')
+  config.available_features.add('rtl-sim')
+  config.substitutions.append(('%iverilog', config.iverilog_path))
+  config.substitutions.append(('%ieee-sim', config.iverilog_path))
+
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
@@ -133,23 +144,14 @@ if config.questa_path != "":
   config.substitutions.append(
       ('%ieee-sim', os.path.join(config.questa_path, "vsim")))
 
-# Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
-if config.iverilog_path != "":
-  tool_dirs.append(os.path.dirname(config.iverilog_path))
-  tools.append('iverilog')
-  tools.append('vvp')
-  config.available_features.add('iverilog')
-  config.substitutions.append(('%iverilog', config.iverilog_path))
-  if 'ieee-sim' not in config.available_features:
-    config.available_features.add('ieee-sim')
-    config.available_features.add('rtl-sim')
-    config.substitutions.append(('%ieee-sim', config.iverilog_path))
-
 ieee_sims = list(filter(lambda x: x[0] == '%ieee-sim', config.substitutions))
 if len(ieee_sims) > 1:
   warnings.warn(
       f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}"
   )
+
+if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
+  config.available_features.add('ieee-sim-iverilog')
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":
