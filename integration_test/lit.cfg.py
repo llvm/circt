@@ -134,15 +134,16 @@ if config.questa_path != "":
       ('%ieee-sim', os.path.join(config.questa_path, "vsim")))
 
 # Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
-if config.iverilog_path != "" and 'ieee-sim' not in config.available_features:
+if config.iverilog_path != "":
   tool_dirs.append(os.path.dirname(config.iverilog_path))
   tools.append('iverilog')
   tools.append('vvp')
   config.available_features.add('iverilog')
-  config.available_features.add('ieee-sim')
-  config.available_features.add('rtl-sim')
   config.substitutions.append(('%iverilog', config.iverilog_path))
-  config.substitutions.append(('%ieee-sim', config.iverilog_path))
+  if 'ieee-sim' not in config.available_features:
+    config.available_features.add('ieee-sim')
+    config.available_features.add('rtl-sim')
+    config.substitutions.append(('%ieee-sim', config.iverilog_path))
 
 ieee_sims = list(filter(lambda x: x[0] == '%ieee-sim', config.substitutions))
 if len(ieee_sims) > 1:
