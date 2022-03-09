@@ -824,16 +824,14 @@ bool StdExprBuilder::buildSignExtendOp(unsigned dstWidth) {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  if (isSignedOp) {
+  if (isSignedOp)
     arg0Data = rewriter.create<AsSIntPrimOp>(insertLoc, arg0Data);
-  }
 
   Value resultDataOp =
       rewriter.create<PadPrimOp>(insertLoc, arg0Data, dstWidth);
 
-  if (isSignedOp) {
+  if (isSignedOp)
     resultDataOp = rewriter.create<AsUIntPrimOp>(insertLoc, resultDataOp);
-  }
 
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
 
@@ -914,13 +912,11 @@ void StdExprBuilder::buildBinaryLogic() {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  if (fstOpSigned) {
+  if (fstOpSigned)
     arg0Data = rewriter.create<AsSIntPrimOp>(insertLoc, arg0Data);
-  }
 
-  if (sndOpSigned) {
+  if (sndOpSigned)
     arg1Data = rewriter.create<AsSIntPrimOp>(insertLoc, arg1Data);
-  }
 
   // Carry out the binary operation.
   Value resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data, arg1Data);

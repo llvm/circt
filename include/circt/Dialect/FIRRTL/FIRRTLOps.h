@@ -212,7 +212,8 @@ struct InnerRefRecord {
 // insert-phase and lookup-phase based code.
 // TODO: Generalize this data structure.
 struct InnerRefList {
-  InnerRefList(MLIRContext* context) : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
+  InnerRefList(MLIRContext *context)
+      : InnerSymAttr(StringAttr::get(context, "inner_sym")) {}
 
   void sort() {
     llvm::sort(list);
