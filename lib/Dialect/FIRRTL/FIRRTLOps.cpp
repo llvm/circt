@@ -1979,6 +1979,23 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
 }
 
+static LogicalResult verifyRegResetOp(RegResetOp op) {
+  Value reset = op.resetValue();
+
+  FIRRTLType resetType = reset.getType().cast<FIRRTLType>();
+  FIRRTLType regType = op.getResult().getType().cast<FIRRTLType>();
+
+  // The FIRRTL specification is unclear about the relationship between the
+  // reset and the register type, mentioning they must 'match'. The FIRRTL
+  // compiler expects the types to be equivalent, without comparing integer
+  // widths. In practice, both truncation and extension is allowed.
+  if (!areTypesEquivalent(resetType, regType))
+    return op.emitError("type mismatch between register ")
+           << regType << " and reset value " << resetType;
+
+  return success();
+}
+
 void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
 }
