@@ -804,6 +804,17 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
     hwPort.type = lowerType(firrtlPort.type);
     hwPort.sym = firrtlPort.sym;
 
+    // Pass down the debug attr if any
+    // Notice that hasAnnotation does not work since the debug attribute
+    // is not inserted as a class
+    for (auto anno : firrtlPort.annotations) {
+      auto annoDict = anno.getDict();
+      if (auto debugAttr = annoDict.get("hw.debug.name")) {
+        hwPort.debugAttr = debugAttr.cast<StringAttr>();
+        firrtlPort.annotations.removeAnnotation(anno);
+        break;
+      }
+    }
     // We can't lower all types, so make sure to cleanly reject them.
     if (!hwPort.type) {
       moduleOp->emitError("cannot lower this port type to HW");
@@ -1004,7 +1015,6 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   if (failed)
     return {};
-
   loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
 }
@@ -1085,6 +1095,15 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
   auto connectSrc = connectOp->getOperand(1);
+
+  if (auto *srcOp = connectSrc.getDefiningOp()) {
+    if (srcOp->hasAttr("hw.debug.name")) {
+      // If the source has debug attribute, we don't do any optimization
+      // because otherwise we will lose this symbol
+      auto str = srcOp->getAttr("hw.debug.name").cast<StringAttr>().str();
+      return {};
+    }
+  }
 
   // Convert fliped sources to passive sources.
   if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
@@ -1575,6 +1594,11 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   SmallVector<sv::ReadInOutOp> reads;
   sv::AssignOp write;
 
+  // if the wire has debug attributes, skip it
+  if (wire->hasAttr("hw.debug.name")) {
+    return;
+  }
+
   for (auto *user : wire->getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
       reads.push_back(read);
@@ -1954,6 +1978,10 @@ template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
   auto result = builder.createOrFold<ResultOpType>(args...);
+  if (auto debugAttr = orig->getAttr("hw.debug.name")) {
+    auto *op = result.getDefiningOp();
+    op->setAttr("hw.debug.name", debugAttr);
+  }
   if (auto *op = result.getDefiningOp())
     tryCopyName(op, orig);
   return setPossiblyFoldedLowering(orig->getResult(0), result);
@@ -1992,6 +2020,11 @@ Value FIRRTLLowering::getReadInOutOp(Value v) {
   }
 
   result = builder.createOrFold<sv::ReadInOutOp>(v);
+  if (auto *vOp = v.getDefiningOp()) {
+    if (auto debugAttr = vOp->getAttr("hw.debug.name")) {
+      result.getDefiningOp()->setAttr("hw.debug.name", debugAttr);
+    }
+  }
   builder.restoreInsertionPoint(oldIP);
   return result;
 }
@@ -2298,10 +2331,12 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
   // that we have a symbol name so we can keep the node as a wire.
+  // Or we have debug attribute attached
   auto symName = op.inner_symAttr();
   auto name = op.nameAttr();
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation") &&
+  if ((AnnotationSet::removeAnnotations(
+           op, "firrtl.transforms.DontTouchAnnotation") ||
+       op->hasAttr("hw.debug.name")) &&
       !symName) {
     // name may be empty
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
@@ -2311,7 +2346,11 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
 
   if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    builder.create<sv::AssignOp>(wire, operand);
+    auto assign = builder.create<sv::AssignOp>(wire, operand);
+    if (auto debugAttr = op->getAttr("hw.debug.name")) {
+      assign->setAttr("hw.debug.name", debugAttr);
+      wire->setAttr("hw.debug.name", debugAttr);
+    }
   }
 
   return setLowering(op, operand);
@@ -2517,10 +2556,15 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     symName = op.nameAttr();
   auto regResult =
       builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
+  if (auto debugAttr = op->getAttr("hw.debug.name"))
+    regResult->setAttr("hw.debug.name", debugAttr);
   (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
-    builder.create<sv::PAssignOp>(regResult, resetValue);
+    auto assignOP = builder.create<sv::PAssignOp>(regResult, resetValue);
+    if (auto debugAttr = op->getAttr("hw.debug.name")) {
+      assignOP->setAttr("hw.debug.name", debugAttr);
+    }
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
@@ -2769,8 +2813,20 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // Create a wire for each input/inout operand, so there is
     // something to connect to.
-    Value wire =
-        createTmpWireOp(portType, "." + port.getName().str() + ".wire");
+    auto w = createTmpWireOp(portType, "." + port.getName().str() + ".wire");
+    Value wire = w;
+
+    // migrate the renaming process
+    auto *op = wire.getDefiningOp();
+    auto &annos = port.annotations;
+    if (op) {
+      for (auto const &attr : annos) {
+        auto const &dict = attr.getDict();
+        if (auto name = dict.get("hw.debug.name")) {
+          w->setAttr("hw.debug.name", name);
+        }
+      }
+    }
 
     // Know that the argument FIRRTL value is equal to this wire, allowing
     // connects to it to be lowered.
@@ -3331,8 +3387,13 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     if (!clockVal)
       return failure();
 
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+    addToAlwaysBlock(clockVal, [&]() {
+      auto assignOp = builder.create<sv::PAssignOp>(destVal, srcVal);
+      if (auto debugAttr = op->getAttr("hw.debug.name")) {
+        assignOp->setAttr("hw.debug.name", debugAttr);
+      }
+      return assignOp;
+    });
     return success();
   }
 
@@ -3348,12 +3409,26 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
                      regResetOp.resetSignal().getType().isa<AsyncResetType>()
                          ? ::ResetType::AsyncReset
                          : ::ResetType::SyncReset,
-                     sv::EventControl::AtPosEdge, resetSignal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+                     sv::EventControl::AtPosEdge, resetSignal, [&]() {
+                       auto assignOp =
+                           builder.create<sv::PAssignOp>(destVal, srcVal);
+                       if (auto debugAttr = op->getAttr("hw.debug.name")) {
+                         assignOp->setAttr("hw.debug.name", debugAttr);
+                       }
+
+                       return assignOp;
+                     });
     return success();
   }
 
-  builder.create<sv::AssignOp>(destVal, srcVal);
+  auto newAssignOp = builder.create<sv::AssignOp>(destVal, srcVal);
+  if (auto debugAttr = op->getAttr("hw.debug.name")) {
+    newAssignOp->setAttr("hw.debug.name", debugAttr);
+  } else if (auto *destOp = op.dest().getDefiningOp()) {
+    if ((debugAttr = destOp->getAttr("hw.debug.name"))) {
+      newAssignOp->setAttr("hw.debug.name", debugAttr);
+    }
+  }
   return success();
 }
 
@@ -3384,8 +3459,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     if (!clockVal)
       return failure();
 
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+    addToAlwaysBlock(clockVal, [&]() {
+      auto assignOp = builder.create<sv::PAssignOp>(destVal, srcVal);
+      if (auto debugAttr = op->getAttr("hw.debug.name")) {
+        assignOp->setAttr("hw.debug.name", debugAttr);
+      }
+      return assignOp;
+    });
     return success();
   }
 
@@ -3401,8 +3481,14 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
                           ? ::ResetType::AsyncReset
                           : ::ResetType::SyncReset;
     addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
-                     sv::EventControl::AtPosEdge, resetSignal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
+                     sv::EventControl::AtPosEdge, resetSignal, [&]() {
+                       auto assignOp =
+                           builder.create<sv::PAssignOp>(destVal, srcVal);
+                       if (auto debugAttr = op->getAttr("hw.debug.name")) {
+                         assignOp->setAttr("hw.debug.name", debugAttr);
+                       }
+                       return assignOp;
+                     });
     return success();
   }
 
@@ -3431,7 +3517,13 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
                       srcVectorType.getElementType());
             }
           })
-          .Case<IntType>([&](auto) { builder.create<sv::AssignOp>(dest, src); })
+          .Case<IntType>([&](auto) {
+            auto assignOp = builder.create<sv::AssignOp>(dest, src);
+            if (auto debugAttr = op->getAttr("hw.debug.name")) {
+              assignOp->setAttr("hw.debug.name", debugAttr);
+            }
+            return assignOp;
+          })
           .Default([&](auto) { llvm_unreachable("must fail before"); });
     };
     recurse(destVal, srcVal, destType, op.src().getType());

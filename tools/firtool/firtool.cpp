@@ -13,6 +13,7 @@
 
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
+#include "circt/Debug/HWDebug.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
@@ -237,6 +238,11 @@ static cl::opt<bool>
                       cl::desc("enable infer read write ports for memory"),
                       cl::init(true));
 
+// generate hgdb symbol table
+static cl::opt<std::string>
+    hgdbDebugFile("hgdb", cl::desc("file name for hgdb debugger file"),
+                  cl::init(""));
+
 enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
@@ -448,7 +454,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // things up.
   if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        replSeqMem, preserveAggregate, preservePublicTypes));
+        replSeqMem, preserveAggregate, preservePublicTypes,
+        !hgdbDebugFile.empty()));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
@@ -572,6 +579,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // pick up any changes that verilog emission made.
     if (exportModuleHierarchy)
       pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
+    // If specified, output HGDB debug table as well
+    if (!hgdbDebugFile.empty()) {
+      pm.addPass(circt::debug::createExportHGDBPass(hgdbDebugFile));
+    }
   }
 
   // Load the emitter options from the command line. Command line options if

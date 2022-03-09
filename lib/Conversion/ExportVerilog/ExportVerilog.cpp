@@ -148,7 +148,7 @@ static bool isDuplicatableExpression(Operation *op) {
 /// Return the verilog name of the operations that can define a symbol.
 /// Except for <WireOp, RegOp, LocalParamOp, InstanceOp>, check global state
 /// `getDeclarationVerilogName` for them.
-static StringRef getSymOpName(Operation *symOp) {
+StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   // If legalizeNames has renamed it, then the attribute must be set.
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))

@@ -372,8 +372,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   SmallVector<Attribute> argNames, resultNames;
   SmallVector<Type, 4> argTypes, resultTypes;
-  SmallVector<Attribute> argAttrs, resultAttrs;
+  SmallVector<Attribute> argAttrs, resultAttrs, debugAttrs;
   auto exportPortIdent = StringAttr::get(builder.getContext(), "hw.exportPort");
+  bool hasDebugAttr = false;
 
   for (auto elt : ports.inputs) {
     if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
@@ -387,6 +388,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     else
       attr = builder.getDictionaryAttr({});
     argAttrs.push_back(attr);
+    debugAttrs.push_back(elt.debugAttr);
+    if (elt.debugAttr)
+      hasDebugAttr = true;
   }
 
   for (auto elt : ports.outputs) {
@@ -399,6 +403,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     else
       attr = builder.getDictionaryAttr({});
     resultAttrs.push_back(attr);
+    debugAttrs.push_back(elt.debugAttr);
+    if (elt.debugAttr)
+      hasDebugAttr = true;
   }
 
   // Allow clients to pass in null for the parameters list.
@@ -419,6 +426,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     comment = builder.getStringAttr("");
   result.addAttribute("comment", comment);
   result.addAttributes(attributes);
+  if (hasDebugAttr && !debugAttrs.empty())
+    result.addAttribute("hw.debug.name", builder.getArrayAttr(debugAttrs));
   result.addRegion();
 }
 
@@ -550,6 +559,7 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   SmallVector<PortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+  auto debugAttrs = op->getAttrOfType<ArrayAttr>("hw.debug.name");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     bool isInOut = false;
     auto type = argTypes[i];
@@ -560,15 +570,21 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
     }
 
     auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
-    results.push_back(
-        {argNames[i].cast<StringAttr>(), direction, type, i, getArgSym(op, i)});
+    auto debugAttr = debugAttrs && debugAttrs[i]
+                         ? debugAttrs[i].cast<StringAttr>()
+                         : StringAttr{};
+    results.push_back({argNames[i].cast<StringAttr>(), direction, type, i,
+                       getArgSym(op, i), debugAttr});
   }
 
   auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    auto debugAttr = debugAttrs && debugAttrs[i + argTypes.size()]
+                         ? debugAttrs[i + argTypes.size()].cast<StringAttr>()
+                         : StringAttr{};
     results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
-                       resultTypes[i], i, getResultSym(op, i)});
+                       resultTypes[i], i, getResultSym(op, i), debugAttr});
   }
   return results;
 }

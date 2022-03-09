@@ -12,6 +12,7 @@ target_link_libraries(firtool PRIVATE
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTSVTransforms
+  CIRCTDebug
 
   MLIRParser
   MLIRSupport
