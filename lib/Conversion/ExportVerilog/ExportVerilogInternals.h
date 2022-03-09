@@ -268,8 +268,7 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
 
 /// Return whether an operation is a constant.
 static inline bool isConstantExpression(Operation *op) {
-  return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp,
-             sv::FileDescriptorOp>(op);
+  return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp>(op);
 }
 
 /// This predicate returns true if the specified operation is considered a

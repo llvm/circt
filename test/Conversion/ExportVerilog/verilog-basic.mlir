@@ -357,7 +357,7 @@ hw.module @Stop(%clock: i1, %reset: i1) {
 
 // CHECK-LABEL: module Print
 hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
 

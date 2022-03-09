@@ -222,7 +222,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
           StructFieldInOutOp, IndexedPartSelectOp, ParamValueOp, XMROp,
-          SampledOp, FileDescriptorOp>(op))
+          SampledOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -356,9 +356,6 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-
-  assert(!isa<FileDescriptorOp>(op) && "file descriptors should be inlined");
-
   if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
 
@@ -1514,9 +1511,6 @@ private:
   // Sampled value functions
   SubExprInfo visitSV(SampledOp op);
 
-  // Standard file descriptor
-  SubExprInfo visitSV(FileDescriptorOp op);
-
   // Other
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
@@ -2127,18 +2121,6 @@ SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   return info;
 }
 
-SubExprInfo ExprEmitter::visitSV(FileDescriptorOp op) {
-  switch (op.fdAttr().getValue()) {
-  case FileDescriptor::StdOut:
-    os << "32'h80000001";
-    break;
-  case FileDescriptor::StdErr:
-    os << "32'h80000002";
-    break;
-  }
-  return {Symbol, IsUnsigned};
-}
-
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // The ?: operator is right associative.
   emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1), OOLBinary);
@@ -2269,10 +2251,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   // Never create a temporary which is only going to be assigned to an output
   // port.
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
-    return true;
-
-  // Always emit constant file descriptors inline.
-  if (isa<FileDescriptorOp>(op))
     return true;
 
   // If this operation has multiple uses, we can't generally inline it unless

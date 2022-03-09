@@ -186,29 +186,3 @@ def SampledOp : SVOp<"system.sampled", [SameOperandsAndResultType]> {
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
-
-/// Handle to stdout.
-def StdOut: I32EnumAttrCase<"StdOut", 1, "stdout">;
-/// Handle to stderr.
-def StdErr: I32EnumAttrCase<"StdErr", 2, "stderr">;
-
-def FileDesciptorAttr : I32EnumAttr<"FileDescriptor", "file descriptor",
-                                    [StdOut, StdErr]> {
-  let cppNamespace = "circt::sv";
-}
-
-def FileDescriptorOp : SVOp<"fd", [NoSideEffect, ConstantLike]> {
-  let summary = "Produces a standard file descriptor";
-  let description = [{
-    Produces a standard file descriptor.
-    ```
-      %fd = sv.fd stdout
-    ```
-    }];
-
-  let arguments = (ins FileDesciptorAttr:$fd);
-  let results = (outs I32:$result);
-  let assemblyFormat = "$fd attr-dict";
-
-  let hasFolder = 1;
-}

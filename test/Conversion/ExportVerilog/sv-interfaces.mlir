@@ -69,7 +69,7 @@ module {
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1
 
     sv.always posedge %clk {
-      %fd = sv.fd stderr
+      %fd = hw.constant 0x80000002 : i32
 
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
       // CHECK: $fwrite(32'h80000002, "valid: %d\n", iface.valid);

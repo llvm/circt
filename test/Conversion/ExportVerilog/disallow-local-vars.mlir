@@ -54,7 +54,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
   // DISALLOW: wire [7:0] [[ADD:[_A-Za-z0-9]+]] = x + y;
 
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   // CHECK:    always @(posedge clock)
   // DISALLOW: always @(posedge clock)

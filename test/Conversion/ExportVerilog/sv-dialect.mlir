@@ -7,7 +7,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
   %partSelectReg = sv.reg : !hw.inout<i42>
 
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'd11;
@@ -501,7 +501,7 @@ hw.module @issue508(%in1: i1, %in2: i1) {
 // CHECK-LABEL: exprInlineTestIssue439
 // https://github.com/llvm/circt/issues/439
 hw.module @exprInlineTestIssue439(%clk: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
@@ -728,7 +728,7 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 
 // CHECK-LABEL: module issue728(
 hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   // CHECK:  always @(posedge clock) begin
   // CHECK:    $fwrite(32'h80000002, "force output");
@@ -748,7 +748,7 @@ hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija:
 
 // CHECK-LABEL: module issue728ifdef(
 hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   // CHECK: always @(posedge clock) begin
   // CHECK:    $fwrite(32'h80000002, "force output");

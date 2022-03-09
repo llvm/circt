@@ -34,7 +34,7 @@ hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
 
 // -----
 hw.module @Fwrite() {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.fwrite should be in a procedural region}}
   sv.fwrite %fd, "error"
 }
@@ -69,7 +69,7 @@ hw.module @ReleasePassign(%arg0: i1) {
 
 // -----
 hw.module @IfOp(%arg0: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.if should be in a procedural region}}
   sv.if %arg0 {
     sv.fwrite %fd, "Foo"
@@ -90,7 +90,7 @@ hw.module @Finish() {
 
 // -----
 hw.module @CaseZ(%arg8: i8) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.casez should be in a procedural region}}
   sv.casez %arg8 : i8
     case b0000001x: {

@@ -3,8 +3,8 @@
 
 // CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
-  // CHECK: [[FD:%.*]] = sv.fd stderr
-  %fd = sv.fd stderr
+  // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
+  %fd = hw.constant 0x80000002 : i32
 
   // CHECK: %param_x = sv.localparam : i42 {value = 11 : i42}
   %param_x = sv.localparam : i42 {value = 11 : i42}
@@ -42,12 +42,12 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "PRINTF_COND_" : () -> i1
   // CHECK-NEXT:     %x_i1 = sv.constantX : i1
   // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
-  // CHECK-NEXT:     %1 = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
-  // CHECK-NEXT:     sv.if %1 {
+  // CHECK-NEXT:     [[COND:%.*]] = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
+  // CHECK-NEXT:     sv.if [[COND]] {
   // CHECK-NEXT:       sv.fwrite [[FD]], "Hi\0A"
   // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.if %1 {
-  // CHECK-NEXT:       sv.fwrite [[FD]], "%x"(%1) : i1
+  // CHECK-NEXT:     sv.if [[COND]] {
+  // CHECK-NEXT:       sv.fwrite [[FD]], "%x"([[COND]]) : i1
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.fwrite [[FD]], "There\0A"
   // CHECK-NEXT:     }

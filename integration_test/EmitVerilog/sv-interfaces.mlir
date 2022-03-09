@@ -32,7 +32,7 @@ module {
 
     sv.always posedge %clk {
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
-      %fd = sv.fd stderr
+      %fd = hw.constant 0x80000002 : i32
       sv.fwrite %fd, "valid: %d\n" (%validValue) : i1
     }
     // CHECK: valid: 1

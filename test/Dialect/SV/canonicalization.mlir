@@ -1,7 +1,7 @@
 // RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
-// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.always posedge %arg0  {
 // CHECK-NEXT:      sv.fwrite [[FD]], "Reachable1"
 // CHECK-NEXT:      sv.fwrite [[FD]], "Reachable2"
@@ -12,7 +12,7 @@
 // CHECK-NEXT:  }
 
 func @if_dead_condition(%arg0: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.always posedge %arg0 {
     %true = hw.constant true
@@ -70,11 +70,11 @@ func @empy_op(%arg0: i1) {
 }
 
 // CHECK-LABEL: func @invert_if(%arg0: i1) {
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    sv.initial  {
 // CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.if %0  {
-// CHECK-NEXT:        [[FD:%.*]] = sv.fd stderr
 // CHECK-NEXT:        sv.fwrite [[FD]], "Foo"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
@@ -84,7 +84,7 @@ func @invert_if(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {
     } else {
-      %fd = sv.fd stderr
+      %fd = hw.constant 0x80000002 : i32
       sv.fwrite %fd, "Foo"
     }
   }

@@ -53,9 +53,7 @@ public:
             // Severity message tasks
             FatalOp, ErrorOp, WarningOp, InfoOp,
             // Sampled value functiions
-            SampledOp,
-            // File descriptors
-            FileDescriptorOp>([&](auto expr) -> ResultType {
+            SampledOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -150,9 +148,6 @@ public:
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);
-
-  // File descriptors
-  HANDLE(FileDescriptorOp, Unhandled);
 #undef HANDLE
 };
 

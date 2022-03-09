@@ -1,7 +1,7 @@
 // RUN: circt-opt -hw-cleanup %s | FileCheck %s
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
-//CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
+//CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
 //CHECK-NEXT:   sv.initial {
 //CHECK-NEXT:     sv.fwrite [[FD]], "Middle\0A"
 //CHECK-NEXT:   }
@@ -17,7 +17,7 @@
 //CHECK-NEXT: }
 
 hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.alwaysff(posedge %arg0) {
     sv.fwrite %fd, "A1"
@@ -38,7 +38,7 @@ hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 }
 
 // CHECK-LABEL: hw.module @alwaysff_basic_reset(%arg0: i1, %arg1: i1) {
-// CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:     sv.fwrite [[FD]], "A1"
 // CHECK-NEXT:     sv.fwrite [[FD]], "A2"
@@ -50,7 +50,7 @@ hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 // CHECK-NEXT: }
 
 hw.module @alwaysff_basic_reset(%arg0: i1, %arg1: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.alwaysff (posedge %arg0) {
     sv.fwrite %fd, "A1"
@@ -67,7 +67,7 @@ hw.module @alwaysff_basic_reset(%arg0: i1, %arg1: i1) {
 
 
 // CHECK-LABEL: hw.module @alwaysff_different_reset(%arg0: i1, %arg1: i1) {
-// CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:   sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:     sv.fwrite [[FD]], "A1"
 // CHECK-NEXT:     sv.fwrite [[FD]], "A2"
@@ -86,7 +86,7 @@ hw.module @alwaysff_basic_reset(%arg0: i1, %arg1: i1) {
 // CHECK-NEXT: }
 
 hw.module @alwaysff_different_reset(%arg0: i1, %arg1: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.alwaysff (posedge %arg0) {
     sv.fwrite %fd, "A1"
@@ -112,7 +112,7 @@ hw.module @alwaysff_different_reset(%arg0: i1, %arg1: i1) {
 }
 
 //CHECK-LABEL: hw.module @alwaysff_ifdef(%arg0: i1) {
-//CHECK-NEXT:  [[FD:%.*]] = sv.fd stderr
+//CHECK-NEXT:  [[FD:%.*]] = hw.constant -2147483646 : i32
 //CHECK-NEXT:  sv.ifdef "FOO" {
 //CHECK-NEXT:     sv.alwaysff(posedge %arg0)  {
 //CHECK-NEXT:       sv.fwrite [[FD]], "A1"
@@ -123,7 +123,7 @@ hw.module @alwaysff_different_reset(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT: }
 
 hw.module @alwaysff_ifdef(%arg0: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.ifdef "FOO" {
     sv.alwaysff(posedge %arg0) {
@@ -137,7 +137,7 @@ hw.module @alwaysff_ifdef(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @ifdef_merge(%arg0: i1) {
-// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.ifdef "FOO"  {
 // CHECK-NEXT:      sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
@@ -145,7 +145,7 @@ hw.module @alwaysff_ifdef(%arg0: i1) {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 hw.module @ifdef_merge(%arg0: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.ifdef "FOO" {
     sv.alwaysff(posedge %arg0) {
@@ -161,20 +161,20 @@ hw.module @ifdef_merge(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @ifdef_proc_merge(%arg0: i1) {
-// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = hw.constant true
-// CHECK-NEXT:      %1 = comb.xor %arg0, %true : i1
+// CHECK-NEXT:      [[XOR:%.*]] = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
-// CHECK-NEXT:        sv.fwrite [[FD]], "%x"(%1) : i1
+// CHECK-NEXT:        sv.fwrite [[FD]], "%x"([[XOR]]) : i1
 // CHECK-NEXT:      }
 // CHECK-NEXT:      sv.ifdef.procedural "BAR"  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 hw.module @ifdef_proc_merge(%arg0: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.alwaysff(posedge %arg0) {
     sv.ifdef.procedural "FOO" {
@@ -193,20 +193,20 @@ hw.module @ifdef_proc_merge(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @if_merge(%arg0: i1, %arg1: i1) {
-// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = hw.constant true
-// CHECK-NEXT:      %1 = comb.xor %arg1, %true : i1
+// CHECK-NEXT:      [[XOR:%.*]] = comb.xor %arg1, %true : i1
 // CHECK-NEXT:      sv.if %arg1  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
-// CHECK-NEXT:        sv.fwrite [[FD]], "%x"(%1) : i1
+// CHECK-NEXT:        sv.fwrite [[FD]], "%x"([[XOR:%.*]]) : i1
 // CHECK-NEXT:      }
-// CHECK-NEXT:      sv.if %1 {
+// CHECK-NEXT:      sv.if [[XOR]] {
 // CHECK-NEXT:        sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 hw.module @if_merge(%arg0: i1, %arg1: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.alwaysff(posedge %arg0) {
     sv.if %arg1 {
@@ -226,13 +226,13 @@ hw.module @if_merge(%arg0: i1, %arg1: i1) {
 
 
 // CHECK-LABEL: hw.module @initial_merge(%arg0: i1) {
-// CHECK-NEXT:    [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.initial {
 // CHECK-NEXT:      sv.fwrite [[FD]], "A1"
 // CHECK-NEXT:      sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:    }
 hw.module @initial_merge(%arg0: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.initial {
     sv.fwrite %fd, "A1"
@@ -244,7 +244,7 @@ hw.module @initial_merge(%arg0: i1) {
 }
 
 //CHECK-LABEL: hw.module @always_basic(%arg0: i1, %arg1: i1) {
-//CHECK-NEXT:   [[FD:%.*]] = sv.fd stderr
+//CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
 //CHECK-NEXT:   sv.initial {
 //CHECK-NEXT:     sv.fwrite [[FD]], "Middle\0A"
 //CHECK-NEXT:   }
@@ -259,7 +259,7 @@ hw.module @initial_merge(%arg0: i1) {
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
 hw.module @always_basic(%arg0: i1, %arg1: i1) {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.always posedge %arg0 {
     sv.fwrite %fd, "A1"
@@ -303,7 +303,7 @@ hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (x: i1, y: i1) {
 }
 
 // CHECK-LABEL: hw.module @nested_regions(
-// CHECK-NEXT:  [[FD:%.*]] = sv.fd stderr
+// CHECK-NEXT:  [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:  sv.initial  {
 // CHECK-NEXT:    sv.ifdef.procedural "L1"  {
 // CHECK-NEXT:      sv.ifdef.procedural "L2"  {
@@ -315,7 +315,7 @@ hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (x: i1, y: i1) {
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 hw.module @nested_regions() {
-  %fd = sv.fd stderr
+  %fd = hw.constant 0x80000002 : i32
 
   sv.initial {
     sv.ifdef.procedural "L1" {

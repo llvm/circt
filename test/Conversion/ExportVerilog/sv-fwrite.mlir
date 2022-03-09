@@ -2,8 +2,8 @@
 
 hw.module @top(%clock : i1, %reset: i1) -> () {
   sv.alwaysff(posedge %clock) {
-    %0 = sv.fd stdout
-    %1 = sv.fd stderr
+    %0 = hw.constant 0x80000001 : i32
+    %1 = hw.constant 0x80000002 : i32
 
     // CHECK: $fwrite(32'h80000001, "stdout");
     sv.fwrite %0, "stdout"

@@ -1406,14 +1406,6 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
 }
 
 //===----------------------------------------------------------------------===//
-// FileDescriptorOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult FileDescriptorOp::fold(ArrayRef<Attribute> constants) {
-  return fdAttr();
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

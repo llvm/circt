@@ -3527,8 +3527,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fwrite, writing to stderr by default.
-        Value stderr =
-            builder.create<sv::FileDescriptorOp>(sv::FileDescriptor::StdErr);
+        Value stderr = builder.create<hw::ConstantOp>(APInt(32, 0x80000002));
         builder.create<sv::FWriteOp>(stderr, op.formatString(), operands);
       });
     });
