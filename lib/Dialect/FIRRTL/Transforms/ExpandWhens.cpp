@@ -186,6 +186,8 @@ public:
                                           Value dest, Value cond,
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
+    auto fusedLoc =
+        b.getFusedLoc({loc, whenTrueConn->getLoc(), whenFalseConn->getLoc()});
     auto whenTrue = getConnectedValue(whenTrueConn);
     auto trueIsInvalid =
         isa_and_nonnull<InvalidValueOp>(whenTrue.getDefiningOp());
@@ -200,7 +202,7 @@ public:
     // mux(cond, x, invalid) -> x
     Value newValue = whenTrue;
     if (trueIsInvalid == falseIsInvalid)
-      newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
+      newValue = b.createOrFold<MuxPrimOp>(fusedLoc, cond, whenTrue, whenFalse);
     else if (trueIsInvalid)
       newValue = whenFalse;
     return b.create<ConnectOp>(loc, dest, newValue);
@@ -298,7 +300,7 @@ public:
   /// If the value was declared in the block, then it does not need to have been
   /// assigned a previous value.  If the value was declared before the block,
   /// then there is an incomplete initialization error.
-  void mergeScopes(DriverMap &thenScope, DriverMap &elseScope,
+  void mergeScopes(Location loc, DriverMap &thenScope, DriverMap &elseScope,
                    Value thenCondition) {
 
     // Process all connects in the `then` block.
@@ -323,9 +325,8 @@ public:
         auto &elseConnect = std::get<1>(*elseIt);
         OpBuilder connectBuilder(elseConnect);
         auto newConnect = flattenConditionalConnections(
-            connectBuilder, elseConnect->getLoc(),
-            getDestinationValue(thenConnect), thenCondition, thenConnect,
-            elseConnect);
+            connectBuilder, loc, getDestinationValue(thenConnect),
+            thenCondition, thenConnect, elseConnect);
 
         // Delete all old connections.
         thenConnect->erase();
@@ -349,9 +350,8 @@ public:
       // `mux(p, then, outer)`.
       OpBuilder connectBuilder(thenConnect);
       auto newConnect = flattenConditionalConnections(
-          connectBuilder, thenConnect->getLoc(),
-          getDestinationValue(thenConnect), thenCondition, thenConnect,
-          outerConnect);
+          connectBuilder, loc, getDestinationValue(thenConnect), thenCondition,
+          thenConnect, outerConnect);
 
       // Delete all old connections.
       thenConnect->erase();
@@ -383,9 +383,8 @@ public:
       // `mux(p, outer, else)`.
       OpBuilder connectBuilder(elseConnect);
       auto newConnect = flattenConditionalConnections(
-          connectBuilder, elseConnect->getLoc(),
-          getDestinationValue(outerConnect), thenCondition, outerConnect,
-          elseConnect);
+          connectBuilder, loc, getDestinationValue(outerConnect), thenCondition,
+          outerConnect, elseConnect);
 
       // Delete all old connections.
       elseConnect->erase();
@@ -518,7 +517,7 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
     elseScope = driverMap.popScope();
   }
 
-  mergeScopes(thenScope, elseScope, condition);
+  mergeScopes(loc, thenScope, elseScope, condition);
 
   // Delete the now empty WhenOp.
   whenOp.erase();
