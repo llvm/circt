@@ -724,7 +724,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (needRandom) {
     emitString("\n// RANDOM may be set to an expression that produces a 32-bit "
                "random unsigned value.");
-    emitGuardedDefine("RANDOM", nullptr, "RANDOM {$random}");
+    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
   }
 
   if (state.used_PRINTF_COND) {
@@ -780,7 +780,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
           emitString(
               "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
               "SIZE) \\");
-          emitString("  ((INDEX) < (SIZE) ? (VALUE) : `RANDOM)");
+          emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
         },
         [&]() {
           emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
@@ -2358,7 +2358,7 @@ void FIRRTLLowering::initializeRegister(Value reg) {
     }
 
     builder.create<sv::VerbatimOp>(
-        builder.getStringAttr(Twine("{{0}} = `RANDOM;")), ValueRange{},
+        builder.getStringAttr(Twine("{{0}} = {`RANDOM};")), ValueRange{},
         builder.getArrayAttr({hw::InnerRefAttr::get(theModule.getNameAttr(),
                                                     randReg.inner_symAttr())}));
 
