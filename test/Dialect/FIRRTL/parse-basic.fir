@@ -1058,4 +1058,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]]
 
   module LargeMem :
+    input clock : Clock
+    input reset : Reset
+    ; CHECK: !chirrtl.cmemory<vector<uint<8>, 16>, 34359738368>
     smem testharness : UInt<8>[16] [34359738368]
+    node w_addr = UInt<36>(42) @[Cat.scala 31:58]
+    write mport MPORT = testharness[w_addr], clock
