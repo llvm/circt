@@ -1655,7 +1655,7 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
     if (tmpType != destType)
       shortened =
           rewriter.createOrFold<AsSIntPrimOp>(op.getLoc(), destType, shortened);
-    rewriter.create<ConnectOp>(op.getLoc(), op.getOperand(0), shortened);
+    rewriter.create<StrictConnectOp>(op.getLoc(), op.getOperand(0), shortened);
     rewriter.eraseOp(op);
     return success();
   }
