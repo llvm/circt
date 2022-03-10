@@ -94,6 +94,8 @@ public:
   explicit operator bool() const { return bool(attr); }
   bool operator!() const { return attr == nullptr; }
 
+  void dump();
+
 private:
   Attribute attr;
 
