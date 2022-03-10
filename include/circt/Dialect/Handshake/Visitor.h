@@ -99,16 +99,15 @@ public:
   ResultType dispatchStdExprVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<arith::IndexCastOp, arith::ExtUIOp, arith::TruncIOp,
-                       // Integer binary expressions.
-                       arith::CmpIOp, arith::AddIOp, arith::SubIOp,
-                       arith::MulIOp, arith::DivSIOp, arith::RemSIOp,
-                       arith::DivUIOp, arith::RemUIOp, arith::XOrIOp,
-                       arith::AndIOp, arith::OrIOp, arith::ShLIOp,
-                       arith::ShRSIOp, arith::ShRUIOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStdExpr(opNode, args...);
-            })
+        .template Case<
+            arith::IndexCastOp, arith::ExtUIOp, arith::ExtSIOp, arith::TruncIOp,
+            // Integer binary expressions.
+            arith::CmpIOp, arith::AddIOp, arith::SubIOp, arith::MulIOp,
+            arith::DivSIOp, arith::RemSIOp, arith::DivUIOp, arith::RemUIOp,
+            arith::XOrIOp, arith::AndIOp, arith::OrIOp, arith::ShLIOp,
+            arith::ShRSIOp, arith::ShRUIOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStdExpr(opNode, args...);
+        })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -132,6 +131,7 @@ public:
   }
 
   HANDLE(arith::IndexCastOp);
+  HANDLE(arith::ExtSIOp);
   HANDLE(arith::ExtUIOp);
   HANDLE(arith::TruncIOp);
 
