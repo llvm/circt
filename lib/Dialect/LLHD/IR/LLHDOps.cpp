@@ -841,10 +841,6 @@ static LogicalResult verify(llhd::InstOp op) {
 
   auto proc = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
       calleeAttr.getValue());
-  auto entity = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
-      calleeAttr.getValue());
-
-  // Verify that the input and output types match the callee.
   if (proc) {
     auto type = proc.getType();
 
@@ -856,12 +852,16 @@ static LogicalResult verify(llhd::InstOp op) {
       return op.emitOpError(
           "incorrect number of outputs for proc instantiation");
 
-    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i)
+    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
       if (op.getOperand(i).getType() != type.getInput(i))
         return op.emitOpError("operand type mismatch");
+    }
 
     return success();
   }
+
+  auto entity = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
+      calleeAttr.getValue());
   if (entity) {
     auto type = entity.getType();
 
@@ -873,14 +873,51 @@ static LogicalResult verify(llhd::InstOp op) {
       return op.emitOpError(
           "incorrect number of outputs for entity instantiation");
 
-    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i)
+    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
       if (op.getOperand(i).getType() != type.getInput(i))
         return op.emitOpError("operand type mismatch");
+    }
 
     return success();
   }
-  return op.emitOpError() << "'" << calleeAttr.getValue()
-                          << "' does not reference a valid proc or entity";
+
+  auto module = op->getParentOfType<ModuleOp>().lookupSymbol<hw::HWModuleOp>(
+      calleeAttr.getValue());
+  if (module) {
+    auto type = module.getType();
+
+    if (type.getNumInputs() != op.inputs().size())
+      return op.emitOpError(
+          "incorrect number of inputs for hw.module instantiation");
+
+    if (type.getNumResults() + type.getNumInputs() != op.getNumOperands())
+      return op.emitOpError(
+          "incorrect number of outputs for hw.module instantiation");
+
+    // Check input types
+    for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
+      if (op.getOperand(i)
+              .getType()
+              .cast<llhd::SigType>()
+              .getUnderlyingType() != type.getInput(i))
+        return op.emitOpError("input type mismatch");
+    }
+
+    // Check output types
+    for (size_t i = 0, e = type.getNumResults(); i != e; ++i) {
+      if (op.getOperand(type.getNumInputs() + i)
+              .getType()
+              .cast<llhd::SigType>()
+              .getUnderlyingType() != type.getResult(i))
+        return op.emitOpError("output type mismatch");
+    }
+
+    return success();
+  }
+
+  return op.emitOpError()
+         << "'" << calleeAttr.getValue()
+         << "' does not reference a valid proc, entity, or hw.module";
 }
 
 FunctionType llhd::InstOp::getCalleeType() {
