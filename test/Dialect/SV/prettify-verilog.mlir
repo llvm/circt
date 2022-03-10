@@ -47,6 +47,9 @@ hw.module @sink_constants(%clock :i1) -> (out : i1){
   // CHECK: %false = hw.constant false
   %false = hw.constant false
 
+  // CHECK-NOT: %fd = hw.constant -2147483646 : i32
+  %fd = hw.constant 0x80000002 : i32
+
   /// Constants not used should be removed.
   // CHECK-NOT: %true = hw.constant true
   %true = hw.constant true
@@ -55,22 +58,24 @@ hw.module @sink_constants(%clock :i1) -> (out : i1){
   sv.ifdef "FOO" {
     sv.initial {
       // CHECK: [[FALSE:%.*]] = hw.constant false
+      // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
       // CHECK: [[TRUE:%.*]] = hw.constant true
-      // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
-      sv.fwrite "%x"(%true) : i1
-      // CHECK: sv.fwrite "%x"([[FALSE]]) : i1
-      sv.fwrite "%x"(%false) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[TRUE]]) : i1
+      sv.fwrite %fd, "%x"(%true) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[FALSE]]) : i1
+      sv.fwrite %fd, "%x"(%false) : i1
     }
   }
 
   /// Multiple uses in the same block should use the same constant.
   sv.ifdef "FOO" {
     sv.initial {
+      // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
       // CHECK: [[TRUE:%.*]] = hw.constant true
-      // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
-      // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
-      sv.fwrite "%x"(%true) : i1
-      sv.fwrite "%x"(%true) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[TRUE]]) : i1
+      // CHECK: sv.fwrite [[FD]], "%x"([[TRUE]]) : i1
+      sv.fwrite %fd, "%x"(%true) : i1
+      sv.fwrite %fd, "%x"(%true) : i1
     }
   }
 

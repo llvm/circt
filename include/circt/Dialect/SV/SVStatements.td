@@ -418,16 +418,14 @@ def AliasOp : SVOp<"alias"> {
   let verifier = "return ::verifyAliasOp(*this);";
 }
 
-// TODO: This needs to model the file descriptor to write on.  This is currently
-// hard coded to 32'h80000002.
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins I32:$fd, StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs);
 
   let assemblyFormat =
-    "$string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
+    "$fd `,` $string attr-dict (`(` $operands^ `)` `:` qualified(type($operands)))?";
 }
 
 def VerbatimOp : SVOp<"verbatim"> {

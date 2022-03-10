@@ -357,6 +357,7 @@ hw.module @Stop(%clock: i1, %reset: i1) {
 
 // CHECK-LABEL: module Print
 hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
+  %fd = hw.constant 0x80000002 : i32
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
 
@@ -370,7 +371,7 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
     %2 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
-      sv.fwrite "Hi %x %x\0A"(%1, %b) : i5, i4
+      sv.fwrite %fd, "Hi %x %x\0A"(%1, %b) : i5, i4
     }
   }
   hw.output

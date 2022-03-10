@@ -352,12 +352,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       sv.fwrite "No operands!\0A"
+    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__0 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
+    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi %x %x\0A"(%2, %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

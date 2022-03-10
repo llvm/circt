@@ -3,6 +3,8 @@
 
 // CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+  // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
+  %fd = hw.constant 0x80000002 : i32
 
   // CHECK: %param_x = sv.localparam : i42 {value = 11 : i42}
   %param_x = sv.localparam : i42 {value = 11 : i42}
@@ -23,13 +25,13 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
       sv.if %tmp2 {
-        sv.fwrite "Hi\n"
+        sv.fwrite %fd, "Hi\n"
       }
       sv.if %tmp2 {
         // Test fwrite with operands.
-        sv.fwrite "%x"(%tmp2) : i1
+        sv.fwrite %fd, "%x"(%tmp2) : i1
       } else {
-        sv.fwrite "There\n"
+        sv.fwrite %fd, "There\n"
       }
     }
   }
@@ -40,48 +42,48 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "PRINTF_COND_" : () -> i1
   // CHECK-NEXT:     %x_i1 = sv.constantX : i1
   // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
-  // CHECK-NEXT:     %0 = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
-  // CHECK-NEXT:     sv.if %0 {
-  // CHECK-NEXT:       sv.fwrite "Hi\0A"
+  // CHECK-NEXT:     [[COND:%.*]] = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
+  // CHECK-NEXT:     sv.if [[COND]] {
+  // CHECK-NEXT:       sv.fwrite [[FD]], "Hi\0A"
   // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.if %0 {
-  // CHECK-NEXT:       sv.fwrite "%x"(%0) : i1
+  // CHECK-NEXT:     sv.if [[COND]] {
+  // CHECK-NEXT:       sv.fwrite [[FD]], "%x"([[COND]]) : i1
   // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.fwrite "There\0A"
+  // CHECK-NEXT:       sv.fwrite [[FD]], "There\0A"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
   sv.alwaysff(posedge %arg0) {
-    sv.fwrite "Yo\n"
+    sv.fwrite %fd, "Yo\n"
   }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0)  {
-  // CHECK-NEXT:   sv.fwrite "Yo\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Yo\0A"
   // CHECK-NEXT: }
 
   sv.alwaysff(posedge %arg0) {
-    sv.fwrite "Sync Main Block\n"
+    sv.fwrite %fd, "Sync Main Block\n"
   } ( syncreset : posedge %arg1) {
-    sv.fwrite "Sync Reset Block\n"
+    sv.fwrite %fd, "Sync Reset Block\n"
   }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0) {
-  // CHECK-NEXT:   sv.fwrite "Sync Main Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Sync Main Block\0A"
   // CHECK-NEXT:  }(syncreset : posedge %arg1) {
-  // CHECK-NEXT:   sv.fwrite "Sync Reset Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Sync Reset Block\0A"
   // CHECK-NEXT: }
 
   sv.alwaysff (posedge %arg0) {
-    sv.fwrite "Async Main Block\n"
+    sv.fwrite %fd, "Async Main Block\n"
   } ( asyncreset : negedge %arg1) {
-    sv.fwrite "Async Reset Block\n"
+    sv.fwrite %fd, "Async Reset Block\n"
   }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0) {
-  // CHECK-NEXT:   sv.fwrite "Async Main Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Async Main Block\0A"
   // CHECK-NEXT:  }(asyncreset : negedge %arg1) {
-  // CHECK-NEXT:   sv.fwrite "Async Reset Block\0A"
+  // CHECK-NEXT:   sv.fwrite [[FD]], "Async Reset Block\0A"
   // CHECK-NEXT: }
 
 // Smoke test generic syntax.
@@ -100,44 +102,44 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.casez %arg8 : i8
   // CHECK-NEXT:   case b0000001x: {
-  // CHECK-NEXT:     sv.fwrite "x"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "x"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   case b000000x1: {
-  // CHECK-NEXT:     sv.fwrite "y"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "y"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   default: {
-  // CHECK-NEXT:     sv.fwrite "z"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "z"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   sv.initial {
     sv.casez %arg8 : i8
     case b0000001x: {
-      sv.fwrite "x"
+      sv.fwrite %fd, "x"
     }
     case b000000x1: {
-      sv.fwrite "y"
+      sv.fwrite %fd, "y"
     }
     default: {
-      sv.fwrite "z"
+      sv.fwrite %fd, "z"
     }
   }
 
   // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.casez %arg1 : i1
   // CHECK-NEXT:   case b0: {
-  // CHECK-NEXT:     sv.fwrite "zero"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "zero"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   case b1: {
-  // CHECK-NEXT:     sv.fwrite "one"
+  // CHECK-NEXT:     sv.fwrite [[FD]], "one"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   sv.initial {
     sv.casez %arg1 : i1
     case b0: {
-      sv.fwrite "zero"
+      sv.fwrite %fd, "zero"
     }
     case b1: {
-      sv.fwrite "one"
+      sv.fwrite %fd, "one"
     }
   }
 

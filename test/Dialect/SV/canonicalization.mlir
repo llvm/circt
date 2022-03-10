@@ -1,16 +1,19 @@
 // RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.always posedge %arg0  {
-// CHECK-NEXT:      sv.fwrite "Reachable1"
-// CHECK-NEXT:      sv.fwrite "Reachable2"
-// CHECK-NEXT:      sv.fwrite "Reachable3"
-// CHECK-NEXT:      sv.fwrite "Reachable4"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable1"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable2"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable3"
+// CHECK-NEXT:      sv.fwrite [[FD]], "Reachable4"
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
 func @if_dead_condition(%arg0: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
   sv.always posedge %arg0 {
     %true = hw.constant true
     %false = hw.constant false
@@ -18,29 +21,29 @@ func @if_dead_condition(%arg0: i1) {
     sv.if %true {}
 
     sv.if %false {
-        sv.fwrite "Unreachable0"
+        sv.fwrite %fd, "Unreachable0"
     }
 
     sv.if %true {
-      sv.fwrite "Reachable1"
+      sv.fwrite %fd, "Reachable1"
     }
 
     sv.if %true {
-      sv.fwrite "Reachable2"
+      sv.fwrite %fd, "Reachable2"
     } else {
-      sv.fwrite "Unreachable2"
+      sv.fwrite %fd, "Unreachable2"
     }
 
     sv.if %false {
-      sv.fwrite "Unreachable3"
+      sv.fwrite %fd, "Unreachable3"
     } else {
-      sv.fwrite "Reachable3"
+      sv.fwrite %fd, "Reachable3"
     }
 
     sv.if %false {
-      sv.fwrite "Unreachable4"
+      sv.fwrite %fd, "Unreachable4"
     } else {
-      sv.fwrite "Reachable4"
+      sv.fwrite %fd, "Reachable4"
     }
   }
 
@@ -67,11 +70,12 @@ func @empy_op(%arg0: i1) {
 }
 
 // CHECK-LABEL: func @invert_if(%arg0: i1) {
+// CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    sv.initial  {
 // CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.if %0  {
-// CHECK-NEXT:        sv.fwrite "Foo"
+// CHECK-NEXT:        sv.fwrite [[FD]], "Foo"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
@@ -80,7 +84,8 @@ func @invert_if(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {
     } else {
-      sv.fwrite "Foo"
+      %fd = hw.constant 0x80000002 : i32
+      sv.fwrite %fd, "Foo"
     }
   }
   return
