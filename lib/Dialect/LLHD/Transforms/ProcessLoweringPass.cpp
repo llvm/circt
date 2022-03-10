@@ -14,9 +14,9 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Visitors.h"
 
+using namespace mlir;
 using namespace circt;
 
 namespace {
@@ -25,6 +25,40 @@ struct ProcessLoweringPass
     : public llhd::ProcessLoweringBase<ProcessLoweringPass> {
   void runOnOperation() override;
 };
+
+/// Backtrack a signal value and make sure that every part of it is in the
+/// observer list at some point. Assumes that there is no operation that adds
+/// parts to a signal that it does not take as input (e.g. something like
+/// llhd.sig.zext %sig : !llhd.sig<i32> -> !llhd.sig<i64>).
+static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
+  // If the value in the observer list, we don't need to backtrack further.
+  if (llvm::is_contained(obs, value))
+    return success();
+
+  if (Operation *op = value.getDefiningOp()) {
+    // If no input is a signal, this operation creates one and thus this is the
+    // last point where it could have been observed. As we've already checked
+    // that, we can fail here. This includes for example llhd.sig
+    if (llvm::none_of(op->getOperands(), [](Value arg) {
+          return arg.getType().isa<llhd::SigType>();
+        }))
+      return failure();
+
+    // Only recusively backtrack signal values. Other values cannot be changed
+    // from outside or with a delay. If they come from probes at some point,
+    // they are covered by that probe. As soon as we find a signal that is not
+    // observed no matter how far we backtrack, we fail.
+    return success(llvm::all_of(op->getOperands(), [&](Value arg) {
+      return !arg.getType().isa<llhd::SigType>() ||
+             succeeded(checkSignalsAreObserved(obs, arg));
+    }));
+  }
+
+  // If the value is a module argument (no block arguments except for the entry
+  // block are allowed here) and was not observed, we cannot backtrack further
+  // and thus fail.
+  return failure();
+}
 
 void ProcessLoweringPass::runOnOperation() {
   ModuleOp module = getOperation();
@@ -45,7 +79,7 @@ void ProcessLoweringPass::runOnOperation() {
             "Process-lowering: The second block (containing the "
             "llhd.wait) is not allowed to have arguments.");
       }
-      if (!isa<mlir::cf::BranchOp>(first.getTerminator())) {
+      if (!isa<cf::BranchOp>(first.getTerminator())) {
         return op.emitOpError(
             "Process-lowering: The first block has to be terminated "
             "by a BranchOp from the standard dialect.");
@@ -60,11 +94,10 @@ void ProcessLoweringPass::runOnOperation() {
         // Every probed signal has to occur in the observed signals list in
         // the wait instruction
         WalkResult result = op.walk([&wait](llhd::PrbOp prbOp) -> WalkResult {
-          if (!llvm::is_contained(wait.obs(), prbOp.signal())) {
+          if (failed(checkSignalsAreObserved(wait.obs(), prbOp.signal())))
             return wait.emitOpError(
                 "Process-lowering: The wait terminator is required to have "
                 "all probed signals as arguments!");
-          }
           return WalkResult::advance();
         });
         if (result.wasInterrupted()) {
