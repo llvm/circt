@@ -13,6 +13,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
+#include <variant>
 
 using namespace mlir;
 using namespace circt;
@@ -1116,6 +1117,253 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
   return true;
 }
 
+/// Identifies integer range checks and simplifies them to minimise comparisons.
+///
+/// In an 'or' operation, tests of a variable belonging to a set of disjoint
+/// intervals are identified and merged whenever possible. 3 distinct patterns
+/// are considered to identify the intervals:
+///
+///   - icmp(ult, x, n),  constrains x < n
+///   - icmp(eq, x, n), constrains x = n
+///   - and(icmp(ugt, x, n), icmp(ult, x, m)) constrains n < x < m
+///
+/// For an individual value x, all the comparisons are collected and new
+/// comparisons are inserted to represent the intervals with fewer operations.
+///
+/// If a sequence of equality checks or(x == n, x == n + 1, ...) is detected,
+/// an interval is emitted only when at least 3 equality checks are folded into
+/// two unsigned comparisons.
+///
+/// All constants and operations operate in unsigned mode.
+///
+static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
+  // x == value
+  struct EqCheck {
+    APInt value;
+    Value check;
+  };
+  // start < x < end
+  struct RangeCheck {
+    APInt start;
+    APInt end;
+    Value startCheck;
+    Value endCheck;
+  };
+  // x < value
+  struct BoundCheck {
+    APInt value;
+    Value check;
+  };
+
+  using AnyCheck = std::variant<RangeCheck, EqCheck, BoundCheck>;
+
+  // Identify all the relevant patterns among the inputs,
+  // mark all others to be retained unchanged.
+  auto inputs = op.inputs();
+  unsigned numKeptOperands = 0;
+  std::vector<bool> keptOperands(inputs.size());
+  DenseMap<Value, SmallVector<std::pair<unsigned, AnyCheck>>> argChecks;
+
+  for (unsigned i = 0, n = inputs.size(); i < n; ++i) {
+    auto input = inputs[i];
+
+    // Find bound checks: and(x > n, x < m)
+    auto andOp = input.getDefiningOp<AndOp>();
+    if (andOp && andOp.inputs().size() == 2) {
+      ICmpOp lhsOp = andOp.inputs()[0].getDefiningOp<ICmpOp>();
+      ICmpOp rhsOp = andOp.inputs()[1].getDefiningOp<ICmpOp>();
+
+      if (lhsOp && rhsOp && lhsOp.lhs() == rhsOp.lhs()) {
+        Value arg = lhsOp.lhs();
+
+        APInt lhsBound, rhsBound;
+        if (matchPattern(lhsOp.rhs(), m_RConstant(lhsBound)) &&
+            matchPattern(rhsOp.rhs(), m_RConstant(rhsBound))) {
+          ICmpPredicate lhsPred = lhsOp.predicate();
+          ICmpPredicate rhsPred = rhsOp.predicate();
+          if (lhsPred == ICmpPredicate::ugt && rhsPred == ICmpPredicate::ult) {
+            argChecks[arg].emplace_back(i,
+                RangeCheck{lhsBound, rhsBound, lhsOp, rhsOp});
+            continue;
+          }
+          if (lhsPred == ICmpPredicate::ult && rhsPred == ICmpPredicate::ugt) {
+            argChecks[arg].emplace_back(i,
+                RangeCheck{rhsBound, lhsBound, rhsOp, lhsOp});
+            continue;
+          }
+        }
+      }
+    }
+
+    if (auto cmpOp = input.getDefiningOp<ICmpOp>()) {
+      APInt value;
+      if (matchPattern(cmpOp.rhs(), m_RConstant(value))) {
+        // Find equality tests: x == n
+        if (cmpOp.predicate() == ICmpPredicate::eq) {
+          argChecks[cmpOp.lhs()].emplace_back(i, EqCheck{value, cmpOp});
+          continue;
+        }
+        // Find upper bound tests: x < n
+        if (cmpOp.predicate() == ICmpPredicate::ult) {
+          argChecks[cmpOp.lhs()].emplace_back(i, BoundCheck{value, cmpOp});
+          continue;
+        }
+      }
+    }
+
+    keptOperands[i] = true;
+    ++numKeptOperands;
+  }
+
+  // Find an 'n' such that 'n < x' for any 'x' matching the check. If 0 is part
+  // of any of the checks, nullopt is returned to represent -1.
+  auto getLowerBound = [](const AnyCheck &check) -> std::optional<APInt> {
+    if (auto eq = std::get_if<EqCheck>(&check)) {
+      if (eq->value.isZero())
+        return std::nullopt;
+      return eq->value - 1;
+    }
+    if (auto range = std::get_if<RangeCheck>(&check))
+      return range->start;
+    if (auto bound = std::get_if<BoundCheck>(&check))
+      return std::nullopt;
+    llvm_unreachable("unknown check");
+  };
+
+  // Find an 'n' such that 'x < n' for any 'x' matching the check.
+  auto getUpperBound = [](const AnyCheck &check) -> APInt {
+    if (auto eq = std::get_if<EqCheck>(&check))
+      return eq->value + 1;
+    if (auto range = std::get_if<RangeCheck>(&check))
+      return range->end;
+    if (auto bound = std::get_if<BoundCheck>(&check))
+      return bound->value;
+    llvm_unreachable("unknown check");
+  };
+
+  // For each value, try to compress the associated checks.
+  llvm::SmallVector<Value> newOperands;
+  for (auto &[arg, checks] : argChecks) {
+    // Order the checks by their lower bounds.
+    std::stable_sort(checks.begin(), checks.end(), [&](auto &lhs, auto &rhs) {
+      if (auto lowerLHS = getLowerBound(lhs.second))
+        if (auto lowerRHS = getLowerBound(rhs.second))
+          return lowerLHS->ult(*lowerRHS);
+      return false;
+    });
+
+    // Find sequences of overlapping checks and compress them.
+    for (auto it = checks.begin(); it != checks.end();) {
+      auto begin = it++;
+
+      APInt end = getUpperBound(begin->second);
+      auto endCheck = begin;
+      while (it != checks.end()) {
+        if (auto lowerBound = getLowerBound(it->second)) {
+          if (!lowerBound->ult(end))
+            break;
+        }
+
+        APInt itBound = getUpperBound(it->second);
+        if (itBound.ugt(end)) {
+          end = itBound;
+          endCheck = it;
+        }
+        ++it;
+      }
+
+      // If there is no overlap or the range consists of only two
+      // consecutive numbers, do not create a new range.
+      size_t n = it - begin;
+      if (n == 1 || (n == 2 && std::holds_alternative<EqCheck>(begin->second) &&
+                     std::holds_alternative<EqCheck>((begin + 1)->second))) {
+        while (begin != it) {
+          keptOperands[begin->first] = true;
+          ++numKeptOperands;
+          ++begin;
+        }
+        continue;
+      }
+
+      // Build the check for the lower bound, based on the first item.
+      Value lowerBoundCheck;
+      if (auto eq = std::get_if<EqCheck>(&begin->second)) {
+        // Add a comparison with the predecessor of the number.
+        if (!eq->value.isZero()) {
+          lowerBoundCheck = rewriter.create<ICmpOp>(
+              eq->check.getLoc(),
+              rewriter.getI1Type(),
+              ICmpPredicate::ugt,
+              arg,
+              rewriter.create<hw::ConstantOp>(op.getLoc(), eq->value - 1));
+        }
+      } else if (auto range = std::get_if<RangeCheck>(&begin->second)) {
+        // Use the value used to check for the start of the range.
+        lowerBoundCheck = range->startCheck;
+      } else if (auto range = std::get_if<BoundCheck>(&begin->second)) {
+        // No check needed, anything below the upper bound is included.
+      } else {
+        llvm_unreachable("unknown check");
+      }
+
+      // Build the check for the upper bound, based on the last item.
+      Value upperBoundCheck;
+      if (auto eq = std::get_if<EqCheck>(&endCheck->second)) {
+        // Add a comparison with the successor of the number.
+        upperBoundCheck = rewriter.create<ICmpOp>(
+            eq->check.getLoc(),
+            rewriter.getI1Type(),
+            ICmpPredicate::ult,
+            arg,
+            rewriter.create<hw::ConstantOp>(op.getLoc(), eq->value + 1));
+      } else if (auto range = std::get_if<RangeCheck>(&endCheck->second)) {
+        // Use the value used to check for the end of the range.
+        upperBoundCheck = range->endCheck;
+      } else if (auto range = std::get_if<BoundCheck>(&endCheck->second)) {
+        // Use the bound check.
+        if (!lowerBoundCheck) {
+          ++numKeptOperands;
+          keptOperands[endCheck->first] = true;
+          continue;
+        }
+        upperBoundCheck = range->check;
+      } else {
+        llvm_unreachable("unknown check");
+      }
+
+      if (lowerBoundCheck) {
+        newOperands.push_back(rewriter.create<AndOp>(
+            op.getLoc(),
+            lowerBoundCheck,
+            upperBoundCheck
+        ));
+      } else {
+        newOperands.push_back(upperBoundCheck);
+      }
+    }
+  }
+
+  if (newOperands.empty() && inputs.size() == numKeptOperands)
+    return false;
+
+  // Build a new operation, preserving unchanged inputs and
+  // adding the new simplified range checks.
+  SmallVector<Value> newInputs;
+  for (unsigned i = 0, n = inputs.size(); i < n; ++i)
+    if (keptOperands[i])
+      newInputs.push_back(inputs[i]);
+
+  for (auto &&op : newOperands)
+    newInputs.push_back(std::move(op));
+
+  if (newInputs.size() == 1)
+    rewriter.replaceOp(op, newInputs[0]);
+  else
+    rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newInputs);
+
+  return true;
+}
+
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -1169,6 +1417,12 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
           if (canonicalizeOrOfConcatsWithCstOperands(op, i, j, rewriter))
             return success();
   }
+
+  // or(eq(x, n), eq(x, n + 1), ...) -> or(and(n <= x, x <= n + ...), ...)
+  // or(and(a < x, x < b), and(c < x, x < d)) -> or(and(a <= x, x < c)) if c < b
+  // or(and(a < x, x < b), x = b) -> or(and(a < x, x < b + 1))
+  if (tryMergeRanges(op, rewriter))
+    return success();
 
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
   return failure();
