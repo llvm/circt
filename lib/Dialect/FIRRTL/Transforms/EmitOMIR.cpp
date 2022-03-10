@@ -283,6 +283,11 @@ void EmitOMIRPass::runOnOperation() {
       }
       if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         auto tmp = symtbl->lookup(nlaSym.getAttr());
+        if (!tmp) {
+          op->emitError("missing annotation ") << nlaSym.getValue();
+          anyFailures = true;
+          return true;
+        }
         tracker.nla = cast<NonLocalAnchor>(tmp);
         removeTempNLAs.push_back(tracker.nla);
       }
