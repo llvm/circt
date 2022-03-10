@@ -23,7 +23,7 @@ circuit Bar :
     ; Analog values should be tapped with a node.
     wire analog: Analog<1>
     ; CHECK: %_analog = firrtl.wire  : !firrtl.analog<1>
-    ; CHECK: %analog = firrtl.node sym @analog %_analog  : !firrtl.analog<1>
+    ; CHECK: %analog = firrtl.wire sym @analog : !firrtl.analog<1>
 
     ; Should create attaches for analog typed elements between the tap wire and
     ; the original wire.

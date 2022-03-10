@@ -67,8 +67,7 @@ def PassiveType : DialectType<FIRRTLDialect,
 
 def NonAnalogPassiveType : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<FIRRTLType>() && "
-          "$_self.cast<FIRRTLType>().isPassive() &&"
-          "!$_self.isa<AnalogType>()">,
+          "$_self.cast<FIRRTLType>().isNonAnalogPassive()">,
     "a passive type that does not contain analog",
     "::circt::firrtl::FIRRTLType">;
 
