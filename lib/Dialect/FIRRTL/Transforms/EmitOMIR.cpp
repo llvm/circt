@@ -282,8 +282,8 @@ void EmitOMIRPass::runOnOperation() {
         return true;
       }
       if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        tracker.nla =
-            dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
+        auto tmp = symtbl->lookup(nlaSym.getAttr());
+        tracker.nla = cast<NonLocalAnchor>(tmp);
         removeTempNLAs.push_back(tracker.nla);
       }
       if (sramIDs.erase(tracker.id) && !tracker.nla)
@@ -325,7 +325,7 @@ void EmitOMIRPass::runOnOperation() {
   DenseSet<StringAttr> nlaSymNamesToDrop;
 
   for (auto nla : removeTempNLAs) {
-    LLVM_DEBUG(llvm::dbgs() << "Removing " << nla << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "Removing '" << nla << "'\n");
     nlaSymNamesToDrop.insert(nla.sym_nameAttr());
     for (auto nameRef : nla.namepath()) {
       if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
@@ -335,7 +335,7 @@ void EmitOMIRPass::runOnOperation() {
         instsToModify.insert(it->second);
       }
     }
-    nla->erase();
+    symtbl->erase(nla);
   }
 
   for (auto instOp : instsToModify) {
@@ -427,6 +427,8 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
                                                builder.getStringAttr(nlaName),
                                                builder.getArrayAttr(namepath));
+  symtbl->insert(tracker.nla);
+
   removeTempNLAs.push_back(tracker.nla);
 }
 
