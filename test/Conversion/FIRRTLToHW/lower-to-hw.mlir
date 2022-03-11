@@ -1118,13 +1118,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @FooDUT
-  // firrtl.moduleHierarchyFile should only be present if both the
-  // MarkDUTAnnotation and the circuit-level ModuleHierarchyAnnotation are
-  // present.
-  // CHECK-NOT: firrtl.moduleHierarchyFile
   firrtl.module @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-
     %chckcoverAnno_clock = firrtl.instance chkcoverAnno @chkcoverAnno(in clock: !firrtl.clock)
   }
 

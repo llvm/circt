@@ -1289,7 +1289,8 @@ section describes well-defined attributes used by HW/SV passes.
 ### firrtl.moduleHierarchyFile
 
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
-hierarchy as a json file. This attribute has type OutputFileAttr.
+hierarchy as a json file. This attribute is a list of files to output to, and
+has type `ArraAttr<OutputFileAttr>`.
 
 The exported JSON file encodes a recursive tree of module instances as JSON
 objects, with each object containing the following members:
@@ -1303,32 +1304,32 @@ objects, with each object containing the following members:
 ### firrtl.extract.assert
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules. This attribute has type OutputFileAttr.
+modules. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.assume
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules. This attribute has type OutputFileAttr.
+modules. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.cover
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules. This attribute has type OutputFileAttr.
+modules. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.assert.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file. This attribute has type OutputFileAttr.
+modules' bind file. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.assume.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file. This attribute has type OutputFileAttr.
+modules' bind file. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.cover.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file. This attribute has type OutputFileAttr.
+modules' bind file. This attribute has type `OutputFileAttr`.
 
 ### firrtl.extract.[cover|assume|assert].extra
 
