@@ -524,7 +524,7 @@ void FIRRTLModuleLowering::runOnOperation() {
         });
   }
 
-  // Figure out which module it the DUT and TestHarness.  If there is no module
+  // Figure out which module is the DUT and TestHarness.  If there is no module
   // marked as the DUT, the top module is the DUT. If the DUT and the test
   // harness are the same, then there is no test harness.
   Operation *testHarness = state.getInstanceGraph()->getTopLevelModule();
