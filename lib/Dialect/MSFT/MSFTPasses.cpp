@@ -1010,6 +1010,7 @@ void PartitionPass::bubbleUpGlobalRefs(
     // previous node in the path must point to parentName.
     size_t opIndex = 0;
     bool found = false;
+    (void)found;
     for (; opIndex < oldPath.size(); ++opIndex) {
       auto oldNode = oldPath[opIndex].cast<hw::InnerRefAttr>();
       if (oldNode.getModule() == parentMod &&
