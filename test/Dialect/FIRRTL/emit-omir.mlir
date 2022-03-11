@@ -331,7 +331,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-SAME:  ]
 
 //===----------------------------------------------------------------------===//
-// Make SRAM Paths Absolute with existing NLAs (`SetOMIRSRAMPaths`)
+// Make SRAM Paths Absolute with existing absolute NLA (`SetOMIRSRAMPaths`)
 //===----------------------------------------------------------------------===//
 
 firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
@@ -373,6 +373,47 @@ firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
 // CHECK-SAME:    @Submodule,
 // CHECK-SAME:    #hw.innerNameRef<@Submodule::[[SYMMEM1:@[a-zA-Z0-9_]+]]>
 // CHECK-SAME:  ]
+
+//===----------------------------------------------------------------------===//
+// Make SRAM Paths Absolute with existing non-absolute NLAs (`SetOMIRSRAMPaths`)
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "SRAMPathsWithNLA" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+      }
+    }
+  ]
+}]} {
+  firrtl.nla @nla [#hw.innerNameRef<@SRAMPaths::@sub>, @Submodule]
+  firrtl.extmodule @MySRAM()
+  firrtl.module @Submodule() {
+    firrtl.instance mem1 {annotations = [{circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+  }
+  firrtl.module @SRAMPaths() {
+    firrtl.instance sub sym @sub {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Submodule()
+  }
+  firrtl.module @SRAMPathsWithNLA() {
+    firrtl.instance paths @SRAMPaths()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "SRAMPathsWithNLA"
+// CHECK:      symbols = [
+// CHECK-SAME:   @SRAMPathsWithNLA,
+// CHECK-SAME:   #hw.innerNameRef<@SRAMPathsWithNLA::@paths>,
+// CHECK-SAME:   @SRAMPaths,
+// CHECK-SAME:   #hw.innerNameRef<@SRAMPaths::@sub>,
+// CHECK-SAME:   @Submodule,
+// CHECK-SAME:   #hw.innerNameRef<@Submodule::@mem1>,
+// CHECK-SAME:   @MySRAM
+// CHECK-SAME: ]
 
 //===----------------------------------------------------------------------===//
 // Add module port information to the OMIR (`SetOMIRPorts`)

@@ -118,6 +118,7 @@ private:
   /// Analyses for the current operation; only valid within `runOnOperation`.
   SymbolTable *symtbl;
   CircuitNamespace *circuitNamespace;
+  InstanceGraph *instanceGraph;
   InstancePathCache *instancePaths;
   /// OMIR target trackers gathered in the current operation, by tracker ID.
   DenseMap<Attribute, Tracker> trackers;
@@ -178,6 +179,7 @@ void EmitOMIRPass::runOnOperation() {
   anyFailures = false;
   symtbl = nullptr;
   circuitNamespace = nullptr;
+  instanceGraph = nullptr;
   instancePaths = nullptr;
   trackers.clear();
   symbols.clear();
@@ -247,9 +249,11 @@ void EmitOMIRPass::runOnOperation() {
   // Establish some of the analyses we need throughout the pass.
   SymbolTable currentSymtbl(circuitOp);
   CircuitNamespace currentCircuitNamespace(circuitOp);
-  InstancePathCache currentInstancePaths(getAnalysis<InstanceGraph>());
+  InstanceGraph &currentInstanceGraph = getAnalysis<InstanceGraph>();
+  InstancePathCache currentInstancePaths(currentInstanceGraph);
   symtbl = &currentSymtbl;
   circuitNamespace = &currentCircuitNamespace;
+  instanceGraph = &currentInstanceGraph;
   instancePaths = &currentInstancePaths;
   dutModuleName = {};
 
@@ -291,7 +295,7 @@ void EmitOMIRPass::runOnOperation() {
         tracker.nla = cast<NonLocalAnchor>(tmp);
         removeTempNLAs.push_back(tracker.nla);
       }
-      if (sramIDs.erase(tracker.id) && !tracker.nla)
+      if (sramIDs.erase(tracker.id))
         makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
@@ -394,8 +398,16 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       builder.getNamedAttr("class", StringAttr::get(context, "circt.nonlocal")),
   });
 
+  // Get all the paths instantiating this module. If there is an NLA already
+  // attached to this tracker, we use it as a base to disambiguate the path to
+  // the memory.
+  Operation *mod;
+  if (tracker.nla)
+    mod = instanceGraph->lookup(tracker.nla.root())->getModule();
+  else
+    mod = tracker.op->getParentOfType<FModuleOp>();
+
   // Get all the paths instantiating this module.
-  auto mod = tracker.op->getParentOfType<FModuleOp>();
   auto paths = instancePaths->getAbsolutePaths(mod);
   if (paths.empty()) {
     tracker.op->emitError("OMIR node targets uninstantiated component `")
@@ -424,9 +436,28 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     namepath.push_back(hw::InnerRefAttr::getFromOperation(
         op, name, op->getParentOfType<FModuleOp>().getNameAttr()));
   };
+  // Add the path up to where the NLA starts.
   for (InstanceOp inst : paths[0])
     addToPath(inst, inst.nameAttr());
-  addToPath(tracker.op, opName);
+  // Add the path from the NLA to the op.
+  if (tracker.nla) {
+    auto path = tracker.nla.namepath().getValue();
+    for (auto attr : path.drop_back()) {
+      auto ref = attr.cast<hw::InnerRefAttr>();
+      // Find the instance referenced by the NLA.
+      auto *node = instanceGraph->lookup(ref.getModule());
+      auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
+        return record->getInstance().inner_symAttr() == ref.getName();
+      });
+      assert(it != node->end() &&
+             "Instance referenced by NLA does not exist in module");
+      addToPath((*it)->getInstance(), ref.getName());
+    }
+  }
+  // Add the op itself.
+  namepath.push_back(hw::InnerRefAttr::getFromOperation(
+      tracker.op, opName,
+      tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),

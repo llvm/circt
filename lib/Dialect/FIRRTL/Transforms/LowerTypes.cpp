@@ -999,11 +999,13 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   };
   // If subannotations present on aggregate fields, we cannot flatten the
   // memory. It must be split into one memory per aggregate field.
-  if (flattenAggregateMemData)
+  // Do not overwrite the pass flag!
+  auto localFlattenAggregateMemData = flattenAggregateMemData;
+  if (localFlattenAggregateMemData)
     if (hasSubAnno() || !flattenType(op.getDataType(), flatMemType))
-      flattenAggregateMemData = false;
+      localFlattenAggregateMemData = false;
 
-  if (flattenAggregateMemData) {
+  if (localFlattenAggregateMemData) {
     SmallVector<Operation *, 8> flatData;
     SmallVector<int32_t> memWidths;
     // Get the width of individual aggregate leaf elements.
@@ -1062,7 +1064,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
       // go both directions, depending on the port direction.
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        if (flattenAggregateMemData) {
+        if (localFlattenAggregateMemData) {
           // If memory was flattened instead of one memory per aggregate field.
           Value newField =
               getSubWhatever(newMemories[0].getResult(index), fieldIndex);
