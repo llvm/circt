@@ -1150,25 +1150,25 @@ struct AnyCheck {
   // Find an 'n' such that 'n < x' for any 'x' matching the check. If 0 is part
   // of any of the checks, nullopt is returned to represent -1.
   std::optional<APInt> lowerBound() const {
-    if (auto eq = std::get_if<EqCheck>(&check)) {
+    if (const auto *eq = std::get_if<EqCheck>(&check)) {
       if (eq->value.isZero())
         return std::nullopt;
       return eq->value - 1;
     }
-    if (auto range = std::get_if<RangeCheck>(&check))
+    if (const auto *range = std::get_if<RangeCheck>(&check))
       return range->start;
-    if (auto bound = std::get_if<BoundCheck>(&check))
+    if (const auto *bound = std::get_if<BoundCheck>(&check))
       return std::nullopt;
     llvm_unreachable("unknown check");
   }
 
   // Find an 'n' such that 'x < n' for any 'x' matching the check.
   APInt upperBound() const {
-    if (auto eq = std::get_if<EqCheck>(&check))
+    if (const auto *eq = std::get_if<EqCheck>(&check))
       return eq->value + 1;
-    if (auto range = std::get_if<RangeCheck>(&check))
+    if (const auto *range = std::get_if<RangeCheck>(&check))
       return range->end;
-    if (auto bound = std::get_if<BoundCheck>(&check))
+    if (const auto *bound = std::get_if<BoundCheck>(&check))
       return bound->value;
     llvm_unreachable("unknown check");
   }
@@ -1267,11 +1267,11 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
     });
 
     // Find sequences of overlapping checks and compress them.
-    for (auto it = checks.begin(); it != checks.end();) {
-      auto begin = it++;
+    for (auto *it = checks.begin(); it != checks.end();) {
+      auto *begin = it++;
 
       APInt end = begin->upperBound();
-      auto endCheck = begin;
+      auto *endCheck = begin;
       while (it != checks.end()) {
         if (auto lowerBound = it->lowerBound()) {
           if (!lowerBound->ult(end))
@@ -1300,17 +1300,17 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
 
       // Build the check for the lower bound, based on the first item.
       Value lowerBoundCheck;
-      if (auto eq = std::get_if<EqCheck>(&begin->check)) {
+      if (auto *eq = std::get_if<EqCheck>(&begin->check)) {
         // Add a comparison with the predecessor of the number.
         if (!eq->value.isZero()) {
           lowerBoundCheck = rewriter.create<ICmpOp>(
               eq->check.getLoc(), rewriter.getI1Type(), ICmpPredicate::ugt, arg,
               rewriter.create<hw::ConstantOp>(op.getLoc(), eq->value - 1));
         }
-      } else if (auto range = std::get_if<RangeCheck>(&begin->check)) {
+      } else if (auto *range = std::get_if<RangeCheck>(&begin->check)) {
         // Use the value used to check for the start of the range.
         lowerBoundCheck = range->startCheck;
-      } else if (auto range = std::get_if<BoundCheck>(&begin->check)) {
+      } else if (auto *bound = std::get_if<BoundCheck>(&begin->check)) {
         // No check needed, anything below the upper bound is included.
       } else {
         llvm_unreachable("unknown check");
@@ -1318,21 +1318,21 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
 
       // Build the check for the upper bound, based on the last item.
       Value upperBoundCheck;
-      if (auto eq = std::get_if<EqCheck>(&endCheck->check)) {
+      if (auto *eq = std::get_if<EqCheck>(&endCheck->check)) {
         // Add a comparison with the successor of the number.
         upperBoundCheck = rewriter.create<ICmpOp>(
             eq->check.getLoc(), rewriter.getI1Type(), ICmpPredicate::ult, arg,
             rewriter.create<hw::ConstantOp>(op.getLoc(), eq->value + 1));
-      } else if (auto range = std::get_if<RangeCheck>(&endCheck->check)) {
+      } else if (auto *range = std::get_if<RangeCheck>(&endCheck->check)) {
         // Use the value used to check for the end of the range.
         upperBoundCheck = range->endCheck;
-      } else if (auto range = std::get_if<BoundCheck>(&endCheck->check)) {
+      } else if (auto *bound = std::get_if<BoundCheck>(&endCheck->check)) {
         // Use the bound check.
         if (!lowerBoundCheck) {
           keptOperands[endCheck->index] = true;
           continue;
         }
-        upperBoundCheck = range->check;
+        upperBoundCheck = bound->check;
       } else {
         llvm_unreachable("unknown check");
       }
