@@ -434,26 +434,26 @@ firrtl.circuit "Top" {
     // CHECK: %0 = firrtl.wire : !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
     // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
     // CHECK: %1 = firrtl.subfield %0(0)
-    // CHECK: firrtl.connect %1, %c0_ui8
+    // CHECK: firrtl.strictconnect %1, %c0_ui8
     // CHECK: %2 = firrtl.wire : !firrtl.bundle<x: uint<8>, y: uint<8>>
     // CHECK: %3 = firrtl.subfield %2(0)
-    // CHECK: firrtl.connect %3, %c0_ui8
+    // CHECK: firrtl.strictconnect %3, %c0_ui8
     // CHECK: %4 = firrtl.subfield %2(1)
-    // CHECK: firrtl.connect %4, %c0_ui8
+    // CHECK: firrtl.strictconnect %4, %c0_ui8
     // CHECK: %5 = firrtl.subfield %0(1)
-    // CHECK: firrtl.connect %5, %2
+    // CHECK: firrtl.strictconnect %5, %2
     // CHECK: %reg_bundle = firrtl.regreset %clock, %reset, %0
     %reg_bundle = firrtl.reg %clock : !firrtl.bundle<a: uint<8>, b: bundle<x: uint<8>, y: uint<8>>>
     // CHECK: %6 = firrtl.wire : !firrtl.vector<uint<8>, 4>
     // CHECK: %c0_ui8_0 = firrtl.constant 0 : !firrtl.uint<8>
     // CHECK: %7 = firrtl.subindex %6[0]
-    // CHECK: firrtl.connect %7, %c0_ui8_0
+    // CHECK: firrtl.strictconnect %7, %c0_ui8_0
     // CHECK: %8 = firrtl.subindex %6[1]
-    // CHECK: firrtl.connect %8, %c0_ui8_0
+    // CHECK: firrtl.strictconnect %8, %c0_ui8_0
     // CHECK: %9 = firrtl.subindex %6[2]
-    // CHECK: firrtl.connect %9, %c0_ui8_0
+    // CHECK: firrtl.strictconnect %9, %c0_ui8_0
     // CHECK: %10 = firrtl.subindex %6[3]
-    // CHECK: firrtl.connect %10, %c0_ui8_0
+    // CHECK: firrtl.strictconnect %10, %c0_ui8_0
     // CHECK: %reg_vector = firrtl.regreset %clock, %reset, %6
     %reg_vector = firrtl.reg %clock : !firrtl.vector<uint<8>, 4>
   }
@@ -489,11 +489,11 @@ firrtl.circuit "ReusePorts" {
   firrtl.module @ReusePorts(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
     portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %child_clock, %child_reset = firrtl.instance child
-    // CHECK: firrtl.connect %child_reset, %reset
+    // CHECK: firrtl.strictconnect %child_reset, %reset
     // CHECK: %badName_reset, %badName_clock, %badName_existingReset = firrtl.instance badName
-    // CHECK: firrtl.connect %badName_reset, %reset
+    // CHECK: firrtl.strictconnect %badName_reset, %reset
     // CHECK: %badType_reset_0, %badType_clock, %badType_reset = firrtl.instance badType
-    // CHECK: firrtl.connect %badType_reset_0, %reset
+    // CHECK: firrtl.strictconnect %badType_reset_0, %reset
     %child_clock, %child_reset = firrtl.instance child @Child(in clock: !firrtl.clock, in reset: !firrtl.asyncreset)
     %badName_clock, %badName_existingReset = firrtl.instance badName @BadName(in clock: !firrtl.clock, in existingReset: !firrtl.asyncreset)
     %badType_clock, %badType_reset = firrtl.instance badType @BadType(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
@@ -603,7 +603,7 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT: firrtl.connect %localReset, %0
+    // CHECK-NEXT: firrtl.strictconnect %localReset, %0
   }
 }
 
@@ -626,7 +626,7 @@ firrtl.circuit "MoveAcrossBlocks1" {
     // CHECK-NEXT: }
     // CHECK-NEXT: firrtl.when %ui1 {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT:   firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT:   firrtl.strictconnect %localReset, [[TMP]]
     // CHECK-NEXT: }
   }
 }
@@ -645,7 +645,7 @@ firrtl.circuit "MoveAcrossBlocks2" {
     // CHECK-NEXT: %localReset = firrtl.wire
     // CHECK-NEXT: firrtl.when %ui1 {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT:   firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT:   firrtl.strictconnect %localReset, [[TMP]]
     // CHECK-NEXT: }
     // CHECK-NEXT: firrtl.when %ui1 {
     // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
@@ -668,7 +668,7 @@ firrtl.circuit "MoveAcrossBlocks3" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: firrtl.when %ui1 {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT:   firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT:   firrtl.strictconnect %localReset, [[TMP]]
     // CHECK-NEXT: }
   }
 }
@@ -688,7 +688,7 @@ firrtl.circuit "MoveAcrossBlocks4" {
     // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: }
     // CHECK-NEXT: [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT: firrtl.connect %localReset, [[TMP]]
+    // CHECK-NEXT: firrtl.strictconnect %localReset, [[TMP]]
   }
 }
 
@@ -700,10 +700,10 @@ firrtl.circuit "SubAccess" {
     %arr = firrtl.wire : !firrtl.vector<uint<8>, 1>
     %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
-    firrtl.connect %2, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %2, %in : !firrtl.uint<8>
     // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
     // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
-    // CHECK-NEXT:  firrtl.connect %[[v0]], %in : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK-NEXT:  firrtl.strictconnect %[[v0]], %in : !firrtl.uint<8>
 
   }
 }
