@@ -426,7 +426,9 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   };
   for (InstanceOp inst : paths[0])
     addToPath(inst, inst.nameAttr());
-  addToPath(tracker.op, opName);
+  namepath.push_back(hw::InnerRefAttr::getFromOperation(
+      tracker.op, opName,
+      tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
