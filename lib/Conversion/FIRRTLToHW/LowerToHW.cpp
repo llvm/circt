@@ -550,7 +550,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Handle the creation of the module hierarchy metadata.
 
-  // Collect the two sets of hiearchy files from the circuit. Some of them will
+  // Collect the two sets of hierarchy files from the circuit. Some of them will
   // be rooted at the test harness, the others will be rooted at the DUT.
   SmallVector<Attribute> dutHierarchyFiles;
   SmallVector<Attribute> testHarnessHierarchyFiles;
