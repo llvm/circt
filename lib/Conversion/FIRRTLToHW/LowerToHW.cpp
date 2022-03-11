@@ -524,24 +524,69 @@ void FIRRTLModuleLowering::runOnOperation() {
         });
   }
 
+  // Figure out which module is the DUT and TestHarness.  If there is no module
+  // marked as the DUT, the top module is the DUT. If the DUT and the test
+  // harness are the same, then there is no test harness.
+  Operation *testHarness = state.getInstanceGraph()->getTopLevelModule();
+  Operation *dut = state.getDut();
+  if (!dut) {
+    dut = testHarness;
+    testHarness = nullptr;
+  } else if (dut == testHarness) {
+    testHarness = nullptr;
+  }
+
   // Now update all the testbench modules' paths.  A module goes in the TB
   // directory if it isn't a child of the DUT and a DUT is marked.
-  if (tbdir) {
-    if (auto dut = state.getDut()) {
-      for (auto mod : state.oldToNewModuleMap) {
-        if (state.isInTestHarness(mod.first)) {
-          auto outputFile = hw::OutputFileAttr::getAsDirectory(
-              circuit.getContext(), tbdir.getValue(), false, true);
-          mod.second->setAttr("output_file", outputFile);
-        }
+  if (tbdir && testHarness) {
+    auto outputFile = hw::OutputFileAttr::getAsDirectory(
+        circuit.getContext(), tbdir.getValue(), false, true);
+    for (auto mod : state.oldToNewModuleMap) {
+      if (state.isInTestHarness(mod.first)) {
+        mod.second->setAttr("output_file", outputFile);
       }
     }
   }
 
-  // At this point, it is safe to the module hierarchy annotations, since they
-  // would have been used while lowering modules.
-  circuitAnno.removeAnnotationsWithClass(moduleHierAnnoClass,
-                                         testHarnessHierAnnoClass);
+  // Handle the creation of the module hierarchy metadata.
+
+  // Collect the two sets of hierarchy files from the circuit. Some of them will
+  // be rooted at the test harness, the others will be rooted at the DUT.
+  SmallVector<Attribute> dutHierarchyFiles;
+  SmallVector<Attribute> testHarnessHierarchyFiles;
+  circuitAnno.removeAnnotations([&](Annotation annotation) {
+    if (annotation.isClass(moduleHierAnnoClass)) {
+      auto file = hw::OutputFileAttr::getFromFilename(
+          &getContext(),
+          annotation.getMember<StringAttr>("filename").getValue(),
+          /*excludeFromFileList=*/true);
+      dutHierarchyFiles.push_back(file);
+      return true;
+    }
+    if (annotation.isClass(testHarnessHierAnnoClass)) {
+      auto file = hw::OutputFileAttr::getFromFilename(
+          &getContext(),
+          annotation.getMember<StringAttr>("filename").getValue(),
+          /*excludeFromFileList=*/true);
+      // If there is no testharness, we print the hiearchy for this file
+      // starting at the DUT.
+      if (testHarness)
+        testHarnessHierarchyFiles.push_back(file);
+      else
+        dutHierarchyFiles.push_back(file);
+      return true;
+    }
+    return false;
+  });
+  // Attach the lowered form of these annotations.
+  if (!dutHierarchyFiles.empty())
+    state.oldToNewModuleMap[dut]->setAttr(
+        moduleHierarchyFileAttrName,
+        ArrayAttr::get(&getContext(), dutHierarchyFiles));
+  if (!testHarnessHierarchyFiles.empty())
+    state.oldToNewModuleMap[testHarness]->setAttr(
+        moduleHierarchyFileAttrName,
+        ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
@@ -933,24 +978,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Transform module annotations
   AnnotationSet annos(oldModule);
 
-  // Grab output file from circuit-level annotation and lower to an attribute
-  // on the module.
-  auto setModuleHierarchyFileAttr = [&](const char hierAnnoClass[]) {
-    AnnotationSet circuitAnnos(loweringState.circuitOp);
-    if (auto hierAnno = circuitAnnos.getAnnotation(hierAnnoClass))
-      newModule->setAttr(
-          moduleHierarchyFileAttrName,
-          hw::OutputFileAttr::getFromFilename(
-              &getContext(),
-              hierAnno.getMember<StringAttr>("filename").getValue(),
-              /*excludeFromFileList=*/true));
-  };
-  if (annos.removeAnnotation(dutAnnoClass)) {
-    setModuleHierarchyFileAttr(moduleHierAnnoClass);
+  if (annos.removeAnnotation(dutAnnoClass))
     loweringState.setDut(oldModule);
-  }
-  if (loweringState.circuitOp.getMainModule() == oldModule)
-    setModuleHierarchyFileAttr(testHarnessHierAnnoClass);
 
   if (annos.removeAnnotation(verifBBClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());

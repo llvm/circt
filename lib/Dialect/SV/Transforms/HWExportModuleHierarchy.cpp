@@ -85,8 +85,10 @@ void HWExportModuleHierarchyPass::runOnOperation() {
   bool directoryCreated = false;
 
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
-    if (auto attr = op->getAttrOfType<hw::OutputFileAttr>(
-            "firrtl.moduleHierarchyFile")) {
+    auto attr = op->getAttrOfType<ArrayAttr>("firrtl.moduleHierarchyFile");
+    if (!attr)
+      continue;
+    for (auto file : attr.getAsRange<hw::OutputFileAttr>()) {
       if (!symbolTable)
         symbolTable = SymbolTable(mlirModule);
 
@@ -101,7 +103,7 @@ void HWExportModuleHierarchyPass::runOnOperation() {
         directoryCreated = true;
       }
       SmallString<128> outputPath(directoryName);
-      appendPossiblyAbsolutePath(outputPath, attr.getFilename().getValue());
+      appendPossiblyAbsolutePath(outputPath, file.getFilename().getValue());
       std::string errorMessage;
       std::unique_ptr<llvm::ToolOutputFile> outputFile(
           mlir::openOutputFile(outputPath, &errorMessage));
