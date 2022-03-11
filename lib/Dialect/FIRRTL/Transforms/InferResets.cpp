@@ -134,7 +134,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type,
               auto zero = createZeroValue(builder, field.value().type, cache);
               auto acc = builder.create<SubfieldOp>(field.value().type, wireOp,
                                                     field.index());
-              builder.create<ConnectOp>(acc, zero);
+              builder.create<StrictConnectOp>(acc, zero);
             }
             return wireOp;
           })
@@ -143,7 +143,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type,
             auto zero = createZeroValue(builder, type.getElementType(), cache);
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
               auto acc = builder.create<SubindexOp>(zero.getType(), wireOp, i);
-              builder.create<ConnectOp>(acc, zero);
+              builder.create<StrictConnectOp>(acc, zero);
             }
             return wireOp;
           })
@@ -1434,7 +1434,7 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
         auto wireOp = builder.create<WireOp>(
             nodeOp.getType(), nodeOp.nameAttr(), nodeOp.annotationsAttr(),
             nodeOp.inner_symAttr());
-        builder.create<ConnectOp>(wireOp, nodeOp.input());
+        builder.create<StrictConnectOp>(wireOp, nodeOp.input());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
         resetOp = wireOp;
@@ -1535,7 +1535,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Connect the instance's reset to the actual reset.
     assert(instReset && actualReset);
     builder.setInsertionPointAfter(instOp);
-    builder.create<ConnectOp>(instReset, actualReset);
+    builder.create<StrictConnectOp>(instReset, actualReset);
     return;
   }
 
