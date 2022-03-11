@@ -60,61 +60,67 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
   return failure();
 }
 
+static LogicalResult isProcValidToLower(llhd::ProcOp op) {
+  size_t numBlocks = op.body().getBlocks().size();
+
+  if (numBlocks == 1) {
+    if (!isa<llhd::HaltOp>(op.body().back().getTerminator()))
+      return op.emitOpError("during process-lowering: entry block is required "
+                            "to be terminated by llhd.halt");
+    return success();
+  }
+
+  if (numBlocks == 2) {
+    Block &first = op.body().front();
+    Block &last = op.body().back();
+
+    if (last.getArguments().size() != 0)
+      return op.emitOpError(
+          "during process-lowering: the second block (containing the "
+          "llhd.wait) is not allowed to have arguments");
+
+    if (!isa<cf::BranchOp>(first.getTerminator()))
+      return op.emitOpError("during process-lowering: the first block has to "
+                            "be terminated by a cf.br operation");
+
+    if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
+      // No optional time argument is allowed
+      if (wait.time())
+        return wait.emitOpError(
+            "during process-lowering: llhd.wait terminators with optional time "
+            "argument cannot be lowered to structural LLHD");
+
+      // Every probed signal has to occur in the observed signals list in
+      // the wait instruction
+      WalkResult result = op.walk([&wait](llhd::PrbOp prbOp) -> WalkResult {
+        if (failed(checkSignalsAreObserved(wait.obs(), prbOp.signal())))
+          return wait.emitOpError(
+              "during process-lowering: the wait terminator is required to "
+              "have all probed signals as arguments");
+
+        return WalkResult::advance();
+      });
+      return failure(result.wasInterrupted());
+    }
+
+    return op.emitOpError("during process-lowering: the second block must be "
+                          "terminated by llhd.wait");
+  }
+
+  return op.emitOpError(
+      "process-lowering only supports processes with either one basic block "
+      "terminated by a llhd.halt operation or two basic blocks where the first "
+      "one contains a cf.br terminator and the second one is terminated by a "
+      "llhd.wait operation");
+}
+
 void ProcessLoweringPass::runOnOperation() {
   ModuleOp module = getOperation();
 
   WalkResult result = module.walk([](llhd::ProcOp op) -> WalkResult {
     // Check invariants
-    size_t numBlocks = op.body().getBlocks().size();
-    if (numBlocks == 1) {
-      if (!isa<llhd::HaltOp>(op.body().back().getTerminator())) {
-        return op.emitOpError("Process-lowering: Entry block is required to be "
-                              "terminated by a HaltOp from the LLHD dialect.");
-      }
-    } else if (numBlocks == 2) {
-      Block &first = op.body().front();
-      Block &last = op.body().back();
-      if (last.getArguments().size() != 0) {
-        return op.emitOpError(
-            "Process-lowering: The second block (containing the "
-            "llhd.wait) is not allowed to have arguments.");
-      }
-      if (!isa<cf::BranchOp>(first.getTerminator())) {
-        return op.emitOpError(
-            "Process-lowering: The first block has to be terminated "
-            "by a BranchOp from the standard dialect.");
-      }
-      if (auto wait = dyn_cast<llhd::WaitOp>(last.getTerminator())) {
-        // No optional time argument is allowed
-        if (wait.time()) {
-          return wait.emitOpError(
-              "Process-lowering: llhd.wait terminators with optional time "
-              "argument cannot be lowered to structural LLHD.");
-        }
-        // Every probed signal has to occur in the observed signals list in
-        // the wait instruction
-        WalkResult result = op.walk([&wait](llhd::PrbOp prbOp) -> WalkResult {
-          if (failed(checkSignalsAreObserved(wait.obs(), prbOp.signal())))
-            return wait.emitOpError(
-                "Process-lowering: The wait terminator is required to have "
-                "all probed signals as arguments!");
-          return WalkResult::advance();
-        });
-        if (result.wasInterrupted()) {
-          return result;
-        }
-      } else {
-        return op.emitOpError(
-            "Process-lowering: The second block must be terminated by "
-            "a WaitOp from the LLHD dialect.");
-      }
-    } else {
-      return op.emitOpError(
-          "Process-lowering only supports processes with either one basic "
-          "block terminated by a llhd.halt operation or two basic blocks where "
-          "the first one contains a std.br terminator and the second one "
-          "is terminated by a llhd.wait operation.");
-    }
+    if (failed(isProcValidToLower(op)))
+      return WalkResult::interrupt();
 
     OpBuilder builder(op);
 
@@ -146,9 +152,9 @@ void ProcessLoweringPass::runOnOperation() {
     }
 
     // Delete the process as it is now replaced by an entity.
-    op.getOperation()->dropAllReferences();
-    op.getOperation()->dropAllDefinedValueUses();
-    op.getOperation()->erase();
+    op->dropAllReferences();
+    op->dropAllDefinedValueUses();
+    op->erase();
 
     // Remove the remaining llhd.halt or llhd.wait terminator
     Operation *terminator = entity.body().front().getTerminator();
