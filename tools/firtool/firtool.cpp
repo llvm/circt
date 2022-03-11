@@ -538,48 +538,57 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     }
   }
 
-  // Add passes specific to Verilog emission if we're going there.
-  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
-      outputFormat == OutputIRVerilog) {
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Tidy up the IR to improve verilog emission quality.
-    if (!disableOptimization) {
-      auto &modulePM = pm.nest<hw::HWModuleOp>();
-      modulePM.addPass(sv::createPrettifyVerilogPass());
-    }
-
-    if (stripDebugInfo)
-      pm.addPass(mlir::createStripDebugInfoPass());
-    // Emit a single file or multiple files depending on the output format.
-    switch (outputFormat) {
-    default:
-      llvm_unreachable("can't reach this");
-    case OutputVerilog:
-      pm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
-      break;
-    case OutputSplitVerilog:
-      pm.addPass(createExportSplitVerilogPass(outputFilename));
-      break;
-    case OutputIRVerilog:
-      // Run the ExportVerilog pass to get its lowering, but discard the output.
-      pm.addPass(createExportVerilogPass(llvm::nulls()));
-      break;
-    }
-
-    // Run module hierarchy emission after verilog emission, which ensures we
-    // pick up any changes that verilog emission made.
-    if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
-  }
-
   // Load the emitter options from the command line. Command line options if
   // specified will override any module options.
   applyLoweringCLOptions(module.get());
 
   if (failed(pm.run(module.get())))
     return failure();
+
+  // Add passes specific to Verilog emission if we're going there.
+  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
+      outputFormat == OutputIRVerilog) {
+    PassManager exportPm(&context);
+    // Legalize unsupported operations within the modules.
+    exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
+    // Tidy up the IR to improve verilog emission quality.
+    if (!disableOptimization) {
+      auto &modulePM = exportPm.nest<hw::HWModuleOp>();
+      modulePM.addPass(sv::createPrettifyVerilogPass());
+    }
+
+    if (stripDebugInfo)
+      exportPm.addPass(mlir::createStripDebugInfoPass());
+
+    // Emit a single file or multiple files depending on the output format.
+    switch (outputFormat) {
+    default:
+      llvm_unreachable("can't reach this");
+    case OutputVerilog:
+      exportPm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
+      break;
+    case OutputSplitVerilog:
+      exportPm.addPass(createExportSplitVerilogPass(outputFilename));
+      break;
+    case OutputIRVerilog:
+      // Run the ExportVerilog pass to get its lowering, but discard the output.
+      exportPm.addPass(createExportVerilogPass(llvm::nulls()));
+      break;
+    }
+
+    // Run module hierarchy emission after verilog emission, which ensures we
+    // pick up any changes that verilog emission made.
+    if (exportModuleHierarchy)
+      exportPm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
+    // Load the emitter options from the command line. Command line options if
+    // specified will override any module options.
+    applyLoweringCLOptions(module.get());
+
+    if (failed(exportPm.run(module.get())))
+      return failure();
+  }
 
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
       outputFormat == OutputIRVerilog) {

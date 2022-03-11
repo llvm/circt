@@ -259,6 +259,8 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
+  std::atomic<bool> moduleLoweringFailed{false};
+
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        bool nonConstAsyncResetValueIsError,
                        InstanceGraph *instanceGraph)
@@ -491,17 +493,23 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
-  // FModule's we come across.
+  // FModule's we come across. If any module fails to lower, return early.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
     TypeSwitch<Operation *>(&op)
         .Case<FModuleOp>([&](auto module) {
-          state.oldToNewModuleMap[&op] =
-              lowerModule(module, topLevelModule, state);
+          auto loweredMod = lowerModule(module, topLevelModule, state);
+          if (!loweredMod)
+            return signalPassFailure();
+
+          state.oldToNewModuleMap[&op] = loweredMod;
           modulesToProcess.push_back(module);
         })
         .Case<FExtModuleOp>([&](auto extModule) {
-          state.oldToNewModuleMap[&op] =
-              lowerExtModule(extModule, topLevelModule, state);
+          auto loweredExtMod = lowerExtModule(extModule, topLevelModule, state);
+          if (!loweredExtMod)
+            return signalPassFailure();
+
+          state.oldToNewModuleMap[&op] = loweredExtMod;
         })
         .Case<NonLocalAnchor>([&](auto nla) {
           // Just drop it.
@@ -512,6 +520,8 @@ void FIRRTLModuleLowering::runOnOperation() {
           // the operation from the circuit.
           if (succeeded(verifyOpLegality(op)))
             op->moveBefore(topLevelModule, topLevelModule->end());
+          else
+            return signalPassFailure();
         });
   }
 
@@ -553,6 +563,10 @@ void FIRRTLModuleLowering::runOnOperation() {
   mlir::parallelForEachN(
       &getContext(), 0, modulesToProcess.size(),
       [&](auto index) { lowerModuleBody(modulesToProcess[index], state); });
+
+  // If any module bodies failed to lower, return early.
+  if (state.moduleLoweringFailed)
+    return signalPassFailure();
 
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {
@@ -1546,8 +1560,10 @@ void FIRRTLLowering::run() {
         break;
       case LoweringFailure:
         // If lowering failed, don't remove *anything* we've lowered so far,
-        // there may be uses, and the pass will fail anyway.
+        // there may be uses, and the pass will fail anyway. Mark the failure in
+        // state.
         opsToRemove.clear();
+        circuitState.moduleLoweringFailed = true;
       }
     }
   }
