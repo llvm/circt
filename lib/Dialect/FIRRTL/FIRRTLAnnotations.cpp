@@ -532,6 +532,8 @@ void Annotation::removeMember(StringRef name) {
   setDict(DictionaryAttr::getWithSorted(dict.getContext(), attributes));
 }
 
+void Annotation::dump() { attr.dump(); }
+
 //===----------------------------------------------------------------------===//
 // AnnotationSetIterator
 //===----------------------------------------------------------------------===//

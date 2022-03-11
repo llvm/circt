@@ -2792,7 +2792,11 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "$fwrite(32'h80000002, \"";
+  indent() << "$fwrite(";
+
+  emitExpression(op.fd(), ops);
+
+  os << ", \"";
   os.write_escaped(op.string());
   os << '"';
 

@@ -19,7 +19,44 @@ def isModuleSymbol : AttrConstraint<
             "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()))"
     >, "is module like">;
 
-def HWModuleOp : HWOp<"module",
+/// Base class factoring out some of the additional class declarations common to
+/// the module-like operations.
+class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
+    HWOp<mnemonic, traits> {
+  /// Additional class declarations inside the module op.
+  code extraModuleClassDeclaration = ?;
+
+  let extraClassDeclaration = extraModuleClassDeclaration # [{
+    /// Insert and remove input and output ports of this module. Does not modify
+    /// the block arguments of the module body. The insertion and removal
+    /// indices must be in ascending order. The indices refer to the port
+    /// positions before any insertion or removal occurs. Ports inserted at the
+    /// same index will appear in the module in the same order as they were
+    /// listed in the insertion arrays.
+    void modifyPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+      ArrayRef<unsigned> eraseInputs,
+      ArrayRef<unsigned> eraseOutputs
+    );
+
+    /// Insert ports into the module. Does not modify the block arguments of the
+    /// module body.
+    void insertPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+      ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs
+    ) { modifyPorts(insertInputs, insertOutputs, {}, {}); }
+
+    /// Erase ports from the module. Does not modify the block arguments of the
+    /// module body.
+    void erasePorts(
+      ArrayRef<unsigned> eraseInputs,
+      ArrayRef<unsigned> eraseOutputs
+    ) { modifyPorts({}, {}, eraseInputs, eraseOutputs); }
+  }];
+}
+
+def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">,
        OpAsmOpInterface]>{
@@ -47,7 +84,7 @@ def HWModuleOp : HWOp<"module",
                    CArg<"StringAttr", "{}">:$comment)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::front;
     using mlir::detail::FunctionOpInterfaceTrait<HWModuleOp>::getBody;
 
@@ -117,7 +154,7 @@ def HWModuleOp : HWOp<"module",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def HWModuleExternOp : HWOp<"module.extern",
+def HWModuleExternOp : HWModuleOpBase<"module.extern",
       [FunctionOpInterface, Symbol, OpAsmOpInterface,
        HasParent<"mlir::ModuleOp">]> {
   let summary = "HW external Module";
@@ -148,7 +185,7 @@ def HWModuleExternOp : HWOp<"module.extern",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
     ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
@@ -244,7 +281,7 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
   let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
 
-def HWModuleGeneratedOp : HWOp<"module.generated",
+def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
       [IsolatedFromAbove, FunctionOpInterface, Symbol, OpAsmOpInterface,
        HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generated Module";
@@ -277,7 +314,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let extraClassDeclaration = [{
+  let extraModuleClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
     ModulePortInfo getPorts() {
       return getModulePortInfo(*this);

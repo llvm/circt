@@ -97,7 +97,8 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
   sv.always posedge %clk {
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
-    sv.fwrite "%d"(%f) : i16
+    %fd = hw.constant 0x80000002 : i32
+    sv.fwrite %fd, "%d"(%f) : i16
   }
 }
 

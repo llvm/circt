@@ -101,6 +101,16 @@ PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
 /// Return the PortInfo for the specified output port.
 PortInfo getModuleOutputPort(Operation *op, size_t idx);
 
+/// Insert and remove ports of a module. The insertion and removal indices must
+/// be in ascending order. The indices refer to the port positions before any
+/// insertion or removal occurs. Ports inserted at the same index will appear in
+/// the module in the same order as they were listed in the `insert*` array.
+void modifyModulePorts(Operation *op,
+                       ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+                       ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+                       ArrayRef<unsigned> removeInputs,
+                       ArrayRef<unsigned> removeOutputs);
+
 // Helpers for working with modules.
 
 /// Return true if this is an hw.module, external module, generated module etc.

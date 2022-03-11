@@ -572,6 +572,7 @@ struct DimStorage : TypeStorage {
     if (inner != inner.fullyResolved())
       newFullyResolved = ConcreteDim::get(inner.fullyResolved(), args...);
     auto result = dim.mutate(newResolved, newFullyResolved);
+    (void)result; // Supress warning
     assert(succeeded(result));
   }
 
@@ -996,10 +997,10 @@ PackedStructType PackedStructType::get(StructKind kind,
                                        ArrayRef<StructMember> members,
                                        StringAttr name, Location loc,
                                        Optional<Sign> sign) {
-  auto isPacked = [](const StructMember &member) {
-    return member.type.isa<PackedType>();
-  };
-  assert(llvm::all_of(members, isPacked) &&
+  assert(llvm::all_of(members,
+                      [](const StructMember &member) {
+                        return member.type.isa<PackedType>();
+                      }) &&
          "packed struct members must be packed");
   return Base::get(loc.getContext(),
                    detail::StructTypeStorage::pack(

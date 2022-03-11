@@ -69,9 +69,11 @@ module {
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1
 
     sv.always posedge %clk {
+      %fd = hw.constant 0x80000002 : i32
+
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
       // CHECK: $fwrite(32'h80000002, "valid: %d\n", iface.valid);
-      sv.fwrite "valid: %d\n" (%validValue) : i1
+      sv.fwrite %fd, "valid: %d\n" (%validValue) : i1
       // CHECK: assert(iface.valid);
       sv.assert %validValue, immediate
 
@@ -79,7 +81,7 @@ module {
         %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !hw.struct<foo: i7, bar: !hw.array<5 x i16>>
         %structData = hw.struct_extract %structDataSignal["foo"] : !hw.struct<foo: i7, bar: !hw.array<5 x i16>>
         // CHECK: $fwrite(32'h80000002, "%d", [[IFACEST]].data.foo);
-        sv.fwrite "%d"(%structData) : i7
+        sv.fwrite %fd, "%d"(%structData) : i7
       }
     }
   }

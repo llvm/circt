@@ -1632,8 +1632,13 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   auto destType =
       op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
   auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
-  if (destType == srcType)
-    return failure();
+  if (destType == srcType) {
+    // bundle is passive on both sides, this can be a strictconnect.
+    rewriter.create<StrictConnectOp>(op->getLoc(), op.getOperand(0),
+                                     op.getOperand(1));
+    rewriter.eraseOp(op);
+    return success();
+  }
 
   auto srcWidth = srcType.getBitWidthOrSentinel();
   auto destWidth = destType.getBitWidthOrSentinel();
@@ -1650,7 +1655,7 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
     if (tmpType != destType)
       shortened =
           rewriter.createOrFold<AsSIntPrimOp>(op.getLoc(), destType, shortened);
-    rewriter.create<ConnectOp>(op.getLoc(), op.getOperand(0), shortened);
+    rewriter.create<StrictConnectOp>(op.getLoc(), op.getOperand(0), shortened);
     rewriter.eraseOp(op);
     return success();
   }

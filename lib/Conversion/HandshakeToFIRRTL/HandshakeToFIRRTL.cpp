@@ -740,13 +740,14 @@ public:
       : portList(portList), insertLoc(insertLoc), rewriter(rewriter) {}
   using StdExprVisitor::visitStdExpr;
 
-  template <typename OpType>
+  template <typename OpType, bool fstOpSigned = false, bool sndOpSigned = false>
   void buildBinaryLogic();
 
   bool visitInvalidOp(Operation *op) { return false; }
 
   bool visitStdExpr(arith::CmpIOp op);
   bool visitStdExpr(arith::ExtUIOp op);
+  bool visitStdExpr(arith::ExtSIOp op);
   bool visitStdExpr(arith::TruncIOp op);
   bool visitStdExpr(arith::IndexCastOp op);
 
@@ -756,19 +757,26 @@ public:
   HANDLE(arith::AddIOp, AddPrimOp);
   HANDLE(arith::SubIOp, SubPrimOp);
   HANDLE(arith::MulIOp, MulPrimOp);
-  HANDLE(arith::DivSIOp, DivPrimOp);
-  HANDLE(arith::RemSIOp, RemPrimOp);
   HANDLE(arith::DivUIOp, DivPrimOp);
   HANDLE(arith::RemUIOp, RemPrimOp);
   HANDLE(arith::XOrIOp, XorPrimOp);
   HANDLE(arith::AndIOp, AndPrimOp);
   HANDLE(arith::OrIOp, OrPrimOp);
   HANDLE(arith::ShLIOp, DShlPrimOp);
-  HANDLE(arith::ShRSIOp, DShrPrimOp);
   HANDLE(arith::ShRUIOp, DShrPrimOp);
 #undef HANDLE
 
-  bool buildZeroExtendOp(unsigned dstWidth);
+#define HANDLE_SIGNED(OPTYPE, FIRRTLTYPE, sndOpSigned)                         \
+  bool visitStdExpr(OPTYPE op) {                                               \
+    return buildBinaryLogic<FIRRTLTYPE, true, sndOpSigned>(), true;            \
+  }
+  HANDLE_SIGNED(arith::DivSIOp, DivPrimOp, true);
+  HANDLE_SIGNED(arith::RemSIOp, RemPrimOp, true);
+  HANDLE_SIGNED(arith::ShRSIOp, DShrPrimOp, false);
+#undef HANDLE_SIGNED
+
+  template <bool isSignedOp = false>
+  bool buildSignExtendOp(unsigned dstWidth);
   bool buildTruncateOp(unsigned dstWidth);
 
 private:
@@ -785,22 +793,27 @@ bool StdExprBuilder::visitStdExpr(arith::CmpIOp op) {
   case arith::CmpIPredicate::ne:
     return buildBinaryLogic<NEQPrimOp>(), true;
   case arith::CmpIPredicate::slt:
+    return buildBinaryLogic<LTPrimOp, true, true>(), true;
   case arith::CmpIPredicate::ult:
     return buildBinaryLogic<LTPrimOp>(), true;
   case arith::CmpIPredicate::sle:
+    return buildBinaryLogic<LEQPrimOp, true, true>(), true;
   case arith::CmpIPredicate::ule:
     return buildBinaryLogic<LEQPrimOp>(), true;
   case arith::CmpIPredicate::sgt:
+    return buildBinaryLogic<GTPrimOp, true, true>(), true;
   case arith::CmpIPredicate::ugt:
     return buildBinaryLogic<GTPrimOp>(), true;
   case arith::CmpIPredicate::sge:
+    return buildBinaryLogic<GEQPrimOp, true, true>(), true;
   case arith::CmpIPredicate::uge:
     return buildBinaryLogic<GEQPrimOp>(), true;
   }
   llvm_unreachable("invalid CmpIOp");
 }
 
-bool StdExprBuilder::buildZeroExtendOp(unsigned dstWidth) {
+template <bool isSignedOp>
+bool StdExprBuilder::buildSignExtendOp(unsigned dstWidth) {
   ValueVector arg0Subfield = portList[0];
   ValueVector resultSubfields = portList[1];
 
@@ -811,8 +824,15 @@ bool StdExprBuilder::buildZeroExtendOp(unsigned dstWidth) {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
+  if (isSignedOp)
+    arg0Data = rewriter.create<AsSIntPrimOp>(insertLoc, arg0Data);
+
   Value resultDataOp =
       rewriter.create<PadPrimOp>(insertLoc, arg0Data, dstWidth);
+
+  if (isSignedOp)
+    resultDataOp = rewriter.create<AsUIntPrimOp>(insertLoc, resultDataOp);
+
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
 
   // Generate valid signal.
@@ -851,8 +871,14 @@ bool StdExprBuilder::buildTruncateOp(unsigned int dstWidth) {
 }
 
 bool StdExprBuilder::visitStdExpr(arith::ExtUIOp op) {
-  return buildZeroExtendOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+  return buildSignExtendOp(getFIRRTLType(getOperandDataType(op.getOperand()))
                                .getBitWidthOrSentinel());
+}
+
+bool StdExprBuilder::visitStdExpr(arith::ExtSIOp op) {
+  return buildSignExtendOp<true>(
+      getFIRRTLType(getOperandDataType(op.getOperand()))
+          .getBitWidthOrSentinel());
 }
 
 bool StdExprBuilder::visitStdExpr(arith::TruncIOp op) {
@@ -866,11 +892,11 @@ bool StdExprBuilder::visitStdExpr(arith::IndexCastOp op) {
   unsigned targetBits = targetType.getBitWidthOrSentinel();
   unsigned sourceBits = sourceType.getBitWidthOrSentinel();
   return (targetBits < sourceBits ? buildTruncateOp(targetBits)
-                                  : buildZeroExtendOp(targetBits));
+                                  : buildSignExtendOp(targetBits));
 }
 
 /// Please refer to simple_addi.mlir test case.
-template <typename OpType>
+template <typename OpType, bool fstOpSigned, bool sndOpSigned>
 void StdExprBuilder::buildBinaryLogic() {
   ValueVector arg0Subfield = portList[0];
   ValueVector arg1Subfield = portList[1];
@@ -886,6 +912,12 @@ void StdExprBuilder::buildBinaryLogic() {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
+  if (fstOpSigned)
+    arg0Data = rewriter.create<AsSIntPrimOp>(insertLoc, arg0Data);
+
+  if (sndOpSigned)
+    arg1Data = rewriter.create<AsSIntPrimOp>(insertLoc, arg1Data);
+
   // Carry out the binary operation.
   Value resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data, arg1Data);
   auto resultTy = resultDataOp.getType().cast<FIRRTLType>();
@@ -895,9 +927,14 @@ void StdExprBuilder::buildBinaryLogic() {
                          .cast<FIRRTLType>()
                          .getPassiveType()
                          .getBitWidthOrSentinel();
+
   if (resultWidth < resultTy.getBitWidthOrSentinel()) {
     resultDataOp = rewriter.create<BitsPrimOp>(insertLoc, resultDataOp,
                                                resultWidth - 1, 0);
+  } else if (fstOpSigned) {
+    // BitsPrimOp already casts to correct type, thus only do this when no
+    // BitsPrimOp was created
+    resultDataOp = rewriter.create<AsUIntPrimOp>(insertLoc, resultDataOp);
   }
 
   rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);

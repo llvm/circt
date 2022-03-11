@@ -850,6 +850,14 @@ firrtl.module @pcon(in %in: !firrtl.uint<9>, out %out: !firrtl.uint<5>) {
   firrtl.partialconnect %out, %in : !firrtl.uint<5>, !firrtl.uint<9>
 }
 
+// CHECK-LABEL: @pcon_bundle
+// CHECK-NEXT:   firrtl.strictconnect %out, %in : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+// CHECK-NEXT:  }
+firrtl.module @pcon_bundle(in %in:   !firrtl.bundle<valid: uint<1>, ready: uint<1>>,
+                           out %out: !firrtl.bundle<valid: uint<1>, ready: uint<1>>) {
+  firrtl.partialconnect %out, %in : !firrtl.bundle<valid: uint<1>, ready: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+}
+
 // https://github.com/llvm/circt/issues/788
 
 // CHECK-LABEL: @AttachMerge

@@ -190,7 +190,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
   if (name.equals("vector")) {
     FIRRTLType elementType;
-    unsigned width = 0;
+    uint64_t width = 0;
 
     if (parser.parseLess() || parseNestedType(elementType, parser) ||
         parser.parseComma() || parser.parseInteger(width) ||
@@ -569,17 +569,16 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
   auto destBundleType = destType.dyn_cast<BundleType>();
   auto srcBundleType = srcType.dyn_cast<BundleType>();
   if (destBundleType && srcBundleType)
-    return llvm::all_of(
-        destBundleType, [&](auto destElt) -> bool {
-          auto destField = destElt.name.getValue();
-          auto srcElt = srcBundleType.getElement(destField);
-          // If the src doesn't contain the destination's field, that's okay.
-          if (!srcElt)
-            return true;
-          return areTypesWeaklyEquivalent(destElt.type, srcElt.getValue().type,
-                                          destFlip ^ destElt.isFlip,
-                                          srcFlip ^ srcElt.getValue().isFlip);
-        });
+    return llvm::all_of(destBundleType, [&](auto destElt) -> bool {
+      auto destField = destElt.name.getValue();
+      auto srcElt = srcBundleType.getElement(destField);
+      // If the src doesn't contain the destination's field, that's okay.
+      if (!srcElt)
+        return true;
+      return areTypesWeaklyEquivalent(destElt.type, srcElt.getValue().type,
+                                      destFlip ^ destElt.isFlip,
+                                      srcFlip ^ srcElt.getValue().isFlip);
+    });
 
   // Ground types can be connected if their passive, widthless versions
   // are equal and leaf flippedness matches.
@@ -885,7 +884,7 @@ namespace circt {
 namespace firrtl {
 namespace detail {
 struct VectorTypeStorage : mlir::TypeStorage {
-  using KeyTy = std::pair<FIRRTLType, unsigned>;
+  using KeyTy = std::pair<FIRRTLType, size_t>;
 
   VectorTypeStorage(KeyTy value) : value(value) {
     auto properties = value.first.getRecursiveTypeProperties();
@@ -903,7 +902,7 @@ struct VectorTypeStorage : mlir::TypeStorage {
 
   /// This holds the bits for the type's recursive properties, and can hold a
   /// pointer to a passive version of the type.
-  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
+  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, size_t>
       passiveContainsAnalogTypeInfo;
 };
 
@@ -911,14 +910,14 @@ struct VectorTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
+FIRRTLType FVectorType::get(FIRRTLType elementType, size_t numElements) {
   return Base::get(elementType.getContext(),
                    std::make_pair(elementType, numElements));
 }
 
 FIRRTLType FVectorType::getElementType() { return getImpl()->value.first; }
 
-unsigned FVectorType::getNumElements() { return getImpl()->value.second; }
+size_t FVectorType::getNumElements() { return getImpl()->value.second; }
 
 /// Return the recursive properties of the type.
 RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {
@@ -947,30 +946,29 @@ FIRRTLType FVectorType::getPassiveType() {
   return passiveType;
 }
 
-unsigned FVectorType::getFieldID(unsigned index) {
+size_t FVectorType::getFieldID(size_t index) {
   return 1 + index * (getElementType().getMaxFieldID() + 1);
 }
 
-unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
+size_t FVectorType::getIndexForFieldID(size_t fieldID) {
   assert(fieldID && "fieldID must be at least 1");
   // Divide the field ID by the number of fieldID's per element.
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
 }
 
-std::pair<FIRRTLType, unsigned>
-FVectorType::getSubTypeByFieldID(unsigned fieldID) {
+std::pair<FIRRTLType, size_t> FVectorType::getSubTypeByFieldID(size_t fieldID) {
   if (fieldID == 0)
     return {*this, 0};
   auto subfieldIndex = getIndexForFieldID(fieldID);
   return {getElementType(), fieldID - getFieldID(subfieldIndex)};
 }
 
-unsigned FVectorType::getMaxFieldID() {
+size_t FVectorType::getMaxFieldID() {
   return getNumElements() * (getElementType().getMaxFieldID() + 1);
 }
 
-std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
-                                                        unsigned index) {
+std::pair<size_t, bool> FVectorType::rootChildFieldID(size_t fieldID,
+                                                      size_t index) {
   auto childRoot = getFieldID(index);
   auto rangeEnd =
       index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
@@ -994,32 +992,38 @@ void FIRRTLDialect::registerTypes() {
 // field element and return the total bit width of the aggregate type. This
 // returns None, if any of the bundle fields is a flip type, or ground type with
 // unknown bit width.
-llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
-  std::function<llvm::Optional<int32_t>(FIRRTLType)> getWidth =
-      [&](FIRRTLType type) -> llvm::Optional<int32_t> {
-    return TypeSwitch<FIRRTLType, llvm::Optional<int32_t>>(type)
+llvm::Optional<int64_t> firrtl::getBitWidth(FIRRTLType type) {
+  std::function<llvm::Optional<int64_t>(FIRRTLType)> getWidth =
+      [&](FIRRTLType type) -> llvm::Optional<int64_t> {
+    return TypeSwitch<FIRRTLType, llvm::Optional<int64_t>>(type)
         .Case<BundleType>([&](BundleType bundle) {
-          int32_t width = 0;
+          int64_t width = 0;
           for (auto &elt : bundle) {
             if (elt.isFlip)
-              return llvm::Optional<int32_t>(None);
+              return llvm::Optional<int64_t>(None);
             auto w = getBitWidth(elt.type);
             if (!w.hasValue())
-              return llvm::Optional<int32_t>(None);
+              return llvm::Optional<int64_t>(None);
             width += w.getValue();
           }
-          return llvm::Optional<int32_t>(width);
+          return llvm::Optional<int64_t>(width);
         })
         .Case<FVectorType>([&](auto vector) {
           auto w = getBitWidth(vector.getElementType());
           if (!w.hasValue())
-            return llvm::Optional<int32_t>(None);
-          return llvm::Optional<int32_t>(w.getValue() *
+            return llvm::Optional<int64_t>(None);
+          return llvm::Optional<int64_t>(w.getValue() *
                                          vector.getNumElements());
         })
-        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
+        .Case<IntType>([&](IntType iType) {
+          auto retval = iType.getWidth();
+          if (retval)
+            return llvm::Optional<int64_t>(*retval);
+          else
+            return llvm::Optional<int64_t>(None);
+        })
         .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
-        .Default([&](auto t) { return llvm::Optional<int32_t>(None); });
+        .Default([&](auto t) { return llvm::Optional<int64_t>(None); });
   };
   return getWidth(type);
 }
