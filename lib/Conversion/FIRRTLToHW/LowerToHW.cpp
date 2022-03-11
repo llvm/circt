@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -1256,30 +1257,12 @@ FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 
 namespace {
 
-struct MixedModuleNamespace : Namespace {
-  MixedModuleNamespace() {}
-  MixedModuleNamespace(hw::HWModuleOp module) { add(module); }
-
-  /// Populate the namespace from a module-like operation. This namespace will
-  /// be composed of the `inner_sym`s of the module's ports and declarations.
-  void add(hw::HWModuleOp module) {
-    for (auto port : module.getAllPorts())
-      if (port.sym && !port.sym.getValue().empty())
-        nextIndex.insert({port.sym.getValue(), 0});
-    module.walk([&](Operation *op) {
-      auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-      if (attr)
-        nextIndex.insert({attr.getValue(), 0});
-    });
-  }
-};
-
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
         builder(module.getLoc(), module.getContext()),
-        moduleNamespace(MixedModuleNamespace(module)) {}
+        moduleNamespace(hw::ModuleNamespace(module)) {}
 
   LogicalResult run();
 
@@ -1523,7 +1506,7 @@ private:
 
   /// A namespace that can be used to generte new symbol names that are unique
   /// within this module.
-  MixedModuleNamespace moduleNamespace;
+  hw::ModuleNamespace moduleNamespace;
 };
 } // end anonymous namespace
 
