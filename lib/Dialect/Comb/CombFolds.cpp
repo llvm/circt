@@ -1195,7 +1195,8 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
         // Find equality tests: x == n
         if (cmpOp.predicate() == ICmpPredicate::eq) {
           if (v.isZero())
-            argChecks[cmpOp.lhs()].emplace_back(Interval{i, std::nullopt, v + 1});
+            argChecks[cmpOp.lhs()].emplace_back(
+                Interval{i, std::nullopt, v + 1});
           else
             argChecks[cmpOp.lhs()].emplace_back(Interval{i, v - 1, v + 1});
           continue;
