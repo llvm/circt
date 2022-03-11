@@ -424,10 +424,10 @@ private:
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
 
-  void lowerModuleBody(FModuleOp oldModule,
-                       CircuitLoweringState &loweringState);
-  void lowerModuleOperations(hw::HWModuleOp module,
-                             CircuitLoweringState &loweringState);
+  LogicalResult lowerModuleBody(FModuleOp oldModule,
+                                CircuitLoweringState &loweringState);
+  LogicalResult lowerModuleOperations(hw::HWModuleOp module,
+                                      CircuitLoweringState &loweringState);
 
   void lowerMemoryDecls(ArrayRef<FirMemory> mems,
                         CircuitLoweringState &loweringState);
@@ -491,17 +491,23 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
-  // FModule's we come across.
+  // FModule's we come across. If any module fails to lower, return early.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
     TypeSwitch<Operation *>(&op)
         .Case<FModuleOp>([&](auto module) {
-          state.oldToNewModuleMap[&op] =
-              lowerModule(module, topLevelModule, state);
+          auto loweredMod = lowerModule(module, topLevelModule, state);
+          if (!loweredMod)
+            return signalPassFailure();
+
+          state.oldToNewModuleMap[&op] = loweredMod;
           modulesToProcess.push_back(module);
         })
         .Case<FExtModuleOp>([&](auto extModule) {
-          state.oldToNewModuleMap[&op] =
-              lowerExtModule(extModule, topLevelModule, state);
+          auto loweredExtMod = lowerExtModule(extModule, topLevelModule, state);
+          if (!loweredExtMod)
+            return signalPassFailure();
+
+          state.oldToNewModuleMap[&op] = loweredExtMod;
         })
         .Case<NonLocalAnchor>([&](auto nla) {
           // Just drop it.
@@ -512,6 +518,8 @@ void FIRRTLModuleLowering::runOnOperation() {
           // the operation from the circuit.
           if (succeeded(verifyOpLegality(op)))
             op->moveBefore(topLevelModule, topLevelModule->end());
+          else
+            return signalPassFailure();
         });
   }
 
@@ -550,9 +558,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that we've lowered all of the modules, move the bodies over and
   // update any instances that refer to the old modules.
-  mlir::parallelForEachN(
-      &getContext(), 0, modulesToProcess.size(),
-      [&](auto index) { lowerModuleBody(modulesToProcess[index], state); });
+  auto result = mlir::failableParallelForEachN(
+      &getContext(), 0, modulesToProcess.size(), [&](auto index) {
+        return lowerModuleBody(modulesToProcess[index], state);
+      });
+
+  // If any module bodies failed to lower, return early.
+  if (failed(result))
+    return signalPassFailure();
 
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {
@@ -1138,13 +1151,14 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
 /// Now that we have the operations for the hw.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
 /// ports and instances.
-void FIRRTLModuleLowering::lowerModuleBody(
-    FModuleOp oldModule, CircuitLoweringState &loweringState) {
+LogicalResult
+FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
+                                      CircuitLoweringState &loweringState) {
   auto newModule =
       dyn_cast_or_null<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
   // Don't touch modules if we failed to lower ports.
   if (!newModule)
-    return;
+    return success();
 
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.body());
 
@@ -1233,7 +1247,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   cursor.erase();
 
   // Lower all of the other operations.
-  lowerModuleOperations(newModule, loweringState);
+  return lowerModuleOperations(newModule, loweringState);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1267,7 +1281,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
         builder(module.getLoc(), module.getContext()),
         moduleNamespace(MixedModuleNamespace(module)) {}
 
-  void run();
+  LogicalResult run();
 
   void optimizeTemporaryWire(sv::WireOp wire);
 
@@ -1513,13 +1527,13 @@ private:
 };
 } // end anonymous namespace
 
-void FIRRTLModuleLowering::lowerModuleOperations(
+LogicalResult FIRRTLModuleLowering::lowerModuleOperations(
     hw::HWModuleOp module, CircuitLoweringState &loweringState) {
-  FIRRTLLowering(module, loweringState).run();
+  return FIRRTLLowering(module, loweringState).run();
 }
 
 // This is the main entrypoint for the lowering pass.
-void FIRRTLLowering::run() {
+LogicalResult FIRRTLLowering::run() {
   // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
   // through each operation, lowering each in turn if we can, introducing
   // casts if we cannot.
@@ -1545,9 +1559,7 @@ void FIRRTLLowering::run() {
         opsToRemove.push_back(&op);
         break;
       case LoweringFailure:
-        // If lowering failed, don't remove *anything* we've lowered so far,
-        // there may be uses, and the pass will fail anyway.
-        opsToRemove.clear();
+        return failure();
       }
     }
   }
@@ -1566,6 +1578,8 @@ void FIRRTLLowering::run() {
   // inserted by MemOp insertions.
   for (auto wire : tmpWiresToOptimize)
     optimizeTemporaryWire(wire);
+
+  return success();
 }
 
 // Try to optimize out temporary wires introduced during lowering.
