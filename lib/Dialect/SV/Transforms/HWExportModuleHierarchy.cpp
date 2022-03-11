@@ -86,7 +86,7 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 
   llvm::errs() << "!starting\n";
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
-    auto attr =  op->getAttrOfType<ArrayAttr>("firrtl.moduleHierarchyFile");
+    auto attr = op->getAttrOfType<ArrayAttr>("firrtl.moduleHierarchyFile");
     if (!attr)
       continue;
     for (auto file : attr.getAsRange<hw::OutputFileAttr>()) {
