@@ -422,6 +422,132 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addRegion();
 }
 
+/// Internal implementation of argument/result insertion and removal on modules.
+static void modifyModuleArgs(
+    MLIRContext *context, ArrayRef<std::pair<unsigned, PortInfo>> insertArgs,
+    ArrayRef<unsigned> removeArgs, ArrayRef<Attribute> oldArgNames,
+    ArrayRef<Type> oldArgTypes, ArrayRef<Attribute> oldArgAttrs,
+    SmallVector<Attribute> &newArgNames, SmallVector<Type> &newArgTypes,
+    SmallVector<Attribute> &newArgAttrs) {
+
+#ifndef NDEBUG
+  // Check that the `insertArgs` and `removeArgs` indices are in ascending
+  // order.
+  assert(llvm::is_sorted(insertArgs,
+                         [](auto &a, auto &b) { return a.first < b.first; }) &&
+         "insertArgs must be in ascending order");
+  assert(llvm::is_sorted(removeArgs, [](auto &a, auto &b) { return a < b; }) &&
+         "removeArgs must be in ascending order");
+#endif
+
+  auto oldArgCount = oldArgTypes.size();
+  auto newArgCount = oldArgCount + insertArgs.size() - removeArgs.size();
+  assert((int)newArgCount >= 0);
+
+  newArgNames.reserve(newArgCount);
+  newArgTypes.reserve(newArgCount);
+  newArgAttrs.reserve(newArgCount);
+
+  auto exportPortAttrName = StringAttr::get(context, "hw.exportPort");
+  auto emptyDictAttr = DictionaryAttr::get(context, {});
+
+  for (unsigned argIdx = 0; argIdx <= oldArgCount; ++argIdx) {
+    // Insert new ports at this position.
+    while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
+      auto port = insertArgs[0].second;
+      if (port.direction == PortDirection::INOUT && !port.type.isa<InOutType>())
+        port.type = InOutType::get(port.type);
+      Attribute attr =
+          (port.sym && !port.sym.getValue().empty())
+              ? DictionaryAttr::get(
+                    context,
+                    {{exportPortAttrName, FlatSymbolRefAttr::get(port.sym)}})
+              : emptyDictAttr;
+      newArgNames.push_back(port.name);
+      newArgTypes.push_back(port.type);
+      newArgAttrs.push_back(attr);
+      insertArgs = insertArgs.drop_front();
+    }
+    if (argIdx == oldArgCount)
+      break;
+
+    // Migrate the old port at this position.
+    bool removed = false;
+    while (!removeArgs.empty() && removeArgs[0] == argIdx) {
+      removeArgs = removeArgs.drop_front();
+      removed = true;
+    }
+    if (!removed) {
+      newArgNames.push_back(oldArgNames[argIdx]);
+      newArgTypes.push_back(oldArgTypes[argIdx]);
+      newArgAttrs.push_back(oldArgAttrs.empty() ? emptyDictAttr
+                                                : oldArgAttrs[argIdx]);
+    }
+  }
+
+  assert(newArgNames.size() == newArgCount);
+  assert(newArgTypes.size() == newArgCount);
+  assert(newArgAttrs.size() == newArgCount);
+}
+
+/// Insert and remove ports of a module. The insertion and removal indices must
+/// be in ascending order. The indices refer to the port positions before any
+/// insertion or removal occurs. Ports inserted at the same index will appear in
+/// the module in the same order as they were listed in the `insert*` array.
+///
+/// The operation must be any of the module-like operations.
+void hw::modifyModulePorts(
+    Operation *op, ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+    ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs) {
+  auto moduleOp = cast<mlir::FunctionOpInterface>(op);
+
+  FunctionType type = moduleOp.getType().cast<FunctionType>();
+  auto arrayOrEmpty = [](ArrayAttr attr) {
+    return attr ? attr.getValue() : ArrayRef<Attribute>{};
+  };
+
+  // Dig up the old argument and result data.
+  ArrayRef<Attribute> oldArgNames =
+      moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
+  ArrayRef<Type> oldArgTypes = type.getInputs();
+  ArrayRef<Attribute> oldArgAttrs =
+      arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
+          mlir::function_interface_impl::getArgDictAttrName()));
+
+  ArrayRef<Attribute> oldResultNames =
+      moduleOp->getAttrOfType<ArrayAttr>("resultNames").getValue();
+  ArrayRef<Type> oldResultTypes = type.getResults();
+  ArrayRef<Attribute> oldResultAttrs =
+      arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
+          mlir::function_interface_impl::getResultDictAttrName()));
+
+  // Modify the ports.
+  SmallVector<Attribute> newArgNames, newResultNames;
+  SmallVector<Type> newArgTypes, newResultTypes;
+  SmallVector<Attribute> newArgAttrs, newResultAttrs;
+
+  modifyModuleArgs(moduleOp.getContext(), insertInputs, removeInputs,
+                   oldArgNames, oldArgTypes, oldArgAttrs, newArgNames,
+                   newArgTypes, newArgAttrs);
+
+  modifyModuleArgs(moduleOp.getContext(), insertOutputs, removeOutputs,
+                   oldResultNames, oldResultTypes, oldResultAttrs,
+                   newResultNames, newResultTypes, newResultAttrs);
+
+  // Update the module operation types and attributes.
+  moduleOp.setType(
+      FunctionType::get(moduleOp.getContext(), newArgTypes, newResultTypes));
+  moduleOp->setAttr("argNames",
+                    ArrayAttr::get(moduleOp.getContext(), newArgNames));
+  moduleOp->setAttr("resultNames",
+                    ArrayAttr::get(moduleOp.getContext(), newResultNames));
+  moduleOp->setAttr(mlir::function_interface_impl::getArgDictAttrName(),
+                    ArrayAttr::get(moduleOp.getContext(), newArgAttrs));
+  moduleOp->setAttr(mlir::function_interface_impl::getResultDictAttrName(),
+                    ArrayAttr::get(moduleOp.getContext(), newResultAttrs));
+}
+
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
                        ArrayAttr parameters,
@@ -448,6 +574,14 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr comment) {
   build(builder, result, name, ModulePortInfo(ports), parameters, attributes,
         comment);
+}
+
+void HWModuleOp::modifyPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                        eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -486,6 +620,14 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
         attributes);
 }
 
+void HWModuleExternOp::modifyPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                        eraseOutputs);
+}
+
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 const ModulePortInfo &ports,
@@ -504,6 +646,14 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 ArrayRef<NamedAttribute> attributes) {
   build(builder, result, genKind, name, ModulePortInfo(ports), verilogName,
         parameters, attributes);
+}
+
+void HWModuleGeneratedOp::modifyPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+    ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
+  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                        eraseOutputs);
 }
 
 /// Return an encapsulated set of information about input and output ports of
