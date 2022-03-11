@@ -1330,7 +1330,7 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
       newInputs.push_back(inputs[i]);
 
   for (auto &&op : newOperands)
-    newInputs.push_back(std::move(op));
+    newInputs.push_back(op);
 
   if (newInputs.size() == 1)
     rewriter.replaceOp(op, newInputs[0]);
