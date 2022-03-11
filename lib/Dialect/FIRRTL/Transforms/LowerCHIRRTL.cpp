@@ -44,6 +44,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
+  void visitStmt(StrictConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitUnhandledOp(Operation *op);
 
@@ -121,6 +122,13 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
 };
 } // end anonymous namespace
 
+static void mkConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
+  if (dst.getType() == src.getType())
+    builder.create<StrictConnectOp>(dst, src);
+  else
+    builder.create<ConnectOp>(dst, src);
+}
+
 /// Performs the callback for each leaf element of a value.  This will create
 /// any subindex and subfield operations needed to access the leaf values of the
 /// aggregate value.
@@ -144,7 +152,7 @@ static void forEachLeaf(ImplicitLocOpBuilder &builder, Value value,
 static void connectLeafsTo(ImplicitLocOpBuilder &builder, Value bundle,
                            Value value) {
   forEachLeaf(builder, bundle,
-              [&](Value leaf) { builder.create<ConnectOp>(leaf, value); });
+              [&](Value leaf) { mkConnect(builder, leaf, value); });
 }
 
 /// Connect each leaf of an aggregate type to invalid.  This does not support
@@ -156,7 +164,7 @@ void LowerCHIRRTLPass::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
     auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
     invalid = builder.create<InvalidValueOp>(getOperation().getLoc(), type);
   }
-  builder.create<ConnectOp>(value, invalid);
+  mkConnect(builder, value, invalid);
 }
 
 /// Converts a CHIRRTL memory port direction to a MemoryOp port type.  The
@@ -241,6 +249,12 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
         // Otherwise we are reading from a memory for the index.
         element.mode |= MemDirAttr::Read;
       } else if (auto connectOp = dyn_cast<ConnectOp>(user)) {
+        if (use.get() == connectOp.dest()) {
+          element.mode |= MemDirAttr::Write;
+        } else {
+          element.mode |= MemDirAttr::Read;
+        }
+      } else if (auto connectOp = dyn_cast<StrictConnectOp>(user)) {
         if (use.get() == connectOp.dest()) {
           element.mode |= MemDirAttr::Write;
         } else {
@@ -362,7 +376,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto address = memBuilder.create<SubfieldOp>(memoryPort, "addr");
     emitInvalid(memBuilder, address);
     auto enable = memBuilder.create<SubfieldOp>(memoryPort, "en");
-    memBuilder.create<ConnectOp>(enable, getConst(0));
+    mkConnect(memBuilder, enable, getConst(0));
     auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
@@ -375,13 +389,12 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
         addressLHS.getBitWidthOrSentinel() < addressRHS.getBitWidthOrSentinel())
       portBuilder.create<PartialConnectOp>(address, cmemoryPortAccess.index());
     else
-      portBuilder.create<ConnectOp>(address, cmemoryPortAccess.index());
+      mkConnect(portBuilder, address, cmemoryPortAccess.index());
     // Sequential+Read ports have a more complicated "enable inference".
     // Everything else sets the enable to true.
-    if (!(portKind == MemOp::PortKind::Read && isSequential)) {
-      portBuilder.create<ConnectOp>(enable, getConst(1));
-    }
-    portBuilder.create<ConnectOp>(clock, cmemoryPortAccess.clock());
+    if (!(portKind == MemOp::PortKind::Read && isSequential))
+      mkConnect(portBuilder, enable, getConst(1));
+    mkConnect(portBuilder, clock, cmemoryPortAccess.clock());
 
     if (portKind == MemOp::PortKind::Read) {
       // Store the read information for updating subfield ops.
@@ -403,7 +416,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       // Initialization at the MemoryOp.
       auto rdata = memBuilder.create<SubfieldOp>(memoryPort, "rdata");
       auto wmode = memBuilder.create<SubfieldOp>(memoryPort, "wmode");
-      memBuilder.create<ConnectOp>(wmode, getConst(0));
+      mkConnect(memBuilder, wmode, getConst(0));
       auto wdata = memBuilder.create<SubfieldOp>(memoryPort, "wdata");
       emitInvalid(memBuilder, wdata);
       auto wmask = memBuilder.create<SubfieldOp>(memoryPort, "wmask");
@@ -441,6 +454,10 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
                 if (cmemoryPortAccess.index() == connectOp.dest())
                   return !dyn_cast_or_null<InvalidValueOp>(
                       connectOp.src().getDefiningOp());
+              } else if (auto connectOp = dyn_cast<StrictConnectOp>(op)) {
+                if (cmemoryPortAccess.index() == connectOp.dest())
+                  return !dyn_cast_or_null<InvalidValueOp>(
+                      connectOp.src().getDefiningOp());
               } else if (auto pConnectOp = dyn_cast<PartialConnectOp>(op)) {
                 if (cmemoryPortAccess.index() == pConnectOp.dest())
                   return !dyn_cast_or_null<InvalidValueOp>(
@@ -451,15 +468,15 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
         // At each location where we drive a value to the index, set the enable.
         for (auto *driver : drivers) {
-          OpBuilder(driver).create<ConnectOp>(driver->getLoc(), enable,
-                                              getConst(1));
+          OpBuilder(driver).create<StrictConnectOp>(driver->getLoc(), enable,
+                                                    getConst(1));
           success = true;
         }
       } else if (isa<NodeOp>(indexOp)) {
         // If using a Node for the address, then the we place the enable at the
         // Node op's
-        OpBuilder(indexOp).create<ConnectOp>(indexOp->getLoc(), enable,
-                                             getConst(1));
+        OpBuilder(indexOp).create<StrictConnectOp>(indexOp->getLoc(), enable,
+                                                   getConst(1));
         success = true;
       }
 
@@ -502,7 +519,30 @@ void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
     connectLeafsTo(builder, writeData.mask, getConst(1));
     // Only ReadWrite memories have a write mode.
     if (writeData.mode)
-      builder.create<ConnectOp>(writeData.mode, getConst(1));
+      mkConnect(builder, writeData.mode, getConst(1));
+  }
+  // Check if we are reading from a memory and, if we are, replace the
+  // source.
+  auto readIt = rdataValues.find(connect.src());
+  if (readIt != rdataValues.end()) {
+    auto newSource = readIt->second;
+    connect.srcMutable().assign(newSource);
+  }
+}
+
+void LowerCHIRRTLPass::visitStmt(StrictConnectOp connect) {
+  // Check if we are writing to a memory and, if we are, replace the
+  // destination.
+  auto writeIt = wdataValues.find(connect.dest());
+  if (writeIt != wdataValues.end()) {
+    auto writeData = writeIt->second;
+    connect.destMutable().assign(writeData.data);
+    // Assign the write mask.
+    ImplicitLocOpBuilder builder(connect.getLoc(), connect);
+    connectLeafsTo(builder, writeData.mask, getConst(1));
+    // Only ReadWrite memories have a write mode.
+    if (writeData.mode)
+      mkConnect(builder, writeData.mode, getConst(1));
   }
   // Check if we are reading from a memory and, if we are, replace the
   // source.
@@ -572,7 +612,7 @@ void LowerCHIRRTLPass::emitPartialConnectMask(
   } else {
     // Connect the mask to 1, forcing the creation of any required subfield and
     // subindex operations.
-    builder.create<ConnectOp>(getSubaccess(builder), getConst(1));
+    mkConnect(builder, getSubaccess(builder), getConst(1));
   }
 }
 
@@ -597,7 +637,7 @@ void LowerCHIRRTLPass::visitStmt(PartialConnectOp partialConnect) {
     // Only ReadWrite memories have a write mode, so this field can sometimes be
     // null.
     if (writeData.mode)
-      builder.create<ConnectOp>(writeData.mode, getConst(1));
+      mkConnect(builder, writeData.mode, getConst(1));
   }
 
   // Check if we are reading from a memory and, if we are, replace the

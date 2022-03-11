@@ -768,3 +768,12 @@ firrtl.circuit "Top"   {
   }
 }
 
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.module @Top (in %in : !firrtl.uint) {
+    %a = firrtl.wire : !firrtl.uint
+    // expected-error @+1 {{op operand #0 must be a sized type}}
+    firrtl.strictconnect %a, %in : !firrtl.uint
+  }
+}

@@ -91,7 +91,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     _t <- _t_2
 
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.uint<1>, !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
     auto is invalid
 
     ; CHECK-NOT: firrtl.attach %a1
@@ -101,7 +101,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     skip  @[SKipLoc.scala 42:24]
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.uint<1>, !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
     auto is invalid
 
     ; CHECK-NOT: firrtl.connect %reset
@@ -550,13 +550,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; Check that invalidation reuses subfields
     wire w: {a: UInt<1>}[1]
-    ; CHECK: %1 = firrtl.subindex %w[0]
-    ; CHECK: %2 = firrtl.subfield %1(0)
-    ; CHECK: %invalid_ui1 = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %2, %invalid_ui1
+    ; CHECK: %invalid = firrtl.invalidvalue : !firrtl.vector<bundle<a: uint<1>>, 1>
+    ; CHECK: firrtl.strictconnect %w, %invalid
     w is invalid
-    ; CHECK: %invalid_ui1_0 = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %2, %invalid_ui1_0
+    ; CHECK: %invalid_0 = firrtl.invalidvalue : !firrtl.vector<bundle<a: uint<1>>, 1>
+    ; CHECK: firrtl.strictconnect %w, %invalid_0
     w is invalid
 
   ; CHECK-LABEL: firrtl.module @flip_one
@@ -696,7 +694,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in2 : { a : UInt<1>, flip b : UInt<1>}
     ; CHECK: [[IN2_B:%.+]] = firrtl.subfield %in2(1)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[IN2_B]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[IN2_B]], [[INV]]
     in2 is invalid
 
   module CheckInvalids_in3 :
@@ -704,30 +702,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[IN3_A:%.+]] = firrtl.subfield %in3(0)
     ; CHECK: [[IN3_A_C:%.+]] = firrtl.subfield [[IN3_A]](1)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[IN3_A_C]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[IN3_A_C]], [[INV]]
     in3 is invalid
 
   module CheckInvalids_out0 :
     output out0 : UInt<1>
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %out0, [[INV]]
+    ; CHECK: firrtl.strictconnect %out0, [[INV]]
     out0 is invalid
 
   module CheckInvalids_out1 :
     output out1 : { a : UInt<1>, b : UInt<1> }
-    ; CHECK: [[OUT1_B:%.+]] = firrtl.subfield %out1(1)
-    ; CHECK: [[OUT1_A:%.+]] = firrtl.subfield %out1(0)
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[OUT1_A]], [[INV]]
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[OUT1_B]], [[INV]]
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<1>> 
+    ; CHECK: firrtl.strictconnect %out1, [[INV]]
     out1 is invalid
 
   module CheckInvalids_out2 :
     output out2 : { a : UInt<1>, flip b : UInt<1>}
     ; CHECK: [[OUT2_A:%.+]] = firrtl.subfield %out2(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[OUT2_A]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[OUT2_A]], [[INV]]
     out2 is invalid
 
   module CheckInvalids_out3 :
@@ -735,13 +729,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[OUT3_A:%.+]] = firrtl.subfield %out3(0)
     ; CHECK: [[OUT3_A_B:%.+]] = firrtl.subfield [[OUT3_A]](0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[OUT3_A_B]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[OUT3_A_B]], [[INV]]
     out3 is invalid
 
   module CheckInvalids_wires :
     ; CHECK: %wire0 = firrtl.wire
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %wire0, [[INV]]
+    ; CHECK: firrtl.strictconnect %wire0, [[INV]]
     wire wire0 : UInt<1>
     wire0 is invalid
 
@@ -749,9 +743,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[WIRE1_B:%.+]] = firrtl.subfield %wire1(1)
     ; CHECK: [[WIRE1_A:%.+]] = firrtl.subfield %wire1(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[WIRE1_A]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[WIRE1_A]], [[INV]]
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[WIRE1_B]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[WIRE1_B]], [[INV]]
     wire wire1 : {a : UInt<1>, flip b : UInt<1> }
     wire1 is invalid
 
@@ -761,7 +755,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[WIRE2_X_B:%.+]] = firrtl.subfield [[WIRE2_X]](1)
     ; CHECK: [[WIRE2_X_A:%.+]] = firrtl.subfield [[WIRE2_X]](0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[WIRE2_X_A]], [[INV]]
+    ; CHECK: firrtl.strictconnect [[WIRE2_X_A]], [[INV]]
     ; CHECK-NOT: firrtl.attach [[WIRE2_X_B]], [[INV]]
     wire wire2 : {x : {flip a : UInt<1>, flip b: Analog<1> } }
     wire2 is invalid
@@ -770,11 +764,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance U0 @mod_0_563
     inst U0 of mod_0_563
 
-    ; CHECK: [[U0_IN1_A:%.+]] = firrtl.subfield %U0_in1(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %U0_in0, [[INV]]
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect [[U0_IN1_A]], [[INV]]
+    ; CHECK: firrtl.strictconnect %U0_in0, [[INV]]
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.bundle<a: uint<5>> 
+    ; CHECK: firrtl.strictconnect %U0_in1, [[INV]]
     U0 is invalid
 
   ; This reference is declared after its first use.

@@ -77,6 +77,13 @@ struct NlaNameNewSym {
 };
 } // end anonymous namespace
 
+static void mkConnect(ImplicitLocOpBuilder *builder, Value dst, Value src) {
+  if (dst.getType() == src.getType())
+    builder->create<StrictConnectOp>(dst, src);
+  else
+    builder->create<ConnectOp>(dst, src);
+}
+
 /// Return true if the type has more than zero bitwidth.
 static bool hasZeroBitWidth(FIRRTLType type) {
   return TypeSwitch<FIRRTLType, bool>(type)
@@ -333,6 +340,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
   bool visitStmt(ConnectOp op);
+  bool visitStmt(StrictConnectOp op);
   bool visitStmt(PartialConnectOp op);
   bool visitStmt(WhenOp op);
 
@@ -644,6 +652,8 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       sfo.replaceAllUsesWith(repl);
       sfo.erase();
     } else {
+      val.dump();
+      val.getDefiningOp()->getParentOfType<FModuleOp>()->dump();
       llvm_unreachable("Unknown aggregate user");
     }
   }
@@ -752,8 +762,9 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
       for (int i = writePath.size() - 2; i >= 0; --i)
         leaf = cloneAccess(builder, writePath[i], leaf);
 
-      if (isa<ConnectOp>(op))
-        builder->create<ConnectOp>(leaf, op->getOperand(1));
+      if (isa<ConnectOp, StrictConnectOp>(op) ||
+          leaf.getType() == op->getOperand(1).getType())
+        mkConnect(builder, leaf, op->getOperand(1));
       else
         builder->create<PartialConnectOp>(leaf, op->getOperand(1));
     });
@@ -781,8 +792,36 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
       std::swap(src, dest);
     if (src.getType().isa<AnalogType>())
       builder->create<AttachOp>(ArrayRef<Value>{dest, src});
+    else {
+      mkConnect(builder, dest, src);
+    }
+  }
+  return true;
+}
+
+// Expand connects of aggregates
+bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
+  if (processSAPath(op))
+    return true;
+
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+
+  // We have to expand connections even if the aggregate preservation is true.
+  if (!peelType(op.dest().getType(), fields,
+                /* allowedToPreserveAggregate */ false))
+    return false;
+
+  // Loop over the leaf aggregates.
+  for (auto field : llvm::enumerate(fields)) {
+    Value src = getSubWhatever(op.src(), field.index());
+    Value dest = getSubWhatever(op.dest(), field.index());
+    if (field.value().isOutput)
+      std::swap(src, dest);
+    if (src.getType().isa<AnalogType>())
+      builder->create<AttachOp>(ArrayRef<Value>{dest, src});
     else
-      builder->create<ConnectOp>(dest, src);
+      builder->create<StrictConnectOp>(dest, src);
   }
   return true;
 }
@@ -810,7 +849,7 @@ bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
     auto destWidth = destType.getBitWidthOrSentinel();
 
     if (destType == srcType) {
-      builder->create<ConnectOp>(dest, src);
+      builder->create<StrictConnectOp>(dest, src);
       return true;
     }
 
@@ -830,7 +869,7 @@ bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
       // Need to extend arg
       src = builder->create<PadPrimOp>(src, destWidth);
     }
-    builder->create<ConnectOp>(dest, src);
+    mkConnect(builder, dest, src);
     return true;
   }
 
@@ -841,7 +880,7 @@ bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
       Value src = builder->create<SubindexOp>(op.src(), index);
       Value dest = builder->create<SubindexOp>(op.dest(), index);
       if (src.getType() == dest.getType())
-        builder->create<ConnectOp>(dest, src);
+        builder->create<StrictConnectOp>(dest, src);
       else
         builder->create<PartialConnectOp>(dest, src);
     }
@@ -862,7 +901,7 @@ bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
           if (src.getType().isa<AnalogType>())
             builder->create<AttachOp>(ArrayRef<Value>{dest, src});
           else if (src.getType() == dest.getType())
-            builder->create<ConnectOp>(dest, src);
+            builder->create<StrictConnectOp>(dest, src);
           else
             builder->create<PartialConnectOp>(dest, src);
           break;
@@ -1033,7 +1072,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
             newField = builder->createOrFold<BitCastOp>(
                 oldField.getType().cast<FIRRTLType>(), newField);
             // Write the aggregate read data.
-            builder->create<ConnectOp>(realOldField, newField);
+            mkConnect(builder, realOldField, newField);
           } else {
             // Cast the input aggregate write data to flat type.
             realOldField = builder->create<BitCastOp>(
@@ -1059,10 +1098,9 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
             }
             // Now set the mask or write data.
             // Ensure that the types match.
-            builder->create<ConnectOp>(
-                newField,
-                builder->createOrFold<BitCastOp>(
-                    newField.getType().cast<FIRRTLType>(), realOldField));
+            mkConnect(builder, newField,
+                      builder->createOrFold<BitCastOp>(
+                          newField.getType().cast<FIRRTLType>(), realOldField));
           }
         } else {
           for (auto field : fields) {
@@ -1071,14 +1109,14 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
                 newMemories[field.index].getResult(index), fieldIndex);
             if (rType.getElement(fieldIndex).isFlip)
               std::swap(realOldField, newField);
-            builder->create<ConnectOp>(newField, realOldField);
+            mkConnect(builder, newField, realOldField);
           }
         }
       } else {
         for (auto mem : newMemories) {
           auto newField =
               builder->create<SubfieldOp>(mem.getResult(index), fieldIndex);
-          builder->create<ConnectOp>(newField, oldField);
+          mkConnect(builder, newField, oldField);
         }
       }
     }

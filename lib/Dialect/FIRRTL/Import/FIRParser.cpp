@@ -1636,7 +1636,17 @@ private:
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   auto tpe = val.getType().cast<FIRRTLType>();
 
-  // Recurse until we hit leaves.  Connect any leaves which have sink or
+  if (tpe.isPassive()) {
+    if (flow == Flow::Source || tpe.isa<AnalogType>())
+      return;
+    if (tpe.hasUninferredWidth())
+      builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
+    else
+      builder.create<StrictConnectOp>(val, builder.create<InvalidValueOp>(tpe));
+    return;
+  }
+
+  // Recurse until we hit passive leaves.  Connect any leaves which have sink or
   // duplex flow.
   //
   // TODO: This is very similar to connect expansion in the LowerTypes pass
@@ -1667,13 +1677,6 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
           }
           emitInvalidate(subindex, flow);
         }
-      })
-      // Drop invalidation of analog.
-      .Case<AnalogType>([](auto) {})
-      // Invalidate any sink or duplex flow ground types.
-      .Default([&](auto tpe) {
-        if (flow != Flow::Source)
-          builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
       });
 }
 

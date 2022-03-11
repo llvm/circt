@@ -39,6 +39,11 @@ def BundleType : DialectType<FIRRTLDialect, CPred<"$_self.isa<BundleType>()">,
 def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
+def SizedType : DialectType<FIRRTLDialect,
+    CPred<"$_self.isa<FIRRTLType>() && "
+          "!$_self.cast<FIRRTLType>().hasUninferredWidth()">,
+    "a sized type (contains no unifered widths)", "::circt::firrtl::FIRRTLType">;
+
 def UInt1Type : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<UIntType>() && "
           "($_self.cast<UIntType>().getWidth() == 1 ||"
