@@ -3161,7 +3161,7 @@ ParseResult FIRStmtParser::parseWire() {
   // TODO: Change this once the FIRRTL spec supports "named" vs. "unnamed"
   // wires.
   if (isNamed) {
-    if (type.isNonAnalogPassive())
+    if (type.isPassive())
       builder.create<NodeOp>(
           type, result, id, getConstants().emptyArrayAttr,
           StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));

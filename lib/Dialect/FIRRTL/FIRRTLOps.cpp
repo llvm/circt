@@ -1985,13 +1985,17 @@ static LogicalResult verifyRegResetOp(RegResetOp op) {
   FIRRTLType resetType = reset.getType().cast<FIRRTLType>();
   FIRRTLType regType = op.getResult().getType().cast<FIRRTLType>();
 
-  // The FIRRTL specification is unclear about the relationship between the
-  // reset and the register type, mentioning they must 'match'. The FIRRTL
-  // compiler expects the types to be equivalent, without comparing integer
-  // widths. In practice, both truncation and extension is allowed.
+  // The type of the initialiser must be equivalent to the register type.
   if (!areTypesEquivalent(resetType, regType))
     return op.emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
+
+  // The width of the register must match the width of the initialiser.
+  int32_t regWidth = regType.getPassiveType().getBitWidthOrSentinel();
+  int32_t resetWidth = resetType.getPassiveType().getBitWidthOrSentinel();
+  if (regWidth > -1 && resetWidth > -1 && regWidth < resetWidth)
+    return op.emitError("register width ")
+           << regWidth << " does not match initialiser width  " << resetWidth;
 
   return success();
 }
