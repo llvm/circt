@@ -84,7 +84,6 @@ void HWExportModuleHierarchyPass::runOnOperation() {
   Optional<SymbolTable> symbolTable = None;
   bool directoryCreated = false;
 
-  llvm::errs() << "!starting\n";
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
     auto attr = op->getAttrOfType<ArrayAttr>("firrtl.moduleHierarchyFile");
     if (!attr)
