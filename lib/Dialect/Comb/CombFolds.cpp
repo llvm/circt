@@ -1118,62 +1118,6 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
   return true;
 }
 
-namespace {
-// x == value
-struct EqCheck {
-  APInt value;
-};
-// start < x < end
-struct RangeCheck {
-  APInt start;
-  APInt end;
-};
-// x < value
-struct BoundCheck {
-  APInt value;
-};
-
-// Wrapper around the recognised checks.
-struct AnyCheck {
-  /// Index of the input from which the check was extracted.
-  unsigned index;
-  /// Union of the possible checks.
-  std::variant<RangeCheck, EqCheck, BoundCheck> check;
-
-  template <typename T>
-  AnyCheck(unsigned index, T &&t) : index(index), check(std::forward<T>(t)) {}
-
-  // Find an 'n' such that 'n < x' for any 'x' matching the check. If 0 is part
-  // of any of the checks, nullopt is returned to represent -1.
-  std::optional<APInt> lowerBound() const {
-    if (const auto *eq = std::get_if<EqCheck>(&check)) {
-      if (eq->value.isZero())
-        return std::nullopt;
-      return eq->value - 1;
-    }
-    if (const auto *range = std::get_if<RangeCheck>(&check))
-      return range->start;
-    if (const auto *bound = std::get_if<BoundCheck>(&check))
-      return std::nullopt;
-    llvm_unreachable("unknown check");
-  }
-
-  // Find an 'n' such that 'x < n' for any 'x' matching the check.
-  APInt upperBound() const {
-    if (const auto *eq = std::get_if<EqCheck>(&check))
-      return eq->value + 1;
-    if (const auto *range = std::get_if<RangeCheck>(&check))
-      return range->end;
-    if (const auto *bound = std::get_if<BoundCheck>(&check))
-      return bound->value;
-    llvm_unreachable("unknown check");
-  }
-
-  /// Returns true if this is an equality check.
-  bool isEqCheck() const { return std::holds_alternative<EqCheck>(check); }
-};
-} // end anonymous namespace
-
 /// Identifies integer range checks and simplifies them to minimise comparisons.
 ///
 /// In an 'or' operation, tests of a variable belonging to a set of disjoint
@@ -1195,11 +1139,26 @@ struct AnyCheck {
 ///
 static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
 
+  // Wrapper around an operand representing an interval.
+  struct Interval {
+    /// Index of the input from which the check was extracted.
+    unsigned index;
+    /// Lower bound, if other than -1.
+    std::optional<APInt> lowerBound;
+    /// Upper bound.
+    APInt upperBound;
+
+    /// Returns true if this is an equality check.
+    bool isEqCheck() const {
+      return lowerBound ? (*lowerBound + 2 == upperBound) : upperBound.isOne();
+    }
+  };
+
   // Identify all the relevant patterns among the inputs,
   // mark all others to be retained unchanged.
   auto inputs = op.inputs();
   llvm::SmallBitVector keptOperands(inputs.size());
-  DenseMap<Value, SmallVector<AnyCheck>> argChecks;
+  DenseMap<Value, SmallVector<Interval>> argChecks;
 
   for (unsigned i = 0, n = inputs.size(); i < n; ++i) {
     auto input = inputs[i];
@@ -1219,11 +1178,11 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
           ICmpPredicate lhsPred = lhsOp.predicate();
           ICmpPredicate rhsPred = rhsOp.predicate();
           if (lhsPred == ICmpPredicate::ugt && rhsPred == ICmpPredicate::ult) {
-            argChecks[arg].emplace_back(i, RangeCheck{lhsBound, rhsBound});
+            argChecks[arg].emplace_back(Interval{i, lhsBound, rhsBound});
             continue;
           }
           if (lhsPred == ICmpPredicate::ult && rhsPred == ICmpPredicate::ugt) {
-            argChecks[arg].emplace_back(i, RangeCheck{rhsBound, lhsBound});
+            argChecks[arg].emplace_back(Interval{i, rhsBound, lhsBound});
             continue;
           }
         }
@@ -1231,16 +1190,19 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
     }
 
     if (auto cmpOp = input.getDefiningOp<ICmpOp>()) {
-      APInt value;
-      if (matchPattern(cmpOp.rhs(), m_RConstant(value))) {
+      APInt v;
+      if (matchPattern(cmpOp.rhs(), m_RConstant(v))) {
         // Find equality tests: x == n
         if (cmpOp.predicate() == ICmpPredicate::eq) {
-          argChecks[cmpOp.lhs()].emplace_back(i, EqCheck{value});
+          if (v.isZero())
+            argChecks[cmpOp.lhs()].emplace_back(Interval{i, std::nullopt, v + 1});
+          else
+            argChecks[cmpOp.lhs()].emplace_back(Interval{i, v - 1, v + 1});
           continue;
         }
         // Find upper bound tests: x < n
         if (cmpOp.predicate() == ICmpPredicate::ult) {
-          argChecks[cmpOp.lhs()].emplace_back(i, BoundCheck{value});
+          argChecks[cmpOp.lhs()].emplace_back(Interval{i, std::nullopt, v});
           continue;
         }
       }
@@ -1254,8 +1216,8 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
   for (auto &[arg, checks] : argChecks) {
     // Order the checks by their lower bounds.
     std::stable_sort(checks.begin(), checks.end(), [&](auto &lhs, auto &rhs) {
-      if (auto lowerLHS = lhs.lowerBound())
-        if (auto lowerRHS = rhs.lowerBound())
+      if (auto lowerLHS = lhs.lowerBound)
+        if (auto lowerRHS = rhs.lowerBound)
           return lowerLHS->ult(*lowerRHS);
       return false;
     });
@@ -1264,16 +1226,16 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
     for (auto *it = checks.begin(); it != checks.end();) {
       auto *begin = it++;
 
-      auto lowerBound = begin->lowerBound();
-      APInt upperBound = begin->upperBound();
+      auto lowerBound = begin->lowerBound;
+      APInt upperBound = begin->upperBound;
       auto *endCheck = begin;
       while (it != checks.end()) {
-        if (auto lowerBound = it->lowerBound()) {
+        if (auto lowerBound = it->lowerBound) {
           if (!lowerBound->ult(upperBound))
             break;
         }
 
-        APInt itBound = it->upperBound();
+        APInt itBound = it->upperBound;
         if (itBound.ugt(upperBound)) {
           upperBound = itBound;
           endCheck = it;
