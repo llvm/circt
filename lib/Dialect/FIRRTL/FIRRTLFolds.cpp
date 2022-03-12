@@ -1471,8 +1471,8 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     // Replace with constant zero.
     if (isa<InvalidValueOp>(srcValueOp)) {
       if (op.dest().getType().isa<BundleType>())
-        failure();
-      else if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
+        return failure();
+      if (op.dest().getType().isa<ClockType, AsyncResetType, ResetType>())
         replacement = rewriter.create<SpecialConstantOp>(
             op.src().getLoc(), op.dest().getType(),
             rewriter.getBoolAttr(false));
