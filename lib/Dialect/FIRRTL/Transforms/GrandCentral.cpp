@@ -1586,11 +1586,12 @@ void GrandCentralPass::runOnOperation() {
     // Error out if this returns None (indicating that the annotation annotation
     // is malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
-    VerbatimBuilder::Base verbatimData;
-    VerbatimBuilder verbatim(verbatimData);
-    verbatim +=
+    auto instanceSymbol =
         hw::InnerRefAttr::get(SymbolTable::getSymbolName(parentModule),
                               StringAttr::get(&getContext(), symbolName));
+    VerbatimBuilder::Base verbatimData;
+    VerbatimBuilder verbatim(verbatimData);
+    verbatim += instanceSymbol;
     auto iface =
         traverseBundle(bundle, bundle.getID(), bundle.getPrefix(), verbatim);
     if (!iface) {
@@ -1614,11 +1615,9 @@ void GrandCentralPass::runOnOperation() {
 
     instance->setAttr("doNotPrint", trueAttr);
     builder.setInsertionPointToStart(
-        instance->getParentOfType<ModuleOp>().getBody());
-    auto bind = builder.create<sv::BindInterfaceOp>(
-        getOperation().getLoc(),
-        SymbolRefAttr::get(builder.getContext(),
-                           instance.sym_name().getValue()));
+        instance->getParentOfType<CircuitOp>().getBody());
+    auto bind = builder.create<sv::BindInterfaceOp>(getOperation().getLoc(),
+                                                    instanceSymbol);
     bind->setAttr("output_file",
                   hw::OutputFileAttr::getFromFilename(
                       &getContext(),

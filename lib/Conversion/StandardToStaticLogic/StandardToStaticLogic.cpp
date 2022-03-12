@@ -13,7 +13,7 @@
 #include "circt/Conversion/StandardToStaticLogic.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 using namespace circt;
 using namespace staticlogic;

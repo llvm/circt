@@ -48,7 +48,7 @@ target_link_libraries(circt-opt
   MLIRMemRef
   MLIROptLib
   MLIRParser
-  MLIRStandard
+  MLIRFunc
   MLIRSupport
   MLIRTransforms
   MLIRSCF

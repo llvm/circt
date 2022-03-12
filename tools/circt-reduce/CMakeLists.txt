@@ -27,7 +27,6 @@ target_link_libraries(circt-reduce
 
   MLIRIR
   MLIRParser
-  MLIRStandard
   MLIRSupport
   MLIRTransforms
   MLIRReduceLib

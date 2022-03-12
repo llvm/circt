@@ -33,7 +33,7 @@ def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> 
     "mlir::cf::ControlFlowDialect",
     "mlir::memref::MemRefDialect",
     "mlir::scf::SCFDialect",
-    "mlir::StandardOpsDialect"
+    "mlir::func::FuncDialect"
   ];
 }
 

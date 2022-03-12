@@ -6,7 +6,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/CAPI/IR.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/SourceMgr.h"
 
@@ -60,8 +60,9 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
 
   MlirOperation module;
   if (!strcmp(Tcl_GetString(objv[1]), "MLIR"))
-    module = wrap(
-        mlir::parseSourceFile(sourceMgr, context).release().getOperation());
+    module = wrap(mlir::parseSourceFile<ModuleOp>(sourceMgr, context)
+                      .release()
+                      .getOperation());
   else if (!strcmp(Tcl_GetString(objv[1]), "FIR"))
     // TODO
     return returnErrorStr(interp, "loading FIR files is unimplemented :(");

@@ -3,5 +3,5 @@ add_circt_translation_library(CIRCTExportFIRRTL
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
-  MLIRTranslation
+  MLIRTranslateLib
 )

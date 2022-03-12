@@ -11,8 +11,9 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   CIRCTLLHD
   CIRCTComb
   CIRCTHW
-  MLIRLLVMIR
-  MLIRStandardToLLVM
+  MLIRControlFlowToLLVM
+  MLIRFuncToLLVM
+  MLIRLLVMCommonConversion
   MLIRVector
   MLIRTransforms
   MLIRReconcileUnrealizedCasts

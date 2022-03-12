@@ -15,7 +15,7 @@
 #include "Tester.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
@@ -128,7 +128,7 @@ static LogicalResult execute(MLIRContext &context) {
   // Parse the input file.
   VERBOSE(llvm::errs() << "Reading input\n");
   mlir::OwningOpRef<mlir::ModuleOp> module =
-      parseSourceFile(inputFilename, &context);
+      parseSourceFile<ModuleOp>(inputFilename, &context);
   if (!module)
     return failure();
 

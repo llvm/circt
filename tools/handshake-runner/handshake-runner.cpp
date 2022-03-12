@@ -11,13 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/SourceMgr.h"
 
@@ -61,7 +60,7 @@ int main(int argc, char **argv) {
 
   // Load the MLIR module.
   mlir::MLIRContext context;
-  context.loadDialect<StandardOpsDialect, memref::MemRefDialect,
+  context.loadDialect<func::FuncDialect, memref::MemRefDialect,
                       handshake::HandshakeDialect>();
 
   // functions feeding into HLS tools might have attributes from high(er) level
@@ -72,7 +71,7 @@ int main(int argc, char **argv) {
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
   mlir::OwningOpRef<mlir::ModuleOp> module(
-      mlir::parseSourceFile(source_mgr, &context));
+      mlir::parseSourceFile<ModuleOp>(source_mgr, &context));
   if (!module)
     return 1;
 

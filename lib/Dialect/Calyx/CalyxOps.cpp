@@ -104,7 +104,11 @@ static LogicalResult verifyNotComplexSource(Op op) {
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
-  AsmState asmState(scopeOp);
+  // CAVEAT: Since commit 27df7158fe MLIR prefers verifiers to print errors for
+  // operations in generic form, and the printer by default runs a verification.
+  // `valueName` is used in some of these verifiers where preferably the generic
+  // operand form should be used instead.
+  AsmState asmState(scopeOp, OpPrintingFlags().assumeVerified());
   v.printAsOperand(os, asmState);
   return s;
 }

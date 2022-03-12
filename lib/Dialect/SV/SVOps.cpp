@@ -1283,19 +1283,22 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
 /// Instances must be at the top level of the hw.module (or within a `ifdef)
 // and are typically at the end of it, so we scan backwards to find them.
-static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
+template <class Op>
+static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
-    if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
+    if (auto instance = dyn_cast<Op>(op)) {
       if (instance.inner_sym() &&
           instance.inner_sym().getValue() == name.getValue())
         return instance;
     }
 
     if (auto ifdef = dyn_cast<IfDefOp>(op)) {
-      if (auto result = findInstanceSymbolInBlock(name, ifdef.getThenBlock()))
+      if (auto result =
+              findInstanceSymbolInBlock<Op>(name, ifdef.getThenBlock()))
         return result;
       if (ifdef.hasElse())
-        if (auto result = findInstanceSymbolInBlock(name, ifdef.getElseBlock()))
+        if (auto result =
+                findInstanceSymbolInBlock<Op>(name, ifdef.getElseBlock()))
           return result;
     }
   }
@@ -1309,7 +1312,7 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
     return cast<hw::InstanceOp>(result.getOp());
   }
 
-  // Otherwise, resolve the instance by looking up the hw.module...
+  // Otherwise, resolve the instance by looking up the module ...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return {};
@@ -1320,8 +1323,8 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock(instance().getName(),
-                                   hwModule.getBodyBlock());
+  return findInstanceSymbolInBlock<hw::InstanceOp>(instance().getName(),
+                                                   hwModule.getBodyBlock());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
@@ -1346,18 +1349,24 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
 
 sv::InterfaceInstanceOp
 BindInterfaceOp::getReferencedInstance(const hw::SymbolCache *cache) {
-  if (cache)
-    if (auto *result = cache->getDefinition(interfaceAttr()))
-      return dyn_cast<sv::InterfaceInstanceOp>(result);
+  // If we have a cache, directly look up the referenced instance.
+  if (cache) {
+    auto result = cache->getDefinition(instance());
+    return cast<sv::InterfaceInstanceOp>(result.getOp());
+  }
 
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
+  // Otherwise, resolve the instance by looking up the module ...
+  auto *symbolTable = SymbolTable::getNearestSymbolTable(*this);
+  if (!symbolTable)
+    return {};
+  auto *parentOp =
+      lookupSymbolInNested(symbolTable, instance().getModule().getValue());
+  if (!parentOp)
+    return {};
 
-  /// Lookup the instance for the symbol.  This returns null on
-  /// invalid IR.
-  auto *inst = lookupSymbolInNested(topLevelModuleOp, interface());
-  return dyn_cast_or_null<sv::InterfaceInstanceOp>(inst);
+  // ... then look up the instance within it.
+  return findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
+      instance().getName(), &parentOp->getRegion(0).front());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.

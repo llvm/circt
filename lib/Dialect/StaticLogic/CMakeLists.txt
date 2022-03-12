@@ -13,7 +13,7 @@ add_circt_dialect_library(CIRCTStaticLogicOps
 
   LINK_LIBS PUBLIC
   MLIRArithmetic
-  MLIRStandard
+  MLIRFunc
   MLIRIR
 
   DEPENDS

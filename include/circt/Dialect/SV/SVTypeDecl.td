@@ -190,7 +190,7 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance", [Symbol]> {
+def InterfaceInstanceOp : SVOp<"interface.instance"> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -200,11 +200,13 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [Symbol]> {
   }];
 
   let arguments = (ins StrAttr:$name,
-                       OptionalAttr<SymbolNameAttr>:$sym_name);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InterfaceType : $result);
 
-  let assemblyFormat =
-    "(`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))";
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
+    `:` qualified(type($result))
+  }];
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$result), [{

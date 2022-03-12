@@ -6,8 +6,8 @@ add_circt_library(CIRCTStandardToStaticLogic
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRFunc
   MLIRPass
-  MLIRStandard
   MLIRSupport
   MLIRTransforms
   CIRCTStaticLogicOps

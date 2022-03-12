@@ -15,8 +15,7 @@ target_link_libraries(circt-translate
   PRIVATE
   ${dialect_libs}
   ${translation_libs}
-  MLIRTranslation
   MLIRIR
-  MLIRStandard
   MLIRSupport
+  MLIRTranslateLib
   )

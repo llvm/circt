@@ -16,12 +16,12 @@
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/PassRegistry.h"
-#include "mlir/Support/MlirOptMain.h"
+#include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
 
 // Defined in the test directory, no public header.
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::AffineDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
-  registry.insert<mlir::StandardOpsDialect>();
+  registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithmeticDialect>();
   registry.insert<mlir::cf::ControlFlowDialect>();
   registry.insert<mlir::scf::SCFDialect>();
@@ -60,7 +60,6 @@ int main(int argc, char **argv) {
   // Other command line options.
   circt::registerLoweringCLOptions();
 
-  return mlir::failed(
-      mlir::MlirOptMain(argc, argv, "CIRCT modular optimizer driver", registry,
-                        /*preloadDialectsInContext=*/false));
+  return mlir::failed(mlir::MlirOptMain(
+      argc, argv, "CIRCT modular optimizer driver", registry));
 }

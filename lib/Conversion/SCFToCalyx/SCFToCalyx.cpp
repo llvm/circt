@@ -1,4 +1,4 @@
-﻿//===- SCFToCalyx.cpp - SCF to Calyx pass entry point -----------*- C++ -*-===//
+//===- SCFToCalyx.cpp - SCF to Calyx pass entry point -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,8 +19,8 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -32,6 +32,7 @@ using namespace llvm;
 using namespace mlir;
 using namespace mlir::arith;
 using namespace mlir::cf;
+using namespace mlir::func;
 
 namespace circt {
 
@@ -2496,7 +2497,7 @@ public:
     target.addIllegalOp<scf::ForOp>();
 
     // Only accept std operations which we've added lowerings for
-    target.addIllegalDialect<StandardOpsDialect>();
+    target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithmeticDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,

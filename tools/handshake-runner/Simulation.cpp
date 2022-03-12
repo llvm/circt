@@ -13,11 +13,10 @@
 
 #include <list>
 
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -249,7 +248,7 @@ private:
                         std::vector<Any> &);
   LogicalResult execute(mlir::cf::CondBranchOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::ReturnOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(func::ReturnOp, std::vector<Any> &, std::vector<Any> &);
   LogicalResult execute(handshake::ReturnOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(mlir::CallOpInterface, std::vector<Any> &,
@@ -533,7 +532,7 @@ LogicalResult HandshakeExecuter::execute(mlir::cf::CondBranchOp condBranchOp,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::ReturnOp op,
+LogicalResult HandshakeExecuter::execute(func::ReturnOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &) {
   for (unsigned i = 0; i < results.size(); ++i) {
@@ -705,7 +704,7 @@ HandshakeExecuter::HandshakeExecuter(
               strat = ExecuteStrategy::Continue;
               return execute(op, inValues, outValues);
             })
-            .Case<mlir::ReturnOp>([&](auto op) {
+            .Case<func::ReturnOp>([&](auto op) {
               strat = ExecuteStrategy::Return;
               return execute(op, inValues, outValues);
             })

@@ -7,7 +7,7 @@ add_circt_library(CIRCTTransforms
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRMemRef
-  MLIRStandard
+  MLIRFunc
   MLIRSupport
   MLIRTransformUtils
 

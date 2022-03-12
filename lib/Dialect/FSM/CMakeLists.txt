@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTFSM
   MLIRFSMIncGen
 
   LINK_LIBS PUBLIC
-  MLIRStandard
   MLIRIR
+  MLIRFunc
+  MLIRArithmetic
   )
