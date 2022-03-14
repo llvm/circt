@@ -38,7 +38,7 @@ llhd.entity @empty() -> () {}
 
 llhd.entity @test_uniqueness() -> () {
   llhd.inst "inst" @empty() -> () : () -> ()
-  // expected-error @+1 {{Redefinition of instance named 'inst'!}}
+  // expected-error @+1 {{redefinition of instance named 'inst'!}}
   llhd.inst "inst" @empty() -> () : () -> ()
 }
 

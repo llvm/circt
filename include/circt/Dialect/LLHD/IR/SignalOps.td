@@ -82,6 +82,46 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
   let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
 }
 
+def LLHD_OutputOp : LLHD_Op<"output", [
+    TypesMatchWith<
+      "type of 'value' and underlying type of 'result' have to match.",
+      "value", "result", "SigType::get($_self)">
+  ]> {
+  let summary = "Introduce a new signal and drive a value onto it.";
+  let description = [{
+    The `llhd.output` operation introduces a new signal and continuously
+    drives a the given value onto it after a given time-delay. The same
+    value is used to initialize the signal in the same way as the 'init'
+    value in `llhd.sig`. An optional name can be given to the created signal.
+    This shows up, e.g., in the simulation trace.
+
+    Example:
+
+    ```mlir
+    %value = llhd.const 1 : i1
+    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %sig = llhd.output "sigName" %value after %time : i1
+
+    // is equivalent to
+
+    %value = llhd.const 1 : i1
+    %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %sig = llhd.sig "sigName" %value : i1
+    llhd.drv %sig, %value after %time : !llhd.sig<i1>
+    ```
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>: $name,
+                       LLHD_AnyUnderlyingType: $value,
+                       LLHD_TimeType: $time);
+
+  let results = (outs LLHD_AnySigType: $result);
+
+  let assemblyFormat = [{
+    ( $name^ )? $value `after` $time attr-dict `:` qualified(type($value))
+  }];
+}
+
 def LLHD_DrvOp : LLHD_Op<"drv", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'signal' have to match.",
