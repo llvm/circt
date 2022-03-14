@@ -18,7 +18,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 
 #include "capnp/schema-parser.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"

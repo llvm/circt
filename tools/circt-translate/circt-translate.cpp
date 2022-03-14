@@ -14,7 +14,7 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/InitAllTranslations.h"
 #include "mlir/Support/LogicalResult.h"
-#include "mlir/Translation.h"
+#include "mlir/Tools/mlir-translate/MlirTranslateMain.h"
 
 int main(int argc, char **argv) {
   circt::registerAllTranslations();

@@ -21,9 +21,9 @@
 #include "mlir/Dialect/Affine/LoopUtils.h"
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Dominance.h"
@@ -39,6 +39,7 @@ using namespace mlir;
 using namespace mlir::arith;
 using namespace mlir::memref;
 using namespace mlir::scf;
+using namespace mlir::func;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;

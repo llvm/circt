@@ -3,7 +3,7 @@
 func @combinational_condition() {
   %c0_i32 = arith.constant 0 : i32
   %0 = memref.alloc() : memref<8xi32>
-  // expected-error @+1 {{'staticlogic.pipeline.while' op condition must have a combinational body, found %1 = memref.load %0[%c0] : memref<8xi32>}}
+  // expected-error @+1 {{'staticlogic.pipeline.while' op condition must have a combinational body, found %3 = "memref.load"(%1, %2) : (memref<8xi32>, index) -> i32}}
   staticlogic.pipeline.while II = 1 iter_args(%arg0 = %c0_i32) : (i32) -> () {
     %c0 = arith.constant 0 : index
     %1 = memref.load %0[%c0] : memref<8xi32>
@@ -67,7 +67,7 @@ func @only_stages() {
 
 func @only_stages() {
   %false = arith.constant 0 : i1
-  // expected-error @+1 {{'staticlogic.pipeline.while' op stages may only contain 'staticlogic.pipeline.stage' or 'staticlogic.pipeline.terminator' ops, found %0 = arith.addi %arg0, %arg0 : i1}}
+  // expected-error @+1 {{'staticlogic.pipeline.while' op stages may only contain 'staticlogic.pipeline.stage' or 'staticlogic.pipeline.terminator' ops, found %1 = "arith.addi"(%arg0, %arg0) : (i1, i1) -> i1}}
   staticlogic.pipeline.while II = 1 iter_args(%arg0 = %false) : (i1) -> () {
     staticlogic.pipeline.register %arg0 : i1
   } do {

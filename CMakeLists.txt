@@ -83,16 +83,16 @@ endif ()
     set(UNITTEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/llvm/llvm/utils/unittest)
   endif()
   if (EXISTS ${UNITTEST_DIR}/googletest/include/gtest/gtest.h)
-    if (NOT TARGET gtest)
+    if (NOT TARGET llvm_gtest)
       find_package(Threads)
-      add_llvm_library(gtest
+      add_llvm_library(llvm_gtest
         ${UNITTEST_DIR}/googletest/src/gtest-all.cc
         ${UNITTEST_DIR}/googlemock/src/gmock-all.cc
         LINK_LIBS pthread
         LINK_COMPONENTS Support # llvm::raw_ostream
         BUILDTREE_ONLY
       )
-      target_include_directories(gtest
+      target_include_directories(llvm_gtest
         PUBLIC
         "${UNITTEST_DIR}/googletest/include"
         "${UNITTEST_DIR}/googlemock/include"
@@ -100,9 +100,9 @@ endif ()
         "${UNITTEST_DIR}/googletest"
         "${UNITTEST_DIR}/googlemock"
       )
-      add_llvm_library(gtest_main
+      add_llvm_library(llvm_gtest_main
         ${UNITTEST_DIR}/UnitTestMain/TestMain.cpp
-        LINK_LIBS gtest
+        LINK_LIBS llvm_gtest
         LINK_COMPONENTS Support # llvm::cl
         BUILDTREE_ONLY
       )

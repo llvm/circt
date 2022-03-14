@@ -595,15 +595,15 @@ firrtl.circuit "BindInterfaceTest"  attributes {
   }
 }
 
-// The bind is dropped in the outer module, outside the circuit.
 // CHECK: module {
-// CHECK-NEXT: sv.bind.interface @[[INTERFACE_INSTANCE_SYMBOL:.+]] {output_file
-
 // CHECK-LABEL: firrtl.circuit "BindInterfaceTest"
 
 // Annotations are removed from the circuit.
 // CHECK-NOT: annotations
 // CHECK-SAME: {
+
+// The bind is dropped inside the circuit.
+// CHECK-NEXT: sv.bind.interface <@DUT::@[[INTERFACE_INSTANCE_SYMBOL:.+]]> {output_file
 
 // Annotations are removed from the module.
 // CHECK: firrtl.module @DUT

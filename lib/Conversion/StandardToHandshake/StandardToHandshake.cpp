@@ -22,9 +22,9 @@
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
@@ -44,6 +44,7 @@
 #include <map>
 
 using namespace mlir;
+using namespace mlir::func;
 using namespace circt;
 using namespace circt::handshake;
 using namespace std;
@@ -63,7 +64,7 @@ public:
   explicit LowerFuncOpTarget(MLIRContext &context) : ConversionTarget(context) {
     loweredFuncs.clear();
     addLegalDialect<HandshakeDialect>();
-    addLegalDialect<StandardOpsDialect>();
+    addLegalDialect<FuncDialect>();
     addLegalDialect<arith::ArithmeticDialect>();
     addIllegalDialect<scf::SCFDialect>();
     addIllegalDialect<mlir::AffineDialect>();
@@ -275,7 +276,7 @@ FuncOpLowering::setControlOnlyPath(ConversionPatternRewriter &rewriter) {
   setBlockEntryControl(entryBlock, startOp->getResult(0));
 
   // Replace original return ops with new returns with additional control input
-  for (auto retOp : llvm::make_early_inc_range(f.getOps<mlir::ReturnOp>())) {
+  for (auto retOp : llvm::make_early_inc_range(f.getOps<func::ReturnOp>())) {
     rewriter.setInsertionPoint(retOp);
     SmallVector<Value, 8> operands(retOp->getOperands());
     operands.push_back(startOp->getResult(0));

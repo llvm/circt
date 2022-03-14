@@ -13,7 +13,7 @@ add_circt_library(CIRCTHandshakeToHW
   MLIRPass
   MLIRArithmetic
   MLIRControlFlow
-  MLIRStandard
+  MLIRFunc
   MLIRSupport
   MLIRTransforms
   )

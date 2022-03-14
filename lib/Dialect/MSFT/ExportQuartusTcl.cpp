@@ -22,7 +22,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/Translation.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"

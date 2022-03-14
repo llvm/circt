@@ -10,10 +10,10 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Translation.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/Support/Format.h"
 
 #include <algorithm>
@@ -186,7 +186,7 @@ void circt::esi::registerESITranslations() {
       "export-esi-capnp", exportCosimSchema,
       [](mlir::DialectRegistry &registry) {
         registry.insert<ESIDialect, circt::hw::HWDialect, circt::sv::SVDialect,
-                        mlir::StandardOpsDialect, mlir::BuiltinDialect>();
+                        mlir::func::FuncDialect, mlir::BuiltinDialect>();
       });
 #endif
 }

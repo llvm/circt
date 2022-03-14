@@ -33,7 +33,9 @@ namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM
 
-class StandardOpsDialect;
+namespace func {
+class FuncDialect;
+} // namespace func
 } // namespace mlir
 
 namespace circt {

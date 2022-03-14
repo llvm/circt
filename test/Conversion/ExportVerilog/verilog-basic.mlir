@@ -495,7 +495,7 @@ hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
   hw.output %false : i1
 }
 
-sv.bind.interface @__Interface__ {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
+sv.bind.interface <@BindInterface::@__Interface__> {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
 sv.interface @Interface {
   sv.interface.signal @a : i1
   sv.interface.signal @b : i1

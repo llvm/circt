@@ -16,7 +16,7 @@
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Reducer/Tester.h"
@@ -171,7 +171,7 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
 }
 
 bool PassReduction::match(Operation *op) {
-  return op->getName().getStringRef() == pm->getOpName(*context);
+  return op->getName() == pm->getOpName(*context);
 }
 
 LogicalResult PassReduction::rewrite(Operation *op) { return pm->run(op); }

@@ -16,10 +16,10 @@
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
@@ -33,6 +33,7 @@
 
 using namespace llvm;
 using namespace mlir;
+using namespace mlir::func;
 using namespace circt;
 
 static cl::opt<std::string>
@@ -173,11 +174,12 @@ int main(int argc, char **argv) {
 
   MLIRContext context;
   // Load the dialects
-  context.loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect,
+  context.loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, FuncDialect,
                       hw::HWDialect, comb::CombDialect>();
   mlir::registerLLVMDialectTranslation(context);
 
-  mlir::OwningOpRef<mlir::ModuleOp> module(parseSourceFile(mgr, &context));
+  mlir::OwningOpRef<mlir::ModuleOp> module(
+      parseSourceFile<ModuleOp>(mgr, &context));
 
   if (dumpMLIR) {
     module->dump();

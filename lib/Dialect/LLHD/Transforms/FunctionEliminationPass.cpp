@@ -13,7 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Visitors.h"
 
 using namespace circt;
@@ -28,7 +28,7 @@ struct FunctionEliminationPass
 void FunctionEliminationPass::runOnOperation() {
   ModuleOp module = getOperation();
 
-  WalkResult result = module.walk([](mlir::CallOp op) -> WalkResult {
+  WalkResult result = module.walk([](mlir::func::CallOp op) -> WalkResult {
     if (isa<llhd::ProcOp>(op->getParentOp()) ||
         isa<llhd::EntityOp>(op->getParentOp())) {
       return emitError(

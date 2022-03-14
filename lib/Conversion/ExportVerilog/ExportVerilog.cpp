@@ -32,7 +32,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Translation.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -4125,12 +4124,6 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
         symbolCache.addDefinition(moduleOp.getNameAttr(), name, op);
-      // HACK: This is to make interface-related operations work as they are at
-      // the moment, with names being stored in `sym_name` instead of
-      // `inner_sym`.
-      if (auto instOp = dyn_cast<InterfaceInstanceOp>(op))
-        if (auto attr = instOp.sym_nameAttr())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), attr, op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });

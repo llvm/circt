@@ -12,7 +12,7 @@ add_circt_library(CIRCTStandardToHandshake
   MLIRPass
   MLIRArithmetic
   MLIRControlFlow
-  MLIRStandard
+  MLIRFunc
   MLIRSupport
   MLIRTransforms
   MLIRAffineToStandard

@@ -24,10 +24,10 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
@@ -391,7 +391,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
-    module = parseSourceFile(sourceMgr, &context);
+    module = parseSourceFile<ModuleOp>(sourceMgr, &context);
   }
   if (!module)
     return failure();

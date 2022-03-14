@@ -1,4 +1,4 @@
-// RUN: mlir-opt --convert-std-to-llvm %s | mlir-cpu-runner --entry-point-result=i64 | FileCheck %s
+// RUN: mlir-opt --convert-func-to-llvm %s | mlir-cpu-runner --entry-point-result=i64 | FileCheck %s
 // RUN: circt-opt -lower-std-to-handshake %s | handshake-runner | FileCheck %s
 // RUN: handshake-runner %s | FileCheck %s
 // CHECK: 42

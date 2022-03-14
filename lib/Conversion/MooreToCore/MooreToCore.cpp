@@ -17,11 +17,12 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Moore/MIROps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+using namespace mlir;
 using namespace circt;
 using namespace moore;
 
@@ -76,53 +77,52 @@ struct AssignOpConv : public OpConversionPattern<AssignOp> {
   }
 };
 
-struct ReturnOpConversion : public OpConversionPattern<mlir::ReturnOp> {
+struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::ReturnOp op, OpAdaptor adaptor,
+  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op, adaptor.operands());
+    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.operands());
     return success();
   }
 };
 
-struct CondBranchOpConversion
-    : public OpConversionPattern<mlir::cf::CondBranchOp> {
+struct CondBranchOpConversion : public OpConversionPattern<cf::CondBranchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::cf::CondBranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(cf::CondBranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::cf::CondBranchOp>(
+    rewriter.replaceOpWithNewOp<cf::CondBranchOp>(
         op, adaptor.getCondition(), adaptor.getTrueDestOperands(),
         adaptor.getFalseDestOperands(), op.getTrueDest(), op.getFalseDest());
     return success();
   }
 };
 
-struct BranchOpConversion : public OpConversionPattern<mlir::cf::BranchOp> {
+struct BranchOpConversion : public OpConversionPattern<cf::BranchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::cf::BranchOp op, OpAdaptor adaptor,
+  matchAndRewrite(cf::BranchOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(op, op.getDest(),
-                                                    adaptor.getDestOperands());
+    rewriter.replaceOpWithNewOp<cf::BranchOp>(op, op.getDest(),
+                                              adaptor.getDestOperands());
     return success();
   }
 };
 
-struct CallOpConversion : public OpConversionPattern<mlir::CallOp> {
+struct CallOpConversion : public OpConversionPattern<func::CallOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(mlir::CallOp op, OpAdaptor adaptor,
+  matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
-    rewriter.replaceOpWithNewOp<mlir::CallOp>(
+    rewriter.replaceOpWithNewOp<func::CallOp>(
         op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
     return success();
   }
@@ -161,10 +161,10 @@ static void populateLegality(ConversionTarget &target) {
   target.addLegalDialect<llhd::LLHDDialect>();
   target.addLegalDialect<comb::CombDialect>();
 
-  addGenericLegality<mlir::cf::CondBranchOp>(target);
-  addGenericLegality<mlir::cf::BranchOp>(target);
-  addGenericLegality<mlir::CallOp>(target);
-  addGenericLegality<mlir::ReturnOp>(target);
+  addGenericLegality<cf::CondBranchOp>(target);
+  addGenericLegality<cf::BranchOp>(target);
+  addGenericLegality<func::CallOp>(target);
+  addGenericLegality<func::ReturnOp>(target);
 
   target.addDynamicallyLegalOp<mlir::FuncOp>([](mlir::FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {

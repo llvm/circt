@@ -468,8 +468,7 @@ def BindOp : SVOp<"bind", []> {
     See 23.11 of SV 2017 spec for more information about bind.
   }];
 
-  let arguments =
-   (ins InnerRefAttr:$instance);
+  let arguments = (ins InnerRefAttr:$instance);
   let results = (outs);
   let verifier = "return ::verify$cppClass(*this);";
 
@@ -489,10 +488,11 @@ def BindInterfaceOp : SVOp<"bind.interface", []> {
     Indirectly instantiate an interface in the context of another module. This
     operation must pair with a `sv.interface.instance`.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$interface);
+  let arguments = (ins InnerRefAttr:$instance);
   let results = (outs);
   let verifier = "return ::verify$cppClass(*this);";
-  let assemblyFormat = [{ $interface attr-dict }];
+
+  let assemblyFormat = "$instance attr-dict";
   let extraClassDeclaration = [{
     sv::InterfaceInstanceOp
     getReferencedInstance(const hw::SymbolCache *cache = nullptr);
