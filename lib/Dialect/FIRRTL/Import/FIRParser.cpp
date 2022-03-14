@@ -2711,7 +2711,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   auto kind = getToken().getKind();
   if (getToken().isNot(FIRToken::less_equal, FIRToken::less_minus))
-    return emitError("expected '<=' or '<-' in statement"), failure();
+    return emitError("expected '<=', '<-', or 'is' in statement"), failure();
   consumeToken();
 
   Value rhs;
