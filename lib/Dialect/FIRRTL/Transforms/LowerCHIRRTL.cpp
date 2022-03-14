@@ -123,7 +123,8 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
 } // end anonymous namespace
 
 static void mkConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
-  if (dst.getType() == src.getType())
+  auto srcType = src.getType().cast<FIRRTLType>();
+  if (dst.getType() == src.getType() && !srcType.hasUninferredWidth())
     builder.create<StrictConnectOp>(dst, src);
   else
     builder.create<ConnectOp>(dst, src);

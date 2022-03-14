@@ -81,7 +81,7 @@ static void mkConnect(ImplicitLocOpBuilder *builder, Value dst, Value src) {
   auto dstType = dst.getType().cast<FIRRTLType>();
   auto srcType = src.getType().cast<FIRRTLType>();
 
-  if (srcType == dstType) {
+  if (srcType == dstType && !dstType.hasUninferredWidth()) {
     builder->create<StrictConnectOp>(dst, src);
     return;
   }
