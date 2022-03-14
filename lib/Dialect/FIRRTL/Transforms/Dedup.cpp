@@ -434,9 +434,11 @@ private:
         }
         if (auto connect = dyn_cast<ConnectOp>(op)) {
           fixupConnect<ConnectOp>(connect, newValue, oldType);
+          continue;
         }
         if (auto strict = dyn_cast<StrictConnectOp>(op)) {
           fixupConnect<StrictConnectOp>(strict, newValue, oldType);
+          continue;
         }
       }
     }
