@@ -57,7 +57,7 @@ circuit Qux:
 ; READ-LABEL:  hw.module @memory_ext
 ; READ:    %[[vtrue:.+]] = hw.constant true
 ; READ:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
-; READ-NEXT:    %[[v2:.+]] = sv.reg  : !hw.inout<i4>
+; READ-NEXT:    %[[v2:.+]] = sv.reg {{.+}} : !hw.inout<i4>
 ; READ-NEXT:    sv.always posedge %R0_clk {
 ; READ-NEXT:      sv.if %R0_en {
 ; READ-NEXT:        sv.passign %[[v2]], %R0_addr : i4
@@ -72,9 +72,9 @@ circuit Qux:
 ; CHECK:  hw.module @memory_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8) -> (R0_data: i8, RW0_rdata: i8) {
 ; CHECK:    %[[vtrue:.+]] = hw.constant true
 ; CHECK-NEXT:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
-; CHECK-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
+; CHECK-NEXT:    %[[v0:.+]] = sv.reg sym @[[v0_sym:.+]] : !hw.inout<i1>
 ; CHECK-NEXT:    %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i1>
-; CHECK-NEXT:    %[[v2:.+]] = sv.reg  : !hw.inout<i4>
+; CHECK-NEXT:    %[[v2:.+]] = sv.reg sym @[[v2_sym:.+]] : !hw.inout<i4>
 ; CHECK-NEXT:    sv.always posedge %R0_clk {
 ; CHECK-NEXT:      sv.passign %[[v0]], %R0_en : i1
 ; CHECK-NEXT:      sv.passign %[[v2]], %R0_addr : i4
@@ -99,6 +99,34 @@ circuit Qux:
 ; CHECK-NEXT:      sv.if %W0_en  {
 ; CHECK-NEXT:        %[[v13:.+]] = sv.array_index_inout %[[vMemory]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
 ; CHECK-NEXT:        sv.passign %[[v13]], %W0_data : i8
+; CHECK-NEXT:      }
+; CHECK-NEXT:    }
+; CHECK-NEXT:    sv.ifdef "SYNTHESIS" {
+; CHECK-NEXT:    } else {
+; CHECK-NEXT:      sv.ifdef "RANDOMIZE_MEM_INIT" {
+; CHECK-NEXT:        %[[RAND_0:.+]] = sv.reg sym @[[RAND_0_sym:[a-zA-Z0-9_]+]] : !hw.inout<i8>
+; CHECK-NEXT:        sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
+; CHECK-NEXT:      }
+; CHECK-NEXT:      sv.ifdef "RANDOMIZE_REG_INIT" {
+; CHECK-NEXT:        %[[RAND_1:.+]] = sv.reg sym @[[RAND_1_sym:[a-zA-Z0-9_]+]] : !hw.inout<i32>
+; CHECK-NEXT:      }
+; CHECK-NEXT:      sv.initial {
+; CHECK-NEXT:        sv.verbatim "`INIT_RANDOM_PROLOG_"
+; CHECK-NEXT:        sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
+; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {`RANDOM}[7:0];"
+; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[RAND_0_sym]]>]}
+; CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 16; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
+; CHECK-SAME{LITERAL}  = {{0}};"
+; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[RAND_0_sym]]>]}
+; CHECK-NEXT:        }
+; CHECK-NEXT:        sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {`RANDOM};"
+; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[RAND_1_sym]]>]}
+; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {{1}}[0];"
+; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[v0_sym]]>, #hw.innerNameRef<@memory_ext::@[[RAND_1_sym]]>]}
+; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {{1}}[4:1];"
+; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[v2_sym]]>, #hw.innerNameRef<@memory_ext::@[[RAND_1_sym]]>]}
+; CHECK-NEXT:        }
 ; CHECK-NEXT:      }
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    hw.output %[[v6]], %[[v11]] : i8, i8

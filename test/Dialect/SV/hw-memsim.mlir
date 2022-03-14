@@ -98,7 +98,28 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:    sv.if %wo_en_0 {
 //CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
 //CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0 
+//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
+//CHECK-NEXT:    }
+//CHECK-NEXT:  }
+//CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
+//CHECK-NEXT:  } else {
+//CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT:      %[[RAND_0:.+]] = sv.reg sym @[[RAND_0_SYM:[a-zA-Z0-9_]+]] :
+//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
+//CHECK-NEXT:    }
+//CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:    }
+//CHECK-NEXT:    sv.initial {
+//CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
+//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT{LITERAL}: sv.verbatim "{{0}} = {`RANDOM}[15:0];"
+//CHECK-SAME:            {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
+//CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
+//CHECK-SAME{LITARL}   = {{0}};"
+//CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
+//CHECK-NEXT:      }
+//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
@@ -112,17 +133,17 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      sv.passign %0, %ro_en_0 : i1
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %1 = sv.read_inout %0 : !hw.inout<i1>
-//CHECK-NEXT:    %2 = sv.reg  : !hw.inout<i1>
+//CHECK-NEXT:    %2 = sv.reg {{.+}}  : !hw.inout<i1>
 //CHECK-NEXT:    sv.always posedge %ro_clock_0 {
 //CHECK-NEXT:      sv.passign %2, %1 : i1
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %3 = sv.read_inout %2 : !hw.inout<i1>
-//CHECK-NEXT:    %4 = sv.reg  : !hw.inout<i4>
+//CHECK-NEXT:    %4 = sv.reg {{.+}}  : !hw.inout<i4>
 //CHECK-NEXT:    sv.always posedge %ro_clock_0 {
 //CHECK-NEXT:      sv.passign %4, %ro_addr_0 : i4
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %5 = sv.read_inout %4 : !hw.inout<i4>
-//CHECK-NEXT:    %6 = sv.reg  : !hw.inout<i4>
+//CHECK-NEXT:    %6 = sv.reg {{.+}} : !hw.inout<i4>
 //CHECK-NEXT:    sv.always posedge %ro_clock_0 {
 //CHECK-NEXT:      sv.passign %6, %5 : i4
 //CHECK-NEXT:    }
@@ -187,7 +208,7 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK:    sv.passign %[[v22:.+]], %W0_data : i32
   // CHECK:  }
   // CHECK:  %[[v23:.+]] = sv.read_inout %[[v22]] : !hw.inout<i32>
-  // CHECK:  %[[v24:.+]] = sv.reg  : !hw.inout<i32>
+  // CHECK:  %[[v24:.+]] = sv.reg {{.+}} : !hw.inout<i32>
   // CHECK:  sv.always posedge %W0_clk {
   // CHECK:    sv.passign %[[v24:.+]], %[[v23:.+]] : i32
   // CHECK:  }
