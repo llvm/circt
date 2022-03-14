@@ -303,6 +303,17 @@ static Attribute foldBinaryOp(
   return {};
 }
 
+/// Given a unary function, if the operand is a known constant integer,
+/// use the specified fold function to compute the result.
+static Attribute
+foldUnaryOp(ArrayRef<Attribute> operands,
+            llvm::function_ref<APInt(const APInt &)> calculate) {
+  assert(operands.size() == 1 && "unary operator always has one operand");
+  if (auto intAttr = operands[0].dyn_cast<IntegerAttr>())
+    return IntegerAttr::get(intAttr.getType(), calculate(intAttr.getValue()));
+  return {};
+}
+
 /// If the specified attribute is a ParamExprAttr with the specified opcode,
 /// return it.  Otherwise return null.
 static ParamExprAttr dyn_castPE(PEO opcode, Attribute value) {
@@ -609,6 +620,14 @@ static Attribute simplifyModS(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.srem(b); });
 }
 
+static Attribute simplifyCLog2(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldUnaryOp(operands, [](auto a) {
+    // Following the Verilog spec, clog2(0) is 0
+    return APInt(a.getBitWidth(), a == 0 ? 0 : a.ceilLogBase2());
+  });
+}
+
 /// Build a parameter expression.  This automatically canonicalizes and
 /// folds, so it may not necessarily return a ParamExprAttr.
 Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
@@ -658,6 +677,9 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
     break;
   case PEO::ModS:
     result = simplifyModS(operands);
+    break;
+  case PEO::CLog2:
+    result = simplifyCLog2(operands);
     break;
   }
 
