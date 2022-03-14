@@ -288,7 +288,7 @@ private:
   /// This fixes up connects when the field names of a bundle type changes.  It
   /// finds all fields which were previously bulk connected and legalizes it
   /// into a connect for each field.
-  template<typename T>
+  template <typename T>
   void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Type dstType,
                     Value src, Type srcType) {
     // If its not a bundle type, the types are guaranteed to be unchanged.  If
@@ -315,7 +315,7 @@ private:
   }
 
   /// Replaces a ConnectOp or StrictConnectOp with new bundle types.
-  template<typename T>
+  template <typename T>
   void fixupConnect(T connect, Value newValue, Type oldType) {
     // Rewrite the connect to connect all values.
     auto dst = connect.dest();

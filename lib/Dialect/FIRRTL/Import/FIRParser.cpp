@@ -2722,7 +2722,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
   auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
-  if (lhsPType == rhsPType) {
+  if (lhsPType == rhsPType && false) {
     if (lhsPType.hasUninferredWidth())
       builder.create<ConnectOp>(lhs, rhs);
     else
