@@ -20,8 +20,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
     The `llhd.sig` instruction introduces a new signal in the IR. The input
     operand determines the initial value carried by the signal, while the
     result type will always be a signal carrying the type of the init operand.
-    A signal defines a unique name within the entity it resides in. Signals
-    can only be allocated within entities.
+    A signal defines a unique name within the entity it resides in.
 
     Syntax:
 
