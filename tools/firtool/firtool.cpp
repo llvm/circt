@@ -549,6 +549,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog ||
       outputFormat == OutputIRVerilog) {
     PassManager exportPm(&context);
+    exportPm.enableTiming(ts);
     // Legalize unsupported operations within the modules.
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
