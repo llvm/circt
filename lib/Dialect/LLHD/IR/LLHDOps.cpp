@@ -26,7 +26,8 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace mlir;
@@ -635,23 +636,32 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 
 LogicalResult circt::llhd::EntityOp::verifyBody() {
   // check signal names are unique
-  llvm::StringMap<bool> sigMap;
-  llvm::StringMap<bool> instMap;
-  auto walkResult = walk([&sigMap, &instMap](Operation *op) -> WalkResult {
-    if (auto sigOp = dyn_cast<SigOp>(op)) {
-      if (sigMap[sigOp.name()]) {
-        return sigOp.emitError("Redefinition of signal named '")
-               << sigOp.name() << "'!";
-      }
-      sigMap.insert_or_assign(sigOp.name(), true);
-    } else if (auto instOp = dyn_cast<InstOp>(op)) {
-      if (instMap[instOp.name()]) {
-        return instOp.emitError("Redefinition of instance named '")
-               << instOp.name() << "'!";
-      }
-      instMap.insert_or_assign(instOp.name(), true);
-    }
-    return WalkResult::advance();
+  llvm::StringSet sigSet;
+  llvm::StringSet instSet;
+  auto walkResult = walk([&sigSet, &instSet](Operation *op) -> WalkResult {
+    return TypeSwitch<Operation *, WalkResult>(op)
+        .Case<SigOp>([&](auto sigOp) -> WalkResult {
+          if (!sigSet.insert(sigOp.name()).second)
+            return sigOp.emitError("redefinition of signal named '")
+                   << sigOp.name() << "'!";
+
+          return success();
+        })
+        .Case<OutputOp>([&](auto outputOp) -> WalkResult {
+          if (outputOp.name() && !sigSet.insert(*outputOp.name()).second)
+            return outputOp.emitError("redefinition of signal named '")
+                   << *outputOp.name() << "'!";
+
+          return success();
+        })
+        .Case<InstOp>([&](auto instOp) -> WalkResult {
+          if (!instSet.insert(instOp.name()).second)
+            return instOp.emitError("redefinition of instance named '")
+                   << instOp.name() << "'!";
+
+          return success();
+        })
+        .Default([](auto op) -> WalkResult { return WalkResult::advance(); });
   });
 
   return failure(walkResult.wasInterrupted());

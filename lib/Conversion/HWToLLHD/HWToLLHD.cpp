@@ -64,7 +64,7 @@ void HWToLLHDPass::runOnOperation() {
   target.addLegalDialect<CombDialect>();
   target.addLegalOp<ConstantOp>();
   target.addIllegalOp<HWModuleOp>();
-  target.addIllegalOp<OutputOp>();
+  target.addIllegalOp<hw::OutputOp>();
   target.addIllegalOp<InstanceOp>();
 
   // Rewrite `hw.module`, `hw.output`, and `hw.instance`.
@@ -156,11 +156,11 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 };
 
 /// This works on each output op, creating ops to drive the appropriate results.
-struct ConvertOutput : public OpConversionPattern<OutputOp> {
+struct ConvertOutput : public OpConversionPattern<hw::OutputOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(OutputOp output, OpAdaptor adaptor,
+  matchAndRewrite(hw::OutputOp output, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Get the number of inputs in the entity to offset into the block args.
     auto entity = output->getParentOfType<EntityOp>();
@@ -280,7 +280,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       // use that signal.
       Value sig;
       for (auto &use : result.getUses()) {
-        if (isa<OutputOp>(use.getOwner())) {
+        if (isa<hw::OutputOp>(use.getOwner())) {
           auto entity = instance->getParentOfType<EntityOp>();
           if (!entity)
             continue;
@@ -309,7 +309,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       // Make OutputOps directly refer to this signal, which allows them to use
       // a ConnectOp rather than a PrbOp+DrvOp combo.
       for (auto &use : llvm::make_early_inc_range(result.getUses())) {
-        if (isa<OutputOp>(use.getOwner())) {
+        if (isa<hw::OutputOp>(use.getOwner())) {
           rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(sig); });
         }
       }
