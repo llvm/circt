@@ -288,13 +288,14 @@ private:
   /// This fixes up connects when the field names of a bundle type changes.  It
   /// finds all fields which were previously bulk connected and legalizes it
   /// into a connect for each field.
+  template <typename T>
   void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Type dstType,
                     Value src, Type srcType) {
     // If its not a bundle type, the types are guaranteed to be unchanged.  If
     // it is a bundle type, we would rather bulk-connect the values instead of
     // decomposing the connect if the type is unchanged.
     if (dstType == dst.getType() && srcType == src.getType()) {
-      builder.create<ConnectOp>(dst, src);
+      builder.create<T>(dst, src);
       return;
     }
     // It must be a bundle type and the field name has changed. We have to
@@ -308,9 +309,24 @@ private:
         std::swap(srcBundle, dstBundle);
         std::swap(srcField, dstField);
       }
-      fixupConnect(builder, dstField, dstBundle.getElementType(i), srcField,
-                   srcBundle.getElementType(i));
+      fixupConnect<T>(builder, dstField, dstBundle.getElementType(i), srcField,
+                      srcBundle.getElementType(i));
     }
+  }
+
+  /// Replaces a ConnectOp or StrictConnectOp with new bundle types.
+  template <typename T>
+  void fixupConnect(T connect, Value newValue, Type oldType) {
+    // Rewrite the connect to connect all values.
+    auto dst = connect.dest();
+    auto src = connect.src();
+    ImplicitLocOpBuilder builder(connect.getLoc(), connect);
+    // Check which side of the connect was updated.
+    if (newValue == dst)
+      fixupConnect<T>(builder, dst, oldType, src, src.getType());
+    else
+      fixupConnect<T>(builder, dst, dst.getType(), src, oldType);
+    connect->erase();
   }
 
   /// This fixes up a partial connect when the field names of a bundle type
@@ -417,16 +433,12 @@ private:
           continue;
         }
         if (auto connect = dyn_cast<ConnectOp>(op)) {
-          // Rewrite the connect to connect all values.
-          auto dst = connect.dest();
-          auto src = connect.src();
-          ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-          // Check which side of the connect was updated.
-          if (newValue == dst)
-            fixupConnect(builder, dst, oldType, src, src.getType());
-          else
-            fixupConnect(builder, dst, dst.getType(), src, oldType);
-          connect->erase();
+          fixupConnect<ConnectOp>(connect, newValue, oldType);
+          continue;
+        }
+        if (auto strict = dyn_cast<StrictConnectOp>(op)) {
+          fixupConnect<StrictConnectOp>(strict, newValue, oldType);
+          continue;
         }
       }
     }

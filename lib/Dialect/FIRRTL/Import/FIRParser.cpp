@@ -2723,10 +2723,10 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
   auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
   if (lhsPType == rhsPType && false) {
-    if (lhsPType.getBitWidthOrSentinel() >= 0)
-      builder.create<StrictConnectOp>(lhs, rhs);
-    else
+    if (lhsPType.hasUninferredWidth())
       builder.create<ConnectOp>(lhs, rhs);
+    else
+      builder.create<StrictConnectOp>(lhs, rhs);
     return success();
   }
 
@@ -2735,7 +2735,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     // firrtl.  Chisel will also use connects as partial connects to do
     // truncation.  Handle truncations as partial connects, which allow
     // truncation.
-    if (lhsPType != rhsPType && lhsPType.getBitWidthOrSentinel() >= 0 &&
+    if (lhsPType.getBitWidthOrSentinel() >= 0 &&
         lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
       builder.create<PartialConnectOp>(lhs, rhs);
     } else {
