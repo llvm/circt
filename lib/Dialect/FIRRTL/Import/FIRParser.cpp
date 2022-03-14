@@ -2732,16 +2732,18 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   if (kind == FIRToken::less_equal) {
+    if (!areTypesEquivalent(lhsPType, rhsPType))
+      return emitError(loc, "cannot connect non-equivalent type ")
+             << rhsPType << " to " << lhsPType;
+
     // Some operations, dshl for example, have implicit truncations, even in lo
     // firrtl.  Chisel will also use connects as partial connects to do
-    // truncation.  Handle truncations as partial connects, which allow
-    // truncation.
-    if (lhsPType.getBitWidthOrSentinel() >= 0 &&
-        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
-      builder.create<PartialConnectOp>(lhs, rhs);
-    } else {
+    // truncation.  Handle truncations between equivalent types as partial
+    // connects, which allow truncation.
+    if (isTypeLarger(lhsPType, rhsPType))
       builder.create<ConnectOp>(lhs, rhs);
-    }
+    else
+      builder.create<PartialConnectOp>(lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(lhs, rhs);

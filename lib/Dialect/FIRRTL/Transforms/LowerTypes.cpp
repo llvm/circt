@@ -81,17 +81,10 @@ static void mkConnect(ImplicitLocOpBuilder *builder, Value dst, Value src) {
   auto dstType = dst.getType().cast<FIRRTLType>();
   auto srcType = src.getType().cast<FIRRTLType>();
 
-  if (srcType == dstType && !dstType.hasUninferredWidth()) {
+  if (srcType == dstType)
     builder->create<StrictConnectOp>(dst, src);
-    return;
-  }
-
-  int32_t dstWidth = dstType.getBitWidthOrSentinel();
-  int32_t srcWidth = srcType.getBitWidthOrSentinel();
-  if (dstWidth >= 0 && dstWidth >= srcWidth)
-    builder->create<ConnectOp>(dst, src);
   else
-    builder->create<PartialConnectOp>(dst, src);
+    builder->create<ConnectOp>(dst, src);
 }
 
 /// Return true if the type has more than zero bitwidth.

@@ -1991,91 +1991,75 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-LogicalResult ConnectOp::verify() {
-  FIRRTLType destType = dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
-
-  // Analog types cannot be connected and must be attached.
-  if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
-    return emitError("analog types may not be connected");
-  if (auto destBundle = destType.dyn_cast<BundleType>())
-    if (destBundle.containsAnalog())
-      return emitError("analog types may not be connected");
-  if (auto srcBundle = srcType.dyn_cast<BundleType>())
-    if (srcBundle.containsAnalog())
-      return emitError("analog types may not be connected");
-
-  // Destination and source types must be equivalent.
-  if (!areTypesEquivalent(destType, srcType))
-    return emitError("type mismatch between destination ")
-           << destType << " and source " << srcType;
-
-  // Destination bitwidth must be greater than or equal to source bitwidth.
-  int32_t destWidth = destType.getPassiveType().getBitWidthOrSentinel();
-  int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
-  if (destWidth > -1 && srcWidth > -1 && destWidth < srcWidth)
-    return emitError("destination width ")
-           << destWidth << " is not greater than or equal to source width "
-           << srcWidth;
+static LogicalResult checkConnectFlow(Operation *connect) {
+  Value dst = connect->getOperand(0);
+  Value src = connect->getOperand(1);
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(src()) == Flow::Sink) {
+  if (foldFlow(src) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src());
+    auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
-          emitOpError()
+          connect->emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
              "is not an output port or instance input (expected source "
              "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src().getLoc())
+      return diag.attachNote(src.getLoc())
              << "the right-hand-side was defined here.";
     }
   }
-
-  if (foldFlow(dest()) == Flow::Source) {
-    auto diag = emitOpError()
+  if (foldFlow(dst) == Flow::Source) {
+    auto diag = connect->emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
-    return diag.attachNote(dest().getLoc())
+    return diag.attachNote(dst.getLoc())
            << "the left-hand-side was defined here.";
   }
 
   return success();
 }
 
-LogicalResult PartialConnectOp::verify() {
-  FIRRTLType destType = dest().getType().cast<FIRRTLType>();
+LogicalResult ConnectOp::verify() {
+  FIRRTLType dstType = dest().getType().cast<FIRRTLType>();
   FIRRTLType srcType = src().getType().cast<FIRRTLType>();
 
-  if (!areTypesWeaklyEquivalent(destType, srcType))
+  // Analog types cannot be connected and must be attached.
+  if (dstType.containsAnalog() || srcType.containsAnalog())
+    return emitError("analog types may not be connected");
+
+  // Destination and source types must be equivalent.
+  if (!areTypesEquivalent(dstType, srcType))
     return emitError("type mismatch between destination ")
-           << destType << " and source " << srcType
+           << dstType << " and source " << srcType;
+
+  // Truncation is banned in a connection: destination bit width must be
+  // greater than or equal to source bit width.
+  if (!isTypeLarger(dstType, srcType))
+    return emitError("destination ")
+           << dstType << " is not as wide as the source " << srcType;
+
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult PartialConnectOp::verify() {
+  FIRRTLType dstType = dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
+
+  // Destination and source types must be weakly equivalent.
+  if (!areTypesWeaklyEquivalent(dstType, srcType))
+    return emitError("type mismatch between destination ")
+           << dstType << " and source " << srcType
            << ". Types are not weakly equivalent.";
 
   // Check that the flows make sense.
-  if (foldFlow(src()) == Flow::Sink) {
-    // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src());
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto diag =
-          emitOpError()
-          << "has invalid flow: the right-hand-side has sink flow and "
-             "is not an output port or instance input (expected source "
-             "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src().getLoc())
-             << "the right-hand-side was defined here.";
-    }
-  }
-
-  if (foldFlow(dest()) == Flow::Source) {
-    auto diag = emitOpError()
-                << "has invalid flow: the left-hand-side has source flow "
-                   "(expected sink or duplex flow).";
-    return diag.attachNote(dest().getLoc())
-           << "the left-hand-side was defined here.";
-  }
+  if (failed(checkConnectFlow(*this)))
+    return failure();
 
   return success();
 }
@@ -2084,35 +2068,12 @@ LogicalResult StrictConnectOp::verify() {
   FIRRTLType type = dest().getType().cast<FIRRTLType>();
 
   // Analog types cannot be connected and must be attached.
-  if (type.isa<AnalogType>())
+  if (type.containsAnalog())
     return emitError("analog types may not be connected");
-  if (auto destBundle = type.dyn_cast<BundleType>())
-    if (destBundle.containsAnalog())
-      return emitError("analog types may not be connected");
 
-  // TODO: Relax this to allow reads from output ports,
-  // instance/memory input ports.
-  if (foldFlow(src()) == Flow::Sink) {
-    // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src());
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto diag =
-          emitOpError()
-          << "has invalid flow: the right-hand-side has sink flow and "
-             "is not an output port or instance input (expected source "
-             "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src().getLoc())
-             << "the right-hand-side was defined here.";
-    }
-  }
-
-  if (foldFlow(dest()) == Flow::Source) {
-    auto diag = emitOpError()
-                << "has invalid flow: the left-hand-side has source flow "
-                   "(expected sink or duplex flow).";
-    return diag.attachNote(dest().getLoc())
-           << "the left-hand-side was defined here.";
-  }
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
 
   return success();
 }
