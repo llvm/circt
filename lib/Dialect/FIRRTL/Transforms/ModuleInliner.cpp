@@ -499,9 +499,9 @@ bool Inliner::doesNLAMatchCurrentPath(NonLocalAnchor nla) {
   auto pathEnd = currentPath.rend();
   while (nlaIt != nlaEnd && pathIt != pathEnd) {
     auto innerRef = (*nlaIt++).cast<hw::InnerRefAttr>();
-    auto &pair = (*pathIt++);
+    auto &[module, name] = (*pathIt++);
     // Break if the NLA does not correspond to our instance.
-    if (innerRef.getModule() != pair.first || innerRef.getName() != pair.second)
+    if (innerRef.getModule() != module || innerRef.getName() != name)
       return false;
   }
   // If we found a mismatch in the path, we should not copy this annotation into

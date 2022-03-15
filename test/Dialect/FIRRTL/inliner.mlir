@@ -561,10 +561,9 @@ firrtl.circuit "RenameAnything" {
   }
 }
 
-
 // Test that when an op is inlined into two locations and an annotation on it
 // becomes local, that the local annotation is only copied to the clone that
-// corresponds original NLA path.
+// corresponds to the original NLA path.
 // CHECK-LABEL: firrtl.circuit "AnnotationSplit0"
 firrtl.circuit "AnnotationSplit0" {
 firrtl.nla @nla_5560 [#hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
@@ -617,5 +616,3 @@ firrtl.module @AnnotationSplit1() {
   firrtl.instance bar1 sym @bar1 {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Bar1()
 }
 }
-
-
