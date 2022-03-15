@@ -560,3 +560,59 @@ firrtl.circuit "RenameAnything" {
     firrtl.instance hello @Foo()
   }
 }
+
+// Test that when an op is inlined into two locations and an annotation on it
+// becomes local, that the local annotation is only copied to the clone that
+// corresponds to the original NLA path.
+// CHECK-LABEL: firrtl.circuit "AnnotationSplit0"
+firrtl.circuit "AnnotationSplit0" {
+firrtl.nla @nla_5560 [#hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.nla @nla_5561 [#hw.innerNameRef<@Bar1::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  %w = firrtl.wire sym @w {annotations = [
+    {circt.nonlocal = @nla_5560, class = "test0"},
+    {circt.nonlocal = @nla_5561, class = "test1"}]} : !firrtl.uint<8>
+}
+// CHECK: firrtl.module @Bar0
+firrtl.module @Bar0() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{class = "test0"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5560, class = "circt.nonlocal"}]} @Leaf()
+}
+// CHECK: firrtl.module @Bar1
+firrtl.module @Bar1() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{class = "test1"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Leaf()
+}
+firrtl.module @AnnotationSplit0() {
+  firrtl.instance bar0 @Bar0()
+  firrtl.instance bar1 @Bar1()
+}
+}
+
+// Test that when an operation is inlined into two locations and an annotation
+// on it should only be copied to a specific clone. This differs from the test
+// above in that the annotation does not become a regular local annotation.
+// CHECK-LABEL: firrtl.circuit "AnnotationSplit1"
+firrtl.circuit "AnnotationSplit1" {
+firrtl.nla @nla_5560 [#hw.innerNameRef<@AnnotationSplit::@bar0>, #hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.nla @nla_5561 [#hw.innerNameRef<@AnnotationSplit::@bar1>, #hw.innerNameRef<@Bar1::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  %w = firrtl.wire sym @w {annotations = [
+    {circt.nonlocal = @nla_5560, class = "test0"},
+    {circt.nonlocal = @nla_5561, class = "test1"}]} : !firrtl.uint<8>
+}
+// CHECK: firrtl.module @Bar0
+firrtl.module @Bar0() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5560, class = "circt.nonlocal"}]} @Leaf()
+}
+// CHECK: firrtl.module @Bar1
+firrtl.module @Bar1() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla_5561, class = "test1"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Leaf()
+}
+firrtl.module @AnnotationSplit1() {
+  firrtl.instance bar0 sym @bar0 {annotations = [{circt.nonlocal = @nla_5560, class = "circt.nonlocal"}]} @Bar0()
+  firrtl.instance bar1 sym @bar1 {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Bar1()
+}
+}
