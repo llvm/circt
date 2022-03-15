@@ -99,9 +99,9 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
 }
 
 Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
-                                          ModuleNamespace &moduleNamespace,
-                                          size_t stages, Value clock,
-                                          Value data, Value gate) {
+                                      ModuleNamespace &moduleNamespace,
+                                      size_t stages, Value clock, Value data,
+                                      Value gate) {
   if (!stages)
     return data;
 
