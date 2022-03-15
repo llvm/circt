@@ -210,10 +210,15 @@ def PEO_DivU : I32EnumAttrCase<"DivU", 8, "divu">;
 def PEO_DivS : I32EnumAttrCase<"DivS", 9, "divs">;
 def PEO_ModU : I32EnumAttrCase<"ModU",10, "modu">;
 def PEO_ModS : I32EnumAttrCase<"ModS",11, "mods">;
+
+// Unary Expression Opcodes.
+def PEO_CLog2 : I32EnumAttrCase<"CLog2", 12, "clog2">;
+
 def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
                            [PEO_Add, PEO_Mul, PEO_And, PEO_Or, PEO_Xor,
                             PEO_Shl, PEO_ShrU, PEO_ShrS,
-                            PEO_DivU, PEO_DivS, PEO_ModU, PEO_ModS]>;
+                            PEO_DivU, PEO_DivS, PEO_ModU, PEO_ModS,
+                            PEO_CLog2]>;
 }
 
 def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
