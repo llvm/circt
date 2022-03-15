@@ -475,3 +475,50 @@ firrtl.circuit "NLAUsedInWiring"  {
     firrtl.connect %k, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Check that NLAs not rooted at the top module still produce correct XMRs.
+// See https://github.com/llvm/circt/issues/2767.
+
+firrtl.circuit "Top" {
+  firrtl.nla @nla_0 [#hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@bar>]
+  firrtl.nla @nla [#hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@bar>]
+  firrtl.module @Submodule(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %bar_out_MPORT = firrtl.mem sym @bar Undefined  {annotations = [{circt.nonlocal = @nla, class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 1 : i64}, {circt.nonlocal = @nla_0, class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64}], depth = 1 : i64, modName = "bar_ext", name = "bar", portNames = ["out_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %0 = firrtl.subfield %bar_out_MPORT(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %bar_out_MPORT(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %bar_out_MPORT(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
+    %3 = firrtl.subfield %bar_out_MPORT(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+    firrtl.strictconnect %0, %c0_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %1, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %2, %clock : !firrtl.clock
+    firrtl.strictconnect %out, %3 : !firrtl.uint<1>
+  }
+  firrtl.module @DUT(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    %submodule_1_clock, %submodule_1_out = firrtl.instance submodule_1 sym @submodule_1  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %submodule_1_clock, %clock : !firrtl.clock
+    %submodule_2_clock, %submodule_2_out = firrtl.instance submodule_2 sym @submodule_2  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @Submodule(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %submodule_2_clock, %clock : !firrtl.clock
+    %0 = firrtl.or %submodule_1_out, %submodule_2_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.strictconnect %out, %0 : !firrtl.uint<1>
+    %mem_tap_MemTap_1_mem_0 = firrtl.instance mem_tap_MemTap_1  @MemTap_1(out mem_0: !firrtl.uint<1>)
+    %mem_tap_MemTap_2_mem_0 = firrtl.instance mem_tap_MemTap_2  @MemTap_2(out mem_0: !firrtl.uint<1>)
+  }
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    %dut_clock, %dut_out = firrtl.instance dut sym @dut @DUT(in clock: !firrtl.clock, out out: !firrtl.uint<1>)
+    firrtl.strictconnect %dut_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %out, %dut_out : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module @MemTap_1_impl_0
+  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}.Memory[0]"
+  // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_1>, #hw.innerNameRef<@Submodule::@bar>]
+  firrtl.extmodule @MemTap_1(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64, word = 0 : i64}]) attributes {defname = "MemTap"}
+  // CHECK-LABEL: firrtl.module @MemTap_2_impl_0
+  // CHECK-NEXT{LITERAL}: firrtl.verbatim.expr "{{0}}.{{1}}.{{2}}.{{3}}.Memory[0]"
+  // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@bar>]
+  firrtl.extmodule @MemTap_2(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 1 : i64, word = 0 : i64}]) attributes {defname = "MemTap"}
+}
