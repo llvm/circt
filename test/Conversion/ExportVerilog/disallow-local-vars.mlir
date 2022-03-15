@@ -1,5 +1,5 @@
-// RUN: circt-opt --export-verilog %s | FileCheck %s
-// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
+// RUN: circt-opt --export-verilog --lowering-options=maximumNumberOfTokensPerExpression=90 %s | FileCheck %s
+// RUN: circt-opt --lowering-options=disallowLocalVariables,maximumNumberOfTokensPerExpression=90 --export-verilog %s | FileCheck %s --check-prefix=DISALLOW -strict-whitespace
 
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.
@@ -165,4 +165,42 @@ hw.module @ReadInoutAggregate(%clock: i1) {
   // DISALLOW-NEXT: always @(
   // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, [[READ]][15:0]};
   hw.output
+}
+
+// CHECK-LABEL: module too_long_expression
+// DISALLOW-LABEL: module too_long_expression
+// https://github.com/llvm/circt/issues/2772
+hw.module @too_long_expression(%port_with_a_fairly_long_name_one: i1, %port_with_a_fairly_long_name_two: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
+  // With disallowLocalVariables, wires should spill to top-level module body.
+  // DISALLOW: wire _tmp
+  // DISALLOW: wire _GEN
+  // DISALLOW: always @*
+
+  sv.always {
+    // Without disallowLocalVariables, wires should spill to block beginning.
+    // CHECK: always @*
+    // CHECK: automatic logic _GEN
+    // CHECK: automatic logic _tmp
+    sv.ifdef.procedural "foo" {
+      %c0 = hw.constant 1 : i1
+      %concats = comb.add %c0, %c0, %c0, %c0 : i1
+      %and = comb.and %concats, %port_with_a_fairly_long_name_one, %port_with_a_fairly_long_name_two, %port_with_a_fairly_long_name_one : i1
+
+      %cond0 = comb.or %c0, %and : i1
+      // CHECK: if (1'h1 | _tmp)
+      // DISALLOW: if (1'h1 | _tmp)
+      sv.if %cond0 {
+        sv.fwrite %fd, "bar"
+      }
+
+      %cond1 = comb.or %c0, %concats : i1
+      // CHECK: if (1'h1 | _GEN)
+      // DISALLOW: if (1'h1 | _GEN)
+      sv.if %cond1 {
+        sv.fwrite %fd, "bar"
+      }
+    }
+  }
 }

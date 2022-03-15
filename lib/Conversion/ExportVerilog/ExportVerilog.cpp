@@ -2402,8 +2402,10 @@ public:
   /// Emit the declaration for the temporary operation. If the operation is not
   /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
   /// return false. If the operation *is* a constant, also emit the initializer
-  /// and semicolon, e.g. `localparam K = 1'h0;`, and return true.
-  bool emitDeclarationForTemporary(Operation *op);
+  /// and semicolon, e.g. `localparam K = 1'h0;`, and return true. Use the given
+  /// indent level to emit temporaries indented appropriately whether they are
+  /// at the top-level module scope, or nested inside a sub-statement.
+  bool emitDeclarationForTemporary(Operation *op, unsigned indentLevel);
 
 private:
   void collectNamesEmitDecls(Block &block);
@@ -2518,6 +2520,13 @@ private:
   RearrangableOStream::Cursor blockDeclarationInsertPoint;
   unsigned blockDeclarationIndentLevel = INDENT_AMOUNT;
 
+  /// This is the index of the end of the declaration region of the top-level
+  /// scope within the current module. It is set once after the top-level call
+  /// to collectNamesEmitDecls, and should only be updated as later declarations
+  /// are emitted in the top-level scope of the module.
+  RearrangableOStream::Cursor topLevelDeclarationInsertPoint;
+  unsigned topLevelDeclarationIndentLevel = INDENT_AMOUNT;
+
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
@@ -2525,6 +2534,33 @@ private:
 };
 
 } // end anonymous namespace
+
+bool isInProceduralRegion(SmallVector<Operation *> &ops) {
+  // First check if any of the ops is in a procedural region.
+  for (auto *op : ops)
+    if (op->getParentOp()->hasTrait<ProceduralRegion>())
+      return true;
+
+  // Also check if any uses of the ops are in a procedural region. This is
+  // necessary because non side-effecting ops are hoisted in PrepareForEmission,
+  // but may be used in a procedural region, and cannot be spilled to wires in
+  // that region.
+  SmallVector<Operation *> worklist(ops);
+  SmallPtrSet<Operation *, 6> seen;
+  while (!worklist.empty()) {
+    auto *op = worklist.pop_back_val();
+    if (seen.contains(op))
+      continue;
+    seen.insert(op);
+    for (auto *user : op->getUsers()) {
+      if (user->hasTrait<ProceduralRegion>())
+        return true;
+      worklist.push_back(user);
+    }
+  }
+
+  return false;
+}
 
 /// Emit the specified value as an expression.  If this is an inline-emitted
 /// expression, we emit that expression, otherwise we emit a reference to the
@@ -2550,7 +2586,8 @@ void StmtEmitter::emitExpression(Value exp,
   // declarations for each variable separately from the assignments to them.
   // Otherwise we just emit inline 'wire' declarations.
   RearrangableOStream::Cursor declStartCursor, declEndCursor;
-  if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
+  SmallVector<bool> exprEmittedCompletely(tooLargeSubExpressions.size());
+  if (isInProceduralRegion(tooLargeSubExpressions)) {
     // Split the current segment to make sure the cursors we are about to create
     // don't get invalidated by statement reordering.
     rearrangableStream.splitCurrentSegment();
@@ -2559,7 +2596,13 @@ void StmtEmitter::emitExpression(Value exp,
     declStartCursor = rearrangableStream.getCursor();
 
     // Emit the declarations into the stream.
-    for (auto *expr : tooLargeSubExpressions) {
+    for (size_t i = 0, e = tooLargeSubExpressions.size(); i < e; ++i) {
+      auto *expr = tooLargeSubExpressions[i];
+      // Emit the declaration for the temporary. If disallowLocalVariables is
+      // set, we will emit it to the top-level module body, so use the top-level
+      // indent level. Otherwise, use the current block indent level. We also
+      // track if the temporary was emitted completely, so we don't duplicated
+      // it in emitStatementExpression below.
       // TODO: This results in a lot of things like this:
       //   automatic logic _tmp;
       //   automatic logic _tmp_0;
@@ -2568,7 +2611,12 @@ void StmtEmitter::emitExpression(Value exp,
       // we recurse up to finishing off the procedural statement.  That would
       // also eliminate the need for blockDeclarationInsertPoint to be so
       // 'global'.
-      if (!emitDeclarationForTemporary(expr))
+      unsigned indentLevel = state.options.disallowLocalVariables
+                                 ? topLevelDeclarationIndentLevel
+                                 : blockDeclarationIndentLevel;
+      bool emittedCompletely = emitDeclarationForTemporary(expr, indentLevel);
+      exprEmittedCompletely[i] = emittedCompletely;
+      if (!emittedCompletely)
         os << ";\n";
       ++numStatementsEmitted;
     }
@@ -2581,7 +2629,13 @@ void StmtEmitter::emitExpression(Value exp,
 
   // Emit each stmt expression in turn.
   auto stmtStartCursor = rearrangableStream.getCursor();
-  for (auto *expr : tooLargeSubExpressions) {
+  for (size_t i = 0, e = tooLargeSubExpressions.size(); i < e; ++i) {
+    // If the expression was completely emitted by emitDeclarationForTemporary,
+    // skip it.
+    if (exprEmittedCompletely[i])
+      continue;
+
+    auto *expr = tooLargeSubExpressions[i];
     ++numStatementsEmitted;
     emitStatementExpression(expr);
   }
@@ -2593,9 +2647,15 @@ void StmtEmitter::emitExpression(Value exp,
       prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
   if (!declStartCursor.isInvalid()) {
     // Scoop up all of the stuff we just emitted, and move it to the
-    // blockDeclarationInsertPoint.
-    blockDeclarationInsertPoint = rearrangableStream.moveRangeBefore(
-        blockDeclarationInsertPoint, declStartCursor, declEndCursor);
+    // appropriate insertion point. If disallowLocalVariables is set, that has
+    // to be the top-level module body. Otherwise, move it to the current block
+    // with blockDeclarationInsertPoint.
+    if (state.options.disallowLocalVariables)
+      topLevelDeclarationInsertPoint = rearrangableStream.moveRangeBefore(
+          topLevelDeclarationInsertPoint, declStartCursor, declEndCursor);
+    else
+      blockDeclarationInsertPoint = rearrangableStream.moveRangeBefore(
+          blockDeclarationInsertPoint, declStartCursor, declEndCursor);
   }
 }
 
@@ -2622,7 +2682,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     }
     indent() << names.getName(op->getResult(0)) << " = ";
   } else {
-    if (emitDeclarationForTemporary(op))
+    if (emitDeclarationForTemporary(op, blockDeclarationIndentLevel))
       return;
     os << " = ";
   }
@@ -3593,11 +3653,14 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 /// Emit the declaration for the temporary operation. If the operation is not
 /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
 /// return false. If the operation *is* a constant, also emit the initializer
-/// and semicolon, e.g. `localparam K = 1'h0`, and return true.
-bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
+/// and semicolon, e.g. `localparam K = 1'h0`, and return true. Use the given
+/// indent level to emit temporaries indented appropriately whether they are at
+/// the top-level module scope, or nested inside a sub-statement.
+bool StmtEmitter::emitDeclarationForTemporary(Operation *op,
+                                              unsigned indentLevel) {
   StringRef declWord = getVerilogDeclWord(op, state.options);
 
-  os.indent(blockDeclarationIndentLevel) << declWord;
+  os.indent(indentLevel) << declWord;
   if (!declWord.empty())
     os << ' ';
   if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
@@ -3712,6 +3775,15 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   // are all emitted at the top of their enclosing blocks.
   if (!isa<IfDefProceduralOp>(body.getParentOp()))
     collectNamesEmitDecls(body);
+
+  // Some spills to temporaries must be hoisted to the top-level scope of the
+  // module, so keep a cursor at that insertion point as well. The cursor starts
+  // in an invalid state, so only save it in that case, and not in recursive
+  // calls to sub-statements.
+  if (topLevelDeclarationInsertPoint.isInvalid()) {
+    topLevelDeclarationInsertPoint = rearrangableStream.getCursor();
+    topLevelDeclarationIndentLevel = state.currentIndent;
+  }
 
   // Emit the body.
   for (auto &op : body) {
