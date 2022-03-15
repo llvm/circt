@@ -66,64 +66,6 @@ hw.module @WriteOrderedDifferentClock(%clock: i1, %clock2: i1, %w0_addr: i4, %w0
   hw.output
 }
 
-hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
-
-//CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
-//CHECK:       %Memory = sv.reg  : !hw.inout<uarray<10xi16>>
-//CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
-//CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
-//CHECK-NEXT:  %[[x:.+]] = sv.constantX
-//CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
-//CHECK-NEXT:  %true = hw.constant true
-//CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
-//CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
-//CHECK-NEXT:  %false = hw.constant false
-//CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
-//CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
-//CHECK-NEXT:  %[[rwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
-//CHECK-NEXT:  %[[rwdata:.+]] = sv.read_inout %[[rwslot]] :
-//CHECK-NEXT:  %[[x2:.+]] = sv.constantX
-//CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
-//CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
-//CHECK-NEXT:    sv.always posedge %rw_clock_0 {
-//CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %true, %rw_wmode_0
-//CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
-//CHECK-NEXT:      sv.if %[[rwwcond]]  {
-//CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:        sv.passign %[[rwslot]], %rw_wdata_0
-//CHECK-NEXT:      }
-//CHECK-NEXT:    }
-//CHECK-NEXT:  %true_1 = hw.constant true
-//CHECK-NEXT:  sv.always posedge %wo_clock_0 {
-//CHECK-NEXT:    sv.if %wo_en_0 {
-//CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
-//CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
-//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
-//CHECK-NEXT:    }
-//CHECK-NEXT:  }
-//CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
-//CHECK-NEXT:  } else {
-//CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT:      %[[RAND_0:.+]] = sv.reg sym @[[RAND_0_SYM:[a-zA-Z0-9_]+]] :
-//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
-//CHECK-NEXT:    }
-//CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
-//CHECK-NEXT:    }
-//CHECK-NEXT:    sv.initial {
-//CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
-//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT{LITERAL}: sv.verbatim "{{0}} = {`RANDOM}[15:0];"
-//CHECK-SAME:            {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
-//CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
-//CHECK-SAME{LITARL}   = {{0}};"
-//CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
-//CHECK-NEXT:      }
-//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
-//CHECK-NEXT:      }
-//CHECK-NEXT:    }
-//CHECK-NEXT:  }
-//CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
-
 hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
 
 //CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0_0
@@ -280,3 +222,61 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK:        sv.passign %[[vv83]], %[[v85]] : i8
 // CHECK:      }
 // CHECK:    }
+
+hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
+
+//CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
+//CHECK:       %Memory = sv.reg  : !hw.inout<uarray<10xi16>>
+//CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory[%ro_addr_0]
+//CHECK-NEXT:  %[[read:.+]] = sv.read_inout %[[rslot]]
+//CHECK-NEXT:  %[[x:.+]] = sv.constantX
+//CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
+//CHECK-NEXT:  %true = hw.constant true
+//CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
+//CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
+//CHECK-NEXT:  %false = hw.constant false
+//CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
+//CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
+//CHECK-NEXT:  %[[rwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
+//CHECK-NEXT:  %[[rwdata:.+]] = sv.read_inout %[[rwslot]] :
+//CHECK-NEXT:  %[[x2:.+]] = sv.constantX
+//CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
+//CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
+//CHECK-NEXT:    sv.always posedge %rw_clock_0 {
+//CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %true, %rw_wmode_0
+//CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
+//CHECK-NEXT:      sv.if %[[rwwcond]]  {
+//CHECK-NEXT:        %[[c0_i32:.+]] = hw.constant 0 : i32
+//CHECK-NEXT:        sv.passign %[[rwslot]], %rw_wdata_0
+//CHECK-NEXT:      }
+//CHECK-NEXT:    }
+//CHECK-NEXT:  %true_1 = hw.constant true
+//CHECK-NEXT:  sv.always posedge %wo_clock_0 {
+//CHECK-NEXT:    sv.if %wo_en_0 {
+//CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory[%wo_addr_0]
+//CHECK-NEXT:      %[[c0_i32:.+]] = hw.constant 0 : i32
+//CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
+//CHECK-NEXT:    }
+//CHECK-NEXT:  }
+//CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
+//CHECK-NEXT:  } else {
+//CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT:      %[[RAND_0:.+]] = sv.reg sym @[[RAND_0_SYM:[a-zA-Z0-9_]+]] :
+//CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
+//CHECK-NEXT:    }
+//CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:    }
+//CHECK-NEXT:    sv.initial {
+//CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
+//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT{LITERAL}: sv.verbatim "{{0}} = {`RANDOM}[15:0];"
+//CHECK-SAME:            {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
+//CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
+//CHECK-SAME{LITARL}   = {{0}};"
+//CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
+//CHECK-NEXT:      }
+//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:      }
+//CHECK-NEXT:    }
+//CHECK-NEXT:  }
+//CHECK-NEXT:  hw.output %[[readres]], %[[rwres]]
