@@ -599,6 +599,17 @@ void GrandCentralTapsPass::runOnOperation() {
         // Concatenate the prefix into a proper full hierarchical name.
         addSymbol(
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
+        if (port.nla && shortestPrefix->empty() &&
+            port.nla.root() != rootModule.moduleNameAttr()) {
+          // This handles the case when nla is not rooted at top, and
+          // shortestPrefix is empty.
+          auto rootMod = port.nla.root();
+          for (auto p : path) {
+            if (rootMod == p->getParentOfType<FModuleOp>().getNameAttr())
+              break;
+            addSymbol(getInnerRefTo(p));
+          }
+        }
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
         if (port.nla) {
