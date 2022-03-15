@@ -272,7 +272,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT{LITERAL}: sv.verbatim "{{0}} = {`RANDOM}[15:0];"
 //CHECK-SAME:            {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
 //CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
-//CHECK-SAME{LITARL}   = {{0}};"
+//CHECK-SAME{LITERAL}:   = {{0}};"
 //CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
 //CHECK-NEXT:      }
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
