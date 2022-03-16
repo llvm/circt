@@ -76,7 +76,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input s1 : SInt<1>            ; CHECK: in %s1: !firrtl.sint<1>,
     input s8 : SInt<8>            ; CHECK: in %s8: !firrtl.sint<8>,
     input a1 : Analog<1>          ; CHECK: in %a1: !firrtl.analog<1>,
-    input a8 : Analog<8>          ; CHECK: in %a8: !firrtl.analog<8>)
+    input a8 : Analog<8>          ; CHECK: in %a8: !firrtl.analog<8>,
+    input ab : {x : Analog<1>}    ; CHECK: in %ab: !firrtl.bundle<x: analog<1>>)
 
     ; CHECK: %_t = firrtl.wire : !firrtl.vector<uint<1>, 12>
     wire _t : UInt<1>[12] @[Nodes.scala 370:76]
@@ -96,6 +97,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK-NOT: firrtl.attach %a1
     a1 is invalid
+    
+    ; CHECK-NOT: firrtl.attach %ab
+    ab is invalid
 
     ; CHECK: firrtl.skip
     skip  @[SKipLoc.scala 42:24]
