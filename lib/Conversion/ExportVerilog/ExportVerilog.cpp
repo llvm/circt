@@ -141,6 +141,17 @@ static bool isDuplicatableExpression(Operation *op) {
   if (auto array = dyn_cast<hw::ArrayGetOp>(op))
     return array.index().getDefiningOp<ConstantOp>();
 
+  // Inline simple CSE'd expressions
+  if (isa<AndOp, OrOp, XorOp>(op)) {
+    auto operands = op->getOperands();
+    return operands.end() == llvm::find_if_not(operands, [](Value x) {
+             auto *op = x.getDefiningOp();
+             return !op ||
+                    isa<RegOp, WireOp, ConstantOp, LocalParamOp, ParamValueOp>(
+                        op);
+           });
+  }
+
   return false;
 }
 
