@@ -659,15 +659,13 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 
   // CHECK: always @(posedge clock) begin
   sv.always posedge %clock  {
-    // CHECK:   automatic logic _GEN = arg1 & arg2;
-
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
     sv.if %arg1  {
       sv.fatal 1
     }
 
-    // CHECK:   if (_GEN)
+    // CHECK:   if (arg1 & arg2)
     // CHECK:     $fatal;
 
     //this forces a common subexpression to be output out-of-line
@@ -677,7 +675,7 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
       sv.fatal 1
     }
 
-    // CHECK:   if (arg3 & _GEN)
+    // CHECK:   if (arg3 & arg1 & arg2)
     // CHECK:     $fatal;
     sv.if %611  {
       sv.fatal 1
@@ -694,7 +692,6 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     // The variable for the ifdef block needs to be emitted at the top of the
     // always block since the ifdef is transparent to verilog.
 
-    // CHECK:    automatic logic _GEN;
     // CHECK:    if (arg1)
     // CHECK:      $fatal;
     sv.if %arg1  {
@@ -704,14 +701,13 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     // CHECK:    `ifdef FUN_AND_GAMES
      sv.ifdef.procedural "FUN_AND_GAMES" {
       // This forces a common subexpression to be output out-of-line
-      // CHECK:      _GEN = arg1 & arg2;
-      // CHECK:      if (_GEN)
+      // CHECK:      if (arg1 & arg2)
       // CHECK:        $fatal;
       %610 = comb.and %arg1, %arg2 : i1
       sv.if %610  {
         sv.fatal 1
       }
-      // CHECK:      if (arg3 & _GEN)
+      // CHECK:      if (arg3 & arg1 & arg2)
       // CHECK:        $fatal;
       %611 = comb.and %arg3, %610 : i1
      sv.if %611  {
