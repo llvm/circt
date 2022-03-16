@@ -299,5 +299,5 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     }
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 }

@@ -49,7 +49,7 @@ def CircuitOp : FIRRTLOp<"circuit",
   }];
 
   let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
-  let verifier = "return ::verifyCircuitOp(*this);";
+  let hasVerifier = 1;
 }
 
 def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
@@ -139,7 +139,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   }];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = "return ::verifyFExtModuleOp(*this);";
+  let hasVerifier = 1;
 }
 
 def NonLocalAnchor : FIRRTLOp<"nla",

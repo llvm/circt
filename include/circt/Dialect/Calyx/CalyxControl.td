@@ -31,7 +31,7 @@ def ControlOp : CalyxContainer<"control", [
       }
     ```
   }];
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins), [{
@@ -74,7 +74,7 @@ def IfOp : CalyxContainer<"if", [
   }];
 
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let hasCanonicalizer = true;
   let extraClassDeclaration = [{
     /// Checks whether the `then` body exists.
@@ -177,7 +177,7 @@ def ParOp : CalyxContainer<"par", [
     }]>
   ];
   let hasCanonicalizer = true;
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def EnableOp : CalyxOp<"enable", [
@@ -209,7 +209,7 @@ def EnableOp : CalyxOp<"enable", [
     }]>
   ];
   let assemblyFormat = "$groupName attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def WhileOp : CalyxContainer<"while", [
@@ -242,7 +242,7 @@ def WhileOp : CalyxContainer<"while", [
   }];
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins

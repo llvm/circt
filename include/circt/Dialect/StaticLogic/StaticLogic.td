@@ -132,9 +132,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
 
   let hasCustomAssemblyFormat = 1;
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -194,9 +192,7 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
     `start` `=` $start (`when` $when^)? $body (`:` qualified(type($results))^)? attr-dict
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -226,9 +222,7 @@ def PipelineRegisterOp : Op<StaticLogic_Dialect, "pipeline.register",
     $operands (`:` qualified(type($operands))^)? attr-dict
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 }
 
 def PipelineTerminatorOp : Op<StaticLogic_Dialect, "pipeline.terminator",
@@ -260,9 +254,7 @@ def PipelineTerminatorOp : Op<StaticLogic_Dialect, "pipeline.terminator",
     functional-type($iter_args, $results) attr-dict
   }];
 
-  let verifier = [{
-    return ::verify$cppClass(*this);
-  }];
+  let hasVerifier = 1;
 }
 
 #endif // STATICLOGIC_OPS

@@ -98,7 +98,7 @@ def ConstantOp : FIRRTLOp<"constant",
     OpBuilder<(ins "const APSInt &":$value)>
   ];
   let hasFolder = 1;
-  let verifier = "return ::verifyConstantOp(*this);";
+  let hasVerifier = 1;
 }
 
 def SpecialConstantOp : FIRRTLOp<"specialconstant",
@@ -177,7 +177,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     }
   }];
 
-  let verifier = "return ::verifySubfieldOp(*this);";
+  let hasVerifier = 1;
 }
 
 class IndexConstraint<string value, string resultValue>
@@ -626,7 +626,7 @@ def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 
-  let verifier = "return ::verifyHWStructCastOp(*this);";
+  let hasVerifier = 1;
 }
 
 def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
@@ -637,7 +637,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
 
   let arguments = (ins FIRRTLType:$input);
   let results = (outs FIRRTLType:$result);
-  let verifier = "return ::verifyBitCastOp(*this);";
+  let hasVerifier = 1;
   let hasFolder = 1;
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";

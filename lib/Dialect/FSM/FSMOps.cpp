@@ -97,25 +97,24 @@ static LogicalResult compareTypes(TypeRange rangeA, TypeRange rangeB) {
   return success();
 }
 
-static LogicalResult verifyMachineOp(MachineOp op) {
+LogicalResult MachineOp::verify() {
   // If this function is external there is nothing to do.
-  if (op.isExternal())
+  if (isExternal())
     return success();
 
-  if (!op.stateType().isa<IntegerType>())
-    return op.emitOpError("state must be integer type");
+  if (!stateType().isa<IntegerType>())
+    return emitOpError("state must be integer type");
 
   // Verify that the argument list of the function and the arg list of the entry
   // block line up.  The trait already verified that the number of arguments is
   // the same between the signature and the block.
-  if (failed(compareTypes(op.getType().getInputs(),
-                          op.front().getArgumentTypes())))
-    return op.emitOpError(
+  if (failed(compareTypes(getType().getInputs(), front().getArgumentTypes())))
+    return emitOpError(
         "entry block argument types must match the machine input types");
 
   // Verify that the machine only has one block terminated with OutputOp.
-  if (!llvm::hasSingleElement(op))
-    return op.emitOpError("must only have a single block");
+  if (!llvm::hasSingleElement((*this)))
+    return emitOpError("must only have a single block");
 
   return success();
 }
@@ -130,11 +129,11 @@ MachineOp InstanceOp::getMachine() {
   return module.lookupSymbol<MachineOp>(machine());
 }
 
-static LogicalResult verifyInstanceOp(InstanceOp op) {
-  auto machine = op.getMachine();
+LogicalResult InstanceOp::verify() {
+  auto machine = getMachine();
   if (!machine)
-    return op.emitError("cannot find machine definition '")
-           << op.machine() << "'";
+    return emitError("cannot find machine definition '")
+           << this->machine() << "'";
 
   return success();
 }
@@ -184,9 +183,7 @@ MachineOp TriggerOp::getMachine() {
   return instanceOp.getMachine();
 }
 
-static LogicalResult verifyTriggerOp(TriggerOp op) {
-  return verifyCallerTypes(op);
-}
+LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 
 //===----------------------------------------------------------------------===//
 // HWInstanceOp
@@ -198,9 +195,7 @@ MachineOp HWInstanceOp::getMachine() {
   return module.lookupSymbol<MachineOp>(machine());
 }
 
-static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
-  return verifyCallerTypes(op);
-}
+LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
 
 //===----------------------------------------------------------------------===//
 // StateOp
@@ -227,19 +222,19 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 // OutputOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyOutputOp(OutputOp op) {
-  if (op->getParentRegion() == &op->getParentOfType<StateOp>().transitions()) {
-    if (op.getNumOperands() != 0)
-      op.emitOpError("transitions region must not output any value");
+LogicalResult OutputOp::verify() {
+  if ((*this)->getParentRegion() ==
+      &(*this)->getParentOfType<StateOp>().transitions()) {
+    if (getNumOperands() != 0)
+      emitOpError("transitions region must not output any value");
     return success();
   }
 
   // Verify that the result list of the machine and the operand list of the
   // OutputOp line up.
-  auto machine = op->getParentOfType<MachineOp>();
-  if (failed(
-          compareTypes(machine.getType().getResults(), op.getOperandTypes())))
-    return op.emitOpError("operand types must match the machine output types");
+  auto machine = (*this)->getParentOfType<MachineOp>();
+  if (failed(compareTypes(machine.getType().getResults(), getOperandTypes())))
+    return emitOpError("operand types must match the machine output types");
 
   return success();
 }
@@ -293,18 +288,18 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
   return failure();
 }
 
-static LogicalResult verifyTransitionOp(TransitionOp op) {
-  if (!op.getNextState())
-    return op.emitOpError("cannot find the definition of the next state `")
-           << op.nextState() << "`";
+LogicalResult TransitionOp::verify() {
+  if (!getNextState())
+    return emitOpError("cannot find the definition of the next state `")
+           << nextState() << "`";
 
   // Verify the action region.
-  if (op.action().front().getTerminator()->getNumOperands() != 0)
-    return op.emitOpError("action region must not return any value");
+  if (action().front().getTerminator()->getNumOperands() != 0)
+    return emitOpError("action region must not return any value");
 
   // Verify the transition is located in the correct region.
-  if (op->getParentRegion() != &op.getCurrentState().transitions())
-    return op.emitOpError("must only be located in the transitions region");
+  if ((*this)->getParentRegion() != &(*this).getCurrentState().transitions())
+    return emitOpError("must only be located in the transitions region");
 
   return success();
 }
@@ -327,13 +322,13 @@ VariableOp UpdateOp::getVariable() {
   return variable().getDefiningOp<VariableOp>();
 }
 
-static LogicalResult verifyUpdateOp(UpdateOp op) {
-  if (!op.getVariable())
-    return op.emitOpError("destination is not a variable operation");
+LogicalResult UpdateOp::verify() {
+  if (!getVariable())
+    return emitOpError("destination is not a variable operation");
 
-  if (!op->getParentOfType<TransitionOp>().action().isAncestor(
-          op->getParentRegion()))
-    return op.emitOpError("must only be located in the action region");
+  if (!(*this)->getParentOfType<TransitionOp>().action().isAncestor(
+          (*this)->getParentRegion()))
+    return emitOpError("must only be located in the action region");
 
   return success();
 }

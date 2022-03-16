@@ -89,7 +89,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
   }];
 
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins
@@ -214,24 +214,10 @@ class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [Combinational]
 }
 
 def PadLibOp : UnaryLibraryOp<"pad"> {
-  let verifier = [{
-    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
-    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    if (inBits >= outBits)
-      return emitOpError("expected input bits (") << inBits << ')' <<
-                         " to be less than output bits (" << outBits << ')';
-    return success();
-  }];
+  let hasVerifier = 1;
 }
 
 def SliceLibOp : UnaryLibraryOp<"slice"> {
-  let verifier = [{
-    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
-    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    if (inBits <= outBits)
-      return emitOpError("expected input bits (") << inBits << ')' <<
-                         " to be greater than output bits (" << outBits << ')';
-    return success();
-  }];
+  let hasVerifier = 1;
 }
 def NotLibOp  : UnaryLibraryOp<"not"> {}

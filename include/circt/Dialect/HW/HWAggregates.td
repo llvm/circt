@@ -32,12 +32,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let arguments = (ins Variadic<HWNonInOutType>:$inputs);
   let results = (outs ArrayType:$result);
 
-  let verifier = [{
-    unsigned returnSize = getType().cast<ArrayType>().getSize();
-    if (inputs().size() != returnSize)
-      return failure();
-    return success();
-  }];
+  let hasVerifier = 1;
 
   let hasCustomAssemblyFormat = 1;
   let builders = [
@@ -102,14 +97,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
 
   let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
   let results = (outs ArrayType:$dst);
-  let verifier = [{
-    unsigned inputSize = type_cast<ArrayType>(input().getType()).getSize();
-    if (llvm::Log2_64_Ceil(inputSize) !=
-          lowIndex().getType().getIntOrFloatBitWidth())
-      return emitOpError(
-        "ArraySlice: index width must match clog2 of array size");
-    return success();
-  }];
+  let hasVerifier = 1;
 
   let assemblyFormat = [{
     $input`[`$lowIndex`]` attr-dict `:`

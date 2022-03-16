@@ -129,7 +129,7 @@ def HWModuleOp : HWModuleOpBase<"module",
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -151,7 +151,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   }];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def HWModuleExternOp : HWModuleOpBase<"module.extern",
@@ -233,7 +233,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern",
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -255,7 +255,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern",
   }];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def HWGeneratorSchemaOp : HWOp<"generator.schema",
@@ -345,7 +345,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -367,7 +367,7 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
   }];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def InstanceOp : HWOp<"instance", [
@@ -378,7 +378,7 @@ def InstanceOp : HWOp<"instance", [
     This represents an instance of a module. The inputs and results are
     the referenced module's inputs and outputs.  The `argNames` and
     `resultNames` attributes must match the referenced module.
-    
+
     Any parameters in the "old" format (slated to be removed) are stored in the
     `oldParameters` dictionary.
   }];
@@ -457,7 +457,7 @@ def InstanceOp : HWOp<"instance", [
   }];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = "return this->verifyCustom();";
+  let hasVerifier = 1;
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
@@ -476,7 +476,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
 
   let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 
-  let verifier = "return ::verifyOutputOp(this);";
+  let hasVerifier = 1;
 }
 
 def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
@@ -497,7 +497,7 @@ def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
 
   let assemblyFormat = [{ $sym_name $namepath attr-dict}];
 
-  let verifier = "return this->verifyGlobalRef();";
+  let hasVerifier = 1;
 }
 
 def ProbeOp : HWOp<"probe", []> {

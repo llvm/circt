@@ -158,20 +158,20 @@ bool ICmpOp::isNotEqualZero() {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyReplicateOp(ReplicateOp op) {
+LogicalResult ReplicateOp::verify() {
   // The source must be equal or smaller than the dest type, and an even
   // multiple of it.  Both are already known to be signless integers.
-  auto srcWidth = op.getOperand().getType().cast<IntegerType>().getWidth();
-  auto dstWidth = op.getType().getWidth();
+  auto srcWidth = getOperand().getType().cast<IntegerType>().getWidth();
+  auto dstWidth = getType().getWidth();
   if (srcWidth == 0)
-    return op.emitOpError("replicate does not take zero bit integer");
+    return emitOpError("replicate does not take zero bit integer");
 
   if (srcWidth > dstWidth)
-    return op.emitOpError("replicate cannot shrink bitwidth of operand"),
+    return emitOpError("replicate cannot shrink bitwidth of operand"),
            failure();
 
   if (dstWidth % srcWidth)
-    return op.emitOpError("replicate must produce integer multiple of operand"),
+    return emitOpError("replicate must produce integer multiple of operand"),
            failure();
 
   return success();
@@ -211,11 +211,11 @@ static unsigned getTotalWidth(ValueRange inputs) {
   return resultWidth;
 }
 
-static LogicalResult verifyConcatOp(ConcatOp concatOp) {
-  unsigned tyWidth = concatOp.getType().getWidth();
-  unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());
+LogicalResult ConcatOp::verify() {
+  unsigned tyWidth = getType().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(inputs());
   if (tyWidth != operandsTotalWidth)
-    return concatOp.emitOpError("ConcatOp requires operands total width to "
+    return emitOpError("ConcatOp requires operands total width to "
                                 "match type width. operands "
                                 "totalWidth is")
            << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
@@ -246,11 +246,11 @@ LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyExtractOp(ExtractOp op) {
-  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().getWidth();
-  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input"), failure();
+LogicalResult ExtractOp::verify() {
+  unsigned srcWidth = input().getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = getType().getWidth();
+  if (lowBit() >= srcWidth || srcWidth - lowBit() < dstWidth)
+    return emitOpError("from bit too large for input"), failure();
 
   return success();
 }

@@ -598,21 +598,21 @@ void llhd::EntityOp::print(OpAsmPrinter &printer) {
   printer.printRegion(body(), false, false);
 }
 
-static LogicalResult verify(llhd::EntityOp op) {
-  uint64_t numArgs = op.getNumArguments();
-  uint64_t nIns = op.insAttr().getInt();
+LogicalResult llhd::EntityOp::verify() {
+  uint64_t numArgs = getNumArguments();
+  uint64_t nIns = insAttr().getInt();
   // check that there is at most one flag for each argument
   if (numArgs < nIns) {
-    return op.emitError(
+    return emitError(
                "Cannot have more inputs than arguments, expected at most ")
            << numArgs << " but got: " << nIns;
   }
 
   // Check that all block arguments are of signal type
   for (size_t i = 0; i < numArgs; ++i)
-    if (!op.getArgument(i).getType().isa<llhd::SigType>())
-      return op.emitError("usage of invalid argument type. Got ")
-             << op.getArgument(i).getType() << ", expected LLHD signal type";
+    if (!getArgument(i).getType().isa<llhd::SigType>())
+      return emitError("usage of invalid argument type. Got ")
+             << getArgument(i).getType() << ", expected LLHD signal type";
 
   return success();
 }
@@ -699,13 +699,13 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
 
 LogicalResult circt::llhd::ProcOp::verifyBody() { return success(); }
 
-static LogicalResult verify(llhd::ProcOp op) {
+LogicalResult circt::llhd::ProcOp::verify() {
   // Check that the ins attribute is smaller or equal the number of
   // arguments
-  uint64_t numArgs = op.getNumArguments();
-  uint64_t numIns = op.insAttr().getInt();
+  uint64_t numArgs = getNumArguments();
+  uint64_t numIns = insAttr().getInt();
   if (numArgs < numIns) {
-    return op.emitOpError(
+    return emitOpError(
                "Cannot have more inputs than arguments, expected at most ")
            << numArgs << ", got " << numIns;
   }
@@ -843,89 +843,86 @@ ArrayRef<Type> llhd::ProcOp::getCallableResults() {
 // InstOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verify(llhd::InstOp op) {
+LogicalResult llhd::InstOp::verify() {
   // Check that the callee attribute was specified.
-  auto calleeAttr = op->getAttrOfType<FlatSymbolRefAttr>("callee");
+  auto calleeAttr = (*this)->getAttrOfType<FlatSymbolRefAttr>("callee");
   if (!calleeAttr)
-    return op.emitOpError("requires a 'callee' symbol reference attribute");
+    return emitOpError("requires a 'callee' symbol reference attribute");
 
-  auto proc = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
+  auto proc = (*this)->getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
       calleeAttr.getValue());
   if (proc) {
     auto type = proc.getType();
 
-    if (proc.ins() != op.inputs().size())
-      return op.emitOpError(
-          "incorrect number of inputs for proc instantiation");
+    if (proc.ins() != inputs().size())
+      return emitOpError("incorrect number of inputs for proc instantiation");
 
-    if (type.getNumInputs() != op.getNumOperands())
-      return op.emitOpError(
-          "incorrect number of outputs for proc instantiation");
+    if (type.getNumInputs() != getNumOperands())
+      return emitOpError("incorrect number of outputs for proc instantiation");
 
     for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
-      if (op.getOperand(i).getType() != type.getInput(i))
-        return op.emitOpError("operand type mismatch");
+      if (getOperand(i).getType() != type.getInput(i))
+        return emitOpError("operand type mismatch");
     }
 
     return success();
   }
 
-  auto entity = op->getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
-      calleeAttr.getValue());
+  auto entity =
+      (*this)->getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
+          calleeAttr.getValue());
   if (entity) {
     auto type = entity.getType();
 
-    if (entity.ins() != op.inputs().size())
-      return op.emitOpError(
-          "incorrect number of inputs for entity instantiation");
+    if (entity.ins() != inputs().size())
+      return emitOpError("incorrect number of inputs for entity instantiation");
 
-    if (type.getNumInputs() != op.getNumOperands())
-      return op.emitOpError(
+    if (type.getNumInputs() != getNumOperands())
+      return emitOpError(
           "incorrect number of outputs for entity instantiation");
 
     for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
-      if (op.getOperand(i).getType() != type.getInput(i))
-        return op.emitOpError("operand type mismatch");
+      if (getOperand(i).getType() != type.getInput(i))
+        return emitOpError("operand type mismatch");
     }
 
     return success();
   }
 
-  auto module = op->getParentOfType<ModuleOp>().lookupSymbol<hw::HWModuleOp>(
-      calleeAttr.getValue());
+  auto module =
+      (*this)->getParentOfType<ModuleOp>().lookupSymbol<hw::HWModuleOp>(
+          calleeAttr.getValue());
   if (module) {
     auto type = module.getType();
 
-    if (type.getNumInputs() != op.inputs().size())
-      return op.emitOpError(
+    if (type.getNumInputs() != inputs().size())
+      return emitOpError(
           "incorrect number of inputs for hw.module instantiation");
 
-    if (type.getNumResults() + type.getNumInputs() != op.getNumOperands())
-      return op.emitOpError(
+    if (type.getNumResults() + type.getNumInputs() != getNumOperands())
+      return emitOpError(
           "incorrect number of outputs for hw.module instantiation");
 
     // Check input types
     for (size_t i = 0, e = type.getNumInputs(); i != e; ++i) {
-      if (op.getOperand(i)
-              .getType()
-              .cast<llhd::SigType>()
-              .getUnderlyingType() != type.getInput(i))
-        return op.emitOpError("input type mismatch");
+      if (getOperand(i).getType().cast<llhd::SigType>().getUnderlyingType() !=
+          type.getInput(i))
+        return emitOpError("input type mismatch");
     }
 
     // Check output types
     for (size_t i = 0, e = type.getNumResults(); i != e; ++i) {
-      if (op.getOperand(type.getNumInputs() + i)
+      if (getOperand(type.getNumInputs() + i)
               .getType()
               .cast<llhd::SigType>()
               .getUnderlyingType() != type.getResult(i))
-        return op.emitOpError("output type mismatch");
+        return emitOpError("output type mismatch");
     }
 
     return success();
   }
 
-  return op.emitOpError()
+  return emitOpError()
          << "'" << calleeAttr.getValue()
          << "' does not reference a valid proc, entity, or hw.module";
 }
@@ -1062,39 +1059,39 @@ void llhd::RegOp::print(OpAsmPrinter &printer) {
   printer << " : " << signal().getType();
 }
 
-static LogicalResult verify(llhd::RegOp op) {
+LogicalResult llhd::RegOp::verify() {
   // At least one trigger has to be present
-  if (op.triggers().size() < 1)
-    return op.emitError("At least one trigger quadruple has to be present.");
+  if (triggers().size() < 1)
+    return emitError("At least one trigger quadruple has to be present.");
 
   // Values variadic operand must have the same size as the triggers variadic
-  if (op.values().size() != op.triggers().size())
-    return op.emitOpError("Number of 'values' is not equal to the number of "
-                          "'triggers', got ")
-           << op.values().size() << " modes, but " << op.triggers().size()
+  if (values().size() != triggers().size())
+    return emitOpError("Number of 'values' is not equal to the number of "
+                       "'triggers', got ")
+           << values().size() << " modes, but " << triggers().size()
            << " triggers!";
 
   // Delay variadic operand must have the same size as the triggers variadic
-  if (op.delays().size() != op.triggers().size())
-    return op.emitOpError("Number of 'delays' is not equal to the number of "
-                          "'triggers', got ")
-           << op.delays().size() << " modes, but " << op.triggers().size()
+  if (delays().size() != triggers().size())
+    return emitOpError("Number of 'delays' is not equal to the number of "
+                       "'triggers', got ")
+           << delays().size() << " modes, but " << triggers().size()
            << " triggers!";
 
   // Array Attribute of RegModes must have the same number of elements as the
   // variadics
-  if (op.modes().size() != op.triggers().size())
-    return op.emitOpError("Number of 'modes' is not equal to the number of "
-                          "'triggers', got ")
-           << op.modes().size() << " modes, but " << op.triggers().size()
+  if (modes().size() != triggers().size())
+    return emitOpError("Number of 'modes' is not equal to the number of "
+                       "'triggers', got ")
+           << modes().size() << " modes, but " << triggers().size()
            << " triggers!";
 
   // Array Attribute 'gateMask' must have the same number of elements as the
   // triggers and values variadics
-  if (op.gateMask().size() != op.triggers().size())
-    return op.emitOpError("Size of 'gateMask' is not equal to the size of "
-                          "'triggers', got ")
-           << op.gateMask().size() << " modes, but " << op.triggers().size()
+  if (gateMask().size() != triggers().size())
+    return emitOpError("Size of 'gateMask' is not equal to the size of "
+                       "'triggers', got ")
+           << gateMask().size() << " modes, but " << triggers().size()
            << " triggers!";
 
   // Number of non-zero elements in 'gateMask' has to be the same as the size
@@ -1102,30 +1099,30 @@ static LogicalResult verify(llhd::RegOp op) {
   // only once and in increasing order
   unsigned counter = 0;
   unsigned prevElement = 0;
-  for (Attribute maskElem : op.gateMask().getValue()) {
+  for (Attribute maskElem : gateMask().getValue()) {
     int64_t val = maskElem.cast<IntegerAttr>().getInt();
     if (val < 0)
-      return op.emitError("Element in 'gateMask' must not be negative!");
+      return emitError("Element in 'gateMask' must not be negative!");
     if (val == 0)
       continue;
     if (val != ++prevElement)
-      return op.emitError(
+      return emitError(
           "'gateMask' has to contain every number from 1 to the "
           "number of gates minus one exactly once in increasing order "
           "(may have zeros in-between).");
     counter++;
   }
-  if (op.gates().size() != counter)
-    return op.emitError("The number of non-zero elements in 'gateMask' and the "
-                        "size of the 'gates' variadic have to match.");
+  if (gates().size() != counter)
+    return emitError("The number of non-zero elements in 'gateMask' and the "
+                     "size of the 'gates' variadic have to match.");
 
   // Each value must be either the same type as the 'signal' or the underlying
   // type of the 'signal'
-  for (auto val : op.values()) {
-    if (val.getType() != op.signal().getType() &&
+  for (auto val : values()) {
+    if (val.getType() != signal().getType() &&
         val.getType() !=
-            op.signal().getType().cast<llhd::SigType>().getUnderlyingType()) {
-      return op.emitOpError(
+            signal().getType().cast<llhd::SigType>().getUnderlyingType()) {
+      return emitOpError(
           "type of each 'value' has to be either the same as the "
           "type of 'signal' or the underlying type of 'signal'");
     }

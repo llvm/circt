@@ -41,7 +41,7 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
     void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);
 
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -63,7 +63,7 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
   }];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
@@ -83,7 +83,7 @@ def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
     MachineOp getMachine();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def TriggerOp : FSMOp<"trigger", []> {
@@ -106,7 +106,7 @@ def TriggerOp : FSMOp<"trigger", []> {
     MachineOp getMachine();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
@@ -134,7 +134,7 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
     MachineOp getMachine();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
@@ -171,7 +171,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
 
   let assemblyFormat = [{ attr-dict ($operands^ `:` qualified(type($operands)))? }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
@@ -211,7 +211,7 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
     bool isAlwaysTaken();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 def ReturnOp : FSMOp<"return", [HasParent<"TransitionOp">, ReturnLike,
@@ -260,7 +260,7 @@ def UpdateOp : FSMOp<"update", [HasParent<"TransitionOp">, SameTypeOperands]> {
     VariableOp getVariable();
   }];
 
-  let verifier = [{ return ::verify$cppClass(*this); }];
+  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_FSM_FSMOPS_TD
