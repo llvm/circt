@@ -1636,10 +1636,11 @@ private:
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   auto tpe = val.getType().cast<FIRRTLType>();
 
-  if (tpe.isPassive()) {
-    if (flow == Flow::Source || tpe.isa<AnalogType>())
+  auto props = tpe.getRecursiveTypeProperties();
+  if (props.isPassive && !props.containsAnalog) {
+    if (flow == Flow::Source)
       return;
-    if (tpe.hasUninferredWidth())
+    if (props.hasUninferredWidth)
       builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
     else
       builder.create<StrictConnectOp>(val, builder.create<InvalidValueOp>(tpe));
