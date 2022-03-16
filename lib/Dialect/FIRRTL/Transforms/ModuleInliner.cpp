@@ -356,7 +356,8 @@ public:
   }
 
   void setInnerSym(Attribute module, StringAttr innerSym) {
-    assert(symIdx.count(module) && "Mutalbe NLA did not contain symbol");
+    assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
+    assert(!renames.count(module) && "Module already renamed");
     renames.insert({module, innerSym});
   }
 };
@@ -532,8 +533,16 @@ void Inliner::rename(StringRef prefix, Operation *op,
         auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
         if (!sym)
           continue;
-        nlaMap[sym.getAttr()].setInnerSym(
-            moduleNamespace.module.moduleNameAttr(), newSymAttr);
+        // If this is a breadcrumb, we update the annotation path
+        // unconditionally. If this is the leaf of the NLA, we need to make sure
+        // we only update the annotation if the current path matches the NLA.
+        // This matters when the same module is inlined twice and the NLA only
+        // applies to one of them.
+        auto &mnla = nlaMap[sym.getAttr()];
+        if (!anno.isClass("circt.nonlocal") &&
+            !doesNLAMatchCurrentPath(mnla.getNLA()))
+          continue;
+        mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSymAttr);
       }
     }
   }
@@ -573,17 +582,15 @@ Inliner::mapPortsToWires(StringRef prefix, OpBuilder &b,
       // If the annotation is not non-local, copy it to the clone.
       if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
         auto &mnla = nlaMap[sym.getAttr()];
-        // Update any NLAs with the new symbol name.
-        if (oldSym != newSym)
-          mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSym);
         // If the NLA does not match the path, we don't want to copy it over.
         if (!doesNLAMatchCurrentPath(mnla.getNLA()))
           continue;
+        // Update any NLAs with the new symbol name.
+        if (oldSym != newSym)
+          mnla.setInnerSym(moduleNamespace.module.moduleNameAttr(), newSym);
         // If all paths of the NLA have been inlined, make it local.
-        if (nlaMap[sym.getAttr()].isLocal() ||
-            localSymbols.count(sym.getAttr())) {
+        if (mnla.isLocal() || localSymbols.count(sym.getAttr()))
           anno.removeMember("circt.nonlocal");
-        }
       }
       newAnnotations.push_back(anno.getAttr());
     }
@@ -613,7 +620,7 @@ void Inliner::cloneAndRename(
     if (auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
       // If this is a bread-crumb, the NLA may have been renamed.  This only
       // matters for InstanceOps.
-      if (isa<InstanceOp>(op)) {
+      if (anno.isClass("circt.nonlocal")) {
         if (auto newSym = symbolRenames.lookup(sym.getAttr())) {
           auto symRef = FlatSymbolRefAttr::get(newSym.cast<StringAttr>());
           anno.setMember("circt.nonlocal", symRef);

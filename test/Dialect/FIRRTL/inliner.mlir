@@ -546,6 +546,50 @@ firrtl.circuit "CollidingSymbolsReTop" {
   }
 }
 
+// Test that when inlining two instances of a module and the port names collide,
+// that the NLA is properly updated.  Specifically in this test case, the second
+// instance inlined should be renamed, and it should *not* update the NLA.
+// CHECK-LABEL: firrtl.circuit "CollidingSymbolsNLAFixup"
+firrtl.circuit "CollidingSymbolsNLAFixup" {
+  // CHECK: firrtl.nla @nla0 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@io>]
+  firrtl.nla @nla0 [#hw.innerNameRef<@Foo::@bar>,
+                    #hw.innerNameRef<@Bar::@baz0>,
+                    #hw.innerNameRef<@Baz::@io>]
+  
+  // CHECK: firrtl.nla @nla1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@w>]
+  firrtl.nla @nla1 [#hw.innerNameRef<@Foo::@bar>,
+                    #hw.innerNameRef<@Bar::@baz0>,
+                    #hw.innerNameRef<@Baz::@w>]
+
+  firrtl.module @Baz(out %io: !firrtl.uint<1> sym @io [{circt.nonlocal = @nla0, class = "test"}])
+       attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla1, class = "test"}]} : !firrtl.uint<1>
+  }
+
+  // CHECK: firrtl.module @Bar()
+  firrtl.module @Bar() {
+    // CHECK: %baz0_io = firrtl.wire sym @io  {annotations = [{circt.nonlocal = @nla0, class = "test"}]}
+    // CHECK: %baz0_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla1, class = "test"}]}
+    %0 = firrtl.instance baz0 sym @baz0 {annotations = [
+      {circt.nonlocal = @nla0, class = "circt.nonlocal"},
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Baz(out io : !firrtl.uint<1>)
+
+    // CHECK: %baz1_io = firrtl.wire sym @io_0
+    // CHECK: %baz1_w = firrtl.wire sym @w
+    %1 = firrtl.instance baz1 sym @baz1 @Baz(out io : !firrtl.uint<1>)
+  }
+
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar {annotations = [
+      {circt.nonlocal = @nla0, class = "circt.nonlocal"},
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Bar()
+  }
+  
+  firrtl.module @CollidingSymbolsNLAFixup() {
+    firrtl.instance system sym @system @Foo()
+  }
+}
+
 // Test that anything with a "name" will be renamed, even things that FIRRTL
 // Dialect doesn't understand.
 //
