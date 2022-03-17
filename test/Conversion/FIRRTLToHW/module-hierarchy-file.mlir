@@ -32,9 +32,9 @@ firrtl.circuit "MyTestHarness" attributes {annotations = [
   {class = "sifive.enterprise.firrtl.ModuleHierarchyAnnotation", filename = "./dir1/filename1.json" },
   {class = "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation", filename = "./dir2/filename2.json" }]}
 {
-  // CHECK-LABEL: hw.module @MyDUT
+  // CHECK-LABEL: hw.module private @MyDUT
   // CHECK-SAME: attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"./dir1/filename1.json", excludeFromFileList>]}
-  firrtl.module @MyDUT() attributes {annotations = [
+  firrtl.module private @MyDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 
   // CHECK-LABEL: hw.module @MyTestHarness

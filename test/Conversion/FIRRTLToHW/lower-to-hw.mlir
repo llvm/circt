@@ -341,8 +341,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    printf(clock, reset, "No operands!\n")
 //    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
 
-  // CHECK-LABEL: hw.module @Print
-  firrtl.module @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  // CHECK-LABEL: hw.module private @Print
+  firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>) {
     // CHECK: [[ADD:%.+]] = comb.add
 
@@ -383,8 +383,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    stop(clock1, reset, 42)
 //    stop(clock2, reset, 0)
 
-  // CHECK-LABEL: hw.module @Stop
-  firrtl.module @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  // CHECK-LABEL: hw.module private @Stop
+  firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 
     // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
@@ -427,8 +427,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //     cover(clock,  cCond, cEn, "cover0)"
   //     cover(clock,  cCond, cEn, "cover0)" : cover_0
 
-  // CHECK-LABEL: hw.module @Verification
-  firrtl.module @Verification(in %clock: !firrtl.clock, in %aCond: !firrtl.uint<1>,
+  // CHECK-LABEL: hw.module private @Verification
+  firrtl.module private @Verification(in %clock: !firrtl.clock, in %aCond: !firrtl.uint<1>,
     in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
     in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
 
@@ -520,8 +520,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output
   }
 
-  // CHECK-LABEL: hw.module @VerificationGuards
-  firrtl.module @VerificationGuards(
+  // CHECK-LABEL: hw.module private @VerificationGuards
+  firrtl.module private @VerificationGuards(
     in %clock: !firrtl.clock,
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>
@@ -555,8 +555,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  // CHECK-LABEL: hw.module @VerificationAssertFormat
-  firrtl.module @VerificationAssertFormat(
+  // CHECK-LABEL: hw.module private @VerificationAssertFormat
+  firrtl.module private @VerificationAssertFormat(
     in %clock: !firrtl.clock,
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>,
@@ -591,13 +591,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>) {
+  firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) {
     // CHECK: hw.probe @baz, %io_cpu_flush, %io_cpu_flush : i1, i1
     firrtl.probe @baz, %io_cpu_flush, %io_cpu_flush  : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @foo
-  firrtl.module @foo() {
+  // CHECK-LABEL: hw.module private @foo
+  firrtl.module private @foo() {
     // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire sym @__foo__io_cpu_flush.wire : !hw.inout<i1>
     // CHECK-NEXT:  [[IO:%[0-9]+]] = sv.read_inout %io_cpu_flush.wire
     %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
@@ -615,8 +615,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NOT: output_file
   // CHECK-NEXT: sv.bind <@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
-  // CHECK-NEXT: hw.module @bindTest()
-  firrtl.module @bindTest() {
+  // CHECK-NEXT: hw.module private @bindTest()
+  firrtl.module private @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance baz {lowerToBind = true} @bar(in io_cpu_flush: !firrtl.uint<1>)
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
@@ -624,16 +624,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
 
-  // CHECK-LABEL: hw.module @output_fileTest
+  // CHECK-LABEL: hw.module private @output_fileTest
   // CHECK-SAME: output_file = #hw.output_file<"output_fileTest/dir/output_fileTest.sv", excludeFromFileList>
-  firrtl.module @output_fileTest() attributes {output_file = #hw.output_file<
+  firrtl.module private @output_fileTest() attributes {output_file = #hw.output_file<
     "output_fileTest/dir/output_fileTest.sv", excludeFromFileList
   >} {
   }
 
   // https://github.com/llvm/circt/issues/314
-  // CHECK-LABEL: hw.module @issue314
-  firrtl.module @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
+  // CHECK-LABEL: hw.module private @issue314
+  firrtl.module private @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
     // CHECK: %c0_i38 = hw.constant 0 : i38
     // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
@@ -647,16 +647,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // https://github.com/llvm/circt/issues/318
-  // CHECK-LABEL: hw.module @test_rem
+  // CHECK-LABEL: hw.module private @test_rem
   // CHECK-NEXT:     %0 = comb.modu
   // CHECK-NEXT:     hw.output %0
-  firrtl.module @test_rem(in %tmp85: !firrtl.uint<1>, in %tmp79: !firrtl.uint<1>,
+  firrtl.module private @test_rem(in %tmp85: !firrtl.uint<1>, in %tmp79: !firrtl.uint<1>,
        out %out: !firrtl.uint<1>) {
     %2 = firrtl.rem %tmp79, %tmp85 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @Analog(%a1: !hw.inout<i1>, %b1: !hw.inout<i1>,
+  // CHECK-LABEL: hw.module private @Analog(%a1: !hw.inout<i1>, %b1: !hw.inout<i1>,
   // CHECK:                          %c1: !hw.inout<i1>) -> (outClock: i1) {
   // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
   // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
@@ -676,7 +676,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:     }
   // CHECK-NEXT:    }
   // CHECK-NEXT:    hw.output %2 : i1
-  firrtl.module @Analog(in %a1: !firrtl.analog<1>, in %b1: !firrtl.analog<1>,
+  firrtl.module private @Analog(in %a1: !firrtl.analog<1>, in %b1: !firrtl.analog<1>,
                         in %c1: !firrtl.analog<1>, out %outClock: !firrtl.clock) {
     firrtl.attach %a1, %b1, %c1 : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
 
@@ -696,9 +696,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
  //   node _GEN_0 = mux(cond, value, count)
  //   count <= mux(reset, UInt<2>("h0"), _GEN_0)
 
-  // CHECK-LABEL: hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  // CHECK-LABEL: hw.module private @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 
-  firrtl.module @UninitReg1(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  firrtl.module private @UninitReg1(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>) {
     // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -746,8 +746,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //     io_q <= reg
   //     reg <= mux(io_en, io_d, reg)
 
-  // CHECK-LABEL: hw.module @InitReg1(
-  firrtl.module @InitReg1(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  // CHECK-LABEL: hw.module private @InitReg1(
+  firrtl.module private @InitReg1(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                           in %io_d: !firrtl.uint<32>, in %io_en: !firrtl.uint<1>,
                           out %io_q: !firrtl.uint<32>) {
     // CHECK: %c0_i32 = hw.constant 0 : i32
@@ -841,8 +841,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //     _M.write.data <= validif(inpred, indata)
   //     _M.write.mask <= validif(inpred, UInt<1>("h1"))
 
-  // CHECK-LABEL: hw.module @MemSimple(
-  firrtl.module @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
+  // CHECK-LABEL: hw.module private @MemSimple(
+  firrtl.module private @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
                            in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>,
                            out %result: !firrtl.sint<42>,
                            out %result2: !firrtl.sint<42>) {
@@ -888,8 +888,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
       firrtl.connect %14, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @MemSimple_mask(
-  firrtl.module @MemSimple_mask(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
+  // CHECK-LABEL: hw.module private @MemSimple_mask(
+  firrtl.module private @MemSimple_mask(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
                            in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<40>,
                            out %result: !firrtl.sint<40>,
                            out %result2: !firrtl.sint<40>) {
@@ -937,9 +937,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
       %14 = firrtl.subfield %_M_write(4) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>) -> !firrtl.uint<4>
       firrtl.connect %14, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
   }
-  // CHECK-LABEL: hw.module @IncompleteRead(
+  // CHECK-LABEL: hw.module private @IncompleteRead(
   // The read port has no use of the data field.
-  firrtl.module @IncompleteRead(in %clock1: !firrtl.clock) {
+  firrtl.module private @IncompleteRead(in %clock1: !firrtl.clock) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -954,12 +954,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %8, %clock1 : !firrtl.clock, !firrtl.clock
   }
 
-  // CHECK-LABEL: hw.module @top_modx() -> (tmp27: i23) {
+  // CHECK-LABEL: hw.module private @top_modx() -> (tmp27: i23) {
   // CHECK-NEXT:    %c0_i23 = hw.constant 0 : i23
   // CHECK-NEXT:    %c42_i23 = hw.constant 42 : i23
   // CHECK-NEXT:    hw.output %c0_i23 : i23
   // CHECK-NEXT:  }
-  firrtl.module @top_modx(out %tmp27: !firrtl.uint<23>) {
+  firrtl.module private @top_modx(out %tmp27: !firrtl.uint<23>) {
     %0 = firrtl.wire : !firrtl.uint<0>
     %c42_ui23 = firrtl.constant 42 : !firrtl.uint<23>
     %1 = firrtl.tail %c42_ui23, 23 : (!firrtl.uint<23>) -> !firrtl.uint<0>
@@ -969,19 +969,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %tmp27, %3 : !firrtl.uint<23>, !firrtl.uint<23>
   }
 
-  //CHECK-LABEL: hw.module @test_partialconnect(%clock: i1) {
+  //CHECK-LABEL: hw.module private @test_partialconnect(%clock: i1) {
   //CHECK: sv.always posedge %clock
-  firrtl.module @test_partialconnect(in %clock : !firrtl.clock) {
+  firrtl.module private @test_partialconnect(in %clock : !firrtl.clock) {
     %b = firrtl.reg %clock {name = "pcon"} : !firrtl.uint<1>
     %a = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (fldout: i64) {
+  // CHECK-LABEL: hw.module private @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (fldout: i64) {
   // CHECK-NEXT:    %0 = hw.struct_extract %source["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
   // CHECK-NEXT:    hw.output %0 : i64
   // CHECK-NEXT:  }
-  firrtl.module @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
+  firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %fldout: !firrtl.uint<64>) {
     %2 = firrtl.subfield %source (2) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
     firrtl.connect %fldout, %2 : !firrtl.uint<64>, !firrtl.uint<64>
@@ -989,7 +989,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
-  firrtl.module @IsInvalidIssue572(in %a: !firrtl.analog<1>) {
+  firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {
     // CHECK-NEXT: %0 = sv.read_inout %a : !hw.inout<i1>
 
     // CHECK-NEXT: %.invalid_analog = sv.wire : !hw.inout<i1>
@@ -1011,7 +1011,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: IsInvalidIssue654
   // https://github.com/llvm/circt/issues/654
-  firrtl.module @IsInvalidIssue654() {
+  firrtl.module private @IsInvalidIssue654() {
     %w = firrtl.wire : !firrtl.uint<0>
     %0 = firrtl.invalidvalue : !firrtl.uint<0>
     firrtl.connect %w, %0 : !firrtl.uint<0>, !firrtl.uint<0>
@@ -1019,20 +1019,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: ASQ
   // https://github.com/llvm/circt/issues/699
-  firrtl.module @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+  firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
-  // CHECK-LABEL: hw.module @Struct0bits(%source: !hw.struct<valid: i1, ready: i1, data: i0>) {
+  // CHECK-LABEL: hw.module private @Struct0bits(%source: !hw.struct<valid: i1, ready: i1, data: i0>) {
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
-  firrtl.module @Struct0bits(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
+  firrtl.module private @Struct0bits(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
     %2 = firrtl.subfield %source (2) : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
   }
 
-  // CHECK-LABEL: hw.module @MemDepth1
-  firrtl.module @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
+  // CHECK-LABEL: hw.module private @MemDepth1
+  firrtl.module private @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
                            in %addr: !firrtl.uint<1>, out %data: !firrtl.uint<32>) {
     // CHECK: %mem0.R0_data = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_0_1_1(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
     // CHECK: hw.output %mem0.R0_data : i32
@@ -1048,15 +1048,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 }
 
   // https://github.com/llvm/circt/issues/1115
-  // CHECK-LABEL: hw.module @issue1115
-  firrtl.module @issue1115(in %a: !firrtl.sint<20>, out %tmp59: !firrtl.sint<2>) {
+  // CHECK-LABEL: hw.module private @issue1115
+  firrtl.module private @issue1115(in %a: !firrtl.sint<20>, out %tmp59: !firrtl.sint<2>) {
     %0 = firrtl.shr %a, 21 : (!firrtl.sint<20>) -> !firrtl.sint<1>
     firrtl.connect %tmp59, %0 : !firrtl.sint<2>, !firrtl.sint<1>
   }
 
-   // CHECK-LABEL: hw.module @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
+   // CHECK-LABEL: hw.module private @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
 
-  firrtl.module @UninitReg42(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  firrtl.module private @UninitReg42(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
     %c0_ui42 = firrtl.constant 0 : !firrtl.uint<42>
     // CHECK: %count = sv.reg sym @count : !hw.inout<i42>
@@ -1085,7 +1085,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: issue1303
-  firrtl.module @issue1303(out %out: !firrtl.reset) {
+  firrtl.module private @issue1303(out %out: !firrtl.reset) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %out, %c1_ui : !firrtl.reset, !firrtl.uint<1>
     // CHECK-NEXT: %true = hw.constant true
@@ -1094,7 +1094,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: issue1594
   // Make sure LowerToHW's merging of always blocks kicks in for this example.
-  firrtl.module @issue1594(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+  firrtl.module private @issue1594(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %reset_n = firrtl.wire  : !firrtl.uint<1>
     %0 = firrtl.not %reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -1107,8 +1107,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: hw.output
   }
 
-  // CHECK-LABEL: hw.module @Force
-  firrtl.module @Force(in %in: !firrtl.uint<42>) {
+  // CHECK-LABEL: hw.module private @Force
+  firrtl.module private @Force(in %in: !firrtl.uint<42>) {
     // CHECK: %out = sv.wire : !hw.inout<i42>
     // CHECK: sv.initial {
     // CHECK:   sv.force %out, %in : i42
@@ -1140,14 +1140,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   )
   attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
-  // CHECK-LABEL: hw.module @FooDUT
-  firrtl.module @FooDUT() attributes {annotations = [
+  // CHECK-LABEL: hw.module private @FooDUT
+  firrtl.module private @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %chckcoverAnno_clock = firrtl.instance chkcoverAnno @chkcoverAnno(in clock: !firrtl.clock)
   }
 
-  // CHECK-LABEL: hw.module @MemoryWritePortBehavior
-  firrtl.module @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
+  // CHECK-LABEL: hw.module private @MemoryWritePortBehavior
+  firrtl.module private @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
     // This memory has both write ports driven by the same clock.  It should be
     // lowered to an "aa" memory.
     //
@@ -1183,8 +1183,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
   }
 
-  // CHECK-LABEL: hw.module @AsyncResetBasic(
-  firrtl.module @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.uint<1>) {
+  // CHECK-LABEL: hw.module private @AsyncResetBasic(
+  firrtl.module private @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.uint<1>) {
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
     %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
     // The following should not error because the reset values are constant.
@@ -1194,8 +1194,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
   }
 
-  // CHECK-LABEL: hw.module @AsyncResetThroughWires(
-  firrtl.module @AsyncResetThroughWires(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
+  // CHECK-LABEL: hw.module private @AsyncResetThroughWires(
+  firrtl.module private @AsyncResetThroughWires(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
     %c9000_ui42 = firrtl.constant 9000 : !firrtl.uint<42>
     %c9001_ui42 = firrtl.constant 9001 : !firrtl.uint<42>
     // expected-note @+1 {{reset value defined here}}
@@ -1207,8 +1207,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r0 = firrtl.regreset %clock, %arst, %constWire : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
-  // CHECK-LABEL: hw.module @AsyncResetThroughNodes(
-  firrtl.module @AsyncResetThroughNodes(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
+  // CHECK-LABEL: hw.module private @AsyncResetThroughNodes(
+  firrtl.module private @AsyncResetThroughNodes(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
     %c1337_ui42 = firrtl.constant 1337 : !firrtl.uint<42>
     // expected-note @+1 {{reset value defined here}}
     %constNode = firrtl.node %c1337_ui42 : !firrtl.uint<42>
@@ -1217,42 +1217,42 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
-  // CHECK-LABEL: hw.module @BitCast1
-  firrtl.module @BitCast1() {
+  // CHECK-LABEL: hw.module private @BitCast1
+  firrtl.module private @BitCast1() {
     %a = firrtl.wire : !firrtl.vector<uint<2>, 13>
     %b = firrtl.bitcast %a : (!firrtl.vector<uint<2>, 13>) -> (!firrtl.uint<26>)
     // CHECK: hw.bitcast %0 : (!hw.array<13xi2>) -> i26
   }
 
-  // CHECK-LABEL: hw.module @BitCast2
-  firrtl.module @BitCast2() {
+  // CHECK-LABEL: hw.module private @BitCast2
+  firrtl.module private @BitCast2() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
     %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)
     // CHECK: hw.bitcast %0 : (!hw.struct<valid: i1, ready: i1, data: i1>) -> i3
 
   }
-  // CHECK-LABEL: hw.module @BitCast3
-  firrtl.module @BitCast3() {
+  // CHECK-LABEL: hw.module private @BitCast3
+  firrtl.module private @BitCast3() {
     %a = firrtl.wire : !firrtl.uint<26>
     %b = firrtl.bitcast %a : (!firrtl.uint<26>) -> (!firrtl.vector<uint<2>, 13>)
     // CHECK: hw.bitcast %0 : (i26) -> !hw.array<13xi2>
   }
 
-  // CHECK-LABEL: hw.module @BitCast4
-  firrtl.module @BitCast4() {
+  // CHECK-LABEL: hw.module private @BitCast4
+  firrtl.module private @BitCast4() {
     %a = firrtl.wire : !firrtl.uint<3>
     %b = firrtl.bitcast %a : (!firrtl.uint<3>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>)
     // CHECK: hw.bitcast %0 : (i3) -> !hw.struct<valid: i1, ready: i1, data: i1>
 
   }
-  // CHECK-LABEL: hw.module @BitCast5
-  firrtl.module @BitCast5() {
+  // CHECK-LABEL: hw.module private @BitCast5
+  firrtl.module private @BitCast5() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>
     %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>) -> (!firrtl.vector<uint<2>, 3>)
     // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
   }
 
-  // CHECK-LABEL: hw.module @InnerNames
+  // CHECK-LABEL: hw.module private @InnerNames
   // CHECK-SAME:  (
   // CHECK-SAME:    %value: i42 {hw.exportPort = @portValueSym}
   // CHECK-SAME:    %clock: i1 {hw.exportPort = @portClockSym}
@@ -1260,7 +1260,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME:  ) -> (
   // CHECK-SAME:    out: i1 {hw.exportPort = @portOutSym}
   // CHECK-SAME:  )
-  firrtl.module @InnerNames(
+  firrtl.module private @InnerNames(
     in %value: !firrtl.uint<42> sym @portValueSym,
     in %clock: !firrtl.clock sym @portClockSym,
     in %reset: !firrtl.uint<1> sym @portResetSym,
@@ -1282,8 +1282,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @regInitRandomReuse
-  firrtl.module @regInitRandomReuse(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %o1: !firrtl.uint<2>, out %o2: !firrtl.uint<4>, out %o3: !firrtl.uint<32>, out %o4: !firrtl.uint<100>) {
+  // CHECK-LABEL: hw.module private @regInitRandomReuse
+  firrtl.module private @regInitRandomReuse(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %o1: !firrtl.uint<2>, out %o2: !firrtl.uint<4>, out %o3: !firrtl.uint<32>, out %o4: !firrtl.uint<100>) {
     %r1 = firrtl.reg %clock  : !firrtl.uint<2>
     %r2 = firrtl.reg %clock  : !firrtl.uint<4>
     %r3 = firrtl.reg %clock  : !firrtl.uint<32>
@@ -1326,8 +1326,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %o4, %r4 : !firrtl.uint<100>, !firrtl.uint<100>
   }
 
-  // CHECK-LABEL: hw.module @init1DVector
-  firrtl.module @init1DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
+  // CHECK-LABEL: hw.module private @init1DVector
+  firrtl.module private @init1DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %r = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
     // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
     // CHECK:      sv.ifdef "SYNTHESIS" {
@@ -1353,8 +1353,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<2xi1>
   }
 
-  // CHECK-LABEL: hw.module @init2DVector
-  firrtl.module @init2DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, out %b: !firrtl.vector<vector<uint<1>, 1>, 1>) {
+  // CHECK-LABEL: hw.module private @init2DVector
+  firrtl.module private @init2DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, out %b: !firrtl.vector<vector<uint<1>, 1>, 1>) {
     %r = firrtl.reg %clock  : !firrtl.vector<vector<uint<1>, 1>, 1>
     // CKECK-NEXT: sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CKECK-NEXT:   %1 = sv.array_index_inout %r[%false] : !hw.inout<array<1xarray<1xi1>>>, i1
@@ -1373,8 +1373,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<1xarray<1xi1>>
   }
 
-  // CHECK-LABEL: hw.module @connectNarrowUIntVector
-  firrtl.module @connectNarrowUIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 1>, out %b: !firrtl.vector<uint<3>, 1>) {
+  // CHECK-LABEL: hw.module private @connectNarrowUIntVector
+  firrtl.module private @connectNarrowUIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 1>, out %b: !firrtl.vector<uint<3>, 1>) {
     %r1 = firrtl.reg %clock  : !firrtl.vector<uint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<uint<3>, 1>, !firrtl.vector<uint<2>, 1>
@@ -1391,8 +1391,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<1xi3>
   }
 
-  // CHECK-LABEL: hw.module @connectNarrowSIntVector
-  firrtl.module @connectNarrowSIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<sint<1>, 1>, out %b: !firrtl.vector<sint<3>, 1>) {
+  // CHECK-LABEL: hw.module private @connectNarrowSIntVector
+  firrtl.module private @connectNarrowSIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<sint<1>, 1>, out %b: !firrtl.vector<sint<3>, 1>) {
     %r1 = firrtl.reg %clock  : !firrtl.vector<sint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<sint<2>, 1>, !firrtl.vector<sint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<sint<3>, 1>, !firrtl.vector<sint<2>, 1>
@@ -1410,8 +1410,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<1xi3>
   }
 
-  // CHECK-LABEL: hw.module @partialConnectVector
-  firrtl.module @partialConnectVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<3>, 1>, out %b: !firrtl.vector<uint<1>, 1>) {
+  // CHECK-LABEL: hw.module private @partialConnectVector
+  firrtl.module private @partialConnectVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<3>, 1>, out %b: !firrtl.vector<uint<1>, 1>) {
     %r = firrtl.reg %clock  : !firrtl.vector<uint<2>, 1>
     firrtl.partialconnect %r, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<3>, 1>
     firrtl.partialconnect %b, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<2>, 1>
@@ -1430,8 +1430,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<1xi1>
   }
 
-  // CHECK-LABEL: hw.module @SubIndex
-  firrtl.module @SubIndex(in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
+  // CHECK-LABEL: hw.module private @SubIndex
+  firrtl.module private @SubIndex(in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
     %r1 = firrtl.reg %clock  : !firrtl.uint<1>
     %r2 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 1>
     %0 = firrtl.subindex %a[0] : !firrtl.vector<vector<uint<1>, 1>, 1>
@@ -1449,8 +1449,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<1xi1>
   }
 
-  // CHECK-LABEL: hw.module @partialConnectDifferentVectorLength
-  firrtl.module @partialConnectDifferentVectorLength(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 1>) {
+  // CHECK-LABEL: hw.module private @partialConnectDifferentVectorLength
+  firrtl.module private @partialConnectDifferentVectorLength(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 1>) {
     %r1 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
     firrtl.connect %r1, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.partialconnect %b, %r1 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 2>
@@ -1465,8 +1465,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<1xi1>
   }
 
-  // CHECK-LABEL: hw.module @SubindexDestination
-  firrtl.module @SubindexDestination(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
+  // CHECK-LABEL: hw.module private @SubindexDestination
+  firrtl.module private @SubindexDestination(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
     %0 = firrtl.subindex %b[2] : !firrtl.vector<uint<1>, 3>
     %1 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1479,16 +1479,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
   }
 
-  // CHECK-LABEL: hw.module @zero_width_constant()
+  // CHECK-LABEL: hw.module private @zero_width_constant()
   // https://github.com/llvm/circt/issues/2269
-  firrtl.module @zero_width_constant(out %a: !firrtl.uint<0>) {
+  firrtl.module private @zero_width_constant(out %a: !firrtl.uint<0>) {
     // CHECK-NEXT: hw.output
     %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
     firrtl.connect %a, %c0_ui0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 
   // CHECK-LABEL: @subfield_write1(
-  firrtl.module @subfield_write1(out %a: !firrtl.bundle<a: uint<1>>) {
+  firrtl.module private @subfield_write1(out %a: !firrtl.bundle<a: uint<1>>) {
     %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1501,7 +1501,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: @subfield_write2(
-  firrtl.module @subfield_write2(in %in: !firrtl.uint<1>, out %sink: !firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) {
+  firrtl.module private @subfield_write2(in %in: !firrtl.uint<1>, out %sink: !firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) {
     %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: bundle<c: uint<1>>>>) -> !firrtl.bundle<b: bundle<c: uint<1>>>
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: bundle<c: uint<1>>>) -> !firrtl.bundle<c: uint<1>>
     %2 = firrtl.subfield %1(0) : (!firrtl.bundle<c: uint<1>>) -> !firrtl.uint<1>
@@ -1515,8 +1515,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: !hw.struct<c: i1>>>
   }
 
-  // CHECK-LABEL: hw.module @initStruct
-  firrtl.module @initStruct(in %clock: !firrtl.clock) {
+  // CHECK-LABEL: hw.module private @initStruct
+  firrtl.module private @initStruct(in %clock: !firrtl.clock) {
     %r = firrtl.reg %clock  : !firrtl.bundle<a: uint<1>>
     // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
     // CHECK:      sv.ifdef "SYNTHESIS" {
@@ -1534,8 +1534,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  // CHECK-LABEL: hw.module @RegResetStructWiden
-  firrtl.module @RegResetStructWiden(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
+  // CHECK-LABEL: hw.module private @RegResetStructWiden
+  firrtl.module private @RegResetStructWiden(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
     // CHECK:      [[FALSE:%.*]] = hw.constant false
     // CHECK-NEXT: [[A:%.*]] = hw.struct_extract %init["a"] : !hw.struct<a: i2>
     // CHECK-NEXT: [[PADDED:%.*]] = comb.concat [[FALSE]], [[A]] : i1, i2
@@ -1550,8 +1550,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
   }
 
-  // CHECK-LABEL: hw.module @BundleConnection
-  firrtl.module @BundleConnection(in %source: !firrtl.bundle<a: bundle<b: uint<1>>>, out %sink: !firrtl.bundle<a: bundle<b: uint<1>>>) {
+  // CHECK-LABEL: hw.module private @BundleConnection
+  firrtl.module private @BundleConnection(in %source: !firrtl.bundle<a: bundle<b: uint<1>>>, out %sink: !firrtl.bundle<a: bundle<b: uint<1>>>) {
     %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
     %1 = firrtl.subfield %source(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
     firrtl.connect %0, %1 : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
@@ -1563,8 +1563,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.struct<a: !hw.struct<b: i1>>
   }
 
-  // CHECK-LABEL: hw.module @AggregateInvalidValue
-  firrtl.module @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  // CHECK-LABEL: hw.module private @AggregateInvalidValue
+  firrtl.module private @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
     %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
     // CHECK:      %c0_i101 = hw.constant 0 : i101
@@ -1578,8 +1578,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  // CHECK-LABEL: hw.module @AggregateRegAssign
-  firrtl.module @AggregateRegAssign(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+  // CHECK-LABEL: hw.module private @AggregateRegAssign
+  firrtl.module private @AggregateRegAssign(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
     %reg = firrtl.reg %clock : !firrtl.vector<uint<1>, 1>
     %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
     firrtl.connect %reg_0, %value : !firrtl.uint<1>, !firrtl.uint<1>
@@ -1587,8 +1587,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:  sv.passign %0, %value : i1
   }
 
-  // CHECK-LABEL: hw.module @AggregateRegResetAssign
-  firrtl.module @AggregateRegResetAssign(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  // CHECK-LABEL: hw.module private @AggregateRegResetAssign
+  firrtl.module private @AggregateRegResetAssign(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                                          in %init: !firrtl.vector<uint<1>, 1>, in %value: !firrtl.uint<1>) {
     %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     %reg_0 = firrtl.subindex %reg[0] : !firrtl.vector<uint<1>, 1>
@@ -1597,16 +1597,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:  sv.passign %0, %value : i1
   }
 
-  // CHECK-LABEL: hw.module @ForceNameSubmodule
+  // CHECK-LABEL: hw.module private @ForceNameSubmodule
   firrtl.nla @nla_1 [#hw.innerNameRef<@ForceNameTop::@sym_foo>,@ForceNameSubmodule]
   firrtl.nla @nla_2 [#hw.innerNameRef<@ForceNameTop::@sym_bar>,@ForceNameSubmodule]
-  firrtl.module @ForceNameSubmodule() attributes {annotations = [
+  firrtl.module private @ForceNameSubmodule() attributes {annotations = [
     {circt.nonlocal = @nla_2,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Bar"},
     {circt.nonlocal = @nla_1,
      class = "chisel3.util.experimental.ForceNameAnnotation", name = "Foo"}]} {}
-  // CHECK: hw.module @ForceNameTop
-  firrtl.module @ForceNameTop() {
+  // CHECK: hw.module private @ForceNameTop
+  firrtl.module private @ForceNameTop() {
     firrtl.instance foo sym @sym_foo
       {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}
       @ForceNameSubmodule()
@@ -1617,15 +1617,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.instance "bar" sym @sym_bar {{.+}} {hw.verilogName = "Bar"}
   }
 
-  // CHECK-LABEL: hw.module @PreserveName
-  firrtl.module @PreserveName(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>, out %c : !firrtl.uint<1>) {
+  // CHECK-LABEL: hw.module private @PreserveName
+  firrtl.module private @PreserveName(in %a : !firrtl.uint<1>, in %b : !firrtl.uint<1>, out %c : !firrtl.uint<1>) {
     //CHECK comb.or %a, %b {sv.namehint = "myname"}
     %foo = firrtl.or %a, %b {name = "myname"} : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %c, %foo : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @MutlibitMux(%source_0: i1, %source_1: i1, %source_2: i1, %index: i2) -> (sink: i1) {
-  firrtl.module @MutlibitMux(in %source_0: !firrtl.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.uint<1>, out %sink: !firrtl.uint<1>, in %index: !firrtl.uint<2>) {
+  // CHECK-LABEL: hw.module private @MutlibitMux(%source_0: i1, %source_1: i1, %source_2: i1, %index: i2) -> (sink: i1) {
+  firrtl.module private @MutlibitMux(in %source_0: !firrtl.uint<1>, in %source_1: !firrtl.uint<1>, in %source_2: !firrtl.uint<1>, out %sink: !firrtl.uint<1>, in %index: !firrtl.uint<2>) {
     %0 = firrtl.multibit_mux %index, %source_2, %source_1, %source_0 : !firrtl.uint<2>, !firrtl.uint<1>
     firrtl.connect %sink, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %0 = hw.array_create %source_2, %source_1, %source_0 : i1
@@ -1636,7 +1636,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %4 : i1
   }
 
-  firrtl.module @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
+  firrtl.module private @inferUnmaskedMemory(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.uint<8>, in %wMask: !firrtl.uint<1>, in %wData: !firrtl.uint<8>) {
     %tbMemoryKind1_r, %tbMemoryKind1_w = firrtl.mem Undefined  {depth = 16 : i64, modName = "tbMemoryKind1_ext", name = "tbMemoryKind1", portNames = ["r", "w"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %0 = firrtl.subfield %tbMemoryKind1_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<8>
     %1 = firrtl.subfield %tbMemoryKind1_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.uint<1>
@@ -1657,15 +1657,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %1, %wMask : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %0, %wData : !firrtl.uint<8>, !firrtl.uint<8>
   }
-  // CHECK-LABEL: hw.module @inferUnmaskedMemory
+  // CHECK-LABEL: hw.module private @inferUnmaskedMemory
   // CHECK-NEXT:   %[[v0:.+]] = comb.and %rEn, %wMask : i1
   // CHECK-NEXT:   %tbMemoryKind1.R0_data = hw.instance "tbMemoryKind1" @tbMemoryKind1_ext(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, W0_addr: %rAddr: i4, W0_en: %[[v0]]: i1, W0_clk: %clock: i1, W0_data: %wData: i8) -> (R0_data: i8)
   // CHECK-NEXT:   hw.output %tbMemoryKind1.R0_data : i8
 
-  // CHECK-LABEL: hw.module @eliminateSingleOutputConnects
+  // CHECK-LABEL: hw.module private @eliminateSingleOutputConnects
   // CHECK-NOT:     [[WIRE:%.+]] = sv.wire
   // CHECK-NEXT:    hw.output %a : i1
-  firrtl.module @eliminateSingleOutputConnects(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+  firrtl.module private @eliminateSingleOutputConnects(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     firrtl.strictconnect %b, %a : !firrtl.uint<1>
   }
 }

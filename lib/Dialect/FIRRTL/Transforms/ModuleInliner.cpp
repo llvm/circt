@@ -925,7 +925,6 @@ Inliner::Inliner(CircuitOp circuit)
     : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
 
 void Inliner::run() {
-  auto *topModule = circuit.getMainModule();
   CircuitNamespace circuitNamespace(circuit);
 
   for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
@@ -935,11 +934,13 @@ void Inliner::run() {
   }
 
   // Mark the top module as live, so it doesn't get deleted.
-  liveModules.insert(topModule);
-
-  // If the top module is not a regular module, there is nothing to do.
-  if (auto fmodule = dyn_cast<FModuleOp>(topModule))
-    worklist.push_back(fmodule);
+  for (auto module : circuit.getOps<FModuleLike>()) {
+    if (!module.isPublic())
+      continue;
+    liveModules.insert(module);
+    if (isa<FModuleOp>(module))
+      worklist.push_back(cast<FModuleOp>(module));
+  }
 
   // If the module is marked for flattening, flatten it. Otherwise, inline
   // every instance marked to be inlined.

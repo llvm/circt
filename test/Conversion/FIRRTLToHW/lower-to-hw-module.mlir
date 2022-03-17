@@ -13,7 +13,7 @@ firrtl.circuit "Simple" {
    // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
    // CHECK-SAME: (%in: i1) -> (out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
-   firrtl.extmodule @MyParameterizedExtModule
+   firrtl.extmodule private @MyParameterizedExtModule
      <DEFAULT: i64 = 0,
       DEPTH: f64 = 3.242000e+01,
       FORMAT: none = "xyz_timeout=%d\0A",
@@ -46,8 +46,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: hw.output [[RESULT]] : i4
   }
 
-  // CHECK-LABEL: hw.module @TestInstance(
-  firrtl.module @TestInstance(in %u2: !firrtl.uint<2>, in %s8: !firrtl.sint<8>,
+  // CHECK-LABEL: hw.module private @TestInstance(
+  firrtl.module private @TestInstance(in %u2: !firrtl.uint<2>, in %s8: !firrtl.sint<8>,
                               in %clock: !firrtl.clock,
                               in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_i2 = hw.constant
@@ -79,8 +79,8 @@ firrtl.circuit "Simple" {
     firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: hw.module @OutputFirst(%in1: i1, %in4: i4) -> (out4: i4) {
-  firrtl.module @OutputFirst(out %out4: !firrtl.uint<4>,
+  // CHECK-LABEL: hw.module private @OutputFirst(%in1: i1, %in4: i4) -> (out4: i4) {
+  firrtl.module private @OutputFirst(out %out4: !firrtl.uint<4>,
                              in %in1: !firrtl.uint<1>,
                              in %in4: !firrtl.uint<4>) {
     firrtl.connect %out4, %in4 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -88,10 +88,10 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: hw.output %in4 : i4
   }
 
-  // CHECK-LABEL: hw.module @PortMadness(
+  // CHECK-LABEL: hw.module private @PortMadness(
   // CHECK: %inA: i4, %inB: i4, %inC: i4, %inE: i3)
   // CHECK: -> (outA: i4, outB: i4, outC: i4, outD: i4, outE: i4) {
-  firrtl.module @PortMadness(in %inA: !firrtl.uint<4>,
+  firrtl.module private @PortMadness(in %inA: !firrtl.uint<4>,
                              in %inB: !firrtl.uint<4>,
                              in %inC: !firrtl.uint<4>,
                              out %outA: !firrtl.uint<4>,
@@ -127,10 +127,10 @@ firrtl.circuit "Simple" {
     // CHECK: hw.output %inA, [[OUTBR]], [[OUTCR]], [[OUTDR]], [[OUTE]]
   }
 
-  // CHECK-LABEL: hw.module @Analog(%a1: !hw.inout<i1>) -> (outClock: i1) {
+  // CHECK-LABEL: hw.module private @Analog(%a1: !hw.inout<i1>) -> (outClock: i1) {
   // CHECK-NEXT:    %0 = sv.read_inout %a1 : !hw.inout<i1>
   // CHECK-NEXT:    hw.output %0 : i1
-  firrtl.module @Analog(in %a1: !firrtl.analog<1>,
+  firrtl.module private @Analog(in %a1: !firrtl.analog<1>,
                         out %outClock: !firrtl.clock) {
 
     %clock = firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
@@ -138,8 +138,8 @@ firrtl.circuit "Simple" {
   }
 
   // Issue #373: https://github.com/llvm/circt/issues/373
-  // CHECK-LABEL: hw.module @instance_ooo
-  firrtl.module @instance_ooo(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>,
+  // CHECK-LABEL: hw.module private @instance_ooo
+  firrtl.module private @instance_ooo(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>,
                               in %arg2: !firrtl.uint<3>,
                               out %out0: !firrtl.uint<8>) {
     // CHECK: %false = hw.constant false
@@ -163,8 +163,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: hw.output %myext.out
   }
 
-  // CHECK-LABEL: hw.module @instance_cyclic
-  firrtl.module @instance_cyclic(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>) {
+  // CHECK-LABEL: hw.module private @instance_cyclic
+  firrtl.module private @instance_cyclic(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>) {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: %0: i1)
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
@@ -175,8 +175,8 @@ firrtl.circuit "Simple" {
     firrtl.connect %myext#0, %11 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: hw.module @ZeroWidthPorts(%inA: i4) -> (outa: i4) {
-  firrtl.module @ZeroWidthPorts(in %inA: !firrtl.uint<4>,
+  // CHECK-LABEL: hw.module private @ZeroWidthPorts(%inA: i4) -> (outa: i4) {
+  firrtl.module private @ZeroWidthPorts(in %inA: !firrtl.uint<4>,
                                 in %inB: !firrtl.uint<0>,
                                 in %inC: !firrtl.analog<0>,
                                 out %outa: !firrtl.uint<4>,
@@ -192,13 +192,13 @@ firrtl.circuit "Simple" {
     // CHECK: [[OUTAC:%.+]] = hw.constant 0 : i4
     // CHECK-NEXT: hw.output [[OUTAC]] : i4
   }
-  firrtl.extmodule @SameNamePorts(in inA: !firrtl.uint<4>,
+  firrtl.extmodule private @SameNamePorts(in inA: !firrtl.uint<4>,
                                 in inA: !firrtl.uint<1>,
                                 in inA: !firrtl.analog<1>,
                                 out outa: !firrtl.uint<4>,
                                 out outa: !firrtl.uint<1>)
-  // CHECK-LABEL: hw.module @ZeroWidthInstance
-  firrtl.module @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
+  // CHECK-LABEL: hw.module private @ZeroWidthInstance
+  firrtl.module private @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
                                    in %iB: !firrtl.uint<0>,
                                    in %iC: !firrtl.analog<0>,
                                    out %oA: !firrtl.uint<4>,
@@ -221,36 +221,36 @@ firrtl.circuit "Simple" {
     // CHECK: hw.output %myinst.outa
   }
 
-  // CHECK-LABEL: hw.module @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (sink: !hw.struct<valid: i1, ready: i1, data: i64>) {
+  // CHECK-LABEL: hw.module private @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (sink: !hw.struct<valid: i1, ready: i1, data: i64>) {
   // CHECK-NEXT:    hw.output %source : !hw.struct<valid: i1, ready: i1, data: i64>
-  firrtl.module @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
+  firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %sink: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) {
     firrtl.connect %sink, %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
   }
 
   // https://github.com/llvm/circt/issues/690
-  // CHECK-LABEL: hw.module @bar690(%led_0: !hw.inout<i1>) {
-  firrtl.module @bar690(in %led_0: !firrtl.analog<1>) {
+  // CHECK-LABEL: hw.module private @bar690(%led_0: !hw.inout<i1>) {
+  firrtl.module private @bar690(in %led_0: !firrtl.analog<1>) {
   }
-  // CHECK-LABEL: hw.module @foo690()
-  firrtl.module @foo690() {
+  // CHECK-LABEL: hw.module private @foo690()
+  firrtl.module private @foo690() {
     // CHECK: %.led_0.wire = sv.wire
     // CHECK: hw.instance "fpga" @bar690(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
   }
-  // CHECK-LABEL: hw.module @foo690a(%a: !hw.inout<i1>) {
-  firrtl.module @foo690a(in %a: !firrtl.analog<1>) {
+  // CHECK-LABEL: hw.module private @foo690a(%a: !hw.inout<i1>) {
+  firrtl.module private @foo690a(in %a: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %a: !firrtl.analog<1>, !firrtl.analog<1>
   }
 
   // https://github.com/llvm/circt/issues/740
-  // CHECK-LABEL: hw.module @foo740(%led_0: !hw.inout<i1>) {
+  // CHECK-LABEL: hw.module private @foo740(%led_0: !hw.inout<i1>) {
   // CHECK:  %.led_0.wire = sv.wire
   // CHECK-NEXT: sv.read_inout %.led_0.wire
   // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
-  firrtl.extmodule @bar740(in led_0: !firrtl.analog<1>)
-  firrtl.module @foo740(in %led_0: !firrtl.analog<1>) {
+  firrtl.extmodule private @bar740(in led_0: !firrtl.analog<1>)
+  firrtl.module private @foo740(in %led_0: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar740(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }

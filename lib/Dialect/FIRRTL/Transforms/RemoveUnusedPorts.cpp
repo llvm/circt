@@ -40,13 +40,12 @@ void RemoveUnusedPortsPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   LLVM_DEBUG(llvm::dbgs() << "===----- Remove unused ports -----==="
                           << "\n");
-  CircuitOp circuit = getOperation();
   // Iterate in the reverse order of instance graph iterator, i.e. from leaves
   // to top.
   for (auto *node : llvm::post_order(&instanceGraph))
     if (auto module = dyn_cast<FModuleOp>(node->getModule()))
       // Don't prune the main module.
-      if (circuit.getMainModule() != module)
+      if (!module.isPublic())
         removeUnusedModulePorts(module, node);
 }
 

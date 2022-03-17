@@ -60,7 +60,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
     bar.a <= a
 
     ; CHECK-LABEL: firrtl.circuit "Foo" {
-    ; CHECK: firrtl.extmodule @Bar
+    ; CHECK: firrtl.extmodule private @Bar
     ; CHECK-SAME: attributes {annotations = [{a = "a"}]}
 
 ; // -----
@@ -78,7 +78,7 @@ circuit Foo: %[[
     inst bar of Bar
     ; CHECK-LABEL: firrtl.circuit "Foo"
     ; CHECK: firrtl.nla  @nla_1 [#hw.innerNameRef<@Foo::@bar>, @Bar]
-    ; CHECK: firrtl.module @Bar
+    ; CHECK: firrtl.module private @Bar
     ; CHECK-SAME annotations = [{c = "c"}]
     ; CHECK: firrtl.module @Foo
     ; CHECK: firrtl.instance bar
@@ -108,7 +108,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     ; CHECK-LABEL: firrtl.circuit "Foo"
     ; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@d>] 
     ; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
-    ; CHECK: firrtl.module @Bar
+    ; CHECK: firrtl.module private @Bar
     ; CHECK-SAME: sym @b [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
     ; CHECK-NEXT:  %d = firrtl.wire sym @d  
     ; CHECK-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, five}>]}
@@ -238,7 +238,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo
     bar.bar <= foo
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.extmodule @Bar
+    ; CHECK: firrtl.extmodule private @Bar
     ; CHECK-SAME: [[_:.+]] [{a = "a"}]
     ; CHECK: firrtl.module @Foo
     ; CHECK-SAME: %foo: [[_:.+]] [{b = "b"}]
@@ -557,7 +557,7 @@ circuit GCTDataTap : %[
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK:      firrtl.nla @nla_1 [#hw.innerNameRef<@GCTDataTap::@im>, #hw.innerNameRef<@InnerMod::@w>]
-    ; CHECK: firrtl.extmodule @DataTap
+    ; CHECK: firrtl.extmodule private @DataTap
     ; CHECK-SAME: _0: !firrtl.uint<1> sym @_0 [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:    id = [[ID:[0-9]+]] : i64,
@@ -618,7 +618,7 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapsAnnotation"},
     ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}]
 
-    ; CHECK: firrtl.extmodule @BlackBox
+    ; CHECK: firrtl.extmodule private @BlackBox
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:    id = [[ID]] : i64,
@@ -630,7 +630,7 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    internalPath = "baz.quz",
     ; CHECK-SAME:    portID = [[PORT_ID_5]] : i64}
 
-    ; CHECK: firrtl.module @InnerMod
+    ; CHECK: firrtl.module private @InnerMod
     ; CHECK-NEXT: %w = firrtl.wire sym @w
     ; CHECK-SAME: {circt.nonlocal = @nla_1, class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}
 
@@ -692,7 +692,7 @@ circuit GCTMemTap : %[
 
     ; CHECK-LABEL: firrtl.circuit "GCTMemTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
-    ; CHECK: firrtl.extmodule @MemTap
+    ; CHECK: firrtl.extmodule private @MemTap
     ; CHECK-SAME: mem: [[A:.+]] [
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
@@ -918,7 +918,7 @@ circuit GCTInterface : %[
     ; CHECK-SAME: {unrelatedAnnotation}
 
     ; The companion should be marked.
-    ; CHECK: firrtl.module @view_companion
+    ; CHECK: firrtl.module private @view_companion
     ; CHECK-SAME: annotations
     ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.ViewAnnotation",
     ; CHECK-SAME:  id = [[ID_ViewName]] : i64,
@@ -1033,7 +1033,7 @@ circuit Test : %[[
 
 ; CHECK-LABEL:  firrtl.circuit "Test"
 ; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@Test>, @Example]
-; CHECK: firrtl.module @Example() attributes {
+; CHECK: firrtl.module private @Example() attributes {
 ; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "fake"}]
 ; CHECK: firrtl.module @Test()
 ; CHECK:   firrtl.instance Test sym @Test
@@ -1053,9 +1053,9 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
 ; CHECK-LABEL: firrtl.circuit "Foo"
 ; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
 ; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@baz>, @Baz]
-; CHECK: firrtl.module @Baz
+; CHECK: firrtl.module private @Baz
 ; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @nla_1}, {b = "b", circt.nonlocal = @nla_2}]
-; CHECK: firrtl.module @Bar()
+; CHECK: firrtl.module private @Bar()
 ; CHECK: firrtl.instance baz
 ; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
 ; CHECK: firrtl.module @Foo()
@@ -1165,7 +1165,7 @@ circuit Top : %[[{
 ; CHECK: %child_in, %child_out = firrtl.instance child
 ; CHECK-SAME: sym @child {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}
 
-; CHECK: firrtl.extmodule @Child(
+; CHECK: firrtl.extmodule private @Child(
 ; CHECK-SAME:   in in: !firrtl.uint<123> sym @in,
 ; CHECK-SAME:   out out: !firrtl.uint<456> sym @out
 ; CHECK-SAME: )

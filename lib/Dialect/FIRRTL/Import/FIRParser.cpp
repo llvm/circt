@@ -3983,6 +3983,15 @@ DoneParsing:
   if (foundUnappliedAnnotations)
     return failure();
 
+  // If the module has an entry point that is not an external module, set the
+  // visibility of all non-main modules to private.
+  auto main = circuit.getMainModule();
+  if (isa<FModuleOp>(main)) {
+    for (auto mod : circuit.getOps<FModuleLike>()) {
+      if (mod != main)
+        SymbolTable::setSymbolVisibility(mod, SymbolTable::Visibility::Private);
+    }
+  }
   return success();
 }
 

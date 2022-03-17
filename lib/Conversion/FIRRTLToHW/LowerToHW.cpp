@@ -982,6 +982,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
 
+  // If the circuit has an entry point, set all other modules private.
+  // Otherwise, mark all modules as public.
+  SymbolTable::setSymbolVisibility(newModule,
+                                   SymbolTable::getSymbolVisibility(oldModule));
+
   // Transform module annotations
   AnnotationSet annos(oldModule);
 
