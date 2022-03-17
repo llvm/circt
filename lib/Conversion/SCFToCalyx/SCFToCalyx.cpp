@@ -1091,6 +1091,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       /*out=*/remPipe.out_remainder());
 }
 
+// Returns the bit width for the given dimension. This will always be greater
+// than zero. See: https://github.com/llvm/circt/issues/2660
+static unsigned handleZeroWidth(int64_t dim) {
+  return std::max(llvm::Log2_64_Ceil(dim), 1U);
+}
+
 template <typename TAllocOp>
 static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
                                   PatternRewriter &rewriter, TAllocOp allocOp) {
@@ -1100,7 +1106,7 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   SmallVector<int64_t> sizes;
   for (int64_t dim : memtype.getShape()) {
     sizes.push_back(dim);
-    addrSizes.push_back(llvm::Log2_64_Ceil(dim));
+    addrSizes.push_back(handleZeroWidth(dim));
   }
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
@@ -1493,7 +1499,7 @@ appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
   for (auto dim : enumerate(memrefType.getShape())) {
     outPorts.push_back(calyx::PortInfo{
         rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
-        rewriter.getIntegerType(llvm::Log2_64_Ceil(dim.value())),
+        rewriter.getIntegerType(handleZeroWidth(dim.value())),
         calyx::Direction::Output,
         DictionaryAttr::get(rewriter.getContext(),
                             {getMemoryInterfaceAttr("addr", dim.index())})});
