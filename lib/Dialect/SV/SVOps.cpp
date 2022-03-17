@@ -994,6 +994,14 @@ InterfaceInstanceOp::getReferencedInterface(const hw::SymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(interface);
 }
 
+LogicalResult AssignInterfaceSignalOp::verify() {
+  return verifySignalExists(iface(), signalNameAttr());
+}
+
+LogicalResult ReadInterfaceSignalOp::verify() {
+  return verifySignalExists(iface(), signalNameAttr());
+}
+
 //===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//

@@ -761,10 +761,9 @@ LogicalResult MSFTModuleExternOp::verify() {
       continue;
 
     if (value.getType() != paramAttr.getType().getValue())
-      return emitOpError("parameter ")
-             << paramAttr << " should have type "
-             << paramAttr.getType().getValue() << "; has type "
-             << value.getType();
+      return emitOpError("parameter ") << paramAttr << " should have type "
+                                       << paramAttr.getType().getValue()
+                                       << "; has type " << value.getType();
 
     // Verify that this is a valid parameter value, disallowing parameter
     // references.  We could allow parameters to refer to each other in the

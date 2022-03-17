@@ -188,6 +188,26 @@ static LogicalResult verifyUTVariadicOp(Operation *op) {
   return success();
 }
 
+LogicalResult AddOp::verify() {
+  return verifyUTVariadicOp(*this);
+}
+
+LogicalResult MulOp::verify() {
+  return verifyUTVariadicOp(*this);
+}
+
+LogicalResult AndOp::verify() {
+  return verifyUTVariadicOp(*this);
+}
+
+LogicalResult OrOp::verify() {
+  return verifyUTVariadicOp(*this);
+}
+
+LogicalResult XorOp::verify() {
+  return verifyUTVariadicOp(*this);
+}
+
 /// Return true if this is a two operand xor with an all ones constant as its
 /// RHS operand.
 bool XorOp::isBinaryNot() {
@@ -216,8 +236,8 @@ LogicalResult ConcatOp::verify() {
   unsigned operandsTotalWidth = getTotalWidth(inputs());
   if (tyWidth != operandsTotalWidth)
     return emitOpError("ConcatOp requires operands total width to "
-                                "match type width. operands "
-                                "totalWidth is")
+                       "match type width. operands "
+                       "totalWidth is")
            << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
 
   return success();

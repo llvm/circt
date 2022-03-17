@@ -141,8 +141,7 @@ LogicalResult PipelineWhileOp::verify() {
   TypeRange conditionResults =
       conditionBlock.getTerminator()->getOperandTypes();
   if (conditionResults.size() != 1)
-    return emitOpError(
-               "condition must terminate with a single result, found ")
+    return emitOpError("condition must terminate with a single result, found ")
            << conditionResults;
 
   if (conditionResults.front() != IntegerType::get(getContext(), 1))

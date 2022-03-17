@@ -111,8 +111,7 @@ LogicalResult MemoryPortOp::verify() {
   // MemoryPorts require exactly 1 access. Right now there are no other
   // operations that could be using that value due to the types.
   if (!port().hasOneUse())
-    return emitOpError(
-        "port should be used by a chirrtl.memoryport.access");
+    return emitOpError("port should be used by a chirrtl.memoryport.access");
   return success();
 }
 

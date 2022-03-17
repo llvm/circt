@@ -704,8 +704,8 @@ LogicalResult ParOp::verify() {
   for (EnableOp op : body->getOps<EnableOp>()) {
     StringRef groupName = op.groupName();
     if (groupNames.count(groupName))
-      return emitOpError() << "cannot enable the same group: \""
-                                  << groupName << "\" more than once.";
+      return emitOpError() << "cannot enable the same group: \"" << groupName
+                           << "\" more than once.";
     groupNames.insert(groupName);
   }
 
@@ -732,7 +732,7 @@ LogicalResult WiresOp::verify() {
       continue;
     auto group = cast<GroupInterface>(op);
     auto groupName = group.symName();
-    if (::SymbolTable::symbolKnownUseEmpty(groupName, control))
+    if (::mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
   }
@@ -1264,9 +1264,7 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
-  return verifyNotComplexSource(goOp);
-}
+LogicalResult GroupGoOp::verify() { return verifyNotComplexSource(*this); }
 
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -1290,9 +1288,9 @@ ParseResult GroupGoOp::parse(OpAsmParser &parser, OperationState &result) {
 // GroupDoneOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
-  Operation *srcOp = doneOp.src().getDefiningOp();
-  Value optionalGuard = doneOp.guard();
+LogicalResult GroupDoneOp::verify() {
+  Operation *srcOp = src().getDefiningOp();
+  Value optionalGuard = guard();
   Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
   bool noGuard = (guardOp == nullptr);
 
@@ -1301,11 +1299,11 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
     return success();
 
   if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
-    return doneOp->emitOpError()
-           << "with constant source" << (noGuard ? "" : " and constant guard")
-           << ". This should be a combinational group.";
+    return emitOpError() << "with constant source"
+                         << (noGuard ? "" : " and constant guard")
+                         << ". This should be a combinational group.";
 
-  return verifyNotComplexSource(doneOp);
+  return verifyNotComplexSource(*this);
 }
 
 void GroupDoneOp::print(OpAsmPrinter &p) { printGroupPort(p, *this); }
@@ -1453,12 +1451,12 @@ LogicalResult EnableOp::verify() {
 
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<CombGroupOp>(groupOp))
     return emitOpError() << "with group '" << groupName
-                                  << "', which is a combinational group.";
+                         << "', which is a combinational group.";
 
   return success();
 }
@@ -1482,18 +1480,18 @@ LogicalResult IfOp::verify() {
   StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<GroupOp>(groupOp))
     return emitOpError() << "with group '" << groupName
-                              << "', which is not a combinational group.";
+                         << "', which is not a combinational group.";
 
   if (failed(groupOp.drivesPort(cond())))
-    return emitError()
-           << "with conditional op: '" << valueName(component, cond())
-           << "' expected to be driven from group: '" << groupName
-           << "' but no driver was found.";
+    return emitError() << "with conditional op: '"
+                       << valueName(component, cond())
+                       << "' expected to be driven from group: '" << groupName
+                       << "' but no driver was found.";
 
   return success();
 }
@@ -1684,18 +1682,17 @@ LogicalResult WhileOp::verify() {
   StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<GroupOp>(groupOp))
     return emitOpError() << "with group '" << groupName
-                                 << "', which is not a combinational group.";
+                         << "', which is not a combinational group.";
 
   if (failed(groupOp.drivesPort(cond())))
-    return emitError()
-           << "conditional op: '" << valueName(component, cond())
-           << "' expected to be driven from group: '" << groupName
-           << "' but no driver was found.";
+    return emitError() << "conditional op: '" << valueName(component, cond())
+                       << "' expected to be driven from group: '" << groupName
+                       << "' but no driver was found.";
 
   return success();
 }

@@ -1441,7 +1441,7 @@ LogicalResult OutputOp::verify() {
   for (size_t i = 0, e = modResults.size(); i < e; ++i) {
     if (modResults[i] != outputValues[i].getType()) {
       emitOpError("output types must match module. In "
-                      "operand ")
+                  "operand ")
           << i << ", expected " << modResults[i] << ", but got "
           << outputValues[i].getType() << ".";
       return failure();

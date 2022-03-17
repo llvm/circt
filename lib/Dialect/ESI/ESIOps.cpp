@@ -200,15 +200,13 @@ static LogicalResult verifySVInterface(Operation *op,
 }
 
 LogicalResult WrapSVInterface::verify() {
-  auto modportType =
-      interfaceSink().getType().cast<circt::sv::ModportType>();
+  auto modportType = interfaceSink().getType().cast<circt::sv::ModportType>();
   auto chanType = output().getType().cast<ChannelPort>();
   return verifySVInterface(*this, modportType, chanType);
 }
 
 LogicalResult UnwrapSVInterface::verify() {
-  auto modportType =
-      interfaceSource().getType().cast<circt::sv::ModportType>();
+  auto modportType = interfaceSource().getType().cast<circt::sv::ModportType>();
   auto chanType = chanInput().getType().cast<ChannelPort>();
   return verifySVInterface(*this, modportType, chanType);
 }

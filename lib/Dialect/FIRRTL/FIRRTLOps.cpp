@@ -2278,8 +2278,7 @@ LogicalResult ConstantOp::verify() {
 
   // The sign of the attribute's integer type must match our integer type sign.
   auto attrType = valueAttr().getType().cast<IntegerType>();
-  if (attrType.isSignless() ||
-      attrType.isSigned() != getType().isSigned())
+  if (attrType.isSignless() || attrType.isSigned() != getType().isSigned())
     return emitError("firrtl.constant attribute has wrong sign");
 
   return success();
@@ -2384,10 +2383,9 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 LogicalResult SubfieldOp::verify() {
-  if (fieldIndex() >=
-      input().getType().cast<BundleType>().getNumElements())
+  if (fieldIndex() >= input().getType().cast<BundleType>().getNumElements())
     return emitOpError("subfield element index is greater than the number "
-                          "of fields in the bundle type");
+                       "of fields in the bundle type");
   return success();
 }
 
@@ -3161,8 +3159,7 @@ LogicalResult BitCastOp::verify() {
            << resTypeBits.getValue() << ") don't match";
   }
   if (!inTypeBits.hasValue())
-    return emitError(
-               "bitwidth cannot be determined for input operand type ")
+    return emitError("bitwidth cannot be determined for input operand type ")
            << getOperand().getType();
   return emitError("bitwidth cannot be determined for result type ")
          << getType();

@@ -291,7 +291,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
         `=` $rhs attr-dict `:` qualified(type($rhs))
   }];
 
-  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
+  let hasVerifier = 1;
 }
 
 def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
@@ -329,5 +329,5 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
     InterfaceSignalOp getReferencedDecl(const hw::SymbolCache &cache);
   }];
 
-  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
+  let hasVerifier = 1;
 }

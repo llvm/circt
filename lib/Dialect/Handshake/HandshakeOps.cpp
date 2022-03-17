@@ -1472,15 +1472,15 @@ LogicalResult ReturnOp::verify() {
   const auto &results = function.getType().getResults();
   if (getNumOperands() != results.size())
     return emitOpError("has ")
-           << getNumOperands()
-           << " operands, but enclosing function returns " << results.size();
+           << getNumOperands() << " operands, but enclosing function returns "
+           << results.size();
 
   for (unsigned i = 0, e = results.size(); i != e; ++i)
     if (getOperand(i).getType() != results[i])
-      return emitError()
-             << "type of return operand " << i << " ("
-             << getOperand(i).getType()
-             << ") doesn't match function result type (" << results[i] << ")";
+      return emitError() << "type of return operand " << i << " ("
+                         << getOperand(i).getType()
+                         << ") doesn't match function result type ("
+                         << results[i] << ")";
 
   return success();
 }
