@@ -415,11 +415,17 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
   if (!regReset.getType().getPassiveType().isGround())
     return markOverdefined(regReset);
 
-  // The reset value may be known - if so, merge it in.
+  // The reset value may be known - if so, merge it in if the enable is greater
+  // than invalid.
   auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
                                           regReset.getType().cast<FIRRTLType>(),
                                           /*allowTruncation=*/true);
-  mergeLatticeValue(regReset, srcValue);
+  auto enable = getExtendedLatticeValue(regReset.resetSignal(),
+                                        regReset.getType().cast<FIRRTLType>(),
+                                        /*allowTruncation=*/true);
+  if (enable.isOverdefined() ||
+      (enable.isConstant() && !enable.getConstant().getValue().isZero()))
+    mergeLatticeValue(regReset, srcValue);
 }
 
 void IMConstPropPass::markMemOp(MemOp mem) {
