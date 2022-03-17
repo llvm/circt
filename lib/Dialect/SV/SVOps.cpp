@@ -873,7 +873,7 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult InterfaceInstanceOp::verify() {
-  auto symtable = SymbolTable::getNearestSymbolTable((*this));
+  auto *symtable = SymbolTable::getNearestSymbolTable((*this));
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
                      "which has a symbol table.");
@@ -891,7 +891,7 @@ LogicalResult InterfaceInstanceOp::verify() {
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
 LogicalResult GetModportOp::verify() {
-  auto symtable = SymbolTable::getNearestSymbolTable((*this));
+  auto *symtable = SymbolTable::getNearestSymbolTable((*this));
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
                      "which has a symbol table.");

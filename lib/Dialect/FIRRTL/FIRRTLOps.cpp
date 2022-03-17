@@ -278,7 +278,7 @@ LogicalResult CircuitOp::verify() {
 
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
-    auto collidingModule = lookupSymbol(defname.getValue());
+    auto *collidingModule = lookupSymbol(defname.getValue());
     if (isa_and_nonnull<FModuleOp>(collidingModule)) {
       auto diag =
           extModule.emitOpError()
