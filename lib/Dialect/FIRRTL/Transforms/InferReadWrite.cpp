@@ -149,13 +149,13 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto writeClock =
           builder.create<WireOp>(ClockType::get(enb.getContext()));
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
-      builder.create<ConnectOp>(
+      builder.create<StrictConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
       // Enable = Or(WriteEnable, ReadEnable).
-      builder.create<ConnectOp>(enb,
-                                builder.create<OrPrimOp>(rEnWire, wEnWire));
+      builder.create<StrictConnectOp>(
+          enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
       // WriteMode = WriteEnable.
-      builder.create<ConnectOp>(wmode, wEnWire);
+      builder.create<StrictConnectOp>(wmode, wEnWire);
       // Now iterate over the original memory read and write ports.
       for (auto portIt : llvm::enumerate(memOp.results())) {
         // Get the port value.
@@ -200,9 +200,9 @@ private:
   // Get the source value which is connected to the dst.
   Value getConnectSrc(Value dst) {
     for (auto *c : dst.getUsers())
-      if (auto connect = dyn_cast<ConnectOp>(c))
-        if (connect.dest() == dst)
-          return connect.src();
+      if (isa<StrictConnectOp, ConnectOp>(c))
+        if (c->getOperand(0) == dst)
+          return c->getOperand(1);
 
     return nullptr;
   }
@@ -363,7 +363,7 @@ private:
           if (fName.contains("mask")) {
             WireOp dummy = builder.create<WireOp>(oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
-            builder.create<ConnectOp>(
+            builder.create<StrictConnectOp>(
                 sf, builder.create<ConstantOp>(
                         UIntType::get(builder.getContext(), 1), APInt(1, 1)));
           } else
