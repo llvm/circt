@@ -347,6 +347,35 @@ firrtl.circuit "invalidReg2"   {
 
 // -----
 
+// CHECK-LABEL: firrtl.circuit "RegResetInvalid"
+firrtl.circuit "RegResetInvalid"  {
+  firrtl.module @RegResetInvalid(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %a, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %r, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %b, %c1_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %b, %r : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "RegResetInvalidReset"
+firrtl.circuit "RegResetInvalidReset"  {
+  firrtl.module @RegResetInvalidReset(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %invalid_ui1, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %r, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a, %invalid_ui1 : !firrtl.uint<1>
+    firrtl.strictconnect %a, %r : !firrtl.uint<1>
+  }
+}
+// -----
+
 // This test is checking the behavior of a RegOp, "r", and a RegResetOp, "s",
 // that are combinationally connected to themselves through simple and weird
 // formulations.  In all cases it should NOT be optimized away.  For more discussion, see:
