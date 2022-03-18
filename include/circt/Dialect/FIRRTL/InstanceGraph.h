@@ -215,7 +215,7 @@ public:
   // on a CircuitOp.
 
   /// Add a newly created module to the instance graph.
-  InstanceGraphNode *addModule(Operation *op);
+  InstanceGraphNode *addModule(FModuleLike module);
 
   /// Remove this module from the instance graph. This will also remove all
   /// InstanceRecords in this module.  All instances of this module must have
