@@ -76,6 +76,13 @@ InstanceGraph::InstanceGraph(Operation *operation) {
   }
 }
 
+InstanceGraphNode *InstanceGraph::addModule(FModuleLike module) {
+  assert(!nodeMap.count(module.moduleNameAttr()) && "module already added");
+  auto *node = new InstanceGraphNode();
+  nodes.push_back(node);
+  return node;
+}
+
 void InstanceGraph::erase(InstanceGraphNode *node) {
   assert(node->noUses() &&
          "all instances of this module must have been erased.");
