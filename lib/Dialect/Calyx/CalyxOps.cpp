@@ -365,13 +365,8 @@ Value calyx::ComponentOp::getDonePort() {
   return getBlockArgumentWithName("done", *this);
 }
 
-/// Returns the type of the given component as a function type.
-static FunctionType getComponentType(ComponentOp component) {
-  return component.getTypeAttr().getValue().cast<FunctionType>();
-}
-
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
-  auto portTypes = getComponentType(*this).getInputs();
+  auto portTypes = getArgumentTypes();
   ArrayAttr portNamesAttr = portNames(), portAttrs = portAttributes();
   APInt portDirectionsAttr = portDirections();
 
@@ -433,7 +428,8 @@ void ComponentOp::print(OpAsmPrinter &p) {
                 /*printEmptyBlock=*/false);
 
   SmallVector<StringRef> elidedAttrs = {"portAttributes", "portNames",
-                                        "portDirections", "sym_name", "type"};
+                                        "portDirections", "sym_name",
+                                        ComponentOp::getTypeAttrName()};
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 }
 
@@ -697,11 +693,10 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 
 LogicalResult ParOp::verify() {
   llvm::SmallSet<StringRef, 8> groupNames;
-  Block *body = getBody();
 
   // Add loose requirement that the body of a ParOp may not enable the same
   // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
-  for (EnableOp op : body->getOps<EnableOp>()) {
+  for (EnableOp op : getBody()->getOps<EnableOp>()) {
     StringRef groupName = op.groupName();
     if (groupNames.count(groupName))
       return emitOpError() << "cannot enable the same group: \"" << groupName
@@ -727,12 +722,12 @@ LogicalResult WiresOp::verify() {
   auto control = component.getControlOp();
 
   // Verify each group is referenced in the control section.
-  for (auto &&op : *this->getBody()) {
+  for (auto &&op : *getBody()) {
     if (!isa<GroupInterface>(op))
       continue;
     auto group = cast<GroupInterface>(op);
     auto groupName = group.symName();
-    if (::mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
+    if (mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
   }
@@ -786,7 +781,6 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 /// Verifies a combinational group may contain only combinational primitives or
 /// perform combinational logic.
 LogicalResult CombGroupOp::verify() {
-
   for (auto &&op : *getBody()) {
     auto assign = dyn_cast<AssignOp>(op);
     if (assign == nullptr)
@@ -1416,10 +1410,10 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
 }
 
 LogicalResult MemoryOp::verify() {
-  ArrayRef<Attribute> sizes = this->sizes().getValue();
-  ArrayRef<Attribute> addrSizes = this->addrSizes().getValue();
-  size_t numDims = this->sizes().size();
-  size_t numAddrs = this->addrSizes().size();
+  ArrayRef<Attribute> opSizes = sizes().getValue();
+  ArrayRef<Attribute> opAddrSizes = addrSizes().getValue();
+  size_t numDims = sizes().size();
+  size_t numAddrs = addrSizes().size();
   if (numDims != numAddrs)
     return emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
@@ -1430,8 +1424,8 @@ LogicalResult MemoryOp::verify() {
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
-    int64_t size = sizes[i].cast<IntegerAttr>().getInt();
-    int64_t addrSize = addrSizes[i].cast<IntegerAttr>().getInt();
+    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
+    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
       return emitOpError("address size (")
              << addrSize << ") for dimension " << i
@@ -1447,15 +1441,15 @@ LogicalResult MemoryOp::verify() {
 LogicalResult EnableOp::verify() {
   auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  StringRef groupName = this->groupName();
+  StringRef name = groupName();
 
-  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(name);
   if (!groupOp)
-    return emitOpError() << "with group '" << groupName
+    return emitOpError() << "with group '" << name
                          << "', which does not exist.";
 
   if (isa<CombGroupOp>(groupOp))
-    return emitOpError() << "with group '" << groupName
+    return emitOpError() << "with group '" << name
                          << "', which is a combinational group.";
 
   return success();

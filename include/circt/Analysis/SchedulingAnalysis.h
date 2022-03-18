@@ -21,7 +21,9 @@
 
 namespace mlir {
 class AnalysisManager;
+namespace func {
 class FuncOp;
+} // namespace func
 } // namespace mlir
 
 using namespace mlir;

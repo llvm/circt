@@ -38,6 +38,8 @@ def SubAnnotationAttr : AttrDef<FIRRTLDialect, "SubAnnotation"> {
   }];
   let mnemonic = "subAnno";
   let parameters = (ins "int64_t":$fieldID, "DictionaryAttr":$annotations);
+
+  let assemblyFormat = "`<` `fieldID` `=` $fieldID `,` $annotations `>`";
 }
 
 def PortAnnotationsAttr : ArrayAttrBase<
@@ -61,6 +63,8 @@ def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue"> {
   }];
   let mnemonic = "invalidvalue";
   let parameters = (ins  AttributeSelfTypeParameter<"">:$type);
+
+  let assemblyFormat = "`<` $type `>`";
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "Type":$type),
@@ -156,6 +160,8 @@ def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl"> {
                         "::mlir::TypeAttr":$type,
                         "::mlir::Attribute":$value);
   let mnemonic = "param.decl";
+
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,

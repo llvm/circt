@@ -22,6 +22,9 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
       return get(module.getContext(), module, name);
     }]>,
   ];
+
+  let hasCustomAssemblyFormat = 1;
+
   let extraClassDeclaration = [{
     /// Get the InnerRefAttr for an operation and add the sym on it.
     static InnerRefAttr getFromOperation(mlir::Operation *op,
@@ -42,6 +45,8 @@ def GlobalRefAttr : AttrDef<HWDialect, "GlobalRef"> {
       return get(ref.getContext(), SymbolRefAttr::get(ref));
     }]>,
   ];
+
+  let assemblyFormat = "`<` $glblSym `>`";
 
   let extraClassDeclaration = [{
     static constexpr char DialectAttrName[] = "circt.globalRef";

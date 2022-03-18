@@ -45,7 +45,7 @@ StateOp MachineOp::getDefaultState() { return *getOps<StateOp>().begin(); }
 /// Get the port information of the machine.
 void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   ports.clear();
-  auto machineType = getType();
+  auto machineType = getFunctionType();
   auto builder = Builder(*this);
 
   for (unsigned i = 0, e = machineType.getNumInputs(); i < e; ++i) {
@@ -78,9 +78,7 @@ ParseResult MachineOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void MachineOp::print(OpAsmPrinter &p) {
-  FunctionType fnType = getType();
-  function_interface_impl::printFunctionOp(
-      p, *this, fnType.getInputs(), /*isVariadic=*/false, fnType.getResults());
+  function_interface_impl::printFunctionOp(p, *this, /*isVariadic=*/false);
 }
 
 static LogicalResult compareTypes(TypeRange rangeA, TypeRange rangeB) {
@@ -108,12 +106,12 @@ LogicalResult MachineOp::verify() {
   // Verify that the argument list of the function and the arg list of the entry
   // block line up.  The trait already verified that the number of arguments is
   // the same between the signature and the block.
-  if (failed(compareTypes(getType().getInputs(), front().getArgumentTypes())))
+  if (failed(compareTypes(getArgumentTypes(), front().getArgumentTypes())))
     return emitOpError(
         "entry block argument types must match the machine input types");
 
   // Verify that the machine only has one block terminated with OutputOp.
-  if (!llvm::hasSingleElement((*this)))
+  if (!llvm::hasSingleElement(*this))
     return emitOpError("must only have a single block");
 
   return success();
@@ -130,10 +128,9 @@ MachineOp InstanceOp::getMachine() {
 }
 
 LogicalResult InstanceOp::verify() {
-  auto machine = getMachine();
-  if (!machine)
-    return emitError("cannot find machine definition '")
-           << this->machine() << "'";
+  auto m = getMachine();
+  if (!m)
+    return emitError("cannot find machine definition '") << machine() << "'";
 
   return success();
 }
@@ -154,8 +151,8 @@ static LogicalResult verifyCallerTypes(OpType op) {
     return op.emitError("cannot find machine definition");
 
   // Check operand types first.
-  if (failed(compareTypes(machine.getType().getInputs(),
-                          op.inputs().getTypes()))) {
+  if (failed(
+          compareTypes(machine.getArgumentTypes(), op.inputs().getTypes()))) {
     auto diag =
         op.emitOpError("operand types must match the machine input types");
     diag.attachNote(machine->getLoc()) << "original machine declared here";
@@ -163,8 +160,7 @@ static LogicalResult verifyCallerTypes(OpType op) {
   }
 
   // Check result types.
-  if (failed(compareTypes(machine.getType().getResults(),
-                          op.outputs().getTypes()))) {
+  if (failed(compareTypes(machine.getResultTypes(), op.outputs().getTypes()))) {
     auto diag =
         op.emitOpError("result types must match the machine output types");
     diag.attachNote(machine->getLoc()) << "original machine declared here";
@@ -233,7 +229,7 @@ LogicalResult OutputOp::verify() {
   // Verify that the result list of the machine and the operand list of the
   // OutputOp line up.
   auto machine = (*this)->getParentOfType<MachineOp>();
-  if (failed(compareTypes(machine.getType().getResults(), getOperandTypes())))
+  if (failed(compareTypes(machine.getResultTypes(), getOperandTypes())))
     return emitOpError("operand types must match the machine output types");
 
   return success();
@@ -298,7 +294,7 @@ LogicalResult TransitionOp::verify() {
     return emitOpError("action region must not return any value");
 
   // Verify the transition is located in the correct region.
-  if ((*this)->getParentRegion() != &(*this).getCurrentState().transitions())
+  if ((*this)->getParentRegion() != &getCurrentState().transitions())
     return emitOpError("must only be located in the transitions region");
 
   return success();

@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_MOORE_MOORE
 #define CIRCT_DIALECT_MOORE_MOORE
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"

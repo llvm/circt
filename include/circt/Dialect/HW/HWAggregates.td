@@ -97,6 +97,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
 
   let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
   let results = (outs ArrayType:$dst);
+
   let hasVerifier = 1;
 
   let assemblyFormat = [{

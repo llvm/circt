@@ -276,7 +276,7 @@ static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
 LogicalResult ParamValueOp::verify() {
   // Check that the attribute expression is valid in this module.
   return checkParameterInContext(
-      value(), (*this)->getParentOfType<hw::HWModuleOp>(), (*this));
+      value(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
 OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
@@ -502,7 +502,6 @@ void hw::modifyModulePorts(
     ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs) {
   auto moduleOp = cast<mlir::FunctionOpInterface>(op);
 
-  FunctionType type = moduleOp.getType().cast<FunctionType>();
   auto arrayOrEmpty = [](ArrayAttr attr) {
     return attr ? attr.getValue() : ArrayRef<Attribute>{};
   };
@@ -510,14 +509,14 @@ void hw::modifyModulePorts(
   // Dig up the old argument and result data.
   ArrayRef<Attribute> oldArgNames =
       moduleOp->getAttrOfType<ArrayAttr>("argNames").getValue();
-  ArrayRef<Type> oldArgTypes = type.getInputs();
+  ArrayRef<Type> oldArgTypes = moduleOp.getArgumentTypes();
   ArrayRef<Attribute> oldArgAttrs =
       arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
           mlir::function_interface_impl::getArgDictAttrName()));
 
   ArrayRef<Attribute> oldResultNames =
       moduleOp->getAttrOfType<ArrayAttr>("resultNames").getValue();
-  ArrayRef<Type> oldResultTypes = type.getResults();
+  ArrayRef<Type> oldResultTypes = moduleOp.getResultTypes();
   ArrayRef<Attribute> oldResultAttrs =
       arrayOrEmpty(moduleOp->getAttrOfType<ArrayAttr>(
           mlir::function_interface_impl::getResultDictAttrName()));
@@ -1017,9 +1016,9 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   return success();
 }
 
-LogicalResult HWModuleOp::verify() { return verifyModuleCommon((*this)); }
+LogicalResult HWModuleOp::verify() { return verifyModuleCommon(*this); }
 
-LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon((*this)); }
+LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                           mlir::OpAsmSetValueNameFn setNameFn) {
@@ -1039,7 +1038,7 @@ Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
 }
 
 LogicalResult HWModuleGeneratedOp::verify() {
-  if (failed(verifyModuleCommon((*this))))
+  if (failed(verifyModuleCommon(*this)))
     return failure();
 
   auto *referencedKind = getGeneratorKindOp();
@@ -1070,6 +1069,8 @@ void HWModuleGeneratedOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(region, setNameFn);
 }
+
+LogicalResult HWModuleOp::verifyBody() { return success(); }
 
 //===----------------------------------------------------------------------===//
 // InstanceOp
@@ -1230,7 +1231,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-LogicalResult InstanceOp::verifyCustom() {
+LogicalResult InstanceOp::verify() {
   // Check that all the parameter values specified to the instance are
   // structurally valid.
   for (auto param : parameters()) {
@@ -1359,8 +1360,6 @@ void InstanceOp::print(OpAsmPrinter &p) {
       /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
                        "moduleName", "argNames", "resultNames", "parameters"});
 }
-
-LogicalResult InstanceOp::verify() { return this->verifyCustom(); }
 
 /// Return the name of the specified input port or null if it cannot be
 /// determined.

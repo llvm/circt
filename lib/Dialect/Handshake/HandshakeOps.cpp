@@ -484,7 +484,7 @@ LogicalResult FuncOp::verify() {
   // Verify that the argument list of the function and the arg list of the
   // entry block line up.  The trait already verified that the number of
   // arguments is the same between the signature and the block.
-  auto fnInputTypes = getType().getInputs();
+  auto fnInputTypes = getArgumentTypes();
   Block &entryBlock = front();
 
   for (unsigned i = 0, e = entryBlock.getNumArguments(); i != e; ++i)
@@ -601,13 +601,12 @@ static void addStringToStringArrayAttr(Builder &builder, Operation *op,
 }
 
 void handshake::FuncOp::resolveArgAndResNames() {
-  auto type = getType();
   Builder builder(getContext());
 
   /// Generate a set of fallback names. These are used in case names are
   /// missing from the currently set arg- and res name attributes.
-  auto fallbackArgNames = getFuncOpNames(builder, type.getInputs(), "in");
-  auto fallbackResNames = getFuncOpNames(builder, type.getResults(), "out");
+  auto fallbackArgNames = getFuncOpNames(builder, getArgumentTypes(), "in");
+  auto fallbackResNames = getFuncOpNames(builder, getResultTypes(), "out");
   auto argNames = getArgNames().getValue();
   auto resNames = getResNames().getValue();
 
@@ -666,10 +665,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void FuncOp::print(OpAsmPrinter &p) {
-  FunctionType fnType = getType();
-  mlir::function_interface_impl::printFunctionOp(p, *this, fnType.getInputs(),
-                                                 /*isVariadic=*/true,
-                                                 fnType.getResults());
+  mlir::function_interface_impl::printFunctionOp(p, *this, /*isVariadic=*/true);
 }
 
 namespace {
@@ -1109,7 +1105,7 @@ std::string handshake::MemoryOp::getResultName(unsigned int idx) {
   return getMemoryResultName(ldCount(), stCount(), idx);
 }
 
-LogicalResult handshake::MemoryOp::verify() {
+LogicalResult MemoryOp::verify() {
   auto memrefType = memRefType();
 
   if (memrefType.getNumDynamicDims() != 0)
@@ -1118,8 +1114,8 @@ LogicalResult handshake::MemoryOp::verify() {
   if (memrefType.getShape().size() != 1)
     return emitOpError() << "memref must have only a single dimension.";
 
-  unsigned stCount = this->stCount();
-  unsigned ldCount = this->ldCount();
+  unsigned opStCount = stCount();
+  unsigned opLdCount = ldCount();
   int addressCount = memrefType.getShape().size();
 
   auto inputType = inputs().getType();
@@ -1128,21 +1124,21 @@ LogicalResult handshake::MemoryOp::verify() {
 
   unsigned numOperands = static_cast<int>(inputs().size());
   unsigned numResults = static_cast<int>(outputs().size());
-  if (numOperands != (1 + addressCount) * stCount + addressCount * ldCount)
+  if (numOperands != (1 + addressCount) * opStCount + addressCount * opLdCount)
     return emitOpError("number of operands ")
            << numOperands << " does not match number expected of "
-           << 2 * stCount + ldCount << " with " << addressCount
+           << 2 * opStCount + opLdCount << " with " << addressCount
            << " address inputs per port";
 
-  if (numResults != stCount + 2 * ldCount)
+  if (numResults != opStCount + 2 * opLdCount)
     return emitOpError("number of results ")
            << numResults << " does not match number expected of "
-           << stCount + 2 * ldCount << " with " << addressCount
+           << opStCount + 2 * opLdCount << " with " << addressCount
            << " address inputs per port";
 
-  Type addressType = stCount > 0 ? inputType[1] : inputType[0];
+  Type addressType = opStCount > 0 ? inputType[1] : inputType[0];
 
-  for (unsigned i = 0; i < stCount; i++) {
+  for (unsigned i = 0; i < opStCount; i++) {
     if (inputType[2 * i] != dataType)
       return emitOpError("data type for store port ")
              << i << ":" << inputType[2 * i] << " doesn't match memory type "
@@ -1152,27 +1148,27 @@ LogicalResult handshake::MemoryOp::verify() {
              << i << ":" << inputType[2 * i + 1]
              << " doesn't match address type " << addressType;
   }
-  for (unsigned i = 0; i < ldCount; i++) {
-    Type ldAddressType = inputType[2 * stCount + i];
+  for (unsigned i = 0; i < opLdCount; i++) {
+    Type ldAddressType = inputType[2 * opStCount + i];
     if (ldAddressType != addressType)
       return emitOpError("address type for load port ")
              << i << ":" << ldAddressType << " doesn't match address type "
              << addressType;
   }
-  for (unsigned i = 0; i < ldCount; i++) {
+  for (unsigned i = 0; i < opLdCount; i++) {
     if (outputType[i] != dataType)
       return emitOpError("data type for load port ")
              << i << ":" << outputType[i] << " doesn't match memory type "
              << dataType;
   }
-  for (unsigned i = 0; i < stCount; i++) {
-    Type syncType = outputType[ldCount + i];
+  for (unsigned i = 0; i < opStCount; i++) {
+    Type syncType = outputType[opLdCount + i];
     if (!syncType.isa<NoneType>())
       return emitOpError("data type for sync port for store port ")
              << i << ":" << syncType << " is not 'none'";
   }
-  for (unsigned i = 0; i < ldCount; i++) {
-    Type syncType = outputType[ldCount + stCount + i];
+  for (unsigned i = 0; i < opLdCount; i++) {
+    Type syncType = outputType[opLdCount + opStCount + i];
     if (!syncType.isa<NoneType>())
       return emitOpError("data type for sync port for load port ")
              << i << ":" << syncType << " is not 'none'";
@@ -1383,7 +1379,7 @@ static LogicalResult verifyMemoryAccessOp(TMemoryOp op) {
   return success();
 }
 
-LogicalResult LoadOp::verify() { return verifyMemoryAccessOp((*this)); }
+LogicalResult LoadOp::verify() { return verifyMemoryAccessOp(*this); }
 
 std::string handshake::StoreOp::getResultName(unsigned int idx) {
   std::string resName;
@@ -1410,7 +1406,7 @@ void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
   result.types.append(indices.size(), builder.getIndexType());
 }
 
-LogicalResult StoreOp::verify() { return verifyMemoryAccessOp((*this)); }
+LogicalResult StoreOp::verify() { return verifyMemoryAccessOp(*this); }
 
 ParseResult StoreOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseMemoryAccessOp(parser, result);
@@ -1469,7 +1465,7 @@ LogicalResult ReturnOp::verify() {
     return emitOpError("must have a handshake.func parent");
 
   // The operand number and types must match the function signature.
-  const auto &results = function.getType().getResults();
+  const auto &results = function.getResultTypes();
   if (getNumOperands() != results.size())
     return emitOpError("has ")
            << getNumOperands() << " operands, but enclosing function returns "

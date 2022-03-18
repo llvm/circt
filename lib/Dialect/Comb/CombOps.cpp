@@ -181,22 +181,21 @@ LogicalResult ReplicateOp::verify() {
 // Variadic operations
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyUTVariadicOp(Operation *op) {
+static LogicalResult verifyUTBinOp(Operation *op) {
   if (op->getOperands().empty())
     return op->emitOpError("requires 1 or more args");
-
   return success();
 }
 
-LogicalResult AddOp::verify() { return verifyUTVariadicOp(*this); }
+LogicalResult AddOp::verify() { return verifyUTBinOp(*this); }
 
-LogicalResult MulOp::verify() { return verifyUTVariadicOp(*this); }
+LogicalResult MulOp::verify() { return verifyUTBinOp(*this); }
 
-LogicalResult AndOp::verify() { return verifyUTVariadicOp(*this); }
+LogicalResult AndOp::verify() { return verifyUTBinOp(*this); }
 
-LogicalResult OrOp::verify() { return verifyUTVariadicOp(*this); }
+LogicalResult OrOp::verify() { return verifyUTBinOp(*this); }
 
-LogicalResult XorOp::verify() { return verifyUTVariadicOp(*this); }
+LogicalResult XorOp::verify() { return verifyUTBinOp(*this); }
 
 /// Return true if this is a two operand xor with an all ones constant as its
 /// RHS operand.

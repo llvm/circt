@@ -3151,7 +3151,7 @@ LogicalResult BitCastOp::verify() {
   auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
-    // Bitwidths must match for valid bitcast.
+    // Bitwidths must match for valid bit
     if (inTypeBits.getValue() == resTypeBits.getValue())
       return success();
     return emitError("the bitwidth of input (")

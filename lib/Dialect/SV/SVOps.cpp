@@ -26,7 +26,6 @@
 using namespace circt;
 using namespace sv;
 
-static LogicalResult verifyIndexedPartSelectOp(Operation *op);
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
@@ -212,7 +211,7 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult LocalParamOp::verify() {
   // Verify that this is a valid parameter value.
   return hw::checkParameterInContext(
-      value(), (*this)->getParentOfType<hw::HWModuleOp>(), (*this));
+      value(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -873,7 +872,7 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 LogicalResult InterfaceInstanceOp::verify() {
-  auto *symtable = SymbolTable::getNearestSymbolTable((*this));
+  auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
                      "which has a symbol table.");
@@ -891,7 +890,7 @@ LogicalResult InterfaceInstanceOp::verify() {
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
 LogicalResult GetModportOp::verify() {
-  auto *symtable = SymbolTable::getNearestSymbolTable((*this));
+  auto *symtable = SymbolTable::getNearestSymbolTable(*this);
   if (!symtable)
     return emitError("sv.interface.instance must exist within a region "
                      "which has a symbol table.");
@@ -1131,7 +1130,29 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
 }
 
 LogicalResult IndexedPartSelectInOutOp::verify() {
-  return verifyIndexedPartSelectOp(*this);
+  unsigned inputWidth = 0, resultWidth = 0;
+  auto opWidth = width();
+
+  if (auto i = input()
+                   .getType()
+                   .cast<InOutType>()
+                   .getElementType()
+                   .dyn_cast<IntegerType>())
+    inputWidth = i.getWidth();
+  else
+    return emitError("input element type must be Integer");
+
+  if (auto resType =
+          getType().cast<InOutType>().getElementType().dyn_cast<IntegerType>())
+    resultWidth = resType.getWidth();
+  else
+    return emitError("result element type must be Integer");
+
+  if (opWidth > inputWidth)
+    return emitError("slice width should not be greater than input width");
+  if (opWidth != resultWidth)
+    return emitError("result width must be equal to slice width");
+  return success();
 }
 
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
@@ -1151,10 +1172,6 @@ void IndexedPartSelectOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, resultType, input, base, width, decrement);
 }
 
-LogicalResult IndexedPartSelectOp::verify() {
-  return verifyIndexedPartSelectOp(*this);
-}
-
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, Optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::RegionRange regions,
@@ -1168,44 +1185,18 @@ LogicalResult IndexedPartSelectOp::inferReturnTypes(
   return success();
 }
 
-static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
-  return TypeSwitch<Operation *, LogicalResult>(op)
-      .Case<IndexedPartSelectOp, IndexedPartSelectInOutOp>(
-          [&](auto p) -> LogicalResult {
-            unsigned inputWidth = 0, resultWidth = 0;
-            auto width = p.width();
-            if (isa<IndexedPartSelectInOutOp>(p)) {
-              if (auto i = p.input()
-                               .getType()
-                               .template cast<InOutType>()
-                               .getElementType()
-                               .template dyn_cast<IntegerType>())
-                inputWidth = i.getWidth();
-              else
-                return op->emitError("input element type must be Integer");
-              if (auto resType = p.getType()
-                                     .template cast<InOutType>()
-                                     .getElementType()
-                                     .template dyn_cast<IntegerType>())
-                resultWidth = resType.getWidth();
-              else
-                return op->emitError("result element type must be Integer");
-            } else {
-              resultWidth = p.getType().template cast<IntegerType>().getWidth();
-              inputWidth =
-                  p.input().getType().template cast<IntegerType>().getWidth();
-            }
-            if (width > inputWidth)
-              return op->emitError(
-                  "slice width should not be greater than input width");
-            if (width != resultWidth)
-              return op->emitError("result width must be equal to slice width");
-            return success();
-          })
-      .Default([&](auto) { return failure(); });
+LogicalResult IndexedPartSelectOp::verify() {
+  auto opWidth = width();
 
+  unsigned resultWidth = getType().cast<IntegerType>().getWidth();
+  unsigned inputWidth = input().getType().cast<IntegerType>().getWidth();
+
+  if (opWidth > inputWidth)
+    return emitError("slice width should not be greater than input width");
+  if (opWidth != resultWidth)
+    return emitError("result width must be equal to slice width");
   return success();
-}
+};
 
 //===----------------------------------------------------------------------===//
 // StructFieldInOutOp

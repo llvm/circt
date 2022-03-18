@@ -14,6 +14,7 @@
 #ifndef ESI_TD
 #define ESI_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 

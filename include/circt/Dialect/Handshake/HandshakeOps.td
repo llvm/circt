@@ -46,20 +46,19 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     // to match the signature of the function.
     Block *addEntryBlock();
 
-    FunctionType getType() {
-      return (*this)->getAttrOfType<TypeAttr>(getTypeAttrName())
-          .getValue()
-          .cast<FunctionType>();
+    /// Returns the type of this function.
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
     }
 
     /// Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
     /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
     /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     /// Returns the names of the arguments to this function.
     ArrayAttr getArgNames() {
@@ -91,10 +90,11 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// getType, getNumFuncArguments, and getNumFuncResults can be called
     /// safely.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
-                           "' attribute of function type");
+        return emitOpError(
+            "requires '" + mlir::function_interface_impl::getTypeAttrName() +
+            "' attribute of function type");
       return success();
     }
 
@@ -135,7 +135,7 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
-      $_state.addTypes(module.getType().getResults());
+      $_state.addTypes(module.getResultTypes());
       $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,

@@ -13,6 +13,7 @@
 #ifndef CHIRRTL_TD
 #define CHIRRTL_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
@@ -69,6 +70,7 @@ def CMemoryType : TypeDef<CHIRRTLDialect, "CMemory"> {
   ];
 
   let genVerifyDecl = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
 def CMemoryPortType : TypeDef<CHIRRTLDialect, "CMemoryPort"> {

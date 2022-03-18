@@ -20,7 +20,9 @@
 
 namespace mlir {
 struct DependenceComponent;
+namespace func {
 class FuncOp;
+} // namespace func
 } // namespace mlir
 
 namespace circt {

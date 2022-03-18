@@ -24,11 +24,13 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
     includes a `$body` region that contains internal variables and states.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType, TypeAttr:$type);
+  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType,
+                       TypeAttrOf<FunctionType>:$function_type);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
-    OpBuilder<(ins "StringRef":$name, "Type":$stateType, "FunctionType":$type,
+    OpBuilder<(ins "StringRef":$name, "Type":$stateType,
+      "FunctionType":$function_type,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];
@@ -41,20 +43,20 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
     void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);
 
     /// Returns the type of this function.
-    FunctionType getType() {
-      return getTypeAttr().getValue().cast<FunctionType>();
+    FunctionType getFunctionType() {
+      return getFunctionTypeAttr().getValue().cast<FunctionType>();
     }
 
     /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
     /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
     /// Verify the type attribute of this function. Returns failure and emits
     /// an error if the attribute is invalid.
     LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
+      auto type = getFunctionTypeAttr().getValue();
       if (!type.isa<FunctionType>())
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");

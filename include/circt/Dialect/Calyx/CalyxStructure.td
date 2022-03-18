@@ -101,20 +101,20 @@ def ComponentOp : CalyxOp<"component", [
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getBody;
 
       /// Returns the type of this function.
-      FunctionType getType() {
-        return getTypeAttr().getValue().cast<FunctionType>();
+      FunctionType getFunctionType() {
+        return getFunctionTypeAttr().getValue().cast<FunctionType>();
       }
 
       /// Returns the argument types of this function.
-      ArrayRef<Type> getArgumentTypes() { return getType().getInputs(); }
+      ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
       /// Returns the result types of this function.
-      ArrayRef<Type> getResultTypes() { return getType().getResults(); }
+      ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
 
       /// Verify the type attribute of this function. Returns failure and emits
       /// an error if the attribute is invalid.
       LogicalResult verifyType() {
-        auto type = getTypeAttr().getValue();
+        auto type = getFunctionTypeAttr().getValue();
         if (!type.isa<FunctionType>())
           return emitOpError("requires '" + getTypeAttrName() +
                              "' attribute of function type");

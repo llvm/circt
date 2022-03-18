@@ -166,11 +166,11 @@ static void populateLegality(ConversionTarget &target) {
   addGenericLegality<func::CallOp>(target);
   addGenericLegality<func::ReturnOp>(target);
 
-  target.addDynamicallyLegalOp<mlir::FuncOp>([](mlir::FuncOp op) {
+  target.addDynamicallyLegalOp<FuncOp>([](FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
       return hasMooreType(block.getArguments());
     });
-    auto resultsConverted = !hasMooreType(op.getType().getResults());
+    auto resultsConverted = !hasMooreType(op.getResultTypes());
     return argsConverted && resultsConverted;
   });
 }
@@ -195,8 +195,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
       .add<ConstantOpConv, VariableDeclOpConv, AssignOpConv, ReturnOpConversion,
            CondBranchOpConversion, BranchOpConversion, CallOpConversion>(
           typeConverter, context);
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(
-      patterns, typeConverter);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
+                                                                 typeConverter);
 }
 
 //===----------------------------------------------------------------------===//

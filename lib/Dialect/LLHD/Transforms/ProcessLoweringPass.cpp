@@ -133,7 +133,7 @@ void ProcessLoweringPass::runOnOperation() {
     // Move all blocks from the process to the entity, the process does not have
     // a region afterwards.
     entity.body().takeBody(op.body());
-    entity->setAttr("type", op->getAttr("type"));
+    entity->setAttr("function_type", op->getAttr("function_type"));
     // In the case that wait is used to suspend the process, we need to merge
     // the two blocks as we needed the second block to have a target for wait
     // (the entry block cannot be targeted).

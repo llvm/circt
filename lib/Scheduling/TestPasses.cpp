@@ -12,6 +12,7 @@
 
 #include "circt/Scheduling/Algorithms.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 

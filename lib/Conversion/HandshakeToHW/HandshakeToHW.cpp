@@ -168,10 +168,10 @@ private:
     auto inF = [&](unsigned idx) { return op.getArgName(idx).str(); };
     auto outF = [&](unsigned idx) { return op.getResName(idx).str(); };
     llvm::transform(
-        llvm::enumerate(op.getType().getInputs()), std::back_inserter(inputs),
+        llvm::enumerate(op.getArgumentTypes()), std::back_inserter(inputs),
         [&](auto it) { return builder.getStringAttr(inF(it.index())); });
     llvm::transform(
-        llvm::enumerate(op.getType().getResults()), std::back_inserter(outputs),
+        llvm::enumerate(op.getResultTypes()), std::back_inserter(outputs),
         [&](auto it) { return builder.getStringAttr(outF(it.index())); });
   }
 
@@ -333,9 +333,8 @@ static HWModuleExternOp createSubModuleOp(ModuleOp parentModule,
 
 static hw::HWModuleOp createTopModuleOp(handshake::FuncOp funcOp,
                                         ConversionPatternRewriter &rewriter) {
-  llvm::SmallVector<PortInfo, 8> ports =
-      getPortInfoForOp(rewriter, funcOp, funcOp.getType().getInputs(),
-                       funcOp.getType().getResults());
+  llvm::SmallVector<PortInfo, 8> ports = getPortInfoForOp(
+      rewriter, funcOp, funcOp.getArgumentTypes(), funcOp.getResultTypes());
 
   // Create a HW module.
   auto hwModuleOp = rewriter.create<hw::HWModuleOp>(

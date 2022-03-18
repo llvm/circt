@@ -29,6 +29,8 @@ def IntTypeImpl : HWType<"Int"> {
   let mnemonic = "int";
   let parameters = (ins "::mlir::Attribute":$width);
 
+  let hasCustomAssemblyFormat = 1;
+
   let skipDefaultBuilders = 1;
 
   let extraClassDeclaration = [{
@@ -52,6 +54,8 @@ def ArrayTypeImpl : HWType<"Array"> {
   let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
   let genVerifyDecl = 1;
 
+  let hasCustomAssemblyFormat = 1;
+
   let extraClassDeclaration = [{
     static ArrayType get(Type elementType, size_t size) {
       return get(elementType.getContext(), elementType, size);
@@ -70,6 +74,8 @@ def UnpackedArrayType : HWType<"UnpackedArray"> {
   let mnemonic = "uarray";
   let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
   let genVerifyDecl = 1;
+
+  let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
     static UnpackedArrayType get(Type elementType, size_t size) {
@@ -90,6 +96,8 @@ def InOutTypeImpl : HWType<"InOut"> {
   let parameters = (ins "::mlir::Type":$elementType);
   let genVerifyDecl = 1;
 
+  let hasCustomAssemblyFormat = 1;
+
   let extraClassDeclaration = [{
     static InOutType get(Type elementType) {
       return get(elementType.getContext(), elementType);
@@ -105,6 +113,8 @@ def StructTypeImpl : HWType<"Struct"> {
     !hw.struct<fieldName1: Type1, fieldName2: Type2>
   }];
   let mnemonic = "struct";
+
+  let hasCustomAssemblyFormat = 1;
 
   let parameters = (
     ins ArrayRefParameter<
@@ -128,6 +138,8 @@ def UnionTypeImpl : HWType<"Union"> {
       "::circt::hw::UnionType::FieldInfo", "union fields">: $elements
   );
   let mnemonic = "union";
+
+  let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
     using FieldInfo = ::circt::hw::detail::FieldInfo;
@@ -156,6 +168,8 @@ def TypeAliasType : HWType<"TypeAlias"> {
     "mlir::Type":$innerType,
     "mlir::Type":$canonicalType
   );
+
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     TypeBuilderWithInferredContext<(ins

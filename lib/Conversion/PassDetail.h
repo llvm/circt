@@ -35,6 +35,7 @@ class LLVMDialect;
 
 namespace func {
 class FuncDialect;
+class FuncOp;
 } // namespace func
 } // namespace mlir
 
