@@ -125,16 +125,15 @@ void ProcessLoweringPass::runOnOperation() {
     OpBuilder builder(op);
 
     // Replace proc with entity
-    llhd::EntityOp entity = builder.create<llhd::EntityOp>(
-        op.getLoc(), op.ins(), op.getFunctionType());
+    llhd::EntityOp entity =
+        builder.create<llhd::EntityOp>(op.getLoc(), op.ins());
     // Set the symbol name of the entity to the same as the process (as the
     // process gets deleted anyways).
     entity.setName(op.getName());
     // Move all blocks from the process to the entity, the process does not have
     // a region afterwards.
     entity.body().takeBody(op.body());
-    entity->setAttr(llhd::EntityOp::getTypeAttrName(),
-                    op->getAttr(llhd::EntityOp::getTypeAttrName()));
+    entity->setAttr("type", op->getAttr("type"));
     // In the case that wait is used to suspend the process, we need to merge
     // the two blocks as we needed the second block to have a target for wait
     // (the entry block cannot be targeted).
