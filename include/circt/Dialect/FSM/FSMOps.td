@@ -24,12 +24,11 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
     includes a `$body` region that contains internal variables and states.
   }];
 
-  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType);
+  let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType, TypeAttr:$type);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
-    OpBuilder<(ins "StringRef":$name, "Type":$stateType,
-      "FunctionType":$typ,
+    OpBuilder<(ins "StringRef":$name, "Type":$stateType, "FunctionType":$typ,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];

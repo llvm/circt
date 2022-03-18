@@ -33,8 +33,8 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let results = (outs ArrayType:$result);
 
   let hasVerifier = 1;
-  let hasCustomAssemblyFormat = 1;
 
+  let hasCustomAssemblyFormat = 1;
   let builders = [
     // ValueRange needs to contain at least one element.
     OpBuilder<(ins "ValueRange":$input)>

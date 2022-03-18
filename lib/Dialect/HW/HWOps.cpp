@@ -1041,7 +1041,7 @@ LogicalResult HWModuleGeneratedOp::verify() {
   if (failed(verifyModuleCommon(*this)))
     return failure();
 
-  auto referencedKind = getGeneratorKindOp();
+  auto *referencedKind = getGeneratorKindOp();
   if (referencedKind == nullptr)
     return emitError("Cannot find generator definition '")
            << generatorKind() << "'";
@@ -1427,7 +1427,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult OutputOp::verify() {
   // Check that the we (hw.output) have the same number of operands as our
   // region has results.
-  auto opParent = (*this)->getParentOp();
+  auto *opParent = (*this)->getParentOp();
   FunctionType modType = getModuleType(opParent);
   ArrayRef<Type> modResults = modType.getResults();
   OperandRange outputValues = getOperands();

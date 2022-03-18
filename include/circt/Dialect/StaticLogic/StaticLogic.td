@@ -131,6 +131,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   );
 
   let hasCustomAssemblyFormat = 1;
+
   let hasVerifier = 1;
 
   let skipDefaultBuilders = 1;
