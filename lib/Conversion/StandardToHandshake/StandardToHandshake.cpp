@@ -201,7 +201,7 @@ public:
 
   LogicalResult finalize(ConversionPatternRewriter &rewriter,
                          TypeRange argTypes, TypeRange resTypes,
-                         mlir::FuncOp origFunc);
+                         func::FuncOp origFunc);
 
   // Partial lowering driver. This function will instantiate a new
   // partial lowering call, creating a conversion rewriter context which is then
@@ -1807,7 +1807,7 @@ FuncOpLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
 
 LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
                                        TypeRange argTypes, TypeRange resTypes,
-                                       mlir::FuncOp origFunc) {
+                                       func::FuncOp origFunc) {
   SmallVector<Type> newArgTypes(argTypes);
   newArgTypes.push_back(rewriter.getNoneType());
 
@@ -1828,8 +1828,9 @@ LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
   return success();
 }
 
-LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
-                          bool sourceConstants, bool disableTaskPipelining) {
+static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
+                                 bool sourceConstants,
+                                 bool disableTaskPipelining) {
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
   for (const auto &attr : funcOp->getAttrs()) {
@@ -1848,15 +1849,15 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx,
 
   // Get function results
   llvm::SmallVector<mlir::Type, 8> resTypes;
-  for (auto arg : funcOp.getType().getResults())
+  for (auto arg : funcOp.getResultTypes())
     resTypes.push_back(arg);
 
   handshake::FuncOp newFuncOp;
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  returnOnError(partiallyLowerFuncOp<mlir::FuncOp>(
-      [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
+  returnOnError(partiallyLowerFuncOp<func::FuncOp>(
+      [&](func::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         resTypes.push_back(noneType);
         auto func_type = rewriter.getFunctionType(argTypes, resTypes);
@@ -1937,7 +1938,7 @@ struct StandardToHandshakePass
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
-    for (auto funcOp : llvm::make_early_inc_range(m.getOps<mlir::FuncOp>())) {
+    for (auto funcOp : llvm::make_early_inc_range(m.getOps<func::FuncOp>())) {
       if (failed(lowerFuncOp(funcOp, &getContext(), sourceConstants,
                              disableTaskPipelining))) {
         signalPassFailure();

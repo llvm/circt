@@ -21,6 +21,9 @@
 using namespace circt;
 using namespace circt::esi;
 
+/*
+TODO BUMP
+
 Type ChannelPort::parse(AsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
@@ -33,6 +36,7 @@ void ChannelPort::print(AsmPrinter &p) const {
   p.printType(getInner());
   p << ">";
 }
+*/
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"

@@ -50,6 +50,8 @@ def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
     }]>,
   ];
 
+  let hasCustomAssemblyFormat = 1;
+
   let extraClassDeclaration = [{
     /// Get an OutputFileAttr from a string filename, canonicalizing the
     /// filename.
@@ -110,6 +112,8 @@ def FileListAttr : AttrDef<HWDialect, "FileList"> {
     }]>,
   ];
 
+  let assemblyFormat = "`<` $filename `>`";
+
   let extraClassDeclaration = [{
     /// Get an OutputFileAttr from a string filename, canonicalizing the
     /// filename.
@@ -133,6 +137,8 @@ def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
                         "::mlir::TypeAttr":$type,
                         "::mlir::Attribute":$value);
   let mnemonic = "param.decl";
+
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
@@ -181,6 +187,8 @@ def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
       return get(name.getContext(), name, type);
     }]>
   ];
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
@@ -189,6 +197,8 @@ def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
   let parameters = (ins "::mlir::StringAttr":$value,
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.verbatim";
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 
@@ -243,6 +253,8 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
       return get(opcode, operands);
     }
   }];
+
+  let hasCustomAssemblyFormat = 1;
 }
 
 

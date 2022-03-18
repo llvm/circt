@@ -19,7 +19,7 @@ include "mlir/Pass/PassBase.td"
 // AffineToStaticLogic
 //===----------------------------------------------------------------------===//
 
-def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::FuncOp"> {
+def AffineToStaticLogic : Pass<"convert-affine-to-staticlogic", "mlir::func::FuncOp"> {
   let summary = "Convert Affine dialect to StaticLogic pipelines";
   let description = [{
     This pass analyzes Affine loops and control flow, creates a Scheduling
@@ -227,7 +227,7 @@ def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::
 // StandardToStaticLogic
 //===----------------------------------------------------------------------===//
 
-def CreatePipeline : Pass<"create-pipeline", "mlir::FuncOp"> {
+def CreatePipeline : Pass<"create-pipeline", "mlir::func::FuncOp"> {
   let summary = "Create StaticLogic pipeline operations";
   let constructor = "circt::createCreatePipelinePass()";
   let dependentDialects = ["staticlogic::StaticLogicDialect"];

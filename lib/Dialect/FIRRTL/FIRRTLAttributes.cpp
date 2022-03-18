@@ -20,41 +20,6 @@ using namespace firrtl;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.cpp.inc"
 
-Attribute InvalidValueAttr::parse(AsmParser &p, Type typeX) {
-  FIRRTLType type;
-  if (p.parseLess() || p.parseType(type) || p.parseGreater())
-    return Attribute();
-  return InvalidValueAttr::get(p.getContext(), type);
-}
-
-void InvalidValueAttr::print(AsmPrinter &p) const {
-  p << '<' << getType() << '>';
-}
-
-//===----------------------------------------------------------------------===//
-// SubAnnotationAttr
-//===----------------------------------------------------------------------===//
-
-Attribute SubAnnotationAttr::parse(AsmParser &p, Type type) {
-  int64_t fieldID;
-  DictionaryAttr annotations;
-  StringRef fieldIDKeyword;
-
-  if (p.parseLess() || p.parseKeyword(&fieldIDKeyword) || p.parseEqual() ||
-      p.parseInteger(fieldID) || p.parseComma() ||
-      p.parseAttribute<DictionaryAttr>(annotations) || p.parseGreater())
-    return Attribute();
-
-  if (fieldIDKeyword != "fieldID")
-    return Attribute();
-
-  return SubAnnotationAttr::get(p.getContext(), fieldID, annotations);
-}
-
-void SubAnnotationAttr::print(AsmPrinter &p) const {
-  p << "<fieldID = " << getFieldID() << ", " << getAnnotations() << ">";
-}
-
 //===----------------------------------------------------------------------===//
 // Utilities related to Direction
 //===----------------------------------------------------------------------===//

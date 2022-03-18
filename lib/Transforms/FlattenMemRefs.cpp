@@ -248,17 +248,16 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
   addGenericLegalityConstraint<func::CallOp>(target);
   addGenericLegalityConstraint<func::ReturnOp>(target);
 
-  target.addDynamicallyLegalOp<mlir::FuncOp>([](mlir::FuncOp op) {
+  target.addDynamicallyLegalOp<FuncOp>([](FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
       return hasMultiDimMemRef(block.getArguments());
     });
 
-    auto resultsConverted =
-        llvm::all_of(op.getType().getResults(), [](Type type) {
-          if (auto memref = type.dyn_cast<MemRefType>())
-            return isUniDimensional(memref);
-          return true;
-        });
+    auto resultsConverted = llvm::all_of(op.getResultTypes(), [](Type type) {
+      if (auto memref = type.dyn_cast<MemRefType>())
+        return isUniDimensional(memref);
+      return true;
+    });
 
     return argsConverted && resultsConverted;
   });

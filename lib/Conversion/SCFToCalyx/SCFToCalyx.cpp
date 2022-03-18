@@ -1539,7 +1539,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// Create I/O ports. Maintain separate in/out port vectors to determine
     /// which port index each function argument will eventually map to.
     SmallVector<calyx::PortInfo> inPorts, outPorts;
-    FunctionType funcType = funcOp.getType();
+    FunctionType funcType = funcOp.getFunctionType();
     unsigned extMemCounter = 0;
     for (auto &arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
@@ -1577,7 +1577,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
     auto compOp = rewriter.create<calyx::ComponentOp>(
-        funcOp.getLoc(), rewriter.getStringAttr(funcOp.sym_name()), ports);
+        funcOp.getLoc(), rewriter.getStringAttr(funcOp.getSymName()), ports);
 
     /// Mark this component as the toplevel.
     compOp->setAttr("toplevel", rewriter.getUnitAttr());
@@ -1949,7 +1949,7 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
 
-    for (auto argType : enumerate(funcOp.getType().getResults())) {
+    for (auto argType : enumerate(funcOp.getResultTypes())) {
       auto convArgType = convIndexType(rewriter, argType.value());
       assert(convArgType.isa<IntegerType>() && "unsupported return type");
       unsigned width = convArgType.getIntOrFloatBitWidth();
@@ -2459,7 +2459,7 @@ public:
       /// a single function, else, throw error.
       auto funcOps = moduleOp.getOps<mlir::FuncOp>();
       if (std::distance(funcOps.begin(), funcOps.end()) == 1)
-        topLevelFunction = (*funcOps.begin()).sym_name().str();
+        topLevelFunction = (*funcOps.begin()).getSymName().str();
       else {
         moduleOp.emitError()
             << "Module contains multiple functions, but no top level "
@@ -2508,7 +2508,7 @@ public:
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
                       MulIOp, DivUIOp, RemUIOp, ReturnOp, arith::ConstantOp,
-                      IndexCastOp>();
+                      IndexCastOp, mlir::FuncOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());

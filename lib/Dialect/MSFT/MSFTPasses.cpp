@@ -581,9 +581,8 @@ SmallVector<InstanceOp, 1> &PassCommon::updateInstances(
   for (InstanceOp inst : moduleInstantiations[mod]) {
     assert(inst->getParentOp());
     OpBuilder b(inst);
-    auto newInst =
-        b.create<InstanceOp>(inst.getLoc(), mod.getType().getResults(),
-                             inst.getOperands(), inst->getAttrs());
+    auto newInst = b.create<InstanceOp>(inst.getLoc(), mod.getResultTypes(),
+                                        inst.getOperands(), inst->getAttrs());
 
     SmallVector<Value> newOperands;
     getOperandsFunc(newInst, inst, newOperands);
@@ -1128,7 +1127,7 @@ static SmallVector<unsigned> makeSequentialRange(unsigned size) {
 
 void PartitionPass::bubbleUp(MSFTModuleOp mod, Block *partBlock) {
   auto *ctxt = mod.getContext();
-  FunctionType origType = mod.getType();
+  FunctionType origType = mod.getFunctionType();
   std::string nameBuffer;
 
   //*************
@@ -1483,7 +1482,7 @@ void PassCommon::dedupOutputs(MSFTModuleOp mod) {
   }
 
   mod.removePorts(llvm::BitVector(mod.getNumArguments()), outputPortsToRemove);
-  updateInstances(mod, makeSequentialRange(mod.getType().getNumResults()),
+  updateInstances(mod, makeSequentialRange(mod.getNumResults()),
                   [&](InstanceOp newInst, InstanceOp oldInst,
                       SmallVectorImpl<Value> &newOperands) {
                     // Operands don't change.

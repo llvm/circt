@@ -112,7 +112,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   matchAndRewrite(HWModuleOp module, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Collect the HW module's port types.
-    FunctionType moduleType = module.getType();
+    FunctionType moduleType = module.getFunctionType();
     unsigned numInputs = moduleType.getNumInputs();
     TypeRange moduleInputs = moduleType.getInputs();
     TypeRange moduleOutputs = moduleType.getResults();
@@ -130,7 +130,9 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Create the entity. Note that LLHD does not support parameterized
     // entities, so this conversion does not support parameterized modules.
-    auto entity = rewriter.create<EntityOp>(module.getLoc(), numInputs);
+    auto entityType = rewriter.getFunctionType(entityTypes, {});
+    auto entity =
+        rewriter.create<EntityOp>(module.getLoc(), numInputs, entityType);
 
     // Inline the HW module body into the entity body.
     Region &entityBodyRegion = entity.getBodyRegion();
@@ -139,9 +141,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     // Set the entity type and name attributes. Add block arguments for each
     // output, since LLHD entity outputs are still block arguments to the op.
-    auto entityType = rewriter.getFunctionType(entityTypes, {});
     rewriter.updateRootInPlace(entity, [&] {
-      entity->setAttr(entity.getTypeAttrName(), TypeAttr::get(entityType));
       entity.setName(module.getName());
       entityBodyRegion.addArguments(
           moduleOutputs, SmallVector<Location, 4>(moduleOutputs.size(),

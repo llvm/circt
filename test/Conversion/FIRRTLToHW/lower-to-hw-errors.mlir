@@ -10,7 +10,7 @@
 
 firrtl.circuit "OperandTypeIsFIRRTL" {
   firrtl.module @OperandTypeIsFIRRTL() { }
-  builtin.func @Test() {
+  func.func @Test() {
     // expected-error @+1 {{Found unhandled FIRRTL operation 'firrtl.constant'}}
     %a = firrtl.constant 0 : !firrtl.uint<1>
     return
@@ -29,7 +29,7 @@ firrtl.circuit "ResultTypeIsFIRRTL" {
 
 firrtl.circuit "RecursiveCheck" {
   firrtl.module @RecursiveCheck() { }
-  builtin.func private @CheckRecursive() {
+  func.func private @CheckRecursive() {
     // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
     %1 = "fake_op"() : () -> (!firrtl.uint<1>)
   }

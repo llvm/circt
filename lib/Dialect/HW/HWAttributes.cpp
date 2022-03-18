@@ -161,21 +161,6 @@ void OutputFileAttr::print(AsmPrinter &p) const {
 // FileListAttr
 //===----------------------------------------------------------------------===//
 
-/// Option         ::= 'includeReplicatedOp'
-/// OutputFileAttr ::= 'output_file<' name (',' Option)* '>'
-Attribute FileListAttr::parse(AsmParser &p, Type type) {
-  StringAttr filename;
-  if (p.parseLess() || p.parseAttribute<StringAttr>(filename) ||
-      p.parseGreater())
-    return Attribute();
-  auto *context = p.getContext();
-  return FileListAttr::get(context, filename);
-}
-
-void FileListAttr::print(AsmPrinter &p) const {
-  p << "<" << getFilename() << ">";
-}
-
 FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
                                            const Twine &filename) {
   auto canonicalized = canonicalizeFilename("", filename);
@@ -218,24 +203,6 @@ InnerRefAttr InnerRefAttr::getFromOperation(mlir::Operation *op,
     op->setAttr(attrName, attr);
   }
   return InnerRefAttr::get(moduleName, attr);
-}
-
-//===----------------------------------------------------------------------===//
-// GlobalRefAttr
-//===----------------------------------------------------------------------===//
-
-Attribute GlobalRefAttr::parse(AsmParser &p, Type type) {
-  FlatSymbolRefAttr attr;
-  if (p.parseLess() || p.parseAttribute<FlatSymbolRefAttr>(attr) ||
-      p.parseGreater())
-    return Attribute();
-  return GlobalRefAttr::get(p.getContext(), attr);
-}
-
-void GlobalRefAttr::print(AsmPrinter &p) const {
-  p << "<";
-  p.printSymbolName(getGlblSym().getValue());
-  p << ">";
 }
 
 //===----------------------------------------------------------------------===//

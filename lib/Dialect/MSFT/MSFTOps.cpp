@@ -145,7 +145,7 @@ InstanceOp::verifySignatureMatch(const hw::ModulePortInfo &ports) {
 /// Consider adding a `HasModulePorts` op interface to facilitate.
 hw::ModulePortInfo MSFTModuleOp::getPorts() {
   SmallVector<hw::PortInfo> inputs, outputs;
-  auto argTypes = getType().getInputs();
+  auto argTypes = getArgumentTypes();
 
   auto argNames = this->argNames();
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -163,7 +163,7 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
   }
 
   auto resultNames = this->resultNames();
-  auto resultTypes = getType().getResults();
+  auto resultTypes = getResultTypes();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
     outputs.push_back({resultNames[i].cast<StringAttr>(),
                        hw::PortDirection::OUTPUT, resultTypes[i], i});
@@ -175,12 +175,11 @@ SmallVector<BlockArgument>
 MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
                        ArrayRef<std::pair<StringAttr, Value>> outputs) {
   auto *ctxt = getContext();
-  FunctionType ftype = getType();
   Block *body = getBodyBlock();
 
   // Append new inputs.
-  SmallVector<Type, 32> modifiedArgs(ftype.getInputs().begin(),
-                                     ftype.getInputs().end());
+  SmallVector<Type, 32> modifiedArgs(getArgumentTypes().begin(),
+                                     getArgumentTypes().end());
   SmallVector<Attribute> modifiedArgNames(argNames().getAsRange<Attribute>());
   SmallVector<BlockArgument> newBlockArgs;
   for (auto ttPair : inputs) {
@@ -192,8 +191,8 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
   argNamesAttr(ArrayAttr::get(ctxt, modifiedArgNames));
 
   // Append new outputs.
-  SmallVector<Type, 32> modifiedResults(ftype.getResults().begin(),
-                                        ftype.getResults().end());
+  SmallVector<Type, 32> modifiedResults(getResultTypes().begin(),
+                                        getResultTypes().end());
   SmallVector<Attribute> modifiedResultNames(
       resultNames().getAsRange<Attribute>());
   Operation *terminator = body->getTerminator();
@@ -215,7 +214,7 @@ MSFTModuleOp::addPorts(ArrayRef<std::pair<StringAttr, Type>> inputs,
 SmallVector<unsigned> MSFTModuleOp::removePorts(llvm::BitVector inputs,
                                                 llvm::BitVector outputs) {
   MLIRContext *ctxt = getContext();
-  FunctionType ftype = getType();
+  FunctionType ftype = getFunctionType();
   Block *body = getBodyBlock();
   Operation *terminator = body->getTerminator();
 
@@ -460,9 +459,8 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 void MSFTModuleOp::print(OpAsmPrinter &p) {
   using namespace mlir::function_interface_impl;
 
-  FunctionType fnType = getType();
-  auto argTypes = fnType.getInputs();
-  auto resultTypes = fnType.getResults();
+  auto argTypes = getArgumentTypes();
+  auto resultTypes = getResultTypes();
 
   // Print the operation and the function name.
   p << ' ';

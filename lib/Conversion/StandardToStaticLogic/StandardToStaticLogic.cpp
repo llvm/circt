@@ -62,7 +62,7 @@ valueVector getPipelineResults(Block &block) {
   return results;
 }
 
-static void createPipeline(mlir::FuncOp f, OpBuilder &builder) {
+static void createPipeline(mlir::func::FuncOp f, OpBuilder &builder) {
   for (Block &block : f) {
     if (!block.front().mightHaveTrait<OpTrait::IsTerminator>()) {
 
@@ -111,7 +111,7 @@ namespace {
 
 struct CreatePipelinePass : public CreatePipelineBase<CreatePipelinePass> {
   void runOnOperation() override {
-    mlir::FuncOp f = getOperation();
+    auto f = getOperation();
     auto builder = OpBuilder(f.getContext());
     createPipeline(f, builder);
   }

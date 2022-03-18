@@ -36,6 +36,8 @@ def Channel : ESI_Port<"Channel"> {
 
   let mnemonic = "channel";
   let parameters = (ins "Type":$inner);
+
+  let assemblyFormat = "`<` $inner `>`";
 }
 
 def ChannelType :

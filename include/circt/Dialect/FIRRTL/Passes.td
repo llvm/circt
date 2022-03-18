@@ -98,6 +98,12 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     ```
   }];
   let constructor = "circt::firrtl::createInlinerPass()";
+  let statistics = [
+    Statistic<"numRemoved", "num-removed-modules",
+      "Number of dead modules erased">,
+    Statistic<"numInlined", "num-inlined-instances",
+      "Number of instances inlined">
+  ];
 }
 
 def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {

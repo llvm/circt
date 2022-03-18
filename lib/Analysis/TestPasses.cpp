@@ -15,6 +15,7 @@
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 

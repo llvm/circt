@@ -559,8 +559,7 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
   auto op = callOp.getOperation();
   mlir::Operation *calledOp = callOp.resolveCallable();
   if (auto funcOp = dyn_cast<mlir::FuncOp>(calledOp)) {
-    mlir::FunctionType ftype = funcOp.getType();
-    unsigned outputs = ftype.getNumResults();
+    unsigned outputs = funcOp.getNumResults();
     llvm::DenseMap<mlir::Value, Any> newValueMap;
     llvm::DenseMap<mlir::Value, double> newTimeMap;
     std::vector<Any> results(outputs);
@@ -602,7 +601,7 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
       /// intanceOp - available in the enclosing scope value map - and the
       /// argument SSA values within the called function of the InstanceOp.
 
-      const unsigned nRealFuncOuts = func.getType().getNumResults() - 1;
+      const unsigned nRealFuncOuts = func.getNumResults() - 1;
       mlir::Block &entryBlock = func.getBody().front();
       mlir::Block::BlockArgListType instanceBlockArgs =
           entryBlock.getArguments();
@@ -915,25 +914,25 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
 
   if (mlir::FuncOp toplevel =
           module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
-    ftype = toplevel.getType();
+    ftype = toplevel.getFunctionType();
     mlir::Block &entryBlock = toplevel.getBody().front();
     blockArgs = entryBlock.getArguments();
 
     // Get the primary inputs of toplevel off the command line.
-    inputs = ftype.getNumInputs();
+    inputs = toplevel.getNumArguments();
     realInputs = inputs;
-    outputs = ftype.getNumResults();
+    outputs = toplevel.getNumResults();
     realOutputs = outputs;
   } else if (handshake::FuncOp toplevel =
                  module->lookupSymbol<handshake::FuncOp>(toplevelFunction)) {
-    ftype = toplevel.getType();
+    ftype = toplevel.getFunctionType();
     mlir::Block &entryBlock = toplevel.getBody().front();
     blockArgs = entryBlock.getArguments();
 
     // Get the primary inputs of toplevel off the command line.
-    inputs = ftype.getNumInputs();
+    inputs = toplevel.getNumArguments();
     realInputs = inputs - 1;
-    outputs = ftype.getNumResults();
+    outputs = toplevel.getNumResults();
     realOutputs = outputs - 1;
     if (inputs == 0) {
       errs() << "Function " << toplevelFunction << " is expected to have "

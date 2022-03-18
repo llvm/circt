@@ -413,7 +413,7 @@ static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
 /// Convert all input and output ChannelPorts into valid/ready wires. Try not to
 /// change the order and materialize ops in reasonably intuitive locations.
 bool ESIPortsPass::updateFunc(HWModuleOp mod) {
-  auto funcType = mod.getType();
+  auto funcType = mod.getFunctionType();
   // Build ops in the module.
   ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
   Type i1 = modBuilder.getI1Type();
@@ -433,7 +433,7 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
   SmallVector<std::pair<Value, StringAttr>, 8> newReadySignals;
   SmallVector<Attribute> newArgNames;
 
-  for (size_t argNum = 0, blockArgNum = 0, e = funcType.getNumInputs();
+  for (size_t argNum = 0, blockArgNum = 0, e = mod.getNumArguments();
        argNum < e; ++argNum, ++blockArgNum) {
     Type argTy = funcType.getInput(argNum);
     auto argNameAttr = getModuleArgumentNameAttr(mod, argNum);
@@ -626,7 +626,6 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
 /// over all the module updates.
 bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   auto *ctxt = &getContext();
-  auto funcType = mod.getType();
 
   bool updated = false;
 
@@ -636,7 +635,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // port is found.
   SmallVector<Type, 16> newArgTypes;
   size_t nextArgNo = 0;
-  for (auto argTy : funcType.getInputs()) {
+  for (auto argTy : mod.getArgumentTypes()) {
     auto chanTy = argTy.dyn_cast<ChannelPort>();
     newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo++));
 
@@ -657,7 +656,8 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   // operand.
   SmallVector<Type, 8> newResultTypes;
   SmallVector<DictionaryAttr, 4> newResultAttrs;
-  for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
+  auto funcType = mod.getFunctionType();
+  for (size_t resNum = 0, numRes = mod.getNumResults(); resNum < numRes;
        ++resNum) {
     Type resTy = funcType.getResult(resNum);
     auto chanTy = resTy.dyn_cast<ChannelPort>();
@@ -734,7 +734,7 @@ static std::string &constructInstanceName(Value operand, InterfaceOp iface,
 void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
   circt::ImplicitLocOpBuilder instBuilder(inst.getLoc(), inst);
-  FunctionType funcTy = mod.getType();
+  FunctionType funcTy = mod.getFunctionType();
 
   // op counter for error reporting purposes.
   size_t opNum = 0;

@@ -44,7 +44,7 @@ void FunctionEliminationPass::runOnOperation() {
     return;
   }
 
-  module.walk([](mlir::FuncOp op) { op.erase(); });
+  module.walk([](mlir::func::FuncOp op) { op.erase(); });
 }
 } // namespace
 

@@ -618,7 +618,7 @@ LogicalResult llhd::EntityOp::verify() {
 }
 
 LogicalResult circt::llhd::EntityOp::verifyType() {
-  FunctionType type = getType();
+  FunctionType type = getFunctionType();
 
   // Fail if function returns any values. An entity's outputs are specially
   // marked arguments.
@@ -672,7 +672,7 @@ Region *llhd::EntityOp::getCallableRegion() {
 }
 
 ArrayRef<Type> llhd::EntityOp::getCallableResults() {
-  return getType().getResults();
+  return getFunctionType().getResults();
 }
 
 //===----------------------------------------------------------------------===//
@@ -699,7 +699,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
 
 LogicalResult circt::llhd::ProcOp::verifyBody() { return success(); }
 
-LogicalResult circt::llhd::ProcOp::verify() {
+LogicalResult llhd::ProcOp::verify() {
   // Check that the ins attribute is smaller or equal the number of
   // arguments
   uint64_t numArgs = getNumArguments();
@@ -822,7 +822,7 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
 }
 
 void llhd::ProcOp::print(OpAsmPrinter &printer) {
-  FunctionType type = getType();
+  FunctionType type = getFunctionType();
   printer << ' ';
   printer.printSymbolName(getName());
   printProcArguments(printer, getOperation(), type.getInputs(),
@@ -836,7 +836,7 @@ Region *llhd::ProcOp::getCallableRegion() {
 }
 
 ArrayRef<Type> llhd::ProcOp::getCallableResults() {
-  return getType().getResults();
+  return getFunctionType().getResults();
 }
 
 //===----------------------------------------------------------------------===//
@@ -852,7 +852,7 @@ LogicalResult llhd::InstOp::verify() {
   auto proc = (*this)->getParentOfType<ModuleOp>().lookupSymbol<llhd::ProcOp>(
       calleeAttr.getValue());
   if (proc) {
-    auto type = proc.getType();
+    auto type = proc.getFunctionType();
 
     if (proc.ins() != inputs().size())
       return emitOpError("incorrect number of inputs for proc instantiation");
@@ -872,7 +872,7 @@ LogicalResult llhd::InstOp::verify() {
       (*this)->getParentOfType<ModuleOp>().lookupSymbol<llhd::EntityOp>(
           calleeAttr.getValue());
   if (entity) {
-    auto type = entity.getType();
+    auto type = entity.getFunctionType();
 
     if (entity.ins() != inputs().size())
       return emitOpError("incorrect number of inputs for entity instantiation");
@@ -893,7 +893,7 @@ LogicalResult llhd::InstOp::verify() {
       (*this)->getParentOfType<ModuleOp>().lookupSymbol<hw::HWModuleOp>(
           calleeAttr.getValue());
   if (module) {
-    auto type = module.getType();
+    auto type = module.getFunctionType();
 
     if (type.getNumInputs() != inputs().size())
       return emitOpError(

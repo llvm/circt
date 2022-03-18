@@ -596,7 +596,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   auto funcLoc = funcOp.getLoc();
 
   // Add all outputs of funcOp.
-  for (auto portType : llvm::enumerate(funcOp.getType().getResults())) {
+  for (auto portType : llvm::enumerate(funcOp.getResultTypes())) {
     auto portName = funcOp.getResName(portType.index());
     auto bundlePortType = getBundleType(portType.value());
 

@@ -278,7 +278,7 @@ LogicalResult CircuitOp::verify() {
 
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
-    auto *collidingModule = lookupSymbol(defname.getValue());
+    auto collidingModule = lookupSymbol(defname.getValue());
     if (isa_and_nonnull<FModuleOp>(collidingModule)) {
       auto diag =
           extModule.emitOpError()
@@ -3151,7 +3151,7 @@ LogicalResult BitCastOp::verify() {
   auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
   auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
-    // Bitwidths must match for valid bitcast.
+    // Bitwidths must match for valid bit
     if (inTypeBits.getValue() == resTypeBits.getValue())
       return success();
     return emitError("the bitwidth of input (")

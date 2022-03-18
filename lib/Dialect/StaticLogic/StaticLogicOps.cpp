@@ -292,8 +292,8 @@ LogicalResult PipelineTerminatorOp::verify() {
           "'iter_args' must be defined by a 'staticlogic.pipeline.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
-  auto results = (*this).results();
-  TypeRange terminatorResultTypes = results.getTypes();
+  auto opResults = results();
+  TypeRange terminatorResultTypes = opResults.getTypes();
   TypeRange pipelineResultTypes = pipeline.getResultTypes();
   if (terminatorResultTypes != pipelineResultTypes)
     return emitOpError("'results' types (")
@@ -301,7 +301,7 @@ LogicalResult PipelineTerminatorOp::verify() {
            << pipelineResultTypes << ")";
 
   // Verify `results` are defined by a pipeline stage.
-  for (auto result : results)
+  for (auto result : opResults)
     if (result.getDefiningOp<PipelineStageOp>() == nullptr)
       return emitOpError(
           "'results' must be defined by a 'staticlogic.pipeline.stage'");
