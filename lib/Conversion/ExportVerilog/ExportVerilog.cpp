@@ -2592,7 +2592,7 @@ void StmtEmitter::emitExpression(Value exp,
   // declarations for each variable separately from the assignments to them.
   // Otherwise we just emit inline 'wire' declarations.
   RearrangableOStream::Cursor declStartCursor, declEndCursor;
-  SmallVector<bool> exprEmittedCompletely(tooLargeSubExpressions.size());
+  llvm::BitVector exprEmittedCompletely(tooLargeSubExpressions.size());
   if (isInProceduralRegion(tooLargeSubExpressions, state.options)) {
     // Split the current segment to make sure the cursors we are about to create
     // don't get invalidated by statement reordering.
@@ -2621,7 +2621,8 @@ void StmtEmitter::emitExpression(Value exp,
                                  ? topLevelDeclarationIndentLevel
                                  : blockDeclarationIndentLevel;
       bool emittedCompletely = emitDeclarationForTemporary(expr, indentLevel);
-      exprEmittedCompletely[i] = emittedCompletely;
+      if (emittedCompletely)
+        exprEmittedCompletely.set(i);
       if (!emittedCompletely)
         os << ";\n";
       ++numStatementsEmitted;
@@ -2638,7 +2639,7 @@ void StmtEmitter::emitExpression(Value exp,
   for (size_t i = 0, e = tooLargeSubExpressions.size(); i < e; ++i) {
     // If the expression was completely emitted by emitDeclarationForTemporary,
     // skip it.
-    if (exprEmittedCompletely[i])
+    if (exprEmittedCompletely.test(i))
       continue;
 
     auto *expr = tooLargeSubExpressions[i];
