@@ -2535,16 +2535,22 @@ private:
 
 } // end anonymous namespace
 
-bool isInProceduralRegion(SmallVector<Operation *> &ops) {
+bool isInProceduralRegion(SmallVector<Operation *> &ops,
+                          const LoweringOptions &options) {
+
   // First check if any of the ops is in a procedural region.
   for (auto *op : ops)
     if (op->getParentOp()->hasTrait<ProceduralRegion>())
       return true;
 
+  // Only do the expensive check of users when disallowLocalVariables is set.
+  if (!options.disallowLocalVariables)
+    return false;
+
   // Also check if any uses of the ops are in a procedural region. This is
   // necessary because non side-effecting ops are hoisted in PrepareForEmission,
   // but may be used in a procedural region, and cannot be spilled to wires in
-  // that region.
+  // that region when disallowLocalVariables is set.
   SmallVector<Operation *> worklist(ops);
   SmallPtrSet<Operation *, 6> seen;
   while (!worklist.empty()) {
@@ -2587,7 +2593,7 @@ void StmtEmitter::emitExpression(Value exp,
   // Otherwise we just emit inline 'wire' declarations.
   RearrangableOStream::Cursor declStartCursor, declEndCursor;
   SmallVector<bool> exprEmittedCompletely(tooLargeSubExpressions.size());
-  if (isInProceduralRegion(tooLargeSubExpressions)) {
+  if (isInProceduralRegion(tooLargeSubExpressions, state.options)) {
     // Split the current segment to make sure the cursors we are about to create
     // don't get invalidated by statement reordering.
     rearrangableStream.splitCurrentSegment();
