@@ -2553,7 +2553,7 @@ bool isInProceduralRegion(SmallVector<Operation *> &ops) {
       continue;
     seen.insert(op);
     for (auto *user : op->getUsers()) {
-      if (user->hasTrait<ProceduralRegion>())
+      if (user->getParentOp()->hasTrait<ProceduralRegion>())
         return true;
       worklist.push_back(user);
     }

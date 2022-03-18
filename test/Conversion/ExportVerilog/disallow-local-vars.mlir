@@ -175,6 +175,7 @@ hw.module @too_long_expression(%port_with_a_fairly_long_name_one: i1, %port_with
 
   // With disallowLocalVariables, wires should spill to top-level module body.
   // DISALLOW: wire _tmp
+  // DISALLOW: wire _tmp_0
   // DISALLOW: wire _GEN
   // DISALLOW: always @*
 
@@ -202,5 +203,19 @@ hw.module @too_long_expression(%port_with_a_fairly_long_name_one: i1, %port_with
         sv.fwrite %fd, "bar"
       }
     }
+  }
+
+  sv.always {
+    // Without disallowLocalVariables, wires should spill to block beginning.
+    // CHECK: always @*
+    // CHECK: automatic logic _tmp_0
+    %c0 = hw.constant 1 : i1
+    %concats = comb.add %c0, %c0, %c0, %c0 : i1
+    %and = comb.and %concats, %port_with_a_fairly_long_name_one, %port_with_a_fairly_long_name_two, %port_with_a_fairly_long_name_one : i1
+    %cond2 = comb.or %c0, %and : i1
+
+    // CHECK: $fwrite({{.+}} _tmp_0)
+    // DISALLOW: $fwrite({{.+}} _tmp_0)
+    sv.fwrite %fd, "baz %x"(%cond2) : i1
   }
 }
