@@ -83,7 +83,7 @@ class CalyxGroupPort<string mnemonic, list<Trait> traits = []> :
     I1:$src,
     Optional<I1>:$guard
   );
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 include "circt/Dialect/Calyx/CalyxStructure.td"

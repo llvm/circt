@@ -214,7 +214,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
     }]>
   ];
 
-  let verifier = "return ::verifyInterfaceInstanceOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
@@ -223,14 +223,14 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
     /// invalid IR.
     Operation *getReferencedInterface(const hw::SymbolCache *cache = nullptr);
 
-    
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
-    
+
   }];
 }
 
@@ -253,7 +253,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let assemblyFormat =
     "$iface $field attr-dict `:` qualified(type($iface)) `->` qualified(type($result))";
 
-  let verifier = "return ::verifyGetModportOp(*this);";
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$value, "::llvm::StringRef":$field)>
@@ -291,7 +291,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
         `=` $rhs attr-dict `:` qualified(type($rhs))
   }];
 
-  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
+  let hasVerifier = 1;
 }
 
 def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
@@ -329,5 +329,5 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
     InterfaceSignalOp getReferencedDecl(const hw::SymbolCache &cache);
   }];
 
-  let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
+  let hasVerifier = 1;
 }

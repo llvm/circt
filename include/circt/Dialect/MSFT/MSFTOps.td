@@ -127,7 +127,7 @@ def MSFTModuleOp : MSFTOp<"module",
                                   mlir::OpAsmSetValueNameFn setNameFn);
 
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -173,7 +173,7 @@ def MSFTModuleExternOp : MSFTOp<"module.extern",
   ];
 
   let hasCustomAssemblyFormat = 1;
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Decode information about the input and output ports on this module.
@@ -250,7 +250,7 @@ def PDPhysLocationOp : MSFTOp<"pd.location",
   }];
 }
 
-def PDPhysRegionOp : MSFTOp<"pd.physregion", 
+def PDPhysRegionOp : MSFTOp<"pd.physregion",
       [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
   let summary = "Specify a physical region for an instance";
   let description = [{

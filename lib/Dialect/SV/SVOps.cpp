@@ -26,6 +26,7 @@
 using namespace circt;
 using namespace sv;
 
+static LogicalResult verifyIndexedPartSelectOp(Operation *op);
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
@@ -175,10 +176,10 @@ void ConstantXOp::getAsmResultNames(
   setNameFn(getResult(), specialName.str());
 }
 
-static LogicalResult verifyConstantXOp(ConstantXOp op) {
+LogicalResult ConstantXOp::verify() {
   // We don't allow zero width constant or unknown width.
-  if (op.getWidth() <= 0)
-    return op.emitError("unsupported type");
+  if (getWidth() <= 0)
+    return emitError("unsupported type");
   return success();
 }
 
@@ -190,10 +191,10 @@ void ConstantZOp::getAsmResultNames(
   setNameFn(getResult(), specialName.str());
 }
 
-static LogicalResult verifyConstantZOp(ConstantZOp op) {
+LogicalResult ConstantZOp::verify() {
   // We don't allow zero width constant or unknown type.
-  if (op.getWidth() <= 0)
-    return op.emitError("unsupported type");
+  if (getWidth() <= 0)
+    return emitError("unsupported type");
   return success();
 }
 
@@ -208,10 +209,10 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-static LogicalResult verifyLocalParamOp(LocalParamOp op) {
+LogicalResult LocalParamOp::verify() {
   // Verify that this is a valid parameter value.
-  return hw::checkParameterInContext(op.value(),
-                                     op->getParentOfType<hw::HWModuleOp>(), op);
+  return hw::checkParameterInContext(
+      value(), (*this)->getParentOfType<hw::HWModuleOp>(), (*this));
 }
 
 //===----------------------------------------------------------------------===//
@@ -420,9 +421,9 @@ void AlwaysOp::build(OpBuilder &builder, OperationState &result,
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyAlwaysOp(AlwaysOp op) {
-  if (op.events().size() != op.getNumOperands())
-    return op.emitError("different number of operands and events");
+LogicalResult AlwaysOp::verify() {
+  if (events().size() != getNumOperands())
+    return emitError("different number of operands and events");
   return success();
 }
 
@@ -736,10 +737,10 @@ void CaseZOp::print(OpAsmPrinter &p) {
   }
 }
 
-static LogicalResult verifyCaseZOp(CaseZOp op) {
+LogicalResult CaseZOp::verify() {
   // Ensure that the number of regions and number of case values match.
-  if (op.casePatterns().size() != op.getNumRegions())
-    return op.emitOpError("case pattern / region count mismatch");
+  if (casePatterns().size() != getNumRegions())
+    return emitOpError("case pattern / region count mismatch");
   return success();
 }
 
@@ -766,17 +767,17 @@ void CaseZOp::build(OpBuilder &builder, OperationState &result, Value cond,
 // Assignment statements
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyBPAssignOp(BPAssignOp op) {
-  if (isa<sv::WireOp>(op.dest().getDefiningOp()))
-    return op.emitOpError(
+LogicalResult BPAssignOp::verify() {
+  if (isa<sv::WireOp>(dest().getDefiningOp()))
+    return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
   return success();
 }
 
-static LogicalResult verifyPAssignOp(PAssignOp op) {
-  if (isa<sv::WireOp>(op.dest().getDefiningOp()))
-    return op.emitOpError(
+LogicalResult PAssignOp::verify() {
+  if (isa<sv::WireOp>(dest().getDefiningOp()))
+    return emitOpError(
         "Verilog disallows procedural assignment to a net type (did you intend "
         "to use a variable type, e.g., sv.reg?)");
   return success();
@@ -871,36 +872,36 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp op) {
-  auto symtable = SymbolTable::getNearestSymbolTable(op);
+LogicalResult InterfaceInstanceOp::verify() {
+  auto *symtable = SymbolTable::getNearestSymbolTable((*this));
   if (!symtable)
-    return op.emitError("sv.interface.instance must exist within a region "
-                        "which has a symbol table.");
-  auto ifaceTy = op.getType();
+    return emitError("sv.interface.instance must exist within a region "
+                     "which has a symbol table.");
+  auto ifaceTy = getType();
   auto referencedOp =
       SymbolTable::lookupSymbolIn(symtable, ifaceTy.getInterface());
   if (!referencedOp)
-    return op.emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
+    return emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
   if (!isa<InterfaceOp>(referencedOp))
-    return op.emitError("Symbol ")
+    return emitError("Symbol ")
            << ifaceTy.getInterface() << " is not an InterfaceOp.";
   return success();
 }
 
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
-static LogicalResult verifyGetModportOp(GetModportOp op) {
-  auto symtable = SymbolTable::getNearestSymbolTable(op);
+LogicalResult GetModportOp::verify() {
+  auto *symtable = SymbolTable::getNearestSymbolTable((*this));
   if (!symtable)
-    return op.emitError("sv.interface.instance must exist within a region "
-                        "which has a symbol table.");
-  auto ifaceTy = op.getType();
+    return emitError("sv.interface.instance must exist within a region "
+                     "which has a symbol table.");
+  auto ifaceTy = getType();
   auto referencedOp =
       SymbolTable::lookupSymbolIn(symtable, ifaceTy.getModport());
   if (!referencedOp)
-    return op.emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
+    return emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
   if (!isa<InterfaceModportOp>(referencedOp))
-    return op.emitError("Symbol ")
+    return emitError("Symbol ")
            << ifaceTy.getModport() << " is not an InterfaceModportOp.";
   return success();
 }
@@ -993,6 +994,14 @@ InterfaceInstanceOp::getReferencedInterface(const hw::SymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(interface);
 }
 
+LogicalResult AssignInterfaceSignalOp::verify() {
+  return verifySignalExists(iface(), signalNameAttr());
+}
+
+LogicalResult ReadInterfaceSignalOp::verify() {
+  return verifySignalExists(iface(), signalNameAttr());
+}
+
 //===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
@@ -1068,9 +1077,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyWireOp(WireOp op) {
-  if (!isa<hw::HWModuleOp>(op->getParentOp()))
-    return op.emitError("sv.wire must not be in an always or initial block");
+LogicalResult WireOp::verify() {
+  if (!isa<hw::HWModuleOp>((*this)->getParentOp()))
+    return emitError("sv.wire must not be in an always or initial block");
   return success();
 }
 
@@ -1121,6 +1130,10 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   return success();
 }
 
+LogicalResult IndexedPartSelectInOutOp::verify() {
+  return verifyIndexedPartSelectOp(*this);
+}
+
 OpFoldResult IndexedPartSelectInOutOp::fold(ArrayRef<Attribute> constants) {
   if (getType() == input().getType())
     return input();
@@ -1136,6 +1149,10 @@ void IndexedPartSelectOp::build(OpBuilder &builder, OperationState &result,
                                 bool decrement) {
   auto resultType = (IntegerType::get(builder.getContext(), width));
   build(builder, result, resultType, input, base, width, decrement);
+}
+
+LogicalResult IndexedPartSelectOp::verify() {
+  return verifyIndexedPartSelectOp(*this);
 }
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
@@ -1215,10 +1232,10 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
 // Other ops.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyAliasOp(AliasOp op) {
+LogicalResult AliasOp::verify() {
   // Must have at least two operands.
-  if (op.operands().size() < 2)
-    return op.emitOpError("alias must have at least two operands");
+  if (operands().size() < 2)
+    return emitOpError("alias must have at least two operands");
 
   return success();
 }
@@ -1328,12 +1345,12 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyBindOp(BindOp op) {
-  auto inst = op.getReferencedInstance();
+LogicalResult BindOp::verify() {
+  auto inst = getReferencedInstance();
   if (!inst)
-    return op.emitError("Referenced instance doesn't exist");
+    return emitError("Referenced instance doesn't exist");
   if (!inst->getAttr("doNotPrint"))
-    return op.emitError("Referenced instance isn't marked as doNotPrint");
+    return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
 }
 
@@ -1370,12 +1387,12 @@ BindInterfaceOp::getReferencedInstance(const hw::SymbolCache *cache) {
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-static LogicalResult verifyBindInterfaceOp(BindInterfaceOp op) {
-  auto inst = op.getReferencedInstance();
+LogicalResult BindInterfaceOp::verify() {
+  auto inst = getReferencedInstance();
   if (!inst)
-    return op.emitError("Referenced interface doesn't exist");
+    return emitError("Referenced interface doesn't exist");
   if (!inst->getAttr("doNotPrint"))
-    return op.emitError("Referenced interface isn't marked as doNotPrint");
+    return emitError("Referenced interface isn't marked as doNotPrint");
   return success();
 }
 

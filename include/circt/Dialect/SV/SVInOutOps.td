@@ -15,7 +15,7 @@ include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
 // Note that net declarations like 'wire' should not appear in an always block.
-def WireOp : SVOp<"wire", [NonProceduralOp, 
+def WireOp : SVOp<"wire", [NonProceduralOp,
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Define a new wire";
   let description = [{
@@ -46,7 +46,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
       return result().getType().cast<InOutType>().getElementType();
     }
   }];
-  let verifier = [{ return ::verifyWireOp(*this); }];
+  let hasVerifier = 1;
 }
 
 def RegOp : SVOp<"reg", [
@@ -160,7 +160,7 @@ def IndexedPartSelectInOutOp : SVOp<"indexed_part_select_inout",
                                  CArg<"bool", "false">:$decrement)>
   ];
 
-  let verifier = "return ::verifyIndexedPartSelectOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.

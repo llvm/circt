@@ -52,11 +52,11 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
   let arguments = (ins I64Attr: $ins);
   let regions = (region SizedRegion<1>: $body);
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -129,7 +129,7 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
 
   let extraClassDeclaration = [{
     /// Returns the type of this function.
-    FunctionType getType() { 
+    FunctionType getType() {
       return getTypeAttr().getValue().cast<FunctionType>();
     }
 
@@ -147,7 +147,7 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
     LogicalResult verifyBody();
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -211,7 +211,7 @@ def LLHD_InstOp : LLHD_Op<"inst", [
     }
   }];
 
-  let verifier = [{ return ::verify(*this); }];
+  let hasVerifier = 1;
 }
 
 def LLHD_ConnectOp : LLHD_Op<"con", [

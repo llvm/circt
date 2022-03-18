@@ -199,18 +199,16 @@ static LogicalResult verifySVInterface(Operation *op,
   return success();
 }
 
-static LogicalResult verifyWrapSVInterface(WrapSVInterface &op) {
-  auto modportType =
-      op.interfaceSink().getType().cast<circt::sv::ModportType>();
-  auto chanType = op.output().getType().cast<ChannelPort>();
-  return verifySVInterface(op, modportType, chanType);
+LogicalResult WrapSVInterface::verify() {
+  auto modportType = interfaceSink().getType().cast<circt::sv::ModportType>();
+  auto chanType = output().getType().cast<ChannelPort>();
+  return verifySVInterface(*this, modportType, chanType);
 }
 
-static LogicalResult verifyUnwrapSVInterface(UnwrapSVInterface &op) {
-  auto modportType =
-      op.interfaceSource().getType().cast<circt::sv::ModportType>();
-  auto chanType = op.chanInput().getType().cast<ChannelPort>();
-  return verifySVInterface(op, modportType, chanType);
+LogicalResult UnwrapSVInterface::verify() {
+  auto modportType = interfaceSource().getType().cast<circt::sv::ModportType>();
+  auto chanType = chanInput().getType().cast<ChannelPort>();
+  return verifySVInterface(*this, modportType, chanType);
 }
 
 #define GET_OP_CLASSES

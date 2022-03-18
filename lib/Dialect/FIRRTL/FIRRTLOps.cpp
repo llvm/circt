@@ -247,19 +247,19 @@ static void printCircuitOpAttrs(OpAsmPrinter &p, Operation *op,
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), elidedAttrs);
 }
 
-static LogicalResult verifyCircuitOp(CircuitOp circuit) {
-  StringRef main = circuit.name();
+LogicalResult CircuitOp::verify() {
+  StringRef main = name();
 
   // Check that the circuit has a non-empty name.
   if (main.empty()) {
-    circuit.emitOpError("must have a non-empty name");
+    emitOpError("must have a non-empty name");
     return failure();
   }
 
   // Check that a module matching the "main" module exists in the circuit.
-  if (!circuit.getMainModule()) {
-    circuit.emitOpError("must contain one module that matches main name '" +
-                        main + "'");
+  if (!getMainModule()) {
+    emitOpError("must contain one module that matches main name '" + main +
+                "'");
     return failure();
   }
 
@@ -278,7 +278,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
 
     // Check that this extmodule's defname does not conflict with
     // the symbol name of any module.
-    auto collidingModule = circuit.lookupSymbol(defname.getValue());
+    auto *collidingModule = lookupSymbol(defname.getValue());
     if (isa_and_nonnull<FModuleOp>(collidingModule)) {
       auto diag =
           extModule.emitOpError()
@@ -367,11 +367,11 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     return success();
   };
 
-  InnerRefList instanceSyms(circuit.getContext());
-  InnerRefList leafInnerSyms(circuit.getContext());
+  InnerRefList instanceSyms(getContext());
+  InnerRefList leafInnerSyms(getContext());
   SmallVector<NonLocalAnchor> nlaList;
 
-  for (auto &op : *circuit.getBody()) {
+  for (auto &op : *getBody()) {
     // Record all the NLAs.
     if (auto nla = dyn_cast<NonLocalAnchor>(op))
       nlaList.push_back(nla);
@@ -1090,8 +1090,8 @@ ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
-static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
-  auto params = op.parameters();
+LogicalResult FExtModuleOp::verify() {
+  auto params = parameters();
   if (params.empty())
     return success();
 
@@ -1101,8 +1101,8 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
         value.isa<FloatAttr>())
       return true;
-    op.emitError() << "has unknown extmodule parameter value '"
-                   << param.getName().getValue() << "' = " << value;
+    emitError() << "has unknown extmodule parameter value '"
+                << param.getName().getValue() << "' = " << value;
     return false;
   };
 
@@ -1399,12 +1399,12 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 /// Verify the correctness of an InstanceOp.
-static LogicalResult verifyInstanceOp(InstanceOp instance) {
+LogicalResult InstanceOp::verify() {
 
   // Check that this instance is inside a module.
-  auto module = instance->getParentOfType<FModuleOp>();
+  auto module = (*this)->getParentOfType<FModuleOp>();
   if (!module) {
-    instance.emitOpError("should be embedded in a 'firrtl.module'");
+    emitOpError("should be embedded in a 'firrtl.module'");
     return failure();
   }
 
@@ -1580,7 +1580,7 @@ void MemOp::getNumPorts(size_t &numReadPorts, size_t &numWritePorts,
 }
 
 /// Verify the correctness of a MemOp.
-static LogicalResult verifyMemOp(MemOp mem) {
+LogicalResult MemOp::verify() {
 
   // Store the port names as we find them. This lets us check quickly
   // for uniqueneess.
@@ -1590,26 +1590,26 @@ static LogicalResult verifyMemOp(MemOp mem) {
   // type is consistent across all ports.
   FIRRTLType oldDataType;
 
-  for (size_t i = 0, e = mem.getNumResults(); i != e; ++i) {
-    auto portName = mem.getPortName(i);
+  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+    auto portName = getPortName(i);
 
     // Get a bundle type representing this port, stripping an outer
     // flip if it exists.  If this is not a bundle<> or
     // flip<bundle<>>, then this is an error.
     BundleType portBundleType =
         TypeSwitch<FIRRTLType, BundleType>(
-            mem.getResult(i).getType().cast<FIRRTLType>())
+            getResult(i).getType().cast<FIRRTLType>())
             .Case<BundleType>([](BundleType a) { return a; })
             .Default([](auto) { return nullptr; });
     if (!portBundleType) {
-      mem.emitOpError() << "has an invalid type on port " << portName
-                        << " (expected '!firrtl.bundle<...>')";
+      emitOpError() << "has an invalid type on port " << portName
+                    << " (expected '!firrtl.bundle<...>')";
       return failure();
     }
 
     // Require that all port names are unique.
     if (!portNamesSet.insert(portName).second) {
-      mem.emitOpError() << "has non-unique port name " << portName;
+      emitOpError() << "has non-unique port name " << portName;
       return failure();
     }
 
@@ -1618,9 +1618,9 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // in the type (but we don't know any more just yet).
     MemOp::PortKind portKind;
     {
-      auto elt = mem.getPortNamed(portName);
+      auto elt = getPortNamed(portName);
       if (!elt) {
-        mem.emitOpError() << "could not get port with name " << portName;
+        emitOpError() << "could not get port with name " << portName;
         return failure();
       }
       auto firrtlType = elt.getType().cast<FIRRTLType>();
@@ -1636,7 +1636,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
         portKind = MemOp::PortKind::ReadWrite;
         break;
       default:
-        mem.emitOpError()
+        emitOpError()
             << "has an invalid number of fields on port " << portName
             << " (expected 4 for read, 5 for write, or 7 for read/write)";
         return failure();
@@ -1651,9 +1651,9 @@ static LogicalResult verifyMemOp(MemOp mem) {
       if (!dataTypeOption && portKind == MemOp::PortKind::ReadWrite)
         dataTypeOption = portBundleType.getElement("wdata");
       if (!dataTypeOption) {
-        mem.emitOpError() << "has no data field on port " << portName
-                          << " (expected to see \"data\" for a read or write "
-                             "port or \"rdata\" for a read/write port)";
+        emitOpError() << "has no data field on port " << portName
+                      << " (expected to see \"data\" for a read or write "
+                         "port or \"rdata\" for a read/write port)";
         return failure();
       }
       dataType = dataTypeOption.getValue().type;
@@ -1665,28 +1665,27 @@ static LogicalResult verifyMemOp(MemOp mem) {
 
     // Error if the data type isn't passive.
     if (!dataType.isPassive()) {
-      mem.emitOpError() << "has non-passive data type on port " << portName
-                        << " (memory types must be passive)";
+      emitOpError() << "has non-passive data type on port " << portName
+                    << " (memory types must be passive)";
       return failure();
     }
 
     // Error if the data type contains analog types.
     if (dataType.containsAnalog()) {
-      mem.emitOpError()
-          << "has a data type that contains an analog type on port " << portName
-          << " (memory types cannot contain analog types)";
+      emitOpError() << "has a data type that contains an analog type on port "
+                    << portName
+                    << " (memory types cannot contain analog types)";
       return failure();
     }
 
     // Check that the port type matches the kind that we determined
     // for this port.  This catches situations of extraneous port
     // fields beind included or the fields being named incorrectly.
-    FIRRTLType expectedType =
-        mem.getTypeForPort(mem.depth(), dataType, portKind,
-                           dataType.isGround() ? mem.getMaskBits() : 0);
+    FIRRTLType expectedType = getTypeForPort(
+        depth(), dataType, portKind, dataType.isGround() ? getMaskBits() : 0);
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
-    auto originalType = mem.getResult(i).getType();
+    auto originalType = getResult(i).getType();
     if (originalType != expectedType) {
       StringRef portKindName;
       switch (portKind) {
@@ -1700,36 +1699,36 @@ static LogicalResult verifyMemOp(MemOp mem) {
         portKindName = "readwrite";
         break;
       }
-      mem.emitOpError() << "has an invalid type for port " << portName
-                        << " of determined kind \"" << portKindName
-                        << "\" (expected " << expectedType << ", but got "
-                        << originalType << ")";
+      emitOpError() << "has an invalid type for port " << portName
+                    << " of determined kind \"" << portKindName
+                    << "\" (expected " << expectedType << ", but got "
+                    << originalType << ")";
       return failure();
     }
 
     // Error if the type of the current port was not the same as the
     // last port, but skip checking the first port.
     if (oldDataType && oldDataType != dataType) {
-      mem.emitOpError() << "port " << mem.getPortName(i)
-                        << " has a different type than port "
-                        << mem.getPortName(i - 1) << " (expected "
-                        << oldDataType << ", but got " << dataType << ")";
+      emitOpError() << "port " << getPortName(i)
+                    << " has a different type than port " << getPortName(i - 1)
+                    << " (expected " << oldDataType << ", but got " << dataType
+                    << ")";
       return failure();
     }
 
     oldDataType = dataType;
   }
 
-  auto maskWidth = mem.getMaskBits();
+  auto maskWidth = getMaskBits();
 
-  auto dataWidth = mem.getDataType().getBitWidthOrSentinel();
+  auto dataWidth = getDataType().getBitWidthOrSentinel();
   if (dataWidth > 0 && maskWidth > (size_t)dataWidth)
-    return mem.emitOpError("the mask width cannot be greater than "
-                           "data width");
+    return emitOpError("the mask width cannot be greater than "
+                       "data width");
 
-  if (mem.portAnnotations().size() != mem.getNumResults())
-    return mem.emitOpError("the number of result annotations should be "
-                           "equal to the number of results");
+  if (portAnnotations().size() != getNumResults())
+    return emitOpError("the number of result annotations should be "
+                       "equal to the number of results");
 
   return success();
 }
@@ -1992,126 +1991,126 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyConnectOp(ConnectOp connect) {
-  FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
+LogicalResult ConnectOp::verify() {
+  FIRRTLType destType = dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
 
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
-    return connect.emitError("analog types may not be connected");
+    return emitError("analog types may not be connected");
   if (auto destBundle = destType.dyn_cast<BundleType>())
     if (destBundle.containsAnalog())
-      return connect.emitError("analog types may not be connected");
+      return emitError("analog types may not be connected");
   if (auto srcBundle = srcType.dyn_cast<BundleType>())
     if (srcBundle.containsAnalog())
-      return connect.emitError("analog types may not be connected");
+      return emitError("analog types may not be connected");
 
   // Destination and source types must be equivalent.
   if (!areTypesEquivalent(destType, srcType))
-    return connect.emitError("type mismatch between destination ")
+    return emitError("type mismatch between destination ")
            << destType << " and source " << srcType;
 
   // Destination bitwidth must be greater than or equal to source bitwidth.
   int32_t destWidth = destType.getPassiveType().getBitWidthOrSentinel();
   int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
   if (destWidth > -1 && srcWidth > -1 && destWidth < srcWidth)
-    return connect.emitError("destination width ")
+    return emitError("destination width ")
            << destWidth << " is not greater than or equal to source width "
            << srcWidth;
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(connect.src()) == Flow::Sink) {
+  if (foldFlow(src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(connect.src());
+    auto kind = getDeclarationKind(src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
-          connect.emitOpError()
+          emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
              "is not an output port or instance input (expected source "
              "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(connect.src().getLoc())
+      return diag.attachNote(src().getLoc())
              << "the right-hand-side was defined here.";
     }
   }
 
-  if (foldFlow(connect.dest()) == Flow::Source) {
-    auto diag = connect.emitOpError()
+  if (foldFlow(dest()) == Flow::Source) {
+    auto diag = emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
-    return diag.attachNote(connect.dest().getLoc())
+    return diag.attachNote(dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 
   return success();
 }
 
-static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
-  FIRRTLType destType = partialConnect.dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = partialConnect.src().getType().cast<FIRRTLType>();
+LogicalResult PartialConnectOp::verify() {
+  FIRRTLType destType = dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
 
   if (!areTypesWeaklyEquivalent(destType, srcType))
-    return partialConnect.emitError("type mismatch between destination ")
+    return emitError("type mismatch between destination ")
            << destType << " and source " << srcType
            << ". Types are not weakly equivalent.";
 
   // Check that the flows make sense.
-  if (foldFlow(partialConnect.src()) == Flow::Sink) {
+  if (foldFlow(src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(partialConnect.src());
+    auto kind = getDeclarationKind(src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
-          partialConnect.emitOpError()
+          emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
              "is not an output port or instance input (expected source "
              "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(partialConnect.src().getLoc())
+      return diag.attachNote(src().getLoc())
              << "the right-hand-side was defined here.";
     }
   }
 
-  if (foldFlow(partialConnect.dest()) == Flow::Source) {
-    auto diag = partialConnect.emitOpError()
+  if (foldFlow(dest()) == Flow::Source) {
+    auto diag = emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
-    return diag.attachNote(partialConnect.dest().getLoc())
+    return diag.attachNote(dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 
   return success();
 }
 
-static LogicalResult verifyStrictConnectOp(StrictConnectOp connect) {
-  FIRRTLType type = connect.dest().getType().cast<FIRRTLType>();
+LogicalResult StrictConnectOp::verify() {
+  FIRRTLType type = dest().getType().cast<FIRRTLType>();
 
   // Analog types cannot be connected and must be attached.
   if (type.isa<AnalogType>())
-    return connect.emitError("analog types may not be connected");
+    return emitError("analog types may not be connected");
   if (auto destBundle = type.dyn_cast<BundleType>())
     if (destBundle.containsAnalog())
-      return connect.emitError("analog types may not be connected");
+      return emitError("analog types may not be connected");
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(connect.src()) == Flow::Sink) {
+  if (foldFlow(src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(connect.src());
+    auto kind = getDeclarationKind(src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
-          connect.emitOpError()
+          emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
              "is not an output port or instance input (expected source "
              "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(connect.src().getLoc())
+      return diag.attachNote(src().getLoc())
              << "the right-hand-side was defined here.";
     }
   }
 
-  if (foldFlow(connect.dest()) == Flow::Source) {
-    auto diag = connect.emitOpError()
+  if (foldFlow(dest()) == Flow::Source) {
+    auto diag = emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
-    return diag.attachNote(connect.dest().getLoc())
+    return diag.attachNote(dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 
@@ -2269,19 +2268,18 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static LogicalResult verifyConstantOp(ConstantOp constant) {
+LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = constant.getType().cast<IntType>();
+  auto intType = getType().cast<IntType>();
   auto width = intType.getWidthOrSentinel();
-  if (width != -1 && (int)constant.value().getBitWidth() != width)
-    return constant.emitError(
+  if (width != -1 && (int)value().getBitWidth() != width)
+    return emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
 
   // The sign of the attribute's integer type must match our integer type sign.
-  auto attrType = constant.valueAttr().getType().cast<IntegerType>();
-  if (attrType.isSignless() ||
-      attrType.isSigned() != constant.getType().isSigned())
-    return constant.emitError("firrtl.constant attribute has wrong sign");
+  auto attrType = valueAttr().getType().cast<IntegerType>();
+  if (attrType.isSignless() || attrType.isSigned() != getType().isSigned())
+    return emitError("firrtl.constant attribute has wrong sign");
 
   return success();
 }
@@ -2384,11 +2382,10 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), specialName.str());
 }
 
-static LogicalResult verifySubfieldOp(SubfieldOp op) {
-  if (op.fieldIndex() >=
-      op.input().getType().cast<BundleType>().getNumElements())
-    return op.emitOpError("subfield element index is greater than the number "
-                          "of fields in the bundle type");
+LogicalResult SubfieldOp::verify() {
+  if (fieldIndex() >= input().getType().cast<BundleType>().getNumElements())
+    return emitOpError("subfield element index is greater than the number "
+                       "of fields in the bundle type");
   return success();
 }
 
@@ -3111,37 +3108,37 @@ void VerbatimWireOp::getAsmResultNames(
 // Conversions to/from structs in the standard dialect.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
+LogicalResult HWStructCastOp::verify() {
   // We must have a bundle and a struct, with matching pairwise fields
   BundleType bundleType;
   hw::StructType structType;
-  if ((bundleType = cast.getOperand().getType().dyn_cast<BundleType>())) {
-    structType = cast.getType().dyn_cast<hw::StructType>();
+  if ((bundleType = getOperand().getType().dyn_cast<BundleType>())) {
+    structType = getType().dyn_cast<hw::StructType>();
     if (!structType)
-      return cast.emitError("result type must be a struct");
-  } else if ((bundleType = cast.getType().dyn_cast<BundleType>())) {
-    structType = cast.getOperand().getType().dyn_cast<hw::StructType>();
+      return emitError("result type must be a struct");
+  } else if ((bundleType = getType().dyn_cast<BundleType>())) {
+    structType = getOperand().getType().dyn_cast<hw::StructType>();
     if (!structType)
-      return cast.emitError("operand type must be a struct");
+      return emitError("operand type must be a struct");
   } else {
-    return cast.emitError("either source or result type must be a bundle type");
+    return emitError("either source or result type must be a bundle type");
   }
 
   auto firFields = bundleType.getElements();
   auto hwFields = structType.getElements();
   if (firFields.size() != hwFields.size())
-    return cast.emitError("bundle and struct have different number of fields");
+    return emitError("bundle and struct have different number of fields");
 
   for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
     if (firFields[findex].name.getValue() != hwFields[findex].name)
-      return cast.emitError("field names don't match '")
+      return emitError("field names don't match '")
              << firFields[findex].name.getValue() << "', '"
              << hwFields[findex].name.getValue() << "'";
     int64_t firWidth =
         FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
     int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
     if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
-      return cast.emitError("size of field '")
+      return emitError("size of field '")
              << hwFields[findex].name.getValue() << "' don't match " << firWidth
              << ", " << hwWidth;
   }
@@ -3149,24 +3146,23 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   return success();
 }
 
-static LogicalResult verifyBitCastOp(BitCastOp cast) {
+LogicalResult BitCastOp::verify() {
 
-  auto inTypeBits = getBitWidth(cast.getOperand().getType().cast<FIRRTLType>());
-  auto resTypeBits = getBitWidth(cast.getType());
+  auto inTypeBits = getBitWidth(getOperand().getType().cast<FIRRTLType>());
+  auto resTypeBits = getBitWidth(getType());
   if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
     // Bitwidths must match for valid bitcast.
     if (inTypeBits.getValue() == resTypeBits.getValue())
       return success();
-    return cast.emitError("the bitwidth of input (")
+    return emitError("the bitwidth of input (")
            << inTypeBits.getValue() << ") and result ("
            << resTypeBits.getValue() << ") don't match";
   }
   if (!inTypeBits.hasValue())
-    return cast.emitError(
-               "bitwidth cannot be determined for input operand type ")
-           << cast.getOperand().getType();
-  return cast.emitError("bitwidth cannot be determined for result type ")
-         << cast.getType();
+    return emitError("bitwidth cannot be determined for input operand type ")
+           << getOperand().getType();
+  return emitError("bitwidth cannot be determined for result type ")
+         << getType();
 }
 
 //===----------------------------------------------------------------------===//

@@ -53,7 +53,7 @@ def ProgramOp : CalyxContainer<"program", [
     }
   }];
   let assemblyFormat = "$entryPointName $body attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def ComponentOp : CalyxOp<"component", [
@@ -72,7 +72,7 @@ def ComponentOp : CalyxOp<"component", [
     (1) In- and output port definitions that define the interface.
     (2) The cells, wires, and control schedule.
 
-    A Calyx component requires attributes `clk`, `go`, and `reset` on separate input ports, 
+    A Calyx component requires attributes `clk`, `go`, and `reset` on separate input ports,
     and `done` on an output port.
 
     ```mlir
@@ -101,7 +101,7 @@ def ComponentOp : CalyxOp<"component", [
       using mlir::detail::FunctionOpInterfaceTrait<ComponentOp>::getBody;
 
       /// Returns the type of this function.
-      FunctionType getType() { 
+      FunctionType getType() {
         return getTypeAttr().getValue().cast<FunctionType>();
       }
 
@@ -155,7 +155,7 @@ def ComponentOp : CalyxOp<"component", [
                                     mlir::OpAsmSetValueNameFn setNameFn);
   }];
 
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 }
 
@@ -183,7 +183,7 @@ def WiresOp : CalyxContainer<"wires", [
       region->push_back(new Block());
     }]>
   ];
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def InstanceOp : CalyxCell<"instance", [
@@ -302,7 +302,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins "StringRef":$sym_name), [{
@@ -348,7 +348,7 @@ def AssignOp : CalyxOp<"assign", [
       $_state.addOperands({dest, src});
     }]>
   ];
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 }
 

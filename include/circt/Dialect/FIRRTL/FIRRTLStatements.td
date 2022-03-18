@@ -36,7 +36,7 @@ def ConnectOp : FIRRTLOp<"connect"> {
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 
-  let verifier = "return ::verifyConnectOp(*this);";
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = true;
 }
 
@@ -53,7 +53,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
-  let verifier = "return ::verifyPartialConnectOp(*this);";
+  let hasVerifier = 1;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
@@ -72,7 +72,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands]> {
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
-  let verifier = "return ::verifyStrictConnectOp(*this);";
+  let hasVerifier = 1;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` qualified(type($dest))";

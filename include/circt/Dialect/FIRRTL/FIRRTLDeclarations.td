@@ -35,7 +35,7 @@ def InstanceOp : FIRRTLOp<"instance", [
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let verifier = "return ::verifyInstanceOp(*this);";
+  let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 
   let builders = [
@@ -121,7 +121,7 @@ def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 
-  let verifier = "return ::verifyMemOp(*this);";
+  let hasVerifier = 1;
 
   let hasCanonicalizeMethod = true;
 

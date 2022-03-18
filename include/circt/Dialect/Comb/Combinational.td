@@ -46,7 +46,7 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
 
   let hasCanonicalizeMethod = true;
   let hasFolder = true;
-  let verifier =  "return ::verifyUTVariadicOp(*this);";
+  let hasVerifier = 1;
 
   let assemblyFormat = "$inputs attr-dict `:` qualified(type($result))";
 
@@ -181,7 +181,7 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
     "$input `from` $lowBit attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
-  let verifier = "return ::verifyExtractOp(*this);";
+  let hasVerifier = 1;
   let hasCanonicalizeMethod = true;
 
   let builders = [
@@ -204,7 +204,7 @@ def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
-  let verifier = "return ::verifyConcatOp(*this);";
+  let hasVerifier = 1;
 
   let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
 
@@ -237,7 +237,7 @@ def ReplicateOp : CombOp<"replicate", [NoSideEffect]> {
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
-  let verifier = "return ::verifyReplicateOp(*this);";
+  let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$operand, "int32_t":$multiple), [{

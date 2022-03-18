@@ -140,7 +140,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
   let summary = "Defines a memory port on CHIRRTL memory";
   let description = [{
     This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
-    `data` is the data returned from the memory port.  
+    `data` is the data returned from the memory port.
 
     The memory port requires an access point, which sets the enable condition
     of the port, the clock, and the address.  This is done by passing the the
@@ -164,7 +164,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations)>
   ];
 
-  let verifier = "return ::verifyMemoryPortOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Get the assocated access op.

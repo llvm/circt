@@ -105,15 +105,15 @@ void PipelineWhileOp::print(OpAsmPrinter &p) {
   p.printRegion(stages(), /*printEntryBlockArgs=*/false);
 }
 
-static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
+LogicalResult PipelineWhileOp::verify() {
   // Verify trip count is not negative.
-  if (op.tripCount() && *op.tripCount() < 0)
-    return op.emitOpError("trip count must not be negative, found ")
-           << *op.tripCount();
+  if (tripCount() && *tripCount() < 0)
+    return emitOpError("trip count must not be negative, found ")
+           << *tripCount();
 
   // Verify the condition block is "combinational" based on an allowlist of
   // Arithmetic ops.
-  Block &conditionBlock = op.condition().front();
+  Block &conditionBlock = condition().front();
   Operation *nonCombinational;
   WalkResult conditionWalk = conditionBlock.walk([&](Operation *op) {
     if (isa<StaticLogicDialect>(op->getDialect()))
@@ -134,32 +134,31 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
   });
 
   if (conditionWalk.wasInterrupted())
-    return op.emitOpError("condition must have a combinational body, found ")
+    return emitOpError("condition must have a combinational body, found ")
            << *nonCombinational;
 
   // Verify the condition block terminates with a value of type i1.
   TypeRange conditionResults =
       conditionBlock.getTerminator()->getOperandTypes();
   if (conditionResults.size() != 1)
-    return op.emitOpError(
-               "condition must terminate with a single result, found ")
+    return emitOpError("condition must terminate with a single result, found ")
            << conditionResults;
 
-  if (conditionResults.front() != IntegerType::get(op.getContext(), 1))
-    return op.emitOpError("condition must terminate with an i1 result, found ")
+  if (conditionResults.front() != IntegerType::get(getContext(), 1))
+    return emitOpError("condition must terminate with an i1 result, found ")
            << conditionResults.front();
 
   // Verify the stages block contains at least one stage and a terminator.
-  Block &stagesBlock = op.stages().front();
+  Block &stagesBlock = stages().front();
   if (stagesBlock.getOperations().size() < 2)
-    return op.emitOpError("stages must contain at least one stage");
+    return emitOpError("stages must contain at least one stage");
 
   int64_t lastStartTime = -1;
   for (Operation &inner : stagesBlock) {
     // Verify the stages block contains only `staticlogic.pipeline.stage` and
     // `staticlogic.pipeline.terminator` ops.
     if (!isa<PipelineStageOp, PipelineTerminatorOp>(inner))
-      return op.emitOpError(
+      return emitOpError(
                  "stages may only contain 'staticlogic.pipeline.stage' or "
                  "'staticlogic.pipeline.terminator' ops, found ")
              << inner;
@@ -216,9 +215,9 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
 // PipelineStageOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyPipelineStageOp(PipelineStageOp op) {
-  if (op.start() < 0)
-    return op.emitOpError("'start' must be non-negative");
+LogicalResult PipelineStageOp::verify() {
+  if (start() < 0)
+    return emitOpError("'start' must be non-negative");
 
   return success();
 }
@@ -240,18 +239,18 @@ void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
 // PipelineRegisterOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyPipelineRegisterOp(PipelineRegisterOp op) {
-  PipelineStageOp stage = op->getParentOfType<PipelineStageOp>();
+LogicalResult PipelineRegisterOp::verify() {
+  PipelineStageOp stage = (*this)->getParentOfType<PipelineStageOp>();
 
   // If this doesn't terminate a stage, it is terminating the condition.
   if (stage == nullptr)
     return success();
 
   // Verify stage terminates with the same types as the result types.
-  TypeRange registerTypes = op.getOperandTypes();
+  TypeRange registerTypes = getOperandTypes();
   TypeRange resultTypes = stage.getResultTypes();
   if (registerTypes != resultTypes)
-    return op.emitOpError("operand types (")
+    return emitOpError("operand types (")
            << registerTypes << ") must match result types (" << resultTypes
            << ")";
 
@@ -274,37 +273,37 @@ unsigned PipelineStageOp::getStageNumber() {
 // PipelineTerminatorOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyPipelineTerminatorOp(PipelineTerminatorOp op) {
-  PipelineWhileOp pipeline = op->getParentOfType<PipelineWhileOp>();
+LogicalResult PipelineTerminatorOp::verify() {
+  PipelineWhileOp pipeline = (*this)->getParentOfType<PipelineWhileOp>();
 
   // Verify pipeline terminates with the same `iter_args` types as the pipeline.
-  auto iterArgs = op.iter_args();
+  auto iterArgs = iter_args();
   TypeRange terminatorArgTypes = iterArgs.getTypes();
   TypeRange pipelineArgTypes = pipeline.iterArgs().getTypes();
   if (terminatorArgTypes != pipelineArgTypes)
-    return op.emitOpError("'iter_args' types (")
+    return emitOpError("'iter_args' types (")
            << terminatorArgTypes << ") must match pipeline 'iter_args' types ("
            << pipelineArgTypes << ")";
 
   // Verify `iter_args` are defined by a pipeline stage.
   for (auto iterArg : iterArgs)
     if (iterArg.getDefiningOp<PipelineStageOp>() == nullptr)
-      return op.emitOpError(
+      return emitOpError(
           "'iter_args' must be defined by a 'staticlogic.pipeline.stage'");
 
   // Verify pipeline terminates with the same result types as the pipeline.
-  auto results = op.results();
+  auto results = (*this).results();
   TypeRange terminatorResultTypes = results.getTypes();
   TypeRange pipelineResultTypes = pipeline.getResultTypes();
   if (terminatorResultTypes != pipelineResultTypes)
-    return op.emitOpError("'results' types (")
+    return emitOpError("'results' types (")
            << terminatorResultTypes << ") must match pipeline result types ("
            << pipelineResultTypes << ")";
 
   // Verify `results` are defined by a pipeline stage.
   for (auto result : results)
     if (result.getDefiningOp<PipelineStageOp>() == nullptr)
-      return op.emitOpError(
+      return emitOpError(
           "'results' must be defined by a 'staticlogic.pipeline.stage'");
 
   return success();

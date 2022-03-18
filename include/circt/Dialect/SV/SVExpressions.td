@@ -92,7 +92,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   let arguments = (ins);
   let results = (outs HWValueType:$result);
   let assemblyFormat = " attr-dict `:` qualified(type($result))";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let extraClassDeclaration = [{
     int64_t getWidth() {
       return hw::getBitWidth(getType());
@@ -110,7 +110,7 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
   let arguments = (ins);
   let results = (outs HWValueType:$result);
   let assemblyFormat = " attr-dict `:` qualified(type($result))";
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
   let extraClassDeclaration = [{
     int64_t getWidth() {
       return hw::getBitWidth(getType());
@@ -133,7 +133,7 @@ def LocalParamOp : SVOp<"localparam",
     `:` qualified(type($result)) custom<ImplicitSSAName>(attr-dict)
   }];
 
-  let verifier = "return ::verify$cppClass(*this);";
+  let hasVerifier = 1;
 }
 
 def IndexedPartSelectOp
@@ -155,7 +155,7 @@ def IndexedPartSelectOp
                                                 CArg<"bool", "false">:$decrement)>
   ];
 
-  let verifier = "return ::verifyIndexedPartSelectOp(*this);";
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Infer the return types of this operation.

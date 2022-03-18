@@ -198,10 +198,10 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static LogicalResult verifyConstantOp(ConstantOp constant) {
+LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  if (constant.value().getBitWidth() != constant.getType().getWidth())
-    return constant.emitError(
+  if (value().getBitWidth() != getType().getWidth())
+    return emitError(
         "hw.constant attribute bitwidth doesn't match return type");
 
   return success();
@@ -273,10 +273,10 @@ static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
   p.printAttributeWithoutType(value);
 }
 
-static LogicalResult verifyParamValueOp(ParamValueOp op) {
+LogicalResult ParamValueOp::verify() {
   // Check that the attribute expression is valid in this module.
-  return checkParameterInContext(op.value(),
-                                 op->getParentOfType<hw::HWModuleOp>(), op);
+  return checkParameterInContext(
+      value(), (*this)->getParentOfType<hw::HWModuleOp>(), (*this));
 }
 
 OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
@@ -1017,13 +1017,9 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   return success();
 }
 
-static LogicalResult verifyHWModuleOp(HWModuleOp op) {
-  return verifyModuleCommon(op);
-}
+LogicalResult HWModuleOp::verify() { return verifyModuleCommon((*this)); }
 
-static LogicalResult verifyHWModuleExternOp(HWModuleExternOp op) {
-  return verifyModuleCommon(op);
-}
+LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon((*this)); }
 
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                           mlir::OpAsmSetValueNameFn setNameFn) {
@@ -1042,29 +1038,29 @@ Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
-static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
-  if (failed(verifyModuleCommon(op)))
+LogicalResult HWModuleGeneratedOp::verify() {
+  if (failed(verifyModuleCommon((*this))))
     return failure();
 
-  auto referencedKind = op.getGeneratorKindOp();
+  auto *referencedKind = getGeneratorKindOp();
   if (referencedKind == nullptr)
-    return op.emitError("Cannot find generator definition '")
-           << op.generatorKind() << "'";
+    return emitError("Cannot find generator definition '")
+           << generatorKind() << "'";
 
   if (!isa<HWGeneratorSchemaOp>(referencedKind))
-    return op.emitError("Symbol resolved to '")
+    return emitError("Symbol resolved to '")
            << referencedKind->getName()
            << "' which is not a HWGeneratorSchemaOp";
 
   auto referencedKindOp = dyn_cast<HWGeneratorSchemaOp>(referencedKind);
   auto paramRef = referencedKindOp.requiredAttrs();
-  auto dict = op->getAttrDictionary();
+  auto dict = (*this)->getAttrDictionary();
   for (auto str : paramRef) {
     auto strAttr = str.dyn_cast<StringAttr>();
     if (!strAttr)
-      return op.emitError("Unknown attribute type, expected a string");
+      return emitError("Unknown attribute type, expected a string");
     if (!dict.get(strAttr.getValue()))
-      return op.emitError("Missing attribute '") << strAttr.getValue() << "'";
+      return emitError("Missing attribute '") << strAttr.getValue() << "'";
   }
 
   return success();
@@ -1364,6 +1360,8 @@ void InstanceOp::print(OpAsmPrinter &p) {
                        "moduleName", "argNames", "resultNames", "parameters"});
 }
 
+LogicalResult InstanceOp::verify() { return this->verifyCustom(); }
+
 /// Return the name of the specified input port or null if it cannot be
 /// determined.
 StringAttr InstanceOp::getArgumentName(size_t idx) {
@@ -1427,23 +1425,23 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 /// Verify that the num of operands and types fit the declared results.
-static LogicalResult verifyOutputOp(OutputOp *op) {
+LogicalResult OutputOp::verify() {
   // Check that the we (hw.output) have the same number of operands as our
   // region has results.
-  auto opParent = (*op)->getParentOp();
+  auto *opParent = (*this)->getParentOp();
   FunctionType modType = getModuleType(opParent);
   ArrayRef<Type> modResults = modType.getResults();
-  OperandRange outputValues = op->getOperands();
+  OperandRange outputValues = getOperands();
   if (modResults.size() != outputValues.size()) {
-    op->emitOpError("must have same number of operands as region results.");
+    emitOpError("must have same number of operands as region results.");
     return failure();
   }
 
   // Check that the types of our operands and the region's results match.
   for (size_t i = 0, e = modResults.size(); i < e; ++i) {
     if (modResults[i] != outputValues[i].getType()) {
-      op->emitOpError("output types must match module. In "
-                      "operand ")
+      emitOpError("output types must match module. In "
+                  "operand ")
           << i << ", expected " << modResults[i] << ", but got "
           << outputValues[i].getType() << ".";
       return failure();
@@ -1457,7 +1455,7 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult GlobalRefOp::verifyGlobalRef() {
+LogicalResult GlobalRefOp::verify() {
   Operation *parent = (*this)->getParentOp();
   StringAttr symNameAttr = (*this).sym_nameAttr();
   SymbolTable symTable(parent);
@@ -1588,6 +1586,22 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
              [elemType](Value v) -> bool { return v.getType() == elemType; }) &&
          "All values must have same type.");
   build(b, state, ArrayType::get(elemType, values.size()), values);
+}
+
+LogicalResult ArrayCreateOp::verify() {
+  unsigned returnSize = getType().cast<ArrayType>().getSize();
+  if (inputs().size() != returnSize)
+    return failure();
+  return success();
+}
+
+LogicalResult ArraySliceOp::verify() {
+  unsigned inputSize = type_cast<ArrayType>(input().getType()).getSize();
+  if (llvm::Log2_64_Ceil(inputSize) !=
+      lowIndex().getType().getIntOrFloatBitWidth())
+    return emitOpError(
+        "ArraySlice: index width must match clog2 of array size");
+  return success();
 }
 
 static ParseResult parseArrayConcatTypes(OpAsmParser &p,
@@ -1951,6 +1965,12 @@ LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
   auto bitcast = rewriter.createOrFold<BitcastOp>(op.getLoc(), op.getType(),
                                                   inputBitcast.input());
   rewriter.replaceOp(op, bitcast);
+  return success();
+}
+
+LogicalResult BitcastOp::verify() {
+  if (getBitWidth(input().getType()) != getBitWidth(result().getType()))
+    return this->emitOpError("Bitwidth of input must match result");
   return success();
 }
 

@@ -311,10 +311,10 @@ static void eraseControlWithGroupAndConditional(OpTy op,
 // ProgramOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyProgramOp(ProgramOp program) {
-  if (program.getEntryPointComponent() == nullptr)
-    return program.emitOpError() << "has undefined entry-point component: \""
-                                 << program.entryPointName() << "\".";
+LogicalResult ProgramOp::verify() {
+  if (getEntryPointComponent() == nullptr)
+    return emitOpError() << "has undefined entry-point component: \""
+                         << entryPointName() << "\".";
 
   return success();
 }
@@ -575,26 +575,26 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
          << difference;
 }
 
-static LogicalResult verifyComponentOp(ComponentOp op) {
+LogicalResult ComponentOp::verify() {
   // Verify there is exactly one of each the wires and control operations.
-  auto wIt = op.getBody()->getOps<WiresOp>();
-  auto cIt = op.getBody()->getOps<ControlOp>();
+  auto wIt = getBody()->getOps<WiresOp>();
+  auto cIt = getBody()->getOps<ControlOp>();
   if (std::distance(wIt.begin(), wIt.end()) +
           std::distance(cIt.begin(), cIt.end()) !=
       2)
-    return op.emitOpError(
+    return emitOpError(
         "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
-  if (failed(hasRequiredPorts(op)))
+  if (failed(hasRequiredPorts(*this)))
     return failure();
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
   bool hasNoControlConstructs =
-      op.getControlOp().getBody()->getOperations().empty();
-  bool hasNoAssignments = op.getWiresOp().getBody()->getOps<AssignOp>().empty();
+      getControlOp().getBody()->getOperations().empty();
+  bool hasNoAssignments = getWiresOp().getBody()->getOps<AssignOp>().empty();
   if (hasNoControlConstructs && hasNoAssignments)
-    return op->emitOpError(
+    return emitOpError(
         "The component currently does nothing. It needs to either have "
         "continuous assignments in the Wires region or control constructs in "
         "the Control region.");
@@ -678,9 +678,7 @@ void ComponentOp::getAsmBlockArgumentNames(
 //===----------------------------------------------------------------------===//
 // ControlOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyControlOp(ControlOp control) {
-  return verifyControlBody(control);
-}
+LogicalResult ControlOp::verify() { return verifyControlBody(*this); }
 
 //===----------------------------------------------------------------------===//
 // SeqOp
@@ -697,17 +695,17 @@ void SeqOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 // ParOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyParOp(ParOp parOp) {
+LogicalResult ParOp::verify() {
   llvm::SmallSet<StringRef, 8> groupNames;
-  Block *body = parOp.getBody();
+  Block *body = getBody();
 
   // Add loose requirement that the body of a ParOp may not enable the same
   // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
   for (EnableOp op : body->getOps<EnableOp>()) {
     StringRef groupName = op.groupName();
     if (groupNames.count(groupName))
-      return parOp->emitOpError() << "cannot enable the same group: \""
-                                  << groupName << "\" more than once.";
+      return emitOpError() << "cannot enable the same group: \"" << groupName
+                           << "\" more than once.";
     groupNames.insert(groupName);
   }
 
@@ -724,17 +722,17 @@ void ParOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 // WiresOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyWiresOp(WiresOp wires) {
-  auto component = wires->getParentOfType<ComponentOp>();
+LogicalResult WiresOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   auto control = component.getControlOp();
 
   // Verify each group is referenced in the control section.
-  for (auto &&op : *wires.getBody()) {
+  for (auto &&op : *this->getBody()) {
     if (!isa<GroupInterface>(op))
       continue;
     auto group = cast<GroupInterface>(op);
     auto groupName = group.symName();
-    if (SymbolTable::symbolKnownUseEmpty(groupName, control))
+    if (::mlir::SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
   }
@@ -787,15 +785,15 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 
 /// Verifies a combinational group may contain only combinational primitives or
 /// perform combinational logic.
-static LogicalResult verifyCombGroupOp(CombGroupOp group) {
+LogicalResult CombGroupOp::verify() {
 
-  for (auto &&op : *group.getBody()) {
+  for (auto &&op : *getBody()) {
     auto assign = dyn_cast<AssignOp>(op);
     if (assign == nullptr)
       continue;
     Value dst = assign.dest(), src = assign.src();
-    if (failed(isCombinational(dst, group)) ||
-        failed(isCombinational(src, group)))
+    if (failed(isCombinational(dst, *this)) ||
+        failed(isCombinational(src, *this)))
       return failure();
   }
   return success();
@@ -1082,11 +1080,11 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   return success();
 }
 
-static LogicalResult verifyAssignOp(AssignOp assign) {
+LogicalResult AssignOp::verify() {
   bool isDestination = true, isSource = false;
-  if (failed(verifyAssignOpValue(assign, isDestination)))
+  if (failed(verifyAssignOpValue(*this, isDestination)))
     return failure();
-  if (failed(verifyAssignOpValue(assign, isSource)))
+  if (failed(verifyAssignOpValue(*this, isSource)))
     return failure();
 
   return success();
@@ -1266,9 +1264,7 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
-  return verifyNotComplexSource(goOp);
-}
+LogicalResult GroupGoOp::verify() { return verifyNotComplexSource(*this); }
 
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -1292,9 +1288,9 @@ ParseResult GroupGoOp::parse(OpAsmParser &parser, OperationState &result) {
 // GroupDoneOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
-  Operation *srcOp = doneOp.src().getDefiningOp();
-  Value optionalGuard = doneOp.guard();
+LogicalResult GroupDoneOp::verify() {
+  Operation *srcOp = src().getDefiningOp();
+  Value optionalGuard = guard();
   Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
   bool noGuard = (guardOp == nullptr);
 
@@ -1303,11 +1299,11 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
     return success();
 
   if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
-    return doneOp->emitOpError()
-           << "with constant source" << (noGuard ? "" : " and constant guard")
-           << ". This should be a combinational group.";
+    return emitOpError() << "with constant source"
+                         << (noGuard ? "" : " and constant guard")
+                         << ". This should be a combinational group.";
 
-  return verifyNotComplexSource(doneOp);
+  return verifyNotComplexSource(*this);
 }
 
 void GroupDoneOp::print(OpAsmPrinter &p) { printGroupPort(p, *this); }
@@ -1419,25 +1415,25 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
   state.addTypes(types);
 }
 
-static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
-  ArrayRef<Attribute> sizes = memoryOp.sizes().getValue();
-  ArrayRef<Attribute> addrSizes = memoryOp.addrSizes().getValue();
-  size_t numDims = memoryOp.sizes().size();
-  size_t numAddrs = memoryOp.addrSizes().size();
+LogicalResult MemoryOp::verify() {
+  ArrayRef<Attribute> sizes = this->sizes().getValue();
+  ArrayRef<Attribute> addrSizes = this->addrSizes().getValue();
+  size_t numDims = this->sizes().size();
+  size_t numAddrs = this->addrSizes().size();
   if (numDims != numAddrs)
-    return memoryOp.emitOpError("mismatched number of dimensions (")
+    return emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
 
   size_t numExtraPorts = 5; // write data/enable, clk, and read data/done.
-  if (memoryOp.getNumResults() != numAddrs + numExtraPorts)
-    return memoryOp.emitOpError("incorrect number of address ports, expected ")
+  if (getNumResults() != numAddrs + numExtraPorts)
+    return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
     int64_t size = sizes[i].cast<IntegerAttr>().getInt();
     int64_t addrSize = addrSizes[i].cast<IntegerAttr>().getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
-      return memoryOp.emitOpError("address size (")
+      return emitOpError("address size (")
              << addrSize << ") for dimension " << i
              << " can't address the entire range (" << size << ")";
   }
@@ -1448,19 +1444,19 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
 //===----------------------------------------------------------------------===//
 // EnableOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyEnableOp(EnableOp enableOp) {
-  auto component = enableOp->getParentOfType<ComponentOp>();
+LogicalResult EnableOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  StringRef groupName = enableOp.groupName();
+  StringRef groupName = this->groupName();
 
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return enableOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<CombGroupOp>(groupOp))
-    return enableOp.emitOpError() << "with group '" << groupName
-                                  << "', which is a combinational group.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which is a combinational group.";
 
   return success();
 }
@@ -1469,14 +1465,14 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
 // IfOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyIfOp(IfOp ifOp) {
-  auto component = ifOp->getParentOfType<ComponentOp>();
+LogicalResult IfOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   WiresOp wiresOp = component.getWiresOp();
 
-  if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
-    return ifOp.emitError() << "empty 'else' region.";
+  if (elseBodyExists() && getElseBody()->empty())
+    return emitError() << "empty 'else' region.";
 
-  Optional<StringRef> optGroupName = ifOp.groupName();
+  Optional<StringRef> optGroupName = groupName();
   if (!optGroupName.hasValue()) {
     // No combinational group was provided.
     return success();
@@ -1484,18 +1480,18 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return ifOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<GroupOp>(groupOp))
-    return ifOp.emitOpError() << "with group '" << groupName
-                              << "', which is not a combinational group.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which is not a combinational group.";
 
-  if (failed(groupOp.drivesPort(ifOp.cond())))
-    return ifOp.emitError()
-           << "with conditional op: '" << valueName(component, ifOp.cond())
-           << "' expected to be driven from group: '" << groupName
-           << "' but no driver was found.";
+  if (failed(groupOp.drivesPort(cond())))
+    return emitError() << "with conditional op: '"
+                       << valueName(component, cond())
+                       << "' expected to be driven from group: '" << groupName
+                       << "' but no driver was found.";
 
   return success();
 }
@@ -1674,11 +1670,11 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 // WhileOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyWhileOp(WhileOp whileOp) {
-  auto component = whileOp->getParentOfType<ComponentOp>();
+LogicalResult WhileOp::verify() {
+  auto component = (*this)->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  Optional<StringRef> optGroupName = whileOp.groupName();
+  Optional<StringRef> optGroupName = groupName();
   if (!optGroupName.hasValue()) {
     /// No combinational group was provided
     return success();
@@ -1686,18 +1682,17 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
-    return whileOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which does not exist.";
 
   if (isa<GroupOp>(groupOp))
-    return whileOp.emitOpError() << "with group '" << groupName
-                                 << "', which is not a combinational group.";
+    return emitOpError() << "with group '" << groupName
+                         << "', which is not a combinational group.";
 
-  if (failed(groupOp.drivesPort(whileOp.cond())))
-    return whileOp.emitError()
-           << "conditional op: '" << valueName(component, whileOp.cond())
-           << "' expected to be driven from group: '" << groupName
-           << "' but no driver was found.";
+  if (failed(groupOp.drivesPort(cond())))
+    return emitError() << "conditional op: '" << valueName(component, cond())
+                       << "' expected to be driven from group: '" << groupName
+                       << "' but no driver was found.";
 
   return success();
 }
@@ -1787,6 +1782,26 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
 //===----------------------------------------------------------------------===//
 // Calyx library ops
 //===----------------------------------------------------------------------===//
+
+LogicalResult PadLibOp::verify() {
+  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+  if (inBits >= outBits)
+    return emitOpError("expected input bits (")
+           << inBits << ')' << " to be less than output bits (" << outBits
+           << ')';
+  return success();
+}
+
+LogicalResult SliceLibOp::verify() {
+  unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+  unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+  if (inBits <= outBits)
+    return emitOpError("expected input bits (")
+           << inBits << ')' << " to be greater than output bits (" << outBits
+           << ')';
+  return success();
+}
 
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
