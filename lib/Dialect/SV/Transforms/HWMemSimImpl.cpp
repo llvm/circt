@@ -44,6 +44,24 @@ struct FirMemory {
 } // end anonymous namespace
 
 namespace {
+
+class HWMemSimImpl {
+  MLIRContext &ctx;
+  bool ignoreReadEnableMem;
+
+  SmallVector<sv::RegOp> registers;
+
+  Value addPipelineStages(ImplicitLocOpBuilder &b,
+                          ModuleNamespace &moduleNamespace, size_t stages,
+                          Value clock, Value data, Value gate = {});
+
+public:
+  HWMemSimImpl(MLIRContext &ctx, bool replSeqMem, bool ignoreReadEnableMem)
+      : ctx(ctx), ignoreReadEnableMem(ignoreReadEnableMem) {}
+
+  void generateMemory(HWModuleOp op, FirMemory mem);
+};
+
 struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
@@ -52,15 +70,6 @@ public:
     replSeqMem = e;
     ignoreReadEnableMem = ignoreEn;
   }
-
-private:
-  void generateMemory(HWModuleOp op, FirMemory mem);
-
-  SmallVector<sv::RegOp> registers;
-
-  Value addPipelineStages(ImplicitLocOpBuilder &b,
-                          ModuleNamespace &moduleNamespace, size_t stages,
-                          Value clock, Value data, Value gate = {});
 };
 } // end anonymous namespace
 
@@ -89,10 +98,10 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   return mem;
 }
 
-Value HWMemSimImplPass::addPipelineStages(ImplicitLocOpBuilder &b,
-                                          ModuleNamespace &moduleNamespace,
-                                          size_t stages, Value clock,
-                                          Value data, Value gate) {
+Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
+                                      ModuleNamespace &moduleNamespace,
+                                      size_t stages, Value clock, Value data,
+                                      Value gate) {
   if (!stages)
     return data;
 
@@ -116,8 +125,8 @@ Value HWMemSimImplPass::addPipelineStages(ImplicitLocOpBuilder &b,
   return data;
 }
 
-void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
+void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
+  ImplicitLocOpBuilder b(UnknownLoc::get(&ctx), op.getBody());
 
   ModuleNamespace moduleNamespace(op);
 
@@ -488,8 +497,10 @@ void HWMemSimImplPass::runOnOperation() {
       } else {
         auto newModule = builder.create<HWModuleOp>(
             oldModule.getLoc(), nameAttr, oldModule.getPorts());
-        generateMemory(newModule, mem);
+        HWMemSimImpl(getContext(), replSeqMem, ignoreReadEnableMem)
+            .generateMemory(newModule, mem);
       }
+
       oldModule.erase();
       anythingChanged = true;
     }

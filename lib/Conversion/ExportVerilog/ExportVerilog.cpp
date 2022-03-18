@@ -1271,6 +1271,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   StringRef operatorStr;
   VerilogPrecedence subprecedence = ForceEmitMultiUse;
   Optional<SubExprSignResult> operandSign;
+  bool isUnary = false;
 
   switch (expr.getOpcode()) {
   case PEO::Add:
@@ -1328,6 +1329,11 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     subprecedence = Multiply;
     operandSign = IsSigned;
     break;
+  case PEO::CLog2:
+    operatorStr = "$clog2";
+    operandSign = IsUnsigned;
+    isUnary = true;
+    break;
   }
 
   // Emit the specified operand with a $signed() or $unsigned() wrapper around
@@ -1346,6 +1352,9 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     }
     return signedness == IsSigned;
   };
+
+  if (isUnary)
+    os << operatorStr;
 
   if (subprecedence > parenthesizeIfLooserThan)
     os << '(';

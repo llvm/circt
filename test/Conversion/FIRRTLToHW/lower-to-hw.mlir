@@ -1117,6 +1117,29 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.force %out, %in : !firrtl.uint<42>, !firrtl.uint<42>
   }
 
+  firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // chckcoverAnno is extracted because it is instantiated inside the DUT.
+  // CHECK-LABEL: hw.module.extern @chkcoverAnno(%clock: i1)
+  // CHECK-SAME: attributes {firrtl.extract.cover.extra}
+
+  firrtl.extmodule @chkcoverAnno2(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  // checkcoverAnno2 is NOT extracted because it is not instantiated under the
+  // DUT.
+  // CHECK-LABEL: hw.module.extern @chkcoverAnno2(%clock: i1)
+  // CHECK-NOT: attributes {firrtl.extract.cover.extra}
+
+  // CHECK-LABEL: hw.module.extern @InnerNamesExt
+  // CHECK-SAME:  (
+  // CHECK-SAME:    clockIn: i1 {hw.exportPort = @extClockInSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    clockOut: i1 {hw.exportPort = @extClockOutSym}
+  // CHECK-SAME:  )
+  firrtl.extmodule @InnerNamesExt(
+    in clockIn: !firrtl.clock sym @extClockInSym,
+    out clockOut: !firrtl.clock sym @extClockOutSym
+  )
+  attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+
   // CHECK-LABEL: hw.module @FooDUT
   firrtl.module @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
@@ -1228,29 +1251,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>) -> (!firrtl.vector<uint<2>, 3>)
     // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
   }
-
-  firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
-  // chckcoverAnno is extracted because it is instantiated inside the DUT.
-  // CHECK-LABEL: hw.module.extern @chkcoverAnno(%clock: i1)
-  // CHECK-SAME: attributes {firrtl.extract.cover.extra}
-
-  firrtl.extmodule @chkcoverAnno2(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
-  // checkcoverAnno2 is NOT extracted because it is not instantiated under the
-  // DUT.
-  // CHECK-LABEL: hw.module.extern @chkcoverAnno2(%clock: i1)
-  // CHECK-NOT: attributes {firrtl.extract.cover.extra}
-
-  // CHECK-LABEL: hw.module.extern @InnerNamesExt
-  // CHECK-SAME:  (
-  // CHECK-SAME:    clockIn: i1 {hw.exportPort = @extClockInSym}
-  // CHECK-SAME:  ) -> (
-  // CHECK-SAME:    clockOut: i1 {hw.exportPort = @extClockOutSym}
-  // CHECK-SAME:  )
-  firrtl.extmodule @InnerNamesExt(
-    in clockIn: !firrtl.clock sym @extClockInSym,
-    out clockOut: !firrtl.clock sym @extClockOutSym
-  )
-  attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
   // CHECK-LABEL: hw.module @InnerNames
   // CHECK-SAME:  (

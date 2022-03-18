@@ -346,6 +346,13 @@ This set includes:
    represented as multiply by `-1`.  This allows it to trivially compose
    with affine expression canonicalizations.
 
+### clog2 Parameter Expression
+A `clog2` parameter expression opcode is provided, which calculates the ceiling
+of log base 2 of its argument. This is useful for calculating things like the
+minimum bitwidth needed to address memory of a parameterized size.
+
+Note that `clog2(0)` is `0`, which follows the Verilog spec.
+
 ### Using parameters in the body of a module
 
 Parameters are not [SSA values](https://en.wikipedia.org/wiki/Static_single_assignment_form), so they cannot directly be used within the body

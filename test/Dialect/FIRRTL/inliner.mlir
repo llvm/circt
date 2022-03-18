@@ -546,6 +546,50 @@ firrtl.circuit "CollidingSymbolsReTop" {
   }
 }
 
+// Test that when inlining two instances of a module and the port names collide,
+// that the NLA is properly updated.  Specifically in this test case, the second
+// instance inlined should be renamed, and it should *not* update the NLA.
+// CHECK-LABEL: firrtl.circuit "CollidingSymbolsNLAFixup"
+firrtl.circuit "CollidingSymbolsNLAFixup" {
+  // CHECK: firrtl.nla @nla0 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@io>]
+  firrtl.nla @nla0 [#hw.innerNameRef<@Foo::@bar>,
+                    #hw.innerNameRef<@Bar::@baz0>,
+                    #hw.innerNameRef<@Baz::@io>]
+  
+  // CHECK: firrtl.nla @nla1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@w>]
+  firrtl.nla @nla1 [#hw.innerNameRef<@Foo::@bar>,
+                    #hw.innerNameRef<@Bar::@baz0>,
+                    #hw.innerNameRef<@Baz::@w>]
+
+  firrtl.module @Baz(out %io: !firrtl.uint<1> sym @io [{circt.nonlocal = @nla0, class = "test"}])
+       attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla1, class = "test"}]} : !firrtl.uint<1>
+  }
+
+  // CHECK: firrtl.module @Bar()
+  firrtl.module @Bar() {
+    // CHECK: %baz0_io = firrtl.wire sym @io  {annotations = [{circt.nonlocal = @nla0, class = "test"}]}
+    // CHECK: %baz0_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla1, class = "test"}]}
+    %0 = firrtl.instance baz0 sym @baz0 {annotations = [
+      {circt.nonlocal = @nla0, class = "circt.nonlocal"},
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Baz(out io : !firrtl.uint<1>)
+
+    // CHECK: %baz1_io = firrtl.wire sym @io_0
+    // CHECK: %baz1_w = firrtl.wire sym @w
+    %1 = firrtl.instance baz1 sym @baz1 @Baz(out io : !firrtl.uint<1>)
+  }
+
+  firrtl.module @Foo() {
+    firrtl.instance bar sym @bar {annotations = [
+      {circt.nonlocal = @nla0, class = "circt.nonlocal"},
+      {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Bar()
+  }
+  
+  firrtl.module @CollidingSymbolsNLAFixup() {
+    firrtl.instance system sym @system @Foo()
+  }
+}
+
 // Test that anything with a "name" will be renamed, even things that FIRRTL
 // Dialect doesn't understand.
 //
@@ -559,4 +603,60 @@ firrtl.circuit "RenameAnything" {
     // CHECK-NEXT: "some_unknown_dialect.op"(){{.+}}name = "hello_world"
     firrtl.instance hello @Foo()
   }
+}
+
+// Test that when an op is inlined into two locations and an annotation on it
+// becomes local, that the local annotation is only copied to the clone that
+// corresponds to the original NLA path.
+// CHECK-LABEL: firrtl.circuit "AnnotationSplit0"
+firrtl.circuit "AnnotationSplit0" {
+firrtl.nla @nla_5560 [#hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.nla @nla_5561 [#hw.innerNameRef<@Bar1::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  %w = firrtl.wire sym @w {annotations = [
+    {circt.nonlocal = @nla_5560, class = "test0"},
+    {circt.nonlocal = @nla_5561, class = "test1"}]} : !firrtl.uint<8>
+}
+// CHECK: firrtl.module @Bar0
+firrtl.module @Bar0() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{class = "test0"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5560, class = "circt.nonlocal"}]} @Leaf()
+}
+// CHECK: firrtl.module @Bar1
+firrtl.module @Bar1() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{class = "test1"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Leaf()
+}
+firrtl.module @AnnotationSplit0() {
+  firrtl.instance bar0 @Bar0()
+  firrtl.instance bar1 @Bar1()
+}
+}
+
+// Test that when an operation is inlined into two locations and an annotation
+// on it should only be copied to a specific clone. This differs from the test
+// above in that the annotation does not become a regular local annotation.
+// CHECK-LABEL: firrtl.circuit "AnnotationSplit1"
+firrtl.circuit "AnnotationSplit1" {
+firrtl.nla @nla_5560 [#hw.innerNameRef<@AnnotationSplit::@bar0>, #hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.nla @nla_5561 [#hw.innerNameRef<@AnnotationSplit::@bar1>, #hw.innerNameRef<@Bar1::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  %w = firrtl.wire sym @w {annotations = [
+    {circt.nonlocal = @nla_5560, class = "test0"},
+    {circt.nonlocal = @nla_5561, class = "test1"}]} : !firrtl.uint<8>
+}
+// CHECK: firrtl.module @Bar0
+firrtl.module @Bar0() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla_5560, class = "test0"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5560, class = "circt.nonlocal"}]} @Leaf()
+}
+// CHECK: firrtl.module @Bar1
+firrtl.module @Bar1() {
+  // CHECK: %leaf_w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla_5561, class = "test1"}]}
+  firrtl.instance leaf sym @leaf  {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Leaf()
+}
+firrtl.module @AnnotationSplit1() {
+  firrtl.instance bar0 sym @bar0 {annotations = [{circt.nonlocal = @nla_5560, class = "circt.nonlocal"}]} @Bar0()
+  firrtl.instance bar1 sym @bar1 {annotations = [{circt.nonlocal = @nla_5561, class = "circt.nonlocal"}]} @Bar1()
+}
 }

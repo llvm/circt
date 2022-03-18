@@ -1018,8 +1018,10 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
 hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
   // CHECK: input [16:0]{{ *}}a,
   (%a: !hw.int<17>,
-  // CHECK: input [param - 1:0] b);
-   %b: !hw.int<#hw.param.decl.ref<"param">>) {
+  // CHECK: input [param - 1:0]{{ *}}b,
+   %b: !hw.int<#hw.param.decl.ref<"param">>,
+  // CHECK: input [$clog2($unsigned(param)) - 1:0]{{ *}}c);
+   %c: !hw.int<#hw.param.expr.clog2<#hw.param.decl.ref<"param">>>) {
 
   // Check that the parameter name renamification propagates.
   // CHECK: wire [wire_0 - 1:0] paramWire;

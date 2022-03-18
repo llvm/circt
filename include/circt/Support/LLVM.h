@@ -150,6 +150,7 @@ class TypeConverter;
 class TypeID;
 class TypeRange;
 class TypeStorage;
+class UnitAttr;
 class UnknownLoc;
 class Value;
 class ValueRange;
@@ -264,6 +265,7 @@ using mlir::TypeConverter;             // NOLINT(misc-unused-using-decls)
 using mlir::TypeID;                    // NOLINT(misc-unused-using-decls)
 using mlir::TypeRange;                 // NOLINT(misc-unused-using-decls)
 using mlir::TypeStorage;               // NOLINT(misc-unused-using-decls)
+using mlir::UnitAttr;                  // NOLINT(misc-unused-using-decls)
 using mlir::UnknownLoc;                // NOLINT(misc-unused-using-decls)
 using mlir::Value;                     // NOLINT(misc-unused-using-decls)
 using mlir::ValueRange;                // NOLINT(misc-unused-using-decls)

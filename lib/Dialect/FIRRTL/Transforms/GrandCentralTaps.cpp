@@ -564,6 +564,17 @@ void GrandCentralTapsPass::runOnOperation() {
           builder.create<ConnectOp>(arg, literal);
           continue;
         }
+        // The code tries to come up with a relative path from the data tap
+        // instance (path being the absolute path to that instance) to the
+        // tapped thing (prefix being the path to the tapped port, wire, or
+        // memory) by calling stripCommonPrefix(prefix, path). Bug 2767 was
+        // caused because, the path in the NLA was not considered for this
+        // common prefix stripping (prefix is the path to the root of the NLA).
+        // This leads to overly pessimistic paths like
+        // Top.dut.submodule_1.bar.Memory[0], which should rather be
+        // DUT.submodule_1.bar.Memory[0]. To properly fix this, the path in the
+        // NLA should be inlined in the prefix such that it becomes part of the
+        // prefix stripping operation.
 
         // Determine the shortest hierarchical prefix from this black box
         // instance to the tapped object.
@@ -599,6 +610,17 @@ void GrandCentralTapsPass::runOnOperation() {
         // Concatenate the prefix into a proper full hierarchical name.
         addSymbol(
             FlatSymbolRefAttr::get(SymbolTable::getSymbolName(rootModule)));
+        if (port.nla && shortestPrefix->empty() &&
+            port.nla.root() != rootModule.moduleNameAttr()) {
+          // This handles the case when nla is not considered for common prefix
+          // stripping.
+          auto rootMod = port.nla.root();
+          for (auto p : path) {
+            if (rootMod == p->getParentOfType<FModuleOp>().getNameAttr())
+              break;
+            addSymbol(getInnerRefTo(p));
+          }
+        }
         for (auto inst : shortestPrefix.getValue())
           addSymbol(getInnerRefTo(inst));
         if (port.nla) {

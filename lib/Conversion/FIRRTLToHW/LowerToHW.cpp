@@ -47,6 +47,8 @@ static const char coverAnnoClass[] =
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 static const char moduleHierAnnoClass[] =
     "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
+static const char testbenchDirAnnoClass[] =
+    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 static const char testHarnessHierAnnoClass[] =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
 static const char verifBBClass[] =
@@ -266,10 +268,34 @@ struct CircuitLoweringState {
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
         nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {
-    // Populate the NLA map with any discovered NonLocalAnchors.
-    NonLocalAnchor foo;
-    for (auto nla : circuitOp.getBody()->getOps<NonLocalAnchor>())
-      nlaMap[nla.sym_nameAttr()] = nla;
+    auto *context = circuitOp.getContext();
+
+    // Get the testbench output directory.
+    if (auto tbAnno =
+            AnnotationSet(circuitOp).getAnnotation(testbenchDirAnnoClass)) {
+      auto dirName = tbAnno.getMember<StringAttr>("dirname");
+      testBenchDirectory = hw::OutputFileAttr::getAsDirectory(
+          context, dirName.getValue(), false, true);
+    }
+
+    for (auto &op : *circuitOp.getBody()) {
+      if (auto nla = dyn_cast<NonLocalAnchor>(op))
+        nlaMap[nla.sym_nameAttr()] = nla;
+      else if (auto module = dyn_cast<FModuleLike>(op))
+        if (AnnotationSet::removeAnnotations(module, dutAnnoClass))
+          dut = module;
+    }
+
+    // Figure out which module is the DUT and TestHarness.  If there is no
+    // module marked as the DUT, the top module is the DUT. If the DUT and the
+    // test harness are the same, then there is no test harness.
+    testHarness = instanceGraph->getTopLevelModule();
+    if (!dut) {
+      dut = testHarness;
+      testHarness = nullptr;
+    } else if (dut == testHarness) {
+      testHarness = nullptr;
+    }
   }
 
   Operation *getNewModule(Operation *oldModule) {
@@ -290,16 +316,18 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
-  FModuleOp getDut() { return dut; }
-  void setDut(FModuleOp mod) { dut = mod; }
+  FModuleLike getDut() { return dut; }
+  FModuleLike getTestHarness() { return testHarness; }
 
-  // Return true if this module is instantiated by the DUT.  Returns false if
-  // the module is not instantiated by the DUT or if the DUT is not known.
-  bool isInDUT(FModuleLike mod) {
-    if (!dut)
-      return false;
-    return getInstanceGraph()->isAncestor(mod, dut);
+  // Return true if this module is the DUT or is instantiated by the DUT.
+  // Returns false if the module is not instantiated by the DUT.
+  bool isInDUT(FModuleLike child) {
+    if (auto parent = dyn_cast<FModuleOp>(*dut))
+      return getInstanceGraph()->isAncestor(child, parent);
+    return dut == child;
   }
+
+  hw::OutputFileAttr getTestBenchDirectory() { return testBenchDirectory; }
 
   // Return true if this module is instantiated by the Test Harness.  Returns
   // false if the module is not instantiated by the Test Harness or if the Test
@@ -339,7 +367,14 @@ private:
 
   // The design-under-test (DUT), if it is found.  This will be set if a
   // "sifive.enterprise.firrtl.MarkDUTAnnotation" exists.
-  FModuleOp dut;
+  FModuleLike dut;
+
+  // If there is a module marked as the DUT and it is not the top level module,
+  // this will be set.
+  FModuleLike testHarness;
+
+  // If there is a testbench output directory, this will be set.
+  hw::OutputFileAttr testBenchDirectory;
 
   /// A mapping of instances to their forced instantiation names (if
   /// applicable).
@@ -485,10 +520,6 @@ void FIRRTLModuleLowering::runOnOperation() {
                 "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
                                          coverAnnoClass);
-  StringAttr tbdir;
-  if (auto tbanno = circuitAnno.getAnnotation(
-          "sifive.enterprise.firrtl.TestBenchDirAnnotation"))
-    tbdir = tbanno.getMember<StringAttr>("dirname");
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
@@ -523,31 +554,6 @@ void FIRRTLModuleLowering::runOnOperation() {
             return signalPassFailure();
         });
   }
-
-  // Figure out which module is the DUT and TestHarness.  If there is no module
-  // marked as the DUT, the top module is the DUT. If the DUT and the test
-  // harness are the same, then there is no test harness.
-  Operation *testHarness = state.getInstanceGraph()->getTopLevelModule();
-  Operation *dut = state.getDut();
-  if (!dut) {
-    dut = testHarness;
-    testHarness = nullptr;
-  } else if (dut == testHarness) {
-    testHarness = nullptr;
-  }
-
-  // Now update all the testbench modules' paths.  A module goes in the TB
-  // directory if it isn't a child of the DUT and a DUT is marked.
-  if (tbdir && testHarness) {
-    auto outputFile = hw::OutputFileAttr::getAsDirectory(
-        circuit.getContext(), tbdir.getValue(), false, true);
-    for (auto mod : state.oldToNewModuleMap) {
-      if (state.isInTestHarness(mod.first)) {
-        mod.second->setAttr("output_file", outputFile);
-      }
-    }
-  }
-
   // Handle the creation of the module hierarchy metadata.
 
   // Collect the two sets of hierarchy files from the circuit. Some of them will
@@ -568,9 +574,9 @@ void FIRRTLModuleLowering::runOnOperation() {
           &getContext(),
           annotation.getMember<StringAttr>("filename").getValue(),
           /*excludeFromFileList=*/true);
-      // If there is no testharness, we print the hiearchy for this file
+      // If there is no testHarness, we print the hiearchy for this file
       // starting at the DUT.
-      if (testHarness)
+      if (state.getTestHarness())
         testHarnessHierarchyFiles.push_back(file);
       else
         dutHierarchyFiles.push_back(file);
@@ -580,11 +586,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   });
   // Attach the lowered form of these annotations.
   if (!dutHierarchyFiles.empty())
-    state.oldToNewModuleMap[dut]->setAttr(
+    state.oldToNewModuleMap[state.getDut()]->setAttr(
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), dutHierarchyFiles));
   if (!testHarnessHierarchyFiles.empty())
-    state.oldToNewModuleMap[testHarness]->setAttr(
+    state.oldToNewModuleMap[state.getTestHarness()]->setAttr(
         moduleHierarchyFileAttrName,
         ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
@@ -979,11 +985,13 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Transform module annotations
   AnnotationSet annos(oldModule);
 
-  if (annos.removeAnnotation(dutAnnoClass))
-    loweringState.setDut(oldModule);
-
   if (annos.removeAnnotation(verifBBClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
+  // If this is in the test harness, make sure it goes to the test directory.
+  if (auto testBenchDir = loweringState.getTestBenchDirectory())
+    if (loweringState.isInTestHarness(oldModule))
+      newModule->setAttr("output_file", testBenchDir);
 
   bool failed = false;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
