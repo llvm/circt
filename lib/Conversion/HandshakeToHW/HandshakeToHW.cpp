@@ -100,7 +100,7 @@ static Type esiWrapper(Type t) {
     t = IntegerType::get(t.getContext(), 64);
 
   return esi::ChannelPort::get(t.getContext(), t);
-};
+}
 
 /// Get type name. Currently we only support integer or index types.
 /// The emitted type aligns with the getFIRRTLType() method. Thus all integers

@@ -1196,7 +1196,7 @@ LogicalResult IndexedPartSelectOp::verify() {
   if (opWidth != resultWidth)
     return emitError("result width must be equal to slice width");
   return success();
-};
+}
 
 //===----------------------------------------------------------------------===//
 // StructFieldInOutOp
