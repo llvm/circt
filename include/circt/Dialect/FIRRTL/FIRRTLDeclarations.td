@@ -293,8 +293,7 @@ def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName/*MemAlloc*/]> {
   }];
 
   let hasCanonicalizer = true;
-
-  let verifier = "return ::verifyRegResetOp(*this);";
+  let hasVerifier = 1;
 }
 
 def WireOp : FIRRTLOp<"wire", [HasCustomSSAName]> {

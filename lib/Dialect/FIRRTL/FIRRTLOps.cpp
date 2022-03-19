@@ -1979,22 +1979,22 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
 }
 
-static LogicalResult verifyRegResetOp(RegResetOp op) {
-  Value reset = op.resetValue();
+LogicalResult RegResetOp::verify() {
+  Value reset = resetValue();
 
   FIRRTLType resetType = reset.getType().cast<FIRRTLType>();
-  FIRRTLType regType = op.getResult().getType().cast<FIRRTLType>();
+  FIRRTLType regType = getResult().getType().cast<FIRRTLType>();
 
   // The type of the initialiser must be equivalent to the register type.
   if (!areTypesEquivalent(resetType, regType))
-    return op.emitError("type mismatch between register ")
+    return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
 
-  // The width of the register must match the width of the initialiser.
+  // Truncation on initialisation is banned.
   int32_t regWidth = regType.getPassiveType().getBitWidthOrSentinel();
   int32_t resetWidth = resetType.getPassiveType().getBitWidthOrSentinel();
   if (regWidth > -1 && resetWidth > -1 && regWidth < resetWidth)
-    return op.emitError("register width ")
+    return emitError("register width ")
            << regWidth << " does not match initialiser width  " << resetWidth;
 
   return success();
