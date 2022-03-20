@@ -224,8 +224,9 @@ class System:
     pm = mlir.passmanager.PassManager.parse(self._passes)
     # Invalidate the symbol cache
     self._symbols = None
-    pm.run(self.mod)
+    [inst._clear_cache() for inst in self._instance_cache.values()]
     types.declare_types(self.mod)
+    pm.run(self.mod)
     self.passed = True
 
   def emit_outputs(self):
