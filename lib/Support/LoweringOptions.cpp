@@ -61,6 +61,12 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
       }
+    } else if (option.startswith("maximumNumberOfTermsPerExpression=")) {
+      option = option.drop_front(strlen("maximumNumberOfTermsPerExpression="));
+      if (option.getAsInteger(10, maximumNumberOfTermsPerExpression)) {
+        errorHandler("expected integer source width");
+        maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -90,6 +96,9 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTokensPerExpression != DEFAULT_TOKEN_NUMBER)
     options += "maximumNumberOfTokensPerExpression=" +
                std::to_string(maximumNumberOfTokensPerExpression) + ',';
+  if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
+    options += "maximumNumberOfTermsPerExpression=" +
+               std::to_string(maximumNumberOfTermsPerExpression) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -142,7 +151,8 @@ struct LoweringCLOptions {
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTokensPerExpression=<n>"),
+          "maximumNumberOfTokensPerExpression=<n>, "
+          "maximumNumberOfTermsPerExpression=<n>"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
