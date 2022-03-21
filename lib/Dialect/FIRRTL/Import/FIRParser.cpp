@@ -3040,7 +3040,10 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
     auto sym = getSymbolIfRequired(annotations.first, id);
     if (!sym)
-      sym = getSymbolIfRequired(annotations.second, id);
+      for (auto portAnno : annotations.second.getAsRange<ArrayAttr>())
+        if ((sym = getSymbolIfRequired(portAnno, id)))
+          break;
+
     result =
         builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                               ruw, builder.getArrayAttr(resultNames), id,
