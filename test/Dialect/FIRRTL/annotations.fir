@@ -1189,3 +1189,29 @@ circuit Top : %[[
     a is invalid
 
 ; CHECK-LABEL: firrtl.circuit
+
+
+; // -----
+;
+circuit memportAnno: %[[
+{
+ "class":"test",
+ "target":"~memportAnno|memportAnno/foo:Foo>memory.w"
+}
+]]
+  module memportAnno:
+    inst foo of Foo
+  module Foo:
+    mem memory:
+      data-type => UInt<8>
+      depth => 16
+      reader => r
+      writer => w
+      readwriter => rw
+      read-latency => 1
+      write-latency => 1
+      read-under-write => undefined
+; CHECK-LABEL: firrtl.circuit "memportAnno"  {
+; CHECK:        firrtl.nla @nla_1 [#hw.innerNameRef<@memportAnno::@foo>, #hw.innerNameRef<@Foo::@memory>]
+; CHECK:        %memory_r, %memory_rw, %memory_w = firrtl.mem sym @memory Undefined  {depth = 16 : i64, name = "memory", portAnnotations
+; CHECK-SAME:   [{circt.nonlocal = @nla_1, class = "test"}]
