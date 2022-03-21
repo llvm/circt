@@ -3042,10 +3042,11 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     // Port annotations are an ArrayAttr of ArrayAttrs, so iterate over all the
     // annotations for each port, and check if any of the port needs a symbol.
     if (!sym)
-      for (auto portAnno : annotations.second.getAsRange<ArrayAttr>())
-        if ((sym = getSymbolIfRequired(portAnno, id)))
+      for (auto portAnno : annotations.second.getAsRange<ArrayAttr>()) {
+        sym = getSymbolIfRequired(portAnno, id);
+        if (sym)
           break;
-
+      }
     result =
         builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
                               ruw, builder.getArrayAttr(resultNames), id,
