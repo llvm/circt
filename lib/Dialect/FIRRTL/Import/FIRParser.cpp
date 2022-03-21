@@ -3039,6 +3039,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
                             ports, moduleContext.targetsInModule);
 
     auto sym = getSymbolIfRequired(annotations.first, id);
+    // Port annotations are an ArrayAttr of ArrayAttrs, so iterate over all the
+    // annotations for each port, and check if any of the port needs a symbol.
     if (!sym)
       for (auto portAnno : annotations.second.getAsRange<ArrayAttr>())
         if ((sym = getSymbolIfRequired(portAnno, id)))
