@@ -85,6 +85,8 @@ std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 std::unique_ptr<mlir::Pass> createRemoveResetsPass();
 
+std::unique_ptr<mlir::Pass> createNormalizeMemoryPass();
+
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
 /// Generate the code for registering passes.

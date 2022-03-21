@@ -205,6 +205,14 @@ def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
+def NoramlizeMemoryPass : Pass<"firrtl-normalize-memory", "firrtl::FModuleOp"> {
+  let summary = "Normalize the types of memorys and compute masks";
+  let description = [{
+      This pass converts memories to memories of bit-vectors and computes appropriate masks.
+  }];
+  let constructor = "circt::firrtl::createLowerCHIRRTLPass()";
+}
+
 def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
   let summary = "Infer the memory ports of SeqMem and CombMem";
   let description = [{

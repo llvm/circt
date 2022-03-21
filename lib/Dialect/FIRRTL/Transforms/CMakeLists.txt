@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerTypes.cpp
   MergeConnections.cpp
   ModuleInliner.cpp
+  NormalizeMemory.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp
