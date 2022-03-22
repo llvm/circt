@@ -165,8 +165,8 @@ circuit Top :
     ; NOEXTRACT:      module MyView_companion();
     ; NOEXTRACT:        Tap tap (
     ; NOEXTRACT-NEXT:     .b     (r),
-    ; NOEXTRACT-NEXT:     .clock (tap_clock),
-    ; NOEXTRACT-NEXT:     .a     (tap_a)
+    ; NOEXTRACT-NEXT:     .clock (_tap_clock),
+    ; NOEXTRACT-NEXT:     .a     (_tap_a)
     ; NOEXTRACT-NEXT:   );
     ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
     ; NOEXTRACT-NEXT: endmodule
@@ -191,8 +191,8 @@ circuit Top :
     ; EXTRACT:        module MyView_companion();
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
-    ; EXTRACT-NEXT:       .clock (tap_clock),
-    ; EXTRACT-NEXT:       .a     (tap_a)
+    ; EXTRACT-NEXT:       .clock (_tap_clock),
+    ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule

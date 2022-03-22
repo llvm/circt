@@ -121,31 +121,31 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    input vec_0, vec_1, vec_2,
 ; VERILOG-NEXT:    output       c);
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:    wire multibitMux_b;
-; VERILOG-NEXT:    wire [9:0] prettifyExample_out1;
-; VERILOG-NEXT:    wire [9:0] prettifyExample_out2;
-; VERILOG-NEXT:    wire [2:0] implicitTrunc_out1;
-; VERILOG-NEXT:    wire [2:0] implicitTrunc_out2;
-; VERILOG-NEXT:    wire [5:0] cat_d;
+; VERILOG-NEXT:    wire _multibitMux_b;
+; VERILOG-NEXT:    wire [9:0] _prettifyExample_out1;
+; VERILOG-NEXT:    wire [9:0] _prettifyExample_out2;
+; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out1;
+; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out2;
+; VERILOG-NEXT:    wire [5:0] _cat_d;
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
 ; VERILOG-NEXT:      .c (b),
-; VERILOG-NEXT:      .d (cat_d)
+; VERILOG-NEXT:      .d (_cat_d)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    ImplicitTrunc implicitTrunc (
 ; VERILOG-NEXT:      .inp_1 (a),
-; VERILOG-NEXT:      .inp_2 (cat_d[4:0]),
-; VERILOG-NEXT:      .out1  (implicitTrunc_out1),
-; VERILOG-NEXT:      .out2  (implicitTrunc_out2)
+; VERILOG-NEXT:      .inp_2 (_cat_d[4:0]),
+; VERILOG-NEXT:      .out1  (_implicitTrunc_out1),
+; VERILOG-NEXT:      .out2  (_implicitTrunc_out2)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    PrettifyExample prettifyExample (
-; VERILOG-NEXT:      .inp_1 (cat_d[4:0]),
-; VERILOG-NEXT:      .inp_2 (cat_d[4:0]),
-; VERILOG-NEXT:      .inp_3 (cat_d[4:0]),
-; VERILOG-NEXT:      .out1  (prettifyExample_out1),
-; VERILOG-NEXT:      .out2  (prettifyExample_out2)
+; VERILOG-NEXT:      .inp_1 (_cat_d[4:0]),
+; VERILOG-NEXT:      .inp_2 (_cat_d[4:0]),
+; VERILOG-NEXT:      .inp_3 (_cat_d[4:0]),
+; VERILOG-NEXT:      .out1  (_prettifyExample_out1),
+; VERILOG-NEXT:      .out2  (_prettifyExample_out2)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    FlipFlop flipFlop (
 ; VERILOG-NEXT:      .clock (clock),
@@ -157,7 +157,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:     .a_1 (vec_1),
 ; VERILOG-NEXT:     .a_2 (vec_2),
 ; VERILOG-NEXT:     .sel (b),
-; VERILOG-NEXT:     .b   (multibitMux_b)
+; VERILOG-NEXT:     .b   (_multibitMux_b)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    UnusedPortsMod unusedPortsMod ();
 ; VERILOG-NEXT:  endmodule
