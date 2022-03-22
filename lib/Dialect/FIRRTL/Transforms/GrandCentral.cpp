@@ -1396,10 +1396,13 @@ void GrandCentralPass::runOnOperation() {
                         /*excludeFromFilelist=*/true));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
-              // Instantiate the mapping module inside the companion.
+              // Instantiate the mapping module inside the companion.  Keep the
+              // instance graph up-to-date with this new instantiation.
               builder.setInsertionPointToEnd(op.getBody());
-              builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
-                                         mapping.getName());
+              instancePaths->instanceGraph[op]->addInstance(
+                  builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
+                                             mapping.getName()),
+                  instancePathCache.instanceGraph.addModule(mapping));
 
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
@@ -1425,6 +1428,42 @@ void GrandCentralPass::runOnOperation() {
                               op.getName() + ".sv",
                               /*excludeFromFileList=*/true,
                               /*includeReplicatedOps=*/true));
+
+              // Look for any blackboxes instantiated by the companion and mark
+              // them for inclusion in the Grand Central extraction directory.
+              SmallVector<FModuleOp> modules({op});
+              DenseSet<Operation *> bboxes, visited({op, mapping});
+              while (!modules.empty()) {
+                auto mod = modules.pop_back_val();
+                visited.insert(mod);
+                for (auto inst : mod.getOps<InstanceOp>()) {
+                  auto *sub =
+                      instancePaths->instanceGraph.getReferencedModule(inst);
+                  if (visited.count(sub))
+                    continue;
+                  if (auto subMod = dyn_cast<FModuleOp>(sub)) {
+                    modules.push_back(subMod);
+                    continue;
+                  }
+                  auto subExtMod = cast<FExtModuleOp>(sub);
+                  for (auto anno : AnnotationSet(subExtMod)) {
+                    if (!anno.isClass("firrtl.transforms.BlackBoxInlineAnno") &&
+                        !anno.isClass("firrtl.transforms.BlackBoxPathAnno") &&
+                        !anno.isClass("firrtl.transforms.BlackBoxResourceAnno"))
+                      continue;
+                    if (subExtMod->hasAttr("output_file"))
+                      break;
+                    subExtMod->setAttr(
+                        "output_file",
+                        hw::OutputFileAttr::getAsDirectory(
+                            &getContext(),
+                            maybeExtractInfo.getValue().directory.getValue(),
+                            /*excludeFromFileList=*/false));
+                    break;
+                  }
+                }
+              }
+
               return true;
             }
 

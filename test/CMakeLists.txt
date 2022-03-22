@@ -17,6 +17,7 @@ configure_lit_site_cfg(
 
 set(CIRCT_TEST_DEPENDS
   FileCheck count not
+  split-file
   circt-capi-ir-test
   circt-opt
   circt-translate

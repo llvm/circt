@@ -480,6 +480,17 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     nonConstAsyncResetValueIsError = true;
   }
 
+  // Run passes to resolve Grand Central features.  This should run before
+  // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
+  // certain black boxes should be placed.
+  if (grandCentral) {
+    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
+    circuitPM.addPass(firrtl::createGrandCentralPass());
+    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+    circuitPM.nest<firrtl::FModuleOp>().addPass(
+        firrtl::createGrandCentralSignalMappingsPass());
+  }
+
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
                                ? llvm::sys::path::parent_path(inputFilename)
@@ -488,14 +499,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       blackBoxRoot, blackBoxRootResourcePath.empty()
                         ? blackBoxRoot
                         : blackBoxRootResourcePath));
-
-  if (grandCentral) {
-    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
-    circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
-    circuitPM.nest<firrtl::FModuleOp>().addPass(
-        firrtl::createGrandCentralSignalMappingsPass());
-  }
 
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
