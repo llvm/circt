@@ -303,7 +303,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.bpassign %wire42, %thing : i42
 
     // CHECK-NEXT: casez (val)
-    sv.casez %val : i8
+    sv.case casez %val : i8
     // CHECK-NEXT: 8'b0000001?: begin
     case b0000001x: {
       // CHECK-NEXT: $fwrite(32'h80000002, "a");
@@ -326,7 +326,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     } // CHECK-NEXT: endcase
 
    // CHECK-NEXT: casez (cond)
-   sv.casez %cond : i1
+   sv.case casez %cond : i1
    // CHECK-NEXT: 1'b0:
      case b0: {
        // CHECK-NEXT: $fwrite(32'h80000002, "zero");

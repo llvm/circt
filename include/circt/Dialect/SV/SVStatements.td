@@ -291,13 +291,23 @@ def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 }
 
-def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
-                             ProceduralRegion, ProceduralOp]> {
-  let summary = "'casez (cond)' block";
-  let description = "See SystemVerilog 2017 12.5.1.";
+def CaseStmt: I32EnumAttrCase<"CaseStmt", 0, "case">;
+def CaseXStmt: I32EnumAttrCase<"CaseXStmt", 1, "casex">;
+def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
+
+def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
+                                   [CaseStmt, CaseXStmt, CaseZStmt]>;
+
+
+def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
+                           ProceduralRegion, ProceduralOp]> {
+  let summary = "'case (cond)' block";
+  let description = "See SystemVerilog 2017 12.5.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
+  let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
+                                         "CaseStmtType::CaseStmt">:$caseStyle,
+                       HWIntegerType:$cond, ArrayAttr:$casePatterns);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
@@ -305,12 +315,12 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let builders = [
     /// This ctor allows you to build a CaseZ with some number of cases, getting
     /// a callback for each case.
-    OpBuilder<(ins "Value":$cond, "size_t":$numCases,
-               "std::function<CaseZPattern(size_t)>":$caseCtor)>
+    OpBuilder<(ins "CaseStmtType":$caseStyle, "Value":$cond, "size_t":$numCases,
+               "std::function<CasePattern(size_t)>":$caseCtor)>
   ];
 
   let extraClassDeclaration = [{
-    SmallVector<CaseZInfo, 4> getCases();
+    SmallVector<CaseInfo, 4> getCases();
 
     // void addCase(...)
   }];

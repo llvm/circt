@@ -90,21 +90,21 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   APInt caseValue(index.getType().getIntOrFloatBitWidth(), 0);
   auto *context = builder.getContext();
 
-  using sv::CaseZPattern;
+  using sv::CasePattern;
 
   // Create the casez itself.
-  builder.create<sv::CaseZOp>(
-      createOp.getLoc(), index, caseValues.size(),
-      [&](size_t caseIdx) -> CaseZPattern {
+  builder.create<sv::CaseOp>(
+      createOp.getLoc(), CaseStmtType::CaseZStmt, index, caseValues.size(),
+      [&](size_t caseIdx) -> CasePattern {
         // Use a default pattern for the last value, even if we are complete.
         // This avoids tools thinking they need to insert a latch due to
         // potentially incomplete case coverage.
         bool isDefault = caseIdx == caseValues.size() - 1;
         Value theValue = caseValues[caseIdx];
-        sv::CaseZPattern thePattern =
+        sv::CasePattern thePattern =
             isDefault
-                ? CaseZPattern::getDefault(caseValue.getBitWidth(), context)
-                : CaseZPattern(caseValue, context);
+                ? CasePattern::getDefault(caseValue.getBitWidth(), context)
+                : CasePattern(caseValue, context);
         ++caseValue;
         builder.create<sv::BPAssignOp>(createOp.getLoc(), theWire, theValue);
         return thePattern;

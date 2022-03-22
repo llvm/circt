@@ -37,42 +37,42 @@ bool isExpression(Operation *op);
 //===----------------------------------------------------------------------===//
 
 /// This describes the bit in a pattern, 0/1/x.
-enum class CaseZPatternBit { Zero = 0, One = 1, Any = 2 };
+enum class CasePatternBit { Zero = 0, One = 1, Any = 2 };
 
 /// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
 /// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
 /// operation syntax.
-char getLetter(CaseZPatternBit bit, bool isVerilog);
+char getLetter(CasePatternBit bit, bool isVerilog);
 
 // This is provides convenient access to encode and decode a pattern.
-struct CaseZPattern {
+struct CasePattern {
   IntegerAttr attr;
 
   // Return the number of bits in the pattern.
   size_t getWidth() const { return attr.getValue().getBitWidth() / 2; }
 
   /// Return the specified bit, bit 0 is the least significant bit.
-  CaseZPatternBit getBit(size_t bitNumber) const;
+  CasePatternBit getBit(size_t bitNumber) const;
 
   /// Return true if this pattern always matches.
   bool isDefault() const;
 
-  /// Get a CaseZPattern from a specified list of CaseZPatternBit.  Bits are
+  /// Get a CasePattern from a specified list of CasePatternBit.  Bits are
   /// specified in most least significant order - element zero is the least
   /// significant bit.
-  CaseZPattern(ArrayRef<CaseZPatternBit> bits, MLIRContext *context);
+  CasePattern(ArrayRef<CasePatternBit> bits, MLIRContext *context);
 
-  /// Get a CaseZPattern for the specified constant value.
-  CaseZPattern(const APInt &value, MLIRContext *context);
+  /// Get a CasePattern for the specified constant value.
+  CasePattern(const APInt &value, MLIRContext *context);
 
-  /// Get a CaseZPattern with a correctly encoded attribute.
-  CaseZPattern(IntegerAttr attr) : attr(attr) {}
+  /// Get a CasePattern with a correctly encoded attribute.
+  CasePattern(IntegerAttr attr) : attr(attr) {}
 
-  static CaseZPattern getDefault(unsigned width, MLIRContext *context);
+  static CasePattern getDefault(unsigned width, MLIRContext *context);
 };
 // This provides information about one case.
-struct CaseZInfo {
-  CaseZPattern pattern;
+struct CaseInfo {
+  CasePattern pattern;
   Block *block;
 };
 
