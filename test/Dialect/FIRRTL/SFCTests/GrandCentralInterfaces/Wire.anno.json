@@ -686,5 +686,23 @@
         }
       ]
     }
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~Top|BlackBox_DUT",
+    "name": "BlackBox_DUT.v",
+    "text": "module BlackBox_DUT(input a);\nendmodule"
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~Top|BlackBox_GCT",
+    "name": "BlackBox_GCT.v",
+    "text": "module BlackBox_GCT(input a);\nendmodule"
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~Top|BlackBox_DUTAndGCT",
+    "name": "BlackBox_DUTAndGCT.v",
+    "text": "module BlackBox_DUTAndGCT(input a);\nendmodule"
   }
 ]

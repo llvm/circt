@@ -1028,6 +1028,59 @@ firrtl.circuit "DedupedPath" attributes {
 
 // -----
 
+firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
+  firrtl.extmodule @BlackBox_DUT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTOnly.v", text = ""}]}
+  firrtl.extmodule @BlackBox_GCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "GCTOnly.v", text = ""}]}
+  firrtl.extmodule @BlackBox_DUTAndGCT() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno", name = "DUTAndGCT.v", text = ""}]}
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {
+    firrtl.instance bbox1 @BlackBox_GCT()
+    firrtl.instance bbox2 @BlackBox_DUTAndGCT()
+  }
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    firrtl.instance View_companion @View_companion()
+    firrtl.instance bbox1 @BlackBox_DUT()
+    firrtl.instance bbox2 @BlackBox_DUTAndGCT()
+  }
+  firrtl.module @BlackBoxDirectoryBehavior() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// Check that black boxes that are instantiated under a Grand Central companion
+// have their "output_file" set to the extraction directory.  This information
+// will later be used by BlackBoxReader to control where these black boxes are
+// extracted to.  This test exists to verify SFC-exact behavior around Grand
+// Central.
+//
+// CHECK-LABEL: "BlackBoxDirectoryBehavior"
+// CHECK:      firrtl.extmodule @BlackBox_DUT()
+// CHECK-NOT:    output_file
+// CHECK-NEXT: firrtl.extmodule @BlackBox_GCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+// CHECK-NEXT: firrtl.extmodule @BlackBox_DUTAndGCT() {{.+}} output_file = #hw.output_file<"gct-dir/">
+
+// -----
+
 firrtl.circuit "YAMLOutputEmptyInterface" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
