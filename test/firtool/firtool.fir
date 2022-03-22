@@ -94,10 +94,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance prettifyExample @PrettifyExample(in inp_1: !firrtl.uint<5>, in inp_2: !firrtl.uint<5>, in inp_3: !firrtl.uint<5>, out out1: !firrtl.uint<10>, out out2: !firrtl.uint<10>)
 ; MLIR-NEXT:    %3 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_1, %3 : !firrtl.uint<5>
-; MLIR-NEXT:    %4 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
-; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_2, %4 : !firrtl.uint<5>
-; MLIR-NEXT:    %5 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
-; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_3, %5 : !firrtl.uint<5>
+; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_2, %3 : !firrtl.uint<5>
+; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_3, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance flipFlop @FlipFlop(in clock: !firrtl.clock, in a_d: !firrtl.uint<1>, out a_q: !firrtl.uint<1>)
 ; MLIR-NEXT:    firrtl.strictconnect %flipFlop_clock, %clock : !firrtl.clock
 ; MLIR-NEXT:    firrtl.strictconnect %flipFlop_a_d, %a : !firrtl.uint<1>
