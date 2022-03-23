@@ -30,4 +30,9 @@ firrtl.circuit "Foo" attributes {annotations = [
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"cover/hello2.v">, symbols = []}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"../testbench/hello3.v">, symbols = []}
   // CHECK: sv.verbatim "// world" {output_file = #hw.output_file<"./hello_dut.v">, symbols = []}
+  // CHECK: sv.verbatim "../testbench/hello.v\0A
+  // CHECK-SAME:         ../testbench/hello3.v\0A
+  // CHECK-SAME:         hello_dut.v\0A
+  // CHECK-SAME:         cover/hello2.v"
+  // CHECK-SAME: output_file = #hw.output_file<"firrtl_black_box_resource_files.f", excludeFromFileList>
 }

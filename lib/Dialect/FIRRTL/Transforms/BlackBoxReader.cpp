@@ -210,13 +210,15 @@ void BlackBoxReaderPass::runOnOperation() {
         [&](StringRef fileName) {
           SmallString<32> filePath(targetDir);
           llvm::sys::path::append(filePath, fileName);
+          llvm::sys::path::remove_dots(filePath);
           os << filePath;
         },
         "\n");
 
-    // Put the file list in to a verbatim op.
+    // Put the file list in to a verbatim op.  Use "unknown location" so that no
+    // file info will unnecessarily print.
     auto op =
-        builder.create<VerbatimOp>(circuitOp->getLoc(), std::move(output));
+        builder.create<VerbatimOp>(builder.getUnknownLoc(), std::move(output));
 
     // Attach the output file information to the verbatim op.
     op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
@@ -363,9 +365,10 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
 
   // If targetDir is not set explicitly and this is a testbench module, then
   // update the targetDir to be the "../testbench".
-  op->setAttr("output_file", OutputFileAttr::getFromDirectoryAndFilename(
-                                 context, outDir, fileName,
-                                 /*excludeFromFileList=*/exclude));
+  auto outFileAttr = OutputFileAttr::getFromDirectoryAndFilename(
+      context, outDir, fileName,
+      /*excludeFromFileList=*/exclude);
+  op->setAttr("output_file", outFileAttr);
 
   // Record that this file has been generated.
   assert(!emittedFiles.count(fileNameAttr) &&
@@ -374,7 +377,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
 
   // Append this file to the file list if its not excluded.
   if (!exclude)
-    fileListFiles.push_back(fileName);
+    fileListFiles.push_back(outFileAttr.getFilename());
 }
 
 /// Return true if module is in the DUT hierarchy.
