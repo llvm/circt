@@ -31,7 +31,7 @@ using namespace sv;
 using namespace ExportVerilog;
 
 // Check if the value is from read of a wire or reg or is a port.
-static bool isSimpleReadOrPort(Value v) {
+bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (v.isa<BlockArgument>())
     return true;
   auto vOp = v.getDefiningOp();
@@ -104,7 +104,6 @@ static void lowerInstanceResults(InstanceOp op) {
     if (onlyUseIsAssign(result))
       continue;
 
-    bool isOneUseOutput = false;
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
@@ -431,12 +430,8 @@ void ExportVerilog::prepareHWModule(Block &block,
     if (!options.allowExprInEventControl) {
       auto enforceWire = [&](Value expr) {
         // Direct port uses are fine.
-        if (expr.isa<BlockArgument>())
+        if (isSimpleReadOrPort(expr))
           return;
-        // If this is a read from a wire, we're fine.
-        if (auto read = expr.getDefiningOp<ReadInOutOp>())
-          if (read.input().getDefiningOp<WireOp>())
-            return;
         if (auto inst = expr.getDefiningOp<InstanceOp>())
           return;
         auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);

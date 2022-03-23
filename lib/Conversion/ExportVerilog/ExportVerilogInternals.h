@@ -22,6 +22,9 @@ struct LoweringOptions;
 namespace ExportVerilog {
 class GlobalNameResolver;
 
+/// Check if the value is from read of a wire or reg or is a port.
+bool isSimpleReadOrPort(Value v);
+
 /// If the given `op` is a declaration, return the attribute that dictates its
 /// name. For things like wires and registers this will be the `name` attribute,
 /// for instances this is `instanceName`, etc.
