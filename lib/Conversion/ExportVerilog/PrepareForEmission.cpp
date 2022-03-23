@@ -434,12 +434,19 @@ void ExportVerilog::prepareHWModule(Block &block,
           return;
         if (auto inst = expr.getDefiningOp<InstanceOp>())
           return;
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(
+            op.getLoc(), &op.getParentOfType<HWModuleOp>().front());
         auto newWire = builder.create<WireOp>(expr.getType());
         builder.setInsertionPoint(&op);
-        builder.create<AssignOp>(newWire, expr);
         auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        op.replaceUsesOfWith(expr, newWireRead);
+        // For simplicity, replace all uses with the read first.  This lets us
+        // recursive root out all uses of the expression.
+        expr.replaceAllUsesWith(newWireRead);
+        builder.setInsertionPoint(&op);
+        builder.create<AssignOp>(newWire, expr);
+        // To get the output correct, given that reads are always inline,
+        // duplicate them for each use.
+        lowerAlwaysInlineOperation(newWireRead);
       };
       if (auto always = dyn_cast<AlwaysOp>(op)) {
         for (auto clock : always.clocks())
