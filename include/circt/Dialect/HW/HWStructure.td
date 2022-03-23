@@ -482,7 +482,9 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
   let hasVerifier = 1;
 }
 
-def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
+def GlobalRefOp : HWOp<"globalRef", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    IsolatedFromAbove, Symbol]> {
   let summary = "A global reference to uniquely identify each"
                                     "instance of an operation";
   let description = [{
@@ -495,8 +497,6 @@ def GlobalRefOp : HWOp<"globalRef", [IsolatedFromAbove, Symbol]> {
   let arguments = (ins SymbolNameAttr:$sym_name, NameRefArrayAttr:$namepath);
 
   let assemblyFormat = [{ $sym_name $namepath attr-dict }];
-
-  let hasVerifier = 1;
 }
 
 def ProbeOp : HWOp<"probe", []> {
@@ -514,4 +514,3 @@ def ProbeOp : HWOp<"probe", []> {
   let assemblyFormat = "$inner_sym attr-dict (`,` $operands^ `:` qualified(type($operands)))?";
 
 }
-
