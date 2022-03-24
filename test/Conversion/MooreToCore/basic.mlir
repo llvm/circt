@@ -56,3 +56,13 @@ func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
   %2 = builtin.unrealized_conversion_cast %1 : i16 to !moore.shortint
   return %2 : !moore.shortint
 }
+
+// CHECK-LABEL: func @Expressions
+func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic) {
+  // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
+  // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
+  %0 = moore.mir.concat %arg0, %arg0 : (!moore.bit, !moore.bit) -> !moore.packed<range<bit, 1:0>>
+  %1 = moore.mir.concat %arg1, %arg1 : (!moore.logic, !moore.logic) -> !moore.packed<range<logic, 1:0>>
+  // CHECK-NEXT: return
+  return
+}

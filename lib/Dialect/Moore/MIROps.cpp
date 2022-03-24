@@ -17,6 +17,29 @@ using namespace circt;
 using namespace circt::moore;
 
 //===----------------------------------------------------------------------===//
+// Type Inference
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
+                                         Optional<Location> loc,
+                                         ValueRange operands,
+                                         DictionaryAttr attrs,
+                                         mlir::RegionRange regions,
+                                         SmallVectorImpl<Type> &results) {
+  Domain domain = Domain::TwoValued;
+  unsigned size = 0;
+  for (auto operand : operands) {
+    auto type = operand.getType().cast<UnpackedType>().getSimpleBitVector();
+    if (type.domain == Domain::FourValued)
+      domain = Domain::FourValued;
+    size += type.size;
+  }
+  results.push_back(
+      SimpleBitVectorType(domain, Sign::Unsigned, size).getType(context));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Custom LValue parser and printer
 //===----------------------------------------------------------------------===//
 

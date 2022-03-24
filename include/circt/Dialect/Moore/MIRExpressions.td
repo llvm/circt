@@ -20,3 +20,26 @@ def ConstantOp : MIROp<"constant", [NoSideEffect]> {
   let results = (outs MooreRValueType:$result);
   let assemblyFormat = "$value attr-dict `:` qualified(type($result))";
 }
+
+def ConcatOp : MIROp<"concat", [
+    NoSideEffect, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "A concatenation of expressions";
+  let description = [{
+    This operation represents the SystemVerilog concatenation expression
+    `{x, y, z}`. See IEEE 1800-2017 §11.4.12 "Concatenation operators".
+
+    All operands must be simple bit vector types.
+
+    The concatenation result is a simple bit vector type. The result is unsigned
+    regardless of the sign of the operands (see concatenation-specific rules in
+    IEEE 1800-2017 §11.8.1 "Rules for expression types"). The size of the result
+    is the sum of the sizes of all operands. If any of the operands is
+    four-valued, the result is four-valued; otherwise it is two-valued.
+  }];
+  let arguments = (ins Variadic<SimpleBitVectorType>:$values);
+  let results = (outs SimpleBitVectorType:$result);
+  let assemblyFormat = [{
+    $values attr-dict `:` functional-type($values, $result)
+  }];
+}
