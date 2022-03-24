@@ -206,8 +206,7 @@ inline llvm::hash_code hash_value(const SimpleBitVectorType &x) {
   if (x)
     return llvm::hash_combine(x.size, x.domain, x.sign, x.usedAtom,
                               x.explicitSign, x.explicitSize);
-  else
-    return {};
+  return {};
 }
 
 template <typename Os>
