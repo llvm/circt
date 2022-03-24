@@ -44,6 +44,16 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.values());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -228,6 +238,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
   // clang-format off
   patterns.add<
     ConstantOpConv,
+    ConcatOpConversion,
     VariableDeclOpConv,
     AssignOpConv,
     ReturnOpConversion,
