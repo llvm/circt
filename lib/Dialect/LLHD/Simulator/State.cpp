@@ -45,11 +45,9 @@ Time Time::operator+(const Time &rhs) const {
 
 bool Time::isZero() { return (time == 0 && delta == 0 && eps == 0); }
 
-std::string Time::dump() {
-  std::string ret;
-  raw_string_ostream ss(ret);
-  ss << time << "ps " << delta << "d " << eps << "e";
-  return ss.str();
+std::string Time::toString() const {
+  return std::to_string(time) + "ps " + std::to_string(delta) + "d " +
+         std::to_string(eps) + "e";
 }
 
 //===----------------------------------------------------------------------===//
@@ -77,17 +75,17 @@ bool Signal::operator<(const Signal &rhs) const {
   return false;
 }
 
-std::string Signal::dump() {
+std::string Signal::toHexString() const {
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
     ss << format_hex_no_prefix(static_cast<int>(value.get()[i]), 2);
   }
-  return ss.str();
+  return ret;
 }
 
-std::string Signal::dump(unsigned elemIndex) {
+std::string Signal::toHexString(unsigned elemIndex) const {
   assert(elements.size() > 0 && "the signal type has to be tuple or array!");
   auto elemSize = elements[elemIndex].second;
   auto ptr = value.get() + elements[elemIndex].first;
@@ -307,8 +305,8 @@ void State::addSignalElement(unsigned index, unsigned offset, unsigned size) {
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
   for (auto inst : sig.triggers) {
-    out << time.dump() << "  " << instances[inst].path << "/" << sig.name
-        << "  " << sig.dump() << "\n";
+    out << time.toString() << "  " << instances[inst].path << "/" << sig.name
+        << "  " << sig.toHexString() << "\n";
   }
 }
 
