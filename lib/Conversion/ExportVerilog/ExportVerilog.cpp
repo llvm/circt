@@ -1615,11 +1615,7 @@ private:
   llvm::raw_svector_ostream os;
   // Track legalized names.
   ModuleNameManager &names;
-<<<<<<< HEAD
   bool isOutermostExpr = false;
-=======
-  bool outermostExpression = false;
->>>>>>> d775df58... Refactor code
 };
 } // end anonymous namespace
 
@@ -1800,24 +1796,15 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   signPreference = signRequirement;
 
   bool bitCastAdded = false;
-<<<<<<< HEAD
-  if (state.options.explicitBitcastAddMul && !isOutermostExpr && isa<AddOp, MulOp>(op)) 
-    if (auto inType = (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())){
-=======
-  if (state.options.explicitBitcastAddMul && !outermostExpression &&
+  if (state.options.explicitBitcastAddMul && !isOutermostExpr &&
       isa<AddOp, MulOp>(op))
     if (auto inType =
             (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
->>>>>>> d775df58... Refactor code
       os << inType.getWidth() << "'(";
       bitCastAdded = true;
     }
 
-<<<<<<< HEAD
   isOutermostExpr = true;
-=======
-  outermostExpression = true;
->>>>>>> d775df58... Refactor code
 
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
