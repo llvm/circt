@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-class MooreType<string name> : TypeDef<MooreDialect, name> { }
+class MooreTypeDef<string name> : TypeDef<MooreDialect, name> { }
 
-def LValueTypeImpl : MooreType<"LValue"> {
+def LValueTypeImpl : MooreTypeDef<"LValue"> {
   let mnemonic = "lvalue";
   let parameters = (ins "::mlir::Type":$nestedType);
   let assemblyFormat = "`<` $nestedType `>`";

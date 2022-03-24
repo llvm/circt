@@ -15,13 +15,27 @@
 
 include "circt/Dialect/Moore/MooreDialect.td"
 
+class MooreType<Pred condition, string description, string cppClassName>
+  : DialectType<MooreDialect, condition, description, cppClassName>;
+
+def PackedType : MooreType<CPred<"$_self.isa<moore::PackedType>()">,
+  "packed type", "moore::PackedType">;
+
+def UnpackedType : MooreType<CPred<"$_self.isa<moore::UnpackedType>()">,
+  "unpacked type", "moore::UnpackedType">;
+
+/// A simple bit vector type.
+def SimpleBitVectorType : MooreType<CPred<[{
+    $_self.isa<moore::UnpackedType>() &&
+    $_self.cast<moore::UnpackedType>().isSimpleBitVector()
+  }]>, "simple bit vector type", "moore::UnpackedType">;
+
 //===----------------------------------------------------------------------===//
 // Integer atom types
 //===----------------------------------------------------------------------===//
 
-def MooreIntType : DialectType<MooreDialect,
-  CPred<"$_self.isa<moore::IntType>()">,
-  "an SystemVerilog int", "::circt::moore::IntType">;
+def MooreIntType : MooreType<CPred<"$_self.isa<moore::IntType>()">,
+  "an SystemVerilog int", "moore::IntType">;
 
 //===----------------------------------------------------------------------===//
 // LValue / RValue predicates
