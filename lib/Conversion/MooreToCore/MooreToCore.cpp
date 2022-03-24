@@ -184,6 +184,15 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return llhd::SigType::get(inner);
   });
 
+  // Directly map simple bit vector types to a compact integer type. This needs
+  // to be added after all of the other conversions above, such that SBVs
+  // conversion gets tried first before any of the others.
+  typeConverter.addConversion([&](UnpackedType type) -> Optional<Type> {
+    if (auto sbv = type.getSimpleBitVectorOrNull())
+      return mlir::IntegerType::get(type.getContext(), sbv.size);
+    return llvm::None;
+  });
+
   // Valid target types.
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
 }
