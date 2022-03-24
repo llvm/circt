@@ -9,7 +9,7 @@ on:
 
 jobs:
   track-llvm-changes:
-    name: Configure Unified Build
+    name: Track LLVM Changes
     runs-on: ubuntu-18.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
-      - name: Configure Unified Build
+      - name: Configure Project
         run: |
           mkdir build
           cd build
