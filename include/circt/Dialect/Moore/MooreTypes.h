@@ -123,6 +123,107 @@ Os &operator<<(Os &os, const Range &range) {
   return os;
 }
 
+class PackedType;
+
+/// A simple bit vector type.
+///
+/// The SystemVerilog standard somewhat loosely defines a "Simple Bit Vector"
+/// type. In essence, this is a zero or one-dimensional integer type. For
+/// example, `bit`, `logic [0:0]`, `reg [31:0]`, or `int` are SBVs, but `bit
+/// [1:0][2:0]`, `int [4:0]`, `bit [5:2]`, or `bit []` are not.
+struct SimpleBitVectorType {
+  /// Create a null SBVT.
+  SimpleBitVectorType() {}
+
+  /// Create a new SBVT with the given domain, sign, and size. The resulting
+  /// type will expand exactly to `bit signed? [size-1:0]`.
+  SimpleBitVectorType(Domain domain, Sign sign, unsigned size,
+                      bool usedAtom = false, bool explicitSign = false,
+                      bool explicitSize = true)
+      : size(size), domain(domain), sign(sign), usedAtom(usedAtom),
+        explicitSign(explicitSign), explicitSize(explicitSize) {
+    assert(size > 0 && "SBVT requires non-zero size");
+  }
+
+  /// Convert this SBVT to an actual type.
+  PackedType getType(MLIRContext *context) const;
+
+  /// Check whether the type is unsigned.
+  bool isUnsigned() const { return sign == Sign::Unsigned; }
+
+  /// Check whether the type is signed.
+  bool isSigned() const { return sign == Sign::Signed; }
+
+  /// Get the range of the type.
+  Range getRange() const { return Range(size, RangeDir::Down, 0); }
+
+  /// Check whether this type is equivalent to another.
+  bool isEquivalent(const SimpleBitVectorType &other) const {
+    return domain == other.domain && sign == other.sign && size == other.size;
+  }
+
+  bool operator==(const SimpleBitVectorType &other) const {
+    if (size == 0 || other.size == 0)
+      return size == other.size; // if either is null, the other has to be null
+    return isEquivalent(other) && usedAtom == other.usedAtom &&
+           explicitSign == other.explicitSign &&
+           explicitSize == other.explicitSize;
+  }
+
+  /// Check whether this is a null type.
+  operator bool() const { return size > 0; }
+
+  /// Format this simple bit vector type as a string.
+  std::string toString() const {
+    std::string buffer;
+    llvm::raw_string_ostream(buffer) << *this;
+    return buffer;
+  }
+
+  /// The size of the vector.
+  unsigned size = 0;
+  /// The domain, which dictates whether this is a `bit` or `logic` vector.
+  Domain domain : 8;
+  /// The sign.
+  Sign sign : 8;
+
+  // The following flags ensure that converting a `PackedType` to an SBVT and
+  // then back to a `PackedType` will yield exactly the original type. For
+  // example, the packed type `int` maps to an SBVT `{32, TwoValued, Signed}`,
+  // which should be converted back to `int` instead of `bit signed [31:0]`.
+
+  /// Whether the type used an integer atom like `int` in the source text.
+  bool usedAtom : 1;
+  /// Whether the sign was explicit in the source text.
+  bool explicitSign : 1;
+  /// Whether the single-bit vector had an explicit range in the source text.
+  /// Essentially whether it was `bit` or `bit[a:a]`.
+  bool explicitSize : 1;
+};
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline llvm::hash_code hash_value(const SimpleBitVectorType &x) {
+  if (x)
+    return llvm::hash_combine(x.size, x.domain, x.sign, x.usedAtom,
+                              x.explicitSign, x.explicitSize);
+  else
+    return {};
+}
+
+template <typename Os>
+Os &operator<<(Os &os, const SimpleBitVectorType &type) {
+  if (!type) {
+    os << "<<<NULL SBVT>>>";
+    return os;
+  }
+  os << (type.domain == Domain::TwoValued ? "bit" : "logic");
+  if (type.sign != Sign::Unsigned || type.explicitSign)
+    os << " " << type.sign;
+  if (type.size > 1 || type.explicitSize)
+    os << " [" << type.getRange() << "]";
+  return os;
+}
+
 namespace detail {
 struct RealTypeStorage;
 struct IntTypeStorage;
@@ -211,6 +312,40 @@ public:
   /// Returns `None` if any of the type's dimensions is unsized, associative, or
   /// a queue, or the core type itself has no known size.
   Optional<unsigned> getBitSize() const;
+
+  /// Get this type as a simple bit vector, if it is one. Returns a null type
+  /// otherwise.
+  SimpleBitVectorType getSimpleBitVectorOrNull() const;
+
+  /// Check whether this is a simple bit vector type.
+  bool isSimpleBitVector() const { return !!getSimpleBitVectorOrNull(); }
+
+  /// Get this type as a simple bit vector. Aborts if it is no simple bit
+  /// vector.
+  SimpleBitVectorType getSimpleBitVector() const {
+    auto sbv = getSimpleBitVectorOrNull();
+    assert(sbv && "getSimpleBitVector called on type that is no SBV");
+    return sbv;
+  }
+
+  /// Cast this type to a simple bit vector. Returns null if this type cannot be
+  /// cast to a simple bit vector.
+  SimpleBitVectorType castToSimpleBitVectorOrNull() const;
+
+  /// Check whether this type can be cast to a simple bit vector type.
+  bool isCastableToSimpleBitVector() const {
+    return !!castToSimpleBitVectorOrNull();
+  }
+
+  /// Cast this type to a simple bit vector. Aborts if this type cannot be cast
+  /// to a simple bit vector.
+  SimpleBitVectorType castToSimpleBitVector() const {
+    auto sbv = castToSimpleBitVectorOrNull();
+    assert(
+        sbv &&
+        "castToSimpleBitVector called on type that cannot be cast to an SBV");
+    return sbv;
+  }
 
   /// Format this type in SystemVerilog syntax into an output stream. Useful to
   /// present the type back to the user in diagnostics.
@@ -402,6 +537,9 @@ public:
   static Domain getDomain(Kind kind);
   /// Get the size of one of the integer types.
   static unsigned getBitSize(Kind kind);
+  /// Get the integer type that corresponds to a domain and bit size. For
+  /// example, returns `int` for `(TwoValued, 32)`.
+  static Optional<Kind> getKindFromDomainAndSize(Domain domain, unsigned size);
 
   static IntType get(MLIRContext *context, Kind kind, Optional<Sign> sign = {});
 

@@ -65,6 +65,33 @@ Optional<Sign> moore::getSignFromKeyword(StringRef keyword) {
 }
 
 //===----------------------------------------------------------------------===//
+// Simple Bit Vector Type
+//===----------------------------------------------------------------------===//
+
+PackedType SimpleBitVectorType::getType(MLIRContext *context) const {
+  if (!*this)
+    return {};
+  Optional<Sign> maybeSign;
+  if (explicitSign)
+    maybeSign = sign;
+
+  // If the type originally used an integer atom, try to reconstruct that.
+  if (usedAtom)
+    if (auto kind = IntType::getKindFromDomainAndSize(domain, size))
+      return IntType::get(context, *kind, maybeSign);
+
+  // Build the core integer bit type.
+  auto kind = domain == Domain::TwoValued ? IntType::Bit : IntType::Logic;
+  auto intType = IntType::get(context, kind, maybeSign);
+
+  // If the vector is wider than a single bit, or the dimension was explicit in
+  // the original type, add a dimension around the bit type.
+  if (size > 1 || explicitSize)
+    return PackedRangeDim::get(intType, size);
+  return intType;
+}
+
+//===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
 
@@ -119,6 +146,64 @@ Optional<unsigned> UnpackedType::getBitSize() const {
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().bitSize; })
       .Default([](auto) { return llvm::None; });
+}
+
+/// Map an `IntType` to the corresponding SBVT. Never returns a null type.
+static SimpleBitVectorType getSimpleBitVectorFromIntType(IntType type) {
+  auto bitSize = type.getBitSize();
+  bool usedAtom = bitSize > 1;
+  return SimpleBitVectorType(type.getDomain(), type.getSign(), bitSize,
+                             usedAtom, type.isSignExplicit(), false);
+}
+
+SimpleBitVectorType UnpackedType::getSimpleBitVectorOrNull() const {
+  return TypeSwitch<UnpackedType, SimpleBitVectorType>(fullyResolved())
+      .Case<IntType>([](auto type) {
+        // Integer types trivially map to SBVTs.
+        return getSimpleBitVectorFromIntType(type);
+      })
+      .Case<PackedRangeDim>([](auto rangeType) {
+        // Inner type must be an integer.
+        auto innerType =
+            rangeType.getInner().fullyResolved().template dyn_cast<IntType>();
+        if (!innerType)
+          return SimpleBitVectorType{};
+
+        // Inner type must be a single-bit integer. Cannot have integer atom
+        // vectors like `int [31:0]`.
+        auto sbv = getSimpleBitVectorFromIntType(innerType);
+        if (sbv.usedAtom)
+          return SimpleBitVectorType{};
+
+        // Range must be have non-zero size, and go downwards to zero.
+        auto range = rangeType.getRange();
+        if (range.size == 0 || range.offset != 0 || range.dir != RangeDir::Down)
+          return SimpleBitVectorType{};
+        sbv.explicitSize = true;
+        sbv.size = range.size;
+        return sbv;
+      })
+      .Default([](auto) { return SimpleBitVectorType{}; });
+}
+
+SimpleBitVectorType UnpackedType::castToSimpleBitVectorOrNull() const {
+  // If the type is already a valid SBVT, return that immediately without
+  // casting.
+  if (auto sbv = getSimpleBitVectorOrNull())
+    return sbv;
+
+  // All packed types with a known size (i.e., with no `[]` dimensions) can be
+  // cast to an SBVT.
+  auto packed = fullyResolved().dyn_cast<PackedType>();
+  if (!packed)
+    return {};
+  auto bitSize = packed.getBitSize();
+  if (!bitSize || *bitSize == 0)
+    return {};
+
+  return SimpleBitVectorType(packed.getDomain(), packed.getSign(), *bitSize,
+                             /*usedAtom=*/false, /*explicitSign=*/false,
+                             /*explicitSize=*/false);
 }
 
 void UnpackedType::format(
@@ -356,6 +441,37 @@ unsigned IntType::getBitSize(Kind kind) {
     return 64;
   }
   llvm_unreachable("all kinds should be handled");
+}
+
+Optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
+                                                          unsigned size) {
+  switch (domain) {
+  case Domain::TwoValued:
+    switch (size) {
+    case 1:
+      return IntType::Bit;
+    case 8:
+      return IntType::Byte;
+    case 16:
+      return IntType::ShortInt;
+    case 32:
+      return IntType::Int;
+    case 64:
+      return IntType::LongInt;
+    default:
+      return {};
+    }
+  case Domain::FourValued:
+    switch (size) {
+    case 1:
+      return IntType::Logic;
+    case 32:
+      return IntType::Integer;
+    default:
+      return {};
+    }
+  }
+  llvm_unreachable("all domains should be handled");
 }
 
 IntType IntType::get(MLIRContext *context, Kind kind, Optional<Sign> sign) {
