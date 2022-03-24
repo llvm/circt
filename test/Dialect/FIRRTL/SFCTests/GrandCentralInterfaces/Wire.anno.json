@@ -100,9 +100,18 @@
                       "path": [],
                       "ref": "w",
                       "component": [
-                        {"class": "firrtl.annotations.TargetToken$Field", "value": "multivec"},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 0},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 0}
+                        {
+                          "class": "firrtl.annotations.TargetToken$Field",
+                          "value": "multivec"
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 0
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 0
+                        }
                       ]
                     },
                     "tpe": {
@@ -117,9 +126,18 @@
                       "path": [],
                       "ref": "w",
                       "component": [
-                        {"class": "firrtl.annotations.TargetToken$Field", "value": "multivec"},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 0},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 1}
+                        {
+                          "class": "firrtl.annotations.TargetToken$Field",
+                          "value": "multivec"
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 0
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 1
+                        }
                       ]
                     },
                     "tpe": {
@@ -134,9 +152,18 @@
                       "path": [],
                       "ref": "w",
                       "component": [
-                        {"class": "firrtl.annotations.TargetToken$Field", "value": "multivec"},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 0},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 2}
+                        {
+                          "class": "firrtl.annotations.TargetToken$Field",
+                          "value": "multivec"
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 0
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 2
+                        }
                       ]
                     },
                     "tpe": {
@@ -156,9 +183,18 @@
                       "path": [],
                       "ref": "w",
                       "component": [
-                        {"class": "firrtl.annotations.TargetToken$Field", "value": "multivec"},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 1},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 0}
+                        {
+                          "class": "firrtl.annotations.TargetToken$Field",
+                          "value": "multivec"
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 1
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 0
+                        }
                       ]
                     },
                     "tpe": {
@@ -173,9 +209,18 @@
                       "path": [],
                       "ref": "w",
                       "component": [
-                        {"class": "firrtl.annotations.TargetToken$Field", "value": "multivec"},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 1},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 1}
+                        {
+                          "class": "firrtl.annotations.TargetToken$Field",
+                          "value": "multivec"
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 1
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 1
+                        }
                       ]
                     },
                     "tpe": {
@@ -190,9 +235,18 @@
                       "path": [],
                       "ref": "w",
                       "component": [
-                        {"class": "firrtl.annotations.TargetToken$Field", "value": "multivec"},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 1},
-                        {"class": "firrtl.annotations.TargetToken$Index", "value": 2}
+                        {
+                          "class": "firrtl.annotations.TargetToken$Field",
+                          "value": "multivec"
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 1
+                        },
+                        {
+                          "class": "firrtl.annotations.TargetToken$Index",
+                          "value": 2
+                        }
                       ]
                     },
                     "tpe": {
