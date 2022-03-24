@@ -56,6 +56,7 @@ jobs:
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
+          git bisect bad
           git bisect run cmake --build ../build --config Debug --target check-circt --
 
       - name: Log broken commit
