@@ -46,3 +46,13 @@ func @Calls(%arg0: !moore.byte, %arg1: !moore.int, %arg2: !moore.bit) -> !moore.
   %0 = call @FuncArgsAndReturns(%arg0, %arg1, %arg2) : (!moore.byte, !moore.int, !moore.bit) -> !moore.byte
   return %0 : !moore.byte
 }
+
+// CHECK-LABEL: func @UnrealizedConversionCast
+func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
+  // CHECK-NEXT: [[TMP:%.+]] = comb.concat %arg0, %arg0 : i8, i8
+  // CHECK-NEXT: return [[TMP]] : i16
+  %0 = builtin.unrealized_conversion_cast %arg0 : !moore.byte to i8
+  %1 = comb.concat %0, %0 : i8, i8
+  %2 = builtin.unrealized_conversion_cast %1 : i16 to !moore.shortint
+  return %2 : !moore.shortint
+}

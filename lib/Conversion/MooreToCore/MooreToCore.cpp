@@ -119,11 +119,35 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
   LogicalResult
   matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Type> convResTypes;
+    SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
     rewriter.replaceOpWithNewOp<func::CallOp>(
         op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
+    return success();
+  }
+};
+
+struct UnrealizedConversionCastConversion
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> convResTypes;
+    if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
+      return failure();
+
+    // Drop the cast if the operand and result types agree after type
+    // conversion.
+    if (convResTypes == adaptor.getOperands().getTypes()) {
+      rewriter.replaceOp(op, adaptor.getOperands());
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+        op, convResTypes, adaptor.getOperands());
     return success();
   }
 };
@@ -165,6 +189,7 @@ static void populateLegality(ConversionTarget &target) {
   addGenericLegality<cf::BranchOp>(target);
   addGenericLegality<func::CallOp>(target);
   addGenericLegality<func::ReturnOp>(target);
+  addGenericLegality<UnrealizedConversionCastOp>(target);
 
   target.addDynamicallyLegalOp<FuncOp>([](FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
@@ -200,10 +225,18 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 static void populateOpConversion(RewritePatternSet &patterns,
                                  TypeConverter &typeConverter) {
   auto *context = patterns.getContext();
-  patterns
-      .add<ConstantOpConv, VariableDeclOpConv, AssignOpConv, ReturnOpConversion,
-           CondBranchOpConversion, BranchOpConversion, CallOpConversion>(
-          typeConverter, context);
+  // clang-format off
+  patterns.add<
+    ConstantOpConv,
+    VariableDeclOpConv,
+    AssignOpConv,
+    ReturnOpConversion,
+    CondBranchOpConversion,
+    BranchOpConversion,
+    CallOpConversion,
+    UnrealizedConversionCastConversion
+  >(typeConverter, context);
+  // clang-format on
   mlir::populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
                                                                  typeConverter);
 }
