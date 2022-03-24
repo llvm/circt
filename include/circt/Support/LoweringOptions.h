@@ -93,6 +93,9 @@ struct LoweringOptions {
   /// columns.
   enum { DEFAULT_LINE_LENGTH = 90 };
   unsigned emittedLineLength = DEFAULT_LINE_LENGTH;
+
+  /// Add an explicit bitcast for avoiding bitwidth mismatch LINT errors.
+  bool explicitBitcastAddMul = false;
 };
 
 /// Register commandline options for the verilog emitter.
