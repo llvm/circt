@@ -2,15 +2,15 @@ name: Track LLVM Changes
 
 on:
   schedule:
-    # 13:00 (1PM) UTC is 5AM Pacific Time
-    - cron: '0 13 * * *'
+    # 10:00 AM UTC is 3AM Pacific Time
+    - cron: '0 10 * * *'
   pull_request: {}
   workflow_dispatch:
 
 jobs:
   track-llvm-changes:
     name: Track LLVM Changes
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -28,6 +28,10 @@ jobs:
             -DBUILD_SHARED_LIBS=ON \
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_TARGETS_TO_BUILD=host \
+            -DLLVM_BUILD_EXAMPLES=OFF \
+            -DLLVM_INSTALL_UTILS=OFF \
+            -DLLVM_ENABLE_OCAMLDOC=OFF \
+            -DLLVM_ENABLE_BINDINGS=OFF \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_EXTERNAL_PROJECTS=circt \
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/..
