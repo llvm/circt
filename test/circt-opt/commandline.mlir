@@ -9,6 +9,7 @@
 // DIALECT-NEXT: builtin
 // DIALECT-NEXT: calyx
 // DIALECT-NEXT: cf
+// DIALECT-NEXT: chalk
 // DIALECT-NEXT: chirrtl
 // DIALECT-NEXT: comb
 // DIALECT-NEXT: esi
