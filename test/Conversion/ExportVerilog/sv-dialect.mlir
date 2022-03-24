@@ -917,15 +917,14 @@ hw.module @OutOfLineConstantsInAlwaysSensitivity() {
 // CHECK-LABEL: module TooLongConstExpr
 hw.module @TooLongConstExpr() {
   %myreg = sv.reg : !hw.inout<i4200>
-  // CHECK: always @* begin
+  // CHECK: always @*
   sv.always {
-    // CHECK-NEXT: localparam [4199:0] _tmp = 4200'h
-    // CHECK-NEXT: myreg <= 4200'(_tmp + _tmp);
+    // CHECK-NEXT: myreg <= 4200'(4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4 +
+    // CHECK-NEXT:                             4200'h2323CB3A9903AD1D87D91023532E89D313E12BFCFCA2492A8561CADD94652CC4);
     %0 = hw.constant 15894191981981165163143546843135416146464164161464654561818646486465164684484 : i4200
     %1 = comb.add %0, %0 : i4200
     sv.passign %myreg, %1 : i4200
   }
-  // CHECK-NEXT: end
 }
 
 // Constants defined before use should be emitted in-place.

@@ -1424,17 +1424,13 @@ class ExprEmitter : public EmitterBase,
                     public Visitor<ExprEmitter, SubExprInfo> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
-  /// of any emitted expressions in the specified set.  If any subexpressions
-  /// are too large to emit, then they are added into tooLargeSubExpressions to
-  /// be emitted independently by the caller.
+  /// of any emitted expressions in the specified set.
   ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
               SmallPtrSet<Operation *, 8> &emittedExprs,
-              SmallVectorImpl<Operation *> &tooLargeSubExpressions,
               ModuleNameManager &names)
       : EmitterBase(emitter.state, os), emitter(emitter),
-        emittedExprs(emittedExprs),
-        tooLargeSubExpressions(tooLargeSubExpressions), outBuffer(outBuffer),
-        os(outBuffer), names(names) {}
+        emittedExprs(emittedExprs), outBuffer(outBuffer), os(outBuffer),
+        names(names) {}
 
   /// Emit the specified value as an expression.  If this is an inline-emitted
   /// expression, we emit that expression, otherwise we emit a reference to the
@@ -1442,7 +1438,7 @@ public:
   ///
   void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
     // Emit the expression.
-    emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
+    emitSubExpr(exp, parenthesizeIfLooserThan,
                 /*signRequirement*/ NoRequirement,
                 /*isSelfDeterminedUnsignedValue*/ false);
 
@@ -1457,11 +1453,6 @@ private:
   friend class Visitor<ExprEmitter, SubExprInfo>;
 
   enum SubExprSignRequirement { NoRequirement, RequireSigned, RequireUnsigned };
-  enum SubExprOutOfLineBehavior {
-    OOLTopLevel, //< Top level expressions shouldn't be emitted out of line.
-    OOLUnary,    //< Unary expressions are more generous on line lengths.
-    OOLBinary    //< Binary expressions split easily.
-  };
 
   /// Emit the specified value `exp` as a subexpression to the stream.  The
   /// `parenthesizeIfLooserThan` parameter indicates when parentheses should be
@@ -1470,11 +1461,9 @@ private:
   /// the `isSelfDeterminedUnsignedValue` flag indicates whether the value is
   /// known to be have "self determined" width, allowing us to omit extensions.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
-                          SubExprOutOfLineBehavior outOfLineBehavior,
                           SubExprSignRequirement signReq = NoRequirement,
                           bool isSelfDeterminedUnsignedValue = false);
 
-  void retroactivelyEmitExpressionIntoTemporary(Operation *op);
   void formatOutBuffer();
 
   SubExprInfo visitUnhandledExpr(Operation *op);
@@ -1533,7 +1522,7 @@ private:
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
-    return emitSubExpr(op->getOperand(0), LowestPrecedence, OOLUnary);
+    return emitSubExpr(op->getOperand(0), LowestPrecedence);
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
   SubExprInfo visitSV(IndexedPartSelectInOutOp op);
@@ -1634,7 +1623,6 @@ private:
 
   /// If any subexpressions would result in too large of a line, report it
   /// back to the caller in this vector.
-  SmallVectorImpl<Operation *> &tooLargeSubExpressions;
   SmallVectorImpl<char> &outBuffer;
   llvm::raw_svector_ostream os;
   // Track legalized names.
@@ -1649,8 +1637,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     os << "$signed(";
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
-  auto lhsInfo =
-      emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
+  auto lhsInfo = emitSubExpr(op->getOperand(0), prec, operandSignReq);
   os << ' ' << syntax << ' ';
 
   // Right associative operators are already generally variadic, we need to
@@ -1671,9 +1658,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     operandSignReq = NoRequirement;
   }
 
-  auto rhsInfo =
-      emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq,
-                  rhsIsUnsignedValueWithSelfDeterminedWidth);
+  auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
+                             rhsIsUnsignedValueWithSelfDeterminedWidth);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1693,8 +1679,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
                                    bool resultAlwaysUnsigned) {
   os << syntax;
-  auto signedness =
-      emitSubExpr(op->getOperand(0), Selection, OOLUnary).signedness;
+  auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
@@ -1741,24 +1726,6 @@ void ExprEmitter::formatOutBuffer() {
   outBuffer = std::move(tmpOutBuffer);
 }
 
-/// We eagerly emit single-use expressions inline into big expression trees...
-/// up to the point where they turn into massively long source lines of Verilog.
-/// At that point, we retroactively break the huge expression by inserting
-/// temporaries.  This handles the bookkeeping.
-void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
-  assert(isVerilogExpression(op) && !emitter.outOfLineExpressions.count(op) &&
-         "Should only be called on expressions thought to be inlined");
-
-  emitter.outOfLineExpressions.insert(op);
-  if (auto name = inferStructuralNameForTemporary(op->getResult(0)))
-    names.addName(op->getResult(0), name);
-  else
-    names.addName(op->getResult(0), "_tmp");
-
-  // Remember that this subexpr needs to be emitted independently.
-  tooLargeSubExpressions.push_back(op);
-}
-
 /// If the specified extension is a zero extended version of another value,
 /// return the shorter value, otherwise return null.
 static Value isZeroExtension(Value value) {
@@ -1780,7 +1747,6 @@ static Value isZeroExtension(Value value) {
 /// known to be have "self determined" width, allowing us to omit extensions.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
-                                     SubExprOutOfLineBehavior outOfLineBehavior,
                                      SubExprSignRequirement signRequirement,
                                      bool isSelfDeterminedUnsignedValue) {
   // If this is a self-determined unsigned value, look through any inline zero
@@ -1859,47 +1825,6 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     os << ')';
   }
 
-  // If we emitted this subexpression and it resulted in something very large,
-  // then we may be in the process of making super huge lines.  Back off to
-  // emitting this as its own temporary on its own line.
-  unsigned threshold;
-  switch (outOfLineBehavior) {
-  case OOLTopLevel:
-    threshold = ~0U;
-    break;
-  case OOLUnary:
-    threshold = std::max(state.options.emittedLineLength - 20, 10U);
-    break;
-  case OOLBinary:
-    threshold = std::max(state.options.emittedLineLength / 2, 10U);
-    break;
-  }
-
-  if (outBuffer.size() - subExprStartIndex > threshold &&
-      parenthesizeIfLooserThan != ForceEmitMultiUse &&
-      !isExpressionAlwaysInline(op)) {
-    // Inform the module emitter that this expression needs a temporary
-    // wire/logic declaration and set it up so it will be referenced instead of
-    // emitted inline.
-    auto emitExpressionIntoTemporary = [&]() {
-      retroactivelyEmitExpressionIntoTemporary(op);
-
-      // Lop this off the buffer we emitted.
-      outBuffer.resize(subExprStartIndex);
-
-      // Try again, now it will get emitted as a out-of-line leaf.
-      return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
-                         signRequirement);
-    };
-
-    // If op has multiple uses or op is a too large expression, we have to spill
-    // the expression.
-    if (!op->hasOneUse() ||
-        outBuffer.size() - subExprStartIndex >
-            state.options.maximumNumberOfTokensPerExpression)
-      return emitExpressionIntoTemporary();
-  }
-
   // Remember that we emitted this.
   emittedExprs.insert(exp.getDefiningOp());
   return expInfo;
@@ -1913,24 +1838,22 @@ SubExprInfo ExprEmitter::visitComb(ReplicateOp op) {
   if (auto concatOp = op.getOperand().getDefiningOp<ConcatOp>()) {
     if (op.getOperand().hasOneUse() &&
         !emitter.outOfLineExpressions.count(concatOp)) {
-      llvm::interleaveComma(concatOp.getOperands(), os, [&](Value v) {
-        emitSubExpr(v, LowestPrecedence, OOLBinary);
-      });
+      llvm::interleaveComma(concatOp.getOperands(), os,
+                            [&](Value v) { emitSubExpr(v, LowestPrecedence); });
       os << "}}";
       return {Symbol, IsUnsigned};
     }
   }
 
-  emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
+  emitSubExpr(op.getOperand(), LowestPrecedence);
   os << "}}";
   return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   os << '{';
-  llvm::interleaveComma(op.getOperands(), os, [&](Value v) {
-    emitSubExpr(v, LowestPrecedence, OOLBinary);
-  });
+  llvm::interleaveComma(op.getOperands(), os,
+                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
 
   os << '}';
   return {Symbol, IsUnsigned};
@@ -1946,7 +1869,7 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
     emitter.emitTypeDims(toType, op.getLoc(), os);
     os << ")*/";
   }
-  return emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
+  return emitSubExpr(op.input(), LowestPrecedence);
 }
 
 SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
@@ -1983,7 +1906,7 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
   unsigned loBit = op.lowBit();
   unsigned hiBit = loBit + op.getType().getWidth() - 1;
 
-  auto x = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
+  auto x = emitSubExpr(op.input(), LowestPrecedence);
   assert((x.precedence == Symbol ||
           (x.precedence == Selection && isOkToBitSelectFrom(op.input()))) &&
          "should be handled by isExpressionUnableToInline");
@@ -2025,8 +1948,8 @@ SubExprInfo ExprEmitter::visitSV(XMROp op) {
 SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
   emitTextWithSubstitutions(
       op->getAttrOfType<StringAttr>("string").getValue(), op,
-      [&](Value operand) { emitSubExpr(operand, LowestPrecedence, OOLBinary); },
-      symbols, names);
+      [&](Value operand) { emitSubExpr(operand, LowestPrecedence); }, symbols,
+      names);
 
   return {Unary, IsUnsigned};
 }
@@ -2079,19 +2002,19 @@ SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
 // for slicing operations.
 SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
 
   unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
-  emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
   os << " +: " << dstWidth << ']';
   return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayGetOp op) {
-  emitSubExpr(op.input(), Selection, OOLUnary);
+  emitSubExpr(op.input(), Selection);
   os << '[';
-  emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
+  emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
   return {Selection, IsUnsigned};
 }
@@ -2101,7 +2024,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
   os << '{';
   llvm::interleaveComma(op.inputs(), os, [&](Value operand) {
     os << "{";
-    emitSubExpr(operand, LowestPrecedence, OOLBinary);
+    emitSubExpr(operand, LowestPrecedence);
     os << "}";
   });
   os << '}';
@@ -2110,25 +2033,24 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
 
 SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
   os << '{';
-  llvm::interleaveComma(op.getOperands(), os, [&](Value v) {
-    emitSubExpr(v, LowestPrecedence, OOLBinary);
-  });
+  llvm::interleaveComma(op.getOperands(), os,
+                        [&](Value v) { emitSubExpr(v, LowestPrecedence); });
   os << '}';
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
-  auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
+  auto arrayPrec = emitSubExpr(op.input(), Selection);
   os << '[';
-  emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
+  emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
   return {Selection, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
-  auto prec = emitSubExpr(op.input(), Selection, OOLUnary);
+  auto prec = emitSubExpr(op.input(), Selection);
   os << '[';
-  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
+  emitSubExpr(op.base(), LowestPrecedence);
   if (op.decrement())
     os << " -: ";
   else
@@ -2138,9 +2060,9 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
-  auto info = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
+  auto info = emitSubExpr(op.input(), LowestPrecedence);
   os << '[';
-  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
+  emitSubExpr(op.base(), LowestPrecedence);
   if (op.decrement())
     os << " -: ";
   else
@@ -2151,26 +2073,26 @@ SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(StructFieldInOutOp op) {
-  auto prec = emitSubExpr(op.input(), Selection, OOLUnary);
+  auto prec = emitSubExpr(op.input(), Selection);
   os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
   return {Selection, prec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitSV(SampledOp op) {
   os << "$sampled(";
-  auto info = emitSubExpr(op.expression(), LowestPrecedence, OOLTopLevel);
+  auto info = emitSubExpr(op.expression(), LowestPrecedence);
   os << ")";
   return info;
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
   // The ?: operator is right associative.
-  emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1), OOLBinary);
+  emitSubExpr(op.cond(), VerilogPrecedence(Conditional - 1));
   os << " ? ";
-  auto lhsInfo = emitSubExpr(op.trueValue(), VerilogPrecedence(Conditional - 1),
-                             OOLBinary);
+  auto lhsInfo =
+      emitSubExpr(op.trueValue(), VerilogPrecedence(Conditional - 1));
   os << " : ";
-  auto rhsInfo = emitSubExpr(op.falseValue(), Conditional, OOLBinary);
+  auto rhsInfo = emitSubExpr(op.falseValue(), Conditional);
 
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
@@ -2186,14 +2108,14 @@ SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
   llvm::interleaveComma(
       stype.getElements(), os, [&](const StructType::FieldInfo &field) {
         os << emitter.getVerilogStructFieldName(field.name) << ": ";
-        emitSubExpr(op.getOperand(i++), Selection, OOLBinary);
+        emitSubExpr(op.getOperand(i++), Selection);
       });
   os << '}';
   return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructExtractOp op) {
-  emitSubExpr(op.input(), Selection, OOLUnary);
+  emitSubExpr(op.input(), Selection);
   os << '.' << emitter.getVerilogStructFieldName(op.fieldAttr());
   return {Selection, IsUnsigned};
 }
@@ -2205,9 +2127,9 @@ SubExprInfo ExprEmitter::visitTypeOp(StructInjectOp op) {
       stype.getElements(), os, [&](const StructType::FieldInfo &field) {
         os << emitter.getVerilogStructFieldName(field.name) << ": ";
         if (field.name == op.field()) {
-          emitSubExpr(op.newValue(), Selection, OOLBinary);
+          emitSubExpr(op.newValue(), Selection);
         } else {
-          emitSubExpr(op.input(), Selection, OOLBinary);
+          emitSubExpr(op.input(), Selection);
           os << '.' << field.name.getValue();
         }
       });
@@ -2605,69 +2527,9 @@ void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<char, 128> exprBuffer;
-  SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
+  ExprEmitter(emitter, exprBuffer, emittedExprs, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
   os.write(exprBuffer.data(), exprBuffer.size());
-
-  // It is possible that the emitted expression was too large to fit on a line
-  // and needs to be split.  If so, the new subexpressions that need emitting
-  // are put out into the the 'tooLargeSubExpressions' list.  Re-emit these at
-  // the start of the current statement as their own stmt expressions.
-  if (tooLargeSubExpressions.empty())
-    return;
-
-  // If we are working on a procedural statement, we need to emit the
-  // declarations for each variable separately from the assignments to them.
-  // Otherwise we just emit inline 'wire' declarations.
-  RearrangableOStream::Cursor declStartCursor, declEndCursor;
-  if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Split the current segment to make sure the cursors we are about to create
-    // don't get invalidated by statement reordering.
-    rearrangableStream.splitCurrentSegment();
-
-    // We're about to emit new things that we want to rearrange.
-    declStartCursor = rearrangableStream.getCursor();
-
-    // Emit the declarations into the stream.
-    for (auto *expr : tooLargeSubExpressions) {
-      // TODO: This results in a lot of things like this:
-      //   automatic logic _tmp;
-      //   automatic logic _tmp_0;
-      // which could be turned into a comma separated list and properly
-      // justified.  We could collect these and emit them all at once when
-      // we recurse up to finishing off the procedural statement.  That would
-      // also eliminate the need for blockDeclarationInsertPoint to be so
-      // 'global'.
-      if (!emitDeclarationForTemporary(expr))
-        os << ";\n";
-      ++numStatementsEmitted;
-    }
-    declEndCursor = rearrangableStream.getCursor();
-  }
-
-  /// Generating new statements will change `statementBeginning`, so make sure
-  /// to keep track of what it is.
-  auto prevStmtBeginning = statementBeginning;
-
-  // Emit each stmt expression in turn.
-  auto stmtStartCursor = rearrangableStream.getCursor();
-  for (auto *expr : tooLargeSubExpressions) {
-    ++numStatementsEmitted;
-    emitStatementExpression(expr);
-  }
-
-  // Rearrange all of the generated text for these statements to before the
-  // previous statement we were emitting, and restore statementBeginning to the
-  // right place.
-  statementBeginning = rearrangableStream.moveRangeBefore(
-      prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
-  if (!declStartCursor.isInvalid()) {
-    // Scoop up all of the stuff we just emitted, and move it to the
-    // blockDeclarationInsertPoint.
-    blockDeclarationInsertPoint = rearrangableStream.moveRangeBefore(
-        blockDeclarationInsertPoint, declStartCursor, declEndCursor);
-  }
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
