@@ -40,7 +40,7 @@ class System:
   ]
 
   PASSES = """
-    msft-lower-instances, msft-partition,
+    msft-lower-instances, {partition}
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
     msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
@@ -169,14 +169,15 @@ class System:
   def body(self):
     return self.mod.body
 
-  @property
-  def _passes(self):
+  def _passes(self, partition):
     tops = ",".join([self._get_module_symbol(m) for m in self.modules])
     verilog_file = self.name + ".sv"
     tcl_file = self.name + ".tcl"
     self.files.add(os.path.join(self._output_directory, verilog_file))
     self.files.add(os.path.join(self._output_directory, tcl_file))
+    partition_str = "msft-partition," if partition else ""
     return self.PASSES.format(tops=tops,
+                              partition=partition_str,
                               verilog_file=verilog_file,
                               tcl_file=tcl_file).strip()
 
@@ -215,13 +216,13 @@ class System:
     def write(self, *_):
       pass
 
-  def run_passes(self):
+  def run_passes(self, partition=False):
     if self.passed:
       return
     if len(self._generate_queue) > 0:
       print("WARNING: running lowering passes on partially generated design!",
             file=sys.stderr)
-    pm = mlir.passmanager.PassManager.parse(self._passes)
+    pm = mlir.passmanager.PassManager.parse(self._passes(partition))
     # Invalidate the symbol cache
     self._symbols = None
     [inst._clear_cache() for inst in self._instance_cache.values()]
