@@ -1,9 +1,8 @@
 // RUN: rm -rf %t
-// RUN: firtool %s --ir-fir --blackbox-resource-path=%S/.. | firtool --format=mlir --split-verilog -o=%t --blackbox-path=%S --blackbox-resource-path=%S/..
+// RUN: firtool %s --ir-fir | firtool --format=mlir --split-verilog -o=%t --blackbox-path=%S
 // RUN: FileCheck %s --check-prefix=VERILOG-TOP < %t/test_mod.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/magic/blackbox-inline.v
 // RUN: FileCheck %s --check-prefix=VERILOG-HDR < %t/magic/blackbox-inline.svh
-// RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/magic/blackbox-resource.v
 // RUN: FileCheck %s --check-prefix=VERILOG-GIB < %t/magic/blackbox-path.v
 // RUN: FileCheck %s --check-prefix=LIST-TOP < %t/filelist.f
 // RUN: FileCheck %s --check-prefix=LIST-BLACK-BOX < %t/magic.f
@@ -12,7 +11,6 @@
 
 // LIST-BLACK-BOX:      magic/blackbox-inline.v
 // LIST-BLACK-BOX-NEXT: magic/blackbox-path.v
-// LIST-BLACK-BOX-NEXT: magic/blackbox-resource.v
 
 firrtl.circuit "test_mod" attributes {annotations = [
   // Black box processing should honor only the last annotation.
@@ -23,12 +21,10 @@ firrtl.circuit "test_mod" attributes {annotations = [
 ]} {
   // VERILOG-TOP-LABEL: module test_mod
   // VERILOG-TOP-NEXT:    ExtInline foo
-  // VERILOG-TOP-NEXT:    ExtResource bar
   // VERILOG-TOP-NEXT:    ExtPath gib
   // VERILOG-TOP-NEXT:  endmodule
   firrtl.module @test_mod() {
     firrtl.instance foo @ExtInline()
-    firrtl.instance bar @ExtResource()
     firrtl.instance gib @ExtPath()
   }
 
@@ -56,20 +52,6 @@ firrtl.circuit "test_mod" attributes {annotations = [
       text = "`define SOME_MACRO\n"
     }
   ], defname = "ExtInline"}
-
-  // VERILOG-BAR-LABEL: module ExtResource(); endmodule
-  // VERILOG-BAR-NOT:   module ExtResource(); endmodule
-  firrtl.extmodule @ExtResource() attributes {annotations = [{
-    class = "firrtl.transforms.BlackBoxResourceAnno",
-    resourceId = "firtool/blackbox-resource.v"
-  }], defname = "ExtResource"}
-
-  // Duplicate resources will not be copied.
-  // VERILOG-BAR-NOT:   module ExtResource(); endmodule
-  firrtl.extmodule @DuplicateExtResource() attributes {annotations = [{
-    class = "firrtl.transforms.BlackBoxResourceAnno",
-    resourceId = "firtool/blackbox-resource.v"
-  }], defname = "DuplicateExtResource"}
 
   // VERILOG-GIB-LABEL: module ExtPath(); endmodule
   // VERILOG-GIB-NOT:   module ExtPath(); endmodule

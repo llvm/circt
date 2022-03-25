@@ -1448,8 +1448,7 @@ void GrandCentralPass::runOnOperation() {
                   auto subExtMod = cast<FExtModuleOp>(sub);
                   for (auto anno : AnnotationSet(subExtMod)) {
                     if (!anno.isClass("firrtl.transforms.BlackBoxInlineAnno") &&
-                        !anno.isClass("firrtl.transforms.BlackBoxPathAnno") &&
-                        !anno.isClass("firrtl.transforms.BlackBoxResourceAnno"))
+                        !anno.isClass("firrtl.transforms.BlackBoxPathAnno"))
                       continue;
                     if (subExtMod->hasAttr("output_file"))
                       break;

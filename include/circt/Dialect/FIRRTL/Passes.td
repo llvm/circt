@@ -266,8 +266,8 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
     This pass handles reads the Verilog source files for black boxes and adds
     them as `sv.verbatim.file` operations into the IR. Later passes can then
     write these files back to disk to ensure that they can be accessed by other
-    tools down the line in a well-known location. Supports inline, resource, and
-    path annotations for black box source files.
+    tools down the line in a well-known location. Supports inline and path
+    annotations for black box source files.
 
     The supported `firrtl.circuit` annotations are:
 
@@ -297,16 +297,6 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       ```
       Specifies the file `path` as source code for the module. Copies the file
       to the target directory.
-    - ```
-      {
-        class = "firrtl.transforms.BlackBoxResourceAnno",
-        resourceId = "myfile.v"
-      }
-      ```
-      Specifies the file `path` as source code for the module. In contrast to
-      the `BlackBoxPathAnno`, the file is searched for in the black box resource
-      search path. This is a remnant of the Scala origins of FIRRTL. Copies the
-      file to the target directory.
   }];
 
   let constructor = "circt::firrtl::createBlackBoxReaderPass()";
@@ -314,11 +304,7 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
     Option<"inputPrefix", "input-prefix", "std::string", "",
       "Prefix for input paths in black box annotations. This should be the "
       "directory where the input file was located, to allow for annotations "
-      "relative to the input file.">,
-    Option<"resourcePrefix", "resource-prefix", "std::string",
-      "\"src/main/resources\"",
-      "Search path for black box sources specified via the "
-      "`BlackBoxResourceAnno` annotation.">
+      "relative to the input file.">
   ];
   let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
@@ -411,7 +397,7 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
     conditions are mutually exclusive.
     The heuristic tries to break up the read enable and write enable logic into an
     `AND` expression tree. It then compares the read and write `AND` terms,
-    looking for a situation where the read/write is the complement of the write/read. 
+    looking for a situation where the read/write is the complement of the write/read.
   }];
   let constructor = "circt::firrtl::createInferReadWritePass()";
 }

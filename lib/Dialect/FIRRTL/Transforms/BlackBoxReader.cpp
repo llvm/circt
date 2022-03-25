@@ -52,7 +52,6 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   bool isDut(Operation *module);
 
   using BlackBoxReaderBase::inputPrefix;
-  using BlackBoxReaderBase::resourcePrefix;
 
 private:
   /// A set of the files generated so far. This is used to prevent two
@@ -243,7 +242,6 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
                                          OpBuilder &builder, bool isCover) {
   StringRef inlineAnnoClass = "firrtl.transforms.BlackBoxInlineAnno";
   StringRef pathAnnoClass = "firrtl.transforms.BlackBoxPathAnno";
-  StringRef resourceAnnoClass = "firrtl.transforms.BlackBoxResourceAnno";
 
   // Handle inline annotation.
   if (anno.isClass(inlineAnnoClass)) {
@@ -288,38 +286,6 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     auto name = builder.getStringAttr(llvm::sys::path::filename(path));
     setOutputFile(verbatim, op, name, isDut(op), isCover);
     return true;
-  }
-
-  // Handle resource annotation.
-  if (anno.isClass(resourceAnnoClass)) {
-    auto resourceId = anno.getMember<StringAttr>("resourceId");
-    if (!resourceId) {
-      op->emitError(resourceAnnoClass)
-          << " annotation missing \"resourceId\" attribute";
-      signalPassFailure();
-      return true;
-    }
-
-    // Note that we always treat `resourceId` as a relative path, as the
-    // previous Scala implementation tended to emit `/foo.v` as resourceId.
-    auto relativeResourceId =
-        llvm::sys::path::relative_path(resourceId.getValue());
-
-    SmallVector<StringRef> roots;
-    StringRef(resourcePrefix).split(roots, ':');
-    for (auto root : roots) {
-      SmallString<128> inputPath(root);
-      llvm::sys::path::append(inputPath, relativeResourceId);
-      auto verbatim = loadFile(op, inputPath, builder);
-      if (!verbatim) {
-        op->emitError("Cannot find file ") << resourceId.getValue();
-        signalPassFailure();
-        return false;
-      }
-      auto name = builder.getStringAttr(llvm::sys::path::filename(inputPath));
-      setOutputFile(verbatim, op, name, isDut(op), isCover);
-      return true;
-    }
   }
 
   // Annotation was not concerned with black boxes.
@@ -432,12 +398,9 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createBlackBoxReaderPass(
-    llvm::Optional<StringRef> inputPrefix,
-    llvm::Optional<StringRef> resourcePrefix) {
+    llvm::Optional<StringRef> inputPrefix) {
   auto pass = std::make_unique<BlackBoxReaderPass>();
   if (inputPrefix)
     pass->inputPrefix = inputPrefix->str();
-  if (resourcePrefix)
-    pass->resourcePrefix = resourcePrefix->str();
   return pass;
 }

@@ -365,7 +365,6 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   std::array<StringRef, 6> blackListedAnnos = {
       "firrtl.transforms.BlackBox",
       "firrtl.transforms.BlackBoxInlineAnno",
-      "firrtl.transforms.BlackBoxResourceAnno",
       "sifive.enterprise.grandcentral.DataTapsAnnotation",
       "sifive.enterprise.grandcentral.MemTapAnnotation",
       "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};

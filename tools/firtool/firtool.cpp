@@ -287,12 +287,6 @@ static cl::opt<std::string> blackBoxRootPath(
     cl::desc("Optional path to use as the root of black box annotations"),
     cl::value_desc("path"), cl::init(""));
 
-static cl::opt<std::string> blackBoxRootResourcePath(
-    "blackbox-resource-path",
-    cl::desc(
-        "Optional path to use as the root of black box resource annotations"),
-    cl::value_desc("path"), cl::init(""));
-
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
@@ -495,10 +489,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   StringRef blackBoxRoot = blackBoxRootPath.empty()
                                ? llvm::sys::path::parent_path(inputFilename)
                                : blackBoxRootPath;
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
-      blackBoxRoot, blackBoxRootResourcePath.empty()
-                        ? blackBoxRoot
-                        : blackBoxRootResourcePath));
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createBlackBoxReaderPass(blackBoxRoot));
 
   // The above passes, IMConstProp in particular, introduce additional
   // canonicalization opportunities that we should pick up here before we
