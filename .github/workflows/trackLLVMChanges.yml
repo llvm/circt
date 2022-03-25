@@ -49,7 +49,7 @@ jobs:
         run: |
           cd llvm
           echo "::set-output name=sha::$(git rev-parse HEAD)"
-          cmake --build ../build --config Debug --target check-circt -- -j($nproc)
+          cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
       
       - name: Build latest LLVM commit
         id: build-latest-llvm-commit
@@ -59,14 +59,14 @@ jobs:
           git fetch origin main
           git checkout --detach origin/main
           echo "::set-output name=sha::$(git rev-parse HEAD)"
-          cmake --build ../build --config Debug --target check-circt -- -j($nproc)
+          cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
       
       - name: Bisect commits
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
           git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commit.outputs.sha }} -- mlir llvm
-          git bisect run cmake --build ../build --config Debug --target check-circt -- -j($nproc)
+          git bisect run cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
 
       - name: Log broken commit
         if: steps.build-latest-llvm-commit.outcome != 'success'
