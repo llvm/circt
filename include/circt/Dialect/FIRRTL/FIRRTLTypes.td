@@ -78,6 +78,12 @@ def AnyResetType : DialectType<FIRRTLDialect,
     CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
     "Reset", "::circt::firrtl::FIRRTLType">;
 
+def AnyRegisterType : DialectType<FIRRTLDialect,
+    CPred<"$_self.isa<FIRRTLType>() && "
+          "$_self.cast<FIRRTLType>().isRegisterType()">,
+    "a passive type that does not contain analog",
+    "::circt::firrtl::FIRRTLType">;
+
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
                                   "::circt::firrtl::FIRRTLType">;

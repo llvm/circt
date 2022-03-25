@@ -778,3 +778,32 @@ firrtl.circuit "Top" {
     firrtl.strictconnect %a, %in : !firrtl.uint
   }
 }
+
+// -----
+
+firrtl.circuit "AnalogRegister" {
+  firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.analog'}}
+    %r = firrtl.reg %clock : !firrtl.analog
+  }
+}
+
+// -----
+
+firrtl.circuit "AnalogVectorRegister" {
+  firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
+    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
+    %r = firrtl.reg %clock : !firrtl.vector<analog, 2>
+  }
+}
+
+// -----
+
+firrtl.circuit "MismatchedRegister" {
+  firrtl.module @MismatchedRegister(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %z: !firrtl.vector<uint<1>, 1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @+1 {{type mismatch between register '!firrtl.vector<uint<1>, 1>' and reset value '!firrtl.uint<1>'}}
+    %r = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>
+    firrtl.connect %z, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+  }
+}

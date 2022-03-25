@@ -1979,6 +1979,25 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
 }
 
+LogicalResult RegResetOp::verify() {
+  Value reset = resetValue();
+
+  FIRRTLType resetType = reset.getType().cast<FIRRTLType>();
+  FIRRTLType regType = getResult().getType().cast<FIRRTLType>();
+
+  // The type of the initialiser must be equivalent to the register type.
+  if (!areTypesEquivalent(resetType, regType))
+    return emitError("type mismatch between register ")
+           << regType << " and reset value " << resetType;
+
+  // Truncation on initialisation is banned.
+  if (!isTypeLarger(regType, resetType))
+    return emitError("register ")
+           << regType << " is not as wide as initialiser  " << resetType;
+
+  return success();
+}
+
 void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
 }

@@ -239,7 +239,7 @@ def RegOp : FIRRTLOp<"reg", [HasCustomSSAName/*MemAlloc*/]> {
     ins ClockType:$clockVal, StrAttr:$name,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs PassiveType:$result);
+  let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -268,10 +268,11 @@ def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
+    ins ClockType:$clockVal, AnyResetType:$resetSignal,
+        AnyRegisterType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations,
         OptionalAttr<SymbolNameAttr>:$inner_sym);
-  let results = (outs PassiveType:$result);
+  let results = (outs AnyRegisterType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
@@ -292,6 +293,7 @@ def RegResetOp : FIRRTLOp<"regreset", [HasCustomSSAName/*MemAlloc*/]> {
   }];
 
   let hasCanonicalizer = true;
+  let hasVerifier = 1;
 }
 
 def WireOp : FIRRTLOp<"wire", [HasCustomSSAName]> {

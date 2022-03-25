@@ -77,10 +77,9 @@ firrtl.circuit "Test" {
     firrtl.connect %result5, %extWire: !firrtl.uint<2>, !firrtl.uint<2>
 
     // regreset
-    %c0_ui20 = firrtl.constant 0 : !firrtl.uint<20>
-    %regreset = firrtl.regreset %clock, %reset, %c0_ui20 : !firrtl.uint<1>, !firrtl.uint<20>, !firrtl.uint<2>
-
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    %regreset = firrtl.regreset %clock, %reset, %c0_ui2 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+
     firrtl.connect %regreset, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK: firrtl.connect %result6, %c0_ui2
