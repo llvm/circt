@@ -12,13 +12,4 @@
 // Base class for the types in this dialect.
 class CHALKType<string name> : TypeDef<CHALKDialect, name> {}
 
-def InstanceType : CHALKType<"Instance"> {
-  let summary = "An CHALK instance type";
-  let description = [{
-    Represents an CHALK instance.
-  }];
-  let mnemonic = "instance";
-  let parameters = (ins);
-}
-
 #endif // CIRCT_DIALECT_CHALK_CHALKTYPES_TD

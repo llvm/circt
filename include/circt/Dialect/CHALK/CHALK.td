@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_CHALK_TD
 #define CIRCT_DIALECT_CHALK_TD
 
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/FunctionInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
