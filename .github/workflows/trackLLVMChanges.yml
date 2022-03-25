@@ -25,6 +25,11 @@ jobs:
           mkdir build
           cd build
           cmake ../llvm/llvm \
+            -DLLVM_USE_LINKER=lld \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_RULE_MESSAGES=OFF \
+            -DCMAKE_BUILD_TYPE=Debug \
             -DBUILD_SHARED_LIBS=ON \
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_TARGETS_TO_BUILD=host \
@@ -40,8 +45,8 @@ jobs:
         id: build-current-llvm-commit
         run: |
           cd llvm
-          cmake --build ../build --config Debug --target check-circt --
           echo "::set-output name=sha::$(git rev-parse HEAD)"
+          cmake --build ../build --config Debug --target check-circt --
       
       - name: Build latest LLVM commit
         id: build-latest-llvm-commit
@@ -50,14 +55,14 @@ jobs:
           cd llvm
           git fetch origin main
           git checkout --detach origin/main
-          cmake --build ../build --config Debug --target check-circt --
           echo "::set-output name=sha::$(git rev-parse HEAD)"
+          cmake --build ../build --config Debug --target check-circt -- -j($nproc)
       
       - name: Bisect commits
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
-          git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commits.outputs.sha }} -- mlir llvm
+          git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commit.outputs.sha }} -- mlir llvm
           git bisect run cmake --build ../build --config Debug --target check-circt --
 
       - name: Log broken commit
