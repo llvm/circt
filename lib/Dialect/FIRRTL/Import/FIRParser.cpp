@@ -1739,12 +1739,6 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
     auto srcBundle = srcType.cast<BundleType>();
     auto numElements = dstBundle.getNumElements();
     for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, dstIndex);
-      if (!dstField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubfieldOp>(dst, dstIndex);
-      }
       // Find a matching field by name in the other bundle.
       auto &dstElement = dstBundle.getElements()[dstIndex];
       auto name = dstElement.name;
@@ -1752,6 +1746,16 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
       // If there was no matching field name, don't connect this one.
       if (!maybe)
         continue;
+      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<SubfieldOp>(dst, dstIndex);
+      }
+      // We are pulling two fields from the cache. If the dstField was a
+      // pointer into the cache, then the lookup for srcField might invalidate
+      // it. So, we just copy dstField into a local.
+      auto dstField = dstRef;
       auto srcIndex = *maybe;
       auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
       if (!srcField) {
@@ -1759,9 +1763,10 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
         builder.setInsertionPointAfterValue(src);
         srcField = builder.create<SubfieldOp>(src, srcIndex);
       }
-      if (dstElement.isFlip)
-        std::swap(dstField, srcField);
-      emitPartialConnect(builder, dstField, srcField);
+      if (!dstElement.isFlip)
+        emitPartialConnect(builder, dstField, srcField);
+      else
+        emitPartialConnect(builder, srcField, dstField);
     }
   } else if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
     auto srcVector = srcType.cast<FVectorType>();
@@ -2801,11 +2806,10 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     // truncation.  Handle truncations as partial connects, which allow
     // truncation.
     if (lhsPType.getBitWidthOrSentinel() >= 0 &&
-        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
+        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel())
       emitConnect(builder, lhs, rhs);
-    } else {
-      builder.create<ConnectOp>(lhs, rhs);
-    }
+    else
+      emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     emitPartialConnect(builder, lhs, rhs);
