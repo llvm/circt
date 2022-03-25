@@ -17,16 +17,16 @@ using namespace circt;
 using namespace firrtl;
 
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
-                                Value src) {
+                                Value src, bool shouldPad) {
   ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
                                   builder.getInsertionPoint());
-  emitConnect(locBuilder, dst, src);
+  emitConnect(locBuilder, dst, src, shouldPad);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
 }
 
 /// Emit a connect between two values.
 void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                Value src) {
+                                Value src, bool shouldPad) {
   auto dstType = dst.getType().cast<FIRRTLType>();
   auto srcType = src.getType().cast<FIRRTLType>();
 
@@ -56,7 +56,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       auto srcField = builder.create<SubfieldOp>(src, i);
       if (dstBundle.getElement(i).isFlip)
         std::swap(dstField, srcField);
-      emitConnect(builder, dstField, srcField);
+      emitConnect(builder, dstField, srcField, shouldPad);
     }
     return;
   }
@@ -74,7 +74,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     for (size_t i = 0; i < numElements; ++i) {
       auto dstField = builder.create<SubindexOp>(dst, i);
       auto srcField = builder.create<SubindexOp>(src, i);
-      emitConnect(builder, dstField, srcField);
+      emitConnect(builder, dstField, srcField, shouldPad);
     }
     return;
   }
@@ -99,7 +99,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // Insert the cast back to signed if needed.
     if (tmpType != dstType)
       src = builder.create<AsSIntPrimOp>(dstType, src);
-  } else if (srcWidth < dstWidth) {
+  } else if (shouldPad && srcWidth < dstWidth) {
     // Need to extend arg.
     src = builder.create<PadPrimOp>(src, dstWidth);
   }
