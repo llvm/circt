@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
@@ -1556,7 +1557,10 @@ private:
   /// Connect all elements of two values, emitting attaches or analog values and
   /// connects for all others. This is useful since it is illegal to connect
   /// analog values.
-  void emitConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
+  void connectDebugValue(ImplicitLocOpBuilder &builder, Value dst, Value src);
+
+  /// Emit the logic for a partial connect using standard connect.
+  void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
 
   /// Parse an @info marker if present and inform locationProcessor about it.
   ParseResult parseOptionalInfo() {
@@ -1681,8 +1685,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
       });
 }
 
-void FIRStmtParser::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                Value src) {
+void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
+                                      Value src) {
   auto type = dst.getType().cast<FIRRTLType>();
   if (!type.containsAnalog()) {
     builder.create<ConnectOp>(dst, src);
@@ -1702,7 +1706,7 @@ void FIRStmtParser::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
         builder.setInsertionPointAfterValue(src);
         srcField = builder.create<SubfieldOp>(src, i);
       }
-      emitConnect(builder, dstField, srcField);
+      connectDebugValue(builder, dstField, srcField);
     }
   } else if (auto vector = type.dyn_cast<FVectorType>()) {
     for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
@@ -1718,10 +1722,75 @@ void FIRStmtParser::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
         builder.setInsertionPointAfterValue(src);
         srcField = builder.create<SubindexOp>(src, i);
       }
-      emitConnect(builder, dstField, srcField);
+      connectDebugValue(builder, dstField, srcField);
     }
   } else {
     llvm_unreachable("unknown type");
+  }
+}
+
+void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
+                                       Value src) {
+  auto dstType = dst.getType().cast<FIRRTLType>();
+  auto srcType = src.getType().cast<FIRRTLType>();
+  if (dstType == srcType) {
+    emitConnect(builder, dst, src);
+  } else if (auto dstBundle = dstType.dyn_cast<BundleType>()) {
+    auto srcBundle = srcType.cast<BundleType>();
+    auto numElements = dstBundle.getNumElements();
+    for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
+      // Find a matching field by name in the other bundle.
+      auto &dstElement = dstBundle.getElements()[dstIndex];
+      auto name = dstElement.name;
+      auto maybe = srcBundle.getElementIndex(name);
+      // If there was no matching field name, don't connect this one.
+      if (!maybe)
+        continue;
+      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<SubfieldOp>(dst, dstIndex);
+      }
+      // We are pulling two fields from the cache. If the dstField was a
+      // pointer into the cache, then the lookup for srcField might invalidate
+      // it. So, we just copy dstField into a local.
+      auto dstField = dstRef;
+      auto srcIndex = *maybe;
+      auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<SubfieldOp>(src, srcIndex);
+      }
+      if (!dstElement.isFlip)
+        emitPartialConnect(builder, dstField, srcField);
+      else
+        emitPartialConnect(builder, srcField, dstField);
+    }
+  } else if (auto dstVector = dstType.dyn_cast<FVectorType>()) {
+    auto srcVector = srcType.cast<FVectorType>();
+    auto dstNumElements = dstVector.getNumElements();
+    auto srcNumEelemnts = srcVector.getNumElements();
+    // Partial connect will connect all elements up to the end of the array.
+    auto numElements = std::min(dstNumElements, srcNumEelemnts);
+    for (size_t i = 0; i != numElements; ++i) {
+      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
+        dstField = builder.create<SubindexOp>(dst, i);
+      }
+      auto &srcField = moduleContext.getCachedSubaccess(src, i);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<SubindexOp>(src, i);
+      }
+      emitPartialConnect(builder, dstField, srcField);
+    }
+  } else {
+    emitConnect(builder, dst, src);
   }
 }
 
@@ -2735,18 +2804,10 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     if (!areTypesEquivalent(lhsPType, rhsPType))
       return emitError(loc, "cannot connect non-equivalent type ")
              << rhsPType << " to " << lhsPType;
-
-    // Some operations, dshl for example, have implicit truncations, even in lo
-    // firrtl.  Chisel will also use connects as partial connects to do
-    // truncation.  Handle truncations between equivalent types as partial
-    // connects, which allow truncation.
-    if (isTypeLarger(lhsPType, rhsPType))
-      builder.create<ConnectOp>(lhs, rhs);
-    else
-      builder.create<PartialConnectOp>(lhs, rhs);
+    emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
-    builder.create<PartialConnectOp>(lhs, rhs);
+    emitPartialConnect(builder, lhs, rhs);
   }
   return success();
 }
@@ -3169,7 +3230,7 @@ ParseResult FIRStmtParser::parseWire() {
       auto debug = builder.create<WireOp>(
           type.getPassiveType(), id, getConstants().emptyArrayAttr,
           StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
-      emitConnect(builder, debug, result);
+      connectDebugValue(builder, debug, result);
     }
   }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
