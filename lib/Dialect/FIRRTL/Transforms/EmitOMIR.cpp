@@ -613,6 +613,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
 
   // Emit the JSON.
   SmallString<64> buf;
+  DenseSet<StringRef> emittedPorts;
   jsonStream.object([&] {
     buf.clear();
     emitSourceInfo(module.getLoc(), buf);
@@ -622,6 +623,10 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
       for (auto port : llvm::enumerate(module.getPorts())) {
         if (port.value().type.getBitWidthOrSentinel() == 0)
           continue;
+        auto portSymbol = addSymbol(getInnerRefTo(module, port.index()));
+        if (emittedPorts.count(portSymbol))
+          continue;
+        emittedPorts.insert(portSymbol);
         jsonStream.object([&] {
           // Emit the `ref` field.
           buf.assign("OMDontTouchedReferenceTarget:~");
@@ -629,7 +634,7 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
           buf.push_back('|');
           buf.append(addSymbol(module));
           buf.push_back('>');
-          buf.append(addSymbol(getInnerRefTo(module, port.index())));
+          buf.append(portSymbol);
           jsonStream.attribute("ref", buf);
 
           // Emit the `direction` field.
