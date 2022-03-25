@@ -4,7 +4,10 @@ on:
   schedule:
     # 10:00 AM UTC is 3AM Pacific Time
     - cron: '0 10 * * *'
-  pull_request: {}
+  # Run this workflow on pull requests which change this workflow
+  pull_request: 
+    paths:
+      - .github/workflows/trackLLVMChanges.yml
   workflow_dispatch:
 
 jobs:
