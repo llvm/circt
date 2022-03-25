@@ -154,7 +154,6 @@ class RootInstance(Instance):
     self._inst_to_dyn_op_cache = None
     self._child_cache = None
 
-
   def _get_static_op(self, inst: Instance):
     # We don't support cache rebuilds yet.
     assert self._inst_to_static_op_cache is not None
