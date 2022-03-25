@@ -55,6 +55,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
       }
+    } else if (option == "explicitBitcastAddMul") {
+      explicitBitcastAddMul = true;
     } else if (option.startswith("maximumNumberOfTokensPerExpression=")) {
       option = option.drop_front(strlen("maximumNumberOfTokensPerExpression="));
       if (option.getAsInteger(10, maximumNumberOfTokensPerExpression)) {
@@ -90,6 +92,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowLocalVariables,";
   if (enforceVerifLabels)
     options += "verifLabels,";
+  if (explicitBitcastAddMul)
+    options += "explicitBitcastAddMul,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -152,7 +156,7 @@ struct LoweringCLOptions {
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTokensPerExpression=<n>, "
-          "maximumNumberOfTermsPerExpression=<n>"),
+          "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

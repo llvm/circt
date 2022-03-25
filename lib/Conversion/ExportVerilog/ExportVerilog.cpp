@@ -1417,10 +1417,12 @@ public:
   /// expression, we emit that expression, otherwise we emit a reference to the
   /// already computed name.
   ///
-  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                      bool needsBitCast) {
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
-                /*signRequirement*/ NoRequirement);
+                /*signRequirement*/ NoRequirement,
+                /*isSelfDeterminedUnsignedValue*/ false, needsBitCast);
 
     // Emitted expression might break the line length constraint so align it
     // here.
@@ -1448,7 +1450,8 @@ private:
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprOutOfLineBehavior outOfLineBehavior,
                           SubExprSignRequirement signReq = NoRequirement,
-                          bool isSelfDeterminedUnsignedValue = false);
+                          bool isSelfDeterminedUnsignedValue = false,
+                          bool needsBitCast = false);
 
   void retroactivelyEmitExpressionIntoTemporary(Operation *op);
   void formatOutBuffer();
@@ -1758,7 +1761,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
                                      SubExprOutOfLineBehavior outOfLineBehavior,
                                      SubExprSignRequirement signRequirement,
-                                     bool isSelfDeterminedUnsignedValue) {
+                                     bool isSelfDeterminedUnsignedValue,
+                                     bool needsBitCast) {
   // If this is a self-determined unsigned value, look through any inline zero
   // extensions.  This occurs on the RHS of a shift operation for example.
   if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {
@@ -1794,6 +1798,14 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   // on contextual desired sign.
   signPreference = signRequirement;
 
+  bool bitCastAdded = false;
+  if (state.options.explicitBitcastAddMul && needsBitCast &&
+      isa<AddOp, MulOp>(op))
+    if (auto inType =
+            (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
+      os << inType.getWidth() << "'(";
+      bitCastAdded = true;
+    }
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
   auto expInfo = dispatchCombinationalVisitor(exp.getDefiningOp());
@@ -1823,6 +1835,9 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     os << ')';
     // Reset the precedence to the () level.
     expInfo.precedence = Selection;
+  }
+  if (bitCastAdded) {
+    os << ')';
   }
 
   // If we emitted this subexpression and it resulted in something very large,
@@ -2423,7 +2438,8 @@ private:
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
-                 VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
+                 VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence,
+                 bool needsBitCast = false);
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
@@ -2545,11 +2561,12 @@ private:
 ///
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
-                                 VerilogPrecedence parenthesizeIfLooserThan) {
+                                 VerilogPrecedence parenthesizeIfLooserThan,
+                                 bool needsBitCast) {
   SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
   ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
-      .emitExpression(exp, parenthesizeIfLooserThan);
+      .emitExpression(exp, parenthesizeIfLooserThan, needsBitCast);
   os.write(exprBuffer.data(), exprBuffer.size());
 
   // It is possible that the emitted expression was too large to fit on a line
@@ -2661,7 +2678,7 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   indent() << "assign ";
   emitExpression(op.dest(), ops);
   os << " = ";
-  emitExpression(op.src(), ops);
+  emitExpression(op.src(), ops, LowestPrecedence, /*needsBitCast*/ true);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -2776,7 +2793,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << getPortVerilogName(parent, port) << " = ";
-    emitExpression(operand, ops);
+    emitExpression(operand, ops, LowestPrecedence, /*needsBitCast*/ true);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -3445,7 +3462,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     // lowered to wire.
     OutputOp output;
     if (!elt.isOutput()) {
-      emitExpression(portVal, ops);
+      emitExpression(portVal, ops, LowestPrecedence, true);
     } else if (portVal.hasOneUse() &&
                (output = dyn_cast_or_null<OutputOp>(
                     portVal.getUses().begin()->getOwner()))) {

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=exprInEventControl,explicitBitcastAddMul | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
@@ -947,7 +947,7 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
   %127 = hw.array_create %124, %123, %125, %126 : i3
   %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>
 
-  // CHECK: assign bb = b + a;
+  // CHECK: assign bb = 3'(b + a);
   %xx = comb.add %123, %124 : i3
   hw.output %128, %xx : i3, i3
 }
@@ -1139,6 +1139,24 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
   %r = sv.read_inout %xmr2 : !hw.inout<i3>
   sv.assign %xmr1, %a : i23
   hw.output %r : i3
+}
+
+
+hw.module.extern @MyExtModule(%in: i8)
+
+// CHECK-LABEL: module MoveInstances
+hw.module @MoveInstances(%a_in: i8) -> (outc : i8){
+  // CHECK: MyExtModule xyz3 (
+  // CHECK:   .in (8'(a_in + a_in))
+  // CHECK: );
+  // CHECK: assign outc = 8'((a_in + a_in + a_in) * a_in)
+
+  %0 = comb.add %a_in, %a_in : i8
+  hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
+  %1 = comb.add %a_in, %a_in : i8
+  %2 = comb.add %1, %a_in : i8
+  %outc = comb.mul %2, %a_in : i8
+  hw.output %outc : i8
 }
 
 // CHECK-LABEL: module extInst
