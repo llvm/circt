@@ -103,7 +103,6 @@ class PlacementDB:
 
   def __init__(self, _circt_mod, seed: typing.Union[PrimitiveDB, None]):
     self._db = msft.PlacementDB(_circt_mod, seed._db if seed else None)
-    self._db.add_design_placements()
 
   def get_instance_at_coords(self,
                              prim_type: typing.Union[str, PrimitiveType],

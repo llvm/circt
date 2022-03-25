@@ -49,14 +49,11 @@ public:
 
 class PlacementDB {
 public:
-  PlacementDB(MlirOperation top, PrimitiveDB *seed) {
+  PlacementDB(MlirModule top, PrimitiveDB *seed) {
     db = circtMSFTCreatePlacementDB(top, seed ? seed->db
                                               : CirctMSFTPrimitiveDB{nullptr});
   }
   ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
-  size_t addDesignPlacements() {
-    return circtMSFTPlacementDBAddDesignPlacements(db);
-  }
   MlirOperation place(MlirOperation instOp, MlirAttribute loc,
                       std::string subpath, MlirLocation srcLoc) {
     auto cSubpath = mlirStringRefCreate(subpath.c_str(), subpath.size());
@@ -191,10 +188,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("loc"));
 
   py::class_<PlacementDB>(m, "PlacementDB")
-      .def(py::init<MlirOperation, PrimitiveDB *>(), py::arg("top"),
+      .def(py::init<MlirModule, PrimitiveDB *>(), py::arg("top"),
            py::arg("seed") = nullptr)
-      .def("add_design_placements", &PlacementDB::addDesignPlacements,
-           "Add the placements already present in the design.")
       .def("place", &PlacementDB::place, "Place a dynamic instance.",
            py::arg("dyn_inst"), py::arg("location"), py::arg("subpath"),
            py::arg("src_location"))

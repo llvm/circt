@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde.devicedb import EntityExtern, PrimitiveDB, PhysicalRegion
+from pycde.devicedb import EntityExtern, PlacementDB, PrimitiveDB, PhysicalRegion
 
 from .module import _SpecializedModule
 from .pycde_types import types
@@ -36,7 +36,7 @@ class System:
   __slots__ = [
       "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
       "_old_system_token", "_symbols", "_generate_queue", "_output_directory",
-      "files", "_instance_cache"
+      "files", "_instance_cache", "_placedb"
   ]
 
   PASSES = """
@@ -59,6 +59,7 @@ class System:
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
     self._instance_cache: dict[_SpecializedModule, RootInstance] = {}
+    self._placedb: devdb.PlacementDB = None
     self.files: typing.Set[str] = set()
 
     if output_directory is None:
@@ -211,11 +212,6 @@ class System:
       self._instance_cache[mod] = RootInstance._get(mod, self)
     return self._instance_cache[mod]
 
-  class DevNull:
-
-    def write(self, *_):
-      pass
-
   def run_passes(self, partition=False):
     if self.passed:
       return
@@ -233,3 +229,13 @@ class System:
   def emit_outputs(self):
     self.run_passes()
     circt.export_split_verilog(self.mod, self._output_directory)
+
+  @property
+  def placedb(self):
+    if self._placedb is None:
+      raise Exception("Must `createdb` first")
+    return self._placedb
+
+  def createdb(self, primdb: PrimitiveDB = None):
+    if self._placedb is None:
+      self._placedb = PlacementDB(self.mod, primdb)
