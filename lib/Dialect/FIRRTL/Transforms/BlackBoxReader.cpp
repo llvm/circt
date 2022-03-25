@@ -261,8 +261,9 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     if (emittedFiles.count(name))
       return true;
 
-    // Create an IR node to hold the contents.
-    auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
+    // Create an IR node to hold the contents.  Use "unknown location" so that
+    // no file info will unnecessarily print.
+    auto verbatim = builder.create<VerbatimOp>(builder.getUnknownLoc(), text);
     setOutputFile(verbatim, op, name, isDut(op), isCover);
     return true;
   }
@@ -311,8 +312,10 @@ VerbatimOp BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   if (!input)
     return {};
 
-  // Create an IR node to hold the contents.
-  return builder.create<VerbatimOp>(op->getLoc(), input->getBuffer());
+  // Create an IR node to hold the contents.  Use "unknown location" so that no
+  // file info will unnecessarily print.
+  return builder.create<VerbatimOp>(builder.getUnknownLoc(),
+                                    input->getBuffer());
 }
 
 /// This function is called for every file generated.  It does the following
