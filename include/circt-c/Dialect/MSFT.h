@@ -80,10 +80,9 @@ typedef struct {
 } CirctMSFTWalkOrder;
 
 MLIR_CAPI_EXPORTED CirctMSFTPlacementDB
-circtMSFTCreatePlacementDB(MlirOperation top, CirctMSFTPrimitiveDB seed);
+circtMSFTCreatePlacementDB(MlirModule top, CirctMSFTPrimitiveDB seed);
 MLIR_CAPI_EXPORTED void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
 MLIR_CAPI_EXPORTED
-size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
 MLIR_CAPI_EXPORTED MlirOperation circtMSFTPlacementDBPlace(
     CirctMSFTPlacementDB, MlirOperation inst, MlirAttribute loc,
     MlirStringRef subpath, MlirLocation srcLoc);

@@ -129,7 +129,7 @@ class RootInstance(Instance):
   from .module import _SpecializedModule
 
   __slots__ = [
-      "_module", "_placedb", "_subsymbol_cache", "_inst_to_static_op_cache",
+      "_module", "_subsymbol_cache", "_inst_to_static_op_cache",
       "_inst_to_dyn_op_cache", "_system"
   ]
 
@@ -140,7 +140,6 @@ class RootInstance(Instance):
     self = RootInstance()
     self._spec_mod = module
     self._system = sys
-    self._placedb = None
     self._root = self
     self._subsymbol_cache = {}
     self._inst_to_static_op_cache = {self: sys._get_circt_mod(module)}
@@ -154,11 +153,6 @@ class RootInstance(Instance):
     self._inst_to_static_op_cache = None
     self._inst_to_dyn_op_cache = None
     self._child_cache = None
-
-  def createdb(self, primdb: devdb.PrimitiveDB = None):
-    import pycde.devicedb as devdb
-    self._placedb = devdb.PlacementDB(
-        self._system._get_circt_mod(self._spec_mod), primdb)
 
   def _get_static_op(self, inst: Instance):
     # We don't support cache rebuilds yet.
@@ -176,9 +170,7 @@ class RootInstance(Instance):
 
   @property
   def placedb(self):
-    if self._placedb is None:
-      raise Exception("Must `createdb` first")
-    return self._placedb
+    return self._system.placedb
 
   @property
   def path(self) -> list[Instance]:

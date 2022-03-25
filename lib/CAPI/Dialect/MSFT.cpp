@@ -58,7 +58,7 @@ bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB self,
 
 DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 
-CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirModule top,
                                                 CirctMSFTPrimitiveDB seed) {
   if (seed.ptr == nullptr)
     return wrap(new PlacementDB(unwrap(top)));
@@ -66,9 +66,6 @@ CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
 }
 void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
   delete unwrap(self);
-}
-size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
-  return unwrap(self)->addDesignPlacements();
 }
 
 MlirOperation circtMSFTPlacementDBPlace(CirctMSFTPlacementDB db,

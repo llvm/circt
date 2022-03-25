@@ -69,7 +69,7 @@ print("=== Hierarchy")
 # CHECK-NEXT: <instance: [UnParameterized_1]>
 # CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
 test_inst = t.get_instance(Test)
-test_inst.createdb(primdb)
+t.createdb(primdb)
 mod = test_inst.walk(lambda inst: print(inst))
 
 
@@ -102,7 +102,7 @@ instance_attrs.lookup(pycde.AppID("UnParameterized",
 # assert region_explicit._physical_region.sym_name.value == "region_1_1"
 
 test_inst = t.get_instance(Test)
-test_inst.createdb()
+t.createdb()
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
 # TODO: add back anonymous reservations

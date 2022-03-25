@@ -63,9 +63,9 @@ private:
 /// placed.
 class PlacementDB {
 public:
-  /// Create a DB treating 'top' as the root module.
-  PlacementDB(Operation *top);
-  PlacementDB(Operation *top, const PrimitiveDB &seed);
+  /// Create a placement db containing all the placements in 'topMod'.
+  PlacementDB(mlir::ModuleOp topMod);
+  PlacementDB(mlir::ModuleOp topMod, const PrimitiveDB &seed);
 
   /// Contains the order to iterate in each dimension for walkPlacements. The
   /// dimensions are visited with columns first, then rows, then numbers within
@@ -83,10 +83,6 @@ public:
   /// Assign an operation to a physical region. Return false on failure.
   PDPhysRegionOp placeIn(DynamicInstanceOp inst, DeclPhysicalRegionOp,
                          StringRef subPath, Location srcLoc);
-
-  /// Load the database from the IR. Return the number of placements which
-  /// failed to load due to invalid specifications.
-  size_t addDesignPlacements();
 
   /// Remove the placement from the DB and IR. Erases the op.
   void removePlacement(PDPhysLocationOp);
@@ -122,7 +118,7 @@ private:
   };
 
   MLIRContext *ctxt;
-  Operation *top;
+  mlir::ModuleOp topMod;
 
   using DimDevType = DenseMap<PrimitiveType, PlacementCell>;
   using DimNumMap = DenseMap<size_t, DimDevType>;
@@ -142,6 +138,10 @@ private:
   /// weren't added due to conflicts.
   size_t addPlacements(DynamicInstanceOp inst);
   LogicalResult insertPlacement(PDPhysLocationOp locOp);
+
+  /// Load the database from the IR. Return the number of placements which
+  /// failed to load due to invalid specifications.
+  size_t addDesignPlacements();
 };
 
 } // namespace msft

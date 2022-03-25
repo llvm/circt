@@ -69,13 +69,16 @@ void PrimitiveDB::foreach (
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-PlacementDB::PlacementDB(Operation *top)
-    : ctxt(top->getContext()), top(top), seeded(false) {}
-PlacementDB::PlacementDB(Operation *top, const PrimitiveDB &seed)
-    : ctxt(top->getContext()), top(top), seeded(false) {
+PlacementDB::PlacementDB(mlir::ModuleOp topMod)
+    : ctxt(topMod->getContext()), topMod(topMod), seeded(false) {
+  addDesignPlacements();
+}
+PlacementDB::PlacementDB(mlir::ModuleOp topMod, const PrimitiveDB &seed)
+    : ctxt(topMod->getContext()), topMod(topMod), seeded(false) {
 
   seed.foreach ([this](PhysLocationAttr loc) { (void)getLeaf(loc); });
   seeded = true;
+  addDesignPlacements();
 }
 
 /// Assign an instance to a primitive. Return false if another instance is
@@ -148,10 +151,8 @@ size_t PlacementDB::addPlacements(DynamicInstanceOp inst) {
 /// Walk the entire design adding placements.
 size_t PlacementDB::addDesignPlacements() {
   size_t failed = 0;
-  auto mlirModule = top->getParentOfType<mlir::ModuleOp>();
-  for (auto inst : mlirModule.getOps<DynamicInstanceOp>())
-    if (inst.isRootedIn(top))
-      failed += addPlacements(inst);
+  for (auto inst : topMod.getOps<DynamicInstanceOp>())
+    failed += addPlacements(inst);
   return failed;
 }
 

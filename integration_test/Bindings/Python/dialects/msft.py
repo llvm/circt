@@ -14,8 +14,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   i32 = ir.IntegerType.get_signless(32)
   i1 = ir.IntegerType.get_signless(1)
 
-  m = ir.Module.create()
-  with ir.InsertionPoint(m.body):
+  mod = ir.Module.create()
+  with ir.InsertionPoint(mod.body):
     extmod = msft.MSFTModuleExternOp(name='MyExternMod',
                                      input_ports=[],
                                      output_ports=[])
@@ -72,11 +72,11 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: msft.module @MyWidget {} ()
   # CHECK:   msft.output
   # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()
-  m.operation.print()
+  mod.operation.print()
 
-  db = msft.PlacementDB(top.operation)
+  db = msft.PlacementDB(mod)
 
-  with ir.InsertionPoint(m.body):
+  with ir.InsertionPoint(mod.body):
     dyn_inst = msft.DynamicInstanceOp.create(path)
   assert db.get_instance_at(physAttr) is None
   # TODO: LLVM doesn't yet have none coersion for Locations.
@@ -87,9 +87,12 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert located_inst is not None
   assert located_inst.opview.subPath == ir.StringAttr.get("foo_subpath")
 
-  place_rc = db.place(dyn_inst, physAttr, "foo_subpath", ir.Location.current)
-  assert not place_rc
+  place_rc_none = db.place(dyn_inst, physAttr, "foo_subpath",
+                           ir.Location.current)
+  assert not place_rc_none
   # ERR: error: 'msft.pd.location' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
+
+  db.remove_placement(place_rc)
 
   physAttr2 = msft.PhysLocationAttr.get(msft.M20K, x=40, y=40, num=1)
   devdb = msft.PrimitiveDB()
@@ -99,7 +102,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   devdb.add_primitive(physAttr2)
   assert devdb.is_valid_location(physAttr)
 
-  seeded_pdb = msft.PlacementDB(top.operation, devdb)
+  seeded_pdb = msft.PlacementDB(mod, devdb)
 
   print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 49))
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
@@ -158,7 +161,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   devdb.add_primitive(msft.PhysLocationAttr.get(msft.M20K, x=1, y=1, num=1))
   devdb.add_primitive(msft.PhysLocationAttr.get(msft.M20K, x=0, y=1, num=1))
   devdb.add_primitive(msft.PhysLocationAttr.get(msft.M20K, x=1, y=1, num=0))
-  pdb = msft.PlacementDB(top.operation, devdb)
+  pdb = msft.PlacementDB(mod, devdb)
 
   print("=== Placements ASC, ASC:")
   walk_order = msft.WalkOrder(columns=msft.Direction.ASC,
@@ -256,5 +259,5 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|foo_subpath
   pm = mlir.passmanager.PassManager.parse(
       "msft-lower-instances,lower-msft-to-hw,msft-export-tcl{tops=top}")
-  pm.run(m)
-  circt.export_verilog(m, sys.stdout)
+  pm.run(mod)
+  circt.export_verilog(mod, sys.stdout)
