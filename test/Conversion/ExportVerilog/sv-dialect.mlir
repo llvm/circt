@@ -1145,13 +1145,17 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
 hw.module.extern @MyExtModule(%in: i8)
 
 // CHECK-LABEL: module MoveInstances
-hw.module @MoveInstances(%a_in: i8) {
+hw.module @MoveInstances(%a_in: i8) -> (outc : i8){
   // CHECK: MyExtModule xyz3 (
   // CHECK:   .in (8'(a_in + a_in))
   // CHECK: );
+  // CHECK: assign outc = 8'((a_in + a_in) * a_in)
+
   %0 = comb.add %a_in, %a_in : i8
   hw.instance "xyz3" @MyExtModule(in: %0: i8) -> ()
-  hw.output
+  %1 = comb.add %a_in, %a_in : i8
+  %outc = comb.mul %1, %a_in : i8
+  hw.output %outc : i8
 }
 
 // CHECK-LABEL: module extInst
