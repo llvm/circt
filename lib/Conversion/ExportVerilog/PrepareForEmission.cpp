@@ -46,6 +46,18 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   return isa<WireOp, RegOp>(readSrc);
 }
 
+// Check if the value is deemed worth spilling into a wire.
+static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
+  auto isAssign = [](Operation *op) { return isa<AssignOp>(op); };
+
+  // If there are more than the maximum number of terms in this single result
+  // expression, and it hasn't already been spilled, this should spill.
+  return isVerilogExpression(&op) &&
+         op.getNumOperands() > options.maximumNumberOfTermsPerExpression &&
+         op.getNumResults() == 1 &&
+         llvm::none_of(op.getResult(0).getUsers(), isAssign);
+}
+
 // Given an invisible instance, make sure all inputs are driven from
 // wires or ports.
 static void lowerBoundInstance(InstanceOp op) {
@@ -379,40 +391,6 @@ void ExportVerilog::prepareHWModule(Block &block,
        opIterator != e;) {
     auto &op = *opIterator++;
 
-    // Lower variadic fully-associative operations with more than two operands
-    // into balanced operand trees so we can split long lines across multiple
-    // statements.
-    // TODO: This is checking the Commutative property, which doesn't seem
-    // right in general.  MLIR doesn't have a "fully associative" property.
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
-        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        (op.getAttrs().empty() ||
-         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
-      // Lower this operation to a balanced binary tree of the same operation.
-      SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
-
-      // Make sure we revisit the newly inserted operations.
-      opIterator = Block::iterator(newOps.front());
-      continue;
-    }
-
-    // Turn a + -cst  ==> a - cst
-    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
-      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
-        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
-        if (cst.getValue().isNegative()) {
-          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
-          opIterator = Block::iterator(firstOp);
-          continue;
-        }
-      }
-    }
-
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
@@ -491,6 +469,59 @@ void ExportVerilog::prepareHWModule(Block &block,
     if (isExpressionAlwaysInline(&op)) {
       lowerAlwaysInlineOperation(&op);
       continue;
+    }
+
+    // If this expression is deemed worth spilling into a wire, do it here.
+    if (shouldSpillWire(op, options)) {
+      // If we're not in a procedural region, or we are, but we can hoist out of
+      // it, we are good to generate a wire.
+      if (!isProceduralRegion ||
+          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
+        lowerUsersToTemporaryWire(op);
+
+        // If we're in a procedural region, we move on to the next op in the
+        // block. The expression splitting and canonicalization below will
+        // happen after we recurse back up. If we're not in a procedural region,
+        // the expression can continue being worked on.
+        if (isProceduralRegion) {
+          ++opIterator;
+          continue;
+        }
+      }
+    }
+
+    // Lower variadic fully-associative operations with more than two operands
+    // into balanced operand trees so we can split long lines across multiple
+    // statements.
+    // TODO: This is checking the Commutative property, which doesn't seem
+    // right in general.  MLIR doesn't have a "fully associative" property.
+    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
+        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
+        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
+        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
+        (op.getAttrs().empty() ||
+         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
+      // Lower this operation to a balanced binary tree of the same operation.
+      SmallVector<Operation *> newOps;
+      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+
+      // Make sure we revisit the newly inserted operations.
+      opIterator = Block::iterator(newOps.front());
+      continue;
+    }
+
+    // Turn a + -cst  ==> a - cst
+    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
+      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
+        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
+        if (cst.getValue().isNegative()) {
+          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
+          opIterator = Block::iterator(firstOp);
+          continue;
+        }
+      }
     }
   }
 

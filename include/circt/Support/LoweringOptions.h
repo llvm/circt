@@ -86,6 +86,9 @@ struct LoweringOptions {
   enum { DEFAULT_TOKEN_NUMBER = 40000 };
   unsigned maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
 
+  enum { DEFAULT_TERM_LIMIT = 256 };
+  unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
+
   /// This is the target width of lines in an emitted Verilog source file in
   /// columns.
   enum { DEFAULT_LINE_LENGTH = 90 };
