@@ -2678,7 +2678,7 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   indent() << "assign ";
   emitExpression(op.dest(), ops);
   os << " = ";
-  emitExpression(op.src(), ops, LowestPrecedence, true);
+  emitExpression(op.src(), ops, LowestPrecedence, /*needsBitCast*/ true);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -2793,7 +2793,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << getPortVerilogName(parent, port) << " = ";
-    emitExpression(operand, ops, LowestPrecedence, true);
+    emitExpression(operand, ops, LowestPrecedence, /*needsBitCast*/ true);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -3474,7 +3474,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
                                containingModule.getOutputPort(outputPortNo));
     } else {
       portVal = getWireForValue(portVal);
-      emitExpression(portVal, ops, LowestPrecedence, true);
+      emitExpression(portVal, ops);
     }
     os << ')';
   }
