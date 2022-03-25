@@ -296,7 +296,7 @@ def __main__(args):
     print(f"Could not determine simulator from '{args.sim}'", file=sys.stderr)
     return 1
 
-  if not args.no_default_driver and sim.DefaultDriver:
+  if not args.no_default_driver:
     args.sources.append(os.path.join(ThisFileDir, sim.DefaultDriver))
 
   if not args.no_compile:
