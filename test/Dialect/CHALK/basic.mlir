@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: module {
 // CHECK:  chalk.cell "EmptyCell"
-chalk.cell "EmptyCell" {}
+chalk.cell "EmptyCell" {} {}
 
 // CHECK:  chalk.cell "CombCell" {
 // CHECK:  chalk.rectangle "CombRect1" {height = 0 : ui32, width = 0 : ui32, xCoord = 0 : i64, yCoord = 0 : i64}

@@ -26,7 +26,7 @@ def CellOp : CHALKOp<"cell", [
 
   let arguments = (ins StrAttr:$cell_name);
   let results = (outs);
-  let regions = (region VariadicRegion<SizedRegion<1>>:$body);
+  let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = "$cell_name attr-dict $body";
 }
@@ -57,8 +57,6 @@ def RectangleOp : CHALKCellShapeBase<"rectangle", [
   let results = (outs);
   let regions = (region);
 
-  // let assemblyFormat = [{ $sym_name attr-dict $xCoord `,` $yCoord `,` $width `,` $height $body }];
-  // let assemblyFormat = [{ $sym_name `{` attr-dict $xCoord `,` $yCoord `,` $width `,` $height `}` regions }];
   let assemblyFormat = "$sym_name attr-dict";
 }
 
