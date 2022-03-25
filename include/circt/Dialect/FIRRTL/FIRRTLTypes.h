@@ -140,6 +140,15 @@ bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false);
 
+/// Returns true if the destination is at least as wide as a source.  The source
+/// and destination types must be equivalent non-analog types.  The types are
+/// recursively connected to ensure that the destination is larger than the
+/// source: ground types are compared on width, vector types are checked
+/// recursively based on their elements and bundles are compared
+/// field-by-field.  Types with unresolved widths are assumed to fit into or
+/// hold their counterparts.
+bool isTypeLarger(FIRRTLType dstType, FIRRTLType srcType);
+
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
 

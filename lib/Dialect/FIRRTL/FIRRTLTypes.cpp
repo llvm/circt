@@ -586,6 +586,35 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
          destFlip == srcFlip;
 }
 
+/// Returns true if the destination is at least as wide as an equivalent source.
+bool firrtl::isTypeLarger(FIRRTLType dstType, FIRRTLType srcType) {
+  return TypeSwitch<FIRRTLType, bool>(dstType)
+      .Case<BundleType>([&](auto dstBundle) {
+        auto srcBundle = srcType.cast<BundleType>();
+        for (size_t i = 0, n = dstBundle.getNumElements(); i < n; ++i) {
+          auto srcElem = srcBundle.getElement(i);
+          auto dstElem = dstBundle.getElement(i);
+          if (dstElem.isFlip) {
+            if (!isTypeLarger(srcElem.type, dstElem.type))
+              return false;
+          } else {
+            if (!isTypeLarger(dstElem.type, srcElem.type))
+              return false;
+          }
+        }
+        return true;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        return isTypeLarger(vector.getElementType(),
+                            srcType.cast<FVectorType>().getElementType());
+      })
+      .Default([&](auto dstGround) {
+        int32_t destWidth = dstType.getPassiveType().getBitWidthOrSentinel();
+        int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
+        return destWidth <= -1 || srcWidth <= -1 || destWidth >= srcWidth;
+      });
+}
+
 /// Return the element of an array type or null.  This strips flip types.
 Type firrtl::getVectorElementType(Type array) {
   auto vectorType = array.dyn_cast<FVectorType>();
