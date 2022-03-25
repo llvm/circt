@@ -1991,11 +1991,9 @@ LogicalResult RegResetOp::verify() {
            << regType << " and reset value " << resetType;
 
   // Truncation on initialisation is banned.
-  int32_t regWidth = regType.getPassiveType().getBitWidthOrSentinel();
-  int32_t resetWidth = resetType.getPassiveType().getBitWidthOrSentinel();
-  if (regWidth > -1 && resetWidth > -1 && regWidth < resetWidth)
-    return emitError("register width ")
-           << regWidth << " does not match initialiser width  " << resetWidth;
+  if (!isTypeLarger(regType, resetType))
+    return emitError("register ")
+           << regType << " is not as wide as initialiser  " << resetType;
 
   return success();
 }
