@@ -37,32 +37,34 @@ jobs:
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/..
 
       - name: Build current LLVM commit
+        id: build-current-llvm-commit
         run: |
           cd llvm
           cmake --build ../build --config Debug --target check-circt --
-          git bisect start
-          git bisect good
+          echo "::set-output name=sha::$(git rev-parse HEAD)"
       
       - name: Build latest LLVM commit
         id: build-latest-llvm-commit
         continue-on-error: true
         run: |
           cd llvm
-          git pull origin main
-          git checkout -d origin/main
+          git fetch origin main
+          git checkout --detach origin/main
           cmake --build ../build --config Debug --target check-circt --
+          echo "::set-output name=sha::$(git rev-parse HEAD)"
       
       - name: Bisect commits
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
-          git bisect bad
+          git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commits.outputs.sha }} -- mlir llvm
           git bisect run cmake --build ../build --config Debug --target check-circt --
 
       - name: Log broken commit
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
+          git bisect log
           git log
 
       - name: Fail if incompatible commits exist
