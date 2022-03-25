@@ -2801,14 +2801,6 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   if (kind == FIRToken::less_equal) {
-    // Some operations, dshl for example, have implicit truncations, even in lo
-    // firrtl.  Chisel will also use connects as partial connects to do
-    // truncation.  Handle truncations as partial connects, which allow
-    // truncation.
-    if (lhsPType.getBitWidthOrSentinel() >= 0 &&
-        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel())
-      emitConnect(builder, lhs, rhs);
-    else
       emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");

@@ -106,8 +106,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
-  // TODO: enable strict connect.
-  if (false && dstType == srcType)
+  if (dstType == srcType)
     builder.create<StrictConnectOp>(dst, src);
   else
     builder.create<ConnectOp>(dst, src);

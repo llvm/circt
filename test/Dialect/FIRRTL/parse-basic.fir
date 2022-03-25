@@ -320,7 +320,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %xyz_in = firrtl.instance xyz @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
-    ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.uint<80>, !firrtl.uint<8>
+    ; CHECK: [[PAD:%.*]] = firrtl.pad %i8, 80 : (!firrtl.uint<8>) -> !firrtl.uint<80>
+    ; CHECK: firrtl.connect %xyz_in, [[PAD]] : !firrtl.uint<80>, !firrtl.uint<80>
     xyz.in <= i8
 
     ; CHECK: %myext_in, %myext_out = firrtl.instance myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
@@ -888,7 +889,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output b: {a: Reset, b: Reset}
 
     b <= a
-    ; CHECK: firrtl.connect %b, %a : !firrtl.bundle<a: reset, b: reset>, !firrtl.bundle<a: uint<1>, b: asyncreset>
+    ; CHECK: %1 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<1>, b: asyncreset>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.connect %0, %1 : !firrtl.reset, !firrtl.uint<1>
+    ; CHECK: %2 = firrtl.subfield %b(1) : (!firrtl.bundle<a: reset, b: reset>) -> !firrtl.reset
+    ; CHECK: %3 = firrtl.subfield %a(1) : (!firrtl.bundle<a: uint<1>, b: asyncreset>) -> !firrtl.asyncreset
+    ; CHECK: firrtl.connect %2, %3 : !firrtl.reset, !firrtl.asyncreset
 
   ; CHECK-LABEL: @WhenEncodedVerification
   module WhenEncodedVerification:
