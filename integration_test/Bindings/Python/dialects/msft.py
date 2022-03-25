@@ -87,7 +87,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert located_inst is not None
   assert located_inst.opview.subPath == ir.StringAttr.get("foo_subpath")
 
-  place_rc_none = db.place(dyn_inst, physAttr, "foo_subpath", ir.Location.current)
+  place_rc_none = db.place(dyn_inst, physAttr, "foo_subpath",
+                           ir.Location.current)
   assert not place_rc_none
   # ERR: error: 'msft.pd.location' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
 
