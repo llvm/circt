@@ -19,11 +19,8 @@
 namespace circt {
 namespace firrtl {
 /// Emit a connect between two values.
-void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs,
-                 bool shouldPad = true);
-void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs,
-                 bool shouldPad = true);
-
+void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
+void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
 } // namespace firrtl
 } // namespace circt
 

@@ -2801,9 +2801,10 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   if (kind == FIRToken::less_equal) {
-    // We don't want the connect to automatically pad values and hide width
-    // errors, so we instruct the connection to not pad the source value.
-    emitConnect(builder, lhs, rhs, /*shouldPad=*/false);
+    if (!areTypesEquivalent(lhsPType, rhsPType))
+      return emitError(loc, "cannot connect non-equivalent type ")
+             << rhsPType << " to " << lhsPType;
+    emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     emitPartialConnect(builder, lhs, rhs);
