@@ -2938,27 +2938,36 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
   return success();
 }
 
-FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
-  auto high = operands[1].getType().cast<FIRRTLType>();
-  auto low = operands[2].getType().cast<FIRRTLType>();
-
-  // TODO: Should use a more general type equivalence operator.
+/// Infer the result type for a multiplexer given its two operand types, which
+/// may be aggregates.
+///
+/// This essentially performs a pairwise comparison of fields and elements, as
+/// follows:
+/// - Identical operands inferred to their common type
+/// - Integer operands inferred to the larger one if both have a known width, a
+///   widthless integer otherwise.
+/// - Vectors inferred based on the element type.
+/// - Bundles inferred in a pairwise fashion based on the field types.
+static FIRRTLType inferMuxReturnType(FIRRTLType high, FIRRTLType low,
+                                     Optional<Location> loc) {
+  // If the types are identical we're done.
   if (high == low)
     return low;
 
   // The base types need to be equivalent.
   if (high.getTypeID() != low.getTypeID()) {
-    if (loc)
-      mlir::emitError(*loc, "true and false value must have same type");
+    if (loc) {
+      auto d = mlir::emitError(*loc, "incompatible mux operand types");
+      d.attachNote() << "true value type:  " << high;
+      d.attachNote() << "false value type: " << low;
+    }
     return {};
   }
 
+  // Two different Int types can be compatible.  If either has unknown width,
+  // then return it.  If both are known but different width, then return the
+  // larger one.
   if (low.isa<IntType>()) {
-    // Two different Int types can be compatible.  If either has unknown
-    // width, then return it.  If both are known but different width, then
-    // return the larger one.
     int32_t highWidth = high.getBitWidthOrSentinel();
     int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)
@@ -2968,10 +2977,69 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
     return lowWidth > highWidth ? low : high;
   }
 
-  // FIXME: Should handle bundles and other things.
-  if (loc)
-    mlir::emitError(*loc, "unknown types to mux");
+  // Infer vector types by comparing the element types.
+  auto highVector = high.dyn_cast<FVectorType>();
+  auto lowVector = low.dyn_cast<FVectorType>();
+  if (highVector && lowVector &&
+      highVector.getNumElements() == lowVector.getNumElements()) {
+    auto inner = inferMuxReturnType(highVector.getElementType(),
+                                    lowVector.getElementType(), loc);
+    if (!inner)
+      return {};
+    return FVectorType::get(inner, lowVector.getNumElements());
+  }
+
+  // Infer bundle types by inferring names in a pairwise fashion.
+  auto highBundle = high.dyn_cast<BundleType>();
+  auto lowBundle = low.dyn_cast<BundleType>();
+  if (highBundle && lowBundle) {
+    auto highElements = highBundle.getElements();
+    auto lowElements = lowBundle.getElements();
+    size_t numElements = highElements.size();
+
+    SmallVector<BundleType::BundleElement> newElements;
+    if (numElements == lowElements.size()) {
+      bool failed = false;
+      for (size_t i = 0; i < numElements; ++i) {
+        if (highElements[i].name != lowElements[i].name ||
+            highElements[i].isFlip != lowElements[i].isFlip) {
+          failed = true;
+          break;
+        }
+        auto element = highElements[i];
+        element.type =
+            inferMuxReturnType(highElements[i].type, lowElements[i].type, loc);
+        if (!element.type)
+          return {};
+        newElements.push_back(element);
+      }
+      if (!failed)
+        return BundleType::get(newElements, low.getContext());
+    }
+    if (loc) {
+      auto d = mlir::emitError(*loc, "incompatible mux operand bundle fields");
+      d.attachNote() << "true value type:  " << high;
+      d.attachNote() << "false value type: " << low;
+    }
+    return {};
+  }
+
+  // If we arrive here the types of the two mux arms are fundamentally
+  // incompatible.
+  if (loc) {
+    auto d = mlir::emitError(*loc, "invalid mux operand types");
+    d.attachNote() << "true value type:  " << high;
+    d.attachNote() << "false value type: " << low;
+  }
   return {};
+}
+
+FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      Optional<Location> loc) {
+  auto high = operands[1].getType().cast<FIRRTLType>();
+  auto low = operands[2].getType().cast<FIRRTLType>();
+  return inferMuxReturnType(high, low, loc);
 }
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
