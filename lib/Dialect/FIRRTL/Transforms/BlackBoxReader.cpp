@@ -45,14 +45,13 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
                        bool isCover);
-  bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
-  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr, bool isDut = false,
-                     bool isCover = false);
+  VerbatimOp loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
+  void setOutputFile(VerbatimOp op, Operation *origOp, StringAttr fileNameAttr,
+                     bool isDut = false, bool isCover = false);
   // Check if module or any of its parents in the InstanceGraph is a DUT.
   bool isDut(Operation *module);
 
   using BlackBoxReaderBase::inputPrefix;
-  using BlackBoxReaderBase::resourcePrefix;
 
 private:
   /// A set of the files generated so far. This is used to prevent two
@@ -243,7 +242,6 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
                                          OpBuilder &builder, bool isCover) {
   StringRef inlineAnnoClass = "firrtl.transforms.BlackBoxInlineAnno";
   StringRef pathAnnoClass = "firrtl.transforms.BlackBoxPathAnno";
-  StringRef resourceAnnoClass = "firrtl.transforms.BlackBoxResourceAnno";
 
   // Handle inline annotation.
   if (anno.isClass(inlineAnnoClass)) {
@@ -263,9 +261,10 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     if (emittedFiles.count(name))
       return true;
 
-    // Create an IR node to hold the contents.
-    auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
-    setOutputFile(verbatim, name, isDut(op), isCover);
+    // Create an IR node to hold the contents.  Use "unknown location" so that
+    // no file info will unnecessarily print.
+    auto verbatim = builder.create<VerbatimOp>(builder.getUnknownLoc(), text);
+    setOutputFile(verbatim, op, name, isDut(op), isCover);
     return true;
   }
 
@@ -279,39 +278,15 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
     SmallString<128> inputPath(inputPrefix);
     appendPossiblyAbsolutePath(inputPath, path.getValue());
-    if (loadFile(op, inputPath, builder))
-      return true;
-    op->emitError("Cannot find file ") << inputPath;
-    signalPassFailure();
-    return false;
-  }
-
-  // Handle resource annotation.
-  if (anno.isClass(resourceAnnoClass)) {
-    auto resourceId = anno.getMember<StringAttr>("resourceId");
-    if (!resourceId) {
-      op->emitError(resourceAnnoClass)
-          << " annotation missing \"resourceId\" attribute";
+    auto verbatim = loadFile(op, inputPath, builder);
+    if (!verbatim) {
+      op->emitError("Cannot find file ") << inputPath;
       signalPassFailure();
-      return true;
+      return false;
     }
-
-    // Note that we always treat `resourceId` as a relative path, as the
-    // previous Scala implementation tended to emit `/foo.v` as resourceId.
-    auto relativeResourceId =
-        llvm::sys::path::relative_path(resourceId.getValue());
-
-    SmallVector<StringRef> roots;
-    StringRef(resourcePrefix).split(roots, ':');
-    for (auto root : roots) {
-      SmallString<128> inputPath(root);
-      llvm::sys::path::append(inputPath, relativeResourceId);
-      if (loadFile(op, inputPath, builder))
-        return true; // found file
-    }
-    op->emitError("Cannot find file ") << resourceId.getValue();
-    signalPassFailure();
-    return false;
+    auto name = builder.getStringAttr(llvm::sys::path::filename(path));
+    setOutputFile(verbatim, op, name, isDut(op), isCover);
+    return true;
   }
 
   // Annotation was not concerned with black boxes.
@@ -320,8 +295,8 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
 
 /// Copies a black box source file to the appropriate location in the target
 /// directory.
-bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
-                                  OpBuilder &builder) {
+VerbatimOp BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
+                                        OpBuilder &builder) {
   auto fileName = llvm::sys::path::filename(inputPath);
   LLVM_DEBUG(llvm::dbgs() << "Add black box source  `" << fileName << "` from `"
                           << inputPath << "`\n");
@@ -329,19 +304,18 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   // Skip this annotation if the target is already loaded.
   auto fileNameAttr = builder.getStringAttr(fileName);
   if (emittedFiles.count(fileNameAttr))
-    return true;
+    return {};
 
   // Open and read the input file.
   std::string errorMessage;
   auto input = mlir::openInputFile(inputPath, &errorMessage);
   if (!input)
-    return false;
+    return {};
 
-  // Create an IR node to hold the contents.
-  auto verbatimOp =
-      builder.create<VerbatimOp>(op->getLoc(), input->getBuffer());
-  setOutputFile(verbatimOp, fileNameAttr);
-  return true;
+  // Create an IR node to hold the contents.  Use "unknown location" so that no
+  // file info will unnecessarily print.
+  return builder.create<VerbatimOp>(builder.getUnknownLoc(),
+                                    input->getBuffer());
 }
 
 /// This function is called for every file generated.  It does the following
@@ -349,12 +323,24 @@ bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 ///  1. Attaches the output file attribute to the VerbatimOp.
 ///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
-void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
-                                       bool isDut, bool isCover) {
-  auto *context = &getContext();
-  auto fileName = fileNameAttr.getValue();
+void BlackBoxReaderPass::setOutputFile(VerbatimOp op, Operation *origOp,
+                                       StringAttr fileNameAttr, bool isDut,
+                                       bool isCover) {
+  // If the output file was set on the original operation then either: (1) copy
+  // this to the new op if it is a filename or (2) use this directory (since it
+  // is a directory) as the lowest priority directory to put this file.
+  auto outputFile = origOp->getAttrOfType<OutputFileAttr>("output_file");
+  if (outputFile && !outputFile.isDirectory()) {
+    op->setAttr("output_file", outputFile);
+    if (!outputFile.getExcludeFromFilelist().getValue())
+      fileListFiles.push_back(outputFile.getFilename());
+    return;
+  }
+
   // Exclude Verilog header files since we expect them to be included
   // explicitly by compiler directives in other source files.
+  auto *context = &getContext();
+  auto fileName = fileNameAttr.getValue();
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = targetDir;
@@ -362,6 +348,8 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr,
     outDir = testBenchDir;
   else if (isCover)
     outDir = coverDir;
+  else if (outputFile)
+    outDir = outputFile.getFilename();
 
   // If targetDir is not set explicitly and this is a testbench module, then
   // update the targetDir to be the "../testbench".
@@ -412,13 +400,10 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
 // Pass Creation
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createBlackBoxReaderPass(
-    llvm::Optional<StringRef> inputPrefix,
-    llvm::Optional<StringRef> resourcePrefix) {
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix) {
   auto pass = std::make_unique<BlackBoxReaderPass>();
   if (inputPrefix)
     pass->inputPrefix = inputPrefix->str();
-  if (resourcePrefix)
-    pass->resourcePrefix = resourcePrefix->str();
   return pass;
 }

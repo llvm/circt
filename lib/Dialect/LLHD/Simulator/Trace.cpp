@@ -51,10 +51,10 @@ void Trace::pushChange(unsigned inst, unsigned sigIndex, int elem = -1) {
     // Add element index to the hierarchical path.
     ss << '[' << elem << ']';
     // Get element value dump.
-    valueDump = sig.dump(elem);
+    valueDump = sig.toHexString(elem);
   } else {
     // Get signal value dump.
-    valueDump = sig.dump();
+    valueDump = sig.toHexString();
   }
 
   // Check wheter we have an actual change from last value.
@@ -101,12 +101,12 @@ void Trace::addChangeMerged(unsigned sigIndex) {
   if (sig.elements.size() > 0) {
     // Add a change for all sub-elements
     for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
-      auto valueDump = sig.dump(i);
+      auto valueDump = sig.toHexString(i);
       mergedChanges[std::make_pair(sigIndex, i)] = valueDump;
     }
   } else {
     // Add one change for the whole signal.
-    auto valueDump = sig.dump();
+    auto valueDump = sig.toHexString();
     mergedChanges[std::make_pair(sigIndex, -1)] = valueDump;
   }
 }
@@ -135,7 +135,7 @@ void Trace::flushFull() {
   if (changes.size() > 0) {
     sortChanges();
 
-    auto timeDump = currentTime.dump();
+    auto timeDump = currentTime.toString();
     for (auto change : changes) {
       out << timeDump << "  " << change.first << "  " << change.second << "\n";
     }

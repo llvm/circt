@@ -2365,14 +2365,17 @@ void NameCollector::collectNames(Block &block) {
     }
 
     // Notice and renamify named declarations.
-    if (isa<WireOp, RegOp, LocalParamOp>(op))
+    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
       names.addName(op.getResult(0), getSymOpName(&op));
+      continue;
+    }
 
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp>(op)) {
       if (auto labelAttr = op.getAttrOfType<StringAttr>("label"))
         names.addName(&op, labelAttr);
+      continue;
     }
 
     // Recursively process any regions under the op iff this is a procedural
@@ -2383,6 +2386,7 @@ void NameCollector::collectNames(Block &block) {
         if (!region.empty())
           collectNames(region.front());
       }
+      continue;
     }
   }
 }
@@ -4569,7 +4573,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 
   for (const auto &it : emitter.files) {
     if (it.second.addToFilelist)
-      output->os() << it.first << "\n";
+      output->os() << it.first.str() << "\n";
   }
   output->keep();
 

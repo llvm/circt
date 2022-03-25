@@ -1534,19 +1534,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
-  // CHECK-LABEL: hw.module @RegResetStructNarrow
-  firrtl.module @RegResetStructNarrow(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
-    // CHECK:      %0 = hw.struct_extract %init["a"] : !hw.struct<a: i2>
-    // CHECK-NEXT: %1 = comb.extract %0 from 0 : (i2) -> i1
-    // CHECK-NEXT: %2 = hw.struct_create (%1) : !hw.struct<a: i1>
-    // CHECK-NEXT: %reg = sv.reg {{.+}}  : !hw.inout<struct<a: i1>>
+  // CHECK-LABEL: hw.module @RegResetStructWiden
+  firrtl.module @RegResetStructWiden(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
+    // CHECK:      [[FALSE:%.*]] = hw.constant false
+    // CHECK-NEXT: [[A:%.*]] = hw.struct_extract %init["a"] : !hw.struct<a: i2>
+    // CHECK-NEXT: [[PADDED:%.*]] = comb.concat [[FALSE]], [[A]] : i1, i2
+    // CHECK-NEXT: [[STRUCT:%.*]] = hw.struct_create ([[PADDED]]) : !hw.struct<a: i3>
+    // CHECK-NEXT: %reg = sv.reg {{.+}}  : !hw.inout<struct<a: i3>>
     // CHECK-NEXT: sv.always posedge %clock  {
     // CHECK-NEXT:   sv.if %reset  {
-    // CHECK-NEXT:     sv.passign %reg, %2 : !hw.struct<a: i1>
+    // CHECK-NEXT:     sv.passign %reg, [[STRUCT]] : !hw.struct<a: i3>
     // CHECK-NEXT:   } else  {
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
   }
 
   // CHECK-LABEL: hw.module @BundleConnection

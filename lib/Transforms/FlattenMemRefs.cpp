@@ -346,6 +346,7 @@ public:
     ConversionTarget target(*ctx);
     target.addLegalDialect<memref::MemRefDialect, mlir::BuiltinDialect>();
     addGenericLegalityConstraint<func::CallOp>(target);
+    addGenericLegalityConstraint<func::FuncOp>(target);
 
     // Add a target materializer to handle memory flattening through
     // memref.subview operations.

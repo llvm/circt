@@ -59,6 +59,9 @@ public:
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().isPassive; }
 
+  /// Returns true if this is a "passive" that which is not analog.
+  bool isRegisterType() { return isPassive() && !containsAnalog(); }
+
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
 
@@ -139,6 +142,15 @@ bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 /// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false);
+
+/// Returns true if the destination is at least as wide as a source.  The source
+/// and destination types must be equivalent non-analog types.  The types are
+/// recursively connected to ensure that the destination is larger than the
+/// source: ground types are compared on width, vector types are checked
+/// recursively based on their elements and bundles are compared
+/// field-by-field.  Types with unresolved widths are assumed to fit into or
+/// hold their counterparts.
+bool isTypeLarger(FIRRTLType dstType, FIRRTLType srcType);
 
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);

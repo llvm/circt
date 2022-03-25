@@ -84,7 +84,6 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 
   // These should all be ignored.
   firrtl.extmodule @ignored0() attributes {annotations = [{class = "firrtl.transforms.BlackBoxInlineAnno"}], defname = "ignored0"}
-  firrtl.extmodule @ignored1() attributes {annotations = [{class = "firrtl.transforms.BlackBoxResourceAnno"}], defname = "ignored1"}
   firrtl.extmodule @ignored2() attributes {annotations = [{class = "sifive.enterprise.firrtl.ScalaClassAnnotation", className = "freechips.rocketchip.util.BlackBoxedROM"}], defname = "ignored2"}
   firrtl.extmodule @ignored3() attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}], defname = "ignored3"}
   firrtl.extmodule @ignored4() attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 4 : i64}], defname = "ignored4"}
@@ -109,7 +108,7 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: firrtl.circuit "top"
-firrtl.circuit "top" 
+firrtl.circuit "top"
 {
   firrtl.module @top() { }
   // When there are no memories, we still need to emit the seq_mems.json
@@ -120,7 +119,7 @@ firrtl.circuit "top"
 }
 
 // CHECK-LABEL: firrtl.circuit "top"
-firrtl.circuit "top" 
+firrtl.circuit "top"
 {
     firrtl.module @top()  {
       firrtl.instance dut @dut()

@@ -864,6 +864,24 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt<8>
     c <= mux(sel, a, b)
 
+  ; Test that a mux with aggregate type is still compatible even if the leaf
+  ; types disagree in their width.
+  ; CHECK-LABEL: firrtl.module @MuxAggregateWidthMismatch_Issue2806
+  module MuxAggregateWidthMismatch_Issue2806:
+    input a: UInt<1>[1]
+    input b: UInt<32>[1]
+    input x: {u: UInt<1>, v: UInt<2>}
+    input y: {u: UInt<32>, v: UInt<2>}
+    input sel: UInt<1>
+    output c: UInt[1]
+    output z: {u: UInt, v: UInt}
+    ; CHECK: firrtl.mux(%sel, %a, %b)
+    ; CHECK-SAME: -> !firrtl.vector<uint<32>, 1>
+    ; CHECK: firrtl.mux(%sel, %x, %y)
+    ; CHECK-SAME: -> !firrtl.bundle<u: uint<32>, v: uint<2>>
+    c <= mux(sel, a, b)
+    z <= mux(sel, x, y)
+
   ; CHECK-LABEL: firrtl.extmodule @RawStringParam
   ; CHECK-SAME:    <TYPE: none = "bit",
   ; CHECK-SAME:     FORMAT: none = "xyz_timeout=%d\\n",
