@@ -225,7 +225,7 @@ def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
 
       1. If a wire or register is used as the index of the memory port, then
          the memory is enabled whenever a non-invalid value is driven to the
-         address. 
+         address.
       2. If a node is used as the index of the memory port, then the memory is
          enabled at the declaration of the node.
       3. In all other cases, the memory is never enabled.

@@ -109,7 +109,7 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: firrtl.circuit "top"
-firrtl.circuit "top" 
+firrtl.circuit "top"
 {
   firrtl.module @top() { }
   // When there are no memories, we still need to emit the seq_mems.json
@@ -120,7 +120,7 @@ firrtl.circuit "top"
 }
 
 // CHECK-LABEL: firrtl.circuit "top"
-firrtl.circuit "top" 
+firrtl.circuit "top"
 {
     firrtl.module @top()  {
       firrtl.instance dut @dut()
