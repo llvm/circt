@@ -13,6 +13,9 @@
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_ENGINE_H
 
+#include "State.h"
+#include "Trace.h"
+
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/IR/BuiltinOps.h"
 
@@ -40,7 +43,7 @@ public:
       llvm::raw_ostream &out, ModuleOp module,
       llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
       llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-      std::string root, int mode, ArrayRef<StringRef> sharedLibPaths);
+      std::string root, TraceMode tm, ArrayRef<StringRef> sharedLibPaths);
 
   /// Default destructor
   ~Engine();
@@ -72,7 +75,7 @@ private:
   std::unique_ptr<State> state;
   std::unique_ptr<mlir::ExecutionEngine> engine;
   ModuleOp module;
-  int traceMode;
+  TraceMode traceMode;
 };
 
 } // namespace sim

@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_SIGNALS_RUNTIME_WRAPPERS_H
 
-#include "State.h"
+#include "circt/Dialect/LLHD/Simulator/State.h"
 
 extern "C" {
 

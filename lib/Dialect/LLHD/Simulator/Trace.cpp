@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Trace.h"
+#include "circt/Dialect/LLHD/Simulator/Trace.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -24,9 +24,10 @@ Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
     : out(out), state(state), mode(mode) {
   auto root = state->root;
   for (auto &sig : state->signals) {
-    if (mode != full && mode != merged && sig.owner != root) {
+    if (mode != TraceMode::Full && mode != TraceMode::Merged &&
+        sig.owner != root) {
       isTraced.push_back(false);
-    } else if (mode == namedOnly &&
+    } else if (mode == TraceMode::NamedOnly &&
                std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))) {
       isTraced.push_back(false);
     } else {
@@ -81,16 +82,17 @@ void Trace::pushAllChanges(unsigned inst, unsigned sigIndex) {
 void Trace::addChange(unsigned sigIndex) {
   currentTime = state->time;
   if (isTraced[sigIndex]) {
-    if (mode == full) {
+    if (mode == TraceMode::Full) {
       auto &sig = state->signals[sigIndex];
       // Add a change for each connected instance.
       for (auto inst : sig.triggers) {
         pushAllChanges(inst, sigIndex);
       }
-    } else if (mode == reduced) {
+    } else if (mode == TraceMode::Reduced) {
       // The root is always the last instance in the instances list.
       pushAllChanges(state->instances.size() - 1, sigIndex);
-    } else if (mode == merged || mode == mergedReduce || mode == namedOnly) {
+    } else if (mode == TraceMode::Merged || mode == TraceMode::MergedReduce ||
+               mode == TraceMode::NamedOnly) {
       addChangeMerged(sigIndex);
     }
   }
@@ -124,9 +126,10 @@ void Trace::sortChanges() {
 }
 
 void Trace::flush(bool force) {
-  if (mode == full || mode == reduced)
+  if (mode == TraceMode::Full || mode == TraceMode::Reduced)
     flushFull();
-  else if (mode == merged || mode == mergedReduce || mode == namedOnly)
+  else if (mode == TraceMode::Merged || mode == TraceMode::MergedReduce ||
+           mode == TraceMode::NamedOnly)
     if (state->time.time > currentTime.time || force)
       flushMerged();
 }
@@ -151,7 +154,7 @@ void Trace::flushMerged() {
     auto &sig = state->signals[sigIndex];
     auto change = elem.second;
 
-    if (mode == merged) {
+    if (mode == TraceMode::Merged) {
       // Add the changes for all connected instances.
       for (auto inst : sig.triggers) {
         pushChange(inst, sigIndex, sigElem);

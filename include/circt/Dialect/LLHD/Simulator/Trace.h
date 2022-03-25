@@ -11,9 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// clang-tidy seems to expect the absolute path in the header guard on some
-// systems, so just disable it.
-// NOLINTNEXTLINE(llvm-header-guard)
 #ifndef CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 #define CIRCT_DIALECT_LLHD_SIMULATOR_TRACE_H
 
@@ -30,7 +27,7 @@ namespace circt {
 namespace llhd {
 namespace sim {
 
-enum TraceMode { full, reduced, merged, mergedReduce, namedOnly };
+enum class TraceMode { Full, Reduced, Merged, MergedReduce, NamedOnly, None };
 
 class Trace {
   llvm::raw_ostream &out;
