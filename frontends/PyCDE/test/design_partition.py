@@ -53,6 +53,7 @@ s.generate()
 
 s.cleanup()
 s.print()
+s.run_passes(partition=True)
 s.emit_outputs()
 print("************")
 print("** Post pass/emit")

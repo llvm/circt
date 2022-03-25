@@ -47,7 +47,7 @@ struct Time {
   bool isZero();
 
   /// Get the stored time in a printable format.
-  std::string dump();
+  std::string toString() const;
 
   uint64_t time;
   uint64_t delta;
@@ -87,11 +87,11 @@ struct Signal {
   bool operator<(const Signal &rhs) const;
 
   /// Return the value of the signal in hexadecimal string format.
-  std::string dump();
+  std::string toHexString() const;
 
   /// Return the value of the i-th element of the signal in hexadecimal string
   /// format.
-  std::string dump(unsigned);
+  std::string toHexString(unsigned) const;
 
   std::string name;
   std::string owner;

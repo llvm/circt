@@ -1454,10 +1454,11 @@ LogicalResult OutputOp::verify() {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult GlobalRefOp::verify() {
+LogicalResult
+GlobalRefOp::verifySymbolUses(mlir::SymbolTableCollection &symTables) {
   Operation *parent = (*this)->getParentOp();
+  SymbolTable &symTable = symTables.getSymbolTable(parent);
   StringAttr symNameAttr = (*this).sym_nameAttr();
-  SymbolTable symTable(parent);
   auto hasGlobalRef = [&](Attribute attr) -> bool {
     if (!attr)
       return false;

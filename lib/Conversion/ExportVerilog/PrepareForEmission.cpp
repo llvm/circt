@@ -31,7 +31,7 @@ using namespace sv;
 using namespace ExportVerilog;
 
 // Check if the value is from read of a wire or reg or is a port.
-static bool isSimpleReadOrPort(Value v) {
+bool ExportVerilog::isSimpleReadOrPort(Value v) {
   if (v.isa<BlockArgument>())
     return true;
   auto vOp = v.getDefiningOp();
@@ -49,11 +49,12 @@ static bool isSimpleReadOrPort(Value v) {
 // Given an invisible instance, make sure all inputs are driven from
 // wires or ports.
 static void lowerBoundInstance(InstanceOp op) {
+  if (!op->hasAttr("doNotPrint"))
+    return;
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
+  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
@@ -92,8 +93,7 @@ static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
+  SmallString<32> nameTmp{"_", op.instanceName(), "_"};
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
@@ -104,30 +104,28 @@ static void lowerInstanceResults(InstanceOp op) {
     if (onlyUseIsAssign(result))
       continue;
 
-    bool isOneUseOutput = false;
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
-      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
+      if (dyn_cast_or_null<OutputOp>(use.getOwner()))
+        continue;
     }
 
-    if (!isOneUseOutput) {
-      nameTmp.resize(namePrefixSize);
-      if (port.name)
-        nameTmp += port.name.getValue().str();
-      else
-        nameTmp += std::to_string(nextResultNo - 1);
+    nameTmp.resize(namePrefixSize);
+    if (port.name)
+      nameTmp += port.name.getValue().str();
+    else
+      nameTmp += std::to_string(nextResultNo - 1);
 
-      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-      while (!result.use_empty()) {
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        OpOperand &use = *result.getUses().begin();
-        use.set(newWireRead);
-        newWireRead->moveBefore(use.getOwner());
-      }
-
-      auto connect = builder.create<AssignOp>(newWire, result);
-      connect->moveAfter(op);
+    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
+    while (!result.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *result.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
     }
+
+    auto connect = builder.create<AssignOp>(newWire, result);
+    connect->moveAfter(op);
   }
 }
 
@@ -424,8 +422,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       // Anchor return values to wires early
       lowerInstanceResults(instance);
       // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
+      lowerBoundInstance(instance);
     }
 
     // Force any expression used in the event control of an always process to be
@@ -433,20 +430,23 @@ void ExportVerilog::prepareHWModule(Block &block,
     if (!options.allowExprInEventControl) {
       auto enforceWire = [&](Value expr) {
         // Direct port uses are fine.
-        if (expr.isa<BlockArgument>())
+        if (isSimpleReadOrPort(expr))
           return;
-        // If this is a read from a wire, we're fine.
-        if (auto read = expr.getDefiningOp<ReadInOutOp>())
-          if (read.input().getDefiningOp<WireOp>())
-            return;
         if (auto inst = expr.getDefiningOp<InstanceOp>())
           return;
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(
+            op.getLoc(), &op.getParentOfType<HWModuleOp>().front());
         auto newWire = builder.create<WireOp>(expr.getType());
         builder.setInsertionPoint(&op);
-        builder.create<AssignOp>(newWire, expr);
         auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        op.replaceUsesOfWith(expr, newWireRead);
+        // For simplicity, replace all uses with the read first.  This lets us
+        // recursive root out all uses of the expression.
+        expr.replaceAllUsesWith(newWireRead);
+        builder.setInsertionPoint(&op);
+        builder.create<AssignOp>(newWire, expr);
+        // To get the output correct, given that reads are always inline,
+        // duplicate them for each use.
+        lowerAlwaysInlineOperation(newWireRead);
       };
       if (auto always = dyn_cast<AlwaysOp>(op)) {
         for (auto clock : always.clocks())

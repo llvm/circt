@@ -99,7 +99,7 @@ class Instance:
 
     assert isinstance(attr, tuple), "Only (subpath, loc) are supported"
     if isinstance(attr[1], devdb.PhysLocation):
-      self._root._placedb.place(self, attr[1], attr[0])
+      self._root.placedb.place(self, attr[1], attr[0])
     else:
       assert False
 

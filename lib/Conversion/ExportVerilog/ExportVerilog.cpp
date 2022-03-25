@@ -2365,14 +2365,17 @@ void NameCollector::collectNames(Block &block) {
     }
 
     // Notice and renamify named declarations.
-    if (isa<WireOp, RegOp, LocalParamOp>(op))
+    if (isa<WireOp, RegOp, LocalParamOp>(op)) {
       names.addName(op.getResult(0), getSymOpName(&op));
+      continue;
+    }
 
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp>(op)) {
       if (auto labelAttr = op.getAttrOfType<StringAttr>("label"))
         names.addName(&op, labelAttr);
+      continue;
     }
 
     // Recursively process any regions under the op iff this is a procedural
@@ -2383,6 +2386,7 @@ void NameCollector::collectNames(Block &block) {
         if (!region.empty())
           collectNames(region.front());
       }
+      continue;
     }
   }
 }
@@ -2463,7 +2467,7 @@ private:
   LogicalResult visitSV(AlwaysCombOp op);
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
-  LogicalResult visitSV(CaseZOp op);
+  LogicalResult visitSV(CaseOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(VerbatimOp op);
 
@@ -3272,11 +3276,22 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(CaseZOp op) {
+LogicalResult StmtEmitter::visitSV(CaseOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
-
-  indent() << "casez (";
+  const char *opname = nullptr;
+  switch (op.caseStyle()) {
+  case CaseStmtType::CaseStmt:
+    opname = "case";
+    break;
+  case CaseStmtType::CaseXStmt:
+    opname = "casex";
+    break;
+  case CaseStmtType::CaseZStmt:
+    opname = "casez";
+    break;
+  }
+  indent() << opname << " (";
   emitExpression(op.cond(), ops);
   os << ')';
   emitLocationInfoAndNewLine(ops);

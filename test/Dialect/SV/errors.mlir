@@ -91,8 +91,8 @@ hw.module @Finish() {
 // -----
 hw.module @CaseZ(%arg8: i8) {
   %fd = hw.constant 0x80000002 : i32
-  // expected-error @+1 {{sv.casez should be in a procedural region}}
-  sv.casez %arg8 : i8
+  // expected-error @+1 {{sv.case should be in a procedural region}}
+  sv.case %arg8 : i8
     case b0000001x: {
       sv.fwrite %fd, "x"
     }

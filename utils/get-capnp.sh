@@ -7,11 +7,11 @@
 # 
 ##===----------------------------------------------------------------------===##
 #
-# This script downloads, compiles, and installs CapnProto into $/ext
-# Cap'nProto is use by ESI cosim aka Elastic Silicon Interfaces cosimulation as
-# a message format and RPC client/server.
+# This script downloads, compiles, and installs CapnProto into $/ext.
+# Cap'nProto is use by ESI (Elastic Silicon Interfaces) cosimulation as a
+# message format and RPC client/server.
 #
-# It will also optionally install pycapnp.
+# It will also optionally install pycapnp, which is used for testing.
 #
 ##===----------------------------------------------------------------------===##
 
@@ -24,20 +24,19 @@ esac
 
 mkdir -p "$(dirname "$BASH_SOURCE[0]")/../ext"
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
-CAPNP_VER=0f1bf4fce79923fb4974aa55a53e26450f83f286
+CAPNP_VER=0.9.1
 echo "Installing capnproto..."
 
 echo $EXT_DIR
 cd $EXT_DIR
 
-git clone https://github.com/capnproto/capnproto.git
-cd capnproto
-git checkout $CAPNP_VER
-cd c++
-autoreconf -i
+wget https://capnproto.org/capnproto-c++-$CAPNP_VER.tar.gz
+tar -zxf capnproto-c++-$CAPNP_VER.tar.gz
+cd capnproto-c++-$CAPNP_VER
 ./configure --prefix=$EXT_DIR
 make -j$(nproc)
 make install
-cd ../../
+cd ../
+rm -r capnproto-c++-$CAPNP_VER capnproto-c++-$CAPNP_VER.tar.gz
 
 echo "Done."

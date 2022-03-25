@@ -217,7 +217,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     trace.flush(/*force=*/true);
   }
 
-  llvm::errs() << "Finished at " << state->time.dump() << " (" << cycle
+  llvm::errs() << "Finished at " << state->time.toString() << " (" << cycle
                << " cycles)\n";
   return 0;
 }

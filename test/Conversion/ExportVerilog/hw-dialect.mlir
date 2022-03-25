@@ -229,17 +229,17 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
 // CHECK-NEXT:   // input  /*Zero Width*/ i3,
 // CHECK-NEXT:      output                y, z, p, p2);
 // CHECK-EMPTY:
-// CHECK-NEXT:   wire b1_b;
-// CHECK-NEXT:   wire a1_f;
+// CHECK-NEXT:   wire _b1_b;
+// CHECK-NEXT:   wire _a1_f;
 // CHECK-EMPTY:
 // CHECK-NEXT:   AAA a1 (
 // CHECK-NEXT:     .d (w),
-// CHECK-NEXT:     .e (b1_b),
-// CHECK-NEXT:     .f (a1_f)
+// CHECK-NEXT:     .e (_b1_b),
+// CHECK-NEXT:     .f (_a1_f)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   B b1 (
-// CHECK-NEXT:     .a (a1_f),
-// CHECK-NEXT:     .b (b1_b),
+// CHECK-NEXT:     .a (_a1_f),
+// CHECK-NEXT:     .b (_b1_b),
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
@@ -627,15 +627,15 @@ hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
 hw.module @out_of_order_multi_result() -> (b: i1, c: i2) {
-  // CHECK: wire       b1_out1;
-  // CHECK: wire [1:0] b1_out2;
+  // CHECK: wire       _b1_out1;
+  // CHECK: wire [1:0] _b1_out2;
   %b = comb.add %out1, %out1 : i1
   %c = comb.add %out2, %out2 : i2
 
   %out1, %out2 = hw.instance "b1" @DifferentResultMod() -> (out1: i1, out2: i2)
 
-  // CHECK: assign b = b1_out1 + b1_out1;
-  // CHECK: assign c = b1_out2 + b1_out2;
+  // CHECK: assign b = _b1_out1 + _b1_out1;
+  // CHECK: assign c = _b1_out2 + _b1_out2;
   hw.output %b, %c : i1, i2
 }
 
@@ -649,20 +649,20 @@ hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
   hw.output %1 : i4
 }
 
-// CHECK:   wire [2:0] whatever_c;
+// CHECK:   wire [2:0] _whatever_c;
 // CHECK-EMPTY:
 // CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:      ExternDestMod whatever (
 // CHECK-NEXT:        .a (a),
 // CHECK-NEXT:        .b (b),
-// CHECK-NEXT:        .c (whatever_c),
+// CHECK-NEXT:        .c (_whatever_c),
 // CHECK-NEXT:        .d (c)
 // CHECK-NEXT:      );
 // CHECK-NEXT:   */
 // CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:      InternalDestMod yo (
 // CHECK-NEXT:        .a (a),
-// CHECK-NEXT:        .b (whatever_c)
+// CHECK-NEXT:        .b (_whatever_c)
 // CHECK-NEXT:      );
 // CHECK-NEXT:   */
 // CHECK-NEXT: endmodule
@@ -674,19 +674,19 @@ hw.module.extern @Owo(%owo_in : i32) -> ()
 // CHECK-LABEL: module Nya(
 hw.module @Nya() -> (nya_output : i32) {
   %0 = hw.instance "uwu" @Uwu() -> (uwu_output: i32)
-  // CHECK: wire [31:0] uwu_uwu_output;
+  // CHECK: wire [31:0] _uwu_uwu_output;
   // CHECK-EMPTY:
   // CHECK: Uwu uwu (
-  // CHECK: .uwu_output (uwu_uwu_output)
+  // CHECK: .uwu_output (_uwu_uwu_output)
   // CHECK: );
 
   hw.instance "owo" @Owo(owo_in: %0: i32) -> ()
   // CHECK: Owo owo (
-  // CHECK: .owo_in (uwu_uwu_output)
+  // CHECK: .owo_in (_uwu_uwu_output)
   // CHECK: );
 
   hw.output %0 : i32
-  // CHECK: assign nya_output = uwu_uwu_output;
+  // CHECK: assign nya_output = _uwu_uwu_output;
   // CHECK: endmodule
 }
 
@@ -719,15 +719,15 @@ hw.module @Ichi() -> (Ichi_output : i0) {
 hw.module @Chi() -> (Chi_output : i0) {
   %0 = hw.instance "ni" @Ni() -> (ni_output: i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (ni_ni_output)
+  // CHECK: //.ni_output (_ni_ni_output)
   // CHECK-NEXT: );
 
   hw.instance "san" @San(san_input: %0: i0) -> ()
   // CHECK: San san (
-  // CHECK: //.san_input (ni_ni_output)
+  // CHECK: //.san_input (_ni_ni_output)
   // CHECK-NEXT: );
 
-  // CHECK: // Zero width: assign Chi_output = ni_ni_output;
+  // CHECK: // Zero width: assign Chi_output = _ni_ni_output;
   hw.output %0 : i0
   // CHECK: endmodule
 }
@@ -868,13 +868,13 @@ hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.s
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
 hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
   // CHECK-EMPTY:
-  // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } inst1_r1;
+  // CHECK-NEXT: wire struct packed {logic repeat_0; logic repeat_0_1; } _inst1_r1;
   %read = sv.read_inout %a : !hw.inout<struct<repeat: i1, repeat_0: i1>>
 
   %i0 = hw.instance "inst1" @renameKeyword(a: %read: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.struct<repeat: i1, repeat_0: i1>)
   // CHECK:      renameKeyword inst1 (
   // CHECK-NEXT:   .a  (a),
-  // CHECK-NEXT:   .r1 (inst1_r1)
+  // CHECK-NEXT:   .r1 (_inst1_r1)
   // CHECK-NEXT: )
 
   // CHECK: wire struct packed {logic repeat_0; logic repeat_0_1; } [[WIREA:.+]] = a;

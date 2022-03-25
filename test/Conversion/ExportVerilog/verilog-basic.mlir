@@ -533,7 +533,7 @@ hw.module @BindInterface() -> () {
 
 sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert
-// CHECK-NEXT:  ._io_req_ready_output (InvisibleBind_assert__io_req_ready_output)
+// CHECK-NEXT:  ._io_req_ready_output (_InvisibleBind_assert__io_req_ready_output)
 // CHECK-NEXT:  .reset                (reset),
 // CHECK-NEXT:  .clock                (clock)
 

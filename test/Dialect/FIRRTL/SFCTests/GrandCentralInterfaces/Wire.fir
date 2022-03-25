@@ -4,6 +4,15 @@
 ; RUN: firtool --firrtl-grand-central --disable-name-preservation --split-verilog --annotation-file %S/Wire.anno.json %s -o %t.folder > %t  && cat %t.folder/MyView_companion.sv | FileCheck %s --check-prefixes MYVIEW_COMPANION
 
 circuit Top :
+  extmodule BlackBox_DUT :
+    input a : UInt<1>
+
+  extmodule BlackBox_GCT :
+    input a : UInt<1>
+
+  extmodule BlackBox_DUTAndGCT :
+    input a : UInt<1>
+
   module Submodule :
     input clock : Clock
     input reset : Reset
@@ -55,10 +64,16 @@ circuit Top :
   module MyView_companion :
     output io : { }
 
-    inst tap of Tap
     wire clock: Clock
-    clock <= tap.clock
     reg r: UInt<1>, clock
+
+    inst bbox1 of BlackBox_GCT
+    bbox1.a <= r
+    inst bbox2 of BlackBox_DUTAndGCT
+    bbox2.a <= r
+
+    inst tap of Tap
+    clock <= tap.clock
     r <= tap.a
     tap.b <= r
 
@@ -122,6 +137,11 @@ circuit Top :
     out.uint <= submodule.out.uint
     inst MyView_companion of MyView_companion
 
+    inst bbox1 of BlackBox_DUT
+    bbox1.a <= in.uint
+    inst bbox2 of BlackBox_DUTAndGCT
+    bbox2.a <= in.uint
+
   module Top :
     input clock : Clock
     input reset : UInt<1>
@@ -165,8 +185,8 @@ circuit Top :
     ; NOEXTRACT:      module MyView_companion();
     ; NOEXTRACT:        Tap tap (
     ; NOEXTRACT-NEXT:     .b     (r),
-    ; NOEXTRACT-NEXT:     .clock (tap_clock),
-    ; NOEXTRACT-NEXT:     .a     (tap_a)
+    ; NOEXTRACT-NEXT:     .clock (_tap_clock),
+    ; NOEXTRACT-NEXT:     .a     (_tap_a)
     ; NOEXTRACT-NEXT:   );
     ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
     ; NOEXTRACT-NEXT: endmodule
@@ -180,6 +200,16 @@ circuit Top :
     ; EXTRACT-NEXT:     */
     ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
 
+    ; EXTRACT:        FILE "./BlackBox_DUT.v"
+    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_GCT.v"
+    ; EXTRACT:        FILE "Wire/firrtl/gct/BlackBox_DUTAndGCT.v"
+
+    ; EXTRACT:        FILE "firrtl_black_box_resource_files.f"
+    ; EXTRACT-NOT:    FILE
+    ; EXTRACT:          BlackBox_DUT.v
+    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_DUTAndGCT.v
+    ; EXTRACT-NEXT:     Wire/firrtl/gct/BlackBox_GCT.v
+
     ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
     ; EXTRACT-NOT:    FILE
     ; EXTRACT:        bind DUT MyInterface MyView{{ *}}(.*);
@@ -191,8 +221,8 @@ circuit Top :
     ; EXTRACT:        module MyView_companion();
     ; EXTRACT:          Tap tap (
     ; EXTRACT-NEXT:       .b     (r),
-    ; EXTRACT-NEXT:       .clock (tap_clock),
-    ; EXTRACT-NEXT:       .a     (tap_a)
+    ; EXTRACT-NEXT:       .clock (_tap_clock),
+    ; EXTRACT-NEXT:       .a     (_tap_a)
     ; EXTRACT-NEXT:     );
     ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
     ; EXTRACT-NEXT:   endmodule

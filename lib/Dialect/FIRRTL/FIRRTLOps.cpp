@@ -1991,91 +1991,75 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Statements
 //===----------------------------------------------------------------------===//
 
-LogicalResult ConnectOp::verify() {
-  FIRRTLType destType = dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
-
-  // Analog types cannot be connected and must be attached.
-  if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
-    return emitError("analog types may not be connected");
-  if (auto destBundle = destType.dyn_cast<BundleType>())
-    if (destBundle.containsAnalog())
-      return emitError("analog types may not be connected");
-  if (auto srcBundle = srcType.dyn_cast<BundleType>())
-    if (srcBundle.containsAnalog())
-      return emitError("analog types may not be connected");
-
-  // Destination and source types must be equivalent.
-  if (!areTypesEquivalent(destType, srcType))
-    return emitError("type mismatch between destination ")
-           << destType << " and source " << srcType;
-
-  // Destination bitwidth must be greater than or equal to source bitwidth.
-  int32_t destWidth = destType.getPassiveType().getBitWidthOrSentinel();
-  int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
-  if (destWidth > -1 && srcWidth > -1 && destWidth < srcWidth)
-    return emitError("destination width ")
-           << destWidth << " is not greater than or equal to source width "
-           << srcWidth;
+static LogicalResult checkConnectFlow(Operation *connect) {
+  Value dst = connect->getOperand(0);
+  Value src = connect->getOperand(1);
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(src()) == Flow::Sink) {
+  if (foldFlow(src) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src());
+    auto kind = getDeclarationKind(src);
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
-          emitOpError()
+          connect->emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
              "is not an output port or instance input (expected source "
              "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src().getLoc())
+      return diag.attachNote(src.getLoc())
              << "the right-hand-side was defined here.";
     }
   }
-
-  if (foldFlow(dest()) == Flow::Source) {
-    auto diag = emitOpError()
+  if (foldFlow(dst) == Flow::Source) {
+    auto diag = connect->emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
-    return diag.attachNote(dest().getLoc())
+    return diag.attachNote(dst.getLoc())
            << "the left-hand-side was defined here.";
   }
 
   return success();
 }
 
-LogicalResult PartialConnectOp::verify() {
-  FIRRTLType destType = dest().getType().cast<FIRRTLType>();
+LogicalResult ConnectOp::verify() {
+  FIRRTLType dstType = dest().getType().cast<FIRRTLType>();
   FIRRTLType srcType = src().getType().cast<FIRRTLType>();
 
-  if (!areTypesWeaklyEquivalent(destType, srcType))
+  // Analog types cannot be connected and must be attached.
+  if (dstType.containsAnalog() || srcType.containsAnalog())
+    return emitError("analog types may not be connected");
+
+  // Destination and source types must be equivalent.
+  if (!areTypesEquivalent(dstType, srcType))
     return emitError("type mismatch between destination ")
-           << destType << " and source " << srcType
+           << dstType << " and source " << srcType;
+
+  // Truncation is banned in a connection: destination bit width must be
+  // greater than or equal to source bit width.
+  if (!isTypeLarger(dstType, srcType))
+    return emitError("destination ")
+           << dstType << " is not as wide as the source " << srcType;
+
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult PartialConnectOp::verify() {
+  FIRRTLType dstType = dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
+
+  // Destination and source types must be weakly equivalent.
+  if (!areTypesWeaklyEquivalent(dstType, srcType))
+    return emitError("type mismatch between destination ")
+           << dstType << " and source " << srcType
            << ". Types are not weakly equivalent.";
 
   // Check that the flows make sense.
-  if (foldFlow(src()) == Flow::Sink) {
-    // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src());
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto diag =
-          emitOpError()
-          << "has invalid flow: the right-hand-side has sink flow and "
-             "is not an output port or instance input (expected source "
-             "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src().getLoc())
-             << "the right-hand-side was defined here.";
-    }
-  }
-
-  if (foldFlow(dest()) == Flow::Source) {
-    auto diag = emitOpError()
-                << "has invalid flow: the left-hand-side has source flow "
-                   "(expected sink or duplex flow).";
-    return diag.attachNote(dest().getLoc())
-           << "the left-hand-side was defined here.";
-  }
+  if (failed(checkConnectFlow(*this)))
+    return failure();
 
   return success();
 }
@@ -2084,35 +2068,12 @@ LogicalResult StrictConnectOp::verify() {
   FIRRTLType type = dest().getType().cast<FIRRTLType>();
 
   // Analog types cannot be connected and must be attached.
-  if (type.isa<AnalogType>())
+  if (type.containsAnalog())
     return emitError("analog types may not be connected");
-  if (auto destBundle = type.dyn_cast<BundleType>())
-    if (destBundle.containsAnalog())
-      return emitError("analog types may not be connected");
 
-  // TODO: Relax this to allow reads from output ports,
-  // instance/memory input ports.
-  if (foldFlow(src()) == Flow::Sink) {
-    // A sink that is a port output or instance input used as a source is okay.
-    auto kind = getDeclarationKind(src());
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
-      auto diag =
-          emitOpError()
-          << "has invalid flow: the right-hand-side has sink flow and "
-             "is not an output port or instance input (expected source "
-             "flow, duplex flow, an output port, or an instance input).";
-      return diag.attachNote(src().getLoc())
-             << "the right-hand-side was defined here.";
-    }
-  }
-
-  if (foldFlow(dest()) == Flow::Source) {
-    auto diag = emitOpError()
-                << "has invalid flow: the left-hand-side has source flow "
-                   "(expected sink or duplex flow).";
-    return diag.attachNote(dest().getLoc())
-           << "the left-hand-side was defined here.";
-  }
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
 
   return success();
 }
@@ -2938,27 +2899,36 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
   return success();
 }
 
-FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
-                                      Optional<Location> loc) {
-  auto high = operands[1].getType().cast<FIRRTLType>();
-  auto low = operands[2].getType().cast<FIRRTLType>();
-
-  // TODO: Should use a more general type equivalence operator.
+/// Infer the result type for a multiplexer given its two operand types, which
+/// may be aggregates.
+///
+/// This essentially performs a pairwise comparison of fields and elements, as
+/// follows:
+/// - Identical operands inferred to their common type
+/// - Integer operands inferred to the larger one if both have a known width, a
+///   widthless integer otherwise.
+/// - Vectors inferred based on the element type.
+/// - Bundles inferred in a pairwise fashion based on the field types.
+static FIRRTLType inferMuxReturnType(FIRRTLType high, FIRRTLType low,
+                                     Optional<Location> loc) {
+  // If the types are identical we're done.
   if (high == low)
     return low;
 
   // The base types need to be equivalent.
   if (high.getTypeID() != low.getTypeID()) {
-    if (loc)
-      mlir::emitError(*loc, "true and false value must have same type");
+    if (loc) {
+      auto d = mlir::emitError(*loc, "incompatible mux operand types");
+      d.attachNote() << "true value type:  " << high;
+      d.attachNote() << "false value type: " << low;
+    }
     return {};
   }
 
+  // Two different Int types can be compatible.  If either has unknown width,
+  // then return it.  If both are known but different width, then return the
+  // larger one.
   if (low.isa<IntType>()) {
-    // Two different Int types can be compatible.  If either has unknown
-    // width, then return it.  If both are known but different width, then
-    // return the larger one.
     int32_t highWidth = high.getBitWidthOrSentinel();
     int32_t lowWidth = low.getBitWidthOrSentinel();
     if (lowWidth == -1)
@@ -2968,10 +2938,69 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
     return lowWidth > highWidth ? low : high;
   }
 
-  // FIXME: Should handle bundles and other things.
-  if (loc)
-    mlir::emitError(*loc, "unknown types to mux");
+  // Infer vector types by comparing the element types.
+  auto highVector = high.dyn_cast<FVectorType>();
+  auto lowVector = low.dyn_cast<FVectorType>();
+  if (highVector && lowVector &&
+      highVector.getNumElements() == lowVector.getNumElements()) {
+    auto inner = inferMuxReturnType(highVector.getElementType(),
+                                    lowVector.getElementType(), loc);
+    if (!inner)
+      return {};
+    return FVectorType::get(inner, lowVector.getNumElements());
+  }
+
+  // Infer bundle types by inferring names in a pairwise fashion.
+  auto highBundle = high.dyn_cast<BundleType>();
+  auto lowBundle = low.dyn_cast<BundleType>();
+  if (highBundle && lowBundle) {
+    auto highElements = highBundle.getElements();
+    auto lowElements = lowBundle.getElements();
+    size_t numElements = highElements.size();
+
+    SmallVector<BundleType::BundleElement> newElements;
+    if (numElements == lowElements.size()) {
+      bool failed = false;
+      for (size_t i = 0; i < numElements; ++i) {
+        if (highElements[i].name != lowElements[i].name ||
+            highElements[i].isFlip != lowElements[i].isFlip) {
+          failed = true;
+          break;
+        }
+        auto element = highElements[i];
+        element.type =
+            inferMuxReturnType(highElements[i].type, lowElements[i].type, loc);
+        if (!element.type)
+          return {};
+        newElements.push_back(element);
+      }
+      if (!failed)
+        return BundleType::get(newElements, low.getContext());
+    }
+    if (loc) {
+      auto d = mlir::emitError(*loc, "incompatible mux operand bundle fields");
+      d.attachNote() << "true value type:  " << high;
+      d.attachNote() << "false value type: " << low;
+    }
+    return {};
+  }
+
+  // If we arrive here the types of the two mux arms are fundamentally
+  // incompatible.
+  if (loc) {
+    auto d = mlir::emitError(*loc, "invalid mux operand types");
+    d.attachNote() << "true value type:  " << high;
+    d.attachNote() << "false value type: " << low;
+  }
   return {};
+}
+
+FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      Optional<Location> loc) {
+  auto high = operands[1].getType().cast<FIRRTLType>();
+  auto low = operands[2].getType().cast<FIRRTLType>();
+  return inferMuxReturnType(high, low, loc);
 }
 
 FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,

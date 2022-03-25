@@ -277,7 +277,7 @@ firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, out %b : !firrtl.bundle
 
 firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.uint<2>, out %b : !firrtl.uint<1>) {
-  // expected-error @+1 {{destination width 1 is not greater than or equal to source width 2}}
+  // expected-error @+1 {{destination '!firrtl.uint<1>' is not as wide as the source '!firrtl.uint<2>'}}
   firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
 }
 }

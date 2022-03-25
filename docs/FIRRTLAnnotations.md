@@ -263,28 +263,6 @@ Example:
 }
 ```
 
-### [BlackBoxResourceAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxResourceAnno.html)
-
-| Property   | Type   | Description                              |
-| ---------- | ------ | -------------                            |
-| class      | string | `firrtl.transforms.BlackBoxResourceAnno` |
-| target     | string | An ExtModule name target                 |
-| path       | string | ModuleName target                        |
-
-Specifies the file `path` as source code for the module. In contrast to
-the `BlackBoxPathAnno`, the file is searched for in the black box resource
-search path. This is a remnant of the Scala origins of FIRRTL. Copies the
-file to the target directory.
-
-Example:
-```json
-{
-  "class": "firrtl.transforms.BlackBoxResourceAnno",
-  "target": "~Foo|Foo",
-  "resourceId": "myfile.v"
-}
-```
-
 ### [BlackBoxResourceFileNameAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxResourceFileNameAnno.html)
 
 | Property         | Type   | Description                              |

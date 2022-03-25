@@ -399,4 +399,39 @@ TEST(TypesTest, Enums) {
   ASSERT_EQ(e5.getBitSize(), 8u);
 }
 
+TEST(TypesTest, SimpleBitVectorTypes) {
+  MLIRContext context;
+  context.loadDialect<MooreDialect>();
+
+  // Unpacked types have no SBV equivalent.
+  auto stringType = StringType::get(&context);
+  ASSERT_FALSE(stringType.isSimpleBitVector());
+  ASSERT_FALSE(stringType.isCastableToSimpleBitVector());
+
+  // Void is packed but cannot be cast to an SBV.
+  auto voidType = VoidType::get(&context);
+  ASSERT_FALSE(voidType.isSimpleBitVector());
+  ASSERT_FALSE(voidType.isCastableToSimpleBitVector());
+
+  // SBVTs preserve whether the sign was explicitly mentioned.
+  auto bit1 = IntType::get(&context, IntType::Bit);
+  auto ubit1 = IntType::get(&context, IntType::Bit, Sign::Unsigned);
+  auto sbit1 = IntType::get(&context, IntType::Bit, Sign::Signed);
+  ASSERT_EQ(bit1.getSimpleBitVector().toString(), "bit");
+  ASSERT_EQ(ubit1.getSimpleBitVector().toString(), "bit unsigned");
+  ASSERT_EQ(sbit1.getSimpleBitVector().toString(), "bit signed");
+
+  // SBVTs preserve whether the original type was an integer atom.
+  auto intTy = IntType::get(&context, IntType::Int);
+  auto byteTy = IntType::get(&context, IntType::Byte);
+  ASSERT_EQ(intTy.getSimpleBitVector().getType(&context), intTy);
+  ASSERT_EQ(byteTy.getSimpleBitVector().getType(&context), byteTy);
+
+  // Integer atoms with a dimension are no SBVT, but can be cast to one.
+  auto intArray = PackedRangeDim::get(intTy, 8);
+  ASSERT_FALSE(intArray.isSimpleBitVector());
+  ASSERT_TRUE(intArray.isCastableToSimpleBitVector());
+  ASSERT_EQ(intArray.castToSimpleBitVector().toString(), "bit signed [255:0]");
+}
+
 } // namespace
