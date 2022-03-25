@@ -68,12 +68,11 @@ jobs:
           git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commit.outputs.sha }} -- mlir llvm
           git bisect run cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
 
-      - name: Log broken commit
+      - name: Git Bisect Log
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
           git bisect log
-          git log
 
       - name: Fail if incompatible commits exist
         if: steps.build-latest-llvm-commit.outcome != 'success'
