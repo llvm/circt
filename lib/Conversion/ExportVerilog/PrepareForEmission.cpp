@@ -476,16 +476,17 @@ void ExportVerilog::prepareHWModule(Block &block,
       // If we're not in a procedural region, or we are, but we can hoist out of
       // it, we are good to generate a wire.
       if (!isProceduralRegion ||
-          (isProceduralRegion && hoistNonSideEffectExpr(&op)))
+          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
         lowerUsersToTemporaryWire(op);
 
-      // If we're in a procedural region, we move on to the next op in the
-      // block. The expression splitting and canonicalization below will happen
-      // after we recurse back up. If we're not in a procedural region, the
-      // expression can continue being worked on.
-      if (isProceduralRegion) {
-        ++opIterator;
-        continue;
+        // If we're in a procedural region, we move on to the next op in the
+        // block. The expression splitting and canonicalization below will
+        // happen after we recurse back up. If we're not in a procedural region,
+        // the expression can continue being worked on.
+        if (isProceduralRegion) {
+          ++opIterator;
+          continue;
+        }
       }
     }
 
