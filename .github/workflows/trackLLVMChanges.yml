@@ -68,14 +68,14 @@ jobs:
           git bisect start ${{ steps.build-latest-llvm-commit.outputs.sha }} ${{ steps.build-current-llvm-commit.outputs.sha }} -- mlir llvm
           git bisect run cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
 
-      - name: Git Bisect Log
+      # Summarize Results (re-run tests to make the log easier to parse)
+      - name: Summarize Results
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
           cd llvm
           git bisect log
-
-      - name: Fail if incompatible commits exist
-        if: steps.build-latest-llvm-commit.outcome != 'success'
-        run: exit 1
+          FIRST_BAD_COMMIT=$(git bisect log | sed -n 's/# first bad commit: \[\([0-9a-f]*\)\].*/\1/p')
+          git checkout $FIRST_BAD_COMMIT
+          cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
 
   # --- end of track-llvm-changes job.
