@@ -58,11 +58,37 @@ func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
 }
 
 // CHECK-LABEL: func @Expressions
-func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic) {
+func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.packed<range<bit, 5:0>>, %arg3: !moore.packed<range<bit<signed>, 4:0>>) {
   // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
   // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
   %0 = moore.mir.concat %arg0, %arg0 : (!moore.bit, !moore.bit) -> !moore.packed<range<bit, 1:0>>
   %1 = moore.mir.concat %arg1, %arg1 : (!moore.logic, !moore.logic) -> !moore.packed<range<logic, 1:0>>
+  // CHECK-NEXT: %[[V0:.+]] = hw.constant 0 : i5
+  // CHECK-NEXT: %[[V1:.+]] = comb.concat %[[V0]], %arg0 : i5, i1
+  // CHECK-NEXT: comb.shl %arg2, %[[V1]] : i6
+  // CHECK-NEXT: %[[V2:.+]] = comb.extract %arg2 from 5 : (i6) -> i1
+  // CHECK-NEXT: %[[V3:.+]] = hw.constant false
+  // CHECK-NEXT: %[[V4:.+]] = comb.icmp eq %[[V2]], %[[V3]] : i1
+  // CHECK-NEXT: %[[V5:.+]] = comb.extract %arg2 from 0 : (i6) -> i5
+  // CHECK-NEXT: %[[V6:.+]] = hw.constant -1 : i5
+  // CHECK-NEXT: %[[V7:.+]] = comb.mux %[[V4]], %[[V5]], %[[V6]] : i5
+  // CHECK-NEXT: comb.shl %arg3, %[[V7]] : i5
+  %2 = moore.mir.shl %arg2, %arg0 : !moore.packed<range<bit, 5:0>>, !moore.bit
+  %3 = moore.mir.shl arithmetic %arg3, %arg2 : !moore.packed<range<bit<signed>, 4:0>>, !moore.packed<range<bit, 5:0>>
+  // CHECK-NEXT: %[[V8:.+]] = hw.constant 0 : i5
+  // CHECK-NEXT: %[[V9:.+]] = comb.concat %[[V8]], %arg0 : i5, i1
+  // CHECK-NEXT: comb.shru %arg2, %[[V9]] : i6
+  // CHECK-NEXT: comb.shru %arg2, %arg2 : i6
+  // CHECK-NEXT: %[[V10:.+]] = comb.extract %arg2 from 5 : (i6) -> i1
+  // CHECK-NEXT: %[[V11:.+]] = hw.constant false
+  // CHECK-NEXT: %[[V12:.+]] = comb.icmp eq %[[V10]], %[[V11]] : i1
+  // CHECK-NEXT: %[[V13:.+]] = comb.extract %arg2 from 0 : (i6) -> i5
+  // CHECK-NEXT: %[[V14:.+]] = hw.constant -1 : i5
+  // CHECK-NEXT: %[[V15:.+]] = comb.mux %[[V12]], %[[V13]], %[[V14]] : i5
+  // CHECK-NEXT: comb.shrs %arg3, %[[V15]] : i5
+  %4 = moore.mir.shr %arg2, %arg0 : !moore.packed<range<bit, 5:0>>, !moore.bit
+  %5 = moore.mir.shr arithmetic %arg2, %arg2 : !moore.packed<range<bit, 5:0>>, !moore.packed<range<bit, 5:0>>
+  %6 = moore.mir.shr arithmetic %arg3, %arg2 : !moore.packed<range<bit<signed>, 4:0>>, !moore.packed<range<bit, 5:0>>
   // CHECK-NEXT: return
   return
 }
