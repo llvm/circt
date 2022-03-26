@@ -150,6 +150,9 @@ if len(ieee_sims) > 1:
       f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}"
   )
 
+# If the ieee-sim was selected to be iverilog in case no other simulators are
+# available, define a feature flag to allow tests which cannot be simulated
+# with iverilog to be disabled.
 if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
   config.available_features.add('ieee-sim-iverilog')
 
