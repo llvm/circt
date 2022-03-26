@@ -88,6 +88,17 @@ if config.yosys_path != "":
   tools.append('yosys')
   config.available_features.add('yosys')
 
+# Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
+if config.iverilog_path != "":
+  tool_dirs.append(os.path.dirname(config.iverilog_path))
+  tools.append('iverilog')
+  tools.append('vvp')
+  config.available_features.add('iverilog')
+  config.available_features.add('ieee-sim')
+  config.available_features.add('rtl-sim')
+  config.substitutions.append(('%iverilog', config.iverilog_path))
+  config.substitutions.append(('%ieee-sim', config.iverilog_path))
+
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
@@ -138,6 +149,12 @@ if len(ieee_sims) > 1:
   warnings.warn(
       f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}"
   )
+
+# If the ieee-sim was selected to be iverilog in case no other simulators are
+# available, define a feature flag to allow tests which cannot be simulated
+# with iverilog to be disabled.
+if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
+  config.available_features.add('ieee-sim-iverilog')
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":
