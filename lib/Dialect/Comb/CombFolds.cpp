@@ -29,7 +29,7 @@ static Value createGenericOp(Location loc, OperationName name,
   OperationState state(loc, name);
   state.addOperands(operands);
   state.addTypes(operands[0].getType());
-  return builder.createOperation(state)->getResult(0);
+  return builder.create(state)->getResult(0);
 }
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {

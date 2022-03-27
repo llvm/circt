@@ -66,7 +66,8 @@ ParseResult module_like_impl::parseFunctionResultList(
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult module_like_impl::parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     SmallVectorImpl<Location> &argLocs, bool &isVariadic,
     SmallVectorImpl<Type> &resultTypes,

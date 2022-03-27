@@ -28,7 +28,7 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
     parser.parseSymbolName(symName, "sym_name", result.attributes);
   }
 
-  SmallVector<OpAsmParser::OperandType, 4> operands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   if (parser.parseOperandList(operands))
     return failure();
   switch (operands.size()) {

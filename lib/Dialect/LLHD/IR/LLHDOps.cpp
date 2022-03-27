@@ -497,10 +497,10 @@ llhd::WaitOp::getMutableSuccessorOperands(unsigned index) {
 /// respectively.
 static ParseResult
 parseArgumentList(OpAsmParser &parser,
-                  SmallVectorImpl<OpAsmParser::OperandType> &args,
+                  SmallVectorImpl<OpAsmParser::UnresolvedOperand> &args,
                   SmallVectorImpl<Type> &argTypes) {
   auto parseElt = [&]() -> ParseResult {
-    OpAsmParser::OperandType argument;
+    OpAsmParser::UnresolvedOperand argument;
     Type argType;
     if (succeeded(parser.parseOptionalRegionArgument(argument))) {
       if (!argument.name.empty() && succeeded(parser.parseColonType(argType))) {
@@ -519,7 +519,7 @@ parseArgumentList(OpAsmParser &parser,
 /// (%arg0 : T0, %arg1 : T1, <...>) -> (%out0 : T0, %out1 : T1, <...>)
 static ParseResult
 parseEntitySignature(OpAsmParser &parser, OperationState &result,
-                     SmallVectorImpl<OpAsmParser::OperandType> &args,
+                     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &args,
                      SmallVectorImpl<Type> &argTypes) {
   if (parseArgumentList(parser, args, argTypes))
     return failure();
@@ -534,7 +534,7 @@ parseEntitySignature(OpAsmParser &parser, OperationState &result,
 
 ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr entityName;
-  SmallVector<OpAsmParser::OperandType, 4> args;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> args;
   SmallVector<Type, 4> argTypes;
 
   if (parser.parseSymbolName(entityName, SymbolTable::getSymbolAttrName(),
@@ -712,9 +712,9 @@ LogicalResult llhd::ProcOp::verify() {
   return success();
 }
 
-static ParseResult
-parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
-                      SmallVectorImpl<OpAsmParser::OperandType> &argNames) {
+static ParseResult parseProcArgumentList(
+    OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames) {
   if (parser.parseLParen())
     return failure();
 
@@ -725,7 +725,7 @@ parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
     llvm::SMLoc loc = parser.getCurrentLocation();
 
     // Parse argument name if present.
-    OpAsmParser::OperandType argument;
+    OpAsmParser::UnresolvedOperand argument;
     Type argumentType;
     if (succeeded(parser.parseOptionalRegionArgument(argument)) &&
         !argument.name.empty()) {
@@ -769,7 +769,7 @@ parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
 
 ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr procName;
-  SmallVector<OpAsmParser::OperandType, 8> argNames;
+  SmallVector<OpAsmParser::UnresolvedOperand, 8> argNames;
   SmallVector<Type, 8> argTypes;
   Builder &builder = parser.getBuilder();
 
@@ -948,12 +948,12 @@ LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
 //===----------------------------------------------------------------------===//
 
 ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType signal;
+  OpAsmParser::UnresolvedOperand signal;
   Type signalType;
-  SmallVector<OpAsmParser::OperandType, 8> valueOperands;
-  SmallVector<OpAsmParser::OperandType, 8> triggerOperands;
-  SmallVector<OpAsmParser::OperandType, 8> delayOperands;
-  SmallVector<OpAsmParser::OperandType, 8> gateOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 8> valueOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 8> triggerOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 8> delayOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 8> gateOperands;
   SmallVector<Type, 8> valueTypes;
   llvm::SmallVector<int64_t, 8> modesArray;
   llvm::SmallVector<int64_t, 8> gateMask;
@@ -962,10 +962,10 @@ ParseResult llhd::RegOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOperand(signal))
     return failure();
   while (succeeded(parser.parseOptionalComma())) {
-    OpAsmParser::OperandType value;
-    OpAsmParser::OperandType trigger;
-    OpAsmParser::OperandType delay;
-    OpAsmParser::OperandType gate;
+    OpAsmParser::UnresolvedOperand value;
+    OpAsmParser::UnresolvedOperand trigger;
+    OpAsmParser::UnresolvedOperand delay;
+    OpAsmParser::UnresolvedOperand gate;
     Type valueType;
     StringAttr modeAttr;
     NamedAttrList attrStorage;

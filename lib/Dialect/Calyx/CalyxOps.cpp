@@ -211,13 +211,13 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
 // (1) %<guard> ? %<src> : i1
 // (2) %<src> : i1
 static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 2> operandInfos;
-  OpAsmParser::OperandType guardOrSource;
+  SmallVector<OpAsmParser::UnresolvedOperand, 2> operandInfos;
+  OpAsmParser::UnresolvedOperand guardOrSource;
   if (parser.parseOperand(guardOrSource))
     return failure();
 
   if (succeeded(parser.parseOptionalQuestion())) {
-    OpAsmParser::OperandType source;
+    OpAsmParser::UnresolvedOperand source;
     // The guard exists.
     if (parser.parseOperand(source))
       return failure();
@@ -437,11 +437,11 @@ void ComponentOp::print(OpAsmPrinter &p) {
 /// port names to `attrName`.
 static ParseResult
 parsePortDefList(OpAsmParser &parser, OperationState &result,
-                 SmallVectorImpl<OpAsmParser::OperandType> &ports,
+                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
                  SmallVectorImpl<Type> &portTypes,
                  SmallVectorImpl<NamedAttrList> &portAttrs) {
   auto parsePort = [&]() -> ParseResult {
-    OpAsmParser::OperandType port;
+    OpAsmParser::UnresolvedOperand port;
     Type portType;
     // Expect each port to have the form `%<ssa-name> : <type>`.
     if (parser.parseRegionArgument(port) || parser.parseColon() ||
@@ -464,9 +464,9 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
 /// Parses the signature of a Calyx component.
 static ParseResult
 parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::OperandType> &ports,
+                        SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
                         SmallVectorImpl<Type> &portTypes) {
-  SmallVector<OpAsmParser::OperandType> inPorts, outPorts;
+  SmallVector<OpAsmParser::UnresolvedOperand> inPorts, outPorts;
   SmallVector<Type> inPortTypes, outPortTypes;
   SmallVector<NamedAttrList> portAttributes;
 
@@ -517,7 +517,7 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  SmallVector<OpAsmParser::OperandType> ports;
+  SmallVector<OpAsmParser::UnresolvedOperand> ports;
   SmallVector<Type> portTypes;
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
@@ -1085,20 +1085,20 @@ LogicalResult AssignOp::verify() {
 }
 
 ParseResult AssignOp::parse(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType destination;
+  OpAsmParser::UnresolvedOperand destination;
   if (parser.parseOperand(destination) || parser.parseEqual())
     return failure();
 
   // An AssignOp takes one of the two following forms:
   // (1) %<dest> = %<src> : <type>
   // (2) %<dest> = %<guard> ? %<src> : <type>
-  OpAsmParser::OperandType guardOrSource;
+  OpAsmParser::UnresolvedOperand guardOrSource;
   if (parser.parseOperand(guardOrSource))
     return failure();
 
   // Since the guard is optional, we need to check if there is an accompanying
   // `?` symbol.
-  OpAsmParser::OperandType source;
+  OpAsmParser::UnresolvedOperand source;
   bool hasGuard = succeeded(parser.parseOptionalQuestion());
   if (hasGuard) {
     // The guard exists. Parse the source.

@@ -43,7 +43,7 @@ ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
   }
 
   // Parse iter_args assignment list.
-  SmallVector<OpAsmParser::OperandType> regionArgs, operands;
+  SmallVector<OpAsmParser::UnresolvedOperand> regionArgs, operands;
   if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
     if (parser.parseAssignmentList(regionArgs, operands))
       return failure();
