@@ -30,7 +30,8 @@ StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     SmallVectorImpl<Location> &argLocs, bool &isVariadic,
     SmallVectorImpl<Type> &resultTypes,

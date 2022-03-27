@@ -814,7 +814,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 /// will populate `entryArgs`.
 static ParseResult
 parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
-                 SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &entryArgs,
                  SmallVectorImpl<Direction> &portDirections,
                  SmallVectorImpl<Attribute> &portNames,
                  SmallVectorImpl<Attribute> &portTypes,
@@ -833,7 +833,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 
     // Parse the port name.
     if (hasSSAIdentifiers) {
-      OpAsmParser::OperandType arg;
+      OpAsmParser::UnresolvedOperand arg;
       if (parser.parseRegionArgument(arg))
         return failure();
       entryArgs.push_back(arg);
@@ -1005,7 +1005,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   result.addAttribute("parameters", builder.getArrayAttr(parameters));
 
   // Parse the module ports.
-  SmallVector<OpAsmParser::OperandType> entryArgs;
+  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -1452,7 +1452,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   std::string name;
   StringAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
-  SmallVector<OpAsmParser::OperandType> entryArgs;
+  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -2478,8 +2478,8 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
 }
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType index;
-  llvm::SmallVector<OpAsmParser::OperandType, 16> inputs;
+  OpAsmParser::UnresolvedOperand index;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
   Type indexType, elemType;
 
   if (parser.parseOperand(index) || parser.parseComma() ||

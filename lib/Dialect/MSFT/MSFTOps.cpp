@@ -380,7 +380,7 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
   auto loc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> entryArgs;
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
@@ -629,7 +629,7 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
 
   auto loc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> entryArgs;
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;

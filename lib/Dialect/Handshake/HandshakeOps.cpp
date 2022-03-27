@@ -72,7 +72,7 @@ static ParseResult parseIntInSquareBrackets(OpAsmParser &parser, int &v) {
 
 static ParseResult
 parseOperation(OpAsmParser &parser,
-               SmallVectorImpl<OpAsmParser::OperandType> &operands,
+               SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operands,
                OperationState &result, int &size, Type &type, bool explicitSize,
                bool alwaysControl = false) {
   if (explicitSize)
@@ -116,7 +116,7 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
 }
 
 static ParseResult parseForkOp(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   SmallVector<Type, 1> resultTypes;
@@ -251,7 +251,7 @@ void MergeOp::build(OpBuilder &builder, OperationState &result,
 }
 
 ParseResult MergeOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   SmallVector<Type, 1> resultTypes, dataOperandsTypes;
@@ -360,8 +360,8 @@ std::string handshake::MuxOp::getOperandName(unsigned int idx) {
 }
 
 ParseResult MuxOp::parse(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType selectOperand;
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  OpAsmParser::UnresolvedOperand selectOperand;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type selectType, dataType;
   SmallVector<Type, 1> dataOperandsTypes;
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
@@ -454,7 +454,7 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
 }
 
 ParseResult ControlMergeOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   SmallVector<Type, 1> resultTypes, dataOperandsTypes;
@@ -528,7 +528,8 @@ LogicalResult FuncOp::verify() {
 /// mlir::function_interface_impl::parseFunctionSignature while getting access
 /// to the parsed SSA names to store as attributes.
 static ParseResult parseFuncOpArgs(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &entryArgs,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Attribute> &argNames,
     SmallVectorImpl<NamedAttrList> &argAttrs, SmallVectorImpl<Type> &resTypes,
     SmallVectorImpl<NamedAttrList> &resAttrs) {
@@ -627,7 +628,7 @@ void handshake::FuncOp::resolveArgAndResNames() {
 ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
   StringAttr nameAttr;
-  SmallVector<OpAsmParser::OperandType, 4> args;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> args;
   SmallVector<Type, 4> argTypes, resTypes;
   SmallVector<NamedAttrList, 4> argAttributes, resAttributes;
   SmallVector<Attribute> argNames;
@@ -738,7 +739,7 @@ void BranchOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 ParseResult BranchOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   SmallVector<Type, 1> dataOperandsTypes;
@@ -760,7 +761,7 @@ void BranchOp::print(OpAsmPrinter &p) { sost::printOp(p, *this, false); }
 
 ParseResult ConditionalBranchOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type dataType;
   SmallVector<Type> operandTypes;
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
@@ -824,7 +825,7 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
 }
 
 ParseResult SelectOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type dataType;
   SmallVector<Type> operandTypes;
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
@@ -916,7 +917,7 @@ void SinkOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 ParseResult SinkOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
@@ -1019,7 +1020,7 @@ void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
 }
 
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
@@ -1318,8 +1319,8 @@ void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
 
 static ParseResult parseMemoryAccessOp(OpAsmParser &parser,
                                        OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> addressOperands, remainingOperands,
-      allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> addressOperands,
+      remainingOperands, allOperands;
   SmallVector<Type, 1> parsedTypes, allTypes;
   llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
 
@@ -1424,7 +1425,7 @@ void JoinOp::build(OpBuilder &builder, OperationState &result,
 }
 
 ParseResult JoinOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> allOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> allOperands;
   Type type;
   ArrayRef<Type> operandTypes(type);
   SmallVector<Type, 1> dataOperandsTypes;

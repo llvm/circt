@@ -29,7 +29,7 @@ using namespace circt::esi;
 ParseResult ChannelBuffer::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   if (parser.parseOperandList(operands, /*requiredOperandCount=*/3,
                               /*delimiter=*/OpAsmParser::Delimiter::None))
     return failure();
@@ -69,7 +69,7 @@ void ChannelBuffer::print(OpAsmPrinter &p) {
 ParseResult PipelineStage::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::OperandType, 4> operands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   Type innerOutputType;
   if (parser.parseOperandList(operands, /*requiredOperandCount=*/3) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -99,7 +99,7 @@ void PipelineStage::print(OpAsmPrinter &p) {
 ParseResult WrapValidReady::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
   Type innerOutputType;
   if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -132,7 +132,7 @@ ParseResult UnwrapValidReady::parse(OpAsmParser &parser,
                                     OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
 
-  llvm::SmallVector<OpAsmParser::OperandType, 2> opList;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 2> opList;
   Type outputType;
   if (parser.parseOperandList(opList, 2, OpAsmParser::Delimiter::None) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||

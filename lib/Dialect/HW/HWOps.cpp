@@ -792,7 +792,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   auto loc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> entryArgs;
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
@@ -1256,7 +1256,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr instanceNameAttr;
   StringAttr sym_nameAttr;
   FlatSymbolRefAttr moduleNameAttr;
-  SmallVector<OpAsmParser::OperandType, 4> inputsOperands;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
   SmallVector<Type> inputsTypes;
   SmallVector<Type> allResultTypes;
   SmallVector<Attribute> argNames, resultNames, parameters;
@@ -1551,7 +1551,7 @@ static void printSliceTypes(OpAsmPrinter &p, Operation *, Type srcType,
 
 ParseResult ArrayCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-  llvm::SmallVector<OpAsmParser::OperandType, 16> operands;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> operands;
   Type elemType;
 
   if (parser.parseOperandList(operands) ||
@@ -1664,7 +1664,7 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 
 ParseResult StructCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-  llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
+  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
   Type declOrAliasType;
 
   if (parser.parseLParen() || parser.parseOperandList(operands) ||
@@ -1701,7 +1701,7 @@ void StructCreateOp::print(OpAsmPrinter &printer) {
 
 ParseResult StructExplodeOp::parse(OpAsmParser &parser,
                                    OperationState &result) {
-  OpAsmParser::OperandType operand;
+  OpAsmParser::UnresolvedOperand operand;
   Type declType;
 
   if (parser.parseOperand(operand) ||
@@ -1737,7 +1737,7 @@ void StructExplodeOp::print(OpAsmPrinter &printer) {
 /// syntax is identical.
 template <typename AggregateType>
 static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType operand;
+  OpAsmParser::UnresolvedOperand operand;
   StringAttr fieldName;
   Type declType;
 
@@ -1815,7 +1815,7 @@ OpFoldResult StructExtractOp::fold(ArrayRef<Attribute> operands) {
 
 ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-  OpAsmParser::OperandType operand, val;
+  OpAsmParser::UnresolvedOperand operand, val;
   StringAttr fieldName;
   Type declType;
 
@@ -1859,7 +1859,7 @@ void StructInjectOp::print(OpAsmPrinter &printer) {
 ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   Type declOrAliasType;
   StringAttr field;
-  OpAsmParser::OperandType input;
+  OpAsmParser::UnresolvedOperand input;
   llvm::SMLoc fieldLoc = parser.getCurrentLocation();
 
   if (parser.parseAttribute(field, "field", result.attributes) ||

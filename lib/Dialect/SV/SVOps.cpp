@@ -426,9 +426,9 @@ LogicalResult AlwaysOp::verify() {
   return success();
 }
 
-static ParseResult
-parseEventList(OpAsmParser &p, Attribute &eventsAttr,
-               SmallVectorImpl<OpAsmParser::OperandType> &clocksOperands) {
+static ParseResult parseEventList(
+    OpAsmParser &p, Attribute &eventsAttr,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &clocksOperands) {
 
   // Parse zero or more conditions intoevents and clocksOperands.
   SmallVector<Attribute> events;
@@ -633,7 +633,7 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
 ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
-  OpAsmParser::OperandType condOperand;
+  OpAsmParser::UnresolvedOperand condOperand;
   Type condType;
 
   auto loc = parser.getCurrentLocation();

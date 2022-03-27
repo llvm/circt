@@ -48,7 +48,7 @@ BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
 Backedge BackedgeBuilder::get(Type t) {
   OperationState s(loc, "TemporaryBackedge");
   s.addTypes(t);
-  auto op = builder.createOperation(s);
+  auto *op = builder.create(s);
   edges.push_back(op);
   return Backedge(op);
 }
