@@ -426,9 +426,9 @@ LogicalResult AlwaysOp::verify() {
   return success();
 }
 
-static ParseResult
-parseEventList(OpAsmParser &p, Attribute &eventsAttr,
-               SmallVectorImpl<OpAsmParser::UnresolvedOperand> &clocksOperands) {
+static ParseResult parseEventList(
+    OpAsmParser &p, Attribute &eventsAttr,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &clocksOperands) {
 
   // Parse zero or more conditions intoevents and clocksOperands.
   SmallVector<Attribute> events;
