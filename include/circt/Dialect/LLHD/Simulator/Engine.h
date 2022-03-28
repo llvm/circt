@@ -32,9 +32,6 @@ namespace circt {
 namespace llhd {
 namespace sim {
 
-struct State;
-struct Instance;
-
 class Engine {
 public:
   /// Initialize an LLHD simulation engine. This initializes the state, as well
