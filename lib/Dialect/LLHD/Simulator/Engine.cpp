@@ -10,11 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "State.h"
-#include "Trace.h"
-
-#include "circt/Conversion/LLHDToLLVM.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
+#include "circt/Conversion/LLHDToLLVM.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
@@ -27,8 +24,8 @@ Engine::Engine(
     llvm::raw_ostream &out, ModuleOp module,
     llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
     llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-    std::string root, int mode, ArrayRef<StringRef> sharedLibPaths)
-    : out(out), root(root), traceMode(mode) {
+    std::string root, TraceMode tm, ArrayRef<StringRef> sharedLibPaths)
+    : out(out), root(root), traceMode(tm) {
   state = std::make_unique<State>();
   state->root = root + '.' + root;
 
@@ -82,7 +79,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     return -1;
   }
 
-  if (traceMode >= 0) {
+  if (traceMode != TraceMode::None) {
     // Add changes for all the signals' initial values.
     for (size_t i = 0, e = state->signals.size(); i < e; ++i) {
       trace.addChange(i);
@@ -121,7 +118,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     // Update the simulation time.
     state->time = pop.time;
 
-    if (traceMode >= 0)
+    if (traceMode != TraceMode::None)
       trace.flush();
 
     // Process signal changes.
@@ -175,7 +172,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
       }
 
       // Dump the updated signal.
-      if (traceMode >= 0)
+      if (traceMode != TraceMode::None)
         trace.addChange(sigIndex);
     }
 
@@ -212,7 +209,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     ++cycle;
   }
 
-  if (traceMode >= 0) {
+  if (traceMode != TraceMode::None) {
     // Flush any remainign changes
     trace.flush(/*force=*/true);
   }

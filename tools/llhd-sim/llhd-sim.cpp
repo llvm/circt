@@ -15,6 +15,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
+#include "circt/Dialect/LLHD/Simulator/Trace.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -35,6 +36,7 @@ using namespace llvm;
 using namespace mlir;
 using namespace mlir::func;
 using namespace circt;
+using namespace circt::llhd::sim;
 
 static cl::opt<std::string>
     inputFilename(cl::Positional, cl::desc("<input-file>"), cl::init("-"));
@@ -80,32 +82,26 @@ cl::opt<OptLevel> optimizationLevel(
                clEnumVal(O2, "Run passes and codegen at O2"),
                clEnumVal(O3, "Run passes and codegen at O3")));
 
-enum TraceFormat {
-  full,
-  reduced,
-  merged,
-  mergedReduce,
-  namedOnly,
-  noTrace = -1
-};
-
-static cl::opt<TraceFormat> traceMode(
-    "trace-format", cl::desc("Choose the dump format:"), cl::init(full),
+static cl::opt<TraceMode> traceMode(
+    "trace-format", cl::desc("Choose the dump format:"),
+    cl::init(TraceMode::Full),
     cl::values(
-        clEnumVal(full, "Dump signal changes for every time step and sub-step, "
-                        "for all instances"),
-        clEnumVal(reduced, "Dump signal changes for every time-step and "
-                           "sub-step, only for the top-level instance"),
-        clEnumVal(merged,
-                  "Only dump changes for real-time steps, for all instances"),
-        clEnumValN(mergedReduce, "merged-reduce",
+        clEnumValN(TraceMode::Full, "full",
+                   "Dump signal changes for every time step and sub-step, "
+                   "for all instances"),
+        clEnumValN(TraceMode::Reduced, "reduced",
+                   "Dump signal changes for every time-step and "
+                   "sub-step, only for the top-level instance"),
+        clEnumValN(TraceMode::Merged, "merged",
+                   "Only dump changes for real-time steps, for all instances"),
+        clEnumValN(TraceMode::MergedReduce, "merged-reduce",
                    "Only dump changes for real-time steps, only for the "
                    "top-level instance"),
         clEnumValN(
-            namedOnly, "named-only",
+            TraceMode::NamedOnly, "named-only",
             "Only dump changes for real-time steps, only for top-level "
             "instance and signals not having the default name '(sig)?[0-9]*'"),
-        clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
+        clEnumValN(TraceMode::None, "none", "Don't dump a signal trace")));
 
 static cl::list<std::string>
     sharedLibs("shared-libs",
