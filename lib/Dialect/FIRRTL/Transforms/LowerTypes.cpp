@@ -687,7 +687,8 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 
   SmallString<16> symtmp;
   StringRef sym;
-  if (oldArg.sym) {
+  bool oldArgHadSym = oldArg.sym && !oldArg.sym.getValue().empty();
+  if (oldArgHadSym) {
     symtmp = (oldArg.sym.getValue() + field.suffix).str();
     sym = symtmp;
   } else
@@ -703,7 +704,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
   StringAttr newSym = {};
-  if ((needsSym || (oldArg.sym && !oldArg.sym.getValue().empty()))) {
+  if (needsSym || oldArgHadSym) {
     newSym = StringAttr::get(context, sym);
     opSymNames[newSym] = module;
   }
