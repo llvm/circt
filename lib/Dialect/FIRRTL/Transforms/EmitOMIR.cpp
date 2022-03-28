@@ -625,7 +625,12 @@ void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
         jsonStream.object([&] {
           // Emit the `ref` field.
           buf.assign("OMDontTouchedReferenceTarget:~");
-          buf.append(getOperation().name());
+          if (module.moduleNameAttr() == dutModuleName) {
+            // If module is DUT, then root the target relative to the DUT.
+            buf.append(module.moduleName());
+          } else {
+            buf.append(getOperation().name());
+          }
           buf.push_back('|');
           buf.append(addSymbol(module));
           buf.push_back('>');
