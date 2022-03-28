@@ -41,6 +41,7 @@ private:
   bool prettifyUnaryOperator(Operation *op);
   void sinkOrCloneOpToUses(Operation *op);
   void sinkExpression(Operation *op);
+  void useNamedOperands(Operation *op, DenseMap<Value, Operation *> &pipeMap);
 
   bool anythingChanged;
 };
@@ -243,8 +244,46 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
   anythingChanged = true;
 }
 
+/// Replace operands which are driven by named wires with inner symbols with
+/// reads of the wires.  This is a heurstic that results in good "named" wires
+/// being used and acts to ensure that preserved Chisel names are actually used
+/// where possible.
+void PrettifyVerilogPass::useNamedOperands(
+    Operation *op, DenseMap<Value, Operation *> &pipeMap) {
+  auto wire = dyn_cast<sv::WireOp>(op);
+  if (!wire || !wire->hasAttr("inner_sym") || !wire->hasOneUse())
+    return;
+
+  auto assign = dyn_cast<sv::AssignOp>(*wire->getUsers().begin());
+  if (!assign || assign.dest().getDefiningOp() != op)
+    return;
+
+  OpBuilder builder(op);
+  builder.setInsertionPointAfter(op);
+  auto splice =
+      builder.create<sv::ReadInOutOp>(op->getLoc(), op->getResults()[0]);
+
+  // If we have never seen any wire driven by this value before, then replace
+  // all uses except the original assign.  If we have seen this value before
+  // (indicating that there is _another_ dead wire driven by the same value),
+  // construct these into a chain of assigns.
+  if (!pipeMap.count(assign.src())) {
+    assign.src().replaceAllUsesExcept(splice, assign);
+    pipeMap.insert({splice, assign});
+    return;
+  }
+
+  auto oldAssign = cast<sv::AssignOp>(pipeMap[assign.src()]);
+  pipeMap[assign.src()] = assign;
+  auto oldSrc = cast<sv::AssignOp>(oldAssign).src();
+  oldAssign->setOperand(1, splice);
+  assign->setOperand(1, oldSrc);
+}
+
 void PrettifyVerilogPass::processPostOrder(Block &body) {
   SmallVector<Operation *> instances;
+
+  DenseMap<Value, Operation *> pipeMap;
 
   // Walk the block bottom-up, processing the region tree inside out.
   for (auto &op :
@@ -254,6 +293,9 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
         for (auto &regionBlock : region.getBlocks())
           processPostOrder(regionBlock);
     }
+
+    // Substitute named wires for operands when possible.
+    useNamedOperands(&op, pipeMap);
 
     // Sink and duplicate unary operators.
     if (isVerilogUnaryOperator(&op) && prettifyUnaryOperator(&op))
