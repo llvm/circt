@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTCHALKTransforms
     CIRCTCHALKTransformsIncGen
 
     LINK_LIBS PUBLIC
+    CIRCTCHALK
     CIRCTSupport
     MLIRIR
     MLIRPass
