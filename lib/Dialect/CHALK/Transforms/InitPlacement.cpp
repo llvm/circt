@@ -22,7 +22,7 @@
 using namespace circt;
 using namespace chalk;
 
-using CellOpList = std::vector< Operation* >;
+using CellOpList = std::vector<Operation *>;
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -30,32 +30,32 @@ using CellOpList = std::vector< Operation* >;
 
 namespace {
 struct InitPlacementPass : public InitPlacementBase<InitPlacementPass> {
-    void runOnOperation() override;
+  void runOnOperation() override;
 };
 } // end anonymous namespace
 
 void InitPlacementPass::runOnOperation() {
-    auto cell = getOperation();
-    OpBuilder builder(&getContext());
-    CellOpList ops;
-    llvm::for_each(cell.getBody()->getOperations(), [&](Operation &op) {
-        if (isa<RectangleOp>(op)) {
-            ops.push_back(&op);
-        }
-    });
-
-    size_t idx = 0;
-    int64_t placeX = 0;
-    for (auto *op: ops) {
-        RectangleOp rectangle = dyn_cast<RectangleOp>(op);
-        int64_t prevX = rectangle.width();
-        IntegerAttr placeXAttr = builder.getI64IntegerAttr(placeX);
-        if (idx != 0) {
-            rectangle.xCoordAttr(placeXAttr);
-        }
-        placeX += prevX;
-        idx++;
+  auto cell = getOperation();
+  OpBuilder builder(&getContext());
+  CellOpList ops;
+  llvm::for_each(cell.getBody()->getOperations(), [&](Operation &op) {
+    if (isa<RectangleOp>(op)) {
+      ops.push_back(&op);
     }
+  });
+
+  size_t idx = 0;
+  int64_t placeX = 0;
+  for (auto *op : ops) {
+    RectangleOp rectangle = dyn_cast<RectangleOp>(op);
+    int64_t prevX = rectangle.width();
+    IntegerAttr placeXAttr = builder.getI64IntegerAttr(placeX);
+    if (idx != 0) {
+      rectangle.xCoordAttr(placeXAttr);
+    }
+    placeX += prevX;
+    idx++;
+  }
 }
 
 std::unique_ptr<mlir::Pass> circt::chalk::createInitPlacementPass() {
