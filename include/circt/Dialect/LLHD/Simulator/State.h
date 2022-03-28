@@ -61,8 +61,6 @@ private:
   uint64_t time;
   uint64_t delta;
   uint64_t eps;
-
-private:
 };
 
 /// Detail structure that can be easily accessed by the lowered code.
