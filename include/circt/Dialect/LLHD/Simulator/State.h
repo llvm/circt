@@ -20,6 +20,7 @@
 
 #include <map>
 #include <queue>
+#include <regex>
 
 namespace circt {
 namespace llhd {
@@ -65,12 +66,15 @@ struct SignalDetail {
 };
 
 /// The simulator's internal representation of a signal.
-struct Signal {
+class Signal {
+public:
   /// Construct an "empty" signal.
-  Signal(std::string name, std::string owner);
+  Signal(std::string name, std::string owner)
+      : name(name), owner(owner), size(0), value(nullptr) {}
 
   /// Construct a signal with the given name, owner and initial value.
-  Signal(std::string name, std::string owner, uint8_t *value, uint64_t size);
+  Signal(std::string name, std::string owner, uint8_t *value, uint64_t size)
+      : name(name), owner(owner), size(size), value(value) {}
 
   /// Default move constructor.
   Signal(Signal &&) = default;
@@ -79,12 +83,53 @@ struct Signal {
   ~Signal() = default;
 
   /// Returns true if the signals match in name, owner, size and value.
-  bool operator==(const Signal &rhs) const;
+  bool operator==(const Signal &rhs) const {
+    if (owner != rhs.owner || name != rhs.name || size != rhs.size)
+      return false;
+    return std::memcmp(value, rhs.value, size);
+  }
 
   /// Returns true if the owner name is lexically smaller than rhs's owner, or
   /// the name is lexically smaller than rhs's name, in case they share the same
   /// owner.
-  bool operator<(const Signal &rhs) const;
+  bool operator<(const Signal &rhs) const {
+    return (owner < rhs.owner || (owner == rhs.owner && name < rhs.name));
+  }
+
+  bool isOwner(std::string rhs) const { return owner == rhs; };
+
+  std::string getOwner() const { return owner; }
+
+  bool isValidSigName() const {
+    return std::regex_match(name, std::regex("(sig)?[0-9]*"));
+  }
+
+  std::string getName() const { return name; }
+
+  uint64_t getSize() const { return size; }
+
+  uint8_t *getValue() const { return value; }
+
+  /// FIXME: We should return the iterator
+  const std::vector<unsigned> &getTriggeredInstanceIndices() const {
+    return instanceIndices;
+  }
+
+  void pushInstanceIndex(unsigned i) { instanceIndices.push_back(i); }
+
+  bool hasElement() const { return elements.size() > 0; }
+
+  size_t getElementSize() const { return elements.size(); }
+
+  void pushElement(std::pair<unsigned, unsigned> val) {
+    elements.push_back(val);
+  }
+
+  /// Store JIT allocated signal pointer and size.
+  void store(uint8_t *v, uint64_t s) {
+    value = v;
+    size = s;
+  }
 
   /// Return the value of the signal in hexadecimal string format.
   std::string toHexString() const;
@@ -93,12 +138,13 @@ struct Signal {
   /// format.
   std::string toHexString(unsigned) const;
 
+private:
   std::string name;
   std::string owner;
   // The list of instances this signal triggers.
-  std::vector<unsigned> triggers;
+  std::vector<unsigned> instanceIndices;
   uint64_t size;
-  std::unique_ptr<uint8_t> value;
+  uint8_t *value;
   std::vector<std::pair<unsigned, unsigned>> elements;
 };
 
