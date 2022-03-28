@@ -125,7 +125,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
     size_t i = 0, e = pop.changesSize;
     while (i < e) {
       const auto sigIndex = pop.changes[i].first;
-      const auto &curr = state->signals[sigIndex];
+      auto &curr = state->signals[sigIndex];
       APInt buff(
           curr.getSize() * 8,
           llvm::makeArrayRef(reinterpret_cast<uint64_t *>(curr.getValue()),
@@ -144,12 +144,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
         ++i;
       }
 
-      // Skip if the updated signal value is equal to the initial value.
-      if (std::memcmp(curr.getValue(), buff.getRawData(), curr.getSize()) == 0)
+      if (!curr.updateWhenChanged(buff.getRawData()))
         continue;
-
-      // Apply the signal update.
-      std::memcpy(curr.getValue(), buff.getRawData(), curr.getSize());
 
       // Add sensitive instances.
       for (auto inst : curr.getTriggeredInstanceIndices()) {

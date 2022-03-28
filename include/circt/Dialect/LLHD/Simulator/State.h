@@ -131,6 +131,52 @@ public:
     size = s;
   }
 
+  /// Update signal value when it is changed, the width of incoming signal
+  /// value and the stored signal value are identical.
+  /// As majority signals are smaller than 64 bits, this implementation
+  /// is much faster as it avoided memcpy in most cases.
+  /// @param v Pointer to signal value
+  /// @return return true when signal is updated, false when not
+  bool updateWhenChanged(const uint64_t *v) {
+    switch (size) {
+    case 1: {
+      const uint8_t *newVal = reinterpret_cast<const uint8_t *>(v);
+      if (*value == *newVal)
+        return false;
+      *value = *newVal;
+      break;
+    }
+    case 2: {
+      const uint16_t *newVal = reinterpret_cast<const uint16_t *>(v);
+      if (*(uint16_t *)value == *newVal)
+        return false;
+      *(uint16_t *)value = *newVal;
+      break;
+    }
+    case 4: {
+      const uint32_t *newVal = reinterpret_cast<const uint32_t *>(v);
+      if (*(uint32_t *)value == *newVal)
+        return false;
+      *(uint32_t *)value = *newVal;
+      break;
+    }
+    case 8: {
+      if (*(uint64_t *)value == *v)
+        return false;
+      *(uint64_t *)value = *v;
+      break;
+    }
+    default: {
+      if (std::memcmp(value, v, size) == 0)
+        return false;
+      std::memcpy(value, v, size);
+      break;
+    }
+    }
+
+    return true;
+  }
+
   /// Return the value of the signal in hexadecimal string format.
   std::string toHexString() const;
 
