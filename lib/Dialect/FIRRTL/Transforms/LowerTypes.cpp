@@ -317,9 +317,9 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   /// If the referenced operation is a FModuleOp or an FExtModuleOp, perform
   /// type lowering on all operations.
-  void lowerModule(Operation *op);
+  void lowerModule(FModuleLike op);
 
-  bool lowerArg(Operation *module, size_t argIndex,
+  bool lowerArg(FModuleLike module, size_t argIndex,
                 SmallVectorImpl<PortInfo> &newArgs,
                 SmallVectorImpl<Value> &lowering);
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
@@ -366,7 +366,7 @@ private:
                               FIRRTLType srcType, FlatBundleFieldEntry field,
                               bool &needsSym, StringRef sym);
 
-  bool isModuleAllowedToPreserveAggregate(Operation *moduleLike);
+  bool isModuleAllowedToPreserveAggregate(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   size_t uniqueIdx = 0;
@@ -419,7 +419,7 @@ private:
 /// Exteranal modules and toplevel modules are sometimes assumed to have lowered
 /// types.
 bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
-    Operation *moduleLike) {
+    FModuleLike module) {
 
   if (!preserveAggregate)
     return false;
@@ -429,9 +429,8 @@ bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
   if (!preservePublicTypes)
     return true;
 
-  if (isa<FExtModuleOp>(moduleLike))
+  if (isa<FExtModuleOp>(module))
     return false;
-  auto module = cast<FModuleOp>(moduleLike);
   return cast<CircuitOp>(module->getParentOp()).getMainModule() != module;
 }
 
@@ -662,10 +661,10 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   }
 }
 
-void TypeLoweringVisitor::lowerModule(Operation *op) {
-  if (auto module = dyn_cast<FModuleOp>(op))
+void TypeLoweringVisitor::lowerModule(FModuleLike op) {
+  if (auto module = dyn_cast<FModuleOp>(*op))
     visitDecl(module);
-  else if (auto extModule = dyn_cast<FExtModuleOp>(op))
+  else if (auto extModule = dyn_cast<FExtModuleOp>(*op))
     visitDecl(extModule);
 }
 
@@ -714,7 +713,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 }
 
 // Lower arguments with bundle type by flattening them.
-bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
+bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
                                    SmallVectorImpl<PortInfo> &newArgs,
                                    SmallVectorImpl<Value> &lowering) {
 
@@ -1534,7 +1533,7 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
-  std::vector<Operation *> ops;
+  std::vector<FModuleLike> ops;
   // Map of name of the NonLocalAnchor to the operation.
   DenseMap<StringAttr, Operation *> nlaMap;
   // Symbol Table
@@ -1545,8 +1544,8 @@ void LowerTypesPass::runOnOperation() {
   // Record all operations in the circuit.
   llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) {
     // Creating a map of all ops in the circt, but only modules are relevant.
-    if (isa<FModuleOp, FExtModuleOp>(op))
-      ops.push_back(&op);
+    if (auto module = dyn_cast<FModuleLike>(op))
+      ops.push_back(module);
     // Record the NonLocalAnchor and its name.
     if (auto nla = dyn_cast<NonLocalAnchor>(op))
       nlaMap[nla.sym_nameAttr()] = nla;
@@ -1558,26 +1557,19 @@ void LowerTypesPass::runOnOperation() {
   SmallVector<InnerRefRecord> opSymNames;
   std::mutex nlaAppendLock;
   // This lambda, executes in parallel for each Op within the circt.
-  auto lowerModules = [&](Operation *op) -> void {
+  auto lowerModules = [&](FModuleLike op) -> void {
     auto tl = TypeLoweringVisitor(&getContext(), flattenAggregateMemData,
                                   preserveAggregate, preservePublicTypes,
                                   symTbl, cache);
     tl.lowerModule(op);
+
     std::lock_guard<std::mutex> lg(nlaAppendLock);
     // This section updates shared data structures using a lock.
     nlaToNewSymList.append(tl.getNLAs());
-    StringAttr modName;
-    ArrayAttr portSyms;
     // Create an inner_sym to op record, which will be used to lookup ops given
     // the InnerRefAttr, during NLA fixup.
-    if (FModuleOp mod = dyn_cast<FModuleOp>(op)) {
-      modName = mod.getNameAttr();
-      portSyms = mod.getPortSymbolsAttr();
-    } else if (auto mod = dyn_cast<FExtModuleOp>(op)) {
-      modName = mod.getNameAttr();
-      portSyms = mod.getPortSymbolsAttr();
-    } else
-      return;
+    StringAttr modName = op.moduleNameAttr();
+    ArrayAttr portSyms = op.getPortSymbolsAttr();
     // We are only interested in Modules and Extern Modules.
     // Create inner_sym record for module ports.
     for (auto pSym : llvm::enumerate(portSyms.getAsRange<StringAttr>()))
