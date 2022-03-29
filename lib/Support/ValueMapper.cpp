@@ -60,5 +60,5 @@ void ValueMapper::set(ValueRange from, ValueRange to, bool replace) {
   assert(from.size() == to.size() && !replace &&
          "Expected # of 'from' values and # of 'to' values to be identical.");
   for (auto [f, t] : llvm::zip(from, to))
-    set(f, t);
+    set(f, t, replace);
 }
