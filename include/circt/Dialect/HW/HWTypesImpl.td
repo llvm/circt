@@ -59,11 +59,11 @@ def ArrayTypeImpl : HWType<"Array"> {
   let extraClassDeclaration = [{
     static ArrayType get(Type elementType, size_t size) {
       auto *ctx = elementType.getContext();
-      auto intType = ::mlir::IntegerType::get(ctx, 32);
+      auto intType = ::mlir::IntegerType::get(ctx, 64);
       auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
       return ArrayType::get(ctx, elementType, sizeAttr);
     }
-    int64_t getSize() const;
+    size_t getSize() const;
   }];
 }
 
@@ -84,11 +84,11 @@ def UnpackedArrayType : HWType<"UnpackedArray"> {
   let extraClassDeclaration = [{
     static UnpackedArrayType get(Type elementType, size_t size) {
       auto *ctx = elementType.getContext();
-      auto intType = ::mlir::IntegerType::get(ctx, 32);
+      auto intType = ::mlir::IntegerType::get(ctx, 64);
       auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
       return UnpackedArrayType::get(ctx, elementType, sizeAttr);
     }
-    int64_t getSize() const;
+    size_t getSize() const;
   }];
 }
 

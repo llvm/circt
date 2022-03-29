@@ -1048,12 +1048,12 @@ hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
 }
 
 // CHECK-LABEL: module parameterizedArrays
-// CHECK: #(parameter param = 1,
-// CHECK:   parameter N = 2) (
-hw.module @parameterizedArrays<param: i32 = 1, N: i32 = 2>
+// CHECK: #(parameter        param = 1,
+// CHECK:   parameter [11:0] N = 2) (
+hw.module @parameterizedArrays<param: i32 = 1, N: i12 = 2>
 // CHECK: input [41:0][param - 1:0]{{ *}}a,
   (%a: !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
-// CHECK:   input [N - 1:0][param - 1:0]{{ *}}b);
+// CHECK:   input [N - 64'd1:0][param - 1:0]{{ *}}b);
    %b: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
 }
 

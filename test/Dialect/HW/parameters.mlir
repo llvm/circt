@@ -172,7 +172,6 @@ hw.module @parameterizedCombSeq<param: i32>
   %1 = seq.compreg %0, %clk: !hw.int<#hw.param.decl.ref<"param">>
 }
 
-<<<<<<< HEAD
 // CHECK-LABEL: hw.module @CLog2Expression<param: i32>() {
 hw.module @CLog2Expression<param: i32>() {
   // CHECK-NEXT: %0 = hw.param.value i32 = 0

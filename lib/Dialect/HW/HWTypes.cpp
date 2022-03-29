@@ -99,7 +99,7 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
           return elementBitWidth;
         int64_t dimBitWidth = a.getSize();
         if (dimBitWidth < 0)
-          return dimBitWidth;
+          return -1L;
         return (int64_t)a.getSize() * elementBitWidth;
       })
       .Case<StructType>([](StructType s) {
@@ -314,39 +314,43 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 // ArrayType
 //===----------------------------------------------------------------------===//
 
-template <typename TArray>
-static Type parseArray(AsmParser &p) {
+static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
   if (p.parseLess())
-    return Type();
+    return failure();
 
-  Attribute dim;
-  Type inner;
   uint64_t dimLiteral;
-  auto int32Type = p.getBuilder().getIntegerType(32);
+  auto int64Type = p.getBuilder().getIntegerType(64);
 
-  if (auto res = p.parseOptionalInteger(dimLiteral); res.hasValue()) {
-    dim = p.getBuilder().getI32IntegerAttr(dimLiteral);
-  } else if (!p.parseOptionalAttribute(dim, int32Type).hasValue())
-    return Type();
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.hasValue())
+    dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
+  else if (!p.parseOptionalAttribute(dim, int64Type).hasValue())
+    return failure();
 
   if (!dim.isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>()) {
     p.emitError(p.getNameLoc(), "unsupported dimension kind in hw.array");
-    return Type();
+    return failure();
   }
 
   if (p.parseXInDimensionList() || parseHWElementType(inner, p) ||
       p.parseGreater())
+    return failure();
+
+  return success();
+}
+
+Type ArrayType::parse(AsmParser &p) {
+  Attribute dim;
+  Type inner;
+
+  if (failed(parseArray(p, dim, inner)))
     return Type();
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(TArray::verify(mlir::detail::getDefaultDiagnosticEmitFn(loc),
-                            inner, dim)))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
     return Type();
 
-  return TArray::get(inner.getContext(), inner, dim);
+  return get(inner.getContext(), inner, dim);
 }
-
-Type ArrayType::parse(AsmParser &p) { return parseArray<ArrayType>(p); }
 
 void ArrayType::print(AsmPrinter &p) const {
   p << "<";
@@ -356,7 +360,7 @@ void ArrayType::print(AsmPrinter &p) const {
   p << '>';
 }
 
-int64_t ArrayType::getSize() const {
+size_t ArrayType::getSize() const {
   if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
     return intAttr.getInt();
   return -1;
@@ -374,7 +378,17 @@ LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 //===----------------------------------------------------------------------===//
 
 Type UnpackedArrayType::parse(AsmParser &p) {
-  return parseArray<UnpackedArrayType>(p);
+  Attribute dim;
+  Type inner;
+
+  if (failed(parseArray(p, dim, inner)))
+    return Type();
+
+  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
+    return Type();
+
+  return get(inner.getContext(), inner, dim);
 }
 
 void UnpackedArrayType::print(AsmPrinter &p) const {
@@ -393,7 +407,7 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-int64_t UnpackedArrayType::getSize() const {
+size_t UnpackedArrayType::getSize() const {
   return getSizeAttr().cast<IntegerAttr>().getInt();
 }
 
