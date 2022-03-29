@@ -41,17 +41,17 @@ def InOutType : DialectType<HWDialect,
 // A handle to refer to hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::ArrayType>($_self)">, "an ArrayType",
-    "TypeAliasOr<ArrayType>">;
+    "hw::TypeAliasOr<hw::ArrayType>">;
 
 // A handle to refer to hw::StructType in ODS.
 def StructType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::StructType>($_self)">, "a StructType",
-    "TypeAliasOr<StructType>">;
+    "hw::TypeAliasOr<hw::StructType>">;
 
 // A handle to refer to hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::UnionType>($_self)">, "a UnionType",
-    "TypeAliasOr<UnionType>">;
+    "hw::TypeAliasOr<hw::UnionType>">;
 
 //===----------------------------------------------------------------------===//
 // Type Definitions
