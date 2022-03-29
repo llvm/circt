@@ -20,15 +20,6 @@
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
-
-namespace hw {
-class HWDialect;
-}
-
-namespace sv {
-class SVDialect;
-}
-
 namespace chalk {
 
 #define GEN_PASS_CLASSES
