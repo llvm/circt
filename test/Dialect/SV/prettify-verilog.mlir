@@ -241,4 +241,84 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
   hw.output %r : i4
 }
 
+// An operand driven that is tapped by a wire with a symbol should be replaced
+// with a read of the wire.  Make sure that this does NOT happen if the wire
+// does not have a symbol.  This exists to improve Verilog quality coming from
+// Chisel while avoiding lint warnings related to dead wires.  See:
+//   - https://github.com/llvm/circt/pull/2676
+//   - https://github.com/llvm/circt/issues/2808
+//
+// CHECK-LABEL: hw.module @use_named_wires_operand
+hw.module @use_named_wires_operands(%a: i1, %b: i1) -> (out1: i1, out2: i1) {
+  // CHECK:      %x = sv.wire
+  // CHECK-NEXT: %[[x_read:.+]] = sv.read_inout %x
+  // CHECK-NEXT: sv.assign %x, %a
+  %x = sv.wire sym @x : !hw.inout<i1>
+  sv.assign %x, %a : i1
 
+  // CHECK:      %y = sv.wire
+  // CHECK-NOT:  sv.read_inout %y
+  // CHECK-NEXT: sv.assign %y, %b
+  %y = sv.wire : !hw.inout<i1>
+  sv.assign %y, %b : i1
+
+  // CHECK:      hw.output %[[x_read]], %b
+  hw.output %a, %b : i1, i1
+}
+
+// Test that a block arg operand tapped by a wire with a symbol should be
+// replaced by a read of the wire.  Also, test that this does NOT happen if the
+// wire does not have a symbol.  This exists to improve Verilog quality coming
+// from Chisel while avoiding lint warnings related to dead wires. See:
+//   - https://github.com/llvm/circt/pull/2676
+//   - https://github.com/llvm/circt/issues/2808
+//
+// CHECK-LABEL: hw.module @use_named_wires_blockargs
+// VERILOG-LABEL: module use_named_wires_blockargs
+hw.module.extern @use_named_wires_blockargs_submodule(%a: i1)
+hw.module @use_named_wires_blockargs(%a: i1, %b: i1) {
+  // VERILOG-NOT: _GEN
+  // CHECK:      %x = sv.wire
+  // CHECK-NEXT: %[[x_read:.+]] = sv.read_inout %x
+  // CHECK-NEXT: sv.assign %x, %a
+  %x = sv.wire sym @x : !hw.inout<i1>
+  sv.assign %x, %a : i1
+
+  // CHECK:      %y = sv.wire
+  // CHECK-NOT:  sv.read_inout %y
+  // CHECK-NEXT: sv.assign %y, %b
+  %y = sv.wire : !hw.inout<i1>
+  sv.assign %y, %b : i1
+
+  // CHECK:      hw.instance "submodule_1" {{.+}}(a: %[[x_read]]
+  hw.instance "submodule_1" @use_named_wires_blockargs_submodule(a: %a: i1) -> ()
+  // CHECK:      hw.instance "submodule_2" {{.+}}(a: %b
+  hw.instance "submodule_2" @use_named_wires_blockargs_submodule(a: %b: i1) -> ()
+  hw.output
+}
+
+// Test that the behavior where multiple named wires are acting as dead taps
+// creates a combinational pipe of connections.  This is one of many valid
+// constructions, but has the benefit of introducing no temporaries and avoiding
+// later lint warnings about unused wires.  Check, in Verilog, that no
+// temporaries are created.
+//
+// CHECK-LABEL: hw.module @use_named_wires_duplicate_operands
+// VERILOG-LABEL: module use_named_wires_duplicate_operands
+hw.module @use_named_wires_duplicate_operands(%a: i1) -> (out: i1) {
+  // VERILOG-NOT: _GEN
+  %w_0 = sv.wire sym @w_0  : !hw.inout<i1>
+  // CHECK: %[[w_0_read:.+]] = sv.read_inout %w_0
+  // CHECK: sv.assign %w_0, %a
+  sv.assign %w_0, %a : i1
+  %w_1 = sv.wire sym @w_1  : !hw.inout<i1>
+  // CHECK: %[[w_1_read:.+]] = sv.read_inout %w_1
+  // CHECK: sv.assign %w_1, %[[w_0_read]]
+  sv.assign %w_1, %a : i1
+  %w_2 = sv.wire sym @w_2  : !hw.inout<i1>
+  // CHECK: %[[w_2_read:.+]] = sv.read_inout %w_2
+  // CHECK: sv.assign %w_2, %[[w_1_read]]
+  sv.assign %w_2, %a : i1
+  // CHECK: hw.output %[[w_2_read]]
+  hw.output %a : i1
+}
