@@ -820,12 +820,13 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
   Type rowType, columnType;
   OpAsmParser::UnresolvedOperand rowInputs, columnInputs;
   llvm::SMLoc loc = parser.getCurrentLocation();
-  if (parser.parseLSquare() || parser.parseInteger(numRows) ||
-      parser.parseKeyword("x") || parser.parseOperand(rowInputs) ||
-      parser.parseColonType(rowType) || parser.parseRSquare() ||
-      parser.parseLSquare() || parser.parseInteger(numColumns) ||
-      parser.parseKeyword("x") || parser.parseOperand(columnInputs) ||
-      parser.parseColonType(columnType) || parser.parseRSquare())
+  if (parser.parseLSquare() || parser.parseOperand(rowInputs) ||
+      parser.parseColon() || parser.parseInteger(numRows) ||
+      parser.parseKeyword("x") || parser.parseType(rowType) ||
+      parser.parseRSquare() || parser.parseLSquare() ||
+      parser.parseOperand(columnInputs) || parser.parseColon() ||
+      parser.parseInteger(numColumns) || parser.parseKeyword("x") ||
+      parser.parseType(columnType) || parser.parseRSquare())
     return failure();
 
   hw::ArrayType rowInputType = hw::ArrayType::get(rowType, numRows);
@@ -866,13 +867,13 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
 void SystolicArrayOp::print(OpAsmPrinter &p) {
   hw::ArrayType rowInputType = rowInputs().getType().cast<hw::ArrayType>();
   hw::ArrayType columnInputType = colInputs().getType().cast<hw::ArrayType>();
-  p << " [" << rowInputType.getSize() << " x ";
+  p << " [";
   p.printOperand(rowInputs());
-  p << " : ";
+  p << " : " << rowInputType.getSize() << " x ";
   p.printType(rowInputType.getElementType());
-  p << "] [" << columnInputType.getSize() << " x ";
+  p << "] [";
   p.printOperand(colInputs());
-  p << " : ";
+  p << " : " << columnInputType.getSize() << " x ";
   p.printType(columnInputType.getElementType());
 
   p << "] pe (";

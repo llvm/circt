@@ -35,8 +35,8 @@ hw.module @SAExample1 (%clk : i1) -> (out: !hw.array<2 x array<3 x i8>>) {
   %rowInputs = hw.array_create %c0_8, %c1_8 : i8
   %colInputs = hw.array_create %c0_8, %c1_8, %c2_8 : i8
 
-  // CHECK: msft.systolic.array [2 x %{{.+}} : i8] [3 x %{{.+}} : i8] pe (%{{.+}}, %{{.+}}) -> (i8) 
-  %peOuts = msft.systolic.array [2 x %rowInputs : i8] [3 x %colInputs : i8]
+  // CHECK: msft.systolic.array [%{{.+}} : 2 x i8] [%{{.+}} : 3 x i8] pe (%{{.+}}, %{{.+}}) -> (i8)
+  %peOuts = msft.systolic.array [%rowInputs : 2 x i8] [%colInputs : 3 x i8]
     pe (%row, %col) -> (i8) {
       %sum = hw.instance "pe" @PE (clk: %clk: i1, a: %row: i8, b: %col: i8) -> (sum: i8)
       msft.pe.output %sum : i8
