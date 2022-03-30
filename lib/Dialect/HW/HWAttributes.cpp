@@ -700,13 +700,15 @@ replaceDeclRefInExpr(const std::map<std::string, IntegerAttr> &parameters,
   if (paramAttr.dyn_cast<IntegerAttr>()) {
     // Nothing to do, constant value.
     return paramAttr;
-  } else if (auto paramRefAttr = paramAttr.dyn_cast<hw::ParamDeclRefAttr>()) {
+  }
+  if (auto paramRefAttr = paramAttr.dyn_cast<hw::ParamDeclRefAttr>()) {
     // Get the value from the provided parameters.
     auto it = parameters.find(paramRefAttr.getName().str());
     assert(it != parameters.end() && "Could not find parameter in the provided "
                                      "parameters for the expression!");
     return it->second;
-  } else if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
+  }
+  if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
     // Recurse into all operands of the expression.
     llvm::SmallVector<Attribute, 4> replacedOperands;
     llvm::transform(paramExprAttr.getOperands(),
@@ -736,7 +738,7 @@ APInt hw::evaluateParamAttr(ArrayAttr parameters, Attribute paramAttr) {
   // Then, evaluate the parametri attribute.
   if (auto intAttr = paramAttr.dyn_cast<IntegerAttr>())
     return intAttr.getValue();
-  else if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
+  if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
     // Since any ParamDeclRefAttr was replaced within the expression, the
     // expression should be able to be fully canonicalized to a constant. We do
     // this through the existing ParamExprAttr canonicalizer.
@@ -748,7 +750,8 @@ APInt hw::evaluateParamAttr(ArrayAttr parameters, Attribute paramAttr) {
            "canonicalize to a constant. Since not, this means that some parts "
            "of the expression did not resolve to a constant");
     return resIntAttr.getValue();
-  } else if (paramAttr.dyn_cast<hw::ParamDeclRefAttr>())
+  }
+  if (paramAttr.dyn_cast<hw::ParamDeclRefAttr>())
     assert(false && "Should have been replaced earlier!");
 
   assert(false && "Unhandled parametric attribute");
