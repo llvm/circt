@@ -18,7 +18,7 @@ def MatrixType : DialectType<HWDialect,
     "hw::TypeAliasOr<hw::ArrayType>">;
 
 
-// SystolicArray
+// SystolicArray starting with an MVP then we'll be making it more generic.
 def SystolicArrayOp : MSFTOp<"systolic.array", 
           [SingleBlockImplicitTerminator<"PEOutputOp"> ]> {
   let summary = "Model of a row/column broadcast systolic array";
@@ -32,6 +32,7 @@ def SystolicArrayOp : MSFTOp<"systolic.array",
 }
 
 def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
+  let summary = "Set the outputs from a PE block";
   let arguments = (ins AnyType:$output);
   let assemblyFormat = "$output `:` type($output) attr-dict";
 }

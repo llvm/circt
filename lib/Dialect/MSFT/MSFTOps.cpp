@@ -814,29 +814,18 @@ void OutputOp::build(OpBuilder &builder, OperationState &result) {}
 // MSFT high level design constructs
 //===----------------------------------------------------------------------===//
 
-// let assemblyFormat = [{
-//   $rowInputs `:` type($rowInputs) `,`
-//   $colInputs `:` type($colInputs)
-//   attr-dict
-//   `->` type($peOutputs)
-//   custom<SystolicArrayPE>($pe)
-// }];
-
 ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
                                    OperationState &result) {
   uint64_t numRows, numColumns;
   Type rowType, columnType;
   OpAsmParser::UnresolvedOperand rowInputs, columnInputs;
-  Type peOutputType;
   llvm::SMLoc loc = parser.getCurrentLocation();
   if (parser.parseLSquare() || parser.parseInteger(numRows) ||
       parser.parseKeyword("x") || parser.parseOperand(rowInputs) ||
       parser.parseColonType(rowType) || parser.parseRSquare() ||
       parser.parseLSquare() || parser.parseInteger(numColumns) ||
       parser.parseKeyword("x") || parser.parseOperand(columnInputs) ||
-      parser.parseColonType(columnType) || parser.parseRSquare() ||
-      parser.parseArrow() || parser.parseLParen() ||
-      parser.parseType(peOutputType) || parser.parseRParen())
+      parser.parseColonType(columnType) || parser.parseRSquare())
     return failure();
 
   hw::ArrayType rowInputType = hw::ArrayType::get(rowType, numRows);
@@ -846,13 +835,17 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
                              {rowInputType, columnInputType}, loc, operands))
     return failure();
   result.addOperands(operands);
-  result.addTypes({hw::ArrayType::get(
-      hw::ArrayType::get(peOutputType, numColumns), numRows)});
 
+  Type peOutputType;
   SmallVector<OpAsmParser::UnresolvedOperand> peArgs;
   if (parser.parseKeyword("pe") ||
-      parser.parseOperandList(peArgs, 2, AsmParser::Delimiter::Paren))
+      parser.parseOperandList(peArgs, 2, AsmParser::Delimiter::Paren) ||
+      parser.parseArrow() || parser.parseLParen() ||
+      parser.parseType(peOutputType) || parser.parseRParen())
     return failure();
+
+  result.addTypes({hw::ArrayType::get(
+      hw::ArrayType::get(peOutputType, numColumns), numRows)});
 
   Region *pe = result.addRegion();
   llvm::SMLoc peLoc = parser.getCurrentLocation();
@@ -860,7 +853,7 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
     return failure();
   if (pe->getBlocks().size() != 1)
     return parser.emitError(peLoc, "expected one block for the PE");
-  auto peTerm = pe->getBlocks().front().getTerminator();
+  Operation *peTerm = pe->getBlocks().front().getTerminator();
   if (peTerm->getOperands().size() != 1)
     return peTerm->emitOpError("expected one return value");
   if (peTerm->getOperand(0).getType() != peOutputType)
@@ -882,18 +875,17 @@ void SystolicArrayOp::print(OpAsmPrinter &p) {
   p << " : ";
   p.printType(columnInputType.getElementType());
 
-  p << "] -> (";
+  p << "] pe (";
+  p.printOperand(pe().getArgument(0));
+  p << ", ";
+  p.printOperand(pe().getArgument(1));
+  p << ") -> (";
   p.printType(peOutputs()
                   .getType()
                   .cast<hw::ArrayType>()
                   .getElementType()
                   .cast<hw::ArrayType>()
                   .getElementType());
-
-  p << ") pe (";
-  p.printOperand(pe().getArgument(0));
-  p << ", ";
-  p.printOperand(pe().getArgument(1));
   p << ") ";
   p.printRegion(pe(), false);
 }
