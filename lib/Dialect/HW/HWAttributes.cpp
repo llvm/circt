@@ -707,7 +707,7 @@ replaceDeclRefInExpr(const std::map<std::string, IntegerAttr> &parameters,
                                      "parameters for the expression!");
     return it->second;
   } else if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
-    // Recurse into all of the operands of the expression.
+    // Recurse into all operands of the expression.
     llvm::SmallVector<Attribute, 4> replacedOperands;
     llvm::transform(paramExprAttr.getOperands(),
                     std::back_inserter(replacedOperands), [&](auto operand) {
