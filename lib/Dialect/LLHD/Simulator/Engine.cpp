@@ -111,7 +111,8 @@ int Engine::simulate(int n, uint64_t maxTime) {
     const auto &pop = state->queue.top();
 
     // Interrupt the simulation if a stop condition is met.
-    if ((n > 0 && cycle >= n) || (maxTime > 0 && pop.time.time > maxTime)) {
+    if ((n > 0 && cycle >= n) ||
+        (maxTime > 0 && pop.time.getTime() > maxTime)) {
       break;
     }
 

@@ -25,26 +25,6 @@ using namespace circt::llhd::sim;
 // Time
 //===----------------------------------------------------------------------===//
 
-bool Time::operator<(const Time &rhs) const {
-  if (time < rhs.time)
-    return true;
-  if (time == rhs.time && delta < rhs.delta)
-    return true;
-  if (time == rhs.time && delta == rhs.delta && eps < rhs.eps)
-    return true;
-  return false;
-}
-
-bool Time::operator==(const Time &rhs) const {
-  return (time == rhs.time && delta == rhs.delta && eps == rhs.eps);
-}
-
-Time Time::operator+(const Time &rhs) const {
-  return Time(time + rhs.time, delta + rhs.delta, eps + rhs.eps);
-}
-
-bool Time::isZero() { return (time == 0 && delta == 0 && eps == 0); }
-
 std::string Time::toString() const {
   return std::to_string(time) + "ps " + std::to_string(delta) + "d " +
          std::to_string(eps) + "e";

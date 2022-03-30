@@ -130,7 +130,7 @@ void Trace::flush(bool force) {
     flushFull();
   else if (mode == TraceMode::Merged || mode == TraceMode::MergedReduce ||
            mode == TraceMode::NamedOnly)
-    if (state->time.time > currentTime.time || force)
+    if (state->time.getTime() > currentTime.getTime() || force)
       flushMerged();
 }
 
@@ -169,7 +169,7 @@ void Trace::flushMerged() {
     sortChanges();
 
     // Flush the changes to output stream.
-    out << currentTime.time << "ps\n";
+    out << currentTime.getTime() << "ps\n";
     for (auto change : changes) {
       out << "  " << change.first << "  " << change.second << "\n";
     }
