@@ -22,6 +22,11 @@ def MatrixType : DialectType<HWDialect,
 def SystolicArrayOp : MSFTOp<"systolic.array", 
           [SingleBlockImplicitTerminator<"PEOutputOp"> ]> {
   let summary = "Model of a row/column broadcast systolic array";
+  // TODO: flesh out description once we've proved this op out.
+  let description = [{
+    Note: the PE region is NOT a graph region. This was intentional since
+    systolic arrays are entirely feed-forward.
+  }];
 
   let arguments = (ins ArrayType:$rowInputs,
                        ArrayType:$colInputs);
@@ -34,5 +39,5 @@ def SystolicArrayOp : MSFTOp<"systolic.array",
 def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
   let summary = "Set the outputs from a PE block";
   let arguments = (ins AnyType:$output);
-  let assemblyFormat = "$output `:` type($output) attr-dict";
+  let assemblyFormat = "$output attr-dict `:` type($output)";
 }

@@ -1696,6 +1696,8 @@ public:
     Block &peBlock = array.pe().front();
     rewriter.setInsertionPointAfter(array);
 
+    // For the row broadcasts, break out the row values which must be broadcast
+    // to each PE.
     hw::ArrayType rowInputs =
         hw::type_cast<hw::ArrayType>(array.rowInputs().getType());
     IntegerType rowIdxType = rewriter.getIntegerType(
@@ -1712,6 +1714,8 @@ public:
       rowValues.push_back(rowValue);
     }
 
+    // For the column broadcasts, break out the column values which must be
+    // broadcast to each PE.
     hw::ArrayType colInputs =
         hw::type_cast<hw::ArrayType>(array.colInputs().getType());
     IntegerType colIdxType = rewriter.getIntegerType(
@@ -1728,19 +1732,28 @@ public:
       colValues.push_back(colValue);
     }
 
+    // Build the PE matrix.
     SmallVector<Value> peOutputs;
     for (Value rowValue : rowValues) {
       SmallVector<Value> colPEOutputs;
       for (Value colValue : colValues) {
+        // Clone the PE block, substituting %row (arg 0) and %col (arg 1) for
+        // the corresponding row/column broadcast value.
+        // NOTE: the PE region is NOT a graph region so we don't have to deal
+        // with backedges.
         BlockAndValueMapping mapper;
         mapper.map(peBlock.getArgument(0), rowValue);
         mapper.map(peBlock.getArgument(1), colValue);
         for (Operation &peOperation : peBlock)
+          // If we see the output op (which should be the block terminator), add
+          // its operand to the output matrix.
           if (auto outputOp = dyn_cast<PEOutputOp>(peOperation))
             colPEOutputs.push_back(mapper.lookup(outputOp.output()));
           else
             rewriter.clone(peOperation, mapper);
       }
+      // Reverse the vector since ArrayCreateOp has the opposite ordering to C
+      // vectors.
       std::reverse(colPEOutputs.begin(), colPEOutputs.end());
       peOutputs.push_back(
           rewriter.create<hw::ArrayCreateOp>(loc, colPEOutputs));
