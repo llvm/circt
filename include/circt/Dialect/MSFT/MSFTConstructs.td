@@ -8,7 +8,7 @@
 
 include "circt/Dialect/HW/HWTypes.td"
 
-// A handle to refer to hw::ArrayType in ODS.
+// A handle to refer to hw::ArrayType of hw::ArrayType in ODS.
 def MatrixType : DialectType<HWDialect,
     CPred<[{
       hw::type_isa<hw::ArrayType>($_self) &&
@@ -18,11 +18,10 @@ def MatrixType : DialectType<HWDialect,
     "hw::TypeAliasOr<hw::ArrayType>">;
 
 
-// SystolicArray -- fully buffered, row/column broadcast
-def SystolicArrayOp : MSFTOp<"systolicarray", 
-          [NoTerminator,
-           SingleBlockImplicitTerminator<"PEOutputOp"> ]> {
-  let summary = "Model of a fully-buffered, broadcast systolic array";
+// SystolicArray
+def SystolicArrayOp : MSFTOp<"systolic.array", 
+          [SingleBlockImplicitTerminator<"PEOutputOp"> ]> {
+  let summary = "Model of a row/column broadcast systolic array";
 
   let arguments = (ins ArrayType:$rowInputs,
                        ArrayType:$colInputs);
@@ -30,14 +29,9 @@ def SystolicArrayOp : MSFTOp<"systolicarray",
   let regions = (region SizedRegion<1>:$pe);
 
   let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-  }];
-
 }
 
-def PEOutputOp: MSFTOp<"pe.output", 
-          [Terminator]> {
+def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
   let arguments = (ins AnyType:$output);
   let assemblyFormat = "$output `:` type($output) attr-dict";
 }

@@ -46,3 +46,9 @@ def LowerInstances: Pass<"msft-lower-instances", "mlir::ModuleOp"> {
   let constructor = "circt::msft::createLowerInstancesPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
+
+def LowerConstructs: Pass<"msft-lower-constructs", "mlir::ModuleOp"> {
+  let summary = "Lower high-level constructs";
+  let constructor = "circt::msft::createLowerConstructsPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
+}

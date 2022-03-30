@@ -846,7 +846,8 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
                              {rowInputType, columnInputType}, loc, operands))
     return failure();
   result.addOperands(operands);
-  result.addTypes({hw::ArrayType::get(rowInputType, numColumns)});
+  result.addTypes({hw::ArrayType::get(
+      hw::ArrayType::get(peOutputType, numColumns), numRows)});
 
   SmallVector<OpAsmParser::UnresolvedOperand> peArgs;
   if (parser.parseKeyword("pe") ||
