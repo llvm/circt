@@ -1147,13 +1147,15 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numOperands; ++i) {
-    auto expectedType = expectedOperandTypes[i];
+    auto expectedType =
+        resolveParametricType(parameters(), expectedOperandTypes[i]);
     auto operandType = getOperand(i).getType();
-    if (operandType != expectedType)
+    if (operandType != expectedType) {
       return emitError([&](auto &diag) {
         diag << "operand type #" << i << " must be " << expectedType
              << ", but got " << operandType;
       });
+    }
 
     if (argNames[i] != modArgNames[i])
       return emitError([&](auto &diag) {
@@ -1180,7 +1182,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numResults; ++i) {
-    auto expectedType = expectedResultTypes[i];
+    auto expectedType =
+        resolveParametricType(parameters(), expectedResultTypes[i]);
     auto resultType = getResult(i).getType();
     if (resultType != expectedType)
       return emitError([&](auto &diag) {

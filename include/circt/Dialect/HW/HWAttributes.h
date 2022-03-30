@@ -25,6 +25,15 @@ struct InnerName {
 // Forward declaration.
 class GlobalRefOp;
 
+/// Returns a resolved version of 'type' wherein any parameter reference
+/// has been evaluated based on the set of provided 'parameters'.
+mlir::Type resolveParametricType(mlir::ArrayAttr parameters, mlir::Type type);
+
+/// Evaluates a parametric attribute (param.decl.ref/param.expr) based on a set
+/// of provided parameter values.
+mlir::APInt evaluateParamAttr(mlir::ArrayAttr parameters,
+                              mlir::Attribute paramAttr);
+
 } // namespace hw
 } // namespace circt
 

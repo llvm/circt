@@ -138,11 +138,26 @@ hw.module @associativeOrdering<p1: i4, p2: i4>()
 hw.module @parameterizedTypes<param: i32>
 // CHECK-SAME: %a: i17,
   (%a: !hw.int<17>,
-// CHECK-SAME: %b: !hw.int<#hw.param.decl.ref<"param">>
-   %b: !hw.int<#hw.param.decl.ref<"param">>) {
+// CHECK-SAME: %b: !hw.int<#hw.param.decl.ref<"param">>) ->
+   %b: !hw.int<#hw.param.decl.ref<"param">>) ->
+// CHECK-SAME: (c: !hw.int<#hw.param.decl.ref<"param">>)
+  (c: !hw.int<#hw.param.decl.ref<"param">>) {
 
   // CHECK: %paramWire = sv.wire : !hw.inout<int<#hw.param.decl.ref<"param">>>
   %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
+  // CHECK: %0 = sv.read_inout %paramWire : !hw.inout<int<#hw.param.decl.ref<"param">>>
+  %0 = sv.read_inout %paramWire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
+  // CHECK: hw.output %0 : !hw.int<#hw.param.decl.ref<"param">>
+  hw.output %0 : !hw.int<#hw.param.decl.ref<"param">>
+}
+
+// CHECK-LABEL: @parameterizedTypesInstance(
+hw.module @parameterizedTypesInstance
+  (%a: !hw.int<17>, %b: !hw.int<42>) {
+
+  // CHECK: hw.instance "inst" @parameterizedTypes<param: i32 = 42>(a: %a: i17, b: %b: i42) -> (c: i42)
+  %c = hw.instance "inst" @parameterizedTypes<param: i32 = 42>
+    (a: %a : !hw.int<17>, b: %b : !hw.int<42>) -> (c: !hw.int<42>) {}
 }
 
 // CHECK-LABEL: hw.module @parameterizedCombSeq<param: i32>(

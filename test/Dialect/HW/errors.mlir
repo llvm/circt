@@ -287,3 +287,27 @@ module  {
     hw.instance "h2" sym @inst_0 @C() -> () {circt.globalRef = [#hw.globalNameRef<@glbl_D_M1>]}
   }
 }
+
+// -----
+
+module {
+  hw.module @A(%a : !hw.int<41>) -> (out: !hw.int<42>) {
+// expected-error @+1 {{'hw.instance' op operand type #0 must be 'i42', but got 'i41'}}
+    %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<41>) -> (out: !hw.int<42>)
+    hw.output %r0: !hw.int<42>
+  }
+// expected-note @+1 {{module declared here}}
+  hw.module.extern @parameters<p1: i42>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>)
+}
+
+// -----
+
+module {
+  hw.module @A(%a : !hw.int<42>) -> (out: !hw.int<41>) {
+// expected-error @+1 {{'hw.instance' op result type #0 must be 'i42', but got 'i41'}}
+    %r0 = hw.instance "inst1" @parameters<p1: i42 = 42>(arg0: %a: !hw.int<42>) -> (out: !hw.int<41>)
+    hw.output %r0: !hw.int<41>
+  }
+// expected-note @+1 {{module declared here}}
+  hw.module.extern @parameters<p1: i42>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>)
+}
