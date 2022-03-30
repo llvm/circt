@@ -220,7 +220,7 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
   %ones = hw.constant 15: i4
 
   // CHECK-NOT: comb.xor
- 
+
   // We normally duplicate unary operations like this one so they can be inlined
   // into the using expressions.  However, not all users can be inlined *into*.
   // Things like extract/sext do not support this, so do not duplicate if used
@@ -228,9 +228,9 @@ hw.module @unary_sink_no_duplicate(%arg0: i4) -> (result: i4) {
 
   // CHECK: comb.xor %arg0,
   %0 = comb.xor %arg0, %ones : i4
- 
+
  // CHECK-NOT: comb.xor
- 
+
   %a = comb.extract %0 from 0 : (i4) -> i1
   %b = comb.extract %0 from 1 : (i4) -> i1
   %c = comb.extract %0 from 2 : (i4) -> i2
