@@ -1698,8 +1698,8 @@ public:
 
     hw::ArrayType rowInputs =
         hw::type_cast<hw::ArrayType>(array.rowInputs().getType());
-    IntegerType rowIdxType =
-        rewriter.getIntegerType(llvm::Log2_64_Ceil(rowInputs.getSize()));
+    IntegerType rowIdxType = rewriter.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(rowInputs.getSize())));
     SmallVector<Value> rowValues;
     for (size_t rowNum = 0, numRows = rowInputs.getSize(); rowNum < numRows;
          ++rowNum) {
@@ -1714,8 +1714,8 @@ public:
 
     hw::ArrayType colInputs =
         hw::type_cast<hw::ArrayType>(array.colInputs().getType());
-    IntegerType colIdxType =
-        rewriter.getIntegerType(llvm::Log2_64_Ceil(colInputs.getSize()));
+    IntegerType colIdxType = rewriter.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(colInputs.getSize())));
     SmallVector<Value> colValues;
     for (size_t colNum = 0, numCols = colInputs.getSize(); colNum < numCols;
          ++colNum) {
@@ -1724,7 +1724,7 @@ public:
       auto colValue =
           rewriter.create<hw::ArrayGetOp>(loc, array.colInputs(), colNumVal);
       colValue->setAttr("sv.namehint",
-                        StringAttr::get(ctxt, "row_" + Twine(colNum)));
+                        StringAttr::get(ctxt, "col_" + Twine(colNum)));
       colValues.push_back(colValue);
     }
 
@@ -1741,10 +1741,12 @@ public:
           else
             rewriter.clone(peOperation, mapper);
       }
+      std::reverse(colPEOutputs.begin(), colPEOutputs.end());
       peOutputs.push_back(
           rewriter.create<hw::ArrayCreateOp>(loc, colPEOutputs));
     }
 
+    std::reverse(peOutputs.begin(), peOutputs.end());
     rewriter.replaceOp(array,
                        {rewriter.create<hw::ArrayCreateOp>(loc, peOutputs)});
     return success();
