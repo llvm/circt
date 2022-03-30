@@ -26,7 +26,8 @@ namespace llhd {
 namespace sim {
 
 /// The simulator's internal representation of time.
-struct Time {
+class Time {
+public:
   /// Empty (zero) time constructor. All the time values are defaulted to 0.
   Time() = default;
 
@@ -35,25 +36,31 @@ struct Time {
       : time(time), delta(delta), eps(eps) {}
 
   /// Compare the time values in order of time, delta, eps.
-  bool operator<(const Time &rhs) const;
+  bool operator<(const Time &rhs) const {
+    return time < rhs.time || (time == rhs.time && delta < rhs.delta) ||
+           (time == rhs.time && delta == rhs.delta && eps < rhs.eps);
+  }
 
   /// Return true if all the time values are equal.
-  bool operator==(const Time &rhs) const;
+  bool operator==(const Time &rhs) const {
+    return time == rhs.time && delta == rhs.delta && eps == rhs.eps;
+  }
 
   /// Add two time values.
-  Time operator+(const Time &rhs) const;
-
-  /// Return true if the time represents zero-time.
-  bool isZero();
+  Time operator+(const Time &rhs) const {
+    return Time(time + rhs.time, delta + rhs.delta, eps + rhs.eps);
+  }
 
   /// Get the stored time in a printable format.
   std::string toString() const;
 
+  uint64_t getTime() const { return time; }
+
+private:
+  /// Simulation real time.
   uint64_t time;
   uint64_t delta;
   uint64_t eps;
-
-private:
 };
 
 /// Detail structure that can be easily accessed by the lowered code.

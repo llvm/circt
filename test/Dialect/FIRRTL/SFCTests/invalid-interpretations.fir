@@ -16,10 +16,10 @@ circuit InvalidInterpretations:
     output out_mux: UInt<8>
     output out_add: UInt<9>
 
-    wire inv: UInt<8>
-    inv is invalid
+    wire _inv: UInt<8>
+    _inv is invalid
 
-    reg r: UInt<8>, clock with : (reset => (reset, inv))
+    reg r: UInt<8>, clock with : (reset => (reset, _inv))
     r <= a
     out_reg <= r
     ; Interpretation 1: Invalid is undefined if used as the initialization value
@@ -37,8 +37,8 @@ circuit InvalidInterpretations:
     ; Interpretation 3: Invalid is undefined as the false leg of a validif.
     ; CHECK:       assign out_validif = a;
 
-    out_mux <= mux(cond, a, inv)
-    out_add <= add(a, inv)
+    out_mux <= mux(cond, a, _inv)
+    out_add <= add(a, _inv)
     ; Interpretation 4: Invalid is zero otherwise.
     ; CHECK:       assign out_mux = cond ? a : 8'h0;
     ; CHECK-NEXT:  assign out_add = {1'h0, a};
