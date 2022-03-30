@@ -28,6 +28,34 @@ using namespace moore;
 
 namespace {
 
+/// Returns the passed value if the integer width is already correct.
+/// Zero-extends if it is too narrow.
+/// Truncates if the integer is too wide and the truncated part is zero, if it
+/// is not zero it returns the max value integer of target-width.
+static Value adjustIntegerWidth(OpBuilder &builder, Value value,
+                                uint32_t targetWidth, Location loc) {
+  uint32_t intWidth = value.getType().getIntOrFloatBitWidth();
+  if (intWidth == targetWidth)
+    return value;
+
+  if (intWidth < targetWidth) {
+    Value zeroExt = builder.create<hw::ConstantOp>(
+        loc, builder.getIntegerType(targetWidth - intWidth), 0);
+    return builder.create<comb::ConcatOp>(loc, ValueRange{zeroExt, value});
+  }
+
+  Value hi = builder.create<comb::ExtractOp>(loc, value, targetWidth,
+                                             intWidth - targetWidth);
+  Value zero = builder.create<hw::ConstantOp>(
+      loc, builder.getIntegerType(intWidth - targetWidth), 0);
+  Value isZero =
+      builder.create<comb::ICmpOp>(loc, comb::ICmpPredicate::eq, hi, zero);
+  Value lo = builder.create<comb::ExtractOp>(loc, value, 0, targetWidth);
+  Value max = builder.create<hw::ConstantOp>(
+      loc, builder.getIntegerType(targetWidth), -1);
+  return builder.create<comb::MuxOp>(loc, isZero, lo, max);
+}
+
 //===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
@@ -162,6 +190,54 @@ struct UnrealizedConversionCastConversion
   }
 };
 
+struct ShlOpConversion : public OpConversionPattern<ShlOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ShlOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.result().getType());
+
+    // Comb shift operations require the same bit-width for value and amount
+    Value amount =
+        adjustIntegerWidth(rewriter, adaptor.amount(),
+                           resultType.getIntOrFloatBitWidth(), op->getLoc());
+    rewriter.replaceOpWithNewOp<comb::ShlOp>(op, resultType, adaptor.value(),
+                                             amount);
+    return success();
+  }
+};
+
+struct ShrOpConversion : public OpConversionPattern<ShrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ShrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.result().getType());
+    bool hasSignedResultType = op.result()
+                                   .getType()
+                                   .cast<UnpackedType>()
+                                   .castToSimpleBitVector()
+                                   .isSigned();
+
+    // Comb shift operations require the same bit-width for value and amount
+    Value amount =
+        adjustIntegerWidth(rewriter, adaptor.amount(),
+                           resultType.getIntOrFloatBitWidth(), op->getLoc());
+
+    if (adaptor.arithmetic() && hasSignedResultType) {
+      rewriter.replaceOpWithNewOp<comb::ShrSOp>(op, resultType, adaptor.value(),
+                                                amount);
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<comb::ShrUOp>(op, resultType, adaptor.value(),
+                                              amount);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -245,6 +321,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CondBranchOpConversion,
     BranchOpConversion,
     CallOpConversion,
+    ShlOpConversion,
+    ShrOpConversion,
     UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on
