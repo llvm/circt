@@ -46,18 +46,17 @@ llvm::SmallVector<Value> ValueMapper::get(ValueRange from,
 void ValueMapper::set(Value from, Value to, bool replace) {
   auto it = mapping.find(from);
   if (it != mapping.end()) {
-    if (auto *backedge = std::get_if<Backedge>(&it->second)) {
+    if (auto *backedge = std::get_if<Backedge>(&it->second))
       backedge->setValue(to);
-    } else {
+    else if (!replace)
       assert(false && "'from' was already mapped to a final value!");
-    }
   }
   // Register the new mapping
   mapping[from] = to;
 }
 
 void ValueMapper::set(ValueRange from, ValueRange to, bool replace) {
-  assert(from.size() == to.size() && !replace &&
+  assert(from.size() == to.size() &&
          "Expected # of 'from' values and # of 'to' values to be identical.");
   for (auto [f, t] : llvm::zip(from, to))
     set(f, t, replace);
