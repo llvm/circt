@@ -1628,8 +1628,69 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     os << "$signed(";
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
-  auto lhsInfo =
-      emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
+
+  // Pattern match situations where the arithmetic has been padded to comply
+  // with HW dialect width rules.  Ignore the pads for the purposes of Verilog
+  // emission.
+  //
+  //   binOp(concat(0, a), concat(0, b)) -> binOp(a, b)
+  //   binOp(concat(0, a), constant)     -> binOp(a, constant[width/2-1:0])
+  //
+  Value lhsSubexpr = op->getOperand(0), rhsSubexpr = op->getOperand(1);
+  TypeSwitch<Operation *>(op).Case<MulOp, AddOp>([&](Operation *op) {
+    auto *lhsOp = op->getOperand(0).getDefiningOp();
+    auto *rhsOp = op->getOperand(1).getDefiningOp();
+    if (!lhsOp || !rhsOp)
+      return;
+
+    auto lhsPad = dyn_cast<ConcatOp>(lhsOp);
+    if (!lhsPad)
+      return;
+
+    // The width is the expected width of the pad/concat.  For an addition this
+    // is one, for a multiplication it is half the full width of the op.
+    unsigned width = 1;
+    if (isa<MulOp>(op))
+      width = op->getResultTypes()[0].getIntOrFloatBitWidth() / 2;
+
+    auto isExtendedConstantOrOp = [&](ConcatOp pad) {
+      if (auto cst = pad.getOperand(0).getDefiningOp<ConstantOp>()) {
+        if (!cst.getValue().isZero() || cst.getValue().getBitWidth() != width)
+          return false;
+      } else if (auto rpl = pad.getOperand(0).getDefiningOp<ReplicateOp>()) {
+        auto extract = rpl.input().getDefiningOp<ExtractOp>();
+        if (!extract || extract.input() != pad.getOperand(1) ||
+            extract.lowBit() !=
+                (pad.getOperand(1).getType().getIntOrFloatBitWidth() - 1) ||
+            rpl.getMultiple() != width)
+          return false;
+      }
+      return true;
+    };
+
+    if (!isExtendedConstantOrOp(lhsPad))
+      return;
+
+    Value newRhs;
+    if (auto maybeConstant = dyn_cast<ConstantOp>(rhsOp)) {
+      auto value = maybeConstant.getValue();
+      if (value.countLeadingZeros() < width)
+        return;
+      OpBuilder builder(op->getContext());
+      newRhs = builder.create<ConstantOp>(op->getLoc(),
+                                          APInt(width, value.getZExtValue()));
+    } else if (auto rhsPad = dyn_cast<ConcatOp>(rhsOp)) {
+      if (!isExtendedConstantOrOp(rhsPad))
+        return;
+      newRhs = rhsPad.getOperand(1);
+    } else
+      return;
+
+    lhsSubexpr = lhsPad.getOperand(1);
+    rhsSubexpr = newRhs;
+  });
+
+  auto lhsInfo = emitSubExpr(lhsSubexpr, prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
 
   // Right associative operators are already generally variadic, we need to
@@ -1650,9 +1711,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     operandSignReq = NoRequirement;
   }
 
-  auto rhsInfo =
-      emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq,
-                  rhsIsUnsignedValueWithSelfDeterminedWidth);
+  auto rhsInfo = emitSubExpr(rhsSubexpr, rhsPrec, OOLBinary, operandSignReq,
+                             rhsIsUnsignedValueWithSelfDeterminedWidth);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
