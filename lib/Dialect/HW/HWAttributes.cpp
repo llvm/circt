@@ -792,7 +792,7 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
         return hw::ArrayType::get(
             arrayType.getContext(), elementType.getValue(),
             IntegerAttr::get(IntegerType::get(type.getContext(), 64),
-                             size.getValue()));
+                             size.getValue().getSExtValue()));
       })
       .Default([&](auto) { return type; });
 }
