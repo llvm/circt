@@ -1199,6 +1199,93 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK-NEXT:    .signed_0 (signed_0)
 }
 
+// CHECK-LABEL: SimplyNestedElseIf
+// CHECK: if (flag1)
+// CHECK: else if (flag2)
+// CHECK: else if (flag3)
+// CHECK: else
+hw.module @SimplyNestedElseIf(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1) {
+  %fd = hw.constant 0x80000002 : i32
+
+  sv.always posedge %clock {
+    sv.if %flag1 {
+      sv.fwrite %fd, "A"
+    } else {
+      sv.if %flag2 {
+        sv.fwrite %fd, "B"
+      } else {
+        sv.if %flag3 {
+          sv.fwrite %fd, "C"
+        } else {
+          sv.fwrite %fd, "D"
+        }
+      }
+    }
+  }
+
+  hw.output
+}
+
+// CHECK-LABEL: DoNotChainElseIf
+// CHECK: if (flag1)
+// CHECK: else begin
+// CHECK: if (flag2)
+// CHECK: else
+// CHECK: end
+hw.module @DoNotChainElseIf(%clock: i1, %flag1 : i1, %flag2: i1) {
+  %wire = sv.reg : !hw.inout<i32>
+  %fd = hw.constant 0x80000002 : i32
+
+  sv.always posedge %clock {
+    sv.if %flag1 {
+      sv.fwrite %fd, "A"
+    } else {
+      sv.passign %wire, %fd : i32
+      sv.if %flag2 {
+        sv.fwrite %fd, "B"
+      } else {
+        sv.fwrite %fd, "C"
+      }
+    }
+  }
+
+  hw.output
+}
+
+// CHECK-LABEL: NestedElseIfHoist
+// CHECK: automatic logic        [[FLAG:.*]] = flag2 & flag4;
+// CHECK: automatic logic [31:0] [[ARG:.*]] = arg0 + arg1 + arg2;
+// CHECK: if (flag1)
+// CHECK: else if ([[FLAG]])
+// CHECK: else if (flag3 & [[FLAG]])
+// CHECK: else
+// CHECK: [[ARG]]
+hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %flag4 : i1, %arg0: i32, %arg1: i32, %arg2: i32) {
+  %fd = hw.constant 0x80000002 : i32
+
+  sv.always posedge %clock {
+    sv.if %flag1 {
+      sv.fwrite %fd, "A"
+    } else {
+      %0 = comb.and %flag2, %flag4 : i1
+      %10 = comb.add %arg0, %arg1 : i32
+      sv.if %0 {
+        sv.fwrite %fd, "B"
+      } else {
+        %1 = comb.and %flag3, %0 : i1
+        %11 = comb.add %10, %arg2 : i32
+        sv.if %1 {
+          sv.fwrite %fd, "C"
+        } else {
+          sv.fwrite %fd, "D(%d)" (%11) : i32
+        }
+      }
+    }
+  }
+
+  hw.output
+}
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>

@@ -510,6 +510,24 @@ static bool isOkToBitSelectFrom(Value v) {
   return false;
 }
 
+/// Find a nested IfOp in an else block that can be printed as `else if`
+/// instead of nesting it into a new `begin` - `end` block.  The block must
+/// contain a single IfOp and optionally expressions which can be hoisted out.
+static IfOp findNestedElseIf(Block *elseBlock) {
+  IfOp ifOp;
+  for (auto &op : *elseBlock) {
+    if (auto opIf = dyn_cast<IfOp>(op)) {
+      if (ifOp)
+        return {};
+      ifOp = opIf;
+      continue;
+    }
+    if (!isVerilogExpression(&op))
+      return {};
+  }
+  return ifOp;
+}
+
 //===----------------------------------------------------------------------===//
 // ModuleNameManager Implementation
 //===----------------------------------------------------------------------===//
@@ -2206,6 +2224,20 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
+/// Checks whether the use block is nested in the definition block through a
+/// chain of ops that do not block the inlining of a definition.
+static bool allowsInlineUses(Block *def, Block *use) {
+  if (def == use)
+    return true;
+
+  // Presently, only `else if` chains allow inlining.
+  auto op = dyn_cast<IfOp>(use->getParentOp());
+  if (op && op.hasElse() && op.getElseBlock() == use && findNestedElseIf(use))
+    return allowsInlineUses(def, op->getBlock());
+
+  return false;
+}
+
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
@@ -2240,7 +2272,8 @@ static bool isExpressionUnableToInline(Operation *op) {
     // If the op is defined locally and the user is in a different block, then
     // we emit this as an out-of-line declaration into its block and the user
     // can refer to it unless the operation is duplicatable.
-    if (isLocalDefinition && user->getBlock() != opBlock && !isDuplicatable)
+    if (isLocalDefinition && !isDuplicatable &&
+        !allowsInlineUses(opBlock, user->getBlock()))
       return true;
 
     // Verilog bit selection is required by the standard to be:
@@ -2337,12 +2370,13 @@ void NameCollector::collectNames(Block &block) {
     }
 
     bool isExpr = isVerilogExpression(&op);
+    bool isInlineExpr = isExpr && isExpressionEmittedInline(&op);
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
       if (isExpr) {
         // If this expression is dead, or can be emitted inline, ignore it.
-        if (result.use_empty() || isExpressionEmittedInline(&op))
+        if (result.use_empty() || isInlineExpr)
           continue;
 
         // Remember that this expression should be emitted out of line.
@@ -2401,6 +2435,14 @@ void NameCollector::collectNames(Block &block) {
         if (!region.empty())
           collectNames(region.front());
       }
+      continue;
+    }
+
+    // Recursively process any expressions in else blocks that can be emitted
+    // as `else if`.
+    if (auto ifOp = dyn_cast<IfOp>(op)) {
+      if (ifOp.hasElse() && findNestedElseIf(ifOp.getElseBlock()))
+        collectNames(*ifOp.getElseBlock());
       continue;
     }
   }
@@ -3142,22 +3184,41 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
 
   indent() << "if (";
 
-  // If we have an else and and empty then block, emit an inverted condition.
-  if (!op.hasElse() || !op.getThenBlock()->empty()) {
-    // Normal emission.
-    emitExpression(op.cond(), ops);
-    os << ')';
-    emitBlockAsStatement(op.getThenBlock(), ops);
-    if (op.hasElse()) {
-      indent() << "else";
-      emitBlockAsStatement(op.getElseBlock(), ops);
+  // In the loop, emit an if statement assuming the keyword introducing
+  // it (either "if (" or "else if (") was printed already.
+  IfOp ifOp = op;
+  for (;;) {
+    // If we have an else and and empty then block, emit an inverted condition.
+    if (ifOp.hasElse() && ifOp.getThenBlock()->empty()) {
+      os << '!';
+      emitExpression(ifOp.cond(), ops, Unary);
+      os << ')';
+      emitBlockAsStatement(ifOp.getElseBlock(), ops);
+      break;
     }
-  } else {
-    // inverted condition.
-    os << '!';
-    emitExpression(op.cond(), ops, Unary);
+
+    // Normal emission.
+    emitExpression(ifOp.cond(), ops);
     os << ')';
-    emitBlockAsStatement(op.getElseBlock(), ops);
+    emitBlockAsStatement(ifOp.getThenBlock(), ops);
+
+    if (!ifOp.hasElse())
+      break;
+
+    // The else block does not contain an if-else that can be flattened.
+    Block *elseBlock = ifOp.getElseBlock();
+    ifOp = findNestedElseIf(elseBlock);
+    if (!ifOp) {
+      indent() << "else";
+      emitBlockAsStatement(elseBlock, ops);
+      break;
+    }
+
+    // Introduce the 'else if', but iteratively continue unfolding any if-else
+    // statements inside of it.  Any wires that would have been generated to
+    // represent the condition will be hoisted to the parent scope of the outer
+    // `if` instead of being placed in a new block scope.
+    indent() << "else if (";
   }
 
   // We count if as multiple statements to make sure it is always surrounded by
