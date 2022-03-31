@@ -330,7 +330,7 @@ void HWElaborateGeneratePass::runOnOperation() {
       parametersUsers;
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
-      auto targetOp = instanceOp.getReferencedModule();
+      auto *targetOp = instanceOp.getReferencedModule();
       auto targetHWModule = dyn_cast<hw::HWModuleOp>(targetOp);
       if (!targetHWModule) {
         continue; // Won't elaborate external modules.
