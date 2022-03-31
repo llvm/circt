@@ -67,7 +67,7 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.valueAttr());
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.getValueAttr());
     return success();
   }
 };
@@ -77,7 +77,7 @@ struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
   LogicalResult
   matchAndRewrite(ConcatOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.values());
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.getValues());
     return success();
   }
 };
@@ -92,10 +92,10 @@ struct VariableDeclOpConv : public OpConversionPattern<VariableDeclOp> {
   LogicalResult
   matchAndRewrite(VariableDeclOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type resultType = typeConverter->convertType(op.result().getType());
+    Type resultType = typeConverter->convertType(op.getResult().getType());
     Value initVal =
-        rewriter.create<hw::ConstantOp>(op->getLoc(), op.initAttr());
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, resultType, op.name(),
+        rewriter.create<hw::ConstantOp>(op->getLoc(), op.getInitAttr());
+    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, resultType, op.getName(),
                                              initVal);
     return success();
   }
@@ -109,8 +109,8 @@ struct AssignOpConv : public OpConversionPattern<AssignOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Value timeVal =
         rewriter.create<llhd::ConstantTimeOp>(op->getLoc(), 0, "s", 0, 1);
-    rewriter.replaceOpWithNewOp<llhd::DrvOp>(op, adaptor.dest(), adaptor.src(),
-                                             timeVal, Value());
+    rewriter.replaceOpWithNewOp<llhd::DrvOp>(
+        op, adaptor.getDest(), adaptor.getSrc(), timeVal, Value());
     return success();
   }
 };
@@ -196,13 +196,13 @@ struct ShlOpConversion : public OpConversionPattern<ShlOp> {
   LogicalResult
   matchAndRewrite(ShlOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type resultType = typeConverter->convertType(op.result().getType());
+    Type resultType = typeConverter->convertType(op.getResult().getType());
 
     // Comb shift operations require the same bit-width for value and amount
     Value amount =
-        adjustIntegerWidth(rewriter, adaptor.amount(),
+        adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
-    rewriter.replaceOpWithNewOp<comb::ShlOp>(op, resultType, adaptor.value(),
+    rewriter.replaceOpWithNewOp<comb::ShlOp>(op, resultType, adaptor.getValue(),
                                              amount);
     return success();
   }
@@ -214,8 +214,8 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
   LogicalResult
   matchAndRewrite(ShrOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type resultType = typeConverter->convertType(op.result().getType());
-    bool hasSignedResultType = op.result()
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    bool hasSignedResultType = op.getResult()
                                    .getType()
                                    .cast<UnpackedType>()
                                    .castToSimpleBitVector()
@@ -223,17 +223,17 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
 
     // Comb shift operations require the same bit-width for value and amount
     Value amount =
-        adjustIntegerWidth(rewriter, adaptor.amount(),
+        adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
 
-    if (adaptor.arithmetic() && hasSignedResultType) {
-      rewriter.replaceOpWithNewOp<comb::ShrSOp>(op, resultType, adaptor.value(),
-                                                amount);
+    if (adaptor.getArithmetic() && hasSignedResultType) {
+      rewriter.replaceOpWithNewOp<comb::ShrSOp>(op, resultType,
+                                                adaptor.getValue(), amount);
       return success();
     }
 
-    rewriter.replaceOpWithNewOp<comb::ShrUOp>(op, resultType, adaptor.value(),
-                                              amount);
+    rewriter.replaceOpWithNewOp<comb::ShrUOp>(op, resultType,
+                                              adaptor.getValue(), amount);
     return success();
   }
 };
