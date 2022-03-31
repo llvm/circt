@@ -21,6 +21,120 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Moore, moore);
 
+//===----------------------------------------------------------------------===//
+// Types
+//===----------------------------------------------------------------------===//
+
+enum MooreIntKind {
+  // The integer vector types. These are the builtin single-bit integer types.
+  /// A `bit`.
+  Bit,
+  /// A `logic`.
+  Logic,
+  /// A `reg`.
+  Reg,
+
+  // The integer atom types. These are the builtin multi-bit integer types.
+  /// A `byte`.
+  Byte,
+  /// A `shortint`.
+  ShortInt,
+  /// An `int`.
+  Int,
+  /// A `longint`.
+  LongInt,
+  /// An `integer`.
+  Integer,
+  /// A `time`.
+  Time,
+};
+
+enum MooreRealKind {
+  /// A `shortreal`.
+  ShortReal,
+  /// A `real`.
+  Real,
+  /// A `realtime`.
+  RealTime,
+};
+
+enum MooreSign {
+  /// No sign is explicitly given.
+  None,
+  /// Explicitly marked to be unsigned.
+  Unsigned,
+  /// Explicitly marked to be signed.
+  Signed,
+};
+
+/// Create a void type.
+MLIR_CAPI_EXPORTED MlirType mooreVoidTypeGet(MlirContext ctx);
+/// Create a string type.
+MLIR_CAPI_EXPORTED MlirType mooreStringTypeGet(MlirContext ctx);
+/// Create a chandle type.
+MLIR_CAPI_EXPORTED MlirType mooreChandleTypeGet(MlirContext ctx);
+/// Create an event type.
+MLIR_CAPI_EXPORTED MlirType mooreEventTypeGet(MlirContext ctx);
+/// Create an int type.
+MLIR_CAPI_EXPORTED MlirType mooreIntTypeGet(MlirContext ctx,
+                                            enum MooreIntKind kind,
+                                            enum MooreSign sign);
+/// Create a `logic` type.
+MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx);
+/// Create an `int` type.
+MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetInt(MlirContext ctx);
+/// Create a `time` type.
+MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetTime(MlirContext ctx);
+/// Create a real type.
+MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx,
+                                             enum MooreRealKind kind);
+/// Create a packed unsized dimension type.
+MLIR_CAPI_EXPORTED MlirType moorePackedUnsizedDimTypeGet(MlirType inner);
+/// Create a packed range dimension type.
+MLIR_CAPI_EXPORTED MlirType moorePackedRangeDimTypeGet(MlirType inner,
+                                                       unsigned size,
+                                                       bool upDir, int offset);
+/// Create a unpacked unsized dimension type.
+MLIR_CAPI_EXPORTED MlirType mooreUnpackedUnsizedDimTypeGet(MlirType inner);
+/// Create a unpacked array dimension type.
+MLIR_CAPI_EXPORTED MlirType mooreUnpackedArrayDimTypeGet(MlirType inner,
+                                                         unsigned size);
+/// Create a unpacked range dimension type.
+MLIR_CAPI_EXPORTED MlirType mooreUnpackedRangeDimTypeGet(MlirType inner,
+                                                         unsigned size,
+                                                         bool upDir,
+                                                         int offset);
+/// Create a unpacked assoc dimension type without index.
+MLIR_CAPI_EXPORTED MlirType mooreUnpackedAssocDimTypeGet(MlirType inner);
+/// Create a unpacked assoc dimension type width index.
+MLIR_CAPI_EXPORTED MlirType
+mooreUnpackedAssocDimTypeGetWithIndex(MlirType inner, MlirType indexType);
+/// Create a unpacked queue dimension type without bound.
+MLIR_CAPI_EXPORTED MlirType mooreUnpackedQueueDimTypeGet(MlirType inner);
+/// Create a unpacked queue dimension type with bound.
+MLIR_CAPI_EXPORTED MlirType
+mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound);
+/// Create a enum type without base.
+MLIR_CAPI_EXPORTED MlirType mooreEnumTypeGet(MlirAttribute name,
+                                             MlirLocation loc);
+/// Create a enum type with base.
+MLIR_CAPI_EXPORTED MlirType mooreEnumTypeGetWithBase(MlirAttribute name,
+                                                     MlirLocation loc,
+                                                     MlirType base);
+// TODO: PackedStructType
+// TODO: UnpackedStructType
+/// Create a simple bit-vector type.
+MLIR_CAPI_EXPORTED MlirType mooreSimpleBitVectorTypeGet(MlirContext ctx,
+                                                        bool isFourValued,
+                                                        bool isSigned,
+                                                        unsigned size);
+/// Checks whether the passed UnpackedType is a four-valued type.
+MLIR_CAPI_EXPORTED bool mooreIsFourValuedType(MlirType type);
+/// Checks whether the passed type is a simple bit-vector.
+MLIR_CAPI_EXPORTED bool mooreIsSimpleBitVectorType(MlirType type);
+/// Returns the size of a simple bit-vector type in bits.
+MLIR_CAPI_EXPORTED unsigned mooreGetSimpleBitVectorSize(MlirType type);
+
 #ifdef __cplusplus
 }
 #endif
