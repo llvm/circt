@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -690,4 +691,94 @@ void ParamExprAttr::print(AsmPrinter &p) const {
   llvm::interleaveComma(getOperands(), p.getStream(),
                         [&](Attribute op) { p.printAttributeWithoutType(op); });
   p << '>';
+}
+
+// Replaces any ParamDeclRefAttr within a parametric expression with its
+// corresponding value from the map of provided parameters.
+static FailureOr<Attribute>
+replaceDeclRefInExpr(Location loc,
+                     const std::map<std::string, IntegerAttr> &parameters,
+                     Attribute paramAttr) {
+  if (paramAttr.dyn_cast<IntegerAttr>()) {
+    // Nothing to do, constant value.
+    return paramAttr;
+  }
+  if (auto paramRefAttr = paramAttr.dyn_cast<hw::ParamDeclRefAttr>()) {
+    // Get the value from the provided parameters.
+    auto it = parameters.find(paramRefAttr.getName().str());
+    if (it == parameters.end())
+      return {emitError(loc)
+              << "Could not find parameter " << paramRefAttr.getName().str()
+              << " in the provided parameters for the expression!"};
+    return it->second;
+  }
+  if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
+    // Recurse into all operands of the expression.
+    llvm::SmallVector<Attribute, 4> replacedOperands;
+    for (auto operand : paramExprAttr.getOperands()) {
+      auto res = replaceDeclRefInExpr(loc, parameters, operand);
+      if (failed(res))
+        return {failure()};
+      replacedOperands.push_back(res.getValue());
+    }
+    return {
+        hw::ParamExprAttr::get(paramExprAttr.getOpcode(), replacedOperands)};
+  }
+  llvm_unreachable("Unhandled parametric attribute");
+  return {};
+}
+
+FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
+                                            Attribute paramAttr) {
+  // Create a map of the provided parameters for faster lookup.
+  std::map<std::string, IntegerAttr> parameterMap;
+  for (auto param : parameters) {
+    auto paramDecl = param.cast<ParamDeclAttr>();
+    auto paramValue = paramDecl.getValue().dyn_cast<IntegerAttr>();
+    if (!paramValue)
+      return {emitError(loc)
+              << "Expected parameter value to be a known integer"};
+    parameterMap[paramDecl.getName().str()] = paramValue;
+  }
+
+  // First, replace any ParamDeclRefAttr in the expression with its
+  // corresponding value in 'parameters'.
+  auto paramAttrRes = replaceDeclRefInExpr(loc, parameterMap, paramAttr);
+  if (failed(paramAttrRes))
+    return {failure()};
+  paramAttr = paramAttrRes.getValue();
+
+  // Then, evaluate the parametric attribute.
+  if (auto intAttr = paramAttr.dyn_cast<IntegerAttr>())
+    return intAttr.getValue();
+  if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
+    // Since any ParamDeclRefAttr was replaced within the expression, the
+    // expression should be able to be fully canonicalized to a constant. We do
+    // this through the existing ParamExprAttr canonicalizer.
+    auto resAttr = ParamExprAttr::get(paramExprAttr.getOpcode(),
+                                      paramExprAttr.getOperands());
+    auto resIntAttr = resAttr.dyn_cast<IntegerAttr>();
+    assert(resIntAttr &&
+           "Expected evaluated parametric expression to "
+           "canonicalize to a constant. Since not, this means that some parts "
+           "of the expression did not resolve to a constant");
+    return resIntAttr.getValue();
+  }
+
+  llvm_unreachable("Unhandled parametric attribute");
+  return APInt();
+}
+
+FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
+                                           Type type) {
+  return llvm::TypeSwitch<Type, Type>(type)
+      .Case<hw::IntType>([&](hw::IntType t) -> FailureOr<Type> {
+        auto attrValue = evaluateParametricAttr(loc, parameters, t.getWidth());
+        if (failed(attrValue))
+          return {failure()};
+
+        return {IntegerType::get(type.getContext(),
+                                 attrValue.getValue().getSExtValue())};
+      })
+      .Default([&](auto) { return type; });
 }

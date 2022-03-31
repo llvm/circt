@@ -1147,13 +1147,19 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numOperands; ++i) {
-    auto expectedType = expectedOperandTypes[i];
-    auto operandType = getOperand(i).getType();
-    if (operandType != expectedType)
+    auto expectedType =
+        evaluateParametricType(getLoc(), parameters(), expectedOperandTypes[i]);
+    if (failed(expectedType))
       return emitError([&](auto &diag) {
-        diag << "operand type #" << i << " must be " << expectedType
+        diag << "failed to resolve parametric input of instantiated module";
+      });
+    auto operandType = getOperand(i).getType();
+    if (operandType != expectedType.getValue()) {
+      return emitError([&](auto &diag) {
+        diag << "operand type #" << i << " must be " << expectedType.getValue()
              << ", but got " << operandType;
       });
+    }
 
     if (argNames[i] != modArgNames[i])
       return emitError([&](auto &diag) {
@@ -1180,11 +1186,16 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numResults; ++i) {
-    auto expectedType = expectedResultTypes[i];
-    auto resultType = getResult(i).getType();
-    if (resultType != expectedType)
+    auto expectedType =
+        evaluateParametricType(getLoc(), parameters(), expectedResultTypes[i]);
+    if (failed(expectedType))
       return emitError([&](auto &diag) {
-        diag << "result type #" << i << " must be " << expectedType
+        diag << "failed to resolve parametric input of instantiated module";
+      });
+    auto resultType = getResult(i).getType();
+    if (resultType != expectedType.getValue())
+      return emitError([&](auto &diag) {
+        diag << "result type #" << i << " must be " << expectedType.getValue()
              << ", but got " << resultType;
       });
 

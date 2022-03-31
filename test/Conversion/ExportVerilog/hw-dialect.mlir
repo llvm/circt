@@ -926,8 +926,17 @@ hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
 
 hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(%arg0: i8) -> (out: i8)
 
+// CHECK-LABEL: module parameters3
+// CHECK-NEXT:   #(parameter [41:0] p1 = 42'd17) (
+// CHECK-NEXT:   input  [p1 - 1:0] arg0,
+// CHECK-NEXT:   output [p1 - 1:0] out);
+// CHECK:   assign out = arg0;
+hw.module @parameters3<p1: i42 = 17>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>) {
+  hw.output %arg0 : !hw.int<#hw.param.decl.ref<"p1">>
+}
+
 // CHECK-LABEL: module UseParameterized(
-hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
+hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8, qq: i8) {
   // Two parameters.
   // CHECK:      parameters #(
   // CHECK-NEXT:   .p1(42'd4),
@@ -964,7 +973,16 @@ hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
   // CHECK-NEXT: );
   %r3 = hw.instance "inst4" @parameters2<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
 
-  hw.output %r0, %r1, %r2, %r3: i8, i8, i8, i8
+  // Parameterized I/O ports.
+  // CHECK: parameters3 #(
+  // CHECK-NEXT:   .p1(42'd8)
+  // CHECK-NEXT: ) inst5 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (qq)
+  // CHECK-NEXT: );
+  %r4 = hw.instance "inst5" @parameters3<p1: i42 = 8>(arg0: %a: i8) -> (out: i8)
+
+  hw.output %r0, %r1, %r2, %r3, %r4: i8, i8, i8, i8, i8
 }
 
 // CHECK-LABEL: module UseParameterValue
