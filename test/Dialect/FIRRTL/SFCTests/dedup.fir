@@ -28,7 +28,7 @@ circuit Top :
     output x: UInt<1>
     x <= UInt(1)
 
-; CHECK-NOT: firrtl.module @A_
+; CHECK-NOT: firrtl.module private @A_
 
 ; // -----
 ; "The module A and B should be deduped"
@@ -40,7 +40,7 @@ circuit Top :
     ; CHECK-NEXT-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
-  ; CHECK: firrtl.module @A
+  ; CHECK: firrtl.module private @A
   module A :
     output x: UInt<1>
     ; CHECK: firrtl.instance b @B(
@@ -57,8 +57,8 @@ circuit Top :
     output x: UInt<1>
     x <= UInt(1)
 
-; CHECK-NOT: firrtl.module @A_
-; CHECK-NOT: firrtl.module @B_
+; CHECK-NOT: firrtl.module private @A_
+; CHECK-NOT: firrtl.module private @B_
 
 ; // -----
 ; "The module A and B with comments should be deduped"
@@ -86,8 +86,8 @@ circuit Top :
     output x: UInt<1>
     x <= UInt(1)
 
-; CHECK-NOT: firrtl.module @A_
-; CHECK-NOT: firrtl.module @B_
+; CHECK-NOT: firrtl.module private @A_
+; CHECK-NOT: firrtl.module private @B_
 
 ; // -----
 ; "A_ but not A should be deduped if not annotated"
@@ -106,7 +106,7 @@ circuit Top :
     output x: UInt<1> @[xx 1:1]
     x <= UInt(1)
 
-; CHECK-NOT: firrtl.module @A_
+; CHECK-NOT: firrtl.module private @A_
 
 ; // -----
 ; "Extmodules with the same defname and parameters should dedup"
@@ -120,7 +120,7 @@ circuit Top :
     inst a1 of A
     inst a2 of A_
     out <= and(a1.x, a2.y)
-  ; CHECK: firrtl.module @A
+  ; CHECK: firrtl.module private @A
   module A : @[yy 2:2]
     output x: UInt<1> @[yy 2:2]
     ; CHECK-NEXT: firrtl.instance b @B(
@@ -139,8 +139,8 @@ circuit Top :
     defname = BB
     parameter N = 0
 
-; CHECK-NOT: firrtl.module @A_
-; CHECK-NOT: firrtl.extmodule @C
+; CHECK-NOT: firrtl.module private @A_
+; CHECK-NOT: firrtl.extmodule private @C
 
 ; // -----
 ; "Extmodules with different defname should NOT dedup"
@@ -159,17 +159,17 @@ circuit Top :
     output x: UInt<1> @[yy 2:2]
     inst b of B
     x <= b.u
-  ; CHECK: firrtl.module @A_
+  ; CHECK: firrtl.module private @A_
   module A_ : @[xx 1:1]
     output y: UInt<1> @[xx 1:1]
     inst c of C
     y <= c.u
-  ; CHECK: firrtl.extmodule @B
+  ; CHECK: firrtl.extmodule private @B
   extmodule B : @[aa 3:3]
     output u : UInt<1> @[aa 4:4]
     defname = BB
     parameter N = 0
-  ; CHECK: firrtl.extmodule @C
+  ; CHECK: firrtl.extmodule private @C
   extmodule C : @[bb 5:5]
     output u : UInt<1> @[bb 6:6]
     defname = CD
@@ -192,17 +192,17 @@ circuit Top :
     output x: UInt<1> @[yy 2:2]
     inst b of B
     x <= b.u
-  ; CHECK: firrtl.module @A_
+  ; CHECK: firrtl.module private @A_
   module A_ : @[xx 1:1]
     output y: UInt<1> @[xx 1:1]
     inst c of C
     y <= c.u
-  ; CHECK: firrtl.extmodule @B
+  ; CHECK: firrtl.extmodule private @B
   extmodule B : @[aa 3:3]
     output u : UInt<1> @[aa 4:4]
     defname = BB
     parameter N = 0
-  ; CHECK: firrtl.extmodule @C
+  ; CHECK: firrtl.extmodule private @C
   extmodule C : @[bb 5:5]
     output u : UInt<1> @[bb 6:6]
     defname = BB
@@ -217,11 +217,11 @@ circuit Top :
 ;
 ; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
 circuit FooAndBarModule :
-  ; CHECK: firrtl.module @FooModule
+  ; CHECK: firrtl.module private @FooModule
   module FooModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
     io.fuzz <= io.foo
-  ; CHECK-NOT: firrtl.module @BarModule
+  ; CHECK-NOT: firrtl.module private @BarModule
   module BarModule :
     output io : {flip bar : UInt<1>, buzz : UInt<1>}
     io.buzz <= io.bar
@@ -241,11 +241,11 @@ circuit FooAndBarModule :
 ;
 ; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
 circuit FooAndBarModule :
-  ; CHECK: firrtl.module @FooModule
+  ; CHECK: firrtl.module private @FooModule
   module FooModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
     io.fuzz <= io.foo
-  ; CHECK-NOT: firrtl.module @BarModule
+  ; CHECK-NOT: firrtl.module private @BarModule
   module BarModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
     io.fuzz <= io.foo
@@ -283,8 +283,8 @@ circuit Top :
     output x: UInt<1>
     x <= UInt(1)
 
-; CHECK-NOT: firrtl.module @A_
-; CHECK-NOT: firrtl.module @B_
+; CHECK-NOT: firrtl.module private @A_
+; CHECK-NOT: firrtl.module private @B_
 
 ; // -----
 ; "The module A and A_ should be deduped with fields that sort of match".
@@ -307,7 +307,7 @@ circuit Top :
     b is invalid
     x <= b.b
 
-; CHECK-NOT: firrtl.module @A_
+; CHECK-NOT: firrtl.module private @A_
 
 ; // -----
 ; "The module A and A_ should dedup with different annotation targets".
@@ -338,7 +338,7 @@ circuit Top : %[[
     b is invalid
     x <= b
 
-; CHECK-NOT: firrtl.module @A_
+; CHECK-NOT: firrtl.module private @A_
 
 ; // -----
 ; "The module A and A_ should dedup with the same annotation targets".
@@ -374,7 +374,7 @@ circuit Top : %[[
     b is invalid
     x <= b
 
-; CHECK-NOT: firrtl.module @A_
+; CHECK-NOT: firrtl.module private @A_
 
 ; // -----
 ; "The deduping module A and A_ should rename internal signals that have
@@ -398,7 +398,7 @@ circuit Top : %[[
     a1 is invalid
     inst a2 of A_
     a2 is invalid
-  ; CHECK: firrtl.module @A(
+  ; CHECK: firrtl.module private @A(
   module A :
     input x: UInt<1>
     output y: UInt<1>
@@ -411,7 +411,7 @@ circuit Top : %[[
     node b = add(x, UInt(1))
     y <= add(b, b)
 
-; CHECK-NOT: firrtl.module @A_(
+; CHECK-NOT: firrtl.module private @A_(
 
 ; // -----
 ; "main should not be deduped even if it's the last module"
@@ -460,7 +460,7 @@ circuit Top : %[[
     inst a of A
     ; CHECK-NEXT: firrtl.instance a_ sym @[[a_Sym]] {{.+}} [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"}, {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"}]} @A()
     inst a_ of A_
-  ; CHECK: firrtl.module @A
+  ; CHECK: firrtl.module private @A
   module A :
     ; CHECK-NEXT: firrtl.instance b sym @[[bSym]]
     ; CHECK-SAME: {circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"}
@@ -469,10 +469,10 @@ circuit Top : %[[
     ; CHECK-SAME: {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}
     ; CHECK-SAME: B()
     inst b of B
-  ; CHECK-NOT: firrtl.module @A_
+  ; CHECK-NOT: firrtl.module private @A_
   module A_ :
     inst b_ of B_
-  ; CHECK: firrtl.module @B
+  ; CHECK: firrtl.module private @B
   ; CHECK-SAME: {circt.nonlocal = @[[nla_3]], class = "B_"}
   ; CHECK-SAME: {circt.nonlocal = @[[nla_1]], class = "B"}
   module B :
@@ -480,7 +480,7 @@ circuit Top : %[[
     ; CHECK-SAME: {circt.nonlocal = @[[nla_4]], class = "B_.bar"}
     ; CHECK-SAME: {circt.nonlocal = @[[nla_2]], class = "B.foo"}
     node foo = UInt<1>(0)
-  ; CHECK-NOT: firrtl.module @B_
+  ; CHECK-NOT: firrtl.module private @B_
   module B_ :
     node bar = UInt<1>(0)
 
@@ -548,7 +548,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @A()
     inst a_ of A_
 
-  ; CHECK:        firrtl.module @A
+  ; CHECK:        firrtl.module private @A
   module A :
     ; CHECK-NEXT:   firrtl.instance b sym @[[bSym]]
     ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
@@ -558,7 +558,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @B()
     inst b of B
 
-  ; CHECK:        firrtl.module @B
+  ; CHECK:        firrtl.module private @B
   module B :
     ; CHECK-NEXT:   firrtl.instance c sym @[[cSym]]
     ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
@@ -568,7 +568,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @C()
     inst c of C
 
-  ; CHECK:        firrtl.module @C
+  ; CHECK:        firrtl.module private @C
   module C :
     ; CHECK-NEXT:   firrtl.instance d sym @[[dSym]]
     ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
@@ -578,7 +578,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @D()
     inst d of D
 
-  ; CHECK:        firrtl.module @D
+  ; CHECK:        firrtl.module private @D
   ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "two"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "one"}]
   module D :
@@ -587,10 +587,10 @@ circuit Top : %[[
     ; CHECK-SAME:      {circt.nonlocal = @[[nla_2]], class = "one"}]
     node foo = UInt<1>(0)
 
-  ; CHECK-NOT: firrtl.module @A_
-  ; CHECK-NOT: firrtl.module @B_
-  ; CHECK-NOT: firrtl.module @C_
-  ; CHECK-NOT: firrtl.module @D_
+  ; CHECK-NOT: firrtl.module private @A_
+  ; CHECK-NOT: firrtl.module private @B_
+  ; CHECK-NOT: firrtl.module private @C_
+  ; CHECK-NOT: firrtl.module private @D_
   module A_ :
     inst b_ of B_
   module B_ :
@@ -733,7 +733,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @A()
     inst a2 of A
 
-  ; CHECK:        firrtl.module @A()
+  ; CHECK:        firrtl.module private @A()
   module A :
     ; CHECK-NEXT:   firrtl.instance b sym @[[AbSym]]
     ; CHECK-SAME:     {circt.nonlocal = @[[nla_5]], class = "circt.nonlocal"},
@@ -750,7 +750,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @B()
     inst b_ of B_
 
-  ; CHECK:        firrtl.module @B()
+  ; CHECK:        firrtl.module private @B()
   ; CHECK-SAME:     [{circt.nonlocal = @[[nla_2]], class = "nla2"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "nla3"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "nla4"},
@@ -768,7 +768,7 @@ circuit Top : %[[
     ; CHECK-SAME:     @C()
     inst c of C
 
-  ; CHECK:        firrtl.module @C()
+  ; CHECK:        firrtl.module private @C()
   ; CHECK-SAME:     [{circt.nonlocal = @[[nla_7]], class = "nla7"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_8]], class = "nla8"},
   ; CHECK-SAME:      {circt.nonlocal = @[[nla_9]], class = "nla9"},
@@ -778,7 +778,7 @@ circuit Top : %[[
   module C :
     skip
 
-  ; CHECK-NOT: firrtl.module @B_()
+  ; CHECK-NOT: firrtl.module private @B_()
   module B_ :
     inst c of C
 
@@ -828,7 +828,7 @@ circuit top : %[[
     ob.a.b.c <= b.r.a.b.c
     ob.z <= b.r.z
 
-  ; CHECK:      firrtl.module @a(
+  ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i: {{.+}} sym @[[aiSym]]
   ; CHECK-NOT:    out
   ; CHECK-SAME:     [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = @[[nla_2]], class = "nla2"}>,
@@ -838,7 +838,7 @@ circuit top : %[[
     output o: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     o <= i
 
-  ; CHECK-NOT:  firrtl.module @b(
+  ; CHECK-NOT:  firrtl.module private @b(
   module b:
     input q: {a: {b: {c: UInt<1>}}, z: UInt<1>}
     output r: {a: {b: {c: UInt<1>}}, z: UInt<1>}

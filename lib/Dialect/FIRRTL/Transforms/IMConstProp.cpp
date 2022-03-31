@@ -291,20 +291,12 @@ void IMConstPropPass::runOnOperation() {
 
   instanceGraph = &getAnalysis<InstanceGraph>();
 
-  // If the top level module is an external module, mark the input ports
-  // overdefined.
-  if (auto module = dyn_cast<FModuleOp>(circuit.getMainModule())) {
-    markBlockExecutable(module.getBody());
-    for (auto port : module.getBody()->getArguments())
-      markOverdefined(port);
-  } else {
-    // Otherwise, mark all module ports as being overdefined.
-    for (auto &circuitBodyOp : circuit.getBody()->getOperations()) {
-      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp)) {
-        markBlockExecutable(module.getBody());
-        for (auto port : module.getBody()->getArguments())
-          markOverdefined(port);
-      }
+  // Mark the input ports of public modules as being overdefined.
+  for (auto module : circuit.getBody()->getOps<FModuleOp>()) {
+    if (module.isPublic()) {
+      markBlockExecutable(module.getBody());
+      for (auto port : module.getBody()->getArguments())
+        markOverdefined(port);
     }
   }
 

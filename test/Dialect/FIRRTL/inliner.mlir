@@ -3,7 +3,7 @@
 // Test that an external module as the main module works.
 firrtl.circuit "main_extmodule" {
   firrtl.extmodule @main_extmodule()
-  firrtl.module @unused () { }
+  firrtl.module private @unused () { }
 }
 // CHECK-LABEL: firrtl.circuit "main_extmodule" {
 // CHECK-NEXT:   firrtl.extmodule @main_extmodule()
@@ -15,19 +15,19 @@ firrtl.module @delete_dead_modules () {
   firrtl.instance used @used()
   firrtl.instance used @used_ext()
 }
-firrtl.module @unused () { }
-firrtl.module @used () { }
-firrtl.extmodule @unused_ext ()
-firrtl.extmodule @used_ext ()
+firrtl.module private @unused () { }
+firrtl.module private @used () { }
+firrtl.extmodule private @unused_ext ()
+firrtl.extmodule private @used_ext ()
 }
 // CHECK-LABEL: firrtl.circuit "delete_dead_modules" {
 // CHECK-NEXT:   firrtl.module @delete_dead_modules() {
 // CHECK-NEXT:     firrtl.instance used @used()
 // CHECK-NEXT:     firrtl.instance used @used_ext
 // CHECK-NEXT:   }
-// CHECK-NEXT:   firrtl.module @used() {
+// CHECK-NEXT:   firrtl.module private @used() {
 // CHECK-NEXT:   }
-// CHECK-NEXT:   firrtl.extmodule @used_ext()
+// CHECK-NEXT:   firrtl.extmodule private @used_ext()
 // CHECK-NEXT: }
 
 
@@ -36,12 +36,12 @@ firrtl.circuit "inlining" {
 firrtl.module @inlining() {
   firrtl.instance test1 @test1()
 }
-firrtl.module @test1()
+firrtl.module private @test1()
   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
   firrtl.instance test2 @test2()
 }
-firrtl.module @test2()
+firrtl.module private @test2()
   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
 }
@@ -62,11 +62,11 @@ firrtl.module @flattening()
   attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
   firrtl.instance test1 @test1()
 }
-firrtl.module @test1() {
+firrtl.module private @test1() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
   firrtl.instance test2 @test2()
 }
-firrtl.module @test2() {
+firrtl.module private @test2() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
 }
 }
@@ -75,8 +75,8 @@ firrtl.module @test2() {
 // CHECK-NOT:      annotations
 // CHECK-NEXT:     %test1_test_wire = firrtl.wire : !firrtl.uint<2>
 // CHECK-NEXT:     %test1_test2_test_wire = firrtl.wire : !firrtl.uint<2>
-// CHECK-NOT:    firrtl.module @test1
-// CHECK-NOT:    firrtl.module @test2
+// CHECK-NOT:    firrtl.module private @test1
+// CHECK-NOT:    firrtl.module private @test2
 
 
 // Test that inlining and flattening compose well.
@@ -86,19 +86,19 @@ firrtl.module @compose() {
   firrtl.instance test2 @test2()
   firrtl.instance test3 @test3()
 }
-firrtl.module @test1() attributes {annotations =
+firrtl.module private @test1() attributes {annotations =
         [{class = "firrtl.transforms.FlattenAnnotation"},
          {class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
   firrtl.instance test2 @test2()
   firrtl.instance test3 @test3()
 }
-firrtl.module @test2() attributes {annotations =
+firrtl.module private @test2() attributes {annotations =
         [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
   firrtl.instance test3 @test3()
 }
-firrtl.module @test3() {
+firrtl.module private @test3() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
 }
 }
@@ -112,7 +112,7 @@ firrtl.module @test3() {
 // CHECK-NEXT:     firrtl.instance test2_test3 @test3()
 // CHECK-NEXT:     firrtl.instance test3 @test3()
 // CHECK-NEXT:   }
-// CHECK-NEXT:   firrtl.module @test3() {
+// CHECK-NEXT:   firrtl.module private @test3() {
 // CHECK-NEXT:     %test_wire = firrtl.wire  : !firrtl.uint<2>
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
@@ -253,15 +253,15 @@ firrtl.circuit "NLAInlining" {
   firrtl.nla @nla4 [#hw.innerNameRef<@NLAInlining::@foo>, @Foo]
   firrtl.nla @nla5 [#hw.innerNameRef<@NLAInlining::@foo>, #hw.innerNameRef<@Foo::@b>]
   firrtl.nla @nla6 [#hw.innerNameRef<@NLAInlining::@foo>, #hw.innerNameRef<@Foo::@port>]
-  // CHECK-NEXT: firrtl.module @Bar
+  // CHECK-NEXT: firrtl.module private @Bar
   // CHECK-SAME: %port: {{.+}} sym @port [{circt.nonlocal = @nla3, class = "nla3"}]
   // CHECK-SAME: [{circt.nonlocal = @nla1, class = "nla1"}]
-  firrtl.module @Bar(
+  firrtl.module private @Bar(
     in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla3, class = "nla3"}]
   ) attributes {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} {
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla2, class = "nla2"}]} : !firrtl.uint<1>
   }
-  firrtl.module @Foo(in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla6, class = "nla6"}]) attributes {annotations = [
+  firrtl.module private @Foo(in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla6, class = "nla6"}]) attributes {annotations = [
   {class = "firrtl.passes.InlineAnnotation"}, {circt.nonlocal = @nla4, class = "nla4"}]} {
     %bar_port = firrtl.instance bar sym @bar {annotations = [
       {circt.nonlocal = @nla1, class = "circt.nonlocal"},
@@ -302,22 +302,22 @@ firrtl.circuit "NLAInliningNotMainRoot" {
   // CHECK-NEXT: firrtl.nla @nla2_0 [#hw.innerNameRef<@Foo::@baz>, #hw.innerNameRef<@Baz::@port>]
   firrtl.nla @nla1 [#hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@a>]
   firrtl.nla @nla2 [#hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@port>]
-  // CHECK: firrtl.module @Baz
+  // CHECK: firrtl.module private @Baz
   // CHECK-SAME: %port: {{.+}} [{circt.nonlocal = @nla2, class = "nla2"}, {circt.nonlocal = @nla2_0, class = "nla2"}]
-  firrtl.module @Baz(
+  firrtl.module private @Baz(
     in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla2, class = "nla2"}]
   ) {
     // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}]
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
   }
-  firrtl.module @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     %baz_port = firrtl.instance baz sym @baz {annotations = [
       {circt.nonlocal = @nla1, class = "circt.nonlocal"},
       {circt.nonlocal = @nla2, class = "circt.nonlocal"}
     ]} @Baz(in port: !firrtl.uint<1>)
   }
-  // CHECK: firrtl.module @Foo
-  firrtl.module @Foo() {
+  // CHECK: firrtl.module private @Foo
+  firrtl.module private @Foo() {
     // CHECK-NEXT: firrtl.instance bar_baz {{.+}} [{circt.nonlocal = @nla1_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla2_0, class = "circt.nonlocal"}]
     firrtl.instance bar @Bar()
   }
@@ -403,35 +403,35 @@ firrtl.circuit "NLAFlatteningChildRoot" {
   firrtl.nla @nla2 [#hw.innerNameRef<@Bar::@qux>, #hw.innerNameRef<@Qux::@Qux_port>]
   firrtl.nla @nla3 [#hw.innerNameRef<@Baz::@quz>, #hw.innerNameRef<@Quz::@b>]
   firrtl.nla @nla4 [#hw.innerNameRef<@Baz::@quz>, #hw.innerNameRef<@Quz::@Quz_port>]
-  // CHECK: firrtl.module @Quz
+  // CHECK: firrtl.module private @Quz
   // CHECK-SAME: in %port: {{.+}} [{circt.nonlocal = @nla4, class = "nla4"}]
-  firrtl.module @Quz(
+  firrtl.module private @Quz(
     in %port: !firrtl.uint<1> sym @Quz_port [{circt.nonlocal = @nla4, class = "nla4"}]
   ) {
     // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla3, class = "nla3"}]
     %b = firrtl.wire sym @b {annotations = [{circt.nonlocal = @nla3, class = "nla3"}]} : !firrtl.uint<1>
   }
-  firrtl.module @Qux(
+  firrtl.module private @Qux(
     in %port: !firrtl.uint<1> sym @Qux_port [{circt.nonlocal = @nla2, class = "nla2"}]
   ) {
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]} : !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Baz
-  firrtl.module @Baz() {
+  // CHECK: firrtl.module private @Baz
+  firrtl.module private @Baz() {
     // CHECK-NEXT: firrtl.instance {{.+}} [{circt.nonlocal = @nla3, class = "circt.nonlocal"}, {circt.nonlocal = @nla4, class = "circt.nonlocal"}]
     firrtl.instance quz sym @quz {annotations = [
       {circt.nonlocal = @nla3, class = "circt.nonlocal"},
       {circt.nonlocal = @nla4, class = "circt.nonlocal"}
     ]} @Quz(in port: !firrtl.uint<1>)
   }
-  firrtl.module @Bar() {
+  firrtl.module private @Bar() {
     firrtl.instance qux sym @qux {annotations = [
       {circt.nonlocal = @nla1, class = "circt.nonlocal"},
       {circt.nonlocal = @nla2, class = "circt.nonlocal"}
     ]} @Qux(in port: !firrtl.uint<1>)
   }
-  // CHECK: firrtl.module @Foo
-  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+  // CHECK: firrtl.module private @Foo
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     // CHECK-NEXT: %bar_qux_port = firrtl.wire sym @Qux_port {{.+}} [{class = "nla2"}]
     // CHECK-NEXT: %bar_qux_a = firrtl.wire {{.+}} [{class = "nla1"}]
     // CHECK-NEXT: %baz_quz_port = firrtl.wire sym @Quz_port {{.+}} [{class = "nla4"}]
@@ -484,14 +484,14 @@ firrtl.circuit "CollidingSymbols" {
 firrtl.circuit "CollidingSymbolsPort" {
   // CHECK-NEXT: firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbolsPort::@foo>, #hw.innerNameRef<@Foo::@[[BarbSym:[_a-zA-Z0-9]+]]>]
   firrtl.nla @nla1 [#hw.innerNameRef<@CollidingSymbolsPort::@foo>, #hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
-  // CHECK-NOT: firrtl.module @Bar
-  firrtl.module @Bar(
+  // CHECK-NOT: firrtl.module private @Bar
+  firrtl.module private @Bar(
     in %b: !firrtl.uint<1> sym @b [{circt.nonlocal = @nla1, class = "nla1"}]
   ) attributes {annotations = [
     {class = "firrtl.passes.InlineAnnotation"}
   ]} {}
-  // CHECK-NEXT: firrtl.module @Foo
-  firrtl.module @Foo() {
+  // CHECK-NEXT: firrtl.module private @Foo
+  firrtl.module private @Foo() {
     // CHECK-NEXT: firrtl.wire sym @[[BarbSym]] {annotations = [{circt.nonlocal = @nla1, class = "nla1"}]}
     firrtl.instance bar sym @bar {annotations = [
       {circt.nonlocal = @nla1, class = "circt.nonlocal"}
@@ -555,7 +555,7 @@ firrtl.circuit "CollidingSymbolsNLAFixup" {
   firrtl.nla @nla0 [#hw.innerNameRef<@Foo::@bar>,
                     #hw.innerNameRef<@Bar::@baz0>,
                     #hw.innerNameRef<@Baz::@io>]
-  
+
   // CHECK: firrtl.nla @nla1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@w>]
   firrtl.nla @nla1 [#hw.innerNameRef<@Foo::@bar>,
                     #hw.innerNameRef<@Bar::@baz0>,
@@ -584,7 +584,7 @@ firrtl.circuit "CollidingSymbolsNLAFixup" {
       {circt.nonlocal = @nla0, class = "circt.nonlocal"},
       {circt.nonlocal = @nla1, class = "circt.nonlocal"}]} @Bar()
   }
-  
+
   firrtl.module @CollidingSymbolsNLAFixup() {
     firrtl.instance system sym @system @Foo()
   }
@@ -595,7 +595,7 @@ firrtl.circuit "CollidingSymbolsNLAFixup" {
 //
 // CHECK-LABEL: firrtl.circuit "RenameAnything"
 firrtl.circuit "RenameAnything" {
-  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     "some_unknown_dialect.op"() { name = "world" } : () -> ()
   }
   // CHECK-NEXT: firrtl.module @RenameAnything

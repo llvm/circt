@@ -10,8 +10,8 @@ firrtl.circuit "ConstInput"   {
     firrtl.connect %c_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %z, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @Child
-  firrtl.module @Child(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @Child
+  firrtl.module private @Child(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK: firrtl.strictconnect %out, %in0 :
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -20,14 +20,14 @@ firrtl.circuit "ConstInput"   {
 
 //propagate constant inputs ONLY if ALL instance inputs get the same value
 firrtl.circuit "InstanceInput"   {
-  // CHECK-LABEL: firrtl.module @Bottom1
-  firrtl.module @Bottom1(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @Bottom1
+  firrtl.module private @Bottom1(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
       // CHECK: %c1_ui1 = firrtl.constant 1
       // CHECK: firrtl.strictconnect %out, %c1_ui1
     firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @Child1
-  firrtl.module @Child1(out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @Child1
+  firrtl.module private @Child1(out %out: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     %b0_in, %b0_out = firrtl.instance b0 @Bottom1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
@@ -53,13 +53,13 @@ firrtl.circuit "InstanceInput"   {
 
 //propagate constant inputs ONLY if ALL instance inputs get the same value
 firrtl.circuit "InstanceInput2"   {
-  // CHECK-LABEL: firrtl.module @Bottom2
-  firrtl.module @Bottom2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module private @Bottom2
+  firrtl.module private @Bottom2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     // CHECK: firrtl.strictconnect %out, %in 
     firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
- // CHECK-LABEL:  firrtl.module @Child2
-  firrtl.module @Child2(out %out: !firrtl.uint<1>) {
+ // CHECK-LABEL:  firrtl.module private @Child2
+  firrtl.module private @Child2(out %out: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     %b0_in, %b0_out = firrtl.instance b0 @Bottom2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
@@ -97,7 +97,7 @@ firrtl.circuit "acrossWire"   {
 
 //"ConstProp" should "propagate constant outputs"
 firrtl.circuit "constOutput"   {
-  firrtl.module @constOutChild(out %out: !firrtl.uint<1>) {
+  firrtl.module private @constOutChild(out %out: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -188,7 +188,7 @@ firrtl.circuit "padZeroReg"   {
 
 // should "pad constant connections to outputs when propagating"
 firrtl.circuit "padConstOut"   {
-  firrtl.module @padConstOutChild(out %x: !firrtl.uint<8>) {
+  firrtl.module private @padConstOutChild(out %x: !firrtl.uint<8>) {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     firrtl.connect %x, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
   }
@@ -205,8 +205,8 @@ firrtl.circuit "padConstOut"   {
 
 // "pad constant connections to submodule inputs when propagating"
 firrtl.circuit "padConstIn"   {
-  // CHECK-LABEL: firrtl.module @padConstInChild
-  firrtl.module @padConstInChild(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<16>) {
+  // CHECK-LABEL: firrtl.module private @padConstInChild
+  firrtl.module private @padConstInChild(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<16>) {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     %0 = firrtl.cat %c3_ui2, %x : (!firrtl.uint<2>, !firrtl.uint<8>) -> !firrtl.uint<10>
     // CHECK: %[[C9:.+]] = firrtl.constant 771 : !firrtl.uint<16>

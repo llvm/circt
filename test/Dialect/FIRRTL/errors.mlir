@@ -807,3 +807,10 @@ firrtl.circuit "MismatchedRegister" {
     firrtl.connect %z, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
   }
 }
+
+// -----
+
+// expected-error @+1 {{'firrtl.circuit' op main module 'private_main' must be public}}
+firrtl.circuit "private_main" {
+  firrtl.module private @private_main() {}
+}

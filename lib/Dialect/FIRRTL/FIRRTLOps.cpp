@@ -224,7 +224,9 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
 }
 
 // Return the main module that is the entry point of the circuit.
-Operation *CircuitOp::getMainModule() { return lookupSymbol(name()); }
+FModuleLike CircuitOp::getMainModule() {
+  return dyn_cast_or_null<FModuleLike>(lookupSymbol(name()));
+}
 
 static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
                                        NamedAttrList &resultAttrs) {
@@ -257,9 +259,16 @@ LogicalResult CircuitOp::verify() {
   }
 
   // Check that a module matching the "main" module exists in the circuit.
-  if (!getMainModule()) {
+  auto mainModule = getMainModule();
+  if (!mainModule) {
     emitOpError("must contain one module that matches main name '" + main +
                 "'");
+    return failure();
+  }
+
+  // Check that the main module is public.
+  if (!mainModule.isPublic()) {
+    emitOpError("main module '" + main + "' must be public");
     return failure();
   }
 
@@ -903,8 +912,14 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
 }
 
 static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
-  // Print the operation and the function name.
   p << " ";
+
+  // Print the visibility of the module.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  // Print the operation and the function name.
   p.printSymbolName(op.moduleName());
 
   // Print the parameter list (if non-empty).
@@ -922,9 +937,9 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
       p, body, portDirections, op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols());
 
-  SmallVector<StringRef, 4> omittedAttrs = {"sym_name",  "portDirections",
-                                            "portTypes", "portAnnotations",
-                                            "portSyms",  "parameters"};
+  SmallVector<StringRef, 4> omittedAttrs = {
+      "sym_name", "portDirections", "portTypes",       "portAnnotations",
+      "portSyms", "parameters",     visibilityAttrName};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -991,6 +1006,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                                       bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
+
+  // Parse the visibility attribute.
+  mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse the name as a symbol.
   StringAttr nameAttr;

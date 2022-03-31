@@ -13,13 +13,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK: }
 
 
-  ; CHECK-LABEL: firrtl.module @circuit(in %in: !firrtl.uint<80>) {
+  ; CHECK-LABEL: firrtl.module private @circuit(in %in: !firrtl.uint<80>) {
   module circuit :    ; Module with a keyword id.
     input in: UInt<80>
 
   ; CHECK: }
 
-  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
+  ; CHECK-LABEL: firrtl.extmodule private @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule :
@@ -27,7 +27,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
     defname = myextmodule
 
-  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule
+  ; CHECK-LABEL: firrtl.extmodule private @MyParameterizedExtModule
   ; CHECK-SAME:    <FORMAT: none = "xyz_timeout=%d\0A",
   ; CHECK-SAME:     DEFAULT: ui32 = 0,
   ; CHECK-SAME:     WIDTH: ui32 = 32,
@@ -47,7 +47,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; Module to test type parsing.
 
-  ; CHECK-LABEL: firrtl.module @types(
+  ; CHECK-LABEL: firrtl.module private @types(
   module types :
     input c: Clock         ; CHECK: %c: !firrtl.clock,
     input r: Reset         ; CHECK: %r: !firrtl.reset,
@@ -63,7 +63,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input vec: UInt<1>[4] ; CHECK: %vec: !firrtl.vector<uint<1>, 4>) {
 
 
-  ; CHECK-LABEL: firrtl.module @stmts(
+  ; CHECK-LABEL: firrtl.module private @stmts(
   module stmts :
     input reset : UInt<1>         ; CHECK: in %reset: !firrtl.uint<1>,
     input reset_async: AsyncReset ; CHECK: in %reset_async: !firrtl.asyncreset,
@@ -415,7 +415,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
     cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
 
-  ; CHECK-LABEL: firrtl.module @type_handling(
+  ; CHECK-LABEL: firrtl.module private @type_handling(
   module type_handling :
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }
     node _t_8 = bits(_t_6.b.bits.source, 5, 0)
@@ -430,7 +430,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire flip4 : { flip x : { flip a : UInt }[4] }
 
 
-  ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity(
+  ; CHECK-LABEL: firrtl.module private @expr_stmt_ambiguity(
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire : !firrtl.uint
     wire reg : UInt
@@ -443,20 +443,20 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subfield %write(0)
     write.id <= UInt(1)
 
-  ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity2(
+  ; CHECK-LABEL: firrtl.module private @expr_stmt_ambiguity2(
   module expr_stmt_ambiguity2 :
     ; CHECK: firrtl.instance write @circuit
     inst write of circuit
     ; CHECK: firrtl.connect %write_in
     write.in <= UInt(1)
 
-  ; CHECK-LABEL: firrtl.module @oversize_shift(
+  ; CHECK-LABEL: firrtl.module private @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>
     ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<1>
     node n = shr(value, 5)
 
-  ; CHECK-LABEL: firrtl.module @when_else_ambiguity(
+  ; CHECK-LABEL: firrtl.module private @when_else_ambiguity(
   module when_else_ambiguity :
     output out : UInt
     input in : UInt
@@ -477,7 +477,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: }
 
 
-  ; CHECK-LABEL: firrtl.module @chisel_when_mport_bug(
+  ; CHECK-LABEL: firrtl.module private @chisel_when_mport_bug(
   module chisel_when_mport_bug :
     input cond : UInt<1>
     input addr : UInt
@@ -506,7 +506,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n1 = xyz0
 
 
-  ; CHECK-LABEL: firrtl.module @constant_implicit_cse(
+  ; CHECK-LABEL: firrtl.module private @constant_implicit_cse(
   module constant_implicit_cse :
     input cond : UInt<1>
 
@@ -535,7 +535,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node f = UInt<4>(15)
     node g = UInt<4>(7)
 
-  ; CHECK-LABEL: firrtl.module @subfield_implicit_cse
+  ; CHECK-LABEL: firrtl.module private @subfield_implicit_cse
   module subfield_implicit_cse :
     input i: {x: UInt<1>}
     input cond: UInt<1>
@@ -562,7 +562,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.strictconnect %w, %invalid_0
     w is invalid
 
-  ; CHECK-LABEL: firrtl.module @flip_one
+  ; CHECK-LABEL: firrtl.module private @flip_one
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
@@ -572,7 +572,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when _T :
       skip
 
-  ; CHECK-LABEL: firrtl.module @mem_depth_1
+  ; CHECK-LABEL: firrtl.module private @mem_depth_1
   module mem_depth_1 :
     input clock : Clock
     input reset : UInt<1>
@@ -589,7 +589,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>,
       ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<3>>
 
-  ; CHECK-LABEL: firrtl.module @mem_no_ports() {
+  ; CHECK-LABEL: firrtl.module private @mem_no_ports() {
   ; CHECK-NEXT: }
   ; https://github.com/llvm/circt/issues/531
   module mem_no_ports :
@@ -600,33 +600,33 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       write-latency => 1
       read-under-write => undefined
 
-  ; CHECK-LABEL: firrtl.module @issue354(out %tmp5: !firrtl.sint<19>) {
+  ; CHECK-LABEL: firrtl.module private @issue354(out %tmp5: !firrtl.sint<19>) {
   module issue354 :
     output tmp5: SInt<19>
     tmp5 <= SInt<19>(8)
      ; CHECK: %c8_si19 = firrtl.constant 8 : !firrtl.sint<19>
      ; CHECK: firrtl.connect %tmp5, %c8_si19 : !firrtl.sint<19>, !firrtl.sint<19>
 
-   ; CHECK-LABEL: firrtl.module @issue347
+   ; CHECK-LABEL: firrtl.module private @issue347
   module issue347 :
     output tmp12: SInt<4>
     tmp12 <= SInt<4>(-4)
     ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.sint<4>
 
-  ; CHECK-LABEL: firrtl.extmodule @issue183<A: si32 = -1>()
+  ; CHECK-LABEL: firrtl.extmodule private @issue183<A: si32 = -1>()
   extmodule issue183:
      parameter A = -1
 
   ; The Scala FIRRTL Compiler allows this for an aggregate node with an internal
   ; analog.
-  ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
+  ; CHECK-LABEL: firrtl.module private @analog_in_aggregate_node
   module analog_in_aggregate_node:
     input a: { a: UInt<1>, b: Analog<1>}
     ; CHECK: %b = firrtl.node %a : !firrtl.bundle<a: uint<1>, b: analog<1>>
     node b = a
 
   ; Check that a register clock sink is converted to passive
-  ; CHECK-LABEL: firrtl.module @register_clock_passive
+  ; CHECK-LABEL: firrtl.module private @register_clock_passive
   module register_clock_passive:
     input clkIn: Clock
     output clkOut: Clock
@@ -635,7 +635,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg r: UInt<1>, clkOut
 
   ; Check that a register reset sink is converted to passive
-  ; CHECK-LABEL: firrtl.module @register_reset_passive
+  ; CHECK-LABEL: firrtl.module private @register_reset_passive
   module register_reset_passive:
     input clk: Clock
     output rst: UInt<1>
@@ -644,7 +644,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
 
   ; Check that a register init sink is converted to passive
-  ; CHECK-LABEL: firrtl.module @register_init_passive
+  ; CHECK-LABEL: firrtl.module private @register_init_passive
   module register_init_passive:
     input clk: Clock
     input rst: UInt<1>
@@ -654,7 +654,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg r: UInt<1>, clk with : (reset => (rst, init))
 
   ; https://github.com/llvm/circt/issues/492
-  ; CHECK-LABEL: firrtl.module @WriteOnlyMemIssue492
+  ; CHECK-LABEL: firrtl.module private @WriteOnlyMemIssue492
   module WriteOnlyMemIssue492 :
     input clock: Clock
     input wAddr: UInt<4>
@@ -677,14 +677,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     memory.w.data <= wData
 
   ; https://github.com/llvm/circt/issues/559
-  ; CHECK-LABEL: firrtl.module @TrickyIssue559
+  ; CHECK-LABEL: firrtl.module private @TrickyIssue559
   module TrickyIssue559:
     input input: UInt<1>
     output output: UInt<1>
     ; CHECK: firrtl.connect %output, %input
     output <= input
 
-  ; CHECK-LABEL: firrtl.module @CheckInvalids
+  ; CHECK-LABEL: firrtl.module private @CheckInvalids
   module CheckInvalids_in0 :
     input in0 : UInt<1>
     ; CHECK-NOT: firrtl.connect %in0
@@ -786,7 +786,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     out1 <= in1
 
   ; https://github.com/llvm/circt/issues/606
-  ; CHECK-LABEL: firrtl.module @mutableSubIndex606
+  ; CHECK-LABEL: firrtl.module private @mutableSubIndex606
   module mutableSubIndex606 :
     output io : UInt<1>[8]
     ; CHECK:  %0 = firrtl.subindex %io[0] : !firrtl.vector<uint<1>, 8>
@@ -837,7 +837,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; Test that behavioral memory reads and writes both work and that flow checks
   ; don't fail here.  (A memory port should have duplex flow.)
   ; See: https://github.com/llvm/circt/issues/1058
-  ; CHECK-LABEL: firrtl.module @BehavioralMemory
+  ; CHECK-LABEL: firrtl.module private @BehavioralMemory
   module BehavioralMemory:
     input clock: Clock
     input rAddr: UInt<3>
@@ -857,7 +857,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; Test that a mux with an unknown width select line parses.  This is a check
   ; of the predicate enforced on UInt1Type.
-  ; CHECK-LABEL: firrtl.module @MuxUnknownWidthSelect_Issue1108
+  ; CHECK-LABEL: firrtl.module private @MuxUnknownWidthSelect_Issue1108
   module MuxUnknownWidthSelect_Issue1108:
     input a: UInt<1>
     input b: UInt<1>
@@ -867,7 +867,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; Test that a mux with aggregate type is still compatible even if the leaf
   ; types disagree in their width.
-  ; CHECK-LABEL: firrtl.module @MuxAggregateWidthMismatch_Issue2806
+  ; CHECK-LABEL: firrtl.module private @MuxAggregateWidthMismatch_Issue2806
   module MuxAggregateWidthMismatch_Issue2806:
     input a: UInt<1>[1]
     input b: UInt<32>[1]
@@ -883,7 +883,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     c <= mux(sel, a, b)
     z <= mux(sel, x, y)
 
-  ; CHECK-LABEL: firrtl.extmodule @RawStringParam
+  ; CHECK-LABEL: firrtl.extmodule private @RawStringParam
   ; CHECK-SAME:    <TYPE: none = "bit",
   ; CHECK-SAME:     FORMAT: none = "xyz_timeout=%d\\n",
   ; CHECK-SAME:     MIXED_QUOTES: none = "\22'\\\22">
@@ -893,7 +893,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter MIXED_QUOTES = '"\'\"'
   ; "
 
-  ; CHECK-LABEL: firrtl.module @issue1303
+  ; CHECK-LABEL: firrtl.module private @issue1303
   module issue1303:
     output out: Reset
     out <= UInt(1)

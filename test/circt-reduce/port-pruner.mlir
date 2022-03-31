@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module @Bar" --keep-best=0 --include firrtl-remove-unused-ports | FileCheck %s
+// RUN: circt-reduce %s --test %S/test.sh --test-arg cat --test-arg "firrtl.module private @Bar" --keep-best=0 --include firrtl-remove-unused-ports | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Foo
@@ -16,13 +16,13 @@ firrtl.circuit "Foo" {
   }
 
   // We're only ever using ports %b and %d -- the rest should be stripped.
-  // CHECK-LABEL: firrtl.module @Bar
+  // CHECK-LABEL: firrtl.module private @Bar
   // CHECK-NOT: in %a
   // CHECK-SAME: in %b
   // CHECK-NOT: out %c
   // CHECK-SAME: out %d
   // CHECK-NOT: out %e
-  firrtl.module @Bar(
+  firrtl.module private @Bar(
     in %a: !firrtl.uint<1>,
     in %b: !firrtl.uint<1>,
     out %c: !firrtl.uint<1>,

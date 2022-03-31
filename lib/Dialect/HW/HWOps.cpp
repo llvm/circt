@@ -801,6 +801,9 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
 
+  // Parse the visibility attribute.
+  mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse the name as a symbol.
   StringAttr nameAttr;
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
@@ -923,8 +926,14 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
-  // Print the operation and the function name.
   p << ' ';
+
+  // Print the visibility of the module.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  // Print the operation and the function name.
   p.printSymbolName(SymbolTable::getSymbolName(op).getValue());
   if (modKind == GenMod) {
     p << ", ";
@@ -945,6 +954,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
   omittedAttrs.push_back("parameters");
+  omittedAttrs.push_back(visibilityAttrName);
   if (op->getAttrOfType<StringAttr>("comment").getValue().empty())
     omittedAttrs.push_back("comment");
 

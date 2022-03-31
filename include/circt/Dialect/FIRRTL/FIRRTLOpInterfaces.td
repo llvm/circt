@@ -30,6 +30,16 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /*methodBody=*/[{ return $_op.getNameAttr(); }]>,
 
     //===------------------------------------------------------------------===//
+    // Module visibility
+    //===------------------------------------------------------------------===//
+    InterfaceMethod<"Check whether the module is publicly visible",
+    "bool", "isPublic", (ins),
+    /*methodBody=*/[{
+      return SymbolTable::getSymbolVisibility($_op) ==
+             SymbolTable::Visibility::Public;
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // Port Directions
     //===------------------------------------------------------------------===//
 

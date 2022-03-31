@@ -19,18 +19,18 @@ circuit MyModule :  @[CIRCUIT.scala 127]
   ; MODULE: CHECK: } loc("FooBar.scala":369:27)
 
 
-  ; CHECK-LABEL: firrtl.module @M2
+  ; CHECK-LABEL: firrtl.module private @M2
   module M2 :   @[Filename With Space.scala 1:2]
     input in: UInt
   ; CHECK: } loc("Filename With Space.scala":1:2)
 
-  ; CHECK-LABEL: firrtl.module @M3
+  ; CHECK-LABEL: firrtl.module private @M3
   module M3 :   @[NoSpaceInLocator]   ; expected-warning {{ignoring unknown @ info record format}}
     input in: UInt
   ; CHECK: } loc({{.*}}test{{.*}}Dialect{{.*}}FIRRTL{{.*}}parse-locations.fir"
 
 
-  ; CHECK-LABEL: firrtl.module @Subexpressions
+  ; CHECK-LABEL: firrtl.module private @Subexpressions
   module Subexpressions :
     input in: UInt
     output auto : { out_0 : UInt<1> }
@@ -53,7 +53,7 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     ; CHECK: %other_thing = firrtl.wire{{.*}} loc("File with space.perl":1:23)
     wire other_thing : SInt<4> @[File with space.perl 1:23]
 
-  ; CHECK-LABEL: firrtl.module @issue1140
+  ; CHECK-LABEL: firrtl.module private @issue1140
   ; https://github.com/llvm/circt/issues/1140
   module issue1140:
     input mask_bit_2 : UInt<1>

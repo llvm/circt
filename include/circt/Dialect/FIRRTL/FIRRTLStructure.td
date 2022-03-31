@@ -45,7 +45,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
     // Return the main module that is the entry point of the circuit.  This may
     // be either an FModuleOp or an FExtModuleOp.
-    Operation *getMainModule();
+    FModuleLike getMainModule();
   }];
 
   let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
