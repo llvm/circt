@@ -28,11 +28,11 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Moore, moore, MooreDialect)
 
 static Optional<Sign> convertMooreSign(enum MooreSign sign) {
   switch (sign) {
-  case MooreSign::Signed:
+  case MooreSign::MooreSigned:
     return Sign::Signed;
-  case MooreSign::Unsigned:
+  case MooreSign::MooreUnsigned:
     return Sign::Unsigned;
-  case MooreSign::None:
+  case MooreSign::MooreNone:
     return {};
   }
   llvm_unreachable("All cases should be covered.");
@@ -40,24 +40,24 @@ static Optional<Sign> convertMooreSign(enum MooreSign sign) {
 
 static IntType::Kind convertMooreIntKind(enum MooreIntKind kind) {
   switch (kind) {
-  case MooreIntKind::Bit:
+  case MooreIntKind::MooreBit:
     return IntType::Kind::Bit;
-  case MooreIntKind::Logic:
+  case MooreIntKind::MooreLogic:
     return IntType::Kind::Logic;
-  case MooreIntKind::Reg:
+  case MooreIntKind::MooreReg:
     return IntType::Kind::Reg;
 
-  case MooreIntKind::Byte:
+  case MooreIntKind::MooreByte:
     return IntType::Kind::Byte;
-  case MooreIntKind::ShortInt:
+  case MooreIntKind::MooreShortInt:
     return IntType::Kind::ShortInt;
-  case MooreIntKind::Int:
+  case MooreIntKind::MooreInt:
     return IntType::Kind::Int;
-  case MooreIntKind::LongInt:
+  case MooreIntKind::MooreLongInt:
     return IntType::Kind::LongInt;
-  case MooreIntKind::Integer:
+  case MooreIntKind::MooreInteger:
     return IntType::Kind::Integer;
-  case MooreIntKind::Time:
+  case MooreIntKind::MooreTime:
     return IntType::Kind::Time;
   }
   llvm_unreachable("All cases should be covered.");
@@ -65,11 +65,11 @@ static IntType::Kind convertMooreIntKind(enum MooreIntKind kind) {
 
 static RealType::Kind convertMooreRealKind(enum MooreRealKind kind) {
   switch (kind) {
-  case MooreRealKind::ShortReal:
+  case MooreRealKind::MooreShortReal:
     return circt::moore::RealType::ShortReal;
-  case MooreRealKind::Real:
+  case MooreRealKind::MooreReal:
     return circt::moore::RealType::Real;
-  case MooreRealKind::RealTime:
+  case MooreRealKind::MooreRealTime:
     return circt::moore::RealType::RealTime;
   }
   llvm_unreachable("All cases should be covered.");

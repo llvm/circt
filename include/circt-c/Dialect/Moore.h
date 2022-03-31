@@ -28,43 +28,43 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Moore, moore);
 enum MooreIntKind {
   // The integer vector types. These are the builtin single-bit integer types.
   /// A `bit`.
-  Bit,
+  MooreBit,
   /// A `logic`.
-  Logic,
+  MooreLogic,
   /// A `reg`.
-  Reg,
+  MooreReg,
 
   // The integer atom types. These are the builtin multi-bit integer types.
   /// A `byte`.
-  Byte,
+  MooreByte,
   /// A `shortint`.
-  ShortInt,
+  MooreShortInt,
   /// An `int`.
-  Int,
+  MooreInt,
   /// A `longint`.
-  LongInt,
+  MooreLongInt,
   /// An `integer`.
-  Integer,
+  MooreInteger,
   /// A `time`.
-  Time,
+  MooreTime,
 };
 
 enum MooreRealKind {
   /// A `shortreal`.
-  ShortReal,
+  MooreShortReal,
   /// A `real`.
-  Real,
+  MooreReal,
   /// A `realtime`.
-  RealTime,
+  MooreRealTime,
 };
 
 enum MooreSign {
   /// No sign is explicitly given.
-  None,
+  MooreNone,
   /// Explicitly marked to be unsigned.
-  Unsigned,
+  MooreUnsigned,
   /// Explicitly marked to be signed.
-  Signed,
+  MooreSigned,
 };
 
 /// Create a void type.
