@@ -445,7 +445,7 @@ firrtl.circuit "DelayedFixup"  {
   firrtl.module @DelayedFixup() {
     // CHECK: firrtl.instance parent0  @Parent0
     %parent0_a, %parent0_b = firrtl.instance parent0  @Parent0(out a: !firrtl.bundle<a: uint<1>>, out b: !firrtl.bundle<b: uint<1>>)
-    // CHECK: firrtl.instance parent0  @Parent0
+    // CHECK: firrtl.instance parent1  @Parent0
     %parent1_a, %parent1_b = firrtl.instance parent1  @Parent1(out a: !firrtl.bundle<a: uint<1>>, out b: !firrtl.bundle<b: uint<1>>)
   }
 }
