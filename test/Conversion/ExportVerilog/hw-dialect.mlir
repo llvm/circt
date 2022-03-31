@@ -97,28 +97,53 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1
 }
 // CHECK-LABEL: module TESTSIMPLE(
-// CHECK-NEXT:   input  [3:0]                                              a, b,
+// CHECK-NEXT:   input  [3:0]                                              a,
+// CHECK-NEXT:                                                             b,
 // CHECK-NEXT:   input  [1:0]                                              c,
 // CHECK-NEXT:   input                                                     cond,
 // CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
-// CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
+// CHECK-NEXT:   input  [7:0]                                              uarray[0:15],
+// CHECK-NEXT:                                                             postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
 // CHECK-NEXT:   input  [0:0]                                              array1,
-// CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9,
-// CHECK-NEXT:   output [3:0]                                              r10, r11, r12, r13, r14, r15,
-// CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21,
-// CHECK-NEXT:   output                                                    r22, r23, r24, r25, r26, r27,
-// CHECK-NEXT:   output                                                    r28,
+// CHECK-NEXT:   output [3:0]                                              r0,
+// CHECK-NEXT:                                                             r2,
+// CHECK-NEXT:                                                             r4,
+// CHECK-NEXT:                                                             r6,
+// CHECK-NEXT:                                                             r7,
+// CHECK-NEXT:                                                             r8,
+// CHECK-NEXT:                                                             r9,
+// CHECK-NEXT:                                                            r10,
+// CHECK-NEXT:                                                             r11,
+// CHECK-NEXT:                                                             r12,
+// CHECK-NEXT:                                                             r13,
+// CHECK-NEXT:                                                             r14,
+// CHECK-NEXT:                                                             r15,
+// CHECK-NEXT:   output                                                    r16,
+// CHECK-NEXT:                                                             r17,
+// CHECK-NEXT:                                                             r18,
+// CHECK-NEXT:                                                             r19,
+// CHECK-NEXT:                                                             r20,
+// CHECK-NEXT:                                                             r21,
+// CHECK-NEXT:                                                             r22,
+// CHECK-NEXT:                                                             r23,
+// CHECK-NEXT:                                                             r24,
+// CHECK-NEXT:                                                             r25,
+// CHECK-NEXT:                                                             r26,
+// CHECK-NEXT:                                                             r27,
+// CHECK-NEXT:                                                             r28,
 // CHECK-NEXT:   output [11:0]                                             r29,
 // CHECK-NEXT:   output [1:0]                                              r30,
 // CHECK-NEXT:   output [8:0]                                              r31,
-// CHECK-NEXT:   output [3:0]                                              r33, r34,
+// CHECK-NEXT:   output [3:0]                                              r33,
+// CHECK-NEXT:                                                             r34,
 // CHECK-NEXT:   output [2:0][3:0]                                         r35,
 // CHECK-NEXT:   output [11:0]                                             r36,
 // CHECK-NEXT:   output [3:0]                                              r37,
 // CHECK-NEXT:   output [5:0][3:0]                                         r38,
-// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40, r41,
+// CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
+// CHECK-NEXT:                                                             r41,
 // CHECK-NEXT:   output                                                    r42);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
@@ -173,7 +198,8 @@ hw.module @B(%a: i1) -> (b: i1, c: i1) {
 }
 // CHECK-LABEL: module B(
 // CHECK-NEXT:   input  a,
-// CHECK-NEXT:   output b, c);
+// CHECK-NEXT:   output b,
+// CHECK-NEXT:          c);
 // CHECK-EMPTY:
 // CHECK-NEXT:   assign b = a | a;
 // CHECK-NEXT:   assign c = a & a;
@@ -184,7 +210,8 @@ hw.module @A(%d: i1, %e: i1) -> (f: i1) {
   hw.output %1 : i1
 }
 // CHECK-LABEL: module A(
-// CHECK-NEXT:  input  d, e,
+// CHECK-NEXT:  input  d,
+// CHECK-NEXT:         e,
 // CHECK-NEXT:  output f);
 // CHECK-EMPTY:
 // CHECK-NEXT:  assign f = d ? d : e;
@@ -195,7 +222,8 @@ hw.module @AAA(%d: i1, %e: i1) -> (f: i1) {
   hw.output %z : i1
 }
 // CHECK-LABEL: module AAA(
-// CHECK-NEXT:  input  d, e,
+// CHECK-NEXT:  input  d,
+// CHECK-NEXT:         e,
 // CHECK-NEXT:  output f);
 // CHECK-EMPTY:
 // CHECK-NEXT:  assign f = 1'h0;
@@ -224,10 +252,14 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1)
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
 // CHECK-LABEL: module AB(
-// CHECK-NEXT:      input                 w, x,
+// CHECK-NEXT:      input                 w,
+// CHECK-NEXT:                            x,
 // CHECK-NEXT:      input  [1:0]          i2,
 // CHECK-NEXT:   // input  /*Zero Width*/ i3,
-// CHECK-NEXT:      output                y, z, p, p2);
+// CHECK-NEXT:      output                y,
+// CHECK-NEXT:                            z,
+// CHECK-NEXT:                            p,
+// CHECK-NEXT:                            p2);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire _b1_b;
 // CHECK-NEXT:   wire _a1_f;
@@ -307,7 +339,8 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
   // CHECK-NEXT:   output [3:0] a,
-  // CHECK-NEXT:   output [7:0] b, c);
+  // CHECK-NEXT:   output [7:0] b,
+  // CHECK-NEXT:                c);
 
   // CHECK-EMPTY:
 
@@ -543,8 +576,10 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // https://github.com/llvm/circt/issues/736
 // Can't depend on left associativeness since ops can have args with different sizes
 // CHECK-LABEL: module eqIssue(
-// CHECK-NEXT: input  [8:0] a, c,
-// CHECK-NEXT: input  [3:0] d, e,
+// CHECK-NEXT: input  [8:0] a,
+// CHECK-NEXT:              c,
+// CHECK-NEXT: input  [3:0] d,
+// CHECK-NEXT:              e,
 // CHECK-NEXT: output       r);
 // CHECK-EMPTY:
 // CHECK-NEXT: assign r = a == c == (d == e);
@@ -864,7 +899,8 @@ hw.module @renameKeyword(%a: !hw.struct<repeat: i1, repeat_0: i1>) -> (r1: !hw.s
 
 // CHECK-LABEL: useRenamedStruct(
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_1; } a,
-// CHECK-NEXT:  output                                                    r1, r2,
+// CHECK-NEXT:  output                                                    r1,
+// CHECK-NEXT:                                                            r2,
 // CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_1; } r3);
 hw.module @useRenamedStruct(%a: !hw.inout<struct<repeat: i1, repeat_0: i1>>) -> (r1: i1, r2: i1, r3: !hw.struct<repeat: i1, repeat_0: i1>) {
   // CHECK-EMPTY:

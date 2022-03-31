@@ -27,11 +27,13 @@ circuit Sub :
 ; CHECK:   input           clock_sink,
 ; CHECK:   input  [41:0]   data_sink_u,
 ; CHECK:   input  [9000:0] data_sink_v,
-; CHECK:   input           data_sink_w_0, data_sink_w_1,
+; CHECK:   input           data_sink_w_0,
+; CHECK:                   data_sink_w_1,
 ; CHECK:   output          clock_source,
 ; CHECK:   output [41:0]   data_source_u,
 ; CHECK:   output [9000:0] data_source_v,
-; CHECK:   output          data_source_w_0, data_source_w_1);
+; CHECK:   output          data_source_w_0,
+; CHECK:                   data_source_w_1);
 ; CHECK:   `ifndef VERILATOR
 ; CHECK:   initial begin
 ; CHECK:     force Foo.clock = clock_sink;

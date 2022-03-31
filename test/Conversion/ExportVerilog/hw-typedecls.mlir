@@ -36,7 +36,8 @@ sv.ifdef "__PYCDE_TYPES__"  {
 
 // CHECK-LABEL: module testTypeAlias
 hw.module @testTypeAlias(
-  // CHECK: input  foo      arg0, arg1
+  // CHECK: input  foo      arg0,
+  // CHECK:                 arg1
   %arg0: !hw.typealias<@__hw_typedecls::@foo,i1>,
   %arg1: !hw.typealias<@__hw_typedecls::@foo,i1>,
   // CHECK: input  foo[2:0] arg2

@@ -114,9 +114,12 @@ circuit test_mod : %[[{"a": "a"}]]
 ; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
 
 ; VERILOG-LABEL: module test_mod(
-; VERILOG-NEXT:    input        clock, a,
+; VERILOG-NEXT:    input        clock,
+; VERILOG-NEXT:                 a,
 ; VERILOG-NEXT:    input  [1:0] b,
-; VERILOG-NEXT:    input vec_0, vec_1, vec_2,
+; VERILOG-NEXT:    input vec_0,
+; VERILOG-NEXT:          vec_1,
+; VERILOG-NEXT:          vec_2,
 ; VERILOG-NEXT:    output       c);
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:    wire _multibitMux_b;
@@ -199,7 +202,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-LABEL: module ImplicitTrunc(
 ; VERILOG-NEXT:   input        inp_1,
 ; VERILOG-NEXT:   input  [4:0] inp_2,
-; VERILOG-NEXT:   output [2:0] out1, out2);
+; VERILOG-NEXT:   output [2:0] out1,
+; VERILOG-NEXT:                out2);
 ; VERILOG-EMPTY:
 ; VERILOG-NEXT:   wire [5:0] _GEN = {inp_2[4], inp_2} << inp_1;
 ; VERILOG-NEXT:   assign out1 = _GEN[2:0];
@@ -236,7 +240,8 @@ circuit test_mod : %[[{"a": "a"}]]
     a_q <= r
 
 ; VERILOG-LABEL: module FlipFlop(
-; VERILOG-NEXT:    input clock, a_d,
+; VERILOG-NEXT:    input clock,
+; VERILOG-NEXT:          a_d,
 ; VERILOG-NEXT:    output a_q);
 ; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;

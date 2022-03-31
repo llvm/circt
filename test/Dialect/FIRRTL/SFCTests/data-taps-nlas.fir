@@ -41,7 +41,9 @@ circuit Top : %[[{
     k is invalid
 
 ; CHECK: module DataTap_impl_0(
-; CHECK:   output b, c, d
+; CHECK:   output b, 
+; CHECK:          c,
+; CHECK:          d
 ; CHECK: );
 ; CHECK:   assign b = Top.foo.f;
 ; CHECK:   assign c = Top.foo.g;

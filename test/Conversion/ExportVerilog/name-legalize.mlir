@@ -88,7 +88,8 @@ hw.module @reg(%inout: i1) -> (output: i1) {
 
 // https://github.com/llvm/circt/issues/525
 // CHECK-LABEL: module issue525(
-// CHECK-NEXT:    input  [1:0] struct_0, else_1,
+// CHECK-NEXT:    input  [1:0] struct_0,
+// CHECK-NEXT:                 else_1,
 // CHECK-NEXT:    output [1:0] casex_2);
 hw.module @issue525(%struct: i2, %else: i2) -> (casex: i2) {
   // CHECK: assign casex_2 = struct_0 + else_1;

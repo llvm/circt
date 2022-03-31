@@ -369,7 +369,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
 }
 
 // CHECK-LABEL: module Aliasing(
-// CHECK-NEXT:             inout [41:0] a, b, c
+// CHECK-NEXT:             inout [41:0] a, 
+// CHECK-NEXT:                          b,
+// CHECK-NEXT:                          c)
 hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
                       %c : !hw.inout<i42>) {
 
@@ -383,7 +385,8 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
-  // CHECK-NEXT:   output [7:0] a, b);
+  // CHECK-NEXT:   output [7:0] a, 
+  // CHECK-NEXT:                b);
 
   // CHECK-EMPTY:
   // CHECK-NEXT: reg [7:0]       myReg;
@@ -1163,7 +1166,10 @@ hw.module @MoveInstances(%a_in: i8) -> (outc : i8){
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 
 // CHECK-LABEL: module extInst2
-// CHECK-NEXT:     input                signed_0, _i, _j, _k
+// CHECK-NEXT:     input                signed_0,
+// CHECK-NEXT:                          _i,
+// CHECK-NEXT:                          _j,
+// CHECK-NEXT:                          _k
 hw.module @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> () {}
 
 // CHECK-LABEL: module remoteInstDut
