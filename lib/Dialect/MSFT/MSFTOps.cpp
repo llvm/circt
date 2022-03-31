@@ -79,6 +79,7 @@ bool DynamicInstanceOp::isRootedIn(Operation *hwMod) {
   return SymbolTable::getSymbolName(hwMod) ==
          appid()[0].cast<hw::InnerRefAttr>().getModule();
 }
+
 //===----------------------------------------------------------------------===//
 // Module/Instance stuff, mostly copied from HW dialect.
 //===----------------------------------------------------------------------===//
@@ -808,6 +809,87 @@ hw::ModulePortInfo MSFTModuleExternOp::getPorts() {
 }
 
 void OutputOp::build(OpBuilder &builder, OperationState &result) {}
+
+//===----------------------------------------------------------------------===//
+// MSFT high level design constructs
+//===----------------------------------------------------------------------===//
+
+ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  uint64_t numRows, numColumns;
+  Type rowType, columnType;
+  OpAsmParser::UnresolvedOperand rowInputs, columnInputs;
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  if (parser.parseLSquare() || parser.parseOperand(rowInputs) ||
+      parser.parseColon() || parser.parseInteger(numRows) ||
+      parser.parseKeyword("x") || parser.parseType(rowType) ||
+      parser.parseRSquare() || parser.parseLSquare() ||
+      parser.parseOperand(columnInputs) || parser.parseColon() ||
+      parser.parseInteger(numColumns) || parser.parseKeyword("x") ||
+      parser.parseType(columnType) || parser.parseRSquare())
+    return failure();
+
+  hw::ArrayType rowInputType = hw::ArrayType::get(rowType, numRows);
+  hw::ArrayType columnInputType = hw::ArrayType::get(columnType, numColumns);
+  SmallVector<Value> operands;
+  if (parser.resolveOperands({rowInputs, columnInputs},
+                             {rowInputType, columnInputType}, loc, operands))
+    return failure();
+  result.addOperands(operands);
+
+  Type peOutputType;
+  SmallVector<OpAsmParser::UnresolvedOperand> peArgs;
+  if (parser.parseKeyword("pe") ||
+      parser.parseOperandList(peArgs, 2, AsmParser::Delimiter::Paren) ||
+      parser.parseArrow() || parser.parseLParen() ||
+      parser.parseType(peOutputType) || parser.parseRParen())
+    return failure();
+
+  result.addTypes({hw::ArrayType::get(
+      hw::ArrayType::get(peOutputType, numColumns), numRows)});
+
+  Region *pe = result.addRegion();
+  llvm::SMLoc peLoc = parser.getCurrentLocation();
+  if (parser.parseRegion(*pe, peArgs, {rowType, columnType}))
+    return failure();
+  if (pe->getBlocks().size() != 1)
+    return parser.emitError(peLoc, "expected one block for the PE");
+  Operation *peTerm = pe->getBlocks().front().getTerminator();
+  if (peTerm->getOperands().size() != 1)
+    return peTerm->emitOpError("expected one return value");
+  if (peTerm->getOperand(0).getType() != peOutputType)
+    return peTerm->emitOpError("expected return type as given in parent: ")
+           << peOutputType;
+
+  return success();
+}
+
+void SystolicArrayOp::print(OpAsmPrinter &p) {
+  hw::ArrayType rowInputType = rowInputs().getType().cast<hw::ArrayType>();
+  hw::ArrayType columnInputType = colInputs().getType().cast<hw::ArrayType>();
+  p << " [";
+  p.printOperand(rowInputs());
+  p << " : " << rowInputType.getSize() << " x ";
+  p.printType(rowInputType.getElementType());
+  p << "] [";
+  p.printOperand(colInputs());
+  p << " : " << columnInputType.getSize() << " x ";
+  p.printType(columnInputType.getElementType());
+
+  p << "] pe (";
+  p.printOperand(pe().getArgument(0));
+  p << ", ";
+  p.printOperand(pe().getArgument(1));
+  p << ") -> (";
+  p.printType(peOutputs()
+                  .getType()
+                  .cast<hw::ArrayType>()
+                  .getElementType()
+                  .cast<hw::ArrayType>()
+                  .getElementType());
+  p << ") ";
+  p.printRegion(pe(), false);
+}
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.cpp.inc"

@@ -1670,6 +1670,126 @@ std::unique_ptr<Pass> createWireCleanupPass() {
 } // namespace msft
 } // namespace circt
 
+//===----------------------------------------------------------------------===//
+// Lower MSFT constructs
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+struct LowerConstructsPass : public LowerConstructsBase<LowerConstructsPass>,
+                             PassCommon {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+namespace {
+/// Lower MSFT's OutputOp to HW's.
+struct SystolicArrayOpLowering : public OpConversionPattern<SystolicArrayOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SystolicArrayOp array, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    MLIRContext *ctxt = getContext();
+    Location loc = array.getLoc();
+    Block &peBlock = array.pe().front();
+    rewriter.setInsertionPointAfter(array);
+
+    // For the row broadcasts, break out the row values which must be broadcast
+    // to each PE.
+    hw::ArrayType rowInputs =
+        hw::type_cast<hw::ArrayType>(array.rowInputs().getType());
+    IntegerType rowIdxType = rewriter.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(rowInputs.getSize())));
+    SmallVector<Value> rowValues;
+    for (size_t rowNum = 0, numRows = rowInputs.getSize(); rowNum < numRows;
+         ++rowNum) {
+      Value rowNumVal =
+          rewriter.create<hw::ConstantOp>(loc, rowIdxType, rowNum);
+      auto rowValue =
+          rewriter.create<hw::ArrayGetOp>(loc, array.rowInputs(), rowNumVal);
+      rowValue->setAttr("sv.namehint",
+                        StringAttr::get(ctxt, "row_" + Twine(rowNum)));
+      rowValues.push_back(rowValue);
+    }
+
+    // For the column broadcasts, break out the column values which must be
+    // broadcast to each PE.
+    hw::ArrayType colInputs =
+        hw::type_cast<hw::ArrayType>(array.colInputs().getType());
+    IntegerType colIdxType = rewriter.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(colInputs.getSize())));
+    SmallVector<Value> colValues;
+    for (size_t colNum = 0, numCols = colInputs.getSize(); colNum < numCols;
+         ++colNum) {
+      Value colNumVal =
+          rewriter.create<hw::ConstantOp>(loc, colIdxType, colNum);
+      auto colValue =
+          rewriter.create<hw::ArrayGetOp>(loc, array.colInputs(), colNumVal);
+      colValue->setAttr("sv.namehint",
+                        StringAttr::get(ctxt, "col_" + Twine(colNum)));
+      colValues.push_back(colValue);
+    }
+
+    // Build the PE matrix.
+    SmallVector<Value> peOutputs;
+    for (Value rowValue : rowValues) {
+      SmallVector<Value> colPEOutputs;
+      for (Value colValue : colValues) {
+        // Clone the PE block, substituting %row (arg 0) and %col (arg 1) for
+        // the corresponding row/column broadcast value.
+        // NOTE: the PE region is NOT a graph region so we don't have to deal
+        // with backedges.
+        BlockAndValueMapping mapper;
+        mapper.map(peBlock.getArgument(0), rowValue);
+        mapper.map(peBlock.getArgument(1), colValue);
+        for (Operation &peOperation : peBlock)
+          // If we see the output op (which should be the block terminator), add
+          // its operand to the output matrix.
+          if (auto outputOp = dyn_cast<PEOutputOp>(peOperation))
+            colPEOutputs.push_back(mapper.lookup(outputOp.output()));
+          else
+            rewriter.clone(peOperation, mapper);
+      }
+      // Reverse the vector since ArrayCreateOp has the opposite ordering to C
+      // vectors.
+      std::reverse(colPEOutputs.begin(), colPEOutputs.end());
+      peOutputs.push_back(
+          rewriter.create<hw::ArrayCreateOp>(loc, colPEOutputs));
+    }
+
+    std::reverse(peOutputs.begin(), peOutputs.end());
+    rewriter.replaceOp(array,
+                       {rewriter.create<hw::ArrayCreateOp>(loc, peOutputs)});
+    return success();
+  }
+};
+} // anonymous namespace
+
+void LowerConstructsPass::runOnOperation() {
+  auto top = getOperation();
+  auto *ctxt = &getContext();
+
+  ConversionTarget target(*ctxt);
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+  target.addIllegalOp<SystolicArrayOp>();
+
+  RewritePatternSet patterns(ctxt);
+  patterns.insert<SystolicArrayOpLowering>(ctxt);
+
+  if (failed(mlir::applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createLowerConstructsPass() {
+  return std::make_unique<LowerConstructsPass>();
+}
+} // namespace msft
+} // namespace circt
+
 namespace {
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/MSFT/MSFTPasses.h.inc"
