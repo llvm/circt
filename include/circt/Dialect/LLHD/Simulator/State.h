@@ -110,7 +110,6 @@ public:
 
   uint8_t *getValue() const { return value; }
 
-  /// FIXME: We should return the iterator
   const std::vector<unsigned> &getTriggeredInstanceIndices() const {
     return instanceIndices;
   }
