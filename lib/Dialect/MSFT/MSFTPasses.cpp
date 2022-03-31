@@ -1083,7 +1083,7 @@ void PartitionPass::pushDownGlobalRefs(
       }
     }
 
-    (void) found;
+    (void)found;
     assert(found);
 
     // If this path already points to the design partition, we are done.
