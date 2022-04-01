@@ -233,11 +233,7 @@ struct Deduper {
     else
       rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
                            fromModule.moduleNameAttr());
-
-    // Replace all instance of one module with the other.  If the module returns
-    // a different bundle type we have to fix up anything connecting to an
-    // instance of it.
-    fixupReferences(toModule, fromModule);
+    replaceInstances(toModule, fromModule);
   }
 
   /// Record the usages of any NLA's in this module, so that we may update the
@@ -285,192 +281,19 @@ private:
           targetMap[nlaRef.getAttr()] = PortAnnoTarget(mem, pair.index());
   }
 
-  /// This fixes up connects when the field names of a bundle type changes.  It
-  /// finds all fields which were previously bulk connected and legalizes it
-  /// into a connect for each field.
-  template <typename T>
-  void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Type dstType,
-                    Value src, Type srcType) {
-    // If its not a bundle type, the types are guaranteed to be unchanged.  If
-    // it is a bundle type, we would rather bulk-connect the values instead of
-    // decomposing the connect if the type is unchanged.
-    if (dstType == dst.getType() && srcType == src.getType()) {
-      builder.create<T>(dst, src);
-      return;
-    }
-    // It must be a bundle type and the field name has changed. We have to
-    // manually decompose the bulk connect into a connect for each field.
-    auto dstBundle = dstType.cast<BundleType>();
-    auto srcBundle = srcType.cast<BundleType>();
-    for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
-      auto dstField = builder.create<SubfieldOp>(dst, i);
-      auto srcField = builder.create<SubfieldOp>(src, i);
-      if (dstBundle.getElement(i).isFlip) {
-        std::swap(srcBundle, dstBundle);
-        std::swap(srcField, dstField);
-      }
-      fixupConnect<T>(builder, dstField, dstBundle.getElementType(i), srcField,
-                      srcBundle.getElementType(i));
-    }
-  }
-
-  /// Replaces a ConnectOp or StrictConnectOp with new bundle types.
-  template <typename T>
-  void fixupConnect(T connect, Value newValue, Type oldType) {
-    // Rewrite the connect to connect all values.
-    auto dst = connect.dest();
-    auto src = connect.src();
-    ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-    // Check which side of the connect was updated.
-    if (newValue == dst)
-      fixupConnect<T>(builder, dst, oldType, src, src.getType());
-    else
-      fixupConnect<T>(builder, dst, dst.getType(), src, oldType);
-    connect->erase();
-  }
-
-  /// This fixes up a partial connect when the field names of a bundle type
-  /// changes.  It finds all the fields which were previously connected and
-  /// replaces them with new partial connects.
-  using LazyValue = std::function<Value(ImplicitLocOpBuilder &)>;
-  // NOLINTNEXTLINE(misc-no-recursion)
-  void fixupPartialConnect(ImplicitLocOpBuilder &builder, LazyValue dst,
-                           Type dstNewType, Type dstOldType, LazyValue src,
-                           Type srcNewType, Type srcOldType) {
-    // If the types didn't change, just emit a partial connect.
-    if (dstOldType == dstNewType && srcOldType == srcNewType) {
-      auto dstField = dst(builder);
-      auto srcField = src(builder);
-      builder.create<PartialConnectOp>(dstField, srcField);
-      return;
-    }
-    // Check if they are bundle types.
-    if (auto dstOldBundle = dstOldType.dyn_cast<BundleType>()) {
-      auto dstNewBundle = dstNewType.cast<BundleType>();
-      auto srcOldBundle = srcOldType.cast<BundleType>();
-      auto srcNewBundle = srcNewType.cast<BundleType>();
-      for (auto &pair : llvm::enumerate(dstOldBundle)) {
-        // Find a matching field in the old type.
-        auto dstField = pair.value();
-        auto maybeIndex = srcOldBundle.getElementIndex(dstField.name);
-        if (!maybeIndex)
-          continue;
-        auto dstIndex = pair.index();
-        auto srcIndex = *maybeIndex;
-        // Recurse on the matching field. The code is complicated because we are
-        // trying to avoid creating subfield operations when no field ultimately
-        // matches.
-        Value dstValue;
-        LazyValue dstLazy = [&](ImplicitLocOpBuilder &builder) -> Value {
-          if (!dstValue)
-            dstValue = builder.create<SubfieldOp>(dst(builder), dstIndex);
-          return dstValue;
-        };
-        auto dstNewElement = dstNewBundle.getElementType(dstIndex);
-        auto dstOldElement = dstOldBundle.getElementType(dstIndex);
-        Value srcValue;
-        LazyValue srcLazy = [&](ImplicitLocOpBuilder &builder) -> Value {
-          if (!srcValue)
-            srcValue = builder.create<SubfieldOp>(src(builder), srcIndex);
-          return srcValue;
-        };
-        auto srcNewElement = srcNewBundle.getElementType(srcIndex);
-        auto srcOldElement = srcOldBundle.getElementType(srcIndex);
-        if (dstField.isFlip) {
-          std::swap(srcLazy, dstLazy);
-          std::swap(srcNewElement, dstNewElement);
-          std::swap(srcOldElement, dstOldElement);
-        }
-        fixupPartialConnect(builder, dstLazy, dstNewElement, dstOldElement,
-                            srcLazy, srcNewElement, srcOldElement);
-      }
-      return;
-    }
-    // If its not a bundle type, just replace it with a partial connect.
-    builder.create<PartialConnectOp>(dst(builder), src(builder));
-  }
-
-  /// When we replace a bundle type with a similar bundle with different field
-  /// names, we have to rewrite all the code to use the new field names. This
-  /// mostly affects subfield result types and any bulk connects.
-  // NOLINTNEXTLINE(misc-no-recursion)
-  void fixupReferences(Value newValue, Type oldType) {
-    SmallVector<std::pair<Value, Type>> workList;
-    workList.emplace_back(newValue, oldType);
-    while (!workList.empty()) {
-      auto [newValue, oldType] = workList.pop_back_val();
-      auto newType = newValue.getType();
-      // If the two types are identical, we don't need to do anything.
-      if (oldType == newType)
-        continue;
-      for (auto *op : llvm::make_early_inc_range(newValue.getUsers())) {
-        if (auto subfield = dyn_cast<SubfieldOp>(op)) {
-          // Rewrite a subfield op to return the correct type.
-          auto index = subfield.fieldIndex();
-          auto result = subfield.getResult();
-          auto newResultType = newType.cast<BundleType>().getElementType(index);
-          workList.emplace_back(result, result.getType());
-          subfield.getResult().setType(newResultType);
-          continue;
-        }
-        if (auto partial = dyn_cast<PartialConnectOp>(op)) {
-          // Rewrite the partial connect to connect the same elements.
-          auto dstOldType = partial.dest().getType();
-          auto dstNewType = dstOldType;
-          auto srcOldType = partial.src().getType();
-          auto srcNewType = srcOldType;
-          // Check which side of the partial connect was updated.
-          if (newValue == partial.dest())
-            dstOldType = oldType;
-          else
-            srcOldType = oldType;
-          ImplicitLocOpBuilder builder(partial.getLoc(), partial);
-          fixupPartialConnect(
-              builder, [&](auto) { return partial.dest(); }, dstNewType,
-              dstOldType, [&](auto) { return partial.src(); }, srcNewType,
-              srcOldType);
-          partial->erase();
-          continue;
-        }
-        if (auto connect = dyn_cast<ConnectOp>(op)) {
-          fixupConnect<ConnectOp>(connect, newValue, oldType);
-          continue;
-        }
-        if (auto strict = dyn_cast<StrictConnectOp>(op)) {
-          fixupConnect<StrictConnectOp>(strict, newValue, oldType);
-          continue;
-        }
-      }
-    }
-  }
-
-  /// This is the root method to fixup module references when a module changes.
-  /// It matches all the results of "to" module with the results of the "from"
-  /// module.
-  void fixupReferences(FModuleLike toModule, Operation *fromModule) {
+  /// This deletes and replaces all instances of the "fromModule" with instances
+  /// of the "toModule".
+  void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[fromModule];
     auto *toNode = instanceGraph[toModule];
+    auto toModuleRef = FlatSymbolRefAttr::get(toModule.moduleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
-      auto oldInst = oldInstRec->getInstance();
-      // Create an instance to replace the old module.
-      auto newInst = OpBuilder(oldInst).create<InstanceOp>(
-          oldInst.getLoc(), toModule, oldInst.nameAttr());
-      newInst.annotationsAttr(oldInst.annotationsAttr());
-      auto oldInnerSym = oldInst.inner_symAttr();
-      if (oldInnerSym)
-        newInst.inner_symAttr(oldInnerSym);
-
-      // We have to replaceAll before fixing up references, we walk the new
-      // usages when fixing up any references.
-      oldInst.replaceAllUsesWith(newInst.getResults());
-      oldInstRec->getParent()->addInstance(newInst, toNode);
-      //  Update bulk connections and subfield operations.
-      for (auto results :
-           llvm::zip(newInst.getResults(), oldInst.getResultTypes()))
-        fixupReferences(std::get<0>(results), std::get<1>(results));
+      auto inst = oldInstRec->getInstance();
+      inst.moduleNameAttr(toModuleRef);
+      inst.portNamesAttr(toModule.getPortNamesAttr());
+      oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
-      oldInst->erase();
     }
     instanceGraph.erase(fromNode);
     fromModule->erase();
@@ -944,6 +767,94 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
+// Fixup
+//===----------------------------------------------------------------------===//
+
+/// This fixes up connects when the field names of a bundle type changes.  It
+/// finds all fields which were previously bulk connected and legalizes it
+/// into a connect for each field.
+template <typename T>
+void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
+  // If the types already match we can emit a connect.
+  auto dstType = dst.getType();
+  auto srcType = src.getType();
+  if (dstType == srcType) {
+    builder.create<T>(dst, src);
+    return;
+  }
+  // It must be a bundle type and the field name has changed. We have to
+  // manually decompose the bulk connect into a connect for each field.
+  auto dstBundle = dstType.cast<BundleType>();
+  auto srcBundle = srcType.cast<BundleType>();
+  for (unsigned i = 0; i < dstBundle.getNumElements(); ++i) {
+    auto dstField = builder.create<SubfieldOp>(dst, i);
+    auto srcField = builder.create<SubfieldOp>(src, i);
+    if (dstBundle.getElement(i).isFlip) {
+      std::swap(srcBundle, dstBundle);
+      std::swap(srcField, dstField);
+    }
+    fixupConnect<T>(builder, dstField, srcField);
+  }
+}
+
+/// Replaces a ConnectOp or StrictConnectOp with new bundle types.
+template <typename T>
+void fixupConnect(T connect) {
+  ImplicitLocOpBuilder builder(connect.getLoc(), connect);
+  fixupConnect<T>(builder, connect.dest(), connect.src());
+  connect->erase();
+}
+
+/// When we replace a bundle type with a similar bundle with different field
+/// names, we have to rewrite all the code to use the new field names. This
+/// mostly affects subfield result types and any bulk connects.
+void fixupReferences(Value oldValue, Type newType) {
+  SmallVector<std::pair<Value, Type>> workList;
+  workList.emplace_back(oldValue, newType);
+  while (!workList.empty()) {
+    auto [oldValue, newType] = workList.pop_back_val();
+    auto oldType = oldValue.getType();
+    // If the two types are identical, we don't need to do anything, otherwise
+    // update the type in place.
+    if (oldType == newType)
+      continue;
+    oldValue.setType(newType);
+    for (auto *op : llvm::make_early_inc_range(oldValue.getUsers())) {
+      if (auto subfield = dyn_cast<SubfieldOp>(op)) {
+        // Rewrite a subfield op to return the correct type.
+        auto index = subfield.fieldIndex();
+        auto result = subfield.getResult();
+        auto newResultType = newType.cast<BundleType>().getElementType(index);
+        workList.emplace_back(result, newResultType);
+        continue;
+      }
+      if (auto connect = dyn_cast<ConnectOp>(op)) {
+        fixupConnect<ConnectOp>(connect);
+        continue;
+      }
+      if (auto strict = dyn_cast<StrictConnectOp>(op)) {
+        fixupConnect<StrictConnectOp>(strict);
+        continue;
+      }
+    }
+  }
+}
+
+/// This is the root method to fixup module references when a module changes.
+/// It matches all the results of "to" module with the results of the "from"
+/// module.
+void fixupAllModules(InstanceGraph &instanceGraph) {
+  for (auto *node : instanceGraph) {
+    auto module = cast<FModuleLike>(node->getModule());
+    for (auto *instRec : node->uses()) {
+      auto inst = instRec->getInstance();
+      for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+        fixupReferences(inst.getResult(i), module.getPortType(i));
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // DedupPass
 //===----------------------------------------------------------------------===//
 
@@ -1062,6 +973,11 @@ class DedupPass : public DedupBase<DedupPass> {
     });
     if (failed)
       return signalPassFailure();
+
+    // Walk all the modules and fixup the instance operation to return the
+    // correct type. We delay this fixup until the end because doing it early
+    // can block the deduplication of the parent modules.
+    fixupAllModules(instanceGraph);
 
     if (!anythingChanged)
       markAllAnalysesPreserved();

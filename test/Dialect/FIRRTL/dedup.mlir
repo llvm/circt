@@ -393,31 +393,6 @@ firrtl.circuit "Bundle" {
     // CHECK: [[F_G:%.+]] = firrtl.subfield [[F]](0)
     // CHECK: firrtl.connect [[F_G]], [[W0_G]]
     firrtl.connect %w0, %f : !firrtl.bundle<g flip: uint<1>, h: uint<1>>, !firrtl.bundle<g flip: uint<1>, h: uint<1>>
-    
-    // Check that we properly fixup partial connects when the field names change.
-    %w1 = firrtl.wire : !firrtl.bundle<g flip: uint<1>>
-    // CHECK: [[F_G:%.+]] = firrtl.subfield [[F]](0)
-    // CHECK: [[W1_G:%.+]] = firrtl.subfield %w1(0)
-    // CHECK: firrtl.partialconnect [[F_G]], [[W1_G]]
-    firrtl.partialconnect %w1, %f : !firrtl.bundle<g flip: uint<1>>, !firrtl.bundle<g flip: uint<1>, h: uint<1>>
-  }
-}
-
-// This is testing an issue in partial connect fixup from a spelling mistake in
-// the pass.
-firrtl.circuit "PartialIssue" {
-  firrtl.module @A(out %a: !firrtl.bundle<member: bundle<a: bundle<clock: clock, reset: asyncreset>>>) { }
-  firrtl.module @B(out %b: !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>) { }
-  firrtl.module @PartialIssue() {
-    %a = firrtl.instance a @A(out a: !firrtl.bundle<member: bundle<a: bundle<clock: clock, reset: asyncreset>>>)
-    %b = firrtl.instance b @B(out b: !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>)
-    %wb = firrtl.wire : !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>
-    firrtl.partialconnect %wb, %b : !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>, !firrtl.bundle<member: bundle<b: bundle<clock: clock, reset: asyncreset>>>
-    // CHECK: %0 = firrtl.subfield %wb(0)
-    // CHECK: %1 = firrtl.subfield %0(0)
-    // CHECK: %2 = firrtl.subfield %b_a(0)
-    // CHECK: %3 = firrtl.subfield %2(0)
-    // CHECK: firrtl.partialconnect %1, %3
   }
 }
 
@@ -445,6 +420,35 @@ firrtl.circuit "Flip" {
   }
 }
 
+// This is checking that the fixup phase due to changing bundle names does not
+// block the deduplication of parent modules.
+// CHECK-LABEL: firrtl.circuit "DelayedFixup"
+firrtl.circuit "DelayedFixup"  {
+  // CHECK: firrtl.extmodule @Foo
+  firrtl.extmodule @Foo(out a: !firrtl.bundle<a: uint<1>>)
+  // CHECK-NOT: firrtl.extmodule @Bar
+  firrtl.extmodule @Bar(out b: !firrtl.bundle<b: uint<1>>)
+  // CHECK: firrtl.module @Parent0
+  firrtl.module @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
+    %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
+    firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
+    firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+  }
+  // CHECK-NOT: firrtl.module @Parent1
+  firrtl.module @Parent1(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
+    %foo_a = firrtl.instance foo  @Foo(out a: !firrtl.bundle<a: uint<1>>)
+    firrtl.connect %a, %foo_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    %bar_b = firrtl.instance bar  @Bar(out b: !firrtl.bundle<b: uint<1>>)
+    firrtl.connect %b, %bar_b : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
+  }
+  firrtl.module @DelayedFixup() {
+    // CHECK: firrtl.instance parent0  @Parent0
+    %parent0_a, %parent0_b = firrtl.instance parent0  @Parent0(out a: !firrtl.bundle<a: uint<1>>, out b: !firrtl.bundle<b: uint<1>>)
+    // CHECK: firrtl.instance parent1  @Parent0
+    %parent1_a, %parent1_b = firrtl.instance parent1  @Parent1(out a: !firrtl.bundle<a: uint<1>>, out b: !firrtl.bundle<b: uint<1>>)
+  }
+}
 
 // Don't attach empty annotations onto ops without annotations.
 // CHECK-LABEL: firrtl.circuit "NoEmptyAnnos"
