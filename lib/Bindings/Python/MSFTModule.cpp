@@ -121,8 +121,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
 
   m.doc() = "MSFT dialect Python native extension";
 
-  m.def("get_instance", circtMSFTGetInstance, py::arg("root"), py::arg("path"));
-
   py::enum_<PrimitiveType>(m, "PrimitiveType")
       .value("M20K", PrimitiveType::M20K)
       .value("DSP", PrimitiveType::DSP)

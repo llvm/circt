@@ -61,14 +61,6 @@ with ir.Context() as ctx, ir.Location.unknown():
   print(path)
   # CHECK-NEXT: [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
 
-  resolved_inst = msft.get_instance(top.operation,
-                                    ir.Attribute.parse("@inst1::@ext1"))
-  assert (resolved_inst == ext_inst.operation)
-
-  not_found_inst = msft.get_instance(top.operation,
-                                     ir.Attribute.parse("@inst_none::@ext1"))
-  assert (not_found_inst is None)
-
   # CHECK: msft.module @MyWidget {} ()
   # CHECK:   msft.output
   # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()

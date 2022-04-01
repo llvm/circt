@@ -181,9 +181,3 @@ MlirAttribute circtMSFTPhysicalBoundsAttrGet(MlirContext cContext,
   auto *context = unwrap(cContext);
   return wrap(PhysicalBoundsAttr::get(context, xMin, xMax, yMin, yMax));
 }
-
-MlirOperation circtMSFTGetInstance(MlirOperation cRoot, MlirAttribute cPath) {
-  auto root = cast<circt::msft::MSFTModuleOp>(unwrap(cRoot));
-  auto path = unwrap(cPath).cast<SymbolRefAttr>();
-  return wrap(getInstance(root, path));
-}
