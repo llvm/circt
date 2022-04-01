@@ -808,7 +808,6 @@ void fixupConnect(T connect) {
 /// When we replace a bundle type with a similar bundle with different field
 /// names, we have to rewrite all the code to use the new field names. This
 /// mostly affects subfield result types and any bulk connects.
-// NOLINTNEXTLINE(misc-no-recursion)
 void fixupReferences(Value oldValue, Type newType) {
   SmallVector<std::pair<Value, Type>> workList;
   workList.emplace_back(oldValue, newType);
