@@ -1638,7 +1638,7 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   //
   Value lhsSubexpr = op->getOperand(0), rhsSubexpr = op->getOperand(1);
   if (isa<MulOp, AddOp>(op))
-    os << "(";
+    os << op->getResultTypes()[0].getIntOrFloatBitWidth() << "'(";
 
   // TypeSwitch<Operation *>(op).Case<MulOp, AddOp>([&](Operation *op) {
   //   auto *lhsOp = op->getOperand(0).getDefiningOp();
