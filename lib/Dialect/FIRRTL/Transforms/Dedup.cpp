@@ -1017,9 +1017,9 @@ class DedupPass : public DedupBase<DedupPass> {
       auto module = StringAttr::get(context, rhs);
       auto it = groupMap.find(module);
       if (it == groupMap.end()) {
-        auto diag =
-            circuit->emitError("MustDeduplicateAnnotation references module ")
-            << module << " which does not exist";
+        auto diag = emitError(circuit.getLoc(),
+                              "MustDeduplicateAnnotation references module ")
+                    << module << " which does not exist";
         failed = true;
         return 0;
       }
@@ -1034,8 +1034,8 @@ class DedupPass : public DedupBase<DedupPass> {
         return false;
       auto modules = annotation.getMember<ArrayAttr>("modules");
       if (!modules) {
-        circuit->emitError(
-            "MustDeduplicateAnnotation missing \"modules\" member");
+        emitError(circuit.getLoc(),
+                  "MustDeduplicateAnnotation missing \"modules\" member");
         failed = true;
         return false;
       }
@@ -1052,7 +1052,7 @@ class DedupPass : public DedupBase<DedupPass> {
         if (failed)
           return false;
         if (first != next) {
-          circuit->emitError("module ")
+          emitError(circuit.getLoc(), "module ")
               << attr << " not deduplicated with " << modules[0];
           failed = true;
           return false;
