@@ -58,6 +58,8 @@ class ImmediateVerifOp<string mnemonic, list<Trait> traits = []> :
       [{ build(odsBuilder, odsState, expression, defer, label, StringAttr{},
         ValueRange{}); }]>
   ];
+
+  let hasCanonicalizer = 1;
 }
 
 def AssertOp : ImmediateVerifOp<"assert"> {
@@ -120,6 +122,8 @@ class ConcurrentVerifOp<string mnemonic, list<Trait> traits = []> :
       [{ build(odsBuilder, odsState, event, clock, property, label,
         StringAttr{}, ValueRange{}); }]>
   ];
+
+  let hasCanonicalizer = 1;
 }
 
 def AssertConcurrentOp : ConcurrentVerifOp<"assert.concurrent"> {

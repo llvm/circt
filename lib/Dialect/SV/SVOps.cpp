@@ -1439,6 +1439,63 @@ void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
 }
 
 //===----------------------------------------------------------------------===//
+// Verification Ops.
+//===----------------------------------------------------------------------===//
+
+static LogicalResult eraseIfNotZero(Operation *op, Value value,
+                                    PatternRewriter &rewriter) {
+  if (auto constant = value.getDefiningOp<hw::ConstantOp>())
+    if (!constant.getValue().isZero()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+  return failure();
+}
+
+template <class Op>
+static LogicalResult canonicalizeImmediateVerifOp(Op op,
+                                                  PatternRewriter &rewriter) {
+  return eraseIfNotZero(op, op.expression(), rewriter);
+}
+
+void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssertOp>);
+}
+
+void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssumeOp>);
+}
+
+void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                          MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<CoverOp>);
+}
+
+template <class Op>
+static LogicalResult canonicalizeConcurrentVerifOp(Op op,
+                                                   PatternRewriter &rewriter) {
+  return eraseIfNotZero(op, op.property(), rewriter);
+}
+
+void AssertConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                     MLIRContext *context) {
+  results.add(canonicalizeConcurrentVerifOp<AssertConcurrentOp>);
+}
+
+void AssumeConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                     MLIRContext *context) {
+  results.add(canonicalizeConcurrentVerifOp<AssumeConcurrentOp>);
+}
+
+void CoverConcurrentOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                    MLIRContext *context) {
+  results.add(canonicalizeConcurrentVerifOp<CoverConcurrentOp>);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

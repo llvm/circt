@@ -133,3 +133,23 @@ func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
   }
   return
 }
+
+// CHECK-LABEL; @immediate_assert_canonicalization
+hw.module @assert_canonicalization(%clock: i1) {
+  %true = hw.constant 1 : i1
+  sv.always posedge %clock {
+    // CHECK-NOT: sv.assert
+    sv.assert %true, immediate message "assert"
+    // CHECK-NOT: sv.assume
+    sv.assume %true, immediate message "assume"
+    // CHECK-NOT: sv.cover
+    sv.cover %true, immediate
+  }
+
+  // CHECK-NOT: sv.assert.concurrent
+  sv.assert.concurrent posedge %clock, %true
+  // CHECK-NOT: sv.assume.concurrent
+  sv.assume.concurrent posedge %clock, %true
+  // CHECK-NOT: sv.cover.concurrent
+  sv.cover.concurrent posedge %clock, %true
+}
