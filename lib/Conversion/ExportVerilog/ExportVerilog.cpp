@@ -1637,58 +1637,73 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   //   binOp(concat(0, a), constant)     -> binOp(a, constant[width/2-1:0])
   //
   Value lhsSubexpr = op->getOperand(0), rhsSubexpr = op->getOperand(1);
-  TypeSwitch<Operation *>(op).Case<MulOp, AddOp>([&](Operation *op) {
-    auto *lhsOp = op->getOperand(0).getDefiningOp();
-    auto *rhsOp = op->getOperand(1).getDefiningOp();
-    if (!lhsOp || !rhsOp)
-      return;
+  if (isa<MulOp, AddOp>(op))
+    os << "(";
 
-    auto lhsPad = dyn_cast<ConcatOp>(lhsOp);
-    if (!lhsPad)
-      return;
+  // TypeSwitch<Operation *>(op).Case<MulOp, AddOp>([&](Operation *op) {
+  //   auto *lhsOp = op->getOperand(0).getDefiningOp();
+  //   auto *rhsOp = op->getOperand(1).getDefiningOp();
+  //   if (!lhsOp || !rhsOp)
+  //     return;
 
-    // The width is the expected width of the pad/concat.  For an addition this
-    // is one, for a multiplication it is half the full width of the op.
-    unsigned width = 1;
-    if (isa<MulOp>(op))
-      width = op->getResultTypes()[0].getIntOrFloatBitWidth() / 2;
+  //   auto lhsPad = dyn_cast<ConcatOp>(lhsOp);
+  //   if (!lhsPad)
+  //     return;
 
-    auto isExtendedConstantOrOp = [&](ConcatOp pad) {
-      if (auto cst = pad.getOperand(0).getDefiningOp<ConstantOp>()) {
-        if (!cst.getValue().isZero() || cst.getValue().getBitWidth() != width)
-          return false;
-      } else if (auto rpl = pad.getOperand(0).getDefiningOp<ReplicateOp>()) {
-        auto extract = rpl.input().getDefiningOp<ExtractOp>();
-        if (!extract || extract.input() != pad.getOperand(1) ||
-            extract.lowBit() !=
-                (pad.getOperand(1).getType().getIntOrFloatBitWidth() - 1) ||
-            rpl.getMultiple() != width)
-          return false;
-      }
-      return true;
-    };
+  //   // The width is the expected width of the pad/concat.  For an addition this
+  //   // is one, for a multiplication it is half the full width of the op.
+  //   unsigned width = 1;
+  //   if (isa<MulOp>(op))
+  //     width = op->getResultTypes()[0].getIntOrFloatBitWidth() / 2;
 
-    if (!isExtendedConstantOrOp(lhsPad))
-      return;
+  //   // Return a simplified version of a concat if the LHS has all the same bits
+  //   // for those greater than some width.
+  //   auto strengthReduceConcat = [](ConcatOp pad, unsigned width) {
+  //     auto totalWidth = pad.getType().getIntOrFloatBitWidth();
 
-    Value newRhs;
-    if (auto maybeConstant = dyn_cast<ConstantOp>(rhsOp)) {
-      auto value = maybeConstant.getValue();
-      if (value.countLeadingZeros() < width)
-        return;
-      OpBuilder builder(op->getContext());
-      newRhs = builder.create<ConstantOp>(op->getLoc(),
-                                          APInt(width, value.getZExtValue()));
-    } else if (auto rhsPad = dyn_cast<ConcatOp>(rhsOp)) {
-      if (!isExtendedConstantOrOp(rhsPad))
-        return;
-      newRhs = rhsPad.getOperand(1);
-    } else
-      return;
+  //     auto lhs = pad.getOperand(0), rhs = pad.getOperand(1);
+  //     if (auto cst = lhs.getDefiningOp<ConstantOp>()) {
+  //       auto value = cst.getValue();
+  //       if (!value.isZero())
+  //         return pad;
+  //       if (value.getBitWidth()
+  //     }
 
-    lhsSubexpr = lhsPad.getOperand(1);
-    rhsSubexpr = newRhs;
-  });
+  //     if (auto cst = pad.getOperand(0).getDefiningOp<ConstantOp>()) {
+  //       if (!cst.getValue().isZero() || cst.getValue().getBitWidth() < width)
+  //         return false;
+  //     } else if (auto rpl = pad.getOperand(0).getDefiningOp<ReplicateOp>()) {
+  //       auto extract = rpl.input().getDefiningOp<ExtractOp>();
+  //       if (!extract || extract.input() != pad.getOperand(1) ||
+  //           extract.lowBit() !=
+  //               (pad.getOperand(1).getType().getIntOrFloatBitWidth() - 1) ||
+  //           rpl.getMultiple() != width)
+  //         return false;
+  //     }
+  //     return true;
+  //   };
+
+  //   if (!isExtendedConstantOrOp(lhsPad))
+  //     return;
+
+  //   Value newRhs;
+  //   if (auto maybeConstant = dyn_cast<ConstantOp>(rhsOp)) {
+  //     auto value = maybeConstant.getValue();
+  //     if (value.countLeadingZeros() < width)
+  //       return;
+  //     OpBuilder builder(op->getContext());
+  //     newRhs = builder.create<ConstantOp>(op->getLoc(),
+  //                                         APInt(width, value.getZExtValue()));
+  //   } else if (auto rhsPad = dyn_cast<ConcatOp>(rhsOp)) {
+  //     if (!isExtendedConstantOrOp(rhsPad))
+  //       return;
+  //     newRhs = rhsPad.getOperand(1);
+  //   } else
+  //     return;
+
+  //   lhsSubexpr = lhsPad.getOperand(1);
+  //   rhsSubexpr = newRhs;
+  // });
 
   auto lhsInfo = emitSubExpr(lhsSubexpr, prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
@@ -1719,6 +1734,9 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
     signedness = IsSigned;
+
+  if (isa<MulOp, AddOp>(op))
+    os << ")";
 
   if (emitBinaryFlags & EB_ForceResultSigned) {
     os << ')';
