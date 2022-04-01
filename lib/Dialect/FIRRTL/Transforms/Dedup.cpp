@@ -233,7 +233,7 @@ struct Deduper {
     else
       rewriteExtModuleNLAs(renameMap, toModule.moduleNameAttr(),
                            fromModule.moduleNameAttr());
-    eraseFromModule(toModule, fromModule);
+    replaceInstances(toModule, fromModule);
   }
 
   /// Record the usages of any NLA's in this module, so that we may update the
@@ -283,7 +283,7 @@ private:
 
   /// This deletes and replaces all instances of the "fromModule" with instances
   /// of the "toModule".
-  void eraseFromModule(FModuleLike toModule, Operation *fromModule) {
+  void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[fromModule];
     auto *toNode = instanceGraph[toModule];
