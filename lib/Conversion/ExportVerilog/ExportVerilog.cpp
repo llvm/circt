@@ -4153,28 +4153,22 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     if (portTypeStrings[portIdx].size() < maxTypeWidth)
       os.indent(maxTypeWidth - portTypeStrings[portIdx].size());
 
+    size_t startOfNamePos = os.tell() - startOfLinePos;
+
     // Emit the name.
     os << getPortVerilogName(module, portInfo[portIdx]);
     printUnpackedTypePostfix(portType, os);
     ++portIdx;
-
-    auto lineLength = state.options.emittedLineLength;
 
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
            stripUnpackedTypes(portType) ==
                stripUnpackedTypes(portInfo[portIdx].type)) {
-      // Don't exceed our preferred line length.
       StringRef name = getPortVerilogName(module, portInfo[portIdx]);
-      if (os.tell() + 2 + name.size() - startOfLinePos >
-          // We use "-2" here because we need a trailing comma or ); for the
-          // decl.
-          lineLength - 2)
-        break;
-
       // Append this to the running port decl.
-      os << ", " << name;
+      os << ",\n";
+      os.indent(startOfNamePos) << name;
       printUnpackedTypePostfix(portInfo[portIdx].type, os);
       ++portIdx;
     }

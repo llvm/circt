@@ -1,7 +1,8 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
-// CHECK-NEXT: input a, b);
+// CHECK-NEXT: input a, 
+// CHECK-NEXT:       b);
 hw.module @inputs_only(%a: i1, %b: i1) {
   hw.output
 }
@@ -14,9 +15,13 @@ hw.module @no_ports() {
 // CHECK-LABEL: module Expressions(
 // CHECK-NEXT:    input  [3:0]  in4,
 // CHECK-NEXT:    input         clock,
-// CHECK-NEXT:    output        out1a, out1b, out1c,
-// CHECK-NEXT:    output [3:0]  out4, out4s,
-// CHECK-NEXT:    output [15:0] out16, out16s,
+// CHECK-NEXT:    output        out1a,
+// CHECK-NEXT:                  out1b,
+// CHECK-NEXT:                  out1c,
+// CHECK-NEXT:    output [3:0]  out4,
+// CHECK-NEXT:                  out4s,
+// CHECK-NEXT:    output [15:0] out16,
+// CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
 // CHECK-NEXT:    output [1:0]  orvout);
 
@@ -484,7 +489,9 @@ hw.module @BindEmission2() -> () {
 
 hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
   // CHECK-LABEL: module bind_rename_port
-  // CHECK-NEXT: input _io_req_ready_output, reset, clock
+  // CHECK-NEXT: input _io_req_ready_output,
+  // CHECK-NEXT:       reset,
+  // CHECK-NEXT:       clock
   hw.output
 }
 
