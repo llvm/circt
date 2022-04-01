@@ -40,7 +40,7 @@ class System:
   ]
 
   PASSES = """
-    msft-lower-instances, {partition}
+    msft-lower-constructs, msft-lower-instances, {partition}
     lower-msft-to-hw{{verilog-file={verilog_file}}},
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
     msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
