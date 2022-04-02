@@ -5,11 +5,11 @@ add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLAttributes.cpp
   FIRRTLDialect.cpp
   FIRRTLFolds.cpp
+  FIRRTLInstanceGraph.cpp
   FIRRTLOpInterfaces.cpp
   FIRRTLOps.cpp
   FIRRTLTypes.cpp
   FIRRTLUtils.cpp
-  InstanceGraph.cpp
   NLATable.cpp
 
   ADDITIONAL_HEADER_DIRS

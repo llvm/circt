@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Dominance.h"
@@ -653,7 +653,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 /// instance's port values with the target module's port values.
 void InferResetsPass::traceResets(InstanceOp inst) {
   // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(inst));
+  auto module = dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(inst));
   if (!module)
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.name() << "\n");
@@ -886,7 +886,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
       if (auto instOp = value.getDefiningOp<InstanceOp>())
         if (auto extmodule = dyn_cast<FExtModuleOp>(
-                instanceGraph->getReferencedModule(instOp)))
+                *instanceGraph->getReferencedModule(instOp)))
           extmoduleWorklist.insert({extmodule, instOp});
     }
   }
@@ -1163,7 +1163,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
 
   // Gather the domains.
   auto &instGraph = getAnalysis<InstanceGraph>();
-  auto module = dyn_cast<FModuleOp>(instGraph.getTopLevelNode()->getModule());
+  auto module = dyn_cast<FModuleOp>(*instGraph.getTopLevelNode()->getModule());
   if (!module) {
     LLVM_DEBUG(llvm::dbgs()
                << "Skipping circuit because main module is no `firrtl.module`");
@@ -1250,10 +1250,10 @@ void InferResetsPass::buildDomains(FModuleOp module,
   // Traverse the child instances.
   InstancePathVec childPath = instPath;
   for (auto *record : *instGraph[module]) {
-    auto submodule = dyn_cast<FModuleOp>(record->getTarget()->getModule());
+    auto submodule = dyn_cast<FModuleOp>(*record->getTarget()->getModule());
     if (!submodule)
       continue;
-    childPath.push_back(record->getInstance());
+    childPath.push_back(cast<InstanceOp>(*record->getInstance()));
     buildDomains(submodule, childPath, domain.reset, instGraph, indent + 1);
     childPath.pop_back();
   }
@@ -1493,7 +1493,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // domain associated with that module, or the module is explicitly marked as
     // being in no domain, simply skip.
     auto refModule =
-        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instOp));
+        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instOp));
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);

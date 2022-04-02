@@ -12,9 +12,9 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -473,7 +473,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
     dutMod = dyn_cast<FModuleOp>(*it);
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     auto *node = instanceGraph.lookup(&(*it));
-    llvm::for_each(llvm::depth_first(node), [&](InstanceGraphNode *node) {
+    llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
       dutModuleSet.insert(node->getModule());
     });
   }

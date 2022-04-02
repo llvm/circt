@@ -9,7 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
@@ -43,7 +43,7 @@ void RemoveUnusedPortsPass::runOnOperation() {
   // Iterate in the reverse order of instance graph iterator, i.e. from leaves
   // to top.
   for (auto *node : llvm::post_order(&instanceGraph))
-    if (auto module = dyn_cast<FModuleOp>(node->getModule()))
+    if (auto module = dyn_cast<FModuleOp>(*node->getModule()))
       // Don't prune the main module.
       if (!module.isPublic())
         removeUnusedModulePorts(module, node);
@@ -129,7 +129,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
   // Rewrite all uses.
   for (auto *use : instanceGraphNode->uses()) {
-    auto instance = use->getInstance();
+    auto instance = ::cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     unsigned outputPortIndex = 0;
     for (auto index : removalPortIndexes) {

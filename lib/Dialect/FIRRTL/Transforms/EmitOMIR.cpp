@@ -12,7 +12,7 @@
 
 #include "AnnotationDetails.h"
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -446,8 +446,9 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       auto ref = attr.cast<hw::InnerRefAttr>();
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph->lookup(ref.getModule());
-      auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-        return record->getInstance().inner_symAttr() == ref.getName();
+      auto it = llvm::find_if(*node, [&](hw::InstanceRecord *record) {
+        return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+               ref.getName();
       });
       assert(it != node->end() &&
              "Instance referenced by NLA does not exist in module");

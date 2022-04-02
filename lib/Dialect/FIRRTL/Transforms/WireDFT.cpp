@@ -12,9 +12,9 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -228,7 +228,7 @@ void WireDFTPass::runOnOperation() {
   llvm::SetVector<InstanceRecord *> clockGates;
   auto *lca = lowestCommonAncestor(
       instanceGraph.lookup(dut), [&](InstanceRecord *node) {
-        FModuleLike module = cast<FModuleLike>(node->getTarget()->getModule());
+        auto module = node->getTarget()->getModule();
         // If this is a clock gate, record the module and return true.
         if (module.moduleName().startswith("EICG_wrapper")) {
           clockGates.insert(node);
@@ -237,7 +237,6 @@ void WireDFTPass::runOnOperation() {
         // Return true if this is the module with the enable signal.
         return node->getParent()->getModule() == enableModule;
       });
-  auto lcaModule = cast<FModuleOp>(lca->getModule());
 
   // If there are no clock gates under the DUT, we can stop now.
   if (!clockGates.size())
@@ -246,7 +245,7 @@ void WireDFTPass::runOnOperation() {
   // Stash some useful things.
   auto *context = &getContext();
   auto uint1Type = enableSignal.getType().cast<FIRRTLType>();
-  auto loc = lcaModule.getLoc();
+  auto loc = lca->getModule().getLoc();
   auto portName = StringAttr::get(context, "test_en");
 
   // This maps an enable signal to each module.
@@ -257,7 +256,7 @@ void WireDFTPass::runOnOperation() {
   auto insertPortIntoInstance =
       [&](InstanceRecord *instanceNode,
           std::pair<unsigned, PortInfo> port) -> InstanceOp {
-    auto instance = instanceNode->getInstance();
+    auto instance = cast<InstanceOp>(*instanceNode->getInstance());
     auto clone = instance.cloneAndInsertPorts({port});
     instanceGraph.replaceInstance(instance, clone);
     instance->replaceAllUsesWith(clone.getResults().drop_back());
@@ -291,7 +290,7 @@ void WireDFTPass::runOnOperation() {
     signals[node] = signal;
 
     // Create an output port to this module.
-    auto module = cast<FModuleOp>(node->getModule());
+    auto module = cast<FModuleOp>(*node->getModule());
     unsigned portNo = module.getNumPorts();
     module.insertPorts({{portNo, portInfo}});
     auto builder =
@@ -324,7 +323,7 @@ void WireDFTPass::runOnOperation() {
       return signal;
 
     // Add an input signal to this module.
-    auto module = cast<FModuleOp>(node->getModule());
+    auto module = cast<FModuleOp>(*node->getModule());
     unsigned portNo = module.getNumPorts();
     module.insertPorts({{portNo, portInfo}});
     auto arg = module.getArgument(portNo);
@@ -339,7 +338,7 @@ void WireDFTPass::runOnOperation() {
 
       // Wire the parent signal to the instance op.
       auto *parent = instanceNode->getParent();
-      auto module = cast<FModuleOp>(parent->getModule());
+      auto module = cast<FModuleOp>(*parent->getModule());
       auto signal = getSignal(parent);
       auto builder =
           ImplicitLocOpBuilder::atBlockEnd(module->getLoc(), module.getBody());
@@ -352,13 +351,14 @@ void WireDFTPass::runOnOperation() {
   // Wire the signal to each clock gate using the helper above.
   for (auto *instance : clockGates) {
     auto *parent = instance->getParent();
-    auto module = cast<FModuleOp>(parent->getModule());
+    auto module = cast<FModuleOp>(*parent->getModule());
     auto builder =
         ImplicitLocOpBuilder::atBlockEnd(module->getLoc(), module.getBody());
     // Hard coded port result number; the clock gate test_en port is 1.
     auto testEnPortNo = 1;
-    builder.create<ConnectOp>(instance->getInstance().getResult(testEnPortNo),
-                              getSignal(parent));
+    builder.create<ConnectOp>(
+        cast<InstanceOp>(*instance->getInstance()).getResult(testEnPortNo),
+        getSignal(parent));
   }
 
   // And we're done!

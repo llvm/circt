@@ -14,9 +14,9 @@
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -321,8 +321,8 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT.
-  bool isInDUT(FModuleLike child) {
-    if (auto parent = dyn_cast<FModuleOp>(*dut))
+  bool isInDUT(hw::HWModuleLike child) {
+    if (auto parent = dyn_cast<hw::HWModuleLike>(*dut))
       return getInstanceGraph()->isAncestor(child, parent);
     return dut == child;
   }
@@ -332,7 +332,7 @@ struct CircuitLoweringState {
   // Return true if this module is instantiated by the Test Harness.  Returns
   // false if the module is not instantiated by the Test Harness or if the Test
   // Harness is not known.
-  bool isInTestHarness(FModuleLike mod) { return !isInDUT(mod); }
+  bool isInTestHarness(hw::HWModuleLike mod) { return !isInDUT(mod); }
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 

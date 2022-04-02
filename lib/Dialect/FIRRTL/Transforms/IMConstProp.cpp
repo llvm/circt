@@ -9,7 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/APInt.h"
 #include "mlir/IR/Threading.h"
@@ -441,7 +441,7 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  auto module = instanceGraph->getReferencedModule(instance);
+  Operation *module = instanceGraph->getReferencedModule(instance);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
@@ -527,7 +527,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     // Update the dest, when its an instance op.
     mergeLatticeValue(connect.dest(), srcValue);
     auto module =
-        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
+        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
     if (!module)
       return;
 
@@ -579,7 +579,7 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
     // Update the dest, when its an instance op.
     mergeLatticeValue(connect.dest(), srcValue);
     auto module =
-        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
+        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instance));
     if (!module)
       return;
 
