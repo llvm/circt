@@ -13,6 +13,11 @@ mlir_tablegen(HWEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(MLIRHWEnumsIncGen)
 add_dependencies(circt-headers MLIRHWEnumsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS Passes.td)
+mlir_tablegen(Passes.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTHWTransformsIncGen)
+add_circt_doc(Passes -gen-pass-doc HWPasses ./)
+
 set(LLVM_TARGET_DEFINITIONS HWOpInterfaces.td)
 mlir_tablegen(HWOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(HWOpInterfaces.cpp.inc -gen-op-interface-defs)
