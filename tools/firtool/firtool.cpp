@@ -374,6 +374,15 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Parse the input.
   mlir::OwningOpRef<mlir::ModuleOp> module;
+
+  llvm::sys::TimePoint<> parseStartTime;
+  if (verbosePassExecutions) {
+    llvm::errs() << "[firtool] Running "
+                 << (inputFormat == InputFIRFile ? "fir" : "mlir")
+                 << " parser\n";
+    parseStartTime = llvm::sys::TimePoint<>::clock::now();
+  }
+
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
@@ -389,6 +398,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
   if (!module)
     return failure();
+
+  if (verbosePassExecutions) {
+    auto elpased = std::chrono::duration<double>(
+                       llvm::sys::TimePoint<>::clock::now() - parseStartTime) /
+                   std::chrono::seconds(1);
+    llvm::errs() << "[firtool] -- Done in " << llvm::format("%.3f", elpased)
+                 << " sec\n";
+  }
 
   // If the user asked for just a parse, stop here.
   if (outputFormat == OutputParseOnly) {
