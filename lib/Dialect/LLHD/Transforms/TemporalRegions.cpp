@@ -19,7 +19,7 @@ using namespace circt;
 
 namespace {
 void addBlockToTR(Block *block, int tr, DenseMap<Block *, int> &blockMap,
-                         DenseMap<int, SmallVector<Block *, 8>> &trMap) {
+                  DenseMap<int, SmallVector<Block *, 8>> &trMap) {
   blockMap.insert(std::make_pair(block, tr));
   SmallVector<Block *, 8> b;
   b.push_back(block);
@@ -32,8 +32,7 @@ bool anyPredecessorHasWait(Block *block) {
   });
 }
 
-bool allPredecessorTRsKnown(Block *block,
-                                   SmallPtrSetImpl<Block *> &known) {
+bool allPredecessorTRsKnown(Block *block, SmallPtrSetImpl<Block *> &known) {
   return std::all_of(block->pred_begin(), block->pred_end(), [&](Block *pred) {
     return std::find(known.begin(), known.end(), pred) != known.end();
   });
