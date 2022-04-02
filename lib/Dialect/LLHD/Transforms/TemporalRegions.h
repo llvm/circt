@@ -20,32 +20,36 @@
 namespace circt {
 namespace llhd {
 
-struct TemporalRegionAnalysis {
-  using BlockMapT = DenseMap<Block *, int>;
-  using TRMapT = DenseMap<int, SmallVector<Block *, 8>>;
-
+class TemporalRegionAnalysis {
+public:
   explicit TemporalRegionAnalysis(Operation *op) { recalculate(op); }
 
+public:
   void recalculate(Operation *);
-
-  unsigned getNumTemporalRegions() { return numTRs; }
 
   int getBlockTR(Block *);
   SmallVector<Block *, 8> getBlocksInTR(int);
-
   SmallVector<Block *, 8> getExitingBlocksInTR(int);
+  SmallVector<int, 8> getTRSuccessors(int);
   Block *getTREntryBlock(int);
+
+public:
   bool hasSingleExitBlock(int tr) {
     return getExitingBlocksInTR(tr).size() == 1;
   }
+
   bool isOwnTRSuccessor(int tr) {
     auto succs = getTRSuccessors(tr);
     return std::find(succs.begin(), succs.end(), tr) != succs.end();
   }
 
-  SmallVector<int, 8> getTRSuccessors(int);
+  unsigned getNumTemporalRegions() { return numTRs; }
   unsigned getNumTRSuccessors(int tr) { return getTRSuccessors(tr).size(); }
   unsigned numBlocksInTR(int tr) { return getBlocksInTR(tr).size(); }
+
+public:
+  using BlockMapT = DenseMap<Block *, int>;
+  using TRMapT = DenseMap<int, SmallVector<Block *, 8>>;
 
 private:
   unsigned numTRs;
