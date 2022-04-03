@@ -147,7 +147,7 @@ Lastly, operator types are identified by `mlir::StringAttr`s, in order to give c
 
 #### Properties
 
-Properties can involve arbitrary data types, as long as these can be stored in maps. Problem classes offer public getter and setter methods to access a given components properties. Getters return optional values, in order to indicate if a property is unset. For example, the signature of the method the queries the computed start time is `Optional<unsigned> getStartTime(Operation *op)`. The concrete properties used throughout the problem hierarchy are discussed [below](#available-problem-definitions).
+Properties can involve arbitrary data types, as long as these can be stored in maps. Problem classes offer public getter and setter methods to access a given components properties. Getters return optional values, in order to indicate if a property is unset. For example, the signature of the method the queries the computed start time is `Optional<unsigned> getStartTime(Operation *op)`.
 
 #### Constraints
 
@@ -155,11 +155,11 @@ Clients call the virtual `Problem::check()` method to test any input constraints
 
 ## Available problem definitions
 
-- Problem
-- CyclicProblem
-- SharedOperatorsProblem
-- ModuloProblem
-- ChainingProblem
+- [Problem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1Problem.html)
+- [CyclicProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1CyclicProblem.html)
+- [SharedOperatorsProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1SharedOperatorsProblem.html)
+- [ModuloProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ModuloProblem.html)
+- [ChainingProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingProblem.html)
 
 ## Available schedulers
 
