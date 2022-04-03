@@ -58,11 +58,12 @@ struct MergeConnection {
   bool changed = false;
 
   // Return true if the given connect op is merged.
-  bool peelConnect(ConnectOp connect);
+  bool peelConnect(StrictConnectOp connect);
 
   // A map from a destination FieldRef to a pair of (i) the number of
   // connections seen so far and (ii) the vector to store subconnections.
-  DenseMap<FieldRef, std::pair<unsigned, SmallVector<ConnectOp>>> connections;
+  DenseMap<FieldRef, std::pair<unsigned, SmallVector<StrictConnectOp>>>
+      connections;
 
   FModuleOp moduleOp;
   ImplicitLocOpBuilder *builder = nullptr;
@@ -72,15 +73,13 @@ struct MergeConnection {
   bool enableAggressiveMerging = false;
 };
 
-bool MergeConnection::peelConnect(ConnectOp connect) {
+bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // Ignore connections between different types because it will produce a
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
   auto destTy = connect.dest().getType().cast<FIRRTLType>();
-  auto srcTy = connect.src().getType().cast<FIRRTLType>();
-  if (destTy != srcTy || !destTy.isPassive() ||
-      !firrtl::getBitWidth(destTy).hasValue())
+  if (!destTy.isPassive() || !firrtl::getBitWidth(destTy).hasValue())
     return false;
 
   auto destFieldRef = getFieldRefFromValue(connect.dest());
@@ -238,7 +237,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
   if (!merged)
     return false;
 
-  builder->create<ConnectOp>(connect.getLoc(), parent, merged);
+  builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
   return true;
 }
 
@@ -248,7 +247,7 @@ bool MergeConnection::run() {
   auto *body = moduleOp.getBody();
   // Merge connections by forward iterations.
   for (auto it = body->begin(), e = body->end(); it != e;) {
-    auto connectOp = dyn_cast<ConnectOp>(*it);
+    auto connectOp = dyn_cast<StrictConnectOp>(*it);
     if (!connectOp) {
       it++;
       continue;
