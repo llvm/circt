@@ -117,11 +117,41 @@ And that's it! For a more practical example, have a look at the [`AffineToStatic
 
 ## Extensible problem model
 
-- Instance and its components: Operations, dependences and operator types. Implicit SSA dependences vs. explicit "auxiliary" dependences.
-- Properties
-- Input and solution constraints
-- Rationale for having a hierarchy of problems instead of an all-encompassing model
-- Rationale for the KV-API instead of tying it more directly to a dialect etc.
+### Theory and terminology
+
+Scheduling problems come in many flavors and variants in the context of hardware design. In order to make the scheduling infrastructure as modular and flexible as CIRCT itself, it is build on the following idea of an *extensible problem model*:
+
+An *instance* is comprised of *components* called *operations*, *dependences* and *operator types*. Operations and dependences form a graph structure and correspond to the source IR to be scheduled. Operator types encode the characteristics of the target IR. The components as well as the instance can be annotated with *properties*. Properties are either *input* or *solution* properties, based on whether they are supplied by the client, or computed by the algorithm. The values of these properties are subject to the *input constraints* and *solution constraints*, which are a first-class concern in the model and are intended to be strictly enforced before respectively after scheduling.
+
+Concrete problem definitions derived from this model share the same representation of the components, but differ in their sets of properties (and potentially distinction of input and solution properties) and input and solution constraints. Hence, we tie together properties and constraints to model a specific scheduling problem. Extending one (or more!) parent problems means inheriting or adding properties, and redefining the constraints (as these don't always compose automatically).
+
+A key benefit of this approach is that these problem definitions provide a reliable contract between the clients and algorithms, making it clear which information needs to be provided, and what kind of solution is to be expected. Clients can therefore choose a problem definition that fits their needs, and algorithms can *opt-in* to accepting a specific subset of problems, which they can solve efficiently. Extensibility is ensured because new problem definitions can be added to the infrastructure (or inside a specific lowering flow, or even out-of-tree) without adapting any existing users.
+
+### Implementation
+
+See [Problems.h](https://github.com/llvm/circt/blob/main/include/circt/Scheduling/Problems.h) / [Problems.cpp](https://github.com/llvm/circt/blob/main/lib/Scheduling/Problems.cpp).
+
+#### Problem definitions
+
+The `Problem` class is currently the base of the problem hierarchy. Several extended problems are [currently defined](#available-problem-definitions) via virtual multiple inheritance. Upon construction, a `containingOp` is passed to instances. This MLIR operation is currently only used to emit diagnostics, and has no semantic meaning beyond that.
+
+#### Components
+
+The infrastructure uses the following representation of the problem components.
+
+Operations are just `mlir::Operation *`s.
+
+We distinguish two kinds of dependences, *def-use* and *auxiliary*. Def-use dependences are part of the SSA graph maintained by MLIR, and can distinguish specific result and operand numbers. As we expect any relevant graph-like input IR to use this MLIR facility, instances automatically consider these edges between registered operations. Auxiliary dependences, in contrast, only specify a source and destination operation, and have to be explicitly added to the instance by the client, e.g. for control or memory dependences. The `detail::Dependence` class abstracts the differences between both kinds, in order to offer a uniform API to iterate over dependences and query their properties.
+
+Lastly, operator types are identified by `mlir::StringAttr`s, in order to give clients maximum flexibility in modeling their operator library. This may change in the future, when a CIRCT-wide concept to model physical properties of hardware emerges.
+
+#### Properties
+
+Properties can involve arbitrary data types, as long as these can be stored in maps. Problem classes offer public getter and setter methods to access a given components properties. Getters return optional values, in order to indicate if a property is unset. For example, the signature of the method the queries the computed start time is `Optional<unsigned> getStartTime(Operation *op)`. The concrete properties used throughout the problem hierarchy are discussed [below](#available-problem-definitions).
+
+#### Constraints
+
+Clients call the virtual `Problem::check()` method to test any input constraints, and `Problem::verify()` to test the solution constraits. Problem classes are expected to override them as needed. There are no further restrictions of how these methods are implemented, but it is recommended to introduce helper methods that test a specific aspect and can be reused in extended problems. In addition, it makes sense to check/verify the properties in an order that avoids redundant tests for the presence of a particular property as well as redundant iteration over the problem components.
 
 ## Available problem definitions
 
@@ -135,7 +165,7 @@ And that's it! For a more practical example, have a look at the [`AffineToStatic
 
 - ASAP list scheduler
 - Linear programming-based schedulers with integrated simplex solver
-- Integer linear programming-based scheduer using external ILP solver
+- Integer linear programming-based scheduler using external ILP solver
 
 ## Utilities
 
