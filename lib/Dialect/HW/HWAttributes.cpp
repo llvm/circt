@@ -707,9 +707,9 @@ replaceDeclRefInExpr(Location loc,
     // Get the value from the provided parameters.
     auto it = parameters.find(paramRefAttr.getName().str());
     if (it == parameters.end())
-      return {emitError(loc)
-              << "Could not find parameter " << paramRefAttr.getName().str()
-              << " in the provided parameters for the expression!"};
+      return emitError(loc)
+             << "Could not find parameter " << paramRefAttr.getName().str()
+             << " in the provided parameters for the expression!";
     return it->second;
   }
   if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
@@ -736,8 +736,7 @@ FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
     auto paramDecl = param.cast<ParamDeclAttr>();
     auto paramValue = paramDecl.getValue().dyn_cast<IntegerAttr>();
     if (!paramValue)
-      return {emitError(loc)
-              << "Expected parameter value to be a known integer"};
+      return emitError(loc) << "Expected parameter value to be a known integer";
     parameterMap[paramDecl.getName().str()] = paramValue;
   }
 
