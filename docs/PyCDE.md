@@ -80,7 +80,7 @@ system = pycde.System([AddInts])
 system.print()
 system.generate()
 system.print()
-system.print_verilog()
+system.emit_outputs()
 ```
 
 Modules are decorated with `@pycde.module`, and define their ports using `pycde.Input` and `pycde.Output`. To control how the body of the module is generated, decorate a method with `@pycde.generator`. The generator is passed an object of the module, and ports can be accessed through named attributes.
