@@ -360,7 +360,7 @@ circuit Top :
     ; YAML-NEXT:                          width: 4
     ; YAML-NEXT:                      instances: []
     ; YAML-NEXT:            - name: sub_vecOfBundle
-    ; YAML-NEXT:              description: "a vector of a bundle in the submodule with a\n// multiline comment"
+    ; YAML-NEXT:              description: "a vector of a bundle in the submodule with a\nmultiline comment"
     ; YAML-NEXT:              dimensions: [ 2 ]
     ; YAML-NEXT:              interface:
     ; YAML-NEXT:                name: Sub_vecOfBundle

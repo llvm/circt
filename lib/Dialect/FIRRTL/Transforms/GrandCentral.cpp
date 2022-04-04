@@ -116,6 +116,31 @@ namespace yaml {
 
 using namespace ::yaml;
 
+/// Convert newlines and comments to remove the comments.  This produces better
+/// looking YAML output.  E.g., this will convert the following:
+///
+///   // foo
+///   // bar
+///
+/// Into the following:
+///
+///   foo
+///   bar
+std::string static stripComment(StringRef str) {
+  std::string descriptionString;
+  llvm::raw_string_ostream stream(descriptionString);
+  SmallVector<StringRef> splits;
+  str.split(splits, "\n");
+  llvm::interleave(
+      splits,
+      [&](auto substr) {
+        substr.consume_front("//");
+        stream << substr.drop_while([](auto c) { return c == ' '; });
+      },
+      [&]() { stream << "\n"; });
+  return descriptionString;
+}
+
 /// Conversion from a `DescribedSignal` to YAML.  This is
 /// implemented using YAML normalization to first convert this to an internal
 /// `Field` structure which has a one-to-one mapping to the YAML represntation.
@@ -127,7 +152,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
     StringRef name;
 
     /// An optional, textual description of what the field is.
-    Optional<StringRef> description;
+    Optional<std::string> description;
 
     /// The dimensions of the field.
     SmallVector<unsigned, 2> dimensions;
@@ -143,10 +168,8 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // Convert the description from a `StringAttr` (which may be null) to an
       // `Optional<StringRef>`.  This aligns exactly with the YAML
       // representation.
-      if (op.description) {
-        description = op.description.getValue();
-        description->consume_front("// ");
-      }
+      if (op.description)
+        description = stripComment(op.description.getValue());
 
       // Unwrap the type of the field into an array of dimensions and a width.
       // By example, this is going from the following hardware type:
@@ -210,7 +233,7 @@ struct MappingContextTraits<DescribedInstance, Context> {
     StringRef name;
 
     /// An optional textual description of the interface.
-    Optional<StringRef> description = None;
+    Optional<std::string> description = None;
 
     /// An array describing the dimnensionality of the interface.
     SmallVector<int64_t, 2> dimensions;
@@ -224,10 +247,8 @@ struct MappingContextTraits<DescribedInstance, Context> {
       // Convert the description from a `StringAttr` (which may be null) to an
       // `Optional<StringRef>`.  This aligns exactly with the YAML
       // representation.
-      if (op.description) {
-        description = op.description.getValue();
-        description->consume_front("// ");
-      }
+      if (op.description)
+        description = stripComment(op.description.getValue());
 
       for (auto &d : op.dimensions) {
         auto dimension = d.dyn_cast<IntegerAttr>();
