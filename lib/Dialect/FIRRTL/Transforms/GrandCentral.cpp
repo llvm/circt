@@ -351,6 +351,7 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
                   "firrtl.grandcentral.yaml.symbol");
               instances.push_back(
                   DescribedInstance({name, description, dimensions, symbol}));
+              description = {};
             })
             // An interface signal op is a field.
             .Case<sv::InterfaceSignalOp>([&](sv::InterfaceSignalOp op) {
