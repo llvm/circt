@@ -171,3 +171,22 @@ hw.module @merge_with_lower_bound(%arg: i32) -> (cond: i1) {
 
   hw.output %11 : i1
 }
+
+// CHECK-LABEL: @merge_with_upper_bound
+// CHECK-DAG: [[CST:%.+]] = hw.constant -5 : i4
+// CHECK-DAG: [[RESULT:%.+]] = comb.icmp ugt %arg, [[CST]] : i4
+// CHECK-DAG: hw.output [[RESULT]] : i1
+hw.module @merge_with_upper_bound(%arg: i4) -> (cond: i1) {
+  %cst15 = hw.constant 15 : i4
+  %is15 = comb.icmp eq %cst15, %arg : i4
+  %cst14 = hw.constant 14 : i4
+  %is14 = comb.icmp eq %cst14, %arg : i4
+  %cst13 = hw.constant 13 : i4
+  %is13 = comb.icmp eq %arg, %cst13 : i4
+  %cst12 = hw.constant 12 : i4
+  %is12 = comb.icmp eq %arg, %cst12 : i4
+
+  %in_range = comb.or %is12, %is13, %is14, %is15 : i1
+
+  hw.output %in_range : i1
+}

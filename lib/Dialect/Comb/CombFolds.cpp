@@ -1143,15 +1143,13 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
   struct Interval {
     /// Index of the input from which the check was extracted.
     unsigned index;
-    /// Lower bound, if other than -1.
-    std::optional<APInt> lowerBound;
-    /// Upper bound.
+    /// Inclusive lower bound.
+    APInt lowerBound;
+    /// Inclusive upper bound.
     APInt upperBound;
 
     /// Returns true if this is an equality check.
-    bool isEqCheck() const {
-      return lowerBound ? (*lowerBound + 2 == upperBound) : upperBound.isOne();
-    }
+    bool isEqCheck() const { return lowerBound == upperBound; }
   };
 
   // Identify all the relevant patterns among the inputs,
@@ -1177,12 +1175,21 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
             matchPattern(rhsOp.rhs(), m_RConstant(rhsBound))) {
           ICmpPredicate lhsPred = lhsOp.predicate();
           ICmpPredicate rhsPred = rhsOp.predicate();
+          // If the lower bound is all ones or the upper bound is all
+          // zeros, the interval is empty and the comparisons are eliminated
+          // through other canonicalisers.
           if (lhsPred == ICmpPredicate::ugt && rhsPred == ICmpPredicate::ult) {
-            argChecks[arg].emplace_back(Interval{i, lhsBound, rhsBound});
+            if (!lhsBound.isAllOnes() && !rhsBound.isZero()) {
+              argChecks[arg].emplace_back(
+                  Interval{i, lhsBound + 1, rhsBound - 1});
+            }
             continue;
           }
           if (lhsPred == ICmpPredicate::ult && rhsPred == ICmpPredicate::ugt) {
-            argChecks[arg].emplace_back(Interval{i, rhsBound, lhsBound});
+            if (!rhsBound.isAllOnes() && !lhsBound.isZero()) {
+              argChecks[arg].emplace_back(
+                  Interval{i, rhsBound + 1, lhsBound - 1});
+            }
             continue;
           }
         }
@@ -1194,16 +1201,15 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
       if (matchPattern(cmpOp.rhs(), m_RConstant(v))) {
         // Find equality tests: x == n
         if (cmpOp.predicate() == ICmpPredicate::eq) {
-          if (v.isZero())
-            argChecks[cmpOp.lhs()].emplace_back(
-                Interval{i, std::nullopt, v + 1});
-          else
-            argChecks[cmpOp.lhs()].emplace_back(Interval{i, v - 1, v + 1});
+          argChecks[cmpOp.lhs()].emplace_back(Interval{i, v, v});
           continue;
         }
         // Find upper bound tests: x < n
         if (cmpOp.predicate() == ICmpPredicate::ult) {
-          argChecks[cmpOp.lhs()].emplace_back(Interval{i, std::nullopt, v});
+          if (!v.isZero()) {
+            argChecks[cmpOp.lhs()].emplace_back(
+                Interval{i, APInt::getZero(v.getBitWidth()), v - 1});
+          }
           continue;
         }
       }
@@ -1217,10 +1223,7 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
   for (auto &[arg, checks] : argChecks) {
     // Order the checks by their lower bounds.
     std::stable_sort(checks.begin(), checks.end(), [&](auto &lhs, auto &rhs) {
-      if (auto lowerLHS = lhs.lowerBound)
-        if (auto lowerRHS = rhs.lowerBound)
-          return lowerLHS->ult(*lowerRHS);
-      return false;
+      return lhs.lowerBound.ult(rhs.lowerBound);
     });
 
     // Find sequences of overlapping checks and compress them.
@@ -1231,10 +1234,8 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
       APInt upperBound = begin->upperBound;
       auto *endCheck = begin;
       while (it != checks.end()) {
-        if (auto lowerBound = it->lowerBound) {
-          if (!lowerBound->ult(upperBound))
-            break;
-        }
+        if (!upperBound.isAllOnes() && !it->lowerBound.ule(upperBound + 1))
+          break;
 
         APInt itBound = it->upperBound;
         if (itBound.ugt(upperBound)) {
@@ -1264,21 +1265,28 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
       LocationAttr loc = rewriter.getFusedLoc(locations);
 
       // Build the check for the upper bound.
-      Value upperBoundCheck = rewriter.create<ICmpOp>(
-          loc, rewriter.getI1Type(), ICmpPredicate::ult, arg,
-          rewriter.create<hw::ConstantOp>(loc, upperBound));
+      Value upperBoundCheck;
+      if (!upperBound.isAllOnes()) {
+        upperBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ult, arg,
+            rewriter.create<hw::ConstantOp>(loc, upperBound + 1));
+      }
 
-      if (lowerBound) {
+      Value lowerBoundCheck;
+      if (!lowerBound.isZero()) {
         // Build the check for the lower bound and unify with and.
-        Value lowerBoundCheck = rewriter.create<ICmpOp>(
+        lowerBoundCheck = rewriter.create<ICmpOp>(
             loc, rewriter.getI1Type(), ICmpPredicate::ugt, arg,
-            rewriter.create<hw::ConstantOp>(loc, *lowerBound));
+            rewriter.create<hw::ConstantOp>(loc, lowerBound - 1));
+      }
 
+      if (lowerBoundCheck && upperBoundCheck)
         newOperands.push_back(
             rewriter.create<AndOp>(loc, lowerBoundCheck, upperBoundCheck));
-      } else {
+      else if (lowerBoundCheck)
+        newOperands.push_back(lowerBoundCheck);
+      else if (upperBoundCheck)
         newOperands.push_back(upperBoundCheck);
-      }
     }
   }
 
