@@ -32,7 +32,7 @@ class Top:
       sum = comb.AddOp(r, c)
       return sum.reg(mod.clk)
 
-    pe_outputs = SystolicArray(types.i8, mod.row_data, mod.col_data, pe)
+    pe_outputs = SystolicArray(mod.row_data, mod.col_data, pe)
 
     mod.out = pe_outputs
 
