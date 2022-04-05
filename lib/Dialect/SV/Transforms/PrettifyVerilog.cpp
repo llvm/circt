@@ -41,7 +41,9 @@ private:
   bool prettifyUnaryOperator(Operation *op);
   void sinkOrCloneOpToUses(Operation *op);
   void sinkExpression(Operation *op);
-  void useNamedOperands(Operation *op, DenseMap<Value, Operation *> &pipeMap);
+  void useNamedOperands(Operation *op, DenseMap<Value, Operation *> &pipeMap,
+                        DenseSet<Operation *> &deadWires);
+  void stripDeadChiselNames(Operation *op);
 
   bool anythingChanged;
 };
@@ -249,7 +251,8 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
 /// being used and acts to ensure that preserved Chisel names are actually used
 /// where possible.
 void PrettifyVerilogPass::useNamedOperands(
-    Operation *op, DenseMap<Value, Operation *> &pipeMap) {
+    Operation *op, DenseMap<Value, Operation *> &pipeMap,
+    DenseSet<Operation *> &deadWires) {
   auto wire = dyn_cast<sv::WireOp>(op);
   if (!wire || !wire->hasAttr("inner_sym") || !wire->hasOneUse())
     return;
@@ -257,6 +260,30 @@ void PrettifyVerilogPass::useNamedOperands(
   auto assign = dyn_cast<sv::AssignOp>(*wire->getUsers().begin());
   if (!assign || assign.dest().getDefiningOp() != op)
     return;
+
+  // If the driver of the wire is a constant, then don't try to use this.
+  // Constants are weird and hard to write heuristics around.
+  if (auto srcOp = assign.src().getDefiningOp<hw::ConstantOp>())
+    return;
+
+  auto assignedToDeadWire = [&](OpOperand &value) {
+    auto assignOp = dyn_cast<sv::AssignOp>(value.getOwner());
+    if (!assignOp)
+      return false;
+    if (auto *dest = assignOp.dest().getDefiningOp())
+      return deadWires.contains(dest);
+    return false;
+  };
+
+  // If the driver of the wire is unused, except to drive the wire, then don't
+  // scramble to find uses for the wire.
+  if (auto *srcOp = assign.src().getDefiningOp()) {
+    if (llvm::all_of(srcOp->getUses(), assignedToDeadWire))
+      return;
+  } else if (auto srcArg = assign.src().dyn_cast<BlockArgument>()) {
+    if (llvm::all_of(srcArg.getUses(), assignedToDeadWire))
+      return;
+  }
 
   OpBuilder builder(op);
   builder.setInsertionPointAfter(op);
@@ -280,10 +307,33 @@ void PrettifyVerilogPass::useNamedOperands(
   assign->setOperand(1, oldSrc);
 }
 
+void PrettifyVerilogPass::stripDeadChiselNames(Operation *op) {
+  if (!op->hasAttr("chisel_name") || !op->hasOneUse())
+    return;
+
+  auto assign = dyn_cast<sv::AssignOp>(*op->getUsers().begin());
+  if (!assign || assign.dest().getDefiningOp() != op)
+    return;
+
+  assign->erase();
+  op->erase();
+}
+
 void PrettifyVerilogPass::processPostOrder(Block &body) {
   SmallVector<Operation *> instances;
 
   DenseMap<Value, Operation *> pipeMap;
+
+  // Compute a set of possibly dead wires.  This makes later analyses easier.
+  DenseSet<Operation *> deadWires;
+  for (auto wire : body.getOps<sv::WireOp>()) {
+    if (!wire->hasOneUse())
+      continue;
+    auto assign = dyn_cast<sv::AssignOp>(*wire->getUsers().begin());
+    if (!assign || assign.dest().getDefiningOp() != wire)
+      continue;
+    deadWires.insert(wire);
+  }
 
   // Walk the block bottom-up, processing the region tree inside out.
   for (auto &op :
@@ -295,7 +345,9 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     }
 
     // Substitute named wires for operands when possible.
-    useNamedOperands(&op, pipeMap);
+    useNamedOperands(&op, pipeMap, deadWires);
+
+    stripDeadChiselNames(&op);
 
     // Sink and duplicate unary operators.
     if (isVerilogUnaryOperator(&op) && prettifyUnaryOperator(&op))

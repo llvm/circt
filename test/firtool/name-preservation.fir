@@ -6,6 +6,8 @@ circuit Foo:
   module Foo:
     input a: {a: UInt<1>, flip b: UInt<1>}
     output b: {a: UInt<1>, flip b: UInt<1>}
+    output constant_out: UInt<1>
+    input unused_in: UInt<1>
 
     ; Unnamed wires are always removed.
     ; CHECK-NOT: wire _x_a;
@@ -35,3 +37,14 @@ circuit Foo:
 
     b.a <= y
     x.b <= b.b
+
+    ; Named nodes driven to a constant are never preserved.
+    ; NAMES-NOT:    wire constant
+    ; NO-NAMES-NOT: wire constant
+    node constant = UInt<1>(1)
+    constant_out <= constant
+
+    ; Named nodes that are truly unused are never preserved.
+    ; NAMES-NOT:    wire unused
+    ; NO-NAMES-NOT: wire unused
+    node unused = unused_in
