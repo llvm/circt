@@ -25,11 +25,12 @@ class Top:
     # col_data = dim(8, 2)([4, 5]).value
 
     # CHECK-LABEL: %{{.+}} = msft.systolic.array [%{{.+}} : 3 x i8] [%{{.+}} : 2 x i8] pe (%arg0, %arg1) -> (i8) {
-    # CHECK:         [[SUM:%.+]] = comb.add %arg0, %arg1 : i8
-    # CHECK:         [[SUMR:%.+]] = seq.compreg [[SUM]], %clk : i8
+    # CHECK:         [[SUM:%.+]] = comb.add %arg0, %arg1 {sv.namehint = "sum"} : i8
+    # CHECK:         [[SUMR:%.+]] = seq.compreg sym @sum__reg1 [[SUM]], %clk : i8
     # CHECK:         msft.pe.output [[SUMR]] : i8
     def pe(r, c):
       sum = comb.AddOp(r, c)
+      sum.name = "sum"
       return sum.reg(mod.clk)
 
     pe_outputs = SystolicArray(mod.row_data, mod.col_data, pe)
@@ -47,5 +48,8 @@ t.run_passes()
 
 print("=== Final mlir dump")
 t.print()
+# CHECK-LABEL: hw.module @Top(%clk: i1, %col_data: !hw.array<2xi8>, %row_data: !hw.array<3xi8>) -> (out: !hw.array<3xarray<2xi8>>)
+# CHECK:         %sum__reg1_0_0 = sv.reg sym @sum__reg1  : !hw.inout<i8>
+# CHECK:         sv.read_inout %sum__reg1_0_0 : !hw.inout<i8>
 
 t.emit_outputs()

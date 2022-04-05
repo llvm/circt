@@ -1735,9 +1735,13 @@ public:
 
     // Build the PE matrix.
     SmallVector<Value> peOutputs;
-    for (Value rowValue : rowValues) {
+    for (size_t rowNum = 0, numRows = rowInputs.getSize(); rowNum < numRows;
+         ++rowNum) {
+      Value rowValue = rowValues[rowNum];
       SmallVector<Value> colPEOutputs;
-      for (Value colValue : colValues) {
+      for (size_t colNum = 0, numCols = colInputs.getSize(); colNum < numCols;
+           ++colNum) {
+        Value colValue = colValues[colNum];
         // Clone the PE block, substituting %row (arg 0) and %col (arg 1) for
         // the corresponding row/column broadcast value.
         // NOTE: the PE region is NOT a graph region so we don't have to deal
@@ -1748,10 +1752,23 @@ public:
         for (Operation &peOperation : peBlock)
           // If we see the output op (which should be the block terminator), add
           // its operand to the output matrix.
-          if (auto outputOp = dyn_cast<PEOutputOp>(peOperation))
+          if (auto outputOp = dyn_cast<PEOutputOp>(peOperation)) {
             colPEOutputs.push_back(mapper.lookup(outputOp.output()));
-          else
-            rewriter.clone(peOperation, mapper);
+          } else {
+            Operation *clone = rewriter.clone(peOperation, mapper);
+
+            StringRef nameSource = "name";
+            auto name = clone->getAttrOfType<StringAttr>(nameSource);
+            if (!name) {
+              nameSource = "sv.namehint";
+              name = clone->getAttrOfType<StringAttr>(nameSource);
+            }
+            if (name)
+              clone->setAttr(nameSource,
+                             StringAttr::get(ctxt, name.getValue() + "_" +
+                                                       Twine(rowNum) + "_" +
+                                                       Twine(colNum)));
+          }
       }
       // Reverse the vector since ArrayCreateOp has the opposite ordering to C
       // vectors.
