@@ -7,7 +7,7 @@ circuit Bar :
     ; is passive.
     wire a: UInt<1>
     ; CHECK: %_a = firrtl.wire  : !firrtl.uint<1>
-    ; CHECK: %a = firrtl.node sym @a %_a  : !firrtl.uint<1>
+    ; CHECK: %a = firrtl.node sym @a %_a {chisel_name} : !firrtl.uint<1>
 
     ; Should use the non-tap wire in expressions.
     a <= in
@@ -17,13 +17,13 @@ circuit Bar :
     ; type of the original wire.
     wire flip: {flip a: UInt<1>}
     ; CHECK: %_flip = firrtl.wire  : !firrtl.bundle<a flip: uint<1>>
-    ; CHECK: %flip = firrtl.wire sym @flip  : !firrtl.bundle<a: uint<1>>
+    ; CHECK: %flip = firrtl.wire sym @flip {chisel_name} : !firrtl.bundle<a: uint<1>>
     ; CHECK: firrtl.connect %flip, %_flip
 
     ; Analog values should be tapped with a node.
     wire analog: Analog<1>
     ; CHECK: %_analog = firrtl.wire  : !firrtl.analog<1>
-    ; CHECK: %analog = firrtl.node sym @analog %_analog  : !firrtl.analog<1>
+    ; CHECK: %analog = firrtl.node sym @analog %_analog {chisel_name} : !firrtl.analog<1>
 
     ; Should create attaches for analog typed elements between the tap wire and
     ; the original wire.
@@ -33,7 +33,7 @@ circuit Bar :
     ; CHECK: [[_W_0:%.+]] = firrtl.subindex %_w[0]
     ; CHECK: [[_W_0_1:%.+]] = firrtl.subfield [[_W_0]](1)
     ; CHECK: [[_W_0_0:%.+]] = firrtl.subfield [[_W_0]](0)
-    ; CHECK: %w = firrtl.wire sym @w  : !firrtl.vector<bundle<a: uint<1>, b: analog<1>>, 1>
+    ; CHECK: %w = firrtl.wire sym @w {chisel_name} : !firrtl.vector<bundle<a: uint<1>, b: analog<1>>, 1>
     ; CHECK: [[W_0:%.+]] = firrtl.subindex %w[0]
     ; CHECK: [[W_0_1:%.+]] = firrtl.subfield [[W_0]](1)
     ; CHECK: [[W_0_0:%.+]] = firrtl.subfield [[W_0]](0)

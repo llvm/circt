@@ -3184,10 +3184,12 @@ ParseResult FIRStmtParser::parseNode() {
   //
   // TODO: Change this once the FIRRTL spec supports "named" vs. "unnamed"
   // nodes.
-  if (isNamed)
-    builder.create<NodeOp>(
+  if (isNamed) {
+    auto tap = builder.create<NodeOp>(
         initializer.getType(), result, id, getConstants().emptyArrayAttr,
         StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
+    tap->setAttr("chisel_name", builder.getUnitAttr());
+  }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3225,16 +3227,18 @@ ParseResult FIRStmtParser::parseWire() {
   // TODO: Change this once the FIRRTL spec supports "named" vs. "unnamed"
   // wires.
   if (isNamed) {
+    Operation *tap;
     if (type.isPassive())
-      builder.create<NodeOp>(
+      tap = builder.create<NodeOp>(
           type, result, id, getConstants().emptyArrayAttr,
           StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
     else {
-      auto debug = builder.create<WireOp>(
+      tap = builder.create<WireOp>(
           type.getPassiveType(), id, getConstants().emptyArrayAttr,
           StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
-      connectDebugValue(builder, debug, result);
+      connectDebugValue(builder, tap->getResults()[0], result);
     }
+    tap->setAttr("chisel_name", builder.getUnitAttr());
   }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
