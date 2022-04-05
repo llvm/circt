@@ -2299,9 +2299,13 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
                                     name.getValue());
   }
 
+  auto wire = builder.create<sv::WireOp>(resultType, name, symName);
+  if (auto attr = op->getAttr("chisel_name"))
+    wire->setAttr("chisel_name", attr);
+
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
+  return setLowering(op, wire);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -2350,6 +2354,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
+    if (auto attr = op->getAttr("chisel_name"))
+      wire->setAttr("chisel_name", attr);
   }
 
   return setLowering(op, operand);
