@@ -14,7 +14,6 @@
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
-#include <variant>
 
 using namespace mlir;
 using namespace circt;
