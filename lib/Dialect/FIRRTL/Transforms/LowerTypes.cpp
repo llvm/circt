@@ -635,6 +635,10 @@ bool TypeLoweringVisitor::lowerProducer(
       opSymNames[newName] = newOp;
       assert(!loweredSymName.empty());
     }
+    // Copy "chisel_name", indicating that this was declared as a Chisel "val"
+    // to all lowered ops.
+    if (auto attr = op->getAttr("chisel_name"))
+      newOp->setAttr("chisel_name", attr);
     lowered.push_back(newOp->getResult(0));
   }
 

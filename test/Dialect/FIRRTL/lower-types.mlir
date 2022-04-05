@@ -1509,5 +1509,10 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
     firrtl.connect %3, %io : !firrtl.bundle<a: uint<0>, b: uint<20>>, !firrtl.bundle<a: uint<0>, b: uint<20>>
   }
 
+  // CHECK-LABEL: firrtl.module @chiselValNames
+  firrtl.module @chiselValNames() {
+    // CHECK-NEXT: {chisel_name}
+    %a = firrtl.wire sym @a {chisel_name} : !firrtl.bundle<b: uint<1>>
+  }
 
 } // CIRCUIT
