@@ -22,9 +22,11 @@ namespace llhd {
 
 class TemporalRegionAnalysis {
 public:
+  using BlockMapT = DenseMap<Block *, int>;
+  using TRMapT = DenseMap<int, SmallVector<Block *, 8>>;
+
   explicit TemporalRegionAnalysis(Operation *op) { recalculate(op); }
 
-public:
   void recalculate(Operation *);
 
   int getBlockTR(Block *);
@@ -33,7 +35,6 @@ public:
   SmallVector<int, 8> getTRSuccessors(int);
   Block *getTREntryBlock(int);
 
-public:
   bool hasSingleExitBlock(int tr) {
     return getExitingBlocksInTR(tr).size() == 1;
   }
@@ -46,10 +47,6 @@ public:
   unsigned getNumTemporalRegions() { return numTRs; }
   unsigned getNumTRSuccessors(int tr) { return getTRSuccessors(tr).size(); }
   unsigned numBlocksInTR(int tr) { return getBlocksInTR(tr).size(); }
-
-public:
-  using BlockMapT = DenseMap<Block *, int>;
-  using TRMapT = DenseMap<int, SmallVector<Block *, 8>>;
 
 private:
   unsigned numTRs;
