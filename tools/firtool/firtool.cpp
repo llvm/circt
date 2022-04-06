@@ -562,6 +562,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputIRVerilog) {
     PassManager exportPm(&context);
     exportPm.enableTiming(ts);
+    if (verbosePassExecutions)
+      exportPm.addInstrumentation(
+          std::make_unique<FirtoolPassInstrumentation>());
     // Legalize unsupported operations within the modules.
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
