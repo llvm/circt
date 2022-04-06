@@ -231,7 +231,7 @@ firrtl.circuit "TopLevel" {
 
     // ---------------------------------------------------------------------------------
     // If flatten memory data is enabled
-    // FLATTEN: %[[memory_r:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} 
+    // FLATTEN: %[[memory_r:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32}
     // FLATTEN-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<16>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<16>, mask: uint<2>>
     // FLATTEN: %[[v0:.+]] = firrtl.subfield %[[memory_r]](0)
     // FLATTEN: firrtl.strictconnect %[[v0]], %[[memory_r_addr:.+]] :
@@ -821,8 +821,8 @@ firrtl.circuit "TopLevel" {
     // CHECK: firrtl.strictconnect %b_a_a, %bx_a_a
     %c = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
     %cx = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
-    // CHECK: %c_a_a = firrtl.wire : !firrtl.uint<1> 
-    // CHECK-NEXT: %cx_a_a = firrtl.wire : !firrtl.uint<1> 
+    // CHECK: %c_a_a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %cx_a_a = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %c, %cx : !firrtl.bundle<a flip: bundle<a: uint<1>>>, !firrtl.bundle<a flip: bundle<a: uint<1>>>
     firrtl.partialconnect %c, %cx : !firrtl.bundle<a flip: bundle<a: uint<1>>>, !firrtl.bundle<a flip: bundle<a: uint<1>>>
     // c <= cx
@@ -849,8 +849,8 @@ firrtl.circuit "TopLevel" {
     // CHECK: firrtl.strictconnect %c_a_a, %cx_a_a
     %d = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     %dx = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
-    // CHECK: %d_a_a = firrtl.wire : !firrtl.uint<1> 
-    // CHECK-NEXT: %dx_a_a = firrtl.wire : !firrtl.uint<1> 
+    // CHECK: %d_a_a = firrtl.wire : !firrtl.uint<1>
+    // CHECK-NEXT: %dx_a_a = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %d, %dx : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     firrtl.partialconnect %d, %dx : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     // d <= dx
@@ -1431,7 +1431,7 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
   // CHECK: firrtl.nla @nla [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b_ready>]
   firrtl.nla @nla_1 [#hw.innerNameRef<@fallBackName::@test>,#hw.innerNameRef<@Aardvark::@test_1>, @Zebra]
   firrtl.nla @nla_2 [#hw.innerNameRef<@fallBackName::@test>, #hw.innerNameRef<@Aardvark::@test>, #hw.innerNameRef<@Zebra::@b2>]
-  // CHECK-NOT: firrtl.nla @nla_2 
+  // CHECK-NOT: firrtl.nla @nla_2
   firrtl.module private @fallBackName() {
     firrtl.instance test  sym @test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} , {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}@Aardvark()
     firrtl.instance test2 @Zebra()
@@ -1451,7 +1451,7 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
    // Note that same NLA is reused. But this depends on the order of the annotations, if DontTouch was earlier in the list, it would be dropped and a new NLA would be created.
    // CHECK-NEXT:   %bundle_ready = firrtl.wire sym @b_ready {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
    // Note the new NLA added here.
-   // CHECK-NEXT:   %bundle_data = firrtl.wire sym @b_data 
+   // CHECK-NEXT:   %bundle_data = firrtl.wire sym @b_data
    // CHECK-SAME: {annotations = [{B, circt.nonlocal = @nla_0}, {A, circt.nonlocal = @nla_0}]}
    // CHECK:   %bundle2_valid = firrtl.wire sym @b2_valid  : !firrtl.uint<1>
    // CHECK:   %bundle2_ready = firrtl.wire sym @b2_ready  : !firrtl.uint<1>
