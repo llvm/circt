@@ -2,6 +2,7 @@ add_circt_dialect_library(
   CIRCTHW
   HWAttributes.cpp
   HWDialect.cpp
+  HWOpInterfaces.cpp
   HWOps.cpp
   HWTypes.cpp
   ModuleImplementation.cpp

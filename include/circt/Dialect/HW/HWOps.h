@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HW_OPS_H
 
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionInterfaces.h"

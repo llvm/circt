@@ -267,7 +267,7 @@ LogicalResult CircuitOp::verify() {
   }
 
   // Check that the main module is public.
-  if (!mainModule.isPublic()) {
+  if (!cast<hw::HWModuleLike>(*mainModule).isPublic()) {
     emitOpError("main module '" + main + "' must be public");
     return failure();
   }
@@ -1428,6 +1428,8 @@ LogicalResult InstanceOp::verify() {
 
   return success();
 }
+
+StringRef InstanceOp::instanceName() { return name(); }
 
 void InstanceOp::print(OpAsmPrinter &p) {
   // Print the instance name.

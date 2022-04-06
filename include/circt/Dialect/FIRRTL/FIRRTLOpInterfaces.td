@@ -30,16 +30,6 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /*methodBody=*/[{ return $_op.getNameAttr(); }]>,
 
     //===------------------------------------------------------------------===//
-    // Module visibility
-    //===------------------------------------------------------------------===//
-    InterfaceMethod<"Check whether the module is publicly visible",
-    "bool", "isPublic", (ins),
-    /*methodBody=*/[{
-      return SymbolTable::getSymbolVisibility($_op) ==
-             SymbolTable::Visibility::Public;
-    }]>,
-
-    //===------------------------------------------------------------------===//
     // Port Directions
     //===------------------------------------------------------------------===//
 
@@ -268,6 +258,9 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     static_assert(
         ConcreteOp::template hasTrait<::mlir::SymbolOpInterface::Trait>(),
         "expected operation to be a symbol");
+    static_assert(
+        ConcreteOp::template hasTrait<::circt::hw::HWModuleLike::Trait>(),
+        "expected operation to be also be a hardware module");
     return verifyModuleLikeOpInterface(op);
   }];
 }

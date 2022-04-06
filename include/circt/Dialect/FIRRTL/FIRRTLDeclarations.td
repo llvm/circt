@@ -14,7 +14,8 @@ def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
 def InstanceOp : FIRRTLOp<"instance", [
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName]> {
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName,
+    DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
