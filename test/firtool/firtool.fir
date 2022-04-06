@@ -52,6 +52,9 @@ circuit test_mod : %[[{"a": "a"}]]
     input b: UInt<2>
     output c: UInt<1>
     input vec: UInt<1>[3]
+    output out_implicitTrunc: UInt<1>
+    output out_prettifyExample: UInt<1>
+    output out_multibitMux: UInt<1>
 
     inst cat of Cat
     cat.a <= b
@@ -80,7 +83,17 @@ circuit test_mod : %[[{"a": "a"}]]
     inst unusedPortsMod of UnusedPortsMod
     unusedPortsMod.in <= a
 
-; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>) {
+    ; These outputs exist to work around the aggressive removal of unused module
+    ; ports.
+    ;
+    ; TODO: This test should be rewritten to not be so brittle around module
+    ; port removal.
+    out_implicitTrunc <= or(orr(implicitTrunc.out1), orr(implicitTrunc.out2))
+    out_prettifyExample <= or(orr(prettifyExample.out1), orr(prettifyExample.out2))
+    out_multibitMux <= multibitMux.b
+
+
+; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>) {
 ; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
 ; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
@@ -91,7 +104,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    %1 = firrtl.bits %0 4 to 0 : (!firrtl.sint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    %2 = firrtl.asSInt %1 : (!firrtl.uint<5>) -> !firrtl.sint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %implicitTrunc_inp_2, %2 : !firrtl.sint<5>
-; MLIR-NEXT:    %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance prettifyExample @PrettifyExample(in inp_1: !firrtl.uint<5>, in inp_2: !firrtl.uint<5>, in inp_3: !firrtl.uint<5>, out out1: !firrtl.uint<10>, out out2: !firrtl.uint<10>)
+; MLIR:         %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance prettifyExample @PrettifyExample(in inp_1: !firrtl.uint<5>, in inp_2: !firrtl.uint<5>, in inp_3: !firrtl.uint<5>, out out1: !firrtl.uint<10>, out out2: !firrtl.uint<10>)
 ; MLIR-NEXT:    %3 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_1, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_2, %3 : !firrtl.uint<5>
@@ -105,9 +118,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
-; MLIR-NEXT:    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+; MLIR-NEXT:    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.instance unusedPortsMod @UnusedPortsMod()
-; MLIR-NEXT:  }
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
 ; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
@@ -120,9 +132,11 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    input vec_0,
 ; VERILOG-NEXT:          vec_1,
 ; VERILOG-NEXT:          vec_2,
-; VERILOG-NEXT:    output       c);
+; VERILOG-NEXT:    output       c,
+; VERILOG-NEXT:                 out_implicitTrunc,
+; VERILOG-NEXT:                 out_prettifyExample,
+; VERILOG-NEXT:                 out_multibitMux);
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:    wire _multibitMux_b;
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out1;
 ; VERILOG-NEXT:    wire [9:0] _prettifyExample_out2;
 ; VERILOG-NEXT:    wire [2:0] _implicitTrunc_out1;
@@ -158,10 +172,10 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:     .a_1 (vec_1),
 ; VERILOG-NEXT:     .a_2 (vec_2),
 ; VERILOG-NEXT:     .sel (b),
-; VERILOG-NEXT:     .b   (_multibitMux_b)
+; VERILOG-NEXT:     .b   (out_multibitMux)
 ; VERILOG-NEXT:    );
 ; VERILOG-NEXT:    UnusedPortsMod unusedPortsMod ();
-; VERILOG-NEXT:  endmodule
+; VERILOG:       endmodule
 
 ; Check that we canonicalize the HW output of lowering.
 
