@@ -48,6 +48,10 @@ constexpr const char *internalKeyClass =
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 
+// SiFive specific Annotations
+constexpr const char *dutAnnoClass =
+    "sifive.enterprise.firrtl.MarkDUTAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 
