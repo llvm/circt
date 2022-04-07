@@ -363,18 +363,11 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           if (i > 0)
             rhs.append(", ");
           rhs.append("{`RANDOM}");
-          if (i == 0) {
-            auto rem = mem.dataWidth % randomWidth;
-            if (!rem)
-              continue;
-            if (rem == 1)
-              rhs.append("[0]");
-            else
-              rhs.append(("[" + Twine(rem - 1) + ":0]").str());
-          }
         }
         if (mem.dataWidth > randomWidth)
           rhs.append("}");
+        if (mem.dataWidth % randomWidth != 0)
+          ("[" + Twine(mem.dataWidth - 1) + ":0]").toVector(rhs);
         rhs.append(";");
 
         b.create<sv::VerbatimOp>(
