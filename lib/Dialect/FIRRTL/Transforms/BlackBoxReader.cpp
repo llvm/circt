@@ -15,7 +15,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -385,9 +385,8 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
   bool anyParentIsDut = false;
   if (node)
     for (auto *u : node->uses()) {
-      InstanceOp inst = u->getInstance();
       // Recursively check the parents.
-      auto dut = isDut(inst->getParentOfType<FModuleOp>());
+      auto dut = isDut(u->getInstance()->getParentOfType<FModuleOp>());
       // Cache the result.
       dutModuleMap[module] = dut;
       anyParentIsDut |= dut;

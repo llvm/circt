@@ -13,7 +13,7 @@
 #include "../AnnotationDetails.h"
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -1262,7 +1262,7 @@ void GrandCentralPass::runOnOperation() {
                         << "', but is never instantiated";
       return None;
     case 1:
-      return (*node->uses().begin())->getInstance();
+      return cast<InstanceOp>(*(*node->uses().begin())->getInstance());
     default:
       auto diag = op->emitOpError()
                   << "is marked as a GrandCentral '" << msg
@@ -1459,7 +1459,7 @@ void GrandCentralPass::runOnOperation() {
                 auto mod = modules.pop_back_val();
                 visited.insert(mod);
                 for (auto inst : mod.getOps<InstanceOp>()) {
-                  auto *sub =
+                  Operation *sub =
                       instancePaths->instanceGraph.getReferencedModule(inst);
                   if (visited.count(sub))
                     continue;

@@ -13,8 +13,8 @@
 #include "../AnnotationDetails.h"
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -168,8 +168,8 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      auto target =
-          dyn_cast<FModuleLike>(instanceGraph->getReferencedModule(instanceOp));
+      auto target = dyn_cast<FModuleLike>(
+          *instanceGraph->getReferencedModule(instanceOp));
 
       // Skip all external modules, unless one of the following conditions
       // is true:
@@ -404,9 +404,9 @@ void PrefixModulesPass::runOnOperation() {
   DenseSet<InstanceGraphNode *> visited;
   for (auto *current : *instanceGraph) {
     for (auto &node : llvm::inverse_post_order_ext(current, visited)) {
-      if (auto module = dyn_cast<FModuleOp>(node->getModule()))
+      if (auto module = dyn_cast<FModuleOp>(*node->getModule()))
         renameModule(module);
-      if (auto extModule = dyn_cast<FExtModuleOp>(node->getModule()))
+      if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule()))
         renameExtModule(extModule);
     }
   }
