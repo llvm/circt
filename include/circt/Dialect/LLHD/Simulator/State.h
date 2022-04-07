@@ -96,7 +96,7 @@ public:
     return (owner < rhs.owner || (owner == rhs.owner && name < rhs.name));
   }
 
-  bool isOwner(std::string rhs) const { return owner == rhs; };
+  bool isOwner(const std::string rhs) const { return owner == rhs; };
 
   std::string getOwner() const { return owner; }
 

@@ -15,8 +15,6 @@
 
 #include "llvm/Support/raw_ostream.h"
 
-#include <regex>
-
 using namespace circt::llhd::sim;
 
 Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
