@@ -34,13 +34,6 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
         sv.fwrite %fd, "Hi\n"
       }
 
-      // CHECK-NEXT: if (!(clock | cond))
-      // CHECK-NEXT:   $fwrite(32'h80000002, "Bye\n");
-      %tmp4 = comb.or %clock, %cond : i1
-      sv.if %tmp4 {
-      } else {
-        sv.fwrite %fd, "Bye\n"
-      }
   // CHECK-NEXT: release forceWire;
     sv.release %forceWire : !hw.inout<i1>
   // CHECK-NEXT:   `endif

@@ -3182,16 +3182,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   // it (either "if (" or "else if (") was printed already.
   IfOp ifOp = op;
   for (;;) {
-    // If we have an else and and empty then block, emit an inverted condition.
-    if (ifOp.hasElse() && ifOp.getThenBlock()->empty()) {
-      os << '!';
-      emitExpression(ifOp.cond(), ops, Unary);
-      os << ')';
-      emitBlockAsStatement(ifOp.getElseBlock(), ops);
-      break;
-    }
-
-    // Normal emission.
+    // Emit the condition and the then block.
     emitExpression(ifOp.cond(), ops);
     os << ')';
     emitBlockAsStatement(ifOp.getThenBlock(), ops);
