@@ -104,7 +104,6 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  sv.ifdef "SYNTHESIS" {
 //CHECK-NEXT:  } else {
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT:      %[[RAND_0:.+]] = sv.reg sym @[[RAND_0_SYM:[a-zA-Z0-9_]+]] :
 //CHECK-NEXT:      sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
 //CHECK-NEXT:    }
 //CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
@@ -112,11 +111,8 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:    sv.initial {
 //CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
-//CHECK-NEXT{LITERAL}: sv.verbatim "{{0}} = {`RANDOM}[15:0];"
-//CHECK-SAME:            {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
 //CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 10; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
-//CHECK-SAME{LITARL}   = {{0}};"
-//CHECK-SAME:          {symbols = [#hw.innerNameRef<@FIRRTLMem_1_1_1_16_10_0_1_0_0::@[[RAND_0_SYM]]>]}
+//CHECK-SAME{LITERAL}: = {`RANDOM}[15:0];"
 //CHECK-NEXT:      }
 //CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
 //CHECK-NEXT:      }
@@ -290,6 +286,5 @@ hw.module.generated @PR2769, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_
 
 // CHECK-LABEL: hw.module @RandomizeWeirdWidths
 // CHECK: sv.ifdef.procedural "RANDOMIZE_MEM_INIT"
-// CHECK-NEXT{LITERAL}: sv.verbatim "{{0}} = {{`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}}[144:0];"
-// CHECK-NEXT{LITERAL}: sv.verbatim "for (initvar = 0; initvar < 10; initvar = initvar + 1)\0A  Memory[initvar] = {{0}};"
+// CHECK-NEXT{LITERAL}: sv.verbatim "for (initvar = 0; initvar < 10; initvar = initvar + 1)\0A  Memory[initvar] = {{`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}, {`RANDOM}}[144:0];"
 hw.module.generated @RandomizeWeirdWidths, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i145, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i145) -> (ro_data_0: i145, rw_rdata_0: i145) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 145 : ui32, writeClockIDs = [], writeLatency = 4 : ui32, writeUnderWrite = 0 : i32}
