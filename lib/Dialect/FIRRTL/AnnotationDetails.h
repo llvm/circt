@@ -18,10 +18,6 @@
 namespace circt {
 namespace firrtl {
 
-/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
-/// simply passes through as a string without any decoding.
-bool isOMIRStringEncodedPassthrough(StringRef type);
-
 //===----------------------------------------------------------------------===//
 // Annotation Class Names
 //===----------------------------------------------------------------------===//
