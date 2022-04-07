@@ -714,7 +714,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return failure();
     }
-    auto error = llvm::sys::fs::create_directory(outputFilename);
+    auto error = llvm::sys::fs::create_directories(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
                    << "': " << error.message() << "\n";

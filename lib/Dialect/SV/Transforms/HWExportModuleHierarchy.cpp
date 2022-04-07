@@ -93,7 +93,7 @@ void HWExportModuleHierarchyPass::runOnOperation() {
         symbolTable = SymbolTable(mlirModule);
 
       if (!directoryCreated) {
-        auto error = llvm::sys::fs::create_directory(directoryName);
+        auto error = llvm::sys::fs::create_directories(directoryName);
         if (error) {
           op->emitError("Error creating directory in HWExportModuleHierarchy: ")
               << error.message();
