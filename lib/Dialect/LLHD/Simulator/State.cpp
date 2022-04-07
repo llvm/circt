@@ -67,7 +67,7 @@ std::string Signal::toHexString() const {
 std::string Signal::toHexString(unsigned elemIndex) const {
   assert(elements.size() > 0 && "the signal type has to be tuple or array!");
   auto elemSize = elements[elemIndex].second;
-  auto ptr = value + elements[elemIndex].first;
+  auto *ptr = value + elements[elemIndex].first;
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
