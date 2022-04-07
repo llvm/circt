@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "FIRAnnotations.h"
-#include "AnnotationDetails.h"
 
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"

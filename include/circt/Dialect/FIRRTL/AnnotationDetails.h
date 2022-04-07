@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef DIALECT_FIRRTL_ANNOTATIONDETAILS_H
-#define DIALECT_FIRRTL_ANNOTATIONDETAILS_H
+#ifndef CIRCT_DIALECT_FIRRTL_ANNOTATIONDETAILS_H
+#define CIRCT_DIALECT_FIRRTL_ANNOTATIONDETAILS_H
 
 #include "circt/Support/LLVM.h"
 
@@ -51,4 +51,4 @@ constexpr const char *extractGrandCentralClass =
 } // namespace firrtl
 } // namespace circt
 
-#endif // DIALECT_FIRRTL_ANNOTATIONDETAILS_H
+#endif // CIRCT_DIALECT_FIRRTL_ANNOTATIONDETAILS_H
