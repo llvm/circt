@@ -719,3 +719,28 @@ firrtl.circuit "ZeroWidthRegister" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]]
   }
 }
+
+// Check that unaffected fields ("data") are not being affected by width
+// inference. See https://github.com/llvm/circt/issues/2857.
+// CHECK-LABEL: firrtl.module @ZeroLengthVectorInBundle1
+firrtl.circuit "ZeroLengthVectorInBundle1"  {
+  firrtl.module @ZeroLengthVectorInBundle1(out %out: !firrtl.bundle<resets: vector<reset, 0>, data flip: uint<3>>) {
+    %0 = firrtl.subfield %out(0) : (!firrtl.bundle<resets: vector<reset, 0>, data flip: uint<3>>) -> !firrtl.vector<reset, 0>
+    %invalid = firrtl.invalidvalue : !firrtl.vector<reset, 0>
+    firrtl.strictconnect %0, %invalid : !firrtl.vector<reset, 0>
+    // CHECK-NEXT: %0 = firrtl.subfield %out(0) : (!firrtl.bundle<resets: vector<uint<1>, 0>, data flip: uint<3>>) -> !firrtl.vector<uint<1>, 0>
+    // CHECK-NEXT: %invalid = firrtl.invalidvalue : !firrtl.vector<uint<1>, 0>
+    // CHECK-NEXT: firrtl.strictconnect %0, %invalid : !firrtl.vector<uint<1>, 0>
+  }
+}
+// CHECK-LABEL: firrtl.module @ZeroLengthVectorInBundle2
+firrtl.circuit "ZeroLengthVectorInBundle2"  {
+  firrtl.module @ZeroLengthVectorInBundle2(out %out: !firrtl.bundle<resets: vector<bundle<a: reset>, 0>, data flip: uint<3>>) {
+    %0 = firrtl.subfield %out(0) : (!firrtl.bundle<resets: vector<bundle<a: reset>, 0>, data flip: uint<3>>) -> !firrtl.vector<bundle<a: reset>, 0>
+    %invalid = firrtl.invalidvalue : !firrtl.vector<bundle<a: reset>, 0>
+    firrtl.strictconnect %0, %invalid : !firrtl.vector<bundle<a: reset>, 0>
+    // CHECK-NEXT: %0 = firrtl.subfield %out(0) : (!firrtl.bundle<resets: vector<bundle<a: uint<1>>, 0>, data flip: uint<3>>) -> !firrtl.vector<bundle<a: uint<1>>, 0>
+    // CHECK-NEXT: %invalid = firrtl.invalidvalue : !firrtl.vector<bundle<a: uint<1>>, 0>
+    // CHECK-NEXT: firrtl.strictconnect %0, %invalid : !firrtl.vector<bundle<a: uint<1>>, 0>
+  }
+}

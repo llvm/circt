@@ -565,6 +565,110 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 }
 
 //===----------------------------------------------------------------------===//
+// Custom Field IDs
+//===----------------------------------------------------------------------===//
+
+// The following functions implement custom field IDs specifically for the use
+// in reset inference. They look much more like tracking fields on types than
+// individual values. For example, vectors don't carry separate IDs for each of
+// their elements. Instead they have one set of IDs for the entire vector, since
+// the element type is uniform across all elements.
+
+static unsigned getMaxFieldID(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, unsigned>(type)
+      .Case<BundleType>([](auto type) {
+        unsigned id = 0;
+        for (auto e : type.getElements())
+          id += getMaxFieldID(e.type) + 1;
+        return id;
+      })
+      .Case<FVectorType>(
+          [](auto type) { return getMaxFieldID(type.getElementType()) + 1; })
+      .Default([](auto) { return 0; });
+}
+
+static unsigned getFieldID(BundleType type, unsigned index) {
+  assert(index < type.getNumElements());
+  unsigned id = 1;
+  for (unsigned i = 0; i < index; ++i)
+    id += getMaxFieldID(type.getElementType(i)) + 1;
+  return id;
+}
+
+static unsigned getFieldID(FVectorType type) { return 1; }
+
+static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
+  assert(type.getNumElements() && "Bundle must have >0 fields");
+  --fieldID;
+  for (auto e : llvm::enumerate(type.getElements())) {
+    auto numSubfields = getMaxFieldID(e.value().type) + 1;
+    if (fieldID < numSubfields)
+      return e.index();
+    fieldID -= numSubfields;
+  }
+  assert(false && "field id outside bundle");
+  return 0;
+}
+
+static bool getDeclName(Value value, SmallString<32> &string) {
+  if (auto arg = value.dyn_cast<BlockArgument>()) {
+    auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    string += module.getPortName(arg.getArgNumber());
+    return true;
+  }
+
+  auto *op = value.getDefiningOp();
+  return TypeSwitch<Operation *, bool>(op)
+      .Case<InstanceOp, MemOp>([&](auto op) {
+        string += op.name();
+        string += ".";
+        string +=
+            op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
+        return true;
+      })
+      .Case<WireOp, RegOp, RegResetOp>([&](auto op) {
+        string += op.name();
+        return true;
+      })
+      .Default([](auto) { return false; });
+}
+
+static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
+  SmallString<64> name;
+  auto value = fieldRef.getValue();
+  if (!getDeclName(value, string))
+    return false;
+
+  auto type = value.getType();
+  auto localID = fieldRef.getFieldID();
+  while (localID) {
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
+      auto index = getIndexForFieldID(bundleType, localID);
+      // Add the current field string, and recurse into a subfield.
+      auto &element = bundleType.getElements()[index];
+      if (!string.empty())
+        string += ".";
+      string += element.name.getValue();
+      // Recurse in to the element type.
+      type = element.type;
+      localID = localID - getFieldID(bundleType, index);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      string += "[]";
+      // Recurse in to the element type.
+      type = vecType.getElementType();
+      localID = localID - getFieldID(vecType);
+    } else {
+      // If we reach here, the field ref is pointing inside some aggregate type
+      // that isn't a bundle or a vector. If the type is a ground type, then the
+      // localID should be 0 at this point, and we should have broken from the
+      // loop.
+      llvm_unreachable("unsupported type");
+    }
+  }
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
 // Reset Tracing
 //===----------------------------------------------------------------------===//
 
@@ -626,7 +730,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           auto index = op.fieldIndex();
           traceResets(op.getType(), op.getResult(), 0,
                       bundleType.getElements()[index].type, op.input(),
-                      bundleType.getFieldID(index), op.getLoc());
+                      getFieldID(bundleType, index), op.getLoc());
         })
 
         .Case<SubindexOp, SubaccessOp>([&](auto op) {
@@ -644,7 +748,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           auto vectorType = op.input().getType().template cast<FVectorType>();
           traceResets(op.getType(), op.getResult(), 0,
                       vectorType.getElementType(), op.input(),
-                      vectorType.getFieldID(0), op.getLoc());
+                      getFieldID(vectorType), op.getLoc());
         });
   });
 }
@@ -695,12 +799,12 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       auto &dstElt = dstBundle.getElements()[dstIdx];
       auto &srcElt = srcBundle.getElements()[*srcIdx];
       if (dstElt.isFlip) {
-        traceResets(srcElt.type, src, srcID + srcBundle.getFieldID(*srcIdx),
-                    dstElt.type, dst, dstID + dstBundle.getFieldID(dstIdx),
+        traceResets(srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
+                    dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
                     loc);
       } else {
-        traceResets(dstElt.type, dst, dstID + dstBundle.getFieldID(dstIdx),
-                    srcElt.type, src, srcID + srcBundle.getFieldID(*srcIdx),
+        traceResets(dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
+                    srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
                     loc);
       }
     }
@@ -712,9 +816,19 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
     auto srcElType = srcVector.getElementType();
     auto dstElType = dstVector.getElementType();
     // Collapse all elements into one shared element. See comment in traceResets
-    // above for some context.
-    traceResets(dstElType, dst, dstID + dstVector.getFieldID(0), srcElType, src,
-                srcID + srcVector.getFieldID(0), loc);
+    // above for some context. Note that we are directly passing on the field ID
+    // of the vector itself as a stand-in for its element type. This is not
+    // really what `FieldRef` is designed to do, but tends to work since all the
+    // places that need to reason about the resulting weird IDs are inside this
+    // file. Normally you would pick a specific index from the vector, which
+    // would also move the field ID forward by some amount. However, we can't
+    // distinguish individual elements for the sake of type inference *and* we
+    // have to support zero-length vectors for which the only available ID is
+    // the vector itself. Therefore we always just pick the vector itself for
+    // the field ID and make sure in `updateType` that we handle vectors
+    // accordingly.
+    traceResets(dstElType, dst, dstID + getFieldID(dstVector), srcElType, src,
+                srcID + getFieldID(srcVector), loc);
     return;
   }
 
@@ -722,9 +836,9 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
     if (dstType.isa<ResetType>() || srcType.isa<ResetType>()) {
       FieldRef dstField(dst, dstID);
       FieldRef srcField(src, srcID);
-      LLVM_DEBUG(llvm::dbgs() << "Visiting driver '" << getFieldName(dstField)
-                              << "' = '" << getFieldName(srcField) << "' ("
-                              << dstType << " = " << srcType << ")\n");
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Visiting driver '" << dstField << "' = '" << srcField
+                 << "' (" << dstType << " = " << srcType << ")\n");
 
       // Determine the leaders for the dst and src reset networks before we make
       // the connection. This will allow us to later detect if dst got merged
@@ -824,8 +938,8 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
     bool majorityAsync = asyncDrives >= syncDrives;
     auto diag = mlir::emitError(root.field.getValue().getLoc())
                 << "reset network";
-    auto fieldName = getFieldName(root.field);
-    if (!fieldName.empty())
+    SmallString<32> fieldName;
+    if (getFieldName(root.field, fieldName))
       diag << " \"" << fieldName << "\"";
     diag << " simultaneously connected to async and sync resets";
     diag.attachNote(root.field.getValue().getLoc())
@@ -967,20 +1081,18 @@ static FIRRTLType updateType(FIRRTLType oldType, unsigned fieldID,
 
   // If this is a bundle type, update the corresponding field.
   if (auto bundleType = oldType.dyn_cast<BundleType>()) {
-    unsigned index = bundleType.getIndexForFieldID(fieldID);
+    unsigned index = getIndexForFieldID(bundleType, fieldID);
     SmallVector<BundleType::BundleElement> fields(bundleType.begin(),
                                                   bundleType.end());
     fields[index].type = updateType(
-        fields[index].type, fieldID - bundleType.getFieldID(index), fieldType);
+        fields[index].type, fieldID - getFieldID(bundleType, index), fieldType);
     return BundleType::get(fields, oldType.getContext());
   }
 
   // If this is a vector type, update the element type.
   if (auto vectorType = oldType.dyn_cast<FVectorType>()) {
-    unsigned index = vectorType.getIndexForFieldID(fieldID);
-    auto newType =
-        updateType(vectorType.getElementType(),
-                   fieldID - vectorType.getFieldID(index), fieldType);
+    auto newType = updateType(vectorType.getElementType(),
+                              fieldID - getFieldID(vectorType), fieldType);
     return FVectorType::get(newType, vectorType.getNumElements());
   }
 
@@ -997,8 +1109,8 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLType resetType) {
   // Update the type if necessary.
   if (oldType == newType)
     return false;
-  LLVM_DEBUG(llvm::dbgs() << "- Updating '" << getFieldName(field) << "' from "
-                          << oldType << " to " << newType << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "- Updating '" << field << "' from " << oldType
+                          << " to " << newType << "\n");
   field.getValue().setType(newType);
   return true;
 }
