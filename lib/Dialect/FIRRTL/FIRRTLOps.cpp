@@ -2010,11 +2010,6 @@ LogicalResult RegResetOp::verify() {
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
 
-  // Truncation on initialisation is banned.
-  if (!isTypeLarger(regType, resetType))
-    return emitError("register ")
-           << regType << " is not as wide as initialiser  " << resetType;
-
   return success();
 }
 
