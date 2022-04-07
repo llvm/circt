@@ -2,6 +2,7 @@ add_circt_dialect_library(
   CIRCTHW
   HWAttributes.cpp
   HWDialect.cpp
+  HWInstanceGraph.cpp
   HWOpInterfaces.cpp
   HWOps.cpp
   HWTypes.cpp
@@ -22,3 +23,5 @@ add_circt_dialect_library(
   LINK_LIBS PUBLIC
   MLIRIR
 )
+
+add_subdirectory(Transforms)
