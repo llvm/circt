@@ -180,17 +180,25 @@ See [`Utilities.h`](https://github.com/llvm/circt/blob/main/include/circt/Schedu
 
 ## Adding a new problem
 
-- Whereever you want. If it's trait-like and of general use, add to `Problems.h`. Otherwise ok to keep it local.
-- Inherit
-- Define additional properties, as needed.
-   - Redifine `getProperties...(...)` methods to get dumping support
-- Redefine `check()` and `verify()`
-   - Current organization is having fine-granular `checkXXX/verifyYYY` methods to validate a specific aspect of the problem. These can be reused in subclasses.
-- Write tests. See `TestPasses.cpp` for inspiration.
+*See e.g. [#2233](https://github.com/llvm/circt/pull/2233), which added the `ChainingProblem`.*
+
+- Decide where to add it. Guideline: If it is trait-like and similar to the existing problem mentioned above, add it to `Problems.h`. If the model is specific to your use-case, it is best to start out in locally in your dialect/pass.
+- Declare the new problem class and inherit *virtually* from the relevant superclasses (at least `Problem`).
+- Define additional properties (private), and the corresponding public getters/setters. Getters return `Optional<T>` values, to indicate an unset state.
+   - Note that dependence properties are somewhat expensive to store, making it desirable that clients and algorithms expect and handle the unset state. This should be clearly documented. Example: `distance` propertiy in `CyclicProblem`.
+- Redefine the `getProperties(*)` methods to get dumping support. These should consider any properties the new class adds, plus properties defined in the superclass(es).
+- Redefine `check()` (input constraints) and `verify()` (solution constraints). If possible, follow the [design used in the existing problem classes](#constraints).
+- Write a couple of "positive" testcases, as well as at least one error test for each input/solution constraint, as validated by `check()` / `verify()`. See [`TestPasses.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/TestPasses.cpp) for inspiration. The testing situation will hopefully improve with [#2760](https://github.com/llvm/circt/issues/2760).
 
 ## Adding a new scheduler
 
-- Schedulers should opt-in to specific problems by providing entry points for the problem subclasses they support.
-- If schedulers support optimizing for different objectives, they should offer an API for that, as objectives are not part of the problem signature
-- Can expect input invariants enforced by `check()` and must compute a solution that complies that passes `verify()`.
-- Otherwise, look at the existing implementations for inspiration.
+*See e.g. [#2650](https://github.com/llvm/circt/pull/2650), which added a scheduler for the `CyclicProblem`.*
+
+- Schedulers should opt-in to specific problems by providing entry points for the problem subclasses they support. Example:
+```c++
+LogicalResult awesomeScheduler(Problem &prob);
+LogicalResult awesomeScheduler(CyclicProblem &prob);
+```
+- Schedulers can expect that the input invariants were enforced by a `check()`-call in the client, and must compute a solution that complies with the solution constraints when the client calls the problem's `verify()` method.
+- Schedulers can live anywhere. If a new algorithm is not entirely dialect/pass-specific and supports problems defined in `Problems.h`, it should offer entry points in `Algorithms.h`.
+- Objectives are not part of the problem signature. Therefore, if an algorithm supports optimizing for different objectives, clients should be able to select one via the entry point(s).
