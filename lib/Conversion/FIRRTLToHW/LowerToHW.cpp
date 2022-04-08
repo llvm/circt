@@ -47,8 +47,6 @@ static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 static const char moduleHierAnnoClass[] =
     "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
-static const char testbenchDirAnnoClass[] =
-    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 static const char testHarnessHierAnnoClass[] =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
 static const char verifBBClass[] =

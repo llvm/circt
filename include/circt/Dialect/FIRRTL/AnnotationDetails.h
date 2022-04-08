@@ -51,6 +51,8 @@ constexpr const char *extractGrandCentralClass =
 // SiFive specific Annotations
 constexpr const char *dutAnnoClass =
     "sifive.enterprise.firrtl.MarkDUTAnnotation";
+constexpr const char *testbenchDirAnnoClass =
+    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 
 } // namespace firrtl
 } // namespace circt
