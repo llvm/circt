@@ -801,6 +801,41 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
   if (op.caseStyle() == CaseStmtType::CaseStmt)
     return failure();
+
+  auto caseInfo = op.getCases();
+  bool noXZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    return !ci.pattern.hasX() && !ci.pattern.hasZ();
+  });
+  bool noX = llvm::all_of(
+      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasX(); });
+  bool noZ = llvm::all_of(
+      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasZ(); });
+
+  if (op.caseStyle() == CaseStmtType::CaseXStmt) {
+    if (noXZ) {
+      rewriter.updateRootInPlace(op, [&]() {
+        op.caseStyleAttr(
+            CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
+      });
+      return success();
+    }
+    if (noX) {
+      rewriter.updateRootInPlace(op, [&]() {
+        op.caseStyleAttr(
+            CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseZStmt));
+      });
+      return success();
+    }
+  }
+
+  if (op.caseStyle() == CaseStmtType::CaseZStmt && noZ) {
+    rewriter.updateRootInPlace(op, [&]() {
+      op.caseStyleAttr(
+          CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
+    });
+    return success();
+  }
+
   return failure();
 }
 

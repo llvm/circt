@@ -46,8 +46,7 @@ char getLetter(CasePatternBit bit);
 struct CasePattern {
   IntegerAttr attr;
 
-  struct DefaultPatternTag {
-  };
+  struct DefaultPatternTag {};
 
   // Return the number of bits in the pattern.
   size_t getWidth() const { return attr.getValue().getBitWidth() / 2; }
