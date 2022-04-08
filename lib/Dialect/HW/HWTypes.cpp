@@ -99,7 +99,7 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
           return elementBitWidth;
         int64_t dimBitWidth = a.getSize();
         if (dimBitWidth < 0)
-          return -1L;
+          return static_cast<int64_t>(-1L);
         return (int64_t)a.getSize() * elementBitWidth;
       })
       .Case<StructType>([](StructType s) {
