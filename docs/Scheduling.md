@@ -155,17 +155,21 @@ Clients call the virtual `Problem::check()` method to test any input constraints
 
 ## Available problem definitions
 
-- [Problem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1Problem.html)
-- [CyclicProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1CyclicProblem.html)
-- [SharedOperatorsProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1SharedOperatorsProblem.html)
-- [ModuloProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ModuloProblem.html)
-- [ChainingProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingProblem.html)
+*See the linked Doxygen docs for more details.*
+
+- [Problem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1Problem.html): A basic, acyclic problem at the root of the problem hierarchy. Operations are linked to operator types, which have integer latencies. The solution comprises integer start times adhering to the precedence constraints implied by the dependences.
+- [CyclicProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1CyclicProblem.html): Cyclic extension of `Problem`. Its solution solution can be used to construct a pipelined datapath with a fixed, integer initiation interval, in which the execution of multiple iterations/samples/etc. may overlap. Operator types are assumed to be fully pipelined.
+- [SharedOperatorsProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1SharedOperatorsProblem.html):  A resource-constrained scheduling problem that corresponds to multiplexing multiple operations onto a pre-allocated number of fully pipelined operator instances.
+- [ModuloProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ModuloProblem.html): Models an HLS classic: Pipeline scheduling with limited resources.
+- [ChainingProblem](https://circt.llvm.org/doxygen/classcirct_1_1scheduling_1_1ChainingProblem.html): Extends `Problem` to consider the accumulation of physical propagation delays on combinational paths along SSA dependences.
+
+NB: The classes listed above each model a *trait*-like aspect of scheduling. These can be used as-is, but are also intended for mixing and matching, even though we currently do not provide definitions for all possible combinations in order not to pollute the infrastructure. For example, the `ChainingProblem` may be of limited use standalone, but can serve as a parent class for a future chaining-enabled modulo scheduling problem.
 
 ## Available schedulers
 
-- ASAP list scheduler
-- Linear programming-based schedulers with integrated simplex solver
-- Integer linear programming-based scheduler using external ILP solver
+- ASAP list scheduler ([`ASAPScheduler.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/ASAPScheduler.cpp)): Solves the basic `Problem` with a worklist algorithm. This is mostly a problem-API demo from the viewpoint of an algorithm implementation.
+- Linear programming-based schedulers ([`SimplexSchedulers.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/SimplexSchedulers.cpp)): Solves `Problem`, `CyclicProblem` and `ChainingProblem` optimally, and `SharedOperatorsProblem`/`ModuloProblem` with simple (not state-of-the-art!) heuristics. This family of schedulers shares a tailored implementation of the simplex algorithm, as proposed by de Dinechin. See the sources for more details and literature references.
+- Integer linear programming-based scheduler ([`LPSchedulers.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/LPSchedulers.cpp)): Demo implementation for using an ILP solver via the OR-Tools integration.
 
 ## Utilities
 
