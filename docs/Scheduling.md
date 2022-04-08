@@ -168,13 +168,14 @@ NB: The classes listed above each model a *trait*-like aspect of scheduling. The
 ## Available schedulers
 
 - ASAP list scheduler ([`ASAPScheduler.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/ASAPScheduler.cpp)): Solves the basic `Problem` with a worklist algorithm. This is mostly a problem-API demo from the viewpoint of an algorithm implementation.
-- Linear programming-based schedulers ([`SimplexSchedulers.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/SimplexSchedulers.cpp)): Solves `Problem`, `CyclicProblem` and `ChainingProblem` optimally, and `SharedOperatorsProblem`/`ModuloProblem` with simple (not state-of-the-art!) heuristics. This family of schedulers shares a tailored implementation of the simplex algorithm, as proposed by de Dinechin. See the sources for more details and literature references.
+- Linear programming-based schedulers ([`SimplexSchedulers.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/SimplexSchedulers.cpp)): Solves `Problem`, `CyclicProblem` and `ChainingProblem` optimally, and `SharedOperatorsProblem` / `ModuloProblem` with simple (not state-of-the-art!) heuristics. This family of schedulers shares a tailored implementation of the simplex algorithm, as proposed by de Dinechin. See the sources for more details and literature references.
 - Integer linear programming-based scheduler ([`LPSchedulers.cpp`](https://github.com/llvm/circt/blob/main/lib/Scheduling/LPSchedulers.cpp)): Demo implementation for using an ILP solver via the OR-Tools integration.
 
 ## Utilities
 
+See [`Utilities.h`](https://github.com/llvm/circt/blob/main/include/circt/Scheduling/Utilities.h):
 - Topologic graph traversal
-- DFA to compute path delays
+- DFA to compute combinational path delays
 - DOT dump
 
 ## Adding a new problem
