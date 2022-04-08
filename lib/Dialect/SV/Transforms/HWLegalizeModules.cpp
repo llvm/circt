@@ -102,9 +102,9 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
         bool isDefault = caseIdx == caseValues.size() - 1;
         Value theValue = caseValues[caseIdx];
         sv::CasePattern thePattern =
-            isDefault
-                ? CasePattern::getDefault(caseValue.getBitWidth(), context)
-                : CasePattern(caseValue, context);
+            isDefault ? CasePattern(caseValue.getBitWidth(),
+                                    CasePattern::DefaultPatternTag(), context)
+                      : CasePattern(caseValue, context);
         ++caseValue;
         builder.create<sv::BPAssignOp>(createOp.getLoc(), theWire, theValue);
         return thePattern;

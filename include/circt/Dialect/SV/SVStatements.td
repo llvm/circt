@@ -311,7 +311,8 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
-
+  let hasCanonicalizeMethod = 1;
+  
   let builders = [
     /// This ctor allows you to build a CaseZ with some number of cases, getting
     /// a callback for each case.
