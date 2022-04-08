@@ -1252,6 +1252,13 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
     ++newIdx;
   }
 
+  // Compy over "output_file" information so that this is not lost when ports
+  // are erased.
+  //
+  // TODO: Other attributes may need to be copied over.
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    newOp->setAttr("output_file", outputFile);
+
   return newOp;
 }
 
