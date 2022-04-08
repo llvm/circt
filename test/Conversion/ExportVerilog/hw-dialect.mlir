@@ -1107,3 +1107,34 @@ hw.module @InlineArrayGet(%source: !hw.array<1xi1>) -> (r1:i1, r2:i1) {
   // CHECK-NEXT: assign r2 = source[1'h0];
   hw.output %0, %0 : i1, i1
 }
+
+// CHECK-LABEL: module parameterizedArrays
+// CHECK-NEXT:   #(parameter /*integer*/ param,
+// CHECK-NEXT:     parameter /*integer*/ N) (
+// CHECK-NEXT:   input  [41:0][param - 1:0]        a,
+// CHECK-NEXT:   input  [N - 64'd1:0][param - 1:0] b,
+// CHECK-NEXT:   output [N - 64'd1:0][param - 1:0] c);
+hw.module @parameterizedArrays<param: i32, N: i32>
+  (%a: !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
+   %b: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) ->
+   (c: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
+  hw.output %b : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>
+}
+
+// CHECK-LABEL: module UseParameterizedArrays(
+// CHECK-NEXT: input [41:0][11:0] a,
+// CHECK-NEXT: input [23:0][11:0] b);
+hw.module @UseParameterizedArrays(%a: !hw.array<42xint<12>>, %b: !hw.array<24xint<12>>) {
+// CHECK:  wire [23:0][11:0] _inst_c;
+// CHECK:  parameterizedArrays #(
+// CHECK-NEXT:    .param(12),
+// CHECK-NEXT:    .N(24)
+// CHECK-NEXT:  ) inst (
+// CHECK-NEXT:    .a (a),
+// CHECK-NEXT:    .b (b),
+// CHECK-NEXT:    .c (_inst_c)
+// CHECK-NEXT:  );
+// CHECK-NEXT: endmodule
+  %c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
+    (a: %a : !hw.array<42xint<12>>, b: %b : !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {}
+}

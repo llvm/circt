@@ -779,5 +779,19 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
         return {IntegerType::get(type.getContext(),
                                  attrValue.getValue().getSExtValue())};
       })
+      .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
+        auto size =
+            evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
+        if (failed(size))
+          return failure();
+        auto elementType =
+            evaluateParametricType(loc, parameters, arrayType.getElementType());
+        if (failed(elementType))
+          return failure();
+        return hw::ArrayType::get(
+            arrayType.getContext(), elementType.getValue(),
+            IntegerAttr::get(IntegerType::get(type.getContext(), 64),
+                             size.getValue().getSExtValue()));
+      })
       .Default([&](auto) { return type; });
 }

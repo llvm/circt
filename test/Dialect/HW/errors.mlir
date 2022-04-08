@@ -44,7 +44,7 @@ hw.module @A() -> ("": i1) { }
 
 // -----
 
-// expected-error @+1 {{hw.array only supports one dimension}}
+// expected-error @+1 {{expected non-function type}}
 func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
 
 // -----
@@ -311,3 +311,8 @@ module {
 // expected-note @+1 {{module declared here}}
   hw.module.extern @parameters<p1: i42>(%arg0: !hw.int<#hw.param.decl.ref<"p1">>) -> (out: !hw.int<#hw.param.decl.ref<"p1">>)
 }
+
+// -----
+
+// expected-error @+1 {{unsupported dimension kind in hw.array}}
+hw.module @bab<param: i32, N: i32> ( %array2d: !hw.array<i3 x i4>) {}
