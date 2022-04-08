@@ -14,6 +14,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -31,46 +32,6 @@ using namespace firrtl;
 using namespace chirrtl;
 
 namespace {
-
-/// Stores an index into an aggregate.
-struct TargetToken {
-  StringRef name;
-  bool isIndex;
-};
-
-/// The parsed annotation path.
-struct TokenAnnoTarget {
-  StringRef circuit;
-  SmallVector<std::pair<StringRef, StringRef>> instances;
-  StringRef module;
-  // The final name of the target
-  StringRef name;
-  // Any aggregates indexed.
-  SmallVector<TargetToken> component;
-};
-
-// The potentially non-local resolved annotation.
-struct AnnoPathValue {
-  SmallVector<InstanceOp> instances;
-  AnnoTarget ref;
-  unsigned fieldIdx = 0;
-
-  AnnoPathValue() = default;
-  AnnoPathValue(CircuitOp op) : ref(OpAnnoTarget(op)) {}
-  AnnoPathValue(Operation *op) : ref(OpAnnoTarget(op)) {}
-  AnnoPathValue(const SmallVectorImpl<InstanceOp> &insts, AnnoTarget b,
-                unsigned fieldIdx)
-      : instances(insts.begin(), insts.end()), ref(b), fieldIdx(fieldIdx) {}
-
-  bool isLocal() const { return instances.empty(); }
-
-  template <typename... T>
-  bool isOpOfType() const {
-    if (auto opRef = ref.dyn_cast<OpAnnoTarget>())
-      return isa<T...>(opRef.getOp());
-    return false;
-  }
-};
 
 /// State threaded through functions for resolving and applying annotations.
 struct ApplyState {
@@ -95,40 +56,6 @@ private:
 };
 
 } // namespace
-
-/// Abstraction over namable things.  Do they have names?
-static bool hasName(StringRef name, Operation *op) {
-  return TypeSwitch<Operation *, bool>(op)
-      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
-            SeqMemOp, MemoryPortOp>(
-          [&](auto nop) { return nop.name() == name; })
-      .Default([](auto &) { return false; });
-}
-
-/// Find a matching name in an operation (usually FModuleOp).  This walk could
-/// be cached in the future.  This finds a port or operation for a given name.
-static AnnoTarget findNamedThing(StringRef name, Operation *op) {
-  AnnoTarget retval;
-  auto nameChecker = [name, &retval](Operation *op) -> WalkResult {
-    if (auto mod = dyn_cast<FModuleLike>(op)) {
-      // Check the ports.
-      auto ports = mod.getPorts();
-      for (size_t i = 0, e = ports.size(); i != e; ++i)
-        if (ports[i].name.getValue() == name) {
-          retval = PortAnnoTarget(op, i);
-          return WalkResult::interrupt();
-        }
-      return WalkResult::advance();
-    }
-    if (hasName(name, op)) {
-      retval = OpAnnoTarget(op);
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  };
-  op->walk(nameChecker);
-  return retval;
-}
 
 /// Get annotations or an empty set of annotations.
 static ArrayAttr getAnnotationsFrom(Operation *op) {
@@ -193,247 +120,6 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
   ref.getOp()->setAttr("portAnnotations", portAnno);
 }
 
-// Some types have been expanded so the first layer of aggregate path is
-// a return value.
-static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &ref) {
-  if (auto mem = dyn_cast<MemOp>(ref.getOp()))
-    for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
-      if (mem.getPortNameStr(p) == field) {
-        ref = PortAnnoTarget(mem, p);
-        return success();
-      }
-  ref.getOp()->emitError("Cannot find port with name ") << field;
-  return failure();
-}
-
-/// Try to resolve an non-array aggregate name from a target given the type and
-/// operation of the resolved target.  This needs to deal with places where we
-/// represent bundle returns as split into constituent parts.
-static FailureOr<unsigned> findBundleElement(Operation *op, Type type,
-                                             StringRef field) {
-  auto bundle = type.dyn_cast<BundleType>();
-  if (!bundle) {
-    op->emitError("field access '")
-        << field << "' into non-bundle type '" << bundle << "'";
-    return failure();
-  }
-  auto idx = bundle.getElementIndex(field);
-  if (!idx) {
-    op->emitError("cannot resolve field '")
-        << field << "' in subtype '" << bundle << "'";
-    return failure();
-  }
-  return *idx;
-}
-
-/// Try to resolve an array index from a target given the type of the resolved
-/// target.
-static FailureOr<unsigned> findVectorElement(Operation *op, Type type,
-                                             StringRef indexStr) {
-  size_t index;
-  if (indexStr.getAsInteger(10, index)) {
-    op->emitError("Cannot convert '") << indexStr << "' to an integer";
-    return failure();
-  }
-  auto vec = type.dyn_cast<FVectorType>();
-  if (!vec) {
-    op->emitError("index access '")
-        << index << "' into non-vector type '" << vec << "'";
-    return failure();
-  }
-  return index;
-}
-
-static FailureOr<unsigned> findFieldID(AnnoTarget &ref,
-                                       ArrayRef<TargetToken> tokens) {
-  if (tokens.empty())
-    return 0;
-
-  auto *op = ref.getOp();
-  auto type = ref.getType();
-  auto fieldIdx = 0;
-  // The first field for some ops refers to expanded return values.
-  if (isa<MemOp>(ref.getOp())) {
-    if (failed(updateExpandedPort(tokens.front().name, ref)))
-      return {};
-    tokens = tokens.drop_front();
-  }
-
-  for (auto token : tokens) {
-    if (token.isIndex) {
-      auto result = findVectorElement(op, type, token.name);
-      if (failed(result))
-        return failure();
-      auto vector = type.cast<FVectorType>();
-      type = vector.getElementType();
-      fieldIdx += vector.getFieldID(*result);
-    } else {
-      auto result = findBundleElement(op, type, token.name);
-      if (failed(result))
-        return failure();
-      auto bundle = type.cast<BundleType>();
-      type = bundle.getElementType(*result);
-      fieldIdx += bundle.getFieldID(*result);
-    }
-  }
-  return fieldIdx;
-}
-
-/// Convert a parsed target string to a resolved target structure.  This
-/// resolves all names and aggregates from a parsed target.
-Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path,
-                                        ApplyState &state) {
-  // Validate circuit name.
-  if (!path.circuit.empty() && state.circuit.name() != path.circuit) {
-    state.circuit->emitError("circuit name doesn't match annotation '")
-        << path.circuit << '\'';
-    return {};
-  }
-  // Circuit only target.
-  if (path.module.empty()) {
-    assert(path.name.empty() && path.instances.empty() &&
-           path.component.empty());
-    return AnnoPathValue(state.circuit);
-  }
-
-  // Resolve all instances for non-local paths.
-  SmallVector<InstanceOp> instances;
-  for (auto p : path.instances) {
-    auto mod = state.symTbl.lookup<FModuleOp>(p.first);
-    if (!mod) {
-      state.circuit->emitError("module doesn't exist '") << p.first << '\'';
-      return {};
-    }
-    auto resolved = findNamedThing(p.second, mod);
-    if (!resolved || !isa<InstanceOp>(resolved.getOp())) {
-      state.circuit.emitError("cannot find instance '")
-          << p.second << "' in '" << mod.getName() << "'";
-      return {};
-    }
-    instances.push_back(cast<InstanceOp>(resolved.getOp()));
-  }
-  // The final module is where the named target is (or is the named target).
-  auto mod = state.symTbl.lookup<FModuleOp>(path.module);
-  if (!mod) {
-    state.circuit->emitError("module doesn't exist '") << path.module << '\'';
-    return {};
-  }
-  AnnoTarget ref;
-  if (path.name.empty()) {
-    assert(path.component.empty());
-    ref = OpAnnoTarget(mod);
-  } else {
-    ref = findNamedThing(path.name, mod);
-    if (!ref) {
-      state.circuit->emitError("cannot find name '")
-          << path.name << "' in " << mod.getName();
-      return {};
-    }
-  }
-
-  // If the reference is pointing to an instance op, we have to move the target
-  // to the module.
-  ArrayRef<TargetToken> component(path.component);
-  if (auto instance = dyn_cast<InstanceOp>(ref.getOp())) {
-    instances.push_back(instance);
-    auto target = instance.getReferencedModule(state.symTbl);
-    if (component.empty()) {
-      ref = OpAnnoTarget(instance.getReferencedModule(state.symTbl));
-    } else {
-      auto field = component.front().name;
-      ref = AnnoTarget();
-      for (size_t p = 0, pe = target.getNumPorts(); p < pe; ++p)
-        if (target.getPortName(p) == field) {
-          ref = PortAnnoTarget(target, p);
-          break;
-        }
-      if (!ref) {
-        state.circuit->emitError("!cannot find port '")
-            << field << "' in module " << target.moduleName();
-        return {};
-      }
-      component = component.drop_front();
-    }
-  }
-
-  // If we have aggregate specifiers, resolve those now. This call can update
-  // the ref to target a port of a memory.
-  auto result = findFieldID(ref, component);
-  if (failed(result))
-    return {};
-  auto fieldIdx = *result;
-
-  return AnnoPathValue(instances, ref, fieldIdx);
-}
-
-/// Return an input \p target string in canonical form.  This converts a Legacy
-/// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
-/// subfield/subindex references are preserved.
-static std::string canonicalizeTarget(StringRef target) {
-
-  if (target.empty())
-    return target.str();
-
-  // If this is a normal Target (not a Named), erase that field in the JSON
-  // object and return that Target.
-  if (target[0] == '~')
-    return target.str();
-
-  // This is a legacy target using the firrtl.annotations.Named type.  This
-  // can be trivially canonicalized to a non-legacy target, so we do it with
-  // the following three mappings:
-  //   1. CircuitName => CircuitTarget, e.g., A -> ~A
-  //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
-  //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
-  std::string newTarget = ("~" + target).str();
-  auto n = newTarget.find('.');
-  if (n != std::string::npos)
-    newTarget[n] = '|';
-  n = newTarget.find('.');
-  if (n != std::string::npos)
-    newTarget[n] = '>';
-  return newTarget;
-}
-
-/// split a target string into it constituent parts.  This is the primary parser
-/// for targets.
-static Optional<TokenAnnoTarget> tokenizePath(StringRef origTarget) {
-  StringRef target = origTarget;
-  TokenAnnoTarget retval;
-  std::tie(retval.circuit, target) = target.split('|');
-  if (!retval.circuit.empty() && retval.circuit[0] == '~')
-    retval.circuit = retval.circuit.drop_front();
-  while (target.count(':')) {
-    StringRef nla;
-    std::tie(nla, target) = target.split(':');
-    StringRef inst, mod;
-    std::tie(mod, inst) = nla.split('/');
-    retval.instances.emplace_back(mod, inst);
-  }
-  // remove aggregate
-  auto targetBase =
-      target.take_until([](char c) { return c == '.' || c == '['; });
-  auto aggBase = target.drop_front(targetBase.size());
-  std::tie(retval.module, retval.name) = targetBase.split('>');
-  while (!aggBase.empty()) {
-    if (aggBase[0] == '.') {
-      aggBase = aggBase.drop_front();
-      StringRef field = aggBase.take_front(aggBase.find_first_of("[."));
-      aggBase = aggBase.drop_front(field.size());
-      retval.component.push_back({field, false});
-    } else if (aggBase[0] == '[') {
-      aggBase = aggBase.drop_front();
-      StringRef index = aggBase.take_front(aggBase.find_first_of(']'));
-      aggBase = aggBase.drop_front(index.size() + 1);
-      retval.component.push_back({index, true});
-    } else {
-      return {};
-    }
-  }
-
-  return retval;
-}
-
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
 static FlatSymbolRefAttr buildNLA(AnnoPathValue target, ApplyState &state) {
@@ -495,7 +181,7 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
     return {};
   }
 
-  return resolveEntities(*tokens, state);
+  return resolveEntities(*tokens, state.circuit, state.symTbl);
 }
 
 /// (SFC) FIRRTL SingleTargetAnnotation resolver.  Uses the 'target' field of
