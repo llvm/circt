@@ -797,7 +797,7 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
 }
 
-// If this wire is only written to, delete the wire and all writers.
+// Strength reduce case styles based on the bit patterns.
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
   if (op.caseStyle() == CaseStmtType::CaseStmt)
     return failure();
