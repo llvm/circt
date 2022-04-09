@@ -33,20 +33,20 @@ namespace sv {
 bool isExpression(Operation *op);
 
 //===----------------------------------------------------------------------===//
-// CaseZOp Support
+// CaseOp Support
 //===----------------------------------------------------------------------===//
 
-/// This describes the bit in a pattern, 0/1/x.
-enum class CasePatternBit { Zero = 0, One = 1, Any = 2 };
+/// This describes the bit in a pattern, 0/1/x/z.
+enum class CasePatternBit { Zero = 0, One = 1, AnyX = 2, AnyZ = 3 };
 
-/// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
-/// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
-/// operation syntax.
-char getLetter(CasePatternBit bit, bool isVerilog);
+/// Return the letter for the specified pattern bit, e.g. "0", "1", "x" or "z".
+char getLetter(CasePatternBit bit);
 
 // This is provides convenient access to encode and decode a pattern.
 struct CasePattern {
   IntegerAttr attr;
+
+  struct DefaultPatternTag {};
 
   // Return the number of bits in the pattern.
   size_t getWidth() const { return attr.getValue().getBitWidth() / 2; }
@@ -56,6 +56,12 @@ struct CasePattern {
 
   /// Return true if this pattern always matches.
   bool isDefault() const;
+
+  /// Return true if this pattern has an X.
+  bool hasX() const;
+
+  /// Return true if this pattern has an Z.
+  bool hasZ() const;
 
   /// Get a CasePattern from a specified list of CasePatternBit.  Bits are
   /// specified in most least significant order - element zero is the least
@@ -68,8 +74,10 @@ struct CasePattern {
   /// Get a CasePattern with a correctly encoded attribute.
   CasePattern(IntegerAttr attr) : attr(attr) {}
 
-  static CasePattern getDefault(unsigned width, MLIRContext *context);
+  /// Get a CasePattern of a default for the specified width.
+  CasePattern(size_t width, DefaultPatternTag, MLIRContext *context);
 };
+
 // This provides information about one case.
 struct CaseInfo {
   CasePattern pattern;
