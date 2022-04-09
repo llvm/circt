@@ -716,7 +716,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // TODO: Unique constants into the entry block of the module.
     Attribute constantValue = it->second.getValue();
     if (constantValue.isa<InvalidValueAttr>()) {
-      APSInt api(value.getType().cast<IntType>().getBitWidthOrSentinel(), (bool)constantValue.getType().dyn_cast<UIntType>());
+      APSInt api(value.getType().cast<IntType>().getBitWidthOrSentinel(),
+                 (bool)constantValue.getType().dyn_cast<UIntType>());
       constantValue = IntegerAttr::get(constantValue.getContext(), api);
     }
     auto *cst = module->getDialect()->materializeConstant(
