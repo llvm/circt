@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-remove-resets))' --verify-diagnostics --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-remove-invalid))' --verify-diagnostics --split-input-file %s | FileCheck %s
 
 firrtl.circuit "RemoveResetTests" {
 

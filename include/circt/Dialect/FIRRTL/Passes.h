@@ -82,7 +82,7 @@ std::unique_ptr<mlir::Pass> createGrandCentralSignalMappingsPass();
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
-std::unique_ptr<mlir::Pass> createRemoveResetsPass();
+std::unique_ptr<mlir::Pass> createRemoveInvalidPass();
 
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
