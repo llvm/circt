@@ -1114,16 +1114,13 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
 
       auto lowerBound = begin->lowerBound;
       APInt upperBound = begin->upperBound;
-      auto *endCheck = begin;
       while (it != checks.end()) {
         if (!upperBound.isAllOnes() && !it->lowerBound.ule(upperBound + 1))
           break;
 
         APInt itBound = it->upperBound;
-        if (itBound.ugt(upperBound)) {
+        if (itBound.ugt(upperBound))
           upperBound = itBound;
-          endCheck = it;
-        }
         ++it;
       }
 
