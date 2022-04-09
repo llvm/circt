@@ -145,6 +145,17 @@ installs pycapnp via 'pip3'. The capnp compile requires libtool.
 Alternatively, you can use a docker image we provide via
 `utils/run-docker.sh`.
 
+8) **Install OR-Tools** (optional, enables additional schedulers)
+
+[OR-Tools](https://developers.google.com/optimization/) is an open source
+software suite for (mathematical) optimization. It provides a uniform interface
+to several open-source and commercial solvers, e.g. for linear programs and
+satisfiability problems. Here, it is optionally used in the static scheduling
+instructure. Binary distributions often do not include the required CMake build
+info. The `utils/get-or-tools.sh` script downloads, compiles, and installs a
+known good version to a directory within the CIRCT source code, where it is then
+picked up automatically by the build.
+
 ## Windows: notes on setting up with Ninja
 
 Building on Windows using MSVC + Ninja + Python support is straight forward,
