@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -100,8 +101,16 @@ void RemoveInvalidPass::runOnOperation() {
                    << "Module: '" << getOperation().getName() << "'\n";);
 
   bool madeModifications = false;
-  for (auto reg : llvm::make_early_inc_range(
-           getOperation().getBody()->getOps<RegResetOp>())) {
+  SmallVector<InvalidValueOp> invalidOps;
+  for (auto &op : llvm::make_early_inc_range(getOperation().getOps())) {
+    // Populate invalidOps for later handling.
+    if (auto inv = dyn_cast<InvalidValueOp>(op)) {
+      invalidOps.push_back(inv);
+      continue;
+    }
+    auto reg = dyn_cast<RegResetOp>(op);
+    if (!reg)
+      continue;
 
     // If the `RegResetOp` has an invalidated initialization, then replace it
     // with a `RegOp`.
@@ -116,6 +125,33 @@ void RemoveInvalidPass::runOnOperation() {
       reg.erase();
       madeModifications = true;
     }
+  }
+
+  // Convert all invalid values to zero.
+  for (auto inv : invalidOps) {
+    // Skip invalids which have no uses.
+    if (inv->getUses().empty())
+      continue;
+    ImplicitLocOpBuilder builder(inv.getLoc(), inv);
+    TypeSwitch<FIRRTLType>(inv.getType())
+        .Case<ClockType, AsyncResetType, ResetType>([&](auto type) {
+          auto zero = builder.create<SpecialConstantOp>(
+              type, builder.getBoolAttr(false));
+          inv->replaceAllUsesWith(zero);
+          inv->erase();
+          madeModifications = true;
+        })
+        .Case<IntType>([&](IntType type) {
+          auto zero = builder.create<ConstantOp>(type, getIntZerosAttr(type));
+          inv->replaceAllUsesWith(zero);
+          inv->erase();
+          madeModifications = true;
+        })
+        .Default([&](auto) {
+          inv->emitOpError()
+              << "has a type which is not a ground type (this is an "
+                 "unimplemented feature of RemoveInvalid!)";
+        });
   }
 
   if (!madeModifications)
