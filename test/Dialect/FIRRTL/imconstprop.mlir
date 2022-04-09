@@ -91,9 +91,9 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result7, %c0_ui4
     firrtl.connect %result7, %reg: !firrtl.uint<4>, !firrtl.uint<4>
 
-    // Wire without connects to it should turn into 'invalid'.
+    // Wire without connects to it should turn into '0'.
     %unconnectedWire = firrtl.wire : !firrtl.uint<2>
-    // CHECK: firrtl.connect %result8, %invalid_ui2
+    // CHECK: firrtl.connect %result8, %c0_ui2_3
     firrtl.connect %result8, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
 
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
@@ -338,8 +338,8 @@ firrtl.circuit "invalidReg2"   {
   firrtl.module @invalidReg2(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
     %foobar = firrtl.reg %clock  : !firrtl.uint<1>
     firrtl.connect %foobar, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
-    //CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    //CHECK: firrtl.connect %a, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    //CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    //CHECK: firrtl.connect %a, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -368,8 +368,8 @@ firrtl.circuit "RegResetInvalidReset"  {
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     %r = firrtl.regreset %clock, %invalid_ui1, %c1_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.strictconnect %r, %invalid_ui1 : !firrtl.uint<1>
-    // CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %a, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %a, %r : !firrtl.uint<1>
   }
 }

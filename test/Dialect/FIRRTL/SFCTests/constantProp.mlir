@@ -241,8 +241,8 @@ firrtl.circuit "uninitSelfReg"   {
     %r = firrtl.reg %clock  :  !firrtl.uint<8>
     firrtl.connect %r, %r : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %invalid_ui8 : !firrtl.uint<8>
+    // CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    // CHECK: firrtl.strictconnect %z, %c0_ui8 : !firrtl.uint<8>
   }
 }
 
