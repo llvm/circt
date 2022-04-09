@@ -234,3 +234,12 @@ def CreatePipeline : Pass<"create-pipeline", "mlir::func::FuncOp"> {
 }
 
 #endif // CIRCT_CONVERSION_PASSES_TD
+
+//===----------------------------------------------------------------------===//
+// SeqToSV
+//===----------------------------------------------------------------------===//
+def ConvertSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
+  let summary = "Lower sequential ops to SV.";
+  let constructor = "circt::createConvertSeqToSVPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}

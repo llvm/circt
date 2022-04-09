@@ -9,6 +9,7 @@ target_link_libraries(circt-tcl
     CIRCTCAPIMSFT
     CIRCTCAPIHW
     CIRCTCAPISeq
+    CIRCTCAPISeqToSV
     CIRCTCAPISV
 )
 target_compile_definitions(circt-tcl PUBLIC -DUSE_TCL_STUBS)

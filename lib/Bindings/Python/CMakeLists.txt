@@ -32,6 +32,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPIMSFT
     CIRCTCAPIHW
     CIRCTCAPISeq
+    CIRCTCAPISeqToSV
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
   PRIVATE_LINK_LIBS

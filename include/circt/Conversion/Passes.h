@@ -23,6 +23,7 @@
 #include "circt/Conversion/LLHDToLLVM.h"
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Conversion/SeqToSV.h"
 #include "circt/Conversion/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic.h"
 #include "mlir/Pass/Pass.h"

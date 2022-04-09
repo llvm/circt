@@ -8,6 +8,7 @@
 
 #include "DialectModules.h"
 
+#include "circt-c/Conversion/SeqToSV.h"
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
 #include "circt-c/Dialect/HW.h"
@@ -27,6 +28,7 @@
 namespace py = pybind11;
 
 static void registerPasses() {
+  registerConvertSeqToSVPass();
   registerSeqPasses();
   registerSVPasses();
 }

@@ -70,8 +70,6 @@ int registerOnlyHW() {
   if (!mlirDialectEqual(seq, alsoSeq))
     return 9;
 
-  registerSeqPasses();
-
   mlirContextDestroy(ctx);
 
   return 0;
