@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Support/APInt.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
@@ -34,25 +35,6 @@ namespace patterns {
 
 using namespace circt;
 using namespace firrtl;
-
-static IntegerAttr getIntAttr(Type type, const APInt &value) {
-  auto intType = type.cast<IntType>();
-  assert((!intType.hasWidth() ||
-          (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
-         "value / type width mismatch");
-  auto intSign =
-      intType.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
-  auto attrType =
-      IntegerType::get(type.getContext(), value.getBitWidth(), intSign);
-  return IntegerAttr::get(attrType, value);
-}
-
-/// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
-/// type. This handles both the known width and unknown width case.
-static IntegerAttr getIntZerosAttr(Type type) {
-  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
-  return getIntAttr(type, APInt(width, 0));
-}
 
 /// Return true if this operation's operands and results all have a known width.
 /// This only works for integer types.
