@@ -104,6 +104,10 @@ static Attribute getInt32Attr(MLIRContext *ctx, uint32_t value) {
   return Builder(ctx).getI32IntegerAttr(value);
 }
 
+static Attribute getIntAttr(MLIRContext *ctx, Type t, const APInt &value) {
+  return Builder(ctx).getIntegerAttr(t, value);
+}
+
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
 /// a temporary wire.
@@ -1072,7 +1076,9 @@ static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
 
     // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
     // attribute so it gets printed in canonical form.
-    auto negOne = getInt32Attr(loc.getContext(), -1);
+    auto negOne =
+        getIntAttr(loc.getContext(), width.getType(),
+                   APInt(width.getType().getIntOrFloatBitWidth(), -1L, true));
     width = ParamExprAttr::get(PEO::Add, width, negOne);
     os << '[';
     emitter.printParamValue(width, os, [loc]() {
@@ -1120,8 +1126,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
-        dims.push_back(
-            getInt32Attr(arrayType.getContext(), arrayType.getSize()));
+        dims.push_back(arrayType.getSizeAttr());
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter);
@@ -3182,16 +3187,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   // it (either "if (" or "else if (") was printed already.
   IfOp ifOp = op;
   for (;;) {
-    // If we have an else and and empty then block, emit an inverted condition.
-    if (ifOp.hasElse() && ifOp.getThenBlock()->empty()) {
-      os << '!';
-      emitExpression(ifOp.cond(), ops, Unary);
-      os << ')';
-      emitBlockAsStatement(ifOp.getElseBlock(), ops);
-      break;
-    }
-
-    // Normal emission.
+    // Emit the condition and the then block.
     emitExpression(ifOp.cond(), ops);
     os << ')';
     emitBlockAsStatement(ifOp.getThenBlock(), ops);
@@ -3379,7 +3375,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
       // there are no x's crossing nibble boundaries.
       indent() << pattern.getWidth() << "'b";
       for (size_t bit = 0, e = pattern.getWidth(); bit != e; ++bit)
-        os << getLetter(pattern.getBit(e - bit - 1), /*isVerilog*/ true);
+        os << getLetter(pattern.getBit(e - bit - 1));
     }
     os << ":";
     emitBlockAsStatement(caseInfo.block, emptyOps);

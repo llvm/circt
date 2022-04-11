@@ -153,3 +153,130 @@ hw.module @assert_canonicalization(%clock: i1) {
   // CHECK-NOT: sv.cover.concurrent
   sv.cover.concurrent posedge %clock, %true
 }
+
+// CHECK-LABEL: @case_stmt
+hw.module @case_stmt(%arg: i3) {
+  %fd = hw.constant 0x80000002 : i32
+  sv.initial {
+    // CHECK: sv.case %arg
+    sv.case casez %arg : i3
+    case b000: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case %arg
+    sv.case casez %arg : i3
+    case b00x: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case casez %arg
+    sv.case casez %arg : i3
+    case b00z: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case casez %arg
+    sv.case casez %arg : i3
+    case b00z: {
+      sv.fwrite %fd, "x"
+    }
+    case b00x: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+
+    // CHECK: sv.case %arg
+    sv.case casex %arg : i3
+    case b000: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case casex %arg
+    sv.case casex %arg : i3
+    case b00x: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case casez %arg
+    sv.case casex %arg : i3
+    case b00z: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case casex %arg
+    sv.case casex %arg : i3
+    case b00z: {
+      sv.fwrite %fd, "x"
+    }
+    case b00x: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+
+    // CHECK: sv.case %arg
+    sv.case %arg : i3
+    case b000: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case %arg
+    sv.case %arg : i3
+    case b00x: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case %arg
+    sv.case %arg : i3
+    case b00z: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+    // CHECK: sv.case %arg
+    sv.case %arg : i3
+    case b00z: {
+      sv.fwrite %fd, "x"
+    }
+    case b00x: {
+      sv.fwrite %fd, "x"
+    }
+    default: {
+      sv.fwrite %fd, "z"
+    }
+
+  }
+
+  }

@@ -328,9 +328,6 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Declare variables for use by memory randomization logic.
     b.create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
-      auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
-      randReg =
-          b.create<sv::RegOp>(b.getIntegerType(mem.dataWidth), name, name);
       initvar = moduleNamespace.newName("initvar");
       b.create<sv::VerbatimOp>("integer " + Twine(initvar) + ";\n");
     });
@@ -363,33 +360,19 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           if (i > 0)
             rhs.append(", ");
           rhs.append("{`RANDOM}");
-          if (i == 0) {
-            auto rem = mem.dataWidth % randomWidth;
-            if (!rem)
-              continue;
-            if (rem == 1)
-              rhs.append("[0]");
-            else
-              rhs.append(("[" + Twine(rem - 1) + ":0]").str());
-          }
         }
         if (mem.dataWidth > randomWidth)
           rhs.append("}");
+        if (mem.dataWidth % randomWidth != 0)
+          ("[" + Twine(mem.dataWidth - 1) + ":0]").toVector(rhs);
         rhs.append(";");
-
-        b.create<sv::VerbatimOp>(
-            b.getStringAttr("{{0}} = " + rhs), ValueRange{},
-            b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
-                                                 randReg.inner_symAttr())));
 
         b.create<sv::VerbatimOp>(
             b.getStringAttr("for (" + initvar + " = 0; " + initvar + " < " +
                             Twine(mem.depth) + "; " + initvar + " = " +
                             initvar + " + 1)\n" + "  Memory[" + initvar +
-                            "] = {{0}};"),
-            ValueRange{},
-            b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
-                                                 randReg.inner_symAttr())));
+                            "] = " + rhs),
+            ValueRange{}, ArrayAttr{});
       });
 
       // Register randomization logic.  Randomize every register to a random

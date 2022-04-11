@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -476,7 +476,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     // between IOs of a module have been detected and recorded in `combPathsMap`
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
-      if (auto module = dyn_cast<FModuleOp>(node->getModule())) {
+      if (auto module = dyn_cast<FModuleOp>(*node->getModule())) {
         NodeContext context(&map, &instanceGraph, module.getOps<ConnectOp>());
         auto dummyNode = Node(nullptr, &context);
 
@@ -525,11 +525,15 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
           }
           combPaths.push_back(outputVec);
         }
-      } else if (auto extModule = dyn_cast<FExtModuleOp>(node->getModule())) {
+        continue;
+      }
+      if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule())) {
         // TODO: Handle FExtModuleOp with `ExtModulePathAnnotation`s.
         auto &combPaths = map[extModule];
         combPaths.resize(extModule.getNumPorts());
+        continue;
       }
+      llvm_unreachable("invalid instance graph node");
     }
 
     if (detectedCycle)

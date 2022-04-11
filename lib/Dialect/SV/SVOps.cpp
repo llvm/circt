@@ -553,20 +553,20 @@ void InitialOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
-// CaseZOp
+// CaseOp
 //===----------------------------------------------------------------------===//
 
-/// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
-/// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
-/// operation syntax.
-char sv::getLetter(CasePatternBit bit, bool isVerilog) {
+/// Return the letter for the specified pattern bit, e.g. "0", "1", "x" or "z".
+char sv::getLetter(CasePatternBit bit) {
   switch (bit) {
   case CasePatternBit::Zero:
     return '0';
   case CasePatternBit::One:
     return '1';
-  case CasePatternBit::Any:
-    return isVerilog ? '?' : 'x';
+  case CasePatternBit::AnyX:
+    return 'x';
+  case CasePatternBit::AnyZ:
+    return 'z';
   }
   llvm_unreachable("invalid casez PatternBit");
 }
@@ -578,10 +578,21 @@ auto CasePattern::getBit(size_t bitNumber) const -> CasePatternBit {
 }
 
 bool CasePattern::isDefault() const {
+  return attr.getValue().getBitWidth() % 2;
+}
+
+bool CasePattern::hasX() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
-    if (getBit(i) != CasePatternBit::Any)
-      return false;
-  return true;
+    if (getBit(i) == CasePatternBit::AnyX)
+      return true;
+  return false;
+}
+
+bool CasePattern::hasZ() const {
+  for (size_t i = 0, e = getWidth(); i != e; ++i)
+    if (getBit(i) == CasePatternBit::AnyZ)
+      return true;
+  return false;
 }
 
 static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
@@ -599,9 +610,11 @@ static SmallVector<CasePatternBit> getPatternBitsForValue(const APInt &value) {
 CasePattern::CasePattern(const APInt &value, MLIRContext *context)
     : CasePattern(getPatternBitsForValue(value), context) {}
 
-CasePattern CasePattern::getDefault(unsigned width, MLIRContext *context) {
-  return CasePattern(SmallVector<CasePatternBit>(width, CasePatternBit::Any),
-                     context);
+CasePattern::CasePattern(size_t width, DefaultPatternTag,
+                         MLIRContext *context) {
+  APInt pattern(width * 2 + 1, 0);
+  auto patternType = IntegerType::get(context, width * 2 + 1);
+  attr = IntegerAttr::get(patternType, pattern);
 }
 
 // Get a CasePattern from a specified list of PatternBits.  Bits are
@@ -660,10 +673,11 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse all the cases.
   SmallVector<Attribute> casePatterns;
   SmallVector<CasePatternBit, 16> caseBits;
+  bool defaultElem = false;
   while (1) {
     if (succeeded(parser.parseOptionalKeyword("default"))) {
       // Fill the pattern with Any.
-      caseBits.assign(condWidth, CasePatternBit::Any);
+      defaultElem = true;
     } else if (failed(parser.parseOptionalKeyword("case"))) {
       // Not default or case, must be the end of the cases.
       break;
@@ -689,7 +703,10 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
           bit = CasePatternBit::One;
           break;
         case 'x':
-          bit = CasePatternBit::Any;
+          bit = CasePatternBit::AnyX;
+          break;
+        case 'z':
+          bit = CasePatternBit::AnyZ;
           break;
         default:
           return parser.emitError(loc, "unexpected case bit '")
@@ -707,7 +724,10 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
         caseBits.append(condWidth - caseBits.size(), CasePatternBit::Zero);
     }
 
-    auto resultPattern = CasePattern(caseBits, builder.getContext());
+    auto resultPattern =
+        defaultElem ? CasePattern(condWidth, CasePattern::DefaultPatternTag(),
+                                  builder.getContext())
+                    : CasePattern(caseBits, builder.getContext());
     casePatterns.push_back(resultPattern.attr);
     caseBits.clear();
 
@@ -740,8 +760,7 @@ void CaseOp::print(OpAsmPrinter &p) {
     } else {
       p << "case b";
       for (size_t i = 0, e = pattern.getWidth(); i != e; ++i)
-        p << getLetter(pattern.getBit(e - i - 1),
-                       /*isVerilog=*/false);
+        p << getLetter(pattern.getBit(e - i - 1));
     }
 
     p << ": ";
@@ -776,6 +795,48 @@ void CaseOp::build(OpBuilder &builder, OperationState &result,
   }
 
   result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
+}
+
+// Strength reduce case styles based on the bit patterns.
+LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
+  if (op.caseStyle() == CaseStmtType::CaseStmt)
+    return failure();
+
+  auto caseInfo = op.getCases();
+  bool noXZ = llvm::all_of(caseInfo, [](const CaseInfo &ci) {
+    return !ci.pattern.hasX() && !ci.pattern.hasZ();
+  });
+  bool noX = llvm::all_of(
+      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasX(); });
+  bool noZ = llvm::all_of(
+      caseInfo, [](const CaseInfo &ci) { return !ci.pattern.hasZ(); });
+
+  if (op.caseStyle() == CaseStmtType::CaseXStmt) {
+    if (noXZ) {
+      rewriter.updateRootInPlace(op, [&]() {
+        op.caseStyleAttr(
+            CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
+      });
+      return success();
+    }
+    if (noX) {
+      rewriter.updateRootInPlace(op, [&]() {
+        op.caseStyleAttr(
+            CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseZStmt));
+      });
+      return success();
+    }
+  }
+
+  if (op.caseStyle() == CaseStmtType::CaseZStmt && noZ) {
+    rewriter.updateRootInPlace(op, [&]() {
+      op.caseStyleAttr(
+          CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
+    });
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

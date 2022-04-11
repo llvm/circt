@@ -61,7 +61,7 @@ void driveSignal(State *state, SignalDetail *detail, uint8_t *value,
   auto offset = detail->offset;
 
   int bitOffset =
-      (detail->value - state->signals[globalIndex].value.get()) * 8 + offset;
+      (detail->value - state->signals[globalIndex].getValue()) * 8 + offset;
 
   // Spawn a new event.
   state->queue.insertOrUpdate(state->time + Time(time, delta, eps), globalIndex,

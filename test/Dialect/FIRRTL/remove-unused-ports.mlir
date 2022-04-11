@@ -137,3 +137,22 @@ firrtl.circuit "Top"   {
     firrtl.strictconnect %c, %A_c : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Ensure that the "output_file" attribute isn't destroyed by RemoveUnusedPorts.
+// This matters for interactions between Grand Central (which sets these) and
+// RemoveUnusedPorts which may clone modules with stripped ports.
+//
+// CHECK-LABEL: "PreserveOutputFile"
+firrtl.circuit "PreserveOutputFile" {
+  // CHECK-NEXT: firrtl.module {{.+}}@Sub
+  // CHECK-SAME:   output_file
+  firrtl.module private @Sub(in %a: !firrtl.uint<1>) attributes {output_file = #hw.output_file<"hello">} {}
+  // CHECK: firrtl.module @PreserveOutputFile
+  firrtl.module @PreserveOutputFile() {
+    // CHECK-NEXT: firrtl.instance sub
+    // CHECK-SAME: output_file
+    firrtl.instance sub {output_file = #hw.output_file<"hello">} @Sub(in a: !firrtl.uint<1>)
+  }
+}

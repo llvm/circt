@@ -13,10 +13,11 @@
 #include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -44,11 +45,8 @@ static const char assumeAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
-static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 static const char moduleHierAnnoClass[] =
     "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
-static const char testbenchDirAnnoClass[] =
-    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 static const char testHarnessHierAnnoClass[] =
     "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
 static const char verifBBClass[] =
@@ -321,8 +319,8 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT.
-  bool isInDUT(FModuleLike child) {
-    if (auto parent = dyn_cast<FModuleOp>(*dut))
+  bool isInDUT(hw::HWModuleLike child) {
+    if (auto parent = dyn_cast<hw::HWModuleLike>(*dut))
       return getInstanceGraph()->isAncestor(child, parent);
     return dut == child;
   }
@@ -332,7 +330,7 @@ struct CircuitLoweringState {
   // Return true if this module is instantiated by the Test Harness.  Returns
   // false if the module is not instantiated by the Test Harness or if the Test
   // Harness is not known.
-  bool isInTestHarness(FModuleLike mod) { return !isInDUT(mod); }
+  bool isInTestHarness(hw::HWModuleLike mod) { return !isInDUT(mod); }
 
   InstanceGraph *getInstanceGraph() { return instanceGraph; }
 

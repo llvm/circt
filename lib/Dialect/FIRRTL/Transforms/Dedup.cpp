@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -286,10 +286,10 @@ private:
   void replaceInstances(FModuleLike toModule, Operation *fromModule) {
     // Replace all instances of the other module.
     auto *fromNode = instanceGraph[fromModule];
-    auto *toNode = instanceGraph[toModule];
+    auto *toNode = instanceGraph[::cast<hw::HWModuleLike>(*toModule)];
     auto toModuleRef = FlatSymbolRefAttr::get(toModule.moduleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
-      auto inst = oldInstRec->getInstance();
+      auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
       inst.moduleNameAttr(toModuleRef);
       inst.portNamesAttr(toModule.getPortNamesAttr());
       oldInstRec->getParent()->addInstance(inst, toNode);
@@ -314,7 +314,7 @@ private:
     auto loc = fromModule->getLoc();
     SmallVector<FlatSymbolRefAttr> nlas;
     for (auto *instanceRecord : instanceGraph[fromModule]->uses()) {
-      auto parent = cast<FModuleOp>(instanceRecord->getParent()->getModule());
+      auto parent = cast<FModuleOp>(*instanceRecord->getParent()->getModule());
       auto inst = instanceRecord->getInstance();
       namepath[0] = OpAnnoTarget(inst).getNLAReference(getNamespace(parent));
       auto arrayAttr = ArrayAttr::get(context, namepath);
@@ -347,7 +347,8 @@ private:
         // Find the instance referenced by the NLA.
         auto targetInstanceName = innerRef.getName();
         auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-          return record->getInstance().inner_symAttr() == targetInstanceName;
+          return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+                 targetInstanceName;
         });
         assert(it != node->end() &&
                "Instance referenced by NLA does not exist in module");
@@ -429,7 +430,8 @@ private:
       auto *node = instanceGraph.lookup(moduleName);
       auto targetInstanceName = innerRef.getName();
       auto it = llvm::find_if(*node, [&](InstanceRecord *record) {
-        return record->getInstance().inner_symAttr() == targetInstanceName;
+        return cast<InstanceOp>(*record->getInstance()).inner_symAttr() ==
+               targetInstanceName;
       });
       assert(it != node->end() &&
              "Instance referenced by NLA does not exist in module");
@@ -845,11 +847,11 @@ void fixupReferences(Value oldValue, Type newType) {
 /// module.
 void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
-    auto module = cast<FModuleLike>(node->getModule());
+    auto module = cast<FModuleLike>(*node->getModule());
     for (auto *instRec : node->uses()) {
       auto inst = instRec->getInstance();
       for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
-        fixupReferences(inst.getResult(i), module.getPortType(i));
+        fixupReferences(inst->getResult(i), module.getPortType(i));
     }
   }
 }
@@ -888,7 +890,7 @@ class DedupPass : public DedupBase<DedupPass> {
     // deduplicate the modules. We have to store the visit order first so that
     // we can safely delete nodes as we go from the instance graph.
     for (auto *node : llvm::post_order(&instanceGraph)) {
-      auto module = cast<FModuleLike>(node->getModule());
+      auto module = cast<FModuleLike>(*node->getModule());
       // If the module is marked with NoDedup, just skip it.
       if (AnnotationSet(module).hasAnnotation(noDedupClass))
         continue;

@@ -23,7 +23,7 @@ def ExportTcl: Pass<"msft-export-tcl", "mlir::ModuleOp"> {
   let options = [
     ListOption<"tops", "tops", "std::string",
                "List of top modules to export Tcl for",
-	       "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
+               "llvm::cl::ZeroOrMore,">,
     Option<"tclFile", "tcl-file", "std::string",
            "", "File to output Tcl into">
   ];

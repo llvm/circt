@@ -36,6 +36,10 @@ inline StringRef getPortAnnotationAttrName() { return "portAnnotations"; }
 /// Return the name of the dialect-prefixed attribute used for annotations.
 inline StringRef getDialectAnnotationAttrName() { return "firrtl.annotations"; }
 
+/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
+/// simply passes through as a string without any decoding.
+bool isOMIRStringEncodedPassthrough(StringRef type);
+
 /// This class provides a read-only projection of an annotation.
 class Annotation {
 public:

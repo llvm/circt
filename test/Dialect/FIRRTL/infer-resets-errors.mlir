@@ -118,7 +118,7 @@ firrtl.circuit "top" {
 // -----
 // Should not allow Vecs to infer different Reset Types
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network "out[0]" simultaneously connected to async and sync resets}}
+  // expected-error @+2 {{reset network "out[]" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.vector<reset, 2>) {
     %0 = firrtl.subindex %out[0] : !firrtl.vector<reset, 2>

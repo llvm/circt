@@ -15,8 +15,6 @@
 
 #include "llvm/Support/raw_ostream.h"
 
-#include <regex>
-
 using namespace circt::llhd::sim;
 
 Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
@@ -24,15 +22,10 @@ Trace::Trace(std::unique_ptr<State> const &state, llvm::raw_ostream &out,
     : out(out), state(state), mode(mode) {
   auto root = state->root;
   for (auto &sig : state->signals) {
-    if (mode != TraceMode::Full && mode != TraceMode::Merged &&
-        sig.owner != root) {
-      isTraced.push_back(false);
-    } else if (mode == TraceMode::NamedOnly &&
-               std::regex_match(sig.name, std::regex("(sig)?[0-9]*"))) {
-      isTraced.push_back(false);
-    } else {
-      isTraced.push_back(true);
-    }
+    bool done = (mode != TraceMode::Full && mode != TraceMode::Merged &&
+                 !sig.isOwner(root)) ||
+                (mode == TraceMode::NamedOnly && sig.isValidSigName());
+    isTraced.push_back(!done);
   }
 }
 
@@ -46,7 +39,7 @@ void Trace::pushChange(unsigned inst, unsigned sigIndex, int elem = -1) {
   std::string path;
   llvm::raw_string_ostream ss(path);
 
-  ss << state->instances[inst].path << '/' << sig.name;
+  ss << state->instances[inst].path << '/' << sig.getName();
 
   if (elem >= 0) {
     // Add element index to the hierarchical path.
@@ -68,9 +61,9 @@ void Trace::pushChange(unsigned inst, unsigned sigIndex, int elem = -1) {
 
 void Trace::pushAllChanges(unsigned inst, unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
-  if (sig.elements.size() > 0) {
+  if (sig.hasElement()) {
     // Push changes for all signal elements.
-    for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
+    for (size_t i = 0, e = sig.getElementSize(); i < e; ++i) {
       pushChange(inst, sigIndex, i);
     }
   } else {
@@ -85,7 +78,7 @@ void Trace::addChange(unsigned sigIndex) {
     if (mode == TraceMode::Full) {
       auto &sig = state->signals[sigIndex];
       // Add a change for each connected instance.
-      for (auto inst : sig.triggers) {
+      for (auto inst : sig.getTriggeredInstanceIndices()) {
         pushAllChanges(inst, sigIndex);
       }
     } else if (mode == TraceMode::Reduced) {
@@ -100,9 +93,9 @@ void Trace::addChange(unsigned sigIndex) {
 
 void Trace::addChangeMerged(unsigned sigIndex) {
   auto &sig = state->signals[sigIndex];
-  if (sig.elements.size() > 0) {
+  if (sig.hasElement()) {
     // Add a change for all sub-elements
-    for (size_t i = 0, e = sig.elements.size(); i < e; ++i) {
+    for (size_t i = 0, e = sig.getElementSize(); i < e; ++i) {
       auto valueDump = sig.toHexString(i);
       mergedChanges[std::make_pair(sigIndex, i)] = valueDump;
     }
@@ -156,7 +149,7 @@ void Trace::flushMerged() {
 
     if (mode == TraceMode::Merged) {
       // Add the changes for all connected instances.
-      for (auto inst : sig.triggers) {
+      for (auto inst : sig.getTriggeredInstanceIndices()) {
         pushChange(inst, sigIndex, sigElem);
       }
     } else {

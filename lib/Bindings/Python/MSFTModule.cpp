@@ -133,6 +133,11 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("DESC", CirctMSFTDirection::DESC)
       .export_values();
 
+  m.def("move_first_block", circtMSFTMoveFirstBlock, py::arg("from"),
+        py::arg("to"),
+        "Move the first block in `from` to the first region's last block in "
+        "`to`.");
+
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(

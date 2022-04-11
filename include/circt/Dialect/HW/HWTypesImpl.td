@@ -51,15 +51,19 @@ def ArrayTypeImpl : HWType<"Array"> {
   }];
 
   let mnemonic = "array";
-  let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
+  let parameters = (ins "::mlir::Type":$elementType, "::mlir::Attribute":$sizeAttr);
   let genVerifyDecl = 1;
 
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
     static ArrayType get(Type elementType, size_t size) {
-      return get(elementType.getContext(), elementType, size);
+      auto *ctx = elementType.getContext();
+      auto intType = ::mlir::IntegerType::get(ctx, 64);
+      auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
+      return ArrayType::get(ctx, elementType, sizeAttr);
     }
+    size_t getSize() const;
   }];
 }
 
@@ -72,15 +76,19 @@ def UnpackedArrayType : HWType<"UnpackedArray"> {
   }];
 
   let mnemonic = "uarray";
-  let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
+  let parameters = (ins "::mlir::Type":$elementType, "::mlir::Attribute":$sizeAttr);
   let genVerifyDecl = 1;
 
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
     static UnpackedArrayType get(Type elementType, size_t size) {
-      return get(elementType.getContext(), elementType, size);
+      auto *ctx = elementType.getContext();
+      auto intType = ::mlir::IntegerType::get(ctx, 64);
+      auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
+      return UnpackedArrayType::get(ctx, elementType, sizeAttr);
     }
+    size_t getSize() const;
   }];
 }
 

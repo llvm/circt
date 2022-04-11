@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
 
@@ -166,102 +167,43 @@ getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
   return {lowestBitRequired, highestBitRequired};
 }
 
-// narrowOperationWidth(...) attempts to create a new instance of Op
-// with createOp using narrowed operands. Ie: transforming f(x, y) into
-// f(x[n:m], y[n:m]), It analyzes all usage sites of narrowingCandidate and
-// mutate them to the newly created narrowed version if it's benefitial.
-//
-// narrowTrailingBits determines whether undemanded trailing bits should
-// be aggressively stripped off.
-//
-// This function requires the narrowingCandidate to have at least 1 use.
-//
-// Returns true if IR is mutated. IR is mutated iff narrowing happens.
-static bool
-narrowOperationWidth(Operation *narrowingCandidate, ValueRange inputs,
-                     bool narrowTrailingBits, PatternRewriter &rewriter,
-                     function_ref<Value(ArrayRef<Value>)> createOp) {
-  // If the result is never used, no point optimizing this. It will
-  // also complicated error handling in getLowestBitAndHigestBitRequired.
-  assert(!narrowingCandidate->getUsers().empty() &&
-         "narrowingCandidate must have at least one use.");
-  assert(narrowingCandidate->getNumResults() == 1 &&
-         "narrowingCandidate must have exactly one result");
-  IntegerType narrowingCandidateType =
-      narrowingCandidate->getResultTypes().front().cast<IntegerType>();
-
-  size_t highestBitRequired;
-  size_t lowestBitRequired;
-  size_t originalOpWidth = narrowingCandidateType.getIntOrFloatBitWidth();
-
-  std::tie(lowestBitRequired, highestBitRequired) =
-      getLowestBitAndHighestBitRequired(narrowingCandidate, narrowTrailingBits,
-                                        originalOpWidth);
-
-  // Give up, because we can't make it narrower than it already is.
-  if (lowestBitRequired == 0 && highestBitRequired == originalOpWidth - 1)
+template <class OpTy>
+static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
+                                 PatternRewriter &rewriter) {
+  IntegerType opType =
+      op.getResult().getType().template dyn_cast<IntegerType>();
+  if (!opType)
     return false;
 
-  auto loc = narrowingCandidate->getLoc();
-  size_t narrowedWidth = highestBitRequired - lowestBitRequired + 1;
-  auto narrowedType = rewriter.getIntegerType(narrowedWidth);
+  auto range = getLowestBitAndHighestBitRequired(op, narrowTrailingBits,
+                                                 opType.getWidth());
+  if (range.second + 1 == opType.getWidth() && range.first == 0)
+    return false;
 
-  // Insert the new narrowedOperation at a point where all narrowingCandidate's
-  // operands are available, and resides before all users.
-  rewriter.setInsertionPoint(narrowingCandidate);
-  Value narrowedOperation =
-      createOp(SmallVector<Value>(llvm::map_range(inputs, [&](auto input) {
-        return rewriter.create<ExtractOp>(loc, narrowedType, input,
-                                          lowestBitRequired);
-      })));
-
-  auto getNarrowedExtractReplacement = [&](ExtractOp extractUse) -> Value {
-    auto oldLowBit = extractUse.lowBit();
-
-    assert(oldLowBit >= lowestBitRequired &&
-           "incorrectly deduced the lowest bit required in usage arguments.");
-
-    auto loc = extractUse.getLoc();
-
-    if (narrowedWidth == extractUse.getType().getWidth()) {
-      return narrowedOperation;
-    }
-
-    uint32_t newLowBit = oldLowBit - lowestBitRequired;
-    Value narrowedExtract = rewriter.create<ExtractOp>(
-        loc, extractUse.getType(), narrowedOperation, newLowBit);
-    return narrowedExtract;
-  };
-
-  // Replaces all existing use sites with the newly created narrowed operation.
-  // This loop captures both the root and non-root use sites.  Note that
-  // PatternRewriter allows calling rewriter.replaceOp on non-root users.
-  for (Operation *user :
-       llvm::make_early_inc_range(narrowingCandidate->getUsers())) {
-    auto extractUser = cast<ExtractOp>(user);
-
-    // This is necessary because the rewriter's insertion point can be a
-    // replaced extractUser
-    rewriter.setInsertionPoint(extractUser);
-    rewriter.replaceOp(extractUser, getNarrowedExtractReplacement(extractUser));
+  SmallVector<Value> args;
+  auto newType = rewriter.getIntegerType(range.second - range.first + 1);
+  for (auto inop : op.getOperands()) {
+    // deal with muxes here
+    if (inop.getType() != op.getType())
+      args.push_back(inop);
+    else
+      args.push_back(rewriter.createOrFold<ExtractOp>(inop.getLoc(), newType,
+                                                      inop, range.first));
   }
-
-  // narrowingCandidate can be safely removed now, as all old users of
-  // narrowingCandidate are replaced.
-  rewriter.eraseOp(narrowingCandidate);
-
+  Value newop = rewriter.createOrFold<OpTy>(op.getLoc(), newType, args);
+  if (range.first)
+    newop = rewriter.createOrFold<ConcatOp>(
+        op.getLoc(), newop,
+        rewriter.create<hw::ConstantOp>(op.getLoc(),
+                                        APInt::getZero(range.first)));
+  if (range.second + 1 < opType.getWidth())
+    newop = rewriter.createOrFold<ConcatOp>(
+        op.getLoc(),
+        rewriter.create<hw::ConstantOp>(
+            op.getLoc(), APInt::getZero(opType.getWidth() - range.second - 1)),
+        newop);
+  rewriter.replaceOp(op, newop);
   return true;
-}
-
-template <class Op>
-static bool narrowOperationWidth(Op op, ValueRange inputs,
-                                 bool narrowTrailingBits,
-                                 PatternRewriter &rewriter) {
-  auto createOp = [&](ArrayRef<Value> args) -> Value {
-    return rewriter.create<Op>(op.getLoc(), args);
-  };
-  return narrowOperationWidth(op, inputs, narrowTrailingBits, rewriter,
-                              createOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -561,62 +503,6 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
   return false;
 }
 
-// Pattern matches on extract(f(a, b)), and transforms f(extract(a), extract(b))
-// for some known f. This is performed by analyzing all usage sites of the
-// result of f(a, b). When this transformation returns true, it mutates all the
-// usage sites of outerExtractOp to reference the newly created narrowed
-// operation.
-static bool narrowExtractWidth(ExtractOp outerExtractOp,
-                               PatternRewriter &rewriter) {
-  auto *innerArg = outerExtractOp.input().getDefiningOp();
-  if (!innerArg)
-    return false;
-
-  // In calls to narrowOperationWidth below, innerOp is guranteed to have at
-  // least one use (ie: this extract operation). So we don't need to handle
-  // innerOp with no uses.
-  return llvm::TypeSwitch<Operation *, bool>(innerArg)
-      // The unreferenced leading bits of Add, Sub and Mul can be stripped of,
-      // but not the trailing bits. The trailing bits is used to compute the
-      // results of arithmetic operations.
-      .Case<AddOp, MulOp>([&](auto innerOp) {
-        return narrowOperationWidth(innerOp, innerOp.inputs(),
-                                    /* narrowTrailingBits= */ false, rewriter);
-      })
-      .Case<SubOp>([&](SubOp innerOp) {
-        return narrowOperationWidth(innerOp, {innerOp.lhs(), innerOp.rhs()},
-                                    /* narrowTrailingBits= */ false, rewriter);
-      })
-      // Bit-wise operations and muxes can be narrowed more aggressively.
-      // Trailing bits that are not referenced in the use-sites can all be
-      // removed.
-      .Case<AndOp, OrOp, XorOp>([&](auto innerOp) {
-        return narrowOperationWidth(innerOp, innerOp.inputs(),
-                                    /* narrowTrailingBits= */ true, rewriter);
-      })
-      .Case<MuxOp>([&](MuxOp innerOp) {
-        assert(innerOp.getType().isa<IntegerType>() &&
-               "extract() requires input to be of type IntegerType!");
-
-        auto cond = innerOp.cond();
-        auto loc = innerOp.getLoc();
-        auto createMuxOp = [&](ArrayRef<Value> values) -> MuxOp {
-          assert(values.size() == 2 &&
-                 "createMuxOp expects exactly two elements");
-          return rewriter.create<MuxOp>(loc, cond, values[0], values[1]);
-        };
-
-        return narrowOperationWidth(
-            innerOp, {innerOp.trueValue(), innerOp.falseValue()},
-            /* narrowTrailingBits= */ true, rewriter, createMuxOp);
-      })
-
-      // TODO: Cautiously investigate whether this optimization can be performed
-      // on other comb operators (shifts & divs), arrays, memory, or even
-      // sequential operations.
-      .Default([](Operation *op) { return false; });
-}
-
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   auto *inputOp = op.input().getDefiningOp();
 
@@ -644,12 +530,6 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (auto replicate = dyn_cast_or_null<ReplicateOp>(inputOp))
     if (extractFromReplicate(op, replicate, rewriter))
       return success();
-
-  // extract(f(a, b)) = f(extract(a), extract(b)). This is performed only when
-  // the number of bits to operation f can be reduced. See documentation of
-  // narrowExtractWidth for more information.
-  if (narrowExtractWidth(op, rewriter))
-    return success();
 
   // `extract(and(a, cst))` -> `extract(a)` when the relevant bits of the
   // and/or/xor are not modifying the extracted bits.
@@ -976,6 +856,10 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
+  // extracts only of and(...) -> and(extract()...)
+  if (narrowOperationWidth(op, true, rewriter))
+    return success();
+
   /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
   return failure();
 }
@@ -1116,6 +1000,196 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
   return true;
 }
 
+/// Identifies integer range checks and simplifies them to minimise comparisons.
+///
+/// In an 'or' operation, tests of a variable belonging to a set of disjoint
+/// intervals are identified and merged whenever possible. 3 distinct patterns
+/// are considered to identify the intervals:
+///
+///   - icmp(ult, x, n),  constrains x < n
+///   - icmp(eq, x, n), constrains x = n
+///   - and(icmp(ugt, x, n), icmp(ult, x, m)) constrains n < x < m
+///
+/// For an individual value x, all the comparisons are collected and new
+/// comparisons are inserted to represent the intervals with fewer operations.
+///
+/// If a sequence of equality checks or(x == n, x == n + 1, ...) is detected,
+/// an interval is emitted only when at least 3 equality checks are folded into
+/// two unsigned comparisons.
+///
+/// All constants and operations operate in unsigned mode.
+///
+static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
+
+  // Wrapper around an operand representing an interval.
+  struct Interval {
+    /// Index of the input from which the check was extracted.
+    unsigned index;
+    /// Inclusive lower bound.
+    APInt lowerBound;
+    /// Inclusive upper bound.
+    APInt upperBound;
+
+    /// Returns true if this is an equality check.
+    bool isEqCheck() const { return lowerBound == upperBound; }
+  };
+
+  // Identify all the relevant patterns among the inputs,
+  // mark all others to be retained unchanged.
+  auto inputs = op.inputs();
+  llvm::SmallBitVector keptOperands(inputs.size());
+  DenseMap<Value, SmallVector<Interval>> argChecks;
+
+  for (unsigned i = 0, n = inputs.size(); i < n; ++i) {
+    auto input = inputs[i];
+
+    // Find bound checks: and(x > n, x < m)
+    auto andOp = input.getDefiningOp<AndOp>();
+    if (andOp && andOp.inputs().size() == 2) {
+      ICmpOp lhsOp = andOp.inputs()[0].getDefiningOp<ICmpOp>();
+      ICmpOp rhsOp = andOp.inputs()[1].getDefiningOp<ICmpOp>();
+
+      if (lhsOp && rhsOp && lhsOp.lhs() == rhsOp.lhs()) {
+        Value arg = lhsOp.lhs();
+
+        APInt lhsBound, rhsBound;
+        if (matchPattern(lhsOp.rhs(), m_RConstant(lhsBound)) &&
+            matchPattern(rhsOp.rhs(), m_RConstant(rhsBound))) {
+          ICmpPredicate lhsPred = lhsOp.predicate();
+          ICmpPredicate rhsPred = rhsOp.predicate();
+          // If the lower bound is all ones or the upper bound is all
+          // zeros, the interval is empty and the comparisons are eliminated
+          // through other canonicalisers.
+          if (lhsPred == ICmpPredicate::ugt && rhsPred == ICmpPredicate::ult) {
+            if (!lhsBound.isAllOnes() && !rhsBound.isZero()) {
+              argChecks[arg].emplace_back(
+                  Interval{i, lhsBound + 1, rhsBound - 1});
+            }
+            continue;
+          }
+          if (lhsPred == ICmpPredicate::ult && rhsPred == ICmpPredicate::ugt) {
+            if (!rhsBound.isAllOnes() && !lhsBound.isZero()) {
+              argChecks[arg].emplace_back(
+                  Interval{i, rhsBound + 1, lhsBound - 1});
+            }
+            continue;
+          }
+        }
+      }
+    }
+
+    if (auto cmpOp = input.getDefiningOp<ICmpOp>()) {
+      APInt v;
+      if (matchPattern(cmpOp.rhs(), m_RConstant(v))) {
+        // Find equality tests: x == n
+        if (cmpOp.predicate() == ICmpPredicate::eq) {
+          argChecks[cmpOp.lhs()].emplace_back(Interval{i, v, v});
+          continue;
+        }
+        // Find upper bound tests: x < n
+        if (cmpOp.predicate() == ICmpPredicate::ult) {
+          if (!v.isZero()) {
+            argChecks[cmpOp.lhs()].emplace_back(
+                Interval{i, APInt::getZero(v.getBitWidth()), v - 1});
+          }
+          continue;
+        }
+      }
+    }
+
+    keptOperands[i] = true;
+  }
+
+  // For each value, try to compress the associated checks.
+  llvm::SmallVector<Value> newOperands;
+  for (auto &[arg, checks] : argChecks) {
+    // Order the checks by their lower bounds.
+    std::stable_sort(checks.begin(), checks.end(), [&](auto &lhs, auto &rhs) {
+      return lhs.lowerBound.ult(rhs.lowerBound);
+    });
+
+    // Find sequences of overlapping checks and compress them.
+    for (auto *it = checks.begin(); it != checks.end();) {
+      auto *begin = it++;
+
+      auto lowerBound = begin->lowerBound;
+      APInt upperBound = begin->upperBound;
+      while (it != checks.end()) {
+        if (!upperBound.isAllOnes() && !it->lowerBound.ule(upperBound + 1))
+          break;
+
+        APInt itBound = it->upperBound;
+        if (itBound.ugt(upperBound))
+          upperBound = itBound;
+        ++it;
+      }
+
+      // If there is no overlap or the range consists of only two
+      // consecutive numbers, do not create a new range.
+      size_t n = std::distance(begin, it);
+      if (n == 1 ||
+          (n == 2 && begin->isEqCheck() && std::next(begin)->isEqCheck())) {
+        while (begin != it) {
+          keptOperands[begin->index] = true;
+          ++begin;
+        }
+        continue;
+      }
+
+      // Fuse the locations of all the operands.
+      llvm::SmallVector<Location> locations;
+      for (auto *op = begin; op != it; ++op)
+        locations.push_back(inputs[op->index].getLoc());
+
+      LocationAttr loc = rewriter.getFusedLoc(locations);
+
+      // Build the check for the upper bound.
+      Value upperBoundCheck;
+      if (!upperBound.isAllOnes()) {
+        upperBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ult, arg,
+            rewriter.create<hw::ConstantOp>(loc, upperBound + 1));
+      }
+
+      Value lowerBoundCheck;
+      if (!lowerBound.isZero()) {
+        // Build the check for the lower bound and unify with and.
+        lowerBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ugt, arg,
+            rewriter.create<hw::ConstantOp>(loc, lowerBound - 1));
+      }
+
+      if (lowerBoundCheck && upperBoundCheck)
+        newOperands.push_back(
+            rewriter.create<AndOp>(loc, lowerBoundCheck, upperBoundCheck));
+      else if (lowerBoundCheck)
+        newOperands.push_back(lowerBoundCheck);
+      else if (upperBoundCheck)
+        newOperands.push_back(upperBoundCheck);
+    }
+  }
+
+  if (newOperands.empty() && inputs.size() == keptOperands.count())
+    return false;
+
+  // Build a new operation, preserving unchanged inputs and
+  // adding the new simplified range checks.
+  SmallVector<Value> newInputs;
+  for (unsigned i = 0, n = inputs.size(); i < n; ++i)
+    if (keptOperands[i])
+      newInputs.push_back(inputs[i]);
+
+  for (auto &&op : newOperands)
+    newInputs.push_back(op);
+
+  if (newInputs.size() == 1)
+    rewriter.replaceOp(op, newInputs[0]);
+  else
+    rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newInputs);
+
+  return true;
+}
+
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -1169,6 +1243,16 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
           if (canonicalizeOrOfConcatsWithCstOperands(op, i, j, rewriter))
             return success();
   }
+
+  // or(eq(x, n), eq(x, n + 1), ...) -> or(and(n <= x, x <= n + ...), ...)
+  // or(and(a < x, x < b), and(c < x, x < d)) -> or(and(a <= x, x < c)) if c < b
+  // or(and(a < x, x < b), x = b) -> or(and(a < x, x < b + 1))
+  if (tryMergeRanges(op, rewriter))
+    return success();
+
+  // extracts only of or(...) -> or(extract()...)
+  if (narrowOperationWidth(op, true, rewriter))
+    return success();
 
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
   return failure();
@@ -1282,6 +1366,10 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
+  // extracts only of xor(...) -> xor(extract()...)
+  if (narrowOperationWidth(op, true, rewriter))
+    return success();
+
   return failure();
 }
 
@@ -1320,6 +1408,10 @@ LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
     rewriter.replaceOpWithNewOp<AddOp>(op, op.lhs(), negCst);
     return success();
   }
+
+  // extracts only of sub(...) -> sub(extract()...)
+  if (narrowOperationWidth(op, false, rewriter))
+    return success();
 
   return failure();
 }
@@ -1410,6 +1502,10 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
+  // extracts only of add(...) -> add(extract()...)
+  if (narrowOperationWidth(op, false, rewriter))
+    return success();
+
   return failure();
 }
 
@@ -1473,6 +1569,10 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
 
   // mul(a, mul(...)) -> mul(a, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
+    return success();
+
+  // extracts only of mul(...) -> mul(extract()...)
+  if (narrowOperationWidth(op, false, rewriter))
     return success();
 
   return failure();
@@ -2249,6 +2349,10 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       if (trueOp->getName() == falseOp->getName())
         if (foldCommonMuxOperation(op, trueOp, falseOp, rewriter))
           return success();
+
+  // extracts only of mux(...) -> mux(extract()...)
+  if (narrowOperationWidth(op, true, rewriter))
+    return success();
 
   return failure();
 }

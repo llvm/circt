@@ -104,7 +104,6 @@ circuit Qux:
 ; CHECK-NEXT:    sv.ifdef "SYNTHESIS" {
 ; CHECK-NEXT:    } else {
 ; CHECK-NEXT:      sv.ifdef "RANDOMIZE_MEM_INIT" {
-; CHECK-NEXT:        %[[RAND_0:.+]] = sv.reg sym @[[RAND_0_sym:[a-zA-Z0-9_]+]] : !hw.inout<i8>
 ; CHECK-NEXT:        sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
 ; CHECK-NEXT:      }
 ; CHECK-NEXT:      sv.ifdef "RANDOMIZE_REG_INIT" {
@@ -113,11 +112,8 @@ circuit Qux:
 ; CHECK-NEXT:      sv.initial {
 ; CHECK-NEXT:        sv.verbatim "`INIT_RANDOM_PROLOG_"
 ; CHECK-NEXT:        sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
-; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {`RANDOM}[7:0];"
-; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[RAND_0_sym]]>]}
 ; CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 16; [[INITVAR]] = [[INITVAR]] + 1)\0A  Memory[[[INITVAR]]]
-; CHECK-SAME{LITERAL}  = {{0}};"
-; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[RAND_0_sym]]>]}
+; CHECK-SAME{LITERAL}:  = {`RANDOM}[7:0];"
 ; CHECK-NEXT:        }
 ; CHECK-NEXT:        sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
 ; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {`RANDOM};"

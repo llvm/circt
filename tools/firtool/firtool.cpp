@@ -374,6 +374,15 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Parse the input.
   mlir::OwningOpRef<mlir::ModuleOp> module;
+
+  llvm::sys::TimePoint<> parseStartTime;
+  if (verbosePassExecutions) {
+    llvm::errs() << "[firtool] Running "
+                 << (inputFormat == InputFIRFile ? "fir" : "mlir")
+                 << " parser\n";
+    parseStartTime = llvm::sys::TimePoint<>::clock::now();
+  }
+
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
@@ -389,6 +398,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
   if (!module)
     return failure();
+
+  if (verbosePassExecutions) {
+    auto elpased = std::chrono::duration<double>(
+                       llvm::sys::TimePoint<>::clock::now() - parseStartTime) /
+                   std::chrono::seconds(1);
+    llvm::errs() << "[firtool] -- Done in " << llvm::format("%.3f", elpased)
+                 << " sec\n";
+  }
 
   // If the user asked for just a parse, stop here.
   if (outputFormat == OutputParseOnly) {
@@ -545,6 +562,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputIRVerilog) {
     PassManager exportPm(&context);
     exportPm.enableTiming(ts);
+    if (verbosePassExecutions)
+      exportPm.addInstrumentation(
+          std::make_unique<FirtoolPassInstrumentation>());
     // Legalize unsupported operations within the modules.
     exportPm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
@@ -694,7 +714,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return failure();
     }
-    auto error = llvm::sys::fs::create_directory(outputFilename);
+    auto error = llvm::sys::fs::create_directories(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
                    << "': " << error.message() << "\n";

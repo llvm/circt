@@ -10,17 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef DIALECT_FIRRTL_ANNOTATIONDETAILS_H
-#define DIALECT_FIRRTL_ANNOTATIONDETAILS_H
+#ifndef CIRCT_DIALECT_FIRRTL_ANNOTATIONDETAILS_H
+#define CIRCT_DIALECT_FIRRTL_ANNOTATIONDETAILS_H
 
 #include "circt/Support/LLVM.h"
 
 namespace circt {
 namespace firrtl {
-
-/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
-/// simply passes through as a string without any decoding.
-bool isOMIRStringEncodedPassthrough(StringRef type);
 
 //===----------------------------------------------------------------------===//
 // Annotation Class Names
@@ -52,7 +48,13 @@ constexpr const char *internalKeyClass =
 constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 
+// SiFive specific Annotations
+constexpr const char *dutAnnoClass =
+    "sifive.enterprise.firrtl.MarkDUTAnnotation";
+constexpr const char *testbenchDirAnnoClass =
+    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 
-#endif // DIALECT_FIRRTL_ANNOTATIONDETAILS_H
+#endif // CIRCT_DIALECT_FIRRTL_ANNOTATIONDETAILS_H

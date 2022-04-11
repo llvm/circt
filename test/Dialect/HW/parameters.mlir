@@ -189,3 +189,24 @@ hw.module @CLog2Expression<param: i32>() {
   // CHECK-NEXT: %4 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
   %4 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.decl.ref<"param">>
 }
+
+// CHECK-LABEL: hw.module @parameterizedArrays<param: i32, N: i32>(
+hw.module @parameterizedArrays<param: i32, N: i32>
+// CHECK-SAME:%a: !hw.array<42xint<#hw.param.decl.ref<"param">>>,
+  (%a: !hw.array<42x!hw.int<#hw.param.decl.ref<"param">>>,
+// CHECK-SAME: %b: !hw.array<#hw.param.decl.ref<"N">xint<#hw.param.decl.ref<"param">>>) ->
+   %b: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) ->
+// CHECK-SAME: (c: !hw.array<#hw.param.decl.ref<"N">xint<#hw.param.decl.ref<"param">>>)
+   (c: !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>) {
+  hw.output %b : !hw.array<#hw.param.decl.ref<"N"> x !hw.int<#hw.param.decl.ref<"param">>>
+}
+
+// CHECK-LABEL: @parameterizedArraysInstance(
+hw.module @parameterizedArraysInstance
+  (%a: !hw.array<42xint<12>>, %b: !hw.array<24xint<12>>) {
+
+// CHECK:      %inst.c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
+// CHECK-SAME: (a: %a: !hw.array<42xi12>, b: %b: !hw.array<24xi12>) -> (c: !hw.array<24xi12>)
+  %c = hw.instance "inst" @parameterizedArrays<param: i32 = 12, N: i32 = 24>
+    (a: %a : !hw.array<42xint<12>>, b: %b : !hw.array<24xint<12>>) -> (c: !hw.array<24xint<12>>) {}
+}

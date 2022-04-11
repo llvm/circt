@@ -707,9 +707,9 @@ replaceDeclRefInExpr(Location loc,
     // Get the value from the provided parameters.
     auto it = parameters.find(paramRefAttr.getName().str());
     if (it == parameters.end())
-      return {emitError(loc)
-              << "Could not find parameter " << paramRefAttr.getName().str()
-              << " in the provided parameters for the expression!"};
+      return emitError(loc)
+             << "Could not find parameter " << paramRefAttr.getName().str()
+             << " in the provided parameters for the expression!";
     return it->second;
   }
   if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
@@ -736,8 +736,7 @@ FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
     auto paramDecl = param.cast<ParamDeclAttr>();
     auto paramValue = paramDecl.getValue().dyn_cast<IntegerAttr>();
     if (!paramValue)
-      return {emitError(loc)
-              << "Expected parameter value to be a known integer"};
+      return emitError(loc) << "Expected parameter value to be a known integer";
     parameterMap[paramDecl.getName().str()] = paramValue;
   }
 
@@ -779,6 +778,20 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
 
         return {IntegerType::get(type.getContext(),
                                  attrValue.getValue().getSExtValue())};
+      })
+      .Case<hw::ArrayType>([&](hw::ArrayType arrayType) -> FailureOr<Type> {
+        auto size =
+            evaluateParametricAttr(loc, parameters, arrayType.getSizeAttr());
+        if (failed(size))
+          return failure();
+        auto elementType =
+            evaluateParametricType(loc, parameters, arrayType.getElementType());
+        if (failed(elementType))
+          return failure();
+        return hw::ArrayType::get(
+            arrayType.getContext(), elementType.getValue(),
+            IntegerAttr::get(IntegerType::get(type.getContext(), 64),
+                             size.getValue().getSExtValue()));
       })
       .Default([&](auto) { return type; });
 }

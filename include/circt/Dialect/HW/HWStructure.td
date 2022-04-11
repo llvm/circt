@@ -22,7 +22,9 @@ def isModuleSymbol : AttrConstraint<
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
-    HWOp<mnemonic, traits> {
+    HWOp<mnemonic, traits # [
+      DeclareOpInterfaceMethods<HWModuleLike>, FunctionOpInterface, Symbol,
+      OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
 
@@ -57,9 +59,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 }
 
 def HWModuleOp : HWModuleOpBase<"module",
-      [IsolatedFromAbove, FunctionOpInterface, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">,
-       OpAsmOpInterface]>{
+      [IsolatedFromAbove, RegionKindInterface,
+       SingleBlockImplicitTerminator<"OutputOp">]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -157,9 +158,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   let hasVerifier = 1;
 }
 
-def HWModuleExternOp : HWModuleOpBase<"module.extern",
-      [FunctionOpInterface, Symbol, OpAsmOpInterface,
-       HasParent<"mlir::ModuleOp">]> {
+def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
   let summary = "HW external Module";
   let description = [{
     The "hw.module.extern" operation represents an external reference to a
@@ -285,8 +284,7 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
 }
 
 def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
-      [IsolatedFromAbove, FunctionOpInterface, Symbol, OpAsmOpInterface,
-       HasParent<"mlir::ModuleOp">]> {
+      [IsolatedFromAbove]> {
   let summary = "HW Generated Module";
   let description = [{
     The "hw.module.generated" operation represents a reference to an external
@@ -377,7 +375,8 @@ def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
 
 def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
+        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<HWInstanceLike>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are

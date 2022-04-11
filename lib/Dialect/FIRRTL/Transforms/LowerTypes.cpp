@@ -431,7 +431,7 @@ bool TypeLoweringVisitor::isModuleAllowedToPreserveAggregate(
 
   if (isa<FExtModuleOp>(module))
     return false;
-  return !module.isPublic();
+  return !cast<hw::HWModuleLike>(*module).isPublic();
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {

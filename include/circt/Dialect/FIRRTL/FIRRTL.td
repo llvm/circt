@@ -23,6 +23,8 @@ include "mlir/IR/FunctionInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
 include "FIRRTLDialect.td"
 include "FIRRTLAttributes.td"
 include "FIRRTLTypes.td"

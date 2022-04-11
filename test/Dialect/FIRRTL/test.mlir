@@ -114,6 +114,13 @@ firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
   %2 = firrtl.dshlw %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<2>
 }
 
+// We allow implicit truncation of a register's reset value.
+// CHECK-LABEL: @RegResetTruncation
+firrtl.module @RegResetTruncation(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %value: !firrtl.bundle<a: uint<2>>, out %out: !firrtl.bundle<a: uint<1>>) {
+  %r2 = firrtl.regreset %clock, %reset, %value  : !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+  firrtl.connect %out, %r2 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+}
+
 // CHECK-LABEL: @TestNodeName
 firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
   // CHECK: %n1 = firrtl.node %in1 : !firrtl.uint<8>

@@ -34,33 +34,12 @@ std::string Time::toString() const {
 // Signal
 //===----------------------------------------------------------------------===//
 
-Signal::Signal(std::string name, std::string owner)
-    : name(name), owner(owner), size(0), value(nullptr) {}
-
-Signal::Signal(std::string name, std::string owner, uint8_t *value,
-               uint64_t size)
-    : name(name), owner(owner), size(size), value(value) {}
-
-bool Signal::operator==(const Signal &rhs) const {
-  if (owner != rhs.owner || name != rhs.name || size != rhs.size)
-    return false;
-  return std::memcmp(value.get(), rhs.value.get(), size);
-}
-
-bool Signal::operator<(const Signal &rhs) const {
-  if (owner < rhs.owner)
-    return true;
-  if (owner == rhs.owner && name < rhs.name)
-    return true;
-  return false;
-}
-
 std::string Signal::toHexString() const {
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
   for (int i = size - 1; i >= 0; --i) {
-    ss << format_hex_no_prefix(static_cast<int>(value.get()[i]), 2);
+    ss << format_hex_no_prefix(static_cast<int>(value[i]), 2);
   }
   return ret;
 }
@@ -68,7 +47,7 @@ std::string Signal::toHexString() const {
 std::string Signal::toHexString(unsigned elemIndex) const {
   assert(elements.size() > 0 && "the signal type has to be tuple or array!");
   auto elemSize = elements[elemIndex].second;
-  auto ptr = value.get() + elements[elemIndex].first;
+  auto *ptr = value + elements[elemIndex].first;
   std::string ret;
   raw_string_ostream ss(ret);
   ss << "0x";
@@ -263,15 +242,14 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
   auto &sig = signals[globalIdx];
 
   // Add pointer and size to global signal table entry.
-  sig.value = std::unique_ptr<uint8_t>(value);
-  sig.size = size;
+  sig.store(value, size);
 
   // Add the value pointer to the signal detail struct for each instance this
   // signal appears in.
-  for (auto inst : signals[globalIdx].triggers) {
+  for (auto inst : signals[globalIdx].getTriggeredInstanceIndices()) {
     for (auto &detail : instances[inst].sensitivityList) {
       if (detail.globalIndex == globalIdx) {
-        detail.value = sig.value.get();
+        detail.value = sig.getValue();
       }
     }
   }
@@ -279,14 +257,14 @@ int State::addSignalData(int index, std::string owner, uint8_t *value,
 }
 
 void State::addSignalElement(unsigned index, unsigned offset, unsigned size) {
-  signals[index].elements.push_back(std::make_pair(offset, size));
+  signals[index].pushElement(std::make_pair(offset, size));
 }
 
 void State::dumpSignal(llvm::raw_ostream &out, int index) {
   auto &sig = signals[index];
-  for (auto inst : sig.triggers) {
-    out << time.toString() << "  " << instances[inst].path << "/" << sig.name
-        << "  " << sig.toHexString() << "\n";
+  for (auto inst : sig.getTriggeredInstanceIndices()) {
+    out << time.toString() << "  " << instances[inst].path << "/"
+        << sig.getName() << "  " << sig.toHexString() << "\n";
   }
 }
 
@@ -308,8 +286,9 @@ void State::dumpLayout() {
 void State::dumpSignalTriggers() {
   llvm::errs() << "::------------- Signal information -------------::\n";
   for (size_t i = 0, e = signals.size(); i < e; ++i) {
-    llvm::errs() << signals[i].owner << "/" << signals[i].name << " triggers: ";
-    for (auto trig : signals[i].triggers) {
+    llvm::errs() << signals[i].getOwner() << "/" << signals[i].getName()
+                 << " triggers: ";
+    for (auto trig : signals[i].getTriggeredInstanceIndices()) {
       llvm::errs() << trig << " ";
     }
     llvm::errs() << "\n";

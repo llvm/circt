@@ -267,7 +267,7 @@ LogicalResult CircuitOp::verify() {
   }
 
   // Check that the main module is public.
-  if (!mainModule.isPublic()) {
+  if (!cast<hw::HWModuleLike>(*mainModule).isPublic()) {
     emitOpError("main module '" + main + "' must be public");
     return failure();
   }
@@ -1252,6 +1252,13 @@ InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
     ++newIdx;
   }
 
+  // Compy over "output_file" information so that this is not lost when ports
+  // are erased.
+  //
+  // TODO: Other attributes may need to be copied over.
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    newOp->setAttr("output_file", outputFile);
+
   return newOp;
 }
 
@@ -1428,6 +1435,8 @@ LogicalResult InstanceOp::verify() {
 
   return success();
 }
+
+StringRef InstanceOp::instanceName() { return name(); }
 
 void InstanceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
@@ -2007,11 +2016,6 @@ LogicalResult RegResetOp::verify() {
   if (!areTypesEquivalent(resetType, regType))
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
-
-  // Truncation on initialisation is banned.
-  if (!isTypeLarger(regType, resetType))
-    return emitError("register ")
-           << regType << " is not as wide as initialiser  " << resetType;
 
   return success();
 }
