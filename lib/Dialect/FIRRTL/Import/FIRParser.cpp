@@ -3852,70 +3852,68 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
-  // Create a scope to observe elapsed time.
-  {
-    auto parseAnnotationTimer = ts.nest("Parse annotations");
-    ArrayAttr annotations;
-    if (getConstants().options.rawAnnotations) {
-      SmallVector<Attribute> rawAnno;
-      // Deal with any inline annotations, if they exist.  These are processed
-      // first to place any annotations from an annotation file *after* the
-      // inline annotations.  While arbitrary, this makes the annotation file
-      // have "append" semantics.
-      if (!inlineAnnotations.empty())
-        if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
-                                 inlineAnnotations, rawAnno))
-          return failure();
+  auto parseAnnotationTimer = ts.nest("Parse annotations");
+  ArrayAttr annotations;
+  if (getConstants().options.rawAnnotations) {
+    SmallVector<Attribute> rawAnno;
+    // Deal with any inline annotations, if they exist.  These are processed
+    // first to place any annotations from an annotation file *after* the
+    // inline annotations.  While arbitrary, this makes the annotation file
+    // have "append" semantics.
+    if (!inlineAnnotations.empty())
+      if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                               inlineAnnotations, rawAnno))
+        return failure();
 
-      // Deal with the annotation file if one was specified
-      for (auto annotationsBuf : annotationsBufs)
-        if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
-                                 annotationsBuf->getBuffer(), rawAnno))
-          return failure();
+    // Deal with the annotation file if one was specified
+    for (auto annotationsBuf : annotationsBufs)
+      if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
+                               annotationsBuf->getBuffer(), rawAnno))
+        return failure();
 
-      if (!omirBufs.empty())
-        mlir::emitWarning(translateLocation(info.getFIRLoc()))
-            << "OMIR is not supported with the 'raw' annotation processing "
-               "right "
-               "now and will just be ignored";
+    if (!omirBufs.empty())
+      mlir::emitWarning(translateLocation(info.getFIRLoc()))
+          << "OMIR is not supported with the 'raw' annotation processing "
+             "right "
+             "now and will just be ignored";
 
-      // Get annotations associated with this circuit. These are either:
-      //   1. Annotations with no target (which we use "~" to identify)
-      //   2. Annotations targeting the circuit, e.g., "~Foo"
-      annotations = b.getArrayAttr(rawAnno);
+    // Get annotations associated with this circuit. These are either:
+    //   1. Annotations with no target (which we use "~" to identify)
+    //   2. Annotations targeting the circuit, e.g., "~Foo"
+    annotations = b.getArrayAttr(rawAnno);
 
-    } else {
+  } else {
 
-      // Deal with any inline annotations, if they exist.  These are processed
-      // first to place any annotations from an annotation file *after* the
-      // inline annotations.  While arbitrary, this makes the annotation file
-      // have "append" semantics.
-      if (!inlineAnnotations.empty())
-        if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                              inlineAnnotations, nlaNumber))
-          return failure();
+    // Deal with any inline annotations, if they exist.  These are processed
+    // first to place any annotations from an annotation file *after* the
+    // inline annotations.  While arbitrary, this makes the annotation file
+    // have "append" semantics.
+    if (!inlineAnnotations.empty())
+      if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
+                            inlineAnnotations, nlaNumber))
+        return failure();
 
-      // Deal with the annotation file if one was specified
-      for (auto annotationsBuf : annotationsBufs)
-        if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                              annotationsBuf->getBuffer(), nlaNumber))
-          return failure();
+    // Deal with the annotation file if one was specified
+    for (auto annotationsBuf : annotationsBufs)
+      if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
+                            annotationsBuf->getBuffer(), nlaNumber))
+        return failure();
 
-      // Process OMIR files as annotations with a class of
-      // "freechips.rocketchip.objectmodel.OMNode"
-      for (auto *omirBuf : omirBufs)
-        if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
-                       omirBuf->getBuffer(), nlaNumber))
-          return failure();
+    // Process OMIR files as annotations with a class of
+    // "freechips.rocketchip.objectmodel.OMNode"
+    for (auto *omirBuf : omirBufs)
+      if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
+                     omirBuf->getBuffer(), nlaNumber))
+        return failure();
 
-      // Get annotations associated with this circuit. These are either:
-      //   1. Annotations with no target (which we use "~" to identify)
-      //   2. Annotations targeting the circuit, e.g., "~Foo"
-      annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
-                                   getConstants().targetSet);
-    }
-    circuit->setAttr("annotations", annotations);
+    // Get annotations associated with this circuit. These are either:
+    //   1. Annotations with no target (which we use "~" to identify)
+    //   2. Annotations targeting the circuit, e.g., "~Foo"
+    annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
+                                 getConstants().targetSet);
   }
+  circuit->setAttr("annotations", annotations);
+  parseAnnotationTimer.stop();
 
   auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
