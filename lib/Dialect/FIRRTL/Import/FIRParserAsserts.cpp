@@ -434,13 +434,11 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   }
 
     // Handle the case of builtin Chisel assertions.
-    //
-    // These are historically emitted as non-concurrent assertions but we choose
-    // to treat them as concurrent.
   case VerifFlavor::ChiselAssert: {
-    builder.create<AssertOp>(
+    auto op = builder.create<AssertOp>(
         printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
         printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
+    op->setAttr("format", StringAttr::get(context, "ifElseFatal"));
     printOp.erase();
     break;
   }

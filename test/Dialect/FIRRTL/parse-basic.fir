@@ -981,6 +981,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed with value %d"(%value) : !firrtl.uint<42>
+    ; CHECK-SAME: format = "ifElseFatal"
     ; CHECK-SAME: isConcurrent = true
     ; CHECK-SAME: name = "chisel3_builtin"
 
@@ -989,6 +990,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message with value %d"(%value) : !firrtl.uint<42>
+    ; CHECK-SAME: format = "ifElseFatal"
     ; CHECK-SAME: isConcurrent = true
     ; CHECK-SAME: name = "chisel3_builtin"
 
@@ -1048,6 +1050,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello"
     ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello"
+    ; CHECK-SAME: format = "ifElseFatal"
     ; CHECK-SAME: name = "chisel3_builtin"
 
     when not_reset:
@@ -1059,6 +1062,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello outside reset"
     ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond2
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello outside reset"
+    ; CHECK-SAME: format = "ifElseFatal"
     ; CHECK-SAME: name = "chisel3_builtin"
     ; CHECK: }
 
