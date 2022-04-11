@@ -3852,14 +3852,13 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
-  auto parseAnnotationTimer = ts.nest("Parse annotations");
   ArrayAttr annotations;
   if (getConstants().options.rawAnnotations) {
     SmallVector<Attribute> rawAnno;
     // Deal with any inline annotations, if they exist.  These are processed
-    // first to place any annotations from an annotation file *after* the
-    // inline annotations.  While arbitrary, this makes the annotation file
-    // have "append" semantics.
+    // first to place any annotations from an annotation file *after* the inline
+    // annotations.  While arbitrary, this makes the annotation file have
+    // "append" semantics.
     if (!inlineAnnotations.empty())
       if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
                                inlineAnnotations, rawAnno))
@@ -3873,8 +3872,7 @@ ParseResult FIRCircuitParser::parseCircuit(
 
     if (!omirBufs.empty())
       mlir::emitWarning(translateLocation(info.getFIRLoc()))
-          << "OMIR is not supported with the 'raw' annotation processing "
-             "right "
+          << "OMIR is not supported with the 'raw' annotation processing right "
              "now and will just be ignored";
 
     // Get annotations associated with this circuit. These are either:
@@ -3885,9 +3883,9 @@ ParseResult FIRCircuitParser::parseCircuit(
   } else {
 
     // Deal with any inline annotations, if they exist.  These are processed
-    // first to place any annotations from an annotation file *after* the
-    // inline annotations.  While arbitrary, this makes the annotation file
-    // have "append" semantics.
+    // first to place any annotations from an annotation file *after* the inline
+    // annotations.  While arbitrary, this makes the annotation file have
+    // "append" semantics.
     if (!inlineAnnotations.empty())
       if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
                             inlineAnnotations, nlaNumber))
@@ -3915,6 +3913,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   circuit->setAttr("annotations", annotations);
   parseAnnotationTimer.stop();
 
+  // A timer to get execution time of module parsing.
   auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
 
@@ -4039,7 +4038,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
 
   // Make sure the parse module has no other structural problems detected by
   // the verifier.
-  auto timer = ts.nest("Verify circuit");
+  auto circuitVerificationTimer = ts.nest("Verify circuit");
   if (failed(verify(*module)))
     return {};
 
