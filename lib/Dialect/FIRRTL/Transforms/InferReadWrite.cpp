@@ -200,9 +200,9 @@ private:
   // Get the source value which is connected to the dst.
   Value getConnectSrc(Value dst) {
     for (auto *c : dst.getUsers())
-      if (isa<StrictConnectOp, ConnectOp>(c))
-        if (c->getOperand(0) == dst)
-          return c->getOperand(1);
+      if (auto connect = dyn_cast<FConnectLike>(c))
+        if (connect.dest() == dst)
+          return connect.src();
 
     return nullptr;
   }

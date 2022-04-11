@@ -89,10 +89,10 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // If the port has a single use, check the port is only connected to
         // invalid or constant
         Operation *op = arg.use_begin().getUser();
-        bool connectLike = isa<ConnectOp, StrictConnectOp>(op);
+        auto connectLike = dyn_cast<FConnectLike>(op);
         if (!connectLike)
           continue;
-        auto *srcOp = op->getOperand(1).getDefiningOp();
+        auto *srcOp = connectLike.src().getDefiningOp();
         if (!isa_and_nonnull<InvalidValueOp, ConstantOp>(srcOp))
           continue;
 
@@ -144,16 +144,14 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // Check that the input port is only written. Sometimes input ports are
         // used as temporary wires. In that case, we cannot erase connections.
         bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
-          if (auto connect = dyn_cast<ConnectOp>(op))
+          if (auto connect = dyn_cast<FConnectLike>(op))
             return connect.dest() == result;
-          if (auto strictconnect = dyn_cast<StrictConnectOp>(op))
-            return strictconnect.dest() == result;
           return false;
         });
 
         result.replaceUsesWithIf(wire, [&](OpOperand &op) -> bool {
           // Connects can be deleted directly.
-          if (onlyWritten && isa<ConnectOp, StrictConnectOp>(op.getOwner())) {
+          if (onlyWritten && isa<FConnectLike>(op.getOwner())) {
             op.getOwner()->erase();
             return false;
           }
