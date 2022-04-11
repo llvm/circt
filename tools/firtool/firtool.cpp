@@ -390,7 +390,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     options.rawAnnotations = newAnno;
     options.numAnnotationFiles = numAnnotationFiles;
     options.disableNamePreservation = disableNamePreservation;
-    module = importFIRFile(sourceMgr, &context, options);
+    module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
