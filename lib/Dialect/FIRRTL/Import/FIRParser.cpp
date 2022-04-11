@@ -3852,6 +3852,8 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
+  // A timer to get execution time of annotation parsing.
+  auto parseAnnotationTimer = ts.nest("Parse annotations");
   ArrayAttr annotations;
   if (getConstants().options.rawAnnotations) {
     SmallVector<Attribute> rawAnno;
