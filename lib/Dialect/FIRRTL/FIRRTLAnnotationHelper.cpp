@@ -453,14 +453,14 @@ firrtl::findLCAandSetPath(AnnoPathValue &srcTarget, AnnoPathValue &dstTarget,
                                  FModuleLike targetModule) -> LogicalResult {
     if (!instances.empty())
       return success();
-    auto instancePathsFromTop =
-        state.instancePathCache.getAbsolutePaths(targetModule);
+    auto instancePathsFromTop = state.instancePathCache.getAbsolutePaths(
+        cast<hw::HWModuleLike>(*targetModule));
     if (instancePathsFromTop.size() > 1)
       return targetModule->emitError("cannot handle multiple paths to target");
 
     // Get the path from top to dst
-    ArrayRef<InstanceOp> p = instancePathsFromTop.back();
-    instances.append(SmallVector<InstanceOp>(p.begin(), p.end()));
+    for (auto inst : instancePathsFromTop.back())
+      instances.push_back(cast<InstanceOp>(inst));
     return success();
   };
   if (initializeInstances(dstTarget.instances, dstModule).failed() ||

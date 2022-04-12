@@ -263,6 +263,46 @@ protected:
   llvm::SmallVector<InstanceGraphNode *> inferredTopLevelNodes;
 };
 
+/// An absolute instance path.
+using InstancePath = ArrayRef<HWInstanceLike>;
+
+template <typename T>
+inline static T &formatInstancePath(T &into, const InstancePath &path) {
+  into << "$root";
+  for (auto inst : path)
+    into << "/" << inst.instanceName() << ":" << inst.referencedModuleName();
+  return into;
+}
+
+template <typename T>
+static T &operator<<(T &os, const InstancePath &path) {
+  return formatInstancePath(os, path);
+}
+
+/// A data structure that caches and provides absolute paths to module instances
+/// in the IR.
+struct InstancePathCache {
+  /// The instance graph of the IR.
+  InstanceGraphBase &instanceGraph;
+
+  explicit InstancePathCache(InstanceGraphBase &instanceGraph)
+      : instanceGraph(instanceGraph) {}
+  ArrayRef<InstancePath> getAbsolutePaths(HWModuleLike op);
+
+  /// Replace an InstanceOp. This is required to keep the cache updated.
+  void replaceInstance(HWInstanceLike oldOp, HWInstanceLike newOp);
+
+private:
+  /// An allocator for individual instance paths and entire path lists.
+  llvm::BumpPtrAllocator allocator;
+
+  /// Cached absolute instance paths.
+  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
+
+  /// Append an instance to a path.
+  InstancePath appendInstance(InstancePath path, HWInstanceLike inst);
+};
+
 } // namespace hw
 } // namespace circt
 
