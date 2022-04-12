@@ -411,33 +411,13 @@ LogicalResult CircuitOp::verify() {
     return success();
   };
 
-  InnerRefList instanceSyms(getContext());
-  InnerRefList leafInnerSyms(getContext());
-  SmallVector<NonLocalAnchor> nlaList;
-
   for (auto &op : *getBody()) {
-    // Record all the NLAs.
-    if (auto nla = dyn_cast<NonLocalAnchor>(op))
-      nlaList.push_back(nla);
-    else if (auto mod = dyn_cast<FModuleOp>(op)) {
-      auto modName = mod.getNameAttr();
-      mod.walk([&](Operation *op) {
-        if (isa<InstanceOp>(op))
-          instanceSyms.insert(op, modName);
-        else
-          leafInnerSyms.insert(op, modName);
-      });
-      leafInnerSyms.insert(mod);
-    }
     // Verify external modules.
     if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-      leafInnerSyms.insert(extModule);
       if (verifyExtModule(extModule).failed())
         return failure();
     }
   }
-  leafInnerSyms.sort();
-  instanceSyms.sort();
 
   return success();
 }
