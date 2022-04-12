@@ -56,8 +56,9 @@ static bool treeIsTooBig(Value v, const LoweringOptions &options) {
     if (isSimpleReadOrPort(v))
       accum += 1;
     if (auto *op = v.getDefiningOp())
-      for (auto oper : op->getOperands())
-        wl.push_back(oper);
+      if (isVerilogExpression(op))
+        for (auto oper : op->getOperands())
+          wl.push_back(oper);
   }
   return accum > options.maximumNumberOfTermsPerExpression;
 }
