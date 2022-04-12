@@ -190,3 +190,19 @@ hw.module @merge_with_upper_bound(%arg: i4) -> (cond: i1) {
 
   hw.output %in_range : i1
 }
+
+// CHECK-LABEL: @merge_range_covers_all
+// CHECK-NEXT: [[CST:%.+]] = hw.constant true
+// CHECK-NEXT: hw.output [[CST]] : i1
+hw.module @merge_range_covers_all(%0: i2) -> (a:i1) {
+  %c-1_i2 = hw.constant -1 : i2
+  %c0_i2 = hw.constant 0 : i2
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %1 = comb.icmp eq %0, %c-2_i2  : i2
+  %2 = comb.icmp eq %0, %c0_i2 : i2
+  %4 = comb.icmp eq %0, %c-1_i2 : i2
+  %5 = comb.icmp eq %0, %c1_i2 : i2
+  %6 = comb.or %1, %2, %4, %5 : i1
+  hw.output %6: i1
+}
