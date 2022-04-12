@@ -1359,19 +1359,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-/// Verify the correctness of an InstanceOp.
-LogicalResult InstanceOp::verify() {
-
-  // Check that this instance is inside a module.
-  auto module = (*this)->getParentOfType<FModuleOp>();
-  if (!module) {
-    emitOpError("should be embedded in a 'firrtl.module'");
-    return failure();
-  }
-
-  return success();
-}
-
 StringRef InstanceOp::instanceName() { return name(); }
 
 void InstanceOp::print(OpAsmPrinter &p) {
@@ -1852,18 +1839,7 @@ FirMemory MemOp::getSummary() {
           continue;
         auto clockPort = a->getResult(0);
         for (auto *b : clockPort.getUsers()) {
-          if (auto connect = dyn_cast<ConnectOp>(b)) {
-            if (connect.dest() == clockPort) {
-              auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
-              if (result.second) {
-                writeClockIDs.push_back(numWritePorts);
-              } else {
-                writeClockIDs.push_back(result.first->second);
-              }
-            }
-          }
-          if (auto connect = dyn_cast<StrictConnectOp>(b)) {
+          if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
               auto result =
                   clockToLeader.insert({connect.src(), numWritePorts});
@@ -3515,7 +3491,7 @@ bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult
 NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
-  auto cnlaAttr = StringAttr::get(instOp.getContext(), "circt.nonlocal");
+  auto cnlaAttr = StringAttr::get(getContext(), "circt.nonlocal");
 
   auto hasNonLocal = [&](InstanceOp instOp) {
     auto annos = AnnotationSet(instOp);

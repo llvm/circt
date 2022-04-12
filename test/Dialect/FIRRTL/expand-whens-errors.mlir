@@ -5,7 +5,7 @@
 // all errors in a module at once.
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.uint<1>, in %p : !firrtl.uint<1>, in %in0 : !firrtl.bundle<a  flip: uint<1>>, out %out0 : !firrtl.uint<2>, out %out1 : !firrtl.bundle<a flip: uint<1>>) {
-  // expected-error @-1 {{sink "in0.a" not fully initialized}}
+  // expected-error @-1 {{port "in0.a" not fully initialized in module "CheckInitialization"}}
 }
 }
 
@@ -91,7 +91,7 @@ firrtl.module @complex(in %p : !firrtl.uint<1>, in %q : !firrtl.uint<1>) {
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(out %out : !firrtl.vector<uint<1>, 1>) {
-  // expected-error @-1 {{sink "out[0]" not fully initialized}}
+  // expected-error @-1 {{port "out[0]" not fully initialized in module "CheckInitialization"}}
 }
 }
 
@@ -108,7 +108,7 @@ firrtl.module @CheckInitialization() {
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.vector<uint<1>, 2>) {
-  // expected-error @-1 {{sink "out[1]" not fully initialized}}
+  // expected-error @-1 {{port "out[1]" not fully initialized in module "CheckInitialization"}}
   %0 = firrtl.subindex %out[0] : !firrtl.vector<uint<1>, 2>
   firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -118,7 +118,7 @@ firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.vector<vector<uint<1>, 1>, 1>) {
-  // expected-error @-1 {{sink "out[0][0]" not fully initialized}}
+  // expected-error @-1 {{port "out[0][0]" not fully initialized in module "CheckInitialization"}}
 }
 }
 
@@ -126,6 +126,6 @@ firrtl.module @CheckInitialization(in %in : !firrtl.uint<1>, out %out : !firrtl.
 
 firrtl.circuit "CheckInitialization" {
 firrtl.module @CheckInitialization(in %p : !firrtl.uint<1>, out %out: !firrtl.vector<bundle<a:uint<1>, b:uint<1>>, 1>) {
-  // expected-error @-1 {{sink "out[0].a" not fully initialized}}
+  // expected-error @-1 {{port "out[0].a" not fully initialized in module "CheckInitialization"}}
 }
 }

@@ -265,3 +265,14 @@ def FModuleLike : OpInterface<"FModuleLike"> {
   }];
 }
 
+def FConnectLike : OpInterface<"FConnectLike"> {
+  let cppNamespace = "circt::firrtl";
+  let description = "Provide common connection information.";
+
+  let methods = [
+    InterfaceMethod<"Return a destination of connection.",
+    "Value", "dest", (ins)>,
+    InterfaceMethod<"Return a source of connection.",
+    "Value", "src", (ins)>,
+  ];
+}
