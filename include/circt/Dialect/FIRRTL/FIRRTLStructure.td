@@ -145,7 +145,9 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 }
 
 def NonLocalAnchor : FIRRTLOp<"nla",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">]> {
+      [IsolatedFromAbove, Symbol, 
+       DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+       HasParent<"CircuitOp">]> {
   let summary = "Anchor for non-local annotations";
   let description = [{
     The "firrtl.nla" operation represents a common point for non-local (path)

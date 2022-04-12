@@ -638,8 +638,8 @@ firrtl.module @AnnotationSplit0() {
 // above in that the annotation does not become a regular local annotation.
 // CHECK-LABEL: firrtl.circuit "AnnotationSplit1"
 firrtl.circuit "AnnotationSplit1" {
-firrtl.nla @nla_5560 [#hw.innerNameRef<@AnnotationSplit::@bar0>, #hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
-firrtl.nla @nla_5561 [#hw.innerNameRef<@AnnotationSplit::@bar1>, #hw.innerNameRef<@Bar1::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.nla @nla_5560 [#hw.innerNameRef<@AnnotationSplit1::@bar0>, #hw.innerNameRef<@Bar0::@leaf>, #hw.innerNameRef<@Leaf::@w>]
+firrtl.nla @nla_5561 [#hw.innerNameRef<@AnnotationSplit1::@bar1>, #hw.innerNameRef<@Bar1::@leaf>, #hw.innerNameRef<@Leaf::@w>]
 firrtl.module @Leaf() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %w = firrtl.wire sym @w {annotations = [
     {circt.nonlocal = @nla_5560, class = "test0"},

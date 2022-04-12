@@ -204,6 +204,41 @@ void getAsmBlockArgumentNamesImpl(Operation *op, mlir::Region &region,
   }
 }
 
+static InstanceOp getInstance(FModuleOp mod, StringAttr name) {
+  for (auto i : mod.getOps<InstanceOp>())
+    if (i.inner_symAttr() == name)
+      return i;
+  return {};
+}
+
+static InstanceOp getInstance(mlir::SymbolTable &symtbl,
+                              hw::InnerRefAttr name) {
+  auto mod = symtbl.lookup<FModuleOp>(name.getModule());
+  if (!mod)
+    return {};
+  return getInstance(mod, name.getName());
+}
+
+static bool hasPortNamed(FModuleLike op, StringAttr name) {
+  return llvm::any_of(op.getPortSymbols(), [name](Attribute pname) {
+    return pname.cast<StringAttr>() == name;
+  });
+}
+
+static bool hasValNamed(FModuleLike op, StringAttr name) {
+  bool retval = false;
+  op.walk([name, &retval](Operation *op) {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr == name) {
+      retval = true;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+    ;
+  });
+  return retval;
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
@@ -403,105 +438,6 @@ LogicalResult CircuitOp::verify() {
   }
   leafInnerSyms.sort();
   instanceSyms.sort();
-
-  // Verify the NonLocalAnchor.
-  // 1. Iterate over the namepath.
-  // 2. The namepath should be a valid instance path, specified either on a
-  // module or a declaration inside a module.
-  // 3. Each element in the namepath is an InnerRefAttr except possibly the
-  // last element.
-  // 4. Make sure that the InnerRefAttr is legal, by verifying the module name
-  // and the corresponding inner_sym on the instance.
-  // 5. Make sure that the instance path is legal, by verifying the sequence of
-  // instance and the expected module occurs as the next element in the path.
-  // 6. The last element of the namepath, can be an InnerRefAttr on either a
-  // module port or a declaration inside the module.
-  // 7. The last element of the namepath can also be a module symbol.
-  auto hasNonLocal = [&](const AnnotationSet &annos, StringAttr nlaName) {
-    for (auto anno : annos)
-      if (auto nlaRef = anno.getMember("circt.nonlocal"))
-        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == nlaName)
-          return true;
-    return false;
-  };
-  for (NonLocalAnchor nla : nlaList) {
-    auto namepath = nla.namepath();
-    StringAttr nlaName = nla.sym_nameAttr();
-    if (namepath.size() <= 1)
-      return nla.emitOpError()
-             << "the instance path cannot be empty/single element, it "
-                "must specify an instance path.";
-
-    StringAttr expectedModuleName = {};
-    for (unsigned i = 0, s = namepath.size() - 1; i < s; ++i) {
-      hw::InnerRefAttr innerRef = namepath[i].dyn_cast<hw::InnerRefAttr>();
-      if (!innerRef)
-        return nla.emitOpError()
-               << "the instance path can only contain inner sym reference"
-               << ", only the leaf can refer to a module symbol";
-
-      if (expectedModuleName && expectedModuleName != innerRef.getModule())
-        return nla.emitOpError()
-               << "instance path is incorrect. Expected module: "
-               << expectedModuleName
-               << " instead found: " << innerRef.getModule();
-      InstanceOp instOp =
-          dyn_cast_or_null<InstanceOp>(instanceSyms.getOpIfExists(innerRef));
-      if (!instOp)
-        return nla.emitOpError()
-               << " module: " << innerRef.getModule()
-               << " does not contain any instance with symbol: "
-               << innerRef.getName();
-      expectedModuleName = instOp.moduleNameAttr().getAttr();
-      bool instFound = hasNonLocal(AnnotationSet(instOp), nlaName);
-      if (!instFound) {
-        auto diag = nla.emitOpError()
-                    << " instance with symbol: " << innerRef
-                    << " does not contain a reference to the NonLocalAnchor";
-        diag.attachNote(instOp.getLoc()) << "the instance was defined here";
-        return failure();
-      }
-    }
-    // The instance path has been verified. Now verify the last element.
-    auto leafRef = namepath[namepath.size() - 1];
-    bool leafFound = false;
-    if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-      auto *rec = leafInnerSyms.getRecordIfExists(innerRef);
-      if (!rec)
-        return nla.emitOpError()
-               << " operation with symbol: " << innerRef << " was not found ";
-      if (expectedModuleName != innerRef.getModule())
-        return nla.emitOpError()
-               << "instance path is incorrect. Expected module: "
-               << expectedModuleName
-               << " instead found: " << innerRef.getModule();
-
-      if (auto mod = dyn_cast<FModuleLike>(rec->op)) {
-        leafFound =
-            hasNonLocal(AnnotationSet::forPort(mod, rec->portIdx), nlaName);
-      } else if (rec->op) {
-        leafFound = hasNonLocal(AnnotationSet(rec->op), nlaName);
-        if (auto mem = dyn_cast<MemOp>(rec->op)) {
-          for (unsigned i = 0, e = mem.getNumResults(); !leafFound && i < e;
-               ++i)
-            leafFound = hasNonLocal(AnnotationSet::forPort(mem, i), nlaName);
-        }
-      }
-      if (!leafFound) {
-        auto diag = nla.emitOpError()
-                    << " operation with symbol: " << innerRef
-                    << " does not contain a reference to the NonLocalAnchor";
-        return diag.attachNote(rec->op->getLoc())
-               << "the symbol was defined here";
-      }
-    } else if (expectedModuleName !=
-               leafRef.cast<FlatSymbolRefAttr>().getAttr())
-      // This is the case when the nla is applied to a module.
-      return nla.emitOpError()
-             << "instance path is incorrect. Expected module: "
-             << expectedModuleName << " instead found: "
-             << leafRef.cast<FlatSymbolRefAttr>().getAttr();
-  }
 
   return success();
 }
@@ -3563,6 +3499,89 @@ bool NonLocalAnchor::isModule() { return !ref(); }
 /// Returns true if this NLA targets something inside a module (as opposed
 /// to a module or an instance of a module);
 bool NonLocalAnchor::isComponent() { return (bool)ref(); }
+
+// Verify the NonLocalAnchor.
+// 1. Iterate over the namepath.
+// 2. The namepath should be a valid instance path, specified either on a
+// module or a declaration inside a module.
+// 3. Each element in the namepath is an InnerRefAttr except possibly the
+// last element.
+// 4. Make sure that the InnerRefAttr is legal, by verifying the module name
+// and the corresponding inner_sym on the instance.
+// 5. Make sure that the instance path is legal, by verifying the sequence of
+// instance and the expected module occurs as the next element in the path.
+// 6. The last element of the namepath, can be an InnerRefAttr on either a
+// module port or a declaration inside the module.
+// 7. The last element of the namepath can also be a module symbol.
+LogicalResult
+NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
+
+  auto hasNonLocal = [&](InstanceOp instOp) {
+    auto annos = AnnotationSet(instOp);
+    for (auto anno : annos)
+      if (auto nlaRef = anno.getMember("circt.nonlocal"))
+        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == sym_nameAttr())
+          return true;
+    return false;
+  };
+
+  Operation *op = *this;
+  CircuitOp cop = op->getParentOfType<CircuitOp>();
+  auto &symtbl = symtblC.getSymbolTable(cop);
+  if (namepath().size() <= 1)
+    return emitOpError()
+           << "the instance path cannot be empty/single element, it "
+              "must specify an instance path.";
+
+  StringAttr expectedModuleName = {};
+  for (unsigned i = 0, s = namepath().size() - 1; i < s; ++i) {
+    hw::InnerRefAttr innerRef = namepath()[i].dyn_cast<hw::InnerRefAttr>();
+    if (!innerRef)
+      return emitOpError()
+             << "the instance path can only contain inner sym reference"
+             << ", only the leaf can refer to a module symbol";
+
+    if (expectedModuleName && expectedModuleName != innerRef.getModule())
+      return emitOpError() << "instance path is incorrect. Expected module: "
+                           << expectedModuleName
+                           << " instead found: " << innerRef.getModule();
+    InstanceOp instOp = getInstance(symtbl, innerRef);
+    if (!instOp)
+      return emitOpError() << " module: " << innerRef.getModule()
+                           << " does not contain any instance with symbol: "
+                           << innerRef.getName();
+    if (!hasNonLocal(instOp)) {
+      auto diag = emitOpError()
+                  << " instance with symbol: " << innerRef
+                  << " does not contain a reference to the NonLocalAnchor";
+      diag.attachNote(instOp.getLoc()) << "the instance was defined here";
+      return failure();
+    }
+    expectedModuleName = instOp.moduleNameAttr().getAttr();
+  }
+  // The instance path has been verified. Now verify the last element.
+  auto leafRef = namepath()[namepath().size() - 1];
+  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
+    auto fmod = symtbl.lookup(innerRef.getModule());
+    auto mod = cast<FModuleLike>(fmod);
+    if (!hasPortNamed(mod, innerRef.getName()) &&
+        !hasValNamed(mod, innerRef.getName())) {
+      return emitOpError() << " operation with symbol: " << innerRef
+                           << " was not found ";
+    }
+    if (expectedModuleName && expectedModuleName != innerRef.getModule())
+      return emitOpError() << "instance path is incorrect. Expected module: "
+                           << expectedModuleName
+                           << " instead found: " << innerRef.getModule();
+  } else if (expectedModuleName !=
+             leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
+    // This is the case when the nla is applied to a module.
+    return emitOpError() << "instance path is incorrect. Expected module: "
+                         << expectedModuleName << " instead found: "
+                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+  }
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // Various namers.
