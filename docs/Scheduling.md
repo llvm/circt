@@ -73,7 +73,7 @@ for (auto &op : block) {
 }
 ```
 
-Note that we do not have to tell the instance about the *dependences* between the operations because the problem model automatically includes the SSA def-use-edges maintained by MLIR.
+Note that we do not have to tell the instance about the *dependences* between the operations in this simple example because the problem model automatically includes the SSA def-use-edges maintained by MLIR. However, we often have to consider additional dependences that are not represented by value flow, such as memory dependences. For these situations, so-called [auxiliary](#components) dependences between operations are inserted explicitly into the problem: `prob.insertDependence(srcOp, destOp)`.
 
 ### Scheduling
 
