@@ -482,10 +482,9 @@ LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
 //===----------------------------------------------------------------------===//
 
 // Implement this operation for the BranchOpInterface
-Optional<MutableOperandRange>
-llhd::WaitOp::getMutableSuccessorOperands(unsigned index) {
+SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
   assert(index == 0 && "invalid successor index");
-  return destOpsMutable();
+  return SuccessorOperands(destOpsMutable());
 }
 
 //===----------------------------------------------------------------------===//
