@@ -54,7 +54,7 @@ static bool treeIsTooBig(Value v, const LoweringOptions &options) {
     v = wl.back();
     wl.pop_back();
     accum += 1;
-    if (auto* op = v.getDefiningOp())
+    if (auto *op = v.getDefiningOp())
       for (auto oper : op->getOperands())
         wl.push_back(oper);
   }
@@ -69,8 +69,7 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
 
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.
-  return isVerilogExpression(&op) &&
-         treeIsTooBig(op.getResult(0), options) &&
+  return isVerilogExpression(&op) && treeIsTooBig(op.getResult(0), options) &&
          op.getNumResults() == 1 &&
          llvm::none_of(op.getResult(0).getUsers(), isAssign);
 }
@@ -487,7 +486,6 @@ void ExportVerilog::prepareHWModule(Block &block,
       lowerAlwaysInlineOperation(&op);
       continue;
     }
-
 
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple
