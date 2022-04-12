@@ -37,13 +37,7 @@ static bool isInvalid(Value val) {
   // this pass runs after `ExpandWhens`.
   auto updateVal = [&](Value thisVal) {
     for (auto *user : thisVal.getUsers()) {
-      if (auto connect = dyn_cast<ConnectOp>(user)) {
-        if (connect.dest() != val)
-          continue;
-        val = connect.src();
-        return;
-      }
-      if (auto connect = dyn_cast<StrictConnectOp>(user)) {
+      if (auto connect = dyn_cast<FConnectLike>(user)) {
         if (connect.dest() != val)
           continue;
         val = connect.src();

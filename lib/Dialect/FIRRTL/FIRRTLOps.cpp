@@ -1903,18 +1903,7 @@ FirMemory MemOp::getSummary() {
           continue;
         auto clockPort = a->getResult(0);
         for (auto *b : clockPort.getUsers()) {
-          if (auto connect = dyn_cast<ConnectOp>(b)) {
-            if (connect.dest() == clockPort) {
-              auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
-              if (result.second) {
-                writeClockIDs.push_back(numWritePorts);
-              } else {
-                writeClockIDs.push_back(result.first->second);
-              }
-            }
-          }
-          if (auto connect = dyn_cast<StrictConnectOp>(b)) {
+          if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
               auto result =
                   clockToLeader.insert({connect.src(), numWritePorts});

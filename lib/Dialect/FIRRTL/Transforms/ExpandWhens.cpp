@@ -126,17 +126,13 @@ public:
   /// Get the destination value from a connection.  This supports any operation
   /// which is capable of driving a value.
   static Value getDestinationValue(Operation *op) {
-    if (auto connect = dyn_cast<ConnectOp>(op))
-      return connect.dest();
-    return cast<StrictConnectOp>(op).dest();
+    return cast<FConnectLike>(op).dest();
   }
 
   /// Get the source value from a connection. This supports any operation which
   /// is capable of driving a value.
   static Value getConnectedValue(Operation *op) {
-    if (auto connect = dyn_cast<ConnectOp>(op))
-      return connect.src();
-    return cast<StrictConnectOp>(op).src();
+    return cast<FConnectLike>(op).src();
   }
 
   /// For every leaf field in the sink, record that it exists and should be
