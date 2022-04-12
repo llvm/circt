@@ -157,6 +157,8 @@ static void emitSchedule(Problem &prob, StringRef attrName,
 namespace {
 struct TestProblemPass
     : public PassWrapper<TestProblemPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-scheduling-problem"; }
   StringRef getDescription() const override {
@@ -194,6 +196,8 @@ void TestProblemPass::runOnOperation() {
 namespace {
 struct TestCyclicProblemPass
     : public PassWrapper<TestCyclicProblemPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestCyclicProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-cyclic-problem"; }
   StringRef getDescription() const override {
@@ -236,6 +240,8 @@ void TestCyclicProblemPass::runOnOperation() {
 namespace {
 struct TestChainingProblemPass
     : public PassWrapper<TestChainingProblemPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestChainingProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-chaining-problem"; }
   StringRef getDescription() const override {
@@ -278,6 +284,8 @@ namespace {
 struct TestSharedOperatorsProblemPass
     : public PassWrapper<TestSharedOperatorsProblemPass,
                          OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSharedOperatorsProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override {
     return "test-shared-operators-problem";
@@ -319,6 +327,8 @@ void TestSharedOperatorsProblemPass::runOnOperation() {
 namespace {
 struct TestModuloProblemPass
     : public PassWrapper<TestModuloProblemPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestModuloProblemPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-modulo-problem"; }
   StringRef getDescription() const override {
@@ -362,6 +372,8 @@ void TestModuloProblemPass::runOnOperation() {
 namespace {
 struct TestASAPSchedulerPass
     : public PassWrapper<TestASAPSchedulerPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestASAPSchedulerPass)
+
   void runOnOperation() override;
   StringRef getArgument() const override { return "test-asap-scheduler"; }
   StringRef getDescription() const override {
@@ -398,6 +410,8 @@ void TestASAPSchedulerPass::runOnOperation() {
 namespace {
 struct TestSimplexSchedulerPass
     : public PassWrapper<TestSimplexSchedulerPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSimplexSchedulerPass)
+
   TestSimplexSchedulerPass() = default;
   TestSimplexSchedulerPass(const TestSimplexSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
@@ -551,6 +565,8 @@ void TestSimplexSchedulerPass::runOnOperation() {
 namespace {
 struct TestLPSchedulerPass
     : public PassWrapper<TestLPSchedulerPass, OperationPass<FuncOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestLPSchedulerPass)
+
   TestLPSchedulerPass() = default;
   TestLPSchedulerPass(const TestLPSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
