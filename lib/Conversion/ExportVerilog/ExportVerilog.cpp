@@ -138,7 +138,7 @@ static bool isDuplicatableExpression(Operation *op) {
     return isDuplicatableNullaryExpression(op);
 
   // It is cheap to inline extract op.
-  if (isa<comb::ExtractOp>(op))
+  if (isa<comb::ExtractOp, hw::StructExtractOp>(op))
     return true;
 
   // We only inline array_get with a constant index.

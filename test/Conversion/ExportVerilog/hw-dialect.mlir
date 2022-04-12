@@ -658,6 +658,14 @@ hw.module @StructExtractExtract(%a: !hw.struct<b: i4>) -> (r: i2) {
   hw.output %1 : i2
 }
 
+// CHECK-LABEL: StrurctExtractInline
+hw.module @StrurctExtractInline(%a: !hw.struct<v: i1>) -> (b: i1, c: i1) {
+  %0 = hw.struct_extract %a["v"] : !hw.struct<v: i1>
+  // CHECK:      assign b = a.v;
+  // CHECK-NEXT: assign c = a.v;
+  hw.output %0, %0 : i1, i1
+}
+
 hw.module.extern @DifferentResultMod() -> (out1: i1, out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
