@@ -206,3 +206,41 @@ hw.module @merge_range_covers_all(%0: i2) -> (a:i1) {
   %6 = comb.or %1, %2, %4, %5 : i1
   hw.output %6: i1
 }
+
+// CHECK-LABEL: @merge_range_covers_all_with_extra_arg
+// CHECK-NEXT: [[CST:%.+]] = hw.constant true
+// CHECK-NEXT: hw.output [[CST]] : i1
+hw.module @merge_range_covers_all_with_extra_arg(%0: i2, %b: i1) -> (a:i1) {
+  %c-1_i2 = hw.constant -1 : i2
+  %c0_i2 = hw.constant 0 : i2
+  %c-2_i2 = hw.constant -2 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %1 = comb.icmp eq %0, %c-2_i2  : i2
+  %2 = comb.icmp eq %0, %c0_i2 : i2
+  %4 = comb.icmp eq %0, %c-1_i2 : i2
+  %5 = comb.icmp eq %0, %c1_i2 : i2
+  %6 = comb.or %1, %2, %4, %5, %b : i1
+  hw.output %6: i1
+}
+
+// CHECK-LABEL: @remove_overlap
+// CHECK-DAG: [[START:%.*]] = hw.constant 200 : i32
+// CHECK-DAG: [[END:%.*]] = hw.constant 100 : i32
+// CHECK-DAG: [[CHECK_START:%.*]] = comb.icmp ugt %arg, [[END]] : i32
+// CHECK-DAG: [[CHECK_END:%.*]] = comb.icmp ult %arg, [[START]] : i32
+// CHECK-DAG: [[RESULT:%.*]] = comb.and [[CHECK_START]], [[CHECK_END]] : i1
+// CHECK-DAG: hw.output [[RESULT]] : i1
+hw.module @remove_overlap(%arg: i32) -> (cond: i1) {
+  %start_a = hw.constant 100 : i32
+  %end_a = hw.constant 200 : i32
+  %check_start_a = comb.icmp ugt %arg, %start_a : i32
+  %check_end_a = comb.icmp ult %arg, %end_a : i32
+  %in_a = comb.and %check_start_a, %check_end_a : i1
+
+  %elem = hw.constant 150 : i32
+  %eq_elem = comb.icmp eq %arg, %elem : i32
+
+  %in_range = comb.or %in_a, %eq_elem : i1
+
+  hw.output %in_range : i1
+}

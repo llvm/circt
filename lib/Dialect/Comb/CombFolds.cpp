@@ -1101,7 +1101,9 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
   }
 
   // For each value, try to compress the associated checks.
-  llvm::SmallVector<Value> newOperands;
+  using RangeCheck = std::tuple<Location, Optional<APInt>, Optional<APInt>>;
+  llvm::DenseMap<Value, SmallVector<RangeCheck>> newChecks;
+  bool foldsToTrue = false;
   for (auto &[arg, checks] : argChecks) {
     // Order the checks by their lower bounds.
     std::stable_sort(checks.begin(), checks.end(), [&](auto &lhs, auto &rhs) {
@@ -1141,56 +1143,71 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
       for (auto *op = begin; op != it; ++op)
         locations.push_back(inputs[op->index].getLoc());
 
-      LocationAttr loc = rewriter.getFusedLoc(locations);
-
       // Build the check for the upper bound.
-      Value upperBoundCheck;
-      if (!upperBound.isAllOnes()) {
-        upperBoundCheck = rewriter.create<ICmpOp>(
-            loc, rewriter.getI1Type(), ICmpPredicate::ult, arg,
-            rewriter.create<hw::ConstantOp>(loc, upperBound + 1));
-      }
-
-      Value lowerBoundCheck;
-      if (!lowerBound.isZero()) {
-        // Build the check for the lower bound and unify with and.
-        lowerBoundCheck = rewriter.create<ICmpOp>(
-            loc, rewriter.getI1Type(), ICmpPredicate::ugt, arg,
-            rewriter.create<hw::ConstantOp>(loc, lowerBound - 1));
-      }
-
-      if (lowerBoundCheck && upperBoundCheck)
-        newOperands.push_back(
-            rewriter.create<AndOp>(loc, lowerBoundCheck, upperBoundCheck));
-      else if (lowerBoundCheck)
-        newOperands.push_back(lowerBoundCheck);
-      else if (upperBoundCheck)
-        newOperands.push_back(upperBoundCheck);
+      LocationAttr loc = rewriter.getFusedLoc(locations);
+      if (lowerBound.isZero() && upperBound.isAllOnes())
+        foldsToTrue = true;
+      else if (lowerBound.isZero())
+        newChecks[arg].emplace_back(loc, llvm::None, upperBound + 1);
+      else if (upperBound.isAllOnes())
+        newChecks[arg].emplace_back(loc, lowerBound - 1, llvm::None);
+      else
+        newChecks[arg].emplace_back(loc, lowerBound - 1, upperBound + 1);
     }
   }
 
-  if (newOperands.empty() && inputs.size() == keptOperands.count())
+  // If any of the arguments had checks exhaustively covering its
+  // range, fold the entire or op to true.
+  if (foldsToTrue) {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, rewriter.getI1Type(), true);
+    return true;
+  }
+
+  // Do not change the op if no checks were rewritten or no
+  // redundant conditions were eliminated.
+  if (newChecks.empty() && inputs.size() == keptOperands.count())
     return false;
 
-  // Build a new operation, preserving unchanged inputs and
-  // adding the new simplified range checks.
   SmallVector<Value> newInputs;
   for (unsigned i = 0, n = inputs.size(); i < n; ++i)
     if (keptOperands[i])
       newInputs.push_back(inputs[i]);
 
-  for (auto &&op : newOperands)
-    newInputs.push_back(op);
+  // Build range checks for all the checks on all arguments.
+  for (auto &[arg, checks] : newChecks) {
+    for (auto &[loc, lowerBound, upperBound] : checks) {
+      Value upperBoundCheck;
+      if (upperBound) {
+        upperBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ult, arg,
+            rewriter.create<hw::ConstantOp>(loc, *upperBound));
+      }
 
-  if (newInputs.empty()) {
-    // If newInputs is empty, the result is true since the interval covers all
-    // and nothing is kept to newInputs.
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, rewriter.getI1Type(), true);
-  } else if (newInputs.size() == 1)
+      Value lowerBoundCheck;
+      if (lowerBound) {
+        lowerBoundCheck = rewriter.create<ICmpOp>(
+            loc, rewriter.getI1Type(), ICmpPredicate::ugt, arg,
+            rewriter.create<hw::ConstantOp>(loc, *lowerBound));
+      }
+
+      if (lowerBoundCheck && upperBoundCheck)
+        newInputs.push_back(
+            rewriter.create<AndOp>(loc, lowerBoundCheck, upperBoundCheck));
+      else if (lowerBoundCheck)
+        newInputs.push_back(lowerBoundCheck);
+      else if (upperBoundCheck)
+        newInputs.push_back(upperBoundCheck);
+      else
+        llvm_unreachable("empty range");
+    }
+  }
+
+  if (newInputs.size() == 1) {
     rewriter.replaceOp(op, newInputs[0]);
-  else
+  } else {
+    assert(newInputs.size() > 1 && "OrOp expects at least two inputs");
     rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newInputs);
-
+  }
   return true;
 }
 
