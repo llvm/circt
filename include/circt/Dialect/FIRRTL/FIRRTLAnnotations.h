@@ -24,6 +24,7 @@ namespace firrtl {
 class AnnotationSetIterator;
 class FModuleLike;
 class MemOp;
+class InstanceOp;
 struct ModuleNamespace;
 class FIRRTLType;
 
