@@ -80,9 +80,9 @@ struct StructuralHasher {
 
   std::string hash(FModuleLike module) {
     update(&(*module));
-    auto hash = sha.final().str();
+    auto hash = sha.final();
     reset();
-    return hash;
+    return std::string((const char *)hash.data(), hash.size());
   }
 
 private:
