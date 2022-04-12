@@ -1182,7 +1182,11 @@ static bool tryMergeRanges(OrOp op, PatternRewriter &rewriter) {
   for (auto &&op : newOperands)
     newInputs.push_back(op);
 
-  if (newInputs.size() == 1)
+  if (newInputs.empty()) {
+    // If newInputs is empty, the result is true since the interval covers all
+    // and nothing is kept to newInputs.
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, rewriter.getI1Type(), true);
+  } else if (newInputs.size() == 1)
     rewriter.replaceOp(op, newInputs[0]);
   else
     rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newInputs);
