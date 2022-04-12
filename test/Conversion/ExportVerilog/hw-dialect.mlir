@@ -635,11 +635,17 @@ hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: 
 
 // CHECK-LABEL: module largeConstant
 hw.module @largeConstant(%a: i100000, %b: i16) -> (x: i100000, y: i16) {
-  // Large constant is broken out to its own localparam to avoid long line problems.
+  // Large constant is inlined on multiple lines.
 
-  // CHECK: localparam [99999:0] _tmp = 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
+  // CHECK: assign x = a + 100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000 +
+  // CHECK:               100000'h2CD76FE086B93CE2F768A00B22A00000000000;
   %c = hw.constant 1000000000000000000000000000000000000000000000 : i100000
-  // CHECK: assign x = a + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp;
   %1 = comb.add %a, %c, %c, %c, %c, %c, %c, %c, %c : i100000
 
   // Small constants are emitted inline.

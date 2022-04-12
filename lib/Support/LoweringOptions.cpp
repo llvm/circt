@@ -57,12 +57,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       }
     } else if (option == "explicitBitcastAddMul") {
       explicitBitcastAddMul = true;
-    } else if (option.startswith("maximumNumberOfTokensPerExpression=")) {
-      option = option.drop_front(strlen("maximumNumberOfTokensPerExpression="));
-      if (option.getAsInteger(10, maximumNumberOfTokensPerExpression)) {
-        errorHandler("expected integer source width");
-        maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
-      }
     } else if (option.startswith("maximumNumberOfTermsPerExpression=")) {
       option = option.drop_front(strlen("maximumNumberOfTermsPerExpression="));
       if (option.getAsInteger(10, maximumNumberOfTermsPerExpression)) {
@@ -74,9 +68,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // We continue parsing options after a failure.
     }
   }
-  if (maximumNumberOfTokensPerExpression < emittedLineLength)
-    errorHandler("maximumNumberOfTokensPerExpression must be equal or larger "
-                 "than emittedLineLength");
 }
 
 std::string LoweringOptions::toString() const {
@@ -97,9 +88,6 @@ std::string LoweringOptions::toString() const {
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
-  if (maximumNumberOfTokensPerExpression != DEFAULT_TOKEN_NUMBER)
-    options += "maximumNumberOfTokensPerExpression=" +
-               std::to_string(maximumNumberOfTokensPerExpression) + ',';
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
@@ -155,7 +143,6 @@ struct LoweringCLOptions {
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTokensPerExpression=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul"),
       llvm::cl::value_desc("option")};
 };
