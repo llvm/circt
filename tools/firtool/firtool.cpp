@@ -167,7 +167,7 @@ static cl::opt<bool>
 
 static cl::opt<bool>
     dedup("dedup", cl::desc("deduplicate structurally identical modules"),
-          cl::init(false));
+          cl::init(true));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
@@ -212,7 +212,7 @@ static cl::opt<bool> exportModuleHierarchy(
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
-                    cl::init(false));
+                    cl::init(true));
 static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
                              cl::init(false));
