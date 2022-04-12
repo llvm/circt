@@ -510,25 +510,7 @@ void ExportVerilog::prepareHWModule(Block &block,
       opIterator = Block::iterator(newOps.front());
       continue;
     }
-#if 0
-    // Non-trivial wires with multiple uses can be spilled
-    if (!op.hasOneUse() && !op.use_empty() && !isExpressionAlwaysInline(&op) && 
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        (op.getAttrs().empty() ||
-         (op.getAttrs().size() == 1 && op.hasAttr("sv.namehint")))) {
-      // If we're not in a procedural region, or we are, but we can hoist out of
-      // it, we are good to generate a wire.
-      if (!isProceduralRegion ||
-          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
-        lowerUsersToTemporaryWire(op);
-        if (isProceduralRegion) {
-          ++opIterator;
-          continue;
-        }
-    }
-    }
-#endif
+
     // If this expression is deemed worth spilling into a wire, do it here.
     if (shouldSpillWire(op, options)) {
       // If we're not in a procedural region, or we are, but we can hoist out of
