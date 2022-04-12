@@ -50,15 +50,16 @@ static bool treeIsTooBig(Value v, const LoweringOptions &options) {
   SmallVector<Value, 64> wl;
   wl.push_back(v);
   unsigned accum = 0;
-  while (!wl.empty() && accum < options.maximumNumberOfTermsPerExpression) {
+  while (!wl.empty() && accum <= options.maximumNumberOfTermsPerExpression) {
     v = wl.back();
     wl.pop_back();
-    accum += 1;
+    if (isSimpleReadOrPort(v))
+      accum += 1;
     if (auto *op = v.getDefiningOp())
       for (auto oper : op->getOperands())
         wl.push_back(oper);
   }
-  return accum >= options.maximumNumberOfTermsPerExpression;
+  return accum > options.maximumNumberOfTermsPerExpression;
 }
 
 // Check if the value is deemed worth spilling into a wire.
@@ -487,6 +488,26 @@ void ExportVerilog::prepareHWModule(Block &block,
       continue;
     }
 
+    // If this expression is deemed worth spilling into a wire, do it here.
+    if (shouldSpillWire(op, options)) {
+      // If we're not in a procedural region, or we are, but we can hoist out of
+      // it, we are good to generate a wire.
+      if (!isProceduralRegion ||
+          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
+
+        lowerUsersToTemporaryWire(op);
+
+        // If we're in a procedural region, we move on to the next op in the
+        // block. The expression splitting and canonicalization below will
+        // happen after we recurse back up. If we're not in a procedural region,
+        // the expression can continue being worked on.
+        if (isProceduralRegion) {
+          ++opIterator;
+          continue;
+        }
+      }
+    }
+
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple
     // statements.
@@ -507,26 +528,6 @@ void ExportVerilog::prepareHWModule(Block &block,
       // Make sure we revisit the newly inserted operations.
       opIterator = Block::iterator(newOps.front());
       continue;
-    }
-
-    // If this expression is deemed worth spilling into a wire, do it here.
-    if (shouldSpillWire(op, options)) {
-      // If we're not in a procedural region, or we are, but we can hoist out of
-      // it, we are good to generate a wire.
-      if (!isProceduralRegion ||
-          (isProceduralRegion && hoistNonSideEffectExpr(&op))) {
-
-        lowerUsersToTemporaryWire(op);
-
-        // If we're in a procedural region, we move on to the next op in the
-        // block. The expression splitting and canonicalization below will
-        // happen after we recurse back up. If we're not in a procedural region,
-        // the expression can continue being worked on.
-        if (isProceduralRegion) {
-          ++opIterator;
-          continue;
-        }
-      }
     }
 
     // Turn a + -cst  ==> a - cst

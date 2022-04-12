@@ -30,13 +30,16 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // LONG:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
 // LONG-NEXT:             + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LIMIT_SHORT:       assign b = a + a + a + a + a + a + a + a + a + a + a
+
+// LIMIT_SHORT:       wire [7:0] _GEN;
+// LIMIT_SHORT-NEXT:  wire [7:0] _GEN_0;
+// LIMIT_SHORT:       assign _GEN_0 = a + a + a + a + a + a + a + a + a + a + a
 // LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  assign _GEN = a + a + a + a + a + a + a + a + a + a + a
 // LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_SHORT-NEXT:                a;
+// LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  assign b = _GEN_0 + _GEN;
 
 // LIMIT_LONG:        assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
