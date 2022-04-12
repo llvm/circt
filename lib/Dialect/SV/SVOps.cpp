@@ -1413,10 +1413,19 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult BindOp::verify() {
-  auto inst = getReferencedInstance();
+LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto module = (*this)->getParentOfType<mlir::ModuleOp>();
+  auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
+      symbolTable.lookupSymbolIn(module, instance().getModule()));
+  if (!hwModule)
+    return emitError("Referenced module doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
+
+  auto inst = findInstanceSymbolInBlock<hw::InstanceOp>(
+      instance().getName(), hwModule.getBodyBlock());
   if (!inst)
-    return emitError("Referenced instance doesn't exist");
+    return emitError("Referenced instance doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
@@ -1455,10 +1464,19 @@ BindInterfaceOp::getReferencedInstance(const hw::SymbolCache *cache) {
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult BindInterfaceOp::verify() {
-  auto inst = getReferencedInstance();
+LogicalResult
+BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto parentOp =
+      symbolTable.lookupNearestSymbolFrom(*this, instance().getModule());
+  if (!parentOp)
+    return emitError("Referenced module doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
+
+  auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
+      instance().getName(), &parentOp->getRegion(0).front());
   if (!inst)
-    return emitError("Referenced interface doesn't exist");
+    return emitError("Referenced interface doesn't exist ")
+           << instance().getModule() << "::" << instance().getName();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced interface isn't marked as doNotPrint");
   return success();

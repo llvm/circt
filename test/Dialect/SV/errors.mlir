@@ -162,11 +162,13 @@ hw.module @Cover(%arg0: i1) {
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
 sv.bind #hw.innerNameRef<@assume::@A>
+hw.module @assume() {
+  hw.output
+}
 
 // -----
-// expected-error @+1 {{Referenced instance doesn't exist}}
+// expected-error @+1 {{Referenced module doesn't exist}}
 sv.bind #hw.innerNameRef<@NotAModule::@A>
-
 
 // -----
 hw.module.extern @ExternDestMod()
