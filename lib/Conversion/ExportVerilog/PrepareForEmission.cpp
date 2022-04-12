@@ -63,7 +63,9 @@ static bool treeIsTooBig(Value v, const LoweringOptions &options) {
 
 // Check if the value is deemed worth spilling into a wire.
 static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
-  auto isAssign = [](Operation *op) { return isa<AssignOp, BPAssignOp, PAssignOp, OutputOp>(op); };
+  auto isAssign = [](Operation *op) {
+    return isa<AssignOp, PAssignOp, BPAssignOp, OutputOp>(op);
+  };
 
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.

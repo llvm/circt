@@ -21,6 +21,12 @@ namespace firrtl {
 /// Emit a connect between two values.
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
 void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
+
+/// Utiility for generating a constant attribute.
+IntegerAttr getIntAttr(Type type, const APInt &value);
+
+/// Utility for generating a constant zero attribute.
+IntegerAttr getIntZerosAttr(Type type);
 } // namespace firrtl
 } // namespace circt
 

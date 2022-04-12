@@ -464,7 +464,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
       modulePM.addPass(firrtl::createExpandWhensPass());
-      modulePM.addPass(firrtl::createRemoveResetsPass());
+      modulePM.addPass(firrtl::createRemoveInvalidPass());
     }
   }
 

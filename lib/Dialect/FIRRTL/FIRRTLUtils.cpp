@@ -111,3 +111,22 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   else
     builder.create<ConnectOp>(dst, src);
 }
+
+IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
+  auto intType = type.cast<IntType>();
+  assert((!intType.hasWidth() ||
+          (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
+         "value / type width mismatch");
+  auto intSign =
+      intType.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
+  auto attrType =
+      IntegerType::get(type.getContext(), value.getBitWidth(), intSign);
+  return IntegerAttr::get(attrType, value);
+}
+
+/// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
+/// type. This handles both the known width and unknown width case.
+IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
+  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  return getIntAttr(type, APInt(width, 0));
+}

@@ -1,13 +1,16 @@
-//===- RemoveResets.cpp - Remove resets of invalid value --------*- C++ -*-===//
+//===- RemoveInvalids.cpp - Remove invalid values ---------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// This pass converts registers that are reset to an invalid value to resetless
-// registers.  This is a reduced implementation of the Scala FIRRTL Compiler's
-// RemoveResets pass.
+// This pass removes invalid values from the circuit.  This is a combination of
+// the Scala FIRRTL Compiler's RemoveRests pass and RemoveValidIf.  This is done
+// to remove two "interpretations" of invalid.  Namely: (1) registers that are
+// initialized to an invalid value (module scoped and looking through wires and
+// connects only) are converted to an unitialized register and (2) invalid
+// values are converted to zero (after rule 1 is applied).
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +25,7 @@
 using namespace circt;
 using namespace firrtl;
 
-struct RemoveResetsPass : public RemoveResetsBase<RemoveResetsPass> {
+struct RemoveInvalidPass : public RemoveInvalidBase<RemoveInvalidPass> {
   void runOnOperation() override;
 };
 
@@ -90,10 +93,10 @@ static bool isInvalid(Value val) {
   return false;
 }
 
-void RemoveResetsPass::runOnOperation() {
+void RemoveInvalidPass::runOnOperation() {
   LLVM_DEBUG(
-      llvm::dbgs() << "===----- Running RemoveResets "
-                      "-----------------------------------------------===\n"
+      llvm::dbgs() << "===----- Running RemoveInvalid "
+                      "----------------------------------------------===\n"
                    << "Module: '" << getOperation().getName() << "'\n";);
 
   bool madeModifications = false;
@@ -119,6 +122,6 @@ void RemoveResetsPass::runOnOperation() {
     return markAllAnalysesPreserved();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createRemoveResetsPass() {
-  return std::make_unique<RemoveResetsPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createRemoveInvalidPass() {
+  return std::make_unique<RemoveInvalidPass>();
 }
