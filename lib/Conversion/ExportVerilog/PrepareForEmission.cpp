@@ -46,6 +46,18 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
   return isa<WireOp, RegOp>(readSrc);
 }
 
+static size_t countTree(Value v) {
+  if (isSimpleReadOrPort(v))
+    return 1;
+  if (auto* op = v.getDefiningOp()) {
+    size_t accum = 0;
+    for (auto oper : op->getOperands())
+      accum += countTree(oper);
+    return accum;
+  }
+  return 0;
+}
+
 // Check if the value is deemed worth spilling into a wire.
 static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   auto isAssign = [](Operation *op) { return isa<AssignOp>(op); };
@@ -53,7 +65,7 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.
   return isVerilogExpression(&op) &&
-         op.getNumOperands() > options.maximumNumberOfTermsPerExpression &&
+         countTree(op.getResult(0)) > options.maximumNumberOfTermsPerExpression &&
          op.getNumResults() == 1 &&
          llvm::none_of(op.getResult(0).getUsers(), isAssign);
 }
