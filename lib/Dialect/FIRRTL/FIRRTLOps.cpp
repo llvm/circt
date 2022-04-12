@@ -3515,11 +3515,12 @@ bool NonLocalAnchor::isComponent() { return (bool)ref(); }
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult
 NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
+  auto cnlaAttr = StringAttr::get(instOp.getContext(), "circt.nonlocal");
 
   auto hasNonLocal = [&](InstanceOp instOp) {
     auto annos = AnnotationSet(instOp);
     for (auto anno : annos)
-      if (auto nlaRef = anno.getMember("circt.nonlocal"))
+      if (auto nlaRef = anno.getMember(cnlaAttr))
         if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == sym_nameAttr())
           return true;
     return false;
