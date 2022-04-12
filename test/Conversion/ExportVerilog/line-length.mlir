@@ -30,21 +30,17 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // LONG:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
 // LONG-NEXT:             + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
-// LIMIT_SHORT:       wire [7:0] _GEN;
-// LIMIT_SHORT:       assign _GEN = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT:       assign b = a + a + a + a + a + a + a + a + a + a + a
 // LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a
 // LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_SHORT-NEXT:                a + a + a + a + a + a + a + a + a + a + a
 // LIMIT_SHORT-NEXT:                + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_SHORT-NEXT:                a;
-// LIMIT_SHORT:       assign b = _GEN;
 
-// LIMIT_LONG:        wire [7:0] _GEN;
-// LIMIT_LONG:        assign _GEN = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// LIMIT_LONG:        assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                 a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// LIMIT_LONG:        assign b = _GEN;
 
 hw.module @moduleWithComment()
   attributes {comment = "The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy dog.\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} {}

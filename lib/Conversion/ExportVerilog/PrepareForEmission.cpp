@@ -48,7 +48,9 @@ bool ExportVerilog::isSimpleReadOrPort(Value v) {
 
 // Check if the value is deemed worth spilling into a wire.
 static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
-  auto isAssign = [](Operation *op) { return isa<AssignOp>(op); };
+  auto isAssign = [](Operation *op) {
+    return isa<AssignOp, PAssignOp, BPAssignOp, OutputOp>(op);
+  };
 
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.
