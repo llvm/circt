@@ -69,8 +69,6 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
 
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.
-  op.dump();
-  llvm::errs() << ":" << treeIsTooBig(op.getResult(0), options) << "\n";
   return isVerilogExpression(&op) &&
          treeIsTooBig(op.getResult(0), options) &&
          op.getNumResults() == 1 &&
