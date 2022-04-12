@@ -3562,7 +3562,7 @@ NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
   // The instance path has been verified. Now verify the last element.
   auto leafRef = namepath()[namepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
-    auto fmod = symtbl.lookup(innerRef.getModule());
+    auto *fmod = symtbl.lookup(innerRef.getModule());
     auto mod = cast<FModuleLike>(fmod);
     if (!hasPortNamed(mod, innerRef.getName()) &&
         !hasValNamed(mod, innerRef.getName())) {
