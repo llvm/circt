@@ -26,6 +26,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Support/Timing.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
@@ -3348,7 +3349,8 @@ struct FIRCircuitParser : public FIRParser {
 
   ParseResult
   parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf,
-               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf);
+               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf,
+               mlir::TimingScope &ts);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
@@ -3821,7 +3823,9 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 ///
 ParseResult FIRCircuitParser::parseCircuit(
     SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
-    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs) {
+    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs,
+    mlir::TimingScope &ts) {
+
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3848,6 +3852,8 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
+  // A timer to get execution time of annotation parsing.
+  auto parseAnnotationTimer = ts.nest("Parse annotations");
   ArrayAttr annotations;
   if (getConstants().options.rawAnnotations) {
     SmallVector<Attribute> rawAnno;
@@ -3907,6 +3913,10 @@ ParseResult FIRCircuitParser::parseCircuit(
                                  getConstants().targetSet);
   }
   circuit->setAttr("annotations", annotations);
+  parseAnnotationTimer.stop();
+
+  // A timer to get execution time of module parsing.
+  auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
 
   // Parse any contained modules.
@@ -4002,7 +4012,7 @@ DoneParsing:
 // Parse the specified .fir file into the specified MLIR context.
 mlir::OwningOpRef<mlir::ModuleOp>
 circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
-                             FIRParserOptions options) {
+                             mlir::TimingScope &ts, FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
   unsigned fileID = 1;
@@ -4025,11 +4035,12 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
   if (FIRCircuitParser(state, lexer, *module)
-          .parseCircuit(annotationsBufs, omirBufs))
+          .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
   // the verifier.
+  auto circuitVerificationTimer = ts.nest("Verify circuit");
   if (failed(verify(*module)))
     return {};
 
@@ -4039,6 +4050,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
 void circt::firrtl::registerFromFIRFileTranslation() {
   static mlir::TranslateToMLIRRegistration fromFIR(
       "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
-        return importFIRFile(sourceMgr, context);
+        mlir::TimingScope ts;
+        return importFIRFile(sourceMgr, context, ts);
       });
 }

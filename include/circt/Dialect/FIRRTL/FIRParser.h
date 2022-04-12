@@ -22,6 +22,7 @@ class SourceMgr;
 
 namespace mlir {
 class LocationAttr;
+class TimingScope;
 }
 
 namespace circt {
@@ -47,6 +48,7 @@ struct FIRParserOptions {
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
                                                 mlir::MLIRContext *context,
+                                                mlir::TimingScope &ts,
                                                 FIRParserOptions options = {});
 
 // Decode a source locator string `spelling`, returning a pair indicating that

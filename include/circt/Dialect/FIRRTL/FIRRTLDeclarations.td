@@ -13,7 +13,7 @@
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
-def InstanceOp : FIRRTLOp<"instance", [
+def InstanceOp : FIRRTLOp<"instance", [HasParent<"firrtl::FModuleOp, firrtl::WhenOp">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>, HasCustomSSAName,
     DeclareOpInterfaceMethods<HWInstanceLike, ["instanceName"]>]> {
   let summary = "Instantiate an instance of a module";
@@ -36,7 +36,6 @@ def InstanceOp : FIRRTLOp<"instance", [
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 
   let builders = [

@@ -21,7 +21,7 @@ def AttachOp : FIRRTLOp<"attach"> {
   let hasCanonicalizeMethod = true;
 }
 
-def ConnectOp : FIRRTLOp<"connect"> {
+def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let summary = "Connect two signals";
   let description = [{
     Connect Operation:
@@ -59,7 +59,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
     "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
 }
 
-def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands]> {
+def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
   let summary = "Connect two signals";
   let description =  [{
     Connect two values with strict constraints:

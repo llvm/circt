@@ -126,17 +126,13 @@ public:
   /// Get the destination value from a connection.  This supports any operation
   /// which is capable of driving a value.
   static Value getDestinationValue(Operation *op) {
-    if (auto connect = dyn_cast<ConnectOp>(op))
-      return connect.dest();
-    return cast<StrictConnectOp>(op).dest();
+    return cast<FConnectLike>(op).dest();
   }
 
   /// Get the source value from a connection. This supports any operation which
   /// is capable of driving a value.
   static Value getConnectedValue(Operation *op) {
-    if (auto connect = dyn_cast<ConnectOp>(op))
-      return connect.src();
-    return cast<StrictConnectOp>(op).src();
+    return cast<FConnectLike>(op).src();
   }
 
   /// For every leaf field in the sink, record that it exists and should be
@@ -595,9 +591,16 @@ LogicalResult ModuleVisitor::checkInitialization() {
       continue;
 
     // Get the op which defines the sink, and emit an error.
-    auto dest = std::get<0>(destAndConnect);
-    dest.getDefiningOp()->emitError("sink \"" + getFieldName(dest) +
-                                    "\" not fully initialized");
+    FieldRef dest = std::get<0>(destAndConnect);
+    auto *definingOp = dest.getDefiningOp();
+    if (auto mod = dyn_cast<FModuleLike>(definingOp))
+      mlir::emitError(definingOp->getLoc())
+          << "port \"" + getFieldName(dest) +
+                 "\" not fully initialized in module \""
+          << mod.moduleName() << "\"";
+    else
+      definingOp->emitError("sink \"" + getFieldName(dest) +
+                            "\" not fully initialized");
     return failure();
   }
   return success();

@@ -467,7 +467,8 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Bind Statements
 //===----------------------------------------------------------------------===//
 
-def BindOp : SVOp<"bind", []> {
+def BindOp : SVOp<"bind", 
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "indirect instantiation statement";
   let description = [{
     Indirectly instantiate a module from the context of another module. BindOp
@@ -481,7 +482,6 @@ def BindOp : SVOp<"bind", []> {
 
   let arguments = (ins InnerRefAttr:$instance);
   let results = (outs);
-  let hasVerifier = 1;
 
   let assemblyFormat = "$instance attr-dict";
   let builders = [
@@ -493,7 +493,8 @@ def BindOp : SVOp<"bind", []> {
   }];
 }
 
-def BindInterfaceOp : SVOp<"bind.interface", []> {
+def BindInterfaceOp : SVOp<"bind.interface", 
+    [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "indirectly instantiate an interface";
   let description = [{
     Indirectly instantiate an interface in the context of another module. This
@@ -501,7 +502,6 @@ def BindInterfaceOp : SVOp<"bind.interface", []> {
   }];
   let arguments = (ins InnerRefAttr:$instance);
   let results = (outs);
-  let hasVerifier = 1;
 
   let assemblyFormat = "$instance attr-dict";
   let extraClassDeclaration = [{
