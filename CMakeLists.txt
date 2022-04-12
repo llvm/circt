@@ -362,12 +362,16 @@ if (OR_TOOLS_DISABLE)
   message(STATUS "Disabling OR-Tools.")
 else()
   if(DEFINED OR_TOOLS_PATH)
-    list(APPEND CMAKE_PREFIX_PATH ${OR_TOOLS_PATH}/lib/cmake)
+    list(APPEND CMAKE_PREFIX_PATH ${OR_TOOLS_PATH})
   endif()
+
+  list(APPEND CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR}/ext)
 
   find_package(ortools CONFIG)
 
   if (ortools_FOUND)
+    get_filename_component(ortools_CMAKEDIR ${ortools_DIR} DIRECTORY)
+    get_filename_component(ortools_LIBDIR ${ortools_CMAKEDIR} DIRECTORY)
     list(APPEND CMAKE_INSTALL_RPATH ${ortools_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   endif()
