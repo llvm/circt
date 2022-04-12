@@ -32,6 +32,8 @@
 
 using namespace circt;
 using namespace firrtl;
+using hw::HWModuleLike;
+using hw::InstancePathCache;
 using llvm::Optional;
 
 //===----------------------------------------------------------------------===//
@@ -615,7 +617,7 @@ private:
                                            VerbatimBuilder &path);
 
   /// Return the module associated with this value.
-  FModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
+  HWModuleLike getEnclosingModule(Value value, FlatSymbolRefAttr sym = {});
 
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
@@ -1205,17 +1207,17 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           fullLeafPath.append(nla.getNamepath().begin(),
                               nla.getNamepath().end());
         } else {
-          FModuleLike enclosing = getEnclosingModule(leafValue, sym);
+          HWModuleLike enclosing = getEnclosingModule(leafValue, sym);
           auto enclosingPaths = instancePaths->getAbsolutePaths(enclosing);
           assert(enclosingPaths.size() == 1 &&
                  "Unable to handle multiply instantiated companions");
           if (enclosingPaths.size() != 1)
             return false;
-          StringAttr root =
-              instancePaths->instanceGraph.getTopLevelModule().moduleNameAttr();
+          auto topNode = instancePaths->instanceGraph.getTopLevelNode();
+          StringAttr root = topNode->getModule().moduleNameAttr();
           for (auto segment : enclosingPaths[0]) {
             fullLeafPath.push_back(getInnerRefTo(segment));
-            root = segment.getModuleNameAttr().getAttr();
+            root = segment.referencedModuleNameAttr();
           }
           fullLeafPath.push_back(FlatSymbolRefAttr::get(root));
         }
@@ -1510,17 +1512,17 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
 
 /// Return the module that is associated with this value.  Use the cached/lazily
 /// constructed symbol table to make this fast.
-FModuleLike GrandCentralPass::getEnclosingModule(Value value,
-                                                 FlatSymbolRefAttr sym) {
+HWModuleLike GrandCentralPass::getEnclosingModule(Value value,
+                                                  FlatSymbolRefAttr sym) {
   if (auto blockArg = value.dyn_cast<BlockArgument>())
-    return cast<FModuleOp>(blockArg.getOwner()->getParentOp());
+    return cast<HWModuleLike>(blockArg.getOwner()->getParentOp());
 
   auto *op = value.getDefiningOp();
   if (InstanceOp instance = dyn_cast<InstanceOp>(op))
-    return getSymbolTable().lookup<FModuleOp>(
+    return getSymbolTable().lookup<HWModuleLike>(
         instance.getModuleNameAttr().getValue());
 
-  return op->getParentOfType<FModuleOp>();
+  return op->getParentOfType<HWModuleLike>();
 }
 
 /// This method contains the business logic of this pass.
@@ -1806,22 +1808,22 @@ void GrandCentralPass::runOnOperation() {
         })
         .Case<FModuleOp>([&](FModuleOp op) {
           // Handle annotations on the ports.
-          AnnotationSet::removePortAnnotations(
-              op, [&](unsigned i, Annotation annotation) {
-                if (!annotation.isClass(augmentedGroundTypeClass))
-                  return false;
-                auto maybeID = getID(op, annotation);
-                if (!maybeID)
-                  return false;
-                auto sym =
-                    annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-                leafMap[*maybeID] = {
-                    {op.getArgument(i), annotation.getFieldID()}, sym};
-                if (sym)
-                  deadNLAs.insert(sym.getAttr());
-                ++numAnnosRemoved;
-                return true;
-              });
+          AnnotationSet::removePortAnnotations(op, [&](unsigned i,
+                                                       Annotation annotation) {
+            if (!annotation.isClass(augmentedGroundTypeClass))
+              return false;
+            auto maybeID = getID(op, annotation);
+            if (!maybeID)
+              return false;
+            auto sym =
+                annotation.getMember<FlatSymbolRefAttr>("circt.nonlocal");
+            leafMap[*maybeID] = {{op.getArgument(i), annotation.getFieldID()},
+                                 sym};
+            if (sym)
+              deadNLAs.insert(sym.getAttr());
+            ++numAnnosRemoved;
+            return true;
+          });
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {

@@ -24,6 +24,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
+#include "circt/Dialect/HW/InstanceGraphBase.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/STLExtras.h"
@@ -37,7 +38,10 @@
 
 using namespace circt;
 using namespace firrtl;
+using hw::HWInstanceLike;
 using hw::InnerRefAttr;
+using hw::InstancePath;
+using hw::InstancePathCache;
 using mlir::FailureOr;
 
 //===----------------------------------------------------------------------===//
@@ -818,16 +822,17 @@ void GrandCentralTapsPass::runOnOperation() {
 
         // Determine the shortest hierarchical prefix from this black box
         // instance to the tapped object.
-        Optional<SmallVector<InstanceOp>> shortestPrefix;
+        Optional<SmallVector<HWInstanceLike>> shortestPrefix;
         for (auto prefix : port.prefices) {
 
           // Append the NLA path to the instance graph-determined path.
-          SmallVector<InstanceOp> prefixWithNLA(prefix.begin(), prefix.end());
+          SmallVector<HWInstanceLike> prefixWithNLA(prefix.begin(),
+                                                    prefix.end());
           if (port.nla) {
             for (auto segment : port.nla.getNamepath().getValue().drop_back())
               if (auto ref = segment.dyn_cast<InnerRefAttr>()) {
                 prefixWithNLA.push_back(
-                    cast<InstanceOp>(innerRefNS.lookupOp(ref)));
+                    cast<HWInstanceLike>(innerRefNS.lookupOp(ref)));
               }
           }
 
