@@ -1423,19 +1423,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-/// Verify the correctness of an InstanceOp.
-LogicalResult InstanceOp::verify() {
-
-  // Check that this instance is inside a module.
-  auto module = (*this)->getParentOfType<FModuleOp>();
-  if (!module) {
-    emitOpError("should be embedded in a 'firrtl.module'");
-    return failure();
-  }
-
-  return success();
-}
-
 StringRef InstanceOp::instanceName() { return name(); }
 
 void InstanceOp::print(OpAsmPrinter &p) {
