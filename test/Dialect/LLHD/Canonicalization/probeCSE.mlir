@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -cse | FileCheck %s
+// XFAIL: *
 
 // CHECK-LABEL: @check_dce_prb_but_not_cse
 // CHECK-SAME: %[[SIG:.*]]: !llhd.sig<i32>
