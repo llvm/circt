@@ -105,6 +105,7 @@ private:
 
   void update(TypeID typeID) { update(typeID.getAsOpaquePointer()); }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(BundleType type) {
     update(type.getTypeID());
     for (auto &element : type.getElements()) {
@@ -113,6 +114,7 @@ private:
     }
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
     if (auto bundle = type.dyn_cast<BundleType>())
       return update(bundle);
@@ -219,6 +221,7 @@ struct Equivalence {
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
                       Operation *a, BundleType aType, Operation *b,
                       BundleType bType) {
@@ -307,7 +310,8 @@ struct Equivalence {
       diag.attachNote(aIt->getLoc()) << "first block has more operations";
       diag.attachNote(b->getLoc()) << "second block here";
       return failure();
-    } else if (bIt != bEnd) {
+    }
+    if (bIt != bEnd) {
       diag.attachNote(bIt->getLoc()) << "second block has more operations";
       diag.attachNote(a->getLoc()) << "first block here";
       return failure();
@@ -417,6 +421,7 @@ struct Equivalence {
     return success();
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
     auto aName = a.moduleNameAttr().getAttr();
     auto bName = b.moduleNameAttr().getAttr();
@@ -440,6 +445,7 @@ struct Equivalence {
     return success();
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
                       Operation *a, Operation *b) {
     // Operation name.
@@ -517,6 +523,7 @@ struct Equivalence {
     return success();
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
     BlockAndValueMapping map;
     if (failed(check(diag, map, a, b)))
