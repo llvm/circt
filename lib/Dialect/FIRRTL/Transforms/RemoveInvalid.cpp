@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -144,6 +145,15 @@ void RemoveInvalidPass::runOnOperation() {
         .Case<IntType>([&](IntType type) {
           auto zero = builder.create<ConstantOp>(type, getIntZerosAttr(type));
           inv->replaceAllUsesWith(zero);
+          inv->erase();
+          madeModifications = true;
+        })
+        .Case<BundleType, FVectorType>([&](auto type) {
+          auto width = circt::firrtl::getBitWidth(type);
+          assert(width && "width must be inferred");
+          auto zero = builder.create<ConstantOp>(APSInt(*width));
+          auto aggregate = builder.create<BitCastOp>(type, zero);
+          inv->replaceAllUsesWith(aggregate);
           inv->erase();
           madeModifications = true;
         })
