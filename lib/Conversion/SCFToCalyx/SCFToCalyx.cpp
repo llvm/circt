@@ -1169,7 +1169,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Block *srcBlock = brOp->getBlock();
   for (auto succBlock : enumerate(brOp->getSuccessors())) {
     auto succOperands = brOp.getSuccessorOperands(succBlock.index());
-    if (!succOperands.hasValue() || succOperands.getValue().size() == 0)
+    if (succOperands.empty())
       continue;
     // Create operand passing group
     std::string groupName = progState().blockName(srcBlock) + "_to_" +
@@ -1180,7 +1180,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     auto dstBlockArgRegs =
         getComponentState().getBlockArgRegs(succBlock.value());
     // Create register assignment for each block argument
-    for (auto arg : enumerate(succOperands.getValue())) {
+    for (auto arg : enumerate(succOperands.getForwardedOperands())) {
       auto reg = dstBlockArgRegs[arg.index()];
       buildAssignmentsForRegisterWrite(getComponentState(), rewriter, groupOp,
                                        reg, arg.value());
