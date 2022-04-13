@@ -3474,10 +3474,11 @@ NonLocalAnchor::verifySymbolUses(mlir::SymbolTableCollection &symtblC) {
   auto cnlaAttr = StringAttr::get(getContext(), "circt.nonlocal");
 
   auto hasNonLocal = [&](InstanceOp instOp) {
+    auto sname = sym_nameAttr();
     auto annos = AnnotationSet(instOp);
     for (auto anno : annos)
       if (auto nlaRef = anno.getMember(cnlaAttr))
-        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == sym_nameAttr())
+        if (nlaRef.cast<FlatSymbolRefAttr>().getAttr() == sname)
           return true;
     return false;
   };
