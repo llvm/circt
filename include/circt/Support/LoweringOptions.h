@@ -91,6 +91,9 @@ struct LoweringOptions {
 
   /// Add an explicit bitcast for avoiding bitwidth mismatch LINT errors.
   bool explicitBitcastAddMul = false;
+
+  /// If true, replicated ops are emitted to a header file.
+  bool emitReplicatedOpsToHeader = false;
 };
 
 /// Register commandline options for the verilog emitter.
