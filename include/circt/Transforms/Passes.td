@@ -16,7 +16,7 @@
 include "mlir/Pass/PassBase.td"
 include "mlir/Rewrite/PassUtil.td"
 
-def FlattenMemRef : Pass<"flatten-memref", "ModuleOp"> {
+def FlattenMemRef : Pass<"flatten-memref", "::mlir::ModuleOp"> {
   let summary = "Flatten memrefs";
   let description = [{
     Flattens multidimensional memories and accesses to them into
@@ -25,7 +25,7 @@ def FlattenMemRef : Pass<"flatten-memref", "ModuleOp"> {
   let dependentDialects = ["memref::MemRefDialect"];
 }
 
-def FlattenMemRefCalls : Pass<"flatten-memref-calls", "ModuleOp"> {
+def FlattenMemRefCalls : Pass<"flatten-memref-calls", "::mlir::ModuleOp"> {
   let summary = "Flatten memref calls";
   let description = [{
     Flattens calls to functions which have multidimensional memrefs as arguments.
