@@ -53,8 +53,8 @@ using namespace ExportVerilog;
 
 constexpr int INDENT_AMOUNT = 2;
 constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
-constexpr char CIRCT_HEADER[] = "circt_header.svh";
-constexpr char CIRCT_HEADER_INCLUDE[] = "`include \"circt_header.svh\"\n";
+StringRef circtHeader = "circt_header.svh";
+StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -4236,7 +4236,7 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
       emitHeader && file.emitReplicatedOps && !file.isHeader;
 
   if (emitHeaderInclude)
-    thingsToEmit.emplace_back(CIRCT_HEADER_INCLUDE);
+    thingsToEmit.emplace_back(circtHeaderInclude);
 
   size_t numReplicatedOps =
       file.emitReplicatedOps && !emitHeaderInclude ? replicatedOps.size() : 0;
@@ -4498,14 +4498,14 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
     // Add a header to the file list.
     bool insertSuccess =
         emitter.files
-            .insert({StringAttr::get(module.getContext(), CIRCT_HEADER),
+            .insert({StringAttr::get(module.getContext(), circtHeader),
                      FileInfo{/*ops*/ {},
                               /*emitReplicatedOps*/ true,
                               /*addToFilelist*/ true,
                               /*isHeader*/ true}})
             .second;
     if (!insertSuccess) {
-      module.emitError() << "tried to emit a heder to " << CIRCT_HEADER
+      module.emitError() << "tried to emit a heder to " << circtHeader
                          << ", but the file is used as an output too.";
       return failure();
     }
