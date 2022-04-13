@@ -167,6 +167,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
+      memOp->setAttr("prefix", StringAttr::get(context, prefix));
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       auto target = dyn_cast<FModuleLike>(
           *instanceGraph->getReferencedModule(instanceOp));
