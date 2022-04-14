@@ -19,9 +19,10 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
@@ -75,11 +76,11 @@ struct StructuralHasher {
     nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
   };
 
-  std::string hash(FModuleLike module) {
+  std::array<uint8_t, 32> hash(FModuleLike module) {
     update(&(*module));
     auto hash = sha.final();
     reset();
-    return std::string((const char *)hash.data(), hash.size());
+    return hash;
   }
 
 private:
@@ -853,6 +854,35 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
   }
 }
 
+/// A DenseMapInfo implementation for llvm::SHA256 hashes, which are represented
+/// as std::array<uint8_t, 32>. This allows us to create DenseMaps with SHA256
+/// hashes as keys.
+struct SHA256HashDenseMapInfo {
+  static inline std::array<uint8_t, 32> getEmptyKey() {
+    std::array<uint8_t, 32> key;
+    std::fill(key.begin(), key.end(), ~0);
+    return key;
+  }
+  static inline std::array<uint8_t, 32> getTombstoneKey() {
+    std::array<uint8_t, 32> key;
+    std::fill(key.begin(), key.end(), ~0 - 1);
+    return key;
+  }
+
+  static unsigned getHashValue(const std::array<uint8_t, 32> &val) {
+    // We assume SHA256 is already a good hash and just truncate down to the
+    // number of bytes we need for DenseMap.
+    unsigned hash;
+    std::memcpy(&hash, val.data(), sizeof(unsigned));
+    return hash;
+  }
+
+  static bool isEqual(const std::array<uint8_t, 32> &lhs,
+                      const std::array<uint8_t, 32> &rhs) {
+    return lhs == rhs;
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // DedupPass
 //===----------------------------------------------------------------------===//
@@ -874,7 +904,8 @@ class DedupPass : public DedupBase<DedupPass> {
         StringAttr::get(context, "firrtl.transforms.NoDedupAnnotation");
 
     // A map of all the module hashes that we have calculated so far.
-    llvm::StringMap<Operation *> moduleHashes;
+    llvm::DenseMap<std::array<uint8_t, 32>, Operation *, SHA256HashDenseMapInfo>
+        moduleHashes;
 
     // We track the "group" that each module is deduped into, so that we can
     // make sure all modules which are marked "must dedup" with each other all
