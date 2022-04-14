@@ -30,7 +30,7 @@ using CombPathsType = SmallVector<SmallVector<size_t, 2>>;
 using CombPathsMap = DenseMap<Operation *, CombPathsType>;
 
 using ConnectIterator =
-    mlir::detail::op_iterator<ConnectOp, Region::OpIterator>;
+    mlir::detail::op_iterator<FConnectLike, Region::OpIterator>;
 using ConnectRange = llvm::iterator_range<ConnectIterator>;
 
 namespace {
@@ -74,7 +74,7 @@ class ChildIterator
                                  Value> {
   void skipToNextValidChild() {
     auto isChild = [&]() {
-      if (auto connect = dyn_cast<ConnectOp>(childIt->getOwner()))
+      if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
         return childIt->get() == connect.src();
       return childIt->getOwner()->getNumResults() > 0;
     };
@@ -103,7 +103,7 @@ public:
 
   Value operator*() {
     assert(!isAtEnd() && "dereferencing the end iterator");
-    if (auto connect = dyn_cast<ConnectOp>(childIt->getOwner()))
+    if (auto connect = dyn_cast<FConnectLike>(childIt->getOwner()))
       return connect.dest();
     return childIt->getOwner()->getResult(0);
   }
@@ -477,7 +477,8 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*node->getModule())) {
-        NodeContext context(&map, &instanceGraph, module.getOps<ConnectOp>());
+        NodeContext context(&map, &instanceGraph,
+                            module.getOps<FConnectLike>());
         auto dummyNode = Node(nullptr, &context);
 
         // Traversing SCCs in the combinational graph to detect cycles. As
