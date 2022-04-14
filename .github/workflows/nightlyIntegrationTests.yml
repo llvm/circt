@@ -15,6 +15,7 @@ jobs:
     container:
       image: ghcr.io/circt/images/circt-integration-test:v10.2
     strategy:
+      fail-fast: false
       matrix:
         build-assert: [ON, OFF]
         build-shared: [ON, OFF]
