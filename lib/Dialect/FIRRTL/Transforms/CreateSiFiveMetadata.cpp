@@ -301,7 +301,7 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
       "sifive.enterprise.firrtl.RetimeModulesAnnotation";
   // Per module annotation.
   auto *retimeModuleAnnoClass =
-      "sifive.enterprise.firrtl.RetimeModuleAnnotation";
+      "freechips.rocketchip.util.RetimeModuleAnnotation";
 
   auto *context = &getContext();
   auto circuitOp = getOperation();
