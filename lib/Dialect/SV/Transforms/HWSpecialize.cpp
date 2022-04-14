@@ -43,7 +43,15 @@ static std::string generateModuleName(hw::HWModuleOp moduleOp,
     int64_t paramValue = paramAttr.getValue().cast<IntegerAttr>().getInt();
     name += "_" + paramAttr.getName().str() + "_" + std::to_string(paramValue);
   }
-  return name;
+
+  // Uniqueness check
+  auto parentModule = moduleOp->getParentOfType<ModuleOp>();
+  int uniqueCntr = 0;
+  std::string uniqueName = name;
+  while (parentModule.lookupSymbol(uniqueName))
+    uniqueName = name + "_" + std::to_string(uniqueCntr++);
+
+  return uniqueName;
 }
 
 // Returns true if any operand or result of 'op' is parametric.

@@ -96,3 +96,25 @@ module {
     hw.output %0, %1 : i64, i64
   }
 }
+
+// -----
+
+// Test unique, non-aliasing module name generation.
+
+module {
+
+// CHECK-LABEL:   hw.module @constantGen_V_5_1() -> (out: i64)
+  hw.module @constantGen<V: i64>() -> (out: i64) {
+    %0 = hw.param.value i64 = #hw.param.decl.ref<"V">
+    hw.output %0 :i64
+  }
+
+  hw.module.extern @constantGen_V_5<V: i64>() -> (out: i64)
+  hw.module.extern @constantGen_V_5_0<V: i64>() -> (out: i64)
+
+  hw.module @top() -> (out1: i64) {
+// CHECK:     %inst1.out = hw.instance "inst1" @constantGen_V_5_1() -> (out: i64)
+    %0 = hw.instance "inst1" @constantGen<V: i64 = 5> () -> (out: i64)
+    hw.output %0 : i64
+  }
+}
