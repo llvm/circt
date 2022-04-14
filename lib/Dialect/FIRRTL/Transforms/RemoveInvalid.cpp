@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -133,25 +134,29 @@ void RemoveInvalidPass::runOnOperation() {
     if (inv->getUses().empty())
       continue;
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);
-    TypeSwitch<FIRRTLType>(inv.getType())
-        .Case<ClockType, AsyncResetType, ResetType>([&](auto type) {
-          auto zero = builder.create<SpecialConstantOp>(
-              type, builder.getBoolAttr(false));
-          inv->replaceAllUsesWith(zero);
-          inv->erase();
-          madeModifications = true;
-        })
-        .Case<IntType>([&](IntType type) {
-          auto zero = builder.create<ConstantOp>(type, getIntZerosAttr(type));
-          inv->replaceAllUsesWith(zero);
-          inv->erase();
-          madeModifications = true;
-        })
-        .Default([&](auto) {
-          inv->emitOpError()
-              << "has a type which is not a ground type (this is an "
-                 "unimplemented feature of RemoveInvalid!)";
-        });
+    Value replacement =
+        TypeSwitch<FIRRTLType, Value>(inv.getType())
+            .Case<ClockType, AsyncResetType, ResetType>(
+                [&](auto type) -> Value {
+                  return builder.create<SpecialConstantOp>(
+                      type, builder.getBoolAttr(false));
+                })
+            .Case<IntType>([&](IntType type) -> Value {
+              return builder.create<ConstantOp>(type, getIntZerosAttr(type));
+            })
+            .Case<BundleType, FVectorType>([&](auto type) -> Value {
+              auto width = circt::firrtl::getBitWidth(type);
+              assert(width && "width must be inferred");
+              auto zero = builder.create<ConstantOp>(APSInt(*width));
+              return builder.create<BitCastOp>(type, zero);
+            })
+            .Default([&](auto) {
+              llvm_unreachable("all types are supported");
+              return Value();
+            });
+    inv.replaceAllUsesWith(replacement);
+    inv.erase();
+    madeModifications = true;
   }
 
   if (!madeModifications)

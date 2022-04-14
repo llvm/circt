@@ -81,4 +81,12 @@ firrtl.circuit "RemoveResetTests" {
     firrtl.connect %q, %r : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
+  firrtl.module @AggregateInvalid(out %q: !firrtl.bundle<a:uint<1>>) {
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.bundle<a:uint<1>>
+    firrtl.connect %q, %invalid_ui1 : !firrtl.bundle<a:uint<1>>, !firrtl.bundle<a:uint<1>>
+    // CHECK: %c0_ui1 = firrtl.constant 0
+    // CHECK-NEXT: %[[CAST:.+]] = firrtl.bitcast %c0_ui1
+    // CHECK-NEXT: %q, %[[CAST]]
+  }
+
 }
