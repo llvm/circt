@@ -1843,7 +1843,7 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  size_t groupID;
+  size_t groupID = 0;
   if (auto gID = op.groupIDAttr())
     groupID = gID.getInt();
   StringAttr modName;
