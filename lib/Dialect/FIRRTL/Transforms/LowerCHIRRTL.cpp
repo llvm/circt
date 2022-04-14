@@ -355,7 +355,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   auto memory = memBuilder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
       memBuilder.getArrayAttr(resultNames), name, annotations,
-      memBuilder.getArrayAttr(portAnnotations), StringAttr{});
+      memBuilder.getArrayAttr(portAnnotations), StringAttr{}, IntegerAttr());
   if (auto innerSym = cmem->getAttr("inner_sym"))
     memory->setAttr("inner_sym", innerSym);
 

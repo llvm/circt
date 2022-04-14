@@ -1843,9 +1843,9 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  StringRef prefix;
-  if (op->hasAttr("prefix"))
-    prefix = op->getAttrOfType<StringAttr>("prefix").strref();
+  size_t groupID;
+  if (auto gID = op.groupIDAttr())
+    groupID = gID.getInt();
   StringAttr modName;
   if (op->hasAttr("modName"))
     modName = op->getAttrOfType<StringAttr>("modName");
@@ -1866,7 +1866,7 @@ FirMemory MemOp::getSummary() {
           (size_t)width,        op.depth(),       op.readLatency(),
           op.writeLatency(),    op.getMaskBits(), (size_t)op.ruw(),
           hw::WUW::PortOrder,   writeClockIDs,    modName,
-          op.getMaskBits() > 1, prefix,           op.getLoc()};
+          op.getMaskBits() > 1, groupID,          op.getLoc()};
 }
 
 void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
