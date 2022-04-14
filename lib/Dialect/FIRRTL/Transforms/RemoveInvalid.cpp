@@ -136,10 +136,11 @@ void RemoveInvalidPass::runOnOperation() {
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);
     Value replacement =
         TypeSwitch<FIRRTLType, Value>(inv.getType())
-            .Case<ClockType, AsyncResetType, ResetType>([&](auto type) -> Value {
-              return builder.create<SpecialConstantOp>(
-                  type, builder.getBoolAttr(false));
-            })
+            .Case<ClockType, AsyncResetType, ResetType>(
+                [&](auto type) -> Value {
+                  return builder.create<SpecialConstantOp>(
+                      type, builder.getBoolAttr(false));
+                })
             .Case<IntType>([&](IntType type) -> Value {
               return builder.create<ConstantOp>(type, getIntZerosAttr(type));
             })
@@ -150,11 +151,11 @@ void RemoveInvalidPass::runOnOperation() {
               return builder.create<BitCastOp>(type, zero);
             })
             .Default([&](auto) {
-              llvm_unreachable("type must be covered");
+              llvm_unreachable("all types are supported");
               return Value();
             });
-    inv->replaceAllUsesWith(Value());
-    inv->erase();
+    inv.replaceAllUsesWith(replacement);
+    inv.erase();
     madeModifications = true;
   }
 
