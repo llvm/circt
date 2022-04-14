@@ -19,6 +19,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ManagedStatic.h"
 
 using namespace circt;
@@ -37,8 +38,14 @@ void SVDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/SV/SV.cpp.inc"
       >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/SV/SVAttributes.cpp.inc"
+      >();
 }
 
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/SV/SVAttributes.cpp.inc"
 #include "circt/Dialect/SV/SVDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//

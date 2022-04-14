@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 //===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
@@ -28,8 +30,8 @@ def InterfaceOp : SVOp<"interface",
     ```mlir
     sv.interface @myinterface {
       sv.interface.signal @data : i32
-      sv.interface.modport @input_port ("input" @data)
-      sv.interface.modport @output_port ("output" @data)
+      sv.interface.modport @input_port (input @data)
+      sv.interface.modport @output_port (output @data)
     }
     ```
   }];
@@ -106,13 +108,18 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   ];
 }
 
-def ModportDirectionInput : StrEnumAttrCase<"input">;
-def ModportDirectionOutput : StrEnumAttrCase<"output">;
-def ModportDirectionInOut : StrEnumAttrCase<"inout">;
+def ModportDirectionInput : I32EnumAttrCase<"input", 0>;
+def ModportDirectionOutput : I32EnumAttrCase<"output", 1>;
+def ModportDirectionInOut : I32EnumAttrCase<"inout", 2>;
 
-def ModportDirectionAttr : StrEnumAttr<"ModportDirectionAttr",
+def ModportDirection : I32EnumAttr<"ModportDirection",
   "Defines direction in a modport",
-  [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]>;
+  [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]> {
+  let genSpecializedAttr = 0;
+}
+
+def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,
+  "modport_direction">;
 
 def ModportDirectionField : StructFieldAttr<"direction", ModportDirectionAttr>;
 
@@ -137,8 +144,8 @@ def InterfaceModportOp : SVOp<"interface.modport",
     Example:
 
     ```mlir
-    sv.interface.modport @input_port ("input" @data)
-    sv.interface.modport @output_port ("output" @data)
+    sv.interface.modport @input_port (input @data)
+    sv.interface.modport @output_port (output @data)
     ```
   }];
 

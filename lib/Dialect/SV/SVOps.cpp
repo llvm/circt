@@ -897,12 +897,16 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
 
   SmallVector<Attribute, 8> ports;
   auto parseElement = [&]() -> ParseResult {
-    StringAttr direction;
-    FlatSymbolRefAttr signal;
-    if (parser.parseAttribute(direction) || parser.parseAttribute(signal))
+    auto direction = ModportDirectionAttr::parse(parser, {});
+    if (!direction)
       return failure();
 
-    ports.push_back(ModportStructAttr::get(direction, signal, context));
+    FlatSymbolRefAttr signal;
+    if (parser.parseAttribute(signal))
+      return failure();
+
+    ports.push_back(ModportStructAttr::get(
+        direction.cast<ModportDirectionAttr>(), signal, context));
     return success();
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
@@ -915,10 +919,10 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
 
 static void printModportStructs(OpAsmPrinter &p, Operation *,
                                 ArrayAttr portsAttr) {
-  p << " (";
+  p << "(";
   llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
     auto port = attr.cast<ModportStructAttr>();
-    p << port.direction();
+    p << stringifyEnum(port.direction().getValue());
     p << ' ';
     p.printSymbolName(port.signal().getRootReference().getValue());
   });
@@ -936,8 +940,10 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
                                ArrayRef<StringRef> outputs) {
   auto *ctxt = builder.getContext();
   SmallVector<Attribute, 8> directions;
-  StringAttr inputDir = StringAttr::get(ctxt, "input");
-  StringAttr outputDir = StringAttr::get(ctxt, "output");
+  ModportDirectionAttr inputDir =
+      ModportDirectionAttr::get(ctxt, ModportDirection::input);
+  ModportDirectionAttr outputDir =
+      ModportDirectionAttr::get(ctxt, ModportDirection::output);
   for (auto input : inputs)
     directions.push_back(ModportStructAttr::get(
         inputDir, SymbolRefAttr::get(ctxt, input), ctxt));

@@ -213,7 +213,7 @@ static std::string dotPrintNode(mlir::raw_indented_ostream &outfile,
                      [&](auto) { return "cbranch"; })
                  .Case<handshake::BufferOp>([&](auto op) {
                    std::string n = "buffer ";
-                   n += op.bufferType();
+                   n += stringifyEnum(op.bufferType());
                    return n;
                  })
                  .Case<arith::AddIOp>([&](auto) { return "+"; })

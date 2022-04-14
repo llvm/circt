@@ -128,6 +128,8 @@ public:
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/SV/SVEnums.h.inc"
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/SV/SVAttributes.h.inc"
 // Clang format shouldn't reorder these headers.
 #include "circt/Dialect/SV/SV.h.inc"
 #include "circt/Dialect/SV/SVStructs.h.inc"

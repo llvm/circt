@@ -4,7 +4,7 @@ sv.interface @IData {
   sv.interface.signal @data : i32
   sv.interface.signal @valid : i1
   sv.interface.signal @stall : i1
-  sv.interface.modport @Sink ("output" @data, "output" @valid, "input" @ready)
+  sv.interface.modport @Sink (output @data, output @valid, input @ready)
 }
 
 hw.module @test() {
@@ -20,7 +20,7 @@ sv.interface @IData {
   sv.interface.signal @data : i2
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
-  sv.interface.modport @Sink ("output" @data, "output" @valid, "input" @ready)
+  sv.interface.modport @Sink (output @data, output @valid, input @ready)
 }
 
 hw.module @test() {
@@ -36,7 +36,7 @@ sv.interface @IData {
   sv.interface.signal @data : i2
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
-  sv.interface.modport @Sink ("output" @data, "output" @valid, "input" @ready)
+  sv.interface.modport @Sink (output @data, output @valid, input @ready)
 }
 
 hw.module @test(%m : !sv.modport<@IData::@Noexist>) {

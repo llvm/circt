@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -204,13 +205,16 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
 }
 
-// Here use StrEnumAttr to better suit the BufferOp sequential
+// Here use I32EnumAttr to better suit the BufferOp sequential
 // attribute for it can only be seq or fifo.
-def BufferCaseSeq: StrEnumAttrCase<"seq">;
-def BufferCaseFIFO: StrEnumAttrCase<"fifo">;
+def BufferCaseSeq: I32EnumAttrCase<"seq", 0>;
+def BufferCaseFIFO: I32EnumAttrCase<"fifo", 1>;
 
-def BufferTypeEnum: StrEnumAttr<
-  "BufferTypeEnum", "BufferOp seq or fifo", [BufferCaseSeq, BufferCaseFIFO]>;
+def BufferTypeEnum: I32EnumAttr<
+  "BufferTypeEnum", "BufferOp seq or fifo", [BufferCaseSeq, BufferCaseFIFO]> {
+  let genSpecializedAttr = 0;
+}
+def BufferTypeEnumAttr: EnumAttr<Handshake_Dialect, BufferTypeEnum, "buffer_type_enum">;
 
 def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
@@ -235,7 +239,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
     TypeAttr:$dataType,
     Confined<I32Attr, [IntMinValue<1>]>:$size,
     AnyType:$operand,
-    BufferTypeEnum:$bufferType,
+    BufferTypeEnumAttr:$bufferType,
     OptionalAttr<I64ArrayAttr>:$initValues);
   let results = (outs AnyType:$result);
   let skipDefaultBuilders = 1;
@@ -244,7 +248,7 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock,
 
   let extraClassDeclaration = [{
     bool isSequential() {
-      return symbolizeBufferTypeEnum(this->bufferType()) == BufferTypeEnum::seq;
+      return this->bufferType() == BufferTypeEnum::seq;
     }
     int getNumSlots() {
       return (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
