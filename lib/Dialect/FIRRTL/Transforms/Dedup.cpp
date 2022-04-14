@@ -54,10 +54,7 @@ llvm::raw_ostream &printHex(llvm::raw_ostream &stream,
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, llvm::SHA256 &data) {
-  auto string = data.result();
-  ArrayRef bytes(reinterpret_cast<const uint8_t *>(string.begin()),
-                 string.size());
-  return printHex(stream, bytes);
+  return printHex(stream, data.result());
 }
 
 llvm::raw_ostream &printHash(llvm::raw_ostream &stream, std::string data) {
