@@ -297,18 +297,18 @@ static LogicalResult removeAnnotationWithFilename(Operation *op,
 LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
 
   // Circuit level annotation.
-  auto *retimeModulesAnnoClass =
+  auto *outputFileNameAnnotation =
       "sifive.enterprise.firrtl.RetimeModulesAnnotation";
   // Per module annotation.
   auto *retimeModuleAnnoClass =
-      "sifive.enterprise.firrtl.RetimeModuleAnnotation";
+      "freechips.rocketchip.util.RetimeModuleAnnotation";
 
   auto *context = &getContext();
   auto circuitOp = getOperation();
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
-  if (failed(removeAnnotationWithFilename(circuitOp, retimeModulesAnnoClass,
+  if (failed(removeAnnotationWithFilename(circuitOp, outputFileNameAnnotation,
                                           filename)))
     return failure();
 

@@ -620,7 +620,7 @@ Example:
 
 | Property   | Type   | Description                                              |
 | ---------- | ------ | -------------                                            |
-| class      | string | `sifive.enterprise.firrtl.RetimeModuleAnnotation` |
+| class      | string | `freechips.rocketchip.util.RetimeModuleAnnotation` |
 
 This annotation is used to mark modules which should be retimed, and is
 generally just passed through to other tools.
@@ -628,7 +628,7 @@ generally just passed through to other tools.
 Example:
 ```json
 {
-    "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation"
+    "class": "freechips.rocketchip.util.RetimeModuleAnnotation"
 }
 ```
 

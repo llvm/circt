@@ -19,13 +19,13 @@ firrtl.circuit "retime0" attributes { annotations = [{
 }]} {
 
   firrtl.module @retime0() attributes { annotations = [{
-      class = "sifive.enterprise.firrtl.RetimeModuleAnnotation"
+      class = "freechips.rocketchip.util.RetimeModuleAnnotation"
   }]} { }
 
   firrtl.module @retime1() { }
 
   firrtl.module @retime2() attributes { annotations = [{
-      class = "sifive.enterprise.firrtl.RetimeModuleAnnotation"
+      class = "freechips.rocketchip.util.RetimeModuleAnnotation"
   }]} { }
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
