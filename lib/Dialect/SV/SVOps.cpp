@@ -29,7 +29,8 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp>(op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
+      op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -161,6 +162,15 @@ void VerbatimExprOp::getAsmResultNames(
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+//===----------------------------------------------------------------------===//
+// MacroRefExprOp
+//===----------------------------------------------------------------------===//
+
+void MacroRefExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), ident().getName());
 }
 
 //===----------------------------------------------------------------------===//

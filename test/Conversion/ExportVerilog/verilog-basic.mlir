@@ -367,13 +367,13 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %c1_i5 = hw.constant 1 : i5
 
   // CHECK: always @(posedge clock) begin
-  // CHECK:   if (`PRINTF_COND_ & reset)
+  // CHECK:   if ((`PRINTF_COND_) & reset)
   // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", {1'h0, a} << 5'h1, b);
   // CHECK: end // always @(posedge)
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
-    %2 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
+    %2 = sv.macro.ref<"PRINTF_COND_"> : i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
       sv.fwrite %fd, "Hi %x %x\0A"(%1, %b) : i5, i4

@@ -82,6 +82,29 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
   ];
 }
 
+def MacroRefExprOp : SVOp<"macro.ref", [NoSideEffect, HasCustomSSAName]> {
+  let summary = "Expression to refer to a SystemVerilog macro";
+  let description = [{
+    This operation produces a value by referencing a named macro.
+
+    Presently, it is assumed that the referenced macro is a constant with no
+    side effects.  This expression is subject to CSE.  It can be duplicated
+    and emitted inline by the Verilog emitter.
+    }];
+
+  let arguments = (ins MacroIdentAttr:$ident);
+  let results = (outs HWValueOrInOutType:$result);
+
+  let assemblyFormat = "`<` $ident `>` attr-dict `:` qualified(type($result))";
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$ident),
+               "build(odsBuilder, odsState, resultType, "
+                 "::circt::sv::MacroIdentAttr::get("
+                   "$_builder.getContext(), ident));">
+  ];
+}
+
 def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   let summary = "A constant of value 'x'";
   let description = [{

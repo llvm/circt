@@ -348,14 +348,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK:      sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else  {
-    // CHECK-NEXT: sv.always posedge %clock {
-    // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
+    // CHECK-NEXT:   sv.always posedge %clock {
+    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref< "PRINTF_COND_"> : i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__0 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
+    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref< "PRINTF_COND_"> : i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
@@ -389,7 +389,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge %clock1 {
-    // CHECK-NEXT:     %STOP_COND_ = sv.verbatim.expr "`STOP_COND_" : () -> i1
+    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
     // CHECK-NEXT:     %0 = comb.and %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.fatal
@@ -398,7 +398,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.stop %clock1, %reset, 42
 
     // CHECK-NEXT:   sv.always posedge %clock2 {
-    // CHECK-NEXT:     %STOP_COND_ = sv.verbatim.expr "`STOP_COND_" : () -> i1
+    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref< "STOP_COND_"> : i1
     // CHECK-NEXT:     %0 = comb.and %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.finish
@@ -575,11 +575,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge %clock {
     // CHECK-NEXT:     sv.if [[TMP2]] {
-    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.verbatim.expr "`ASSERT_VERBOSE_COND_"
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref< "ASSERT_VERBOSE_COND_"> : i1
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
     // CHECK-NEXT:         sv.error "assert1"(%value) : i42
     // CHECK-NEXT:       }
-    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.verbatim.expr "`STOP_COND_"
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref< "STOP_COND_"> : i1
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
     // CHECK-NEXT:         sv.fatal
     // CHECK-NEXT:       }

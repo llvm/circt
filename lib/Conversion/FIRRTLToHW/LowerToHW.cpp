@@ -3608,7 +3608,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
-          builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
+          builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
 
       addIfProceduralBlock(ifCond, [&]() {
@@ -3638,7 +3638,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
-          builder.create<sv::VerbatimExprOp>(cond.getType(), "`STOP_COND_");
+          builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.
@@ -3771,11 +3771,11 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
             circuitState.used_ASSERT_VERBOSE_COND = true;
             circuitState.used_STOP_COND = true;
             addIfProceduralBlock(
-                builder.create<sv::VerbatimExprOp>(boolType,
-                                                   "`ASSERT_VERBOSE_COND_"),
+                builder.create<sv::MacroRefExprOp>(boolType,
+                                                   "ASSERT_VERBOSE_COND_"),
                 [&]() { builder.create<sv::ErrorOp>(message, messageOps); });
             addIfProceduralBlock(
-                builder.create<sv::VerbatimExprOp>(boolType, "`STOP_COND_"),
+                builder.create<sv::MacroRefExprOp>(boolType, "STOP_COND_"),
                 [&]() { builder.create<sv::FatalOp>(); });
           });
         });
