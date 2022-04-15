@@ -66,7 +66,6 @@ void NLATable::erase(NonLocalAnchor nla) {
     } else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
       removeNLAfromList(nodeMap[inr.getModule()]);
   }
-  nla.erase();
 }
 
 void NLATable::renameModule(StringAttr oldModName, StringAttr newModName) {
