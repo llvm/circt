@@ -241,6 +241,7 @@ enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
   OutputIRHW,
+  OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
   OutputSplitVerilog,
@@ -254,6 +255,7 @@ static cl::opt<OutputFormatKind> outputFormat(
                    "Emit FIR dialect after parsing"),
         clEnumValN(OutputIRFir, "ir-fir", "Emit FIR dialect after pipeline"),
         clEnumValN(OutputIRHW, "ir-hw", "Emit HW dialect"),
+        clEnumValN(OutputIRSV, "ir-sv", "Emit SV dialect"),
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
@@ -538,15 +540,23 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
                                          nonConstAsyncResetValueIsError));
     pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
-    if (extractTestCode)
-      pm.addPass(sv::createSVExtractTestCodePass());
+    if (outputFormat == OutputIRHW) {
+      if (!disableOptimization) {
+        auto &modulePM = pm.nest<hw::HWModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
+      }
+    } else {
+      if (extractTestCode)
+        pm.addPass(sv::createSVExtractTestCodePass());
 
-    // If enabled, run the optimizer.
-    if (!disableOptimization) {
-      auto &modulePM = pm.nest<hw::HWModuleOp>();
-      modulePM.addPass(createCSEPass());
-      modulePM.addPass(createSimpleCanonicalizerPass());
-      modulePM.addPass(sv::createHWCleanupPass());
+      // If enabled, run the optimizer.
+      if (!disableOptimization) {
+        auto &modulePM = pm.nest<hw::HWModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
+        modulePM.addPass(sv::createHWCleanupPass());
+      }
     }
   }
 
@@ -607,7 +617,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
 
   if (outputFormat == OutputIRFir || outputFormat == OutputIRHW ||
-      outputFormat == OutputIRVerilog) {
+      outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
     module->print(outputFile.getValue()->os());
   }
