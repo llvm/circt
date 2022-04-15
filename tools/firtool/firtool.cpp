@@ -313,6 +313,11 @@ static cl::opt<std::string>
               cl::desc("dut for signal mapping target correction"),
               cl::init(""));
 
+static cl::opt<bool>
+    omitFileHeader("omit-file-header",
+                   cl::desc("Omit the SystemVerilog file header"),
+                   cl::init(false));
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -580,6 +585,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
         modulePM.addPass(sv::createHWCleanupPass());
       }
+      if (!omitFileHeader)
+        pm.addPass(sv::createSVEmitHeaderPass());
     }
   }
 

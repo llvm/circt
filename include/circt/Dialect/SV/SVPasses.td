@@ -132,4 +132,15 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
    ];
 }
 
+def SVEmitHeader : Pass<"sv-emit-header", "ModuleOp"> {
+  let summary = "Emit the SV header defining macros";
+  let description = [{
+    This pass detects macros are used and emits their definitions.
+  }];
+
+  let constructor = "circt::sv::createSVEmitHeaderPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
+
 #endif // CIRCT_DIALECT_SV_SVPASSES

@@ -252,14 +252,6 @@ struct FIRRTLModuleLowering;
 
 /// This is state shared across the parallel module lowering logic.
 struct CircuitLoweringState {
-  std::atomic<bool> used_PRINTF_COND{false};
-  std::atomic<bool> used_ASSERT_VERBOSE_COND{false};
-  std::atomic<bool> used_STOP_COND{false};
-
-  std::atomic<bool> used_RANDOMIZE_REG_INIT{false},
-      used_RANDOMIZE_MEM_INIT{false};
-  std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
-
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        bool nonConstAsyncResetValueIsError,
                        InstanceGraph *instanceGraph)
@@ -448,7 +440,6 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
   }
 
 private:
-  void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp,
@@ -627,9 +618,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
 
-  // Emit all the macros and preprocessor gunk at the start of the file.
-  lowerFileHeader(circuit, state);
-
   // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
 }
@@ -637,7 +625,6 @@ void FIRRTLModuleLowering::runOnOperation() {
 void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                                             CircuitLoweringState &state) {
   assert(!mems.empty());
-  state.used_RANDOMIZE_MEM_INIT = 1;
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
@@ -729,132 +716,6 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), ArrayAttr(), genAttrs);
   }
-}
-
-/// Emit the file header that defines a bunch of macros.
-void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
-                                           CircuitLoweringState &state) {
-  // Intentionally pass an UnknownLoc here so we don't get line number
-  // comments on the output of this boilerplate in generated Verilog.
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
-
-  // TODO: We could have an operation for macros and uses of them, and
-  // even turn them into symbols so we can DCE unused macro definitions.
-  auto emitString = [&](StringRef verilogString) {
-    b.create<sv::VerbatimOp>(verilogString);
-  };
-
-  // Helper function to emit a "#ifdef guard" with a `define in the then and
-  // optionally in the else branch.
-  auto emitGuardedDefine = [&](const char *guard, const char *defineTrue,
-                               const char *defineFalse = nullptr) {
-    std::string define = "`define ";
-    if (!defineFalse) {
-      assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
-    } else {
-      b.create<sv::IfDefOp>(
-          guard,
-          [&]() {
-            if (defineTrue)
-              emitString(define + defineTrue);
-          },
-          [&]() { emitString(define + defineFalse); });
-    }
-  };
-
-  // If none of the macros are needed, then don't emit any header at all, not
-  // even the header comment.
-  if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !state.used_RANDOMIZE_REG_INIT &&
-      !state.used_RANDOMIZE_MEM_INIT && !state.used_PRINTF_COND &&
-      !state.used_ASSERT_VERBOSE_COND && !state.used_STOP_COND)
-    return;
-
-  emitString("// Standard header to adapt well known macros to our needs.");
-
-  bool needRandom = false;
-  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
-    needRandom = true;
-  }
-  if (state.used_RANDOMIZE_REG_INIT) {
-    emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
-    needRandom = true;
-  }
-  if (state.used_RANDOMIZE_MEM_INIT) {
-    emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
-    needRandom = true;
-  }
-
-  if (needRandom) {
-    emitString("\n// RANDOM may be set to an expression that produces a 32-bit "
-               "random unsigned value.");
-    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
-  }
-
-  if (state.used_PRINTF_COND) {
-    emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
-               "prints.");
-    emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                      "PRINTF_COND_ 1");
-  }
-
-  if (state.used_ASSERT_VERBOSE_COND) {
-    emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
-               "gate to assert error printing.");
-    emitGuardedDefine("ASSERT_VERBOSE_COND",
-                      "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
-                      "ASSERT_VERBOSE_COND_ 1");
-  }
-
-  if (state.used_STOP_COND) {
-    emitString("\n// Users can define 'STOP_COND' to add an extra gate "
-               "to stop conditions.");
-    emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
-  }
-
-  if (needRandom) {
-    emitString("\n// Users can define INIT_RANDOM as general code that gets "
-               "injected "
-               "into the\n// initializer block for modules with registers.");
-    emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
-
-    emitString(
-        "\n// If using random initialization, you can also define "
-        "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
-        "is used.");
-    emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
-
-    emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE",
-        [&]() {
-          emitGuardedDefine(
-              "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-              "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-        },
-        [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
-  }
-
-  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
-    emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
-               "assignments.");
-    b.create<sv::IfDefOp>(
-        "RANDOMIZE_GARBAGE_ASSIGN",
-        [&]() {
-          emitString(
-              "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-              "SIZE) \\");
-          emitString("  ((INDEX) < (SIZE) ? (VALUE) : {`RANDOM})");
-        },
-        [&]() {
-          emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
-                     "VALUE, SIZE) (VALUE)");
-        });
-  }
-
-  // Blank line to separate the header from the modules.
-  emitString("");
 }
 
 LogicalResult FIRRTLModuleLowering::lowerPorts(
@@ -2511,7 +2372,6 @@ void FIRRTLLowering::initializeRegister(
         std::function<void()>());
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
-      circuitState.used_RANDOMIZE_REG_INIT = 1;
       auto *block = builder.getBlock();
 
       // Randomized values are assigned to registers in `ifdef
@@ -3604,8 +3464,6 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
-      circuitState.used_PRINTF_COND = true;
-
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
@@ -3634,8 +3492,6 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     // Emit this into an "sv.always posedge" body.
     addToAlwaysBlock(clock, [&]() {
-      circuitState.used_STOP_COND = true;
-
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
@@ -3768,8 +3624,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       addToIfDefBlock("SYNTHESIS", {}, [&]() {
         addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
-            circuitState.used_ASSERT_VERBOSE_COND = true;
-            circuitState.used_STOP_COND = true;
             addIfProceduralBlock(
                 builder.create<sv::MacroRefExprOp>(boolType,
                                                    "ASSERT_VERBOSE_COND_"),

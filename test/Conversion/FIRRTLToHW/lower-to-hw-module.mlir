@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s -verify-diagnostics | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw --sv-emit-header %s -verify-diagnostics | FileCheck %s
 
 // The firrtl.circuit should be removed.
 // CHECK-NOT: firrtl.circuit
