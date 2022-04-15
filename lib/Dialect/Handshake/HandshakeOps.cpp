@@ -1051,7 +1051,7 @@ void BufferOp::print(OpAsmPrinter &p) {
   int size =
       (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
   p << " [" << size << "]";
-  bufferTypeAttr().print(p);
+  p << " " << stringifyEnum(bufferType());
   Type type = (*this)->getAttrOfType<TypeAttr>("dataType").getValue();
   p << " " << (*this)->getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(),
