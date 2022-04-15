@@ -131,9 +131,10 @@ public:
   /// MutableNLA in any way after calling this method may result in crashes.
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
-  NonLocalAnchor applyUpdates() {
+  NonLocalAnchor applyUpdates(NLATable &nlaTable) {
     // Delete an NLA which is either dead or has been made local.
     if (isLocal() || isDead()) {
+      nlaTable.erase(nla);
       nla.erase();
       return nullptr;
     }
@@ -195,7 +196,8 @@ public:
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
       last = writeBack(root.getModule(), root.getName());
-
+    nlaTable.insert(last);
+    nlaTable.erase(nla);
     nla.erase();
     return last;
   }
@@ -992,7 +994,7 @@ void Inliner::run() {
 
   // Writeback all NLAs to MLIR.
   for (auto &nla : nlaMap)
-    nla.getSecond().applyUpdates();
+    nla.getSecond().applyUpdates(nlaTable);
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
@@ -1079,7 +1081,7 @@ class InlinerPass : public InlinerBase<InlinerPass> {
     LLVM_DEBUG(llvm::dbgs()
                << "===- Running Module Inliner Pass "
                   "--------------------------------------------===\n");
-    auto nlaTable = &getAnalysis<NLATable>();
+    auto *nlaTable = &getAnalysis<NLATable>();
     Inliner inliner(getOperation(), *nlaTable);
     inliner.run();
     LLVM_DEBUG(llvm::dbgs() << "===--------------------------------------------"
