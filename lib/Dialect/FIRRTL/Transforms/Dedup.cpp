@@ -757,6 +757,7 @@ private:
     // Erase the NLA from the leaf module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);
+    symbolTable.erase(nla);
   }
 
   /// Process all NLAs referencing the "from" module to point to the "to"
