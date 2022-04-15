@@ -125,7 +125,8 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
           resultTypes, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
           RUWAttr::Undefined, builder.getArrayAttr(resultNames),
           memOp.nameAttr(), memOp.annotations(),
-          builder.getArrayAttr(portAnnotations), memOp.inner_symAttr());
+          builder.getArrayAttr(portAnnotations), memOp.inner_symAttr(),
+          IntegerAttr());
       auto rwPort = rwMem->getResult(0);
       // Create the subfield access to all fields of the port.
       // The addr should be connected to read/write address depending on the

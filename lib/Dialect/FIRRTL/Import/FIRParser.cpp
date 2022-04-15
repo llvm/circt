@@ -3111,10 +3111,10 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
         if (sym)
           break;
       }
-    result =
-        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
-                              ruw, builder.getArrayAttr(resultNames), id,
-                              annotations.first, annotations.second, sym);
+    result = builder.create<MemOp>(
+        resultTypes, readLatency, writeLatency, depth, ruw,
+        builder.getArrayAttr(resultNames), id, annotations.first,
+        annotations.second, sym, IntegerAttr());
   }
 
   UnbundledValueEntry unbundledValueEntry;

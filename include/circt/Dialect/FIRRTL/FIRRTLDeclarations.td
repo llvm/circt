@@ -102,7 +102,8 @@ def MemOp : FIRRTLOp<"mem", [HasCustomSSAName]> {
          StrArrayAttr:$portNames, StrAttr:$name,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
-         OptionalAttr<SymbolNameAttr>:$inner_sym);
+         OptionalAttr<SymbolNameAttr>:$inner_sym,
+         OptionalAttr<I32Attr>:$groupID);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = [{
