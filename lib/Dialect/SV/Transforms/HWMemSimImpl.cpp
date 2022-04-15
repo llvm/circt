@@ -324,12 +324,14 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   constexpr unsigned randomWidth = 32;
   b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
     sv::RegOp randReg;
-    StringRef initvar;
+    StringRef initvar[2];
 
     // Declare variables for use by memory randomization logic.
     b.create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
-      initvar = moduleNamespace.newName("initvar");
-      b.create<sv::VerbatimOp>("integer " + Twine(initvar) + ";\n");
+      initvar[0] = moduleNamespace.newName("initvar");
+      initvar[1] = moduleNamespace.newName("initvar");
+      b.create<sv::VerbatimOp>("integer " + Twine(initvar[0]) + ";\n");
+      b.create<sv::VerbatimOp>("integer " + Twine(initvar[1]) + ";\n");
     });
 
     // Declare variables for use by register randomization logic.
@@ -352,27 +354,42 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
       // Memory randomization logic.  Every entry in the memory is randomized to
       // the same value.
       b.create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
+        auto name = b.getStringAttr(moduleNamespace.newName("_RANDOM"));
+        auto repeat = (mem.dataWidth + randomWidth - 1) / randomWidth;
+        auto intTy = b.getIntegerType(repeat * randomWidth);
+        randReg = b.create<sv::RegOp>(hw::ArrayType::get(intTy, mem.depth),
+                                      name, name);
+
         SmallString<32> rhs;
-        if (mem.dataWidth > randomWidth)
-          rhs.append("{");
-        for (size_t i = 0, e = (mem.dataWidth + randomWidth - 1) / randomWidth;
-             i != e; ++i) {
+        // `rhs` is a value constructed by concatnating `RANDOM `repeat` times.
+        rhs.append("{");
+        for (size_t i = 0, e = repeat; i != e; ++i) {
           if (i > 0)
             rhs.append(", ");
           rhs.append("{`RANDOM}");
         }
-        if (mem.dataWidth > randomWidth)
-          rhs.append("}");
-        if (mem.dataWidth % randomWidth != 0)
-          ("[" + Twine(mem.dataWidth - 1) + ":0]").toVector(rhs);
-        rhs.append(";");
+        rhs.append("}");
+
+        // `readReg` is an array whose size is equal to `mem.depth`. Initialize
+        // each element with `rhs`.
+        b.create<sv::VerbatimOp>(
+            b.getStringAttr("for (" + initvar[0] + " = 0; " + initvar[0] +
+                            " < " + Twine(mem.depth) + "; " + initvar[0] +
+                            " = " + initvar[0] + " + 1)\n" + "  {{0}}[" +
+                            initvar[0] + "] = " + rhs + ";"),
+            ValueRange{},
+            b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
+                                                 randReg.inner_symAttr())));
 
         b.create<sv::VerbatimOp>(
-            b.getStringAttr("for (" + initvar + " = 0; " + initvar + " < " +
-                            Twine(mem.depth) + "; " + initvar + " = " +
-                            initvar + " + 1)\n" + "  Memory[" + initvar +
-                            "] = " + rhs),
-            ValueRange{}, ArrayAttr{});
+            b.getStringAttr("for (" + initvar[1] + " = 0; " + initvar[1] +
+                            " < " + Twine(mem.depth) + "; " + initvar[1] +
+                            " = " + initvar[1] + " + 1)\n" + "  Memory[" +
+                            initvar[1] + "] = {{0}}[" + initvar[1] + "][" +
+                            Twine(mem.dataWidth - 1) + ":0];"),
+            ValueRange{},
+            b.getArrayAttr(hw::InnerRefAttr::get(op.getNameAttr(),
+                                                 randReg.inner_symAttr())));
       });
 
       // Register randomization logic.  Randomize every register to a random
