@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/iterator.h"
 
 namespace circt {
@@ -48,6 +49,15 @@ public:
 
   /// Remove the NLA from the analysis.
   void erase(NonLocalAnchor nlaOp);
+
+  void commonNLAs(StringAttr mod1, StringAttr mod2,
+                  DenseSet<NonLocalAnchor> &common) {
+    auto mod1NLAs = lookup(mod1);
+    auto mod2NLAs = lookup(mod2);
+    common.insert(mod1NLAs.begin(), mod1NLAs.end());
+    DenseSet<NonLocalAnchor> set2(mod2NLAs.begin(), mod2NLAs.end());
+    llvm::set_intersect(common, set2);
+  }
 
   //===-------------------------------------------------------------------------
   // Methods to keep an NLATable up to date.
