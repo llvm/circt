@@ -10,6 +10,8 @@
 #ifndef TRANSFORMS_PASSDETAIL_H
 #define TRANSFORMS_PASSDETAIL_H
 
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/Passes.h"
 

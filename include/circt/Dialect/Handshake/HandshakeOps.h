@@ -49,6 +49,9 @@ class HasClock : public TraitBase<ConcreteType, HasClock> {};
 } // namespace OpTrait
 } // namespace mlir
 
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Handshake/HandshakeAttributes.h.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Handshake/Handshake.h.inc"
 

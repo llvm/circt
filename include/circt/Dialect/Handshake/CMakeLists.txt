@@ -9,6 +9,11 @@ mlir_tablegen(HandshakeEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(MLIRHandshakeEnumsIncGen)
 add_dependencies(circt-headers MLIRHandshakeEnumsIncGen)
 
+mlir_tablegen(HandshakeAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=handshake)
+mlir_tablegen(HandshakeAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=handshake)
+add_public_tablegen_target(MLIRHandshakeAttributesIncGen)
+add_dependencies(circt-headers MLIRHandshakeAttributesIncGen)
+
 mlir_tablegen(HandshakeAttrs.h.inc -gen-struct-attr-decls)
 mlir_tablegen(HandshakeAttrs.cpp.inc -gen-struct-attr-defs)
 add_public_tablegen_target(MLIRHandshakeAttrsIncGen)

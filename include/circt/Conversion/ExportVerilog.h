@@ -13,6 +13,7 @@
 #ifndef CIRCT_TRANSLATION_EXPORTVERILOG_H
 #define CIRCT_TRANSLATION_EXPORTVERILOG_H
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

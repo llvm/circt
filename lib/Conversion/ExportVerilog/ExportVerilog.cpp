@@ -24,6 +24,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
@@ -3443,7 +3444,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
-    os << port.direction().getValue() << ' ';
+    os << stringifyEnum(port.direction().getValue()) << ' ';
     auto signalDecl = state.symbolCache.getDefinition(port.signal());
     os << getSymOpName(signalDecl);
   });

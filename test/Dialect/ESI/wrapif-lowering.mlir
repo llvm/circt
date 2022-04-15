@@ -4,8 +4,8 @@ sv.interface @IValidReady_i4 {
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
   sv.interface.signal @data : i4
-  sv.interface.modport @source  ("input" @ready, "output" @valid, "output" @data)
-  sv.interface.modport @sink  ("input" @valid, "input" @data, "output" @ready)
+  sv.interface.modport @source  (input @ready, output @valid, output @data)
+  sv.interface.modport @sink  (input @valid, input @data, output @ready)
 }
 
 hw.module @test(%clk:i1, %rstn:i1) {

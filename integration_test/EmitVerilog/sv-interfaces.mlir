@@ -8,8 +8,8 @@ module {
     sv.interface.signal @data : i32
     sv.interface.signal @valid : i1
     sv.interface.signal @ready : i1
-    sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
-    sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
+    sv.interface.modport @data_in (input @data, input @valid, output @ready)
+    sv.interface.modport @data_out (output @data, output @valid, input @ready)
   }
 
   // TODO: This ugly bit is because we don't yet have ExportVerilog support

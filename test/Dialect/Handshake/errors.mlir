@@ -118,7 +118,8 @@ handshake.func @invalid_buffer_init2(%arg0 : i32, %ctrl : none) -> (i32, none) {
 // -----
 
 handshake.func @invalid_buffer_init3(%arg0 : i32, %ctrl : none) -> (i32, none) {
-  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'bufferType' [seq, fifo].}}
+  // expected-error @+2 {{'handshake.buffer' expected valid keyword}}
+  // expected-error @+1 {{'handshake.buffer' failed to parse BufferTypeEnumAttr parameter 'value' which is to be a `::BufferTypeEnum`}}
   %0 = buffer [1]  %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }
@@ -126,7 +127,8 @@ handshake.func @invalid_buffer_init3(%arg0 : i32, %ctrl : none) -> (i32, none) {
 // -----
 
 handshake.func @invalid_buffer_init4(%arg0 : i32, %ctrl : none) -> (i32, none) {
-  // expected-error @+1 {{'handshake.buffer' expected string or keyword containing one of the following enum values for attribute 'bufferType' [seq, fifo].}}
+  // expected-error @+2 {{'handshake.buffer' expected ::BufferTypeEnum to be one of: seq, fifo}}
+  // expected-error @+1 {{'handshake.buffer' failed to parse BufferTypeEnumAttr parameter 'value' which is to be a `::BufferTypeEnum`}}
   %0 = buffer [1] SEQ %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }

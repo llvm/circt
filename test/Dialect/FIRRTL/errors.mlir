@@ -191,7 +191,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {
   // expected-error @+1 {{'firrtl.mem' op attribute 'writeLatency' failed to satisfy constraint: 32-bit signless integer attribute whose minimum value is 1}}
-    %m = firrtl.mem Undefined {depth = 32 : i64, name = "m", readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.bundle<>
+    %m = firrtl.mem Undefined {depth = 32 : i64, name = "m", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.bundle<>
   }
 }
 

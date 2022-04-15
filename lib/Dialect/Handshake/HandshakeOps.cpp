@@ -1015,8 +1015,8 @@ void handshake::BufferOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(operand);
   sost::addAttributes(result, size, innerType);
   result.addTypes({innerType});
-  result.addAttribute(
-      "bufferType", builder.getStringAttr(stringifyBufferTypeEnum(bufferType)));
+  result.addAttribute("bufferType",
+                      BufferTypeEnumAttr::get(result.getContext(), bufferType));
 }
 
 ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -1028,25 +1028,11 @@ ParseResult BufferOp::parse(OpAsmParser &parser, OperationState &result) {
   if (sost::parseIntInSquareBrackets(parser, size))
     return failure();
 
-  StringRef bufferTypeStr;
-  NamedAttrList attrStorage;
-  auto loc = parser.getCurrentLocation();
-  if (parser.parseOptionalKeyword(&bufferTypeStr, {"seq", "fifo"})) {
-    StringAttr attrVal;
-    mlir::OptionalParseResult parseResult = parser.parseOptionalAttribute(
-        attrVal, parser.getBuilder().getNoneType(), "bufferType", attrStorage);
-    if (parseResult.hasValue()) {
-      if (failed(*parseResult))
-        return failure();
-      bufferTypeStr = attrVal.getValue();
-    } else {
-      return parser.emitError(
-          loc, "expected string or keyword containing one of the following "
-               "enum values for attribute 'bufferType' [seq, fifo].");
-    }
-  }
-  result.addAttribute("bufferType",
-                      parser.getBuilder().getStringAttr(bufferTypeStr));
+  auto bufferTypeAttr = BufferTypeEnumAttr::parse(parser, {});
+  if (!bufferTypeAttr)
+    return failure();
+
+  result.addAttribute("bufferType", bufferTypeAttr);
 
   if (parser.parseOperandList(allOperands) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
@@ -1065,7 +1051,7 @@ void BufferOp::print(OpAsmPrinter &p) {
   int size =
       (*this)->getAttrOfType<IntegerAttr>("size").getValue().getZExtValue();
   p << " [" << size << "]";
-  p << " " << (*this)->getAttrOfType<StringAttr>("bufferType").getValue();
+  p << " " << stringifyEnum(bufferType());
   Type type = (*this)->getAttrOfType<TypeAttr>("dataType").getValue();
   p << " " << (*this)->getOperands();
   p.printOptionalAttrDict((*this)->getAttrs(),

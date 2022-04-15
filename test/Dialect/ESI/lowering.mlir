@@ -13,14 +13,14 @@ hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
 // IFACE-NEXT:    sv.interface.signal @valid : i1
 // IFACE-NEXT:    sv.interface.signal @ready : i1
 // IFACE-NEXT:    sv.interface.signal @data : i4
-// IFACE-NEXT:    sv.interface.modport @sink ("input" @ready, "output" @valid, "output" @data)
-// IFACE-NEXT:    sv.interface.modport @source ("input" @valid, "input" @data, "output" @ready)
+// IFACE-NEXT:    sv.interface.modport @sink (input @ready, output @valid, output @data)
+// IFACE-NEXT:    sv.interface.modport @source (input @valid, input @data, output @ready)
 // IFACE-LABEL: sv.interface @IValidReady_ArrayOf4xi64 {
 // IFACE-NEXT:    sv.interface.signal @valid : i1
 // IFACE-NEXT:    sv.interface.signal @ready : i1
 // IFACE-NEXT:    sv.interface.signal @data : !hw.array<4xi64>
-// IFACE-NEXT:    sv.interface.modport @sink  ("input" @ready, "output" @valid, "output" @data)
-// IFACE-NEXT:    sv.interface.modport @source  ("input" @valid, "input" @data, "output" @ready)
+// IFACE-NEXT:    sv.interface.modport @sink  (input @ready, output @valid, output @data)
+// IFACE-NEXT:    sv.interface.modport @source  (input @valid, input @data, output @ready)
 // IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)

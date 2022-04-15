@@ -168,7 +168,7 @@ sv.interface @output {
   // CHECK-NEXT: logic wire_1;
   sv.interface.signal @wire : i1
   // CHECK-NEXT: modport always_2(input input_0, output wire_1);
-  sv.interface.modport @always ("input" @input, "output" @wire)
+  sv.interface.modport @always (input @input, output @wire)
 }
 
 // Renaming the above interface declarations needs to rename their use in the
