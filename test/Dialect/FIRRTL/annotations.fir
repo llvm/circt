@@ -82,7 +82,7 @@ circuit Foo: %[[
     ; CHECK-SAME annotations = [{c = "c"}]
     ; CHECK: firrtl.module @Foo
     ; CHECK: firrtl.instance bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
 
@@ -1037,7 +1037,6 @@ circuit Test : %[[
 ; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "fake"}]
 ; CHECK: firrtl.module @Test()
 ; CHECK:   firrtl.instance Test sym @Test
-; CHECK-SAME: annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]
 
 ; // -----
 
@@ -1057,10 +1056,8 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
 ; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @nla_1}, {b = "b", circt.nonlocal = @nla_2}]
 ; CHECK: firrtl.module private @Bar()
 ; CHECK: firrtl.instance baz
-; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
 ; CHECK: firrtl.module @Foo()
 ; CHECK: firrtl.instance bar
-; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
 
 ; // -----
 
@@ -1163,7 +1160,7 @@ circuit Top : %[[{
 ; CHECK-SAME: {annotations = ["foo", "bar"], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
 
 ; CHECK: %child_in, %child_out = firrtl.instance child
-; CHECK-SAME: sym @child {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]}
+; CHECK-SAME: sym @child 
 
 ; CHECK: firrtl.extmodule private @Child(
 ; CHECK-SAME:   in in: !firrtl.uint<123> sym @in,

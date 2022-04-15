@@ -456,17 +456,13 @@ circuit Top : %[[
   ; CHECK: firrtl.nla @[[nla_1:[_a-zA-Z0-9]+]] [#hw.innerNameRef<@Top::@[[aSym]]>, #hw.innerNameRef<@A::@[[bSym]]>, @B]
   ; CHECK: firrtl.module @Top
   module Top :
-    ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] {{.+}} [{circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"}, {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}]} @A()
+    ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] @A()
     inst a of A
-    ; CHECK-NEXT: firrtl.instance a_ sym @[[a_Sym]] {{.+}} [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"}, {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"}]} @A()
+    ; CHECK-NEXT: firrtl.instance a_ sym @[[a_Sym]] @A()
     inst a_ of A_
   ; CHECK: firrtl.module private @A
   module A :
     ; CHECK-NEXT: firrtl.instance b sym @[[bSym]]
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"}
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"}
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"}
-    ; CHECK-SAME: {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}
     ; CHECK-SAME: B()
     inst b of B
   ; CHECK-NOT: firrtl.module private @A_
@@ -538,43 +534,27 @@ circuit Top : %[[
   ; CHECK-NEXT:   firrtl.module @Top
   module Top :
     ; CHECK-NEXT:   firrtl.instance a sym @[[aSym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}]}
     ; CHECK-SAME:     @A()
     inst a of A
     ; CHECK-NEXT:   firrtl.instance a_ sym @[[a_Sym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"}]}
     ; CHECK-SAME:     @A()
     inst a_ of A_
 
   ; CHECK:        firrtl.module private @A
   module A :
     ; CHECK-NEXT:   firrtl.instance b sym @[[bSym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}]}
     ; CHECK-SAME:     @B()
     inst b of B
 
   ; CHECK:        firrtl.module private @B
   module B :
     ; CHECK-NEXT:   firrtl.instance c sym @[[cSym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}]}
     ; CHECK-SAME:     @C()
     inst c of C
 
   ; CHECK:        firrtl.module private @C
   module C :
     ; CHECK-NEXT:   firrtl.instance d sym @[[dSym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}]}
     ; CHECK-SAME:     @D()
     inst d of D
 
@@ -709,72 +689,34 @@ circuit Top : %[[
   ; CHECK-NEXT:   firrtl.module @Top
   module Top :
     ; CHECK-NEXT:   firrtl.instance b sym @[[TopbSym]]
-    ; CHECK-SAME:    [{circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_7]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @B()
     inst b of B
     ; CHECK-NEXT:   firrtl.instance b_ sym @[[TopbSym]]
-    ; CHECK-SAME:    [{circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_8]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @B()
     inst b_ of B_
     ; CHECK-NEXT:   firrtl.instance a1 sym @[[Topa1Sym]]
-    ; CHECK-SAME:    [{circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_5]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_9]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_11]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @A()
     inst a1 of A
     ; CHECK-NEXT:   firrtl.instance a2 sym @[[Topa2Sym]]
-    ; CHECK-SAME:    [{circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_6]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_10]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_12]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @A()
     inst a2 of A
 
   ; CHECK:        firrtl.module private @A()
   module A :
     ; CHECK-NEXT:   firrtl.instance b sym @[[AbSym]]
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_5]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_6]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_11]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_12]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @B()
     inst b of B
     ; CHECK-NEXT:   firrtl.instance b_ sym @[[Ab_Sym]]
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_3]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_4]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_9]], class = "circt.nonlocal"},
-    ; CHECK-SAME:     {circt.nonlocal = @[[nla_10]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @B()
     inst b_ of B_
 
   ; CHECK:        firrtl.module private @B()
-  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_2]], class = "nla2"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_3]], class = "nla3"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_4]], class = "nla4"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_1]], class = "nla1"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_5]], class = "nla5"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_6]], class = "nla6"}]
   module B :
     ; CHECK-NEXT:   firrtl.instance c sym @[[BcSym]]
-    ; CHECK-SAME:     [{circt.nonlocal = @[[nla_8]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_9]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_10]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_7]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_11]], class = "circt.nonlocal"},
-    ; CHECK-SAME:      {circt.nonlocal = @[[nla_12]], class = "circt.nonlocal"}]
     ; CHECK-SAME:     @C()
     inst c of C
 
   ; CHECK:        firrtl.module private @C()
-  ; CHECK-SAME:     [{circt.nonlocal = @[[nla_7]], class = "nla7"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_8]], class = "nla8"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_9]], class = "nla9"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_10]], class = "nla10"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_11]], class = "nla11"},
-  ; CHECK-SAME:      {circt.nonlocal = @[[nla_12]], class = "nla12"}]
   module C :
     skip
 
@@ -814,14 +756,12 @@ circuit top : %[[
     output oa: {z: {y: {x: UInt<1>}}, a: UInt<1>}
     output ob: {a: {b: {c: UInt<1>}}, z: UInt<1>}
     ; CHECK:      firrtl.instance a sym @[[topaSym]]
-    ; CHECK-SAME:   [{circt.nonlocal = @[[nla_1]], class = "circt.nonlocal"}]
     inst a of a
     a.i.z.y.x <= ia.z.y.x
     a.i.a <= ia.a
     oa.z.y.x <= a.o.z.y.x
     oa.a <= a.o.a
     ; CHECK:      firrtl.instance b sym @[[topbSym]]
-    ; CHECK-SAME:   [{circt.nonlocal = @[[nla_2]], class = "circt.nonlocal"}
     inst b of b
     b.q.a.b.c <= ib.a.b.c
     b.q.z <= ib.z
