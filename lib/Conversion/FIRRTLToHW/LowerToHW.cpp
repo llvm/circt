@@ -2139,7 +2139,7 @@ void FIRRTLLowering::addToIfDefProceduralBlock(
   auto insertIt = builder.getInsertionPoint();
   if (insertIt != builder.getBlock()->begin())
     if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(*--insertIt)) {
-      if (ifdef.cond() == cond) {
+      if (ifdef.cond().getIdent() == cond) {
         runWithInsertionPointAtEndOfBlock(thenCtor, ifdef.thenRegion());
         runWithInsertionPointAtEndOfBlock(elseCtor, ifdef.elseRegion());
         return;
