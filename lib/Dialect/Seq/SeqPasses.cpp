@@ -8,10 +8,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 using namespace circt;
@@ -31,64 +29,115 @@ struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
 } // anonymous namespace
 
 namespace {
-/// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
-/// synchronous reset.
-struct CompRegLower : public OpConversionPattern<CompRegOp> {
+class RegisterLowering {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  RegisterLowering(Block *block) : block(block) {}
 
-  LogicalResult
-  matchAndRewrite(CompRegOp reg, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    Location loc = reg.getLoc();
-
-    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                            reg.nameAttr());
-    svReg->setDialectAttrs(reg->getDialectAttrs());
-
-    // If the seq::CompRegOp has an inner_sym attribute, set this for the
-    // sv::RegOp inner_sym attribute.
-    if (reg.sym_name().hasValue())
-      svReg.inner_symAttr(reg.sym_nameAttr());
-
-    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
-    if (reg.reset() && reg.resetValue()) {
-      rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.clk(), ResetType::SyncReset,
-          sv::EventControl::AtPosEdge, reg.reset(),
-          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); },
-          [&]() {
-            rewriter.create<sv::PAssignOp>(loc, svReg, reg.resetValue());
-          });
-    } else {
-      rewriter.create<sv::AlwaysFFOp>(
-          loc, sv::EventControl::AtPosEdge, reg.clk(),
-          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); });
-    }
-
-    rewriter.replaceOp(reg, {regVal});
-    return success();
+  /// Lower all registers in a block to a single `sv.always` block for each
+  /// clock and reset signal combination placed after the last op.
+  void lower() {
+    for (auto reg : llvm::make_early_inc_range(block->getOps<CompRegOp>()))
+      lower(reg);
   }
+
+  /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
+  /// synchronous reset.
+  void lower(CompRegOp reg);
+
+private:
+  using AlwaysFFKeyType =
+      std::tuple<sv::EventControl, Value, ResetType, sv::EventControl, Value>;
+  llvm::SmallDenseMap<AlwaysFFKeyType, sv::AlwaysFFOp> alwaysBlocks;
+
+  void addToAlwaysFFBlock(Operation *reg, sv::EventControl clockEdge,
+                          Value clock, std::function<void(OpBuilder &)> body,
+                          ResetType resetStyle = {},
+                          sv::EventControl resetEdge = {}, Value reset = {},
+                          std::function<void(OpBuilder &)> resetBody = {});
+
+  Block *block;
 };
-
 } // namespace
+
+void RegisterLowering::lower(CompRegOp reg) {
+  Location loc = reg.getLoc();
+
+  ImplicitLocOpBuilder builder(loc, block->getParentOp()->getContext());
+  builder.setInsertionPoint(reg);
+
+  auto svReg =
+      builder.create<sv::RegOp>(reg.getResult().getType(), reg.nameAttr());
+  svReg->setDialectAttrs(reg->getDialectAttrs());
+
+  // If the seq::CompRegOp has an inner_sym attribute, set this for the
+  // sv::RegOp inner_sym attribute.
+  if (reg.sym_name().hasValue())
+    svReg.inner_symAttr(reg.sym_nameAttr());
+
+  auto regVal = builder.create<sv::ReadInOutOp>(loc, svReg);
+  reg.replaceAllUsesWith(regVal.getResult());
+
+  if (reg.reset() && reg.resetValue()) {
+    addToAlwaysFFBlock(
+        reg, sv::EventControl::AtPosEdge, reg.clk(),
+        [&](OpBuilder &builder) {
+          builder.create<sv::PAssignOp>(loc, svReg, reg.input());
+        },
+        ResetType::SyncReset, sv::EventControl::AtPosEdge, reg.reset(),
+        [&](OpBuilder &builder) {
+          builder.create<sv::PAssignOp>(loc, svReg, reg.resetValue());
+        });
+  } else {
+    addToAlwaysFFBlock(reg, sv::EventControl::AtPosEdge, reg.clk(),
+                       [&](OpBuilder &builder) {
+                         builder.create<sv::PAssignOp>(loc, svReg, reg.input());
+                       });
+  }
+
+  reg.erase();
+}
+
+void RegisterLowering::addToAlwaysFFBlock(
+    Operation *reg, sv::EventControl clockEdge, Value clock,
+    std::function<void(OpBuilder &)> body, ResetType resetStyle,
+    sv::EventControl resetEdge, Value reset,
+    std::function<void(OpBuilder &)> resetBody) {
+
+  // Fetch an existing block with the same triggers or create a new one.
+  auto &op = alwaysBlocks[{clockEdge, clock, resetStyle, resetEdge, reset}];
+  if (!op) {
+    ImplicitLocOpBuilder builder(block->getParentOp()->getLoc(), reg);
+    if (reset) {
+      assert(resetStyle != ::ResetType::NoReset);
+
+      op = builder.create<sv::AlwaysFFOp>(
+          clockEdge, clock, resetStyle, resetEdge, reset, [&] {}, [&] {});
+    } else {
+      assert(!resetBody);
+      op = builder.create<sv::AlwaysFFOp>(clockEdge, clock);
+    }
+  }
+
+  // Extend the reset & body blocks.
+  if (reset) {
+    auto resetBuilder = OpBuilder::atBlockEnd(op.getResetBlock());
+    resetBody(resetBuilder);
+  }
+  auto bodyBuilder = OpBuilder::atBlockEnd(op.getBodyBlock());
+  body(bodyBuilder);
+
+  // Move the op to the last register using it to ensure that values
+  // it might use are defined beforehand in the exported Verilog.
+  op->moveBefore(reg);
+}
+
 void SeqToSVPass::runOnOperation() {
-  ModuleOp top = getOperation();
-  MLIRContext &ctxt = getContext();
-
-  ConversionTarget target(ctxt);
-  target.addIllegalDialect<SeqDialect>();
-  target.addLegalDialect<sv::SVDialect>();
-  RewritePatternSet patterns(&ctxt);
-  patterns.add<CompRegLower>(&ctxt);
-
-  if (failed(applyPartialConversion(top, target, std::move(patterns))))
-    signalPassFailure();
+  getOperation()->walk([&](Block *block) { RegisterLowering(block).lower(); });
 }
 
 namespace circt {
 namespace seq {
-std::unique_ptr<OperationPass<ModuleOp>> createSeqLowerToSVPass() {
+std::unique_ptr<Pass> createSeqLowerToSVPass() {
   return std::make_unique<SeqToSVPass>();
 }
 } // namespace seq
