@@ -14,12 +14,12 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module @issue1246_assume(%clock: i1) 
-// CHECK-NOT: attributes 
+// CHECK: hw.module @issue1246_assume(%clock: i1)
+// CHECK-NOT: attributes
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module @issue1246_cover(%clock: i1) 
-// CHECK-NOT: attributes 
+// CHECK: hw.module @issue1246_cover(%clock: i1)
+// CHECK-NOT: attributes
 // CHECK: sv.cover
 // CHECK: foo_cover
 // CHECK: hw.module @issue1246
@@ -33,9 +33,9 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
-  hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"} 
-  hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"} 
-  hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"} 
+  hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"}
+  hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"}
+  hw.module.extern @foo_assert(%a : i1) attributes {"firrtl.extract.assert.extra"}
   hw.module @issue1246(%clock: i1) -> () {
     sv.always posedge %clock  {
       sv.ifdef.procedural "SYNTHESIS"  {
