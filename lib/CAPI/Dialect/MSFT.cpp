@@ -28,11 +28,6 @@ void mlirMSFTRegisterPasses() {
   mlir::registerCanonicalizerPass();
   circt::msft::registerMSFTPasses();
 }
-void circtMSFTMoveFirstBlock(MlirOperation from, MlirOperation to) {
-  Block &b = unwrap(from)->getRegion(0).getBlocks().front();
-  b.getParent()->getBlocks().remove(b);
-  unwrap(to)->getRegion(0).getBlocks().push_back(&b);
-}
 
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.

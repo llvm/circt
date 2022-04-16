@@ -133,11 +133,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("DESC", CirctMSFTDirection::DESC)
       .export_values();
 
-  m.def("move_first_block", circtMSFTMoveFirstBlock, py::arg("from"),
-        py::arg("to"),
-        "Move the first block in `from` to the first region's last block in "
-        "`to`.");
-
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(
@@ -195,7 +190,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            py::arg("seed") = nullptr)
       .def("place", &PlacementDB::place, "Place a dynamic instance.",
            py::arg("dyn_inst"), py::arg("location"), py::arg("subpath"),
-           py::arg("src_location"))
+           py::arg("src_location") = py::none())
       .def("remove_placement", &PlacementDB::removePlacement,
            "Remove a placement.", py::arg("location"))
       .def("move_placement", &PlacementDB::movePlacement,

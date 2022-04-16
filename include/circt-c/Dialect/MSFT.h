@@ -27,10 +27,6 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 // Values represented in `MSFT.td`.
 typedef int32_t CirctMSFTPrimitiveType;
 
-// Move the first block in `from` to the first region's last block in `to`.
-MLIR_CAPI_EXPORTED void circtMSFTMoveFirstBlock(MlirOperation from,
-                                                MlirOperation to);
-
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//

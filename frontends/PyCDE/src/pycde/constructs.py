@@ -32,7 +32,7 @@ def SystolicArray(row_inputs, col_inputs, pe_builder):
                         row_inputs_type.size)
   array = _msft.SystolicArrayOp(sa_result_type, _get_value(row_inputs),
                                 _get_value(col_inputs))
-  _msft.move_first_block(dummy_op, array)
+  dummy_op.regions[0].blocks[0].append_to(array.regions[0])
   dummy_op.operation.erase()
 
   return array.peOutputs
