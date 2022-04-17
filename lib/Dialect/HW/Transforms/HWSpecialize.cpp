@@ -10,10 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/ValueMapper.h"
@@ -169,7 +170,7 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
   ArrayAttr parameters;
 };
 
-struct HWSpecializePass : public sv::HWSpecializeBase<HWSpecializePass> {
+struct HWSpecializePass : public hw::HWSpecializeBase<HWSpecializePass> {
   void runOnOperation() override;
 };
 
@@ -326,6 +327,6 @@ void HWSpecializePass::runOnOperation() {
 
 } // namespace
 
-std::unique_ptr<Pass> circt::sv::createHWSpecializePass() {
+std::unique_ptr<Pass> circt::hw::createHWSpecializePass() {
   return std::make_unique<HWSpecializePass>();
 }

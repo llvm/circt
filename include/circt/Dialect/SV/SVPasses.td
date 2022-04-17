@@ -27,19 +27,6 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 
-def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
-  let summary = "Specializes instances of parametric hw.modules";
-  let constructor = "circt::sv::createHWSpecializePass()";
-  let description = [{
-    Any `hw.instance` operation instantiating a parametric `hw.module` will
-    trigger a specialization procedure which resolves all parametric types and
-    values within the module based on the set of provided parameters to the
-    `hw.instance` operation. This specialized module is created as a new
-    `hw.module` and the referring `hw.instance` operation is rewritten to
-    instantiate the newly specialized module.
-  }];
-}
-
 def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
   let summary = "Eliminate features marked unsupported in LoweringOptions";
   let description = [{
