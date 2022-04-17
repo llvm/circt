@@ -643,21 +643,44 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
   return result;
 }
 
+/// Parse case op.
+/// case op ::= `sv.case` ?case-style ?unique-priority cond attr-dict `:` type
+///              case-pattern^*
+/// case-style ::= `case` | `casex` | `casez`
+/// unique-priority (see SV Spec 12.5.3) ::= `unique` | `unique0` | `priority`
+/// case-pattern ::= `case` bit-pattern `:` region
 ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
   OpAsmParser::UnresolvedOperand condOperand;
   Type condType;
+  // Track `unique`, `unique0` or `priority`.
+  llvm::Optional<UniquePriorityType> uniquePriority;
 
   auto loc = parser.getCurrentLocation();
 
   StringRef keyword;
   if (!parser.parseOptionalKeyword(&keyword)) {
     auto kind = symbolizeCaseStmtType(keyword);
-    if (!kind.hasValue())
-      return parser.emitError(loc, "expected 'case', 'casex', or 'casez'");
-    auto caseEnum = static_cast<int32_t>(kind.getValue());
-    result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
+    if (kind.hasValue()) {
+      auto caseEnum = static_cast<int32_t>(kind.getValue());
+      result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
+    } else {
+      uniquePriority = symbolizeUniquePriorityType(keyword);
+      if (!uniquePriority)
+        return parser.emitError(loc, "expected 'case', 'casex', 'casez', "
+                                     "'unique', 'unique0', or 'priority'");
+    }
+  }
+
+  if (uniquePriority || !parser.parseOptionalKeyword(&keyword)) {
+    if (!uniquePriority)
+      uniquePriority = symbolizeUniquePriorityType(keyword);
+    if (!uniquePriority)
+      return parser.emitError(loc,
+                              "expected 'unique', 'unique0', or 'priority'");
+    auto caseEnum = static_cast<int32_t>(uniquePriority.getValue());
+    result.addAttribute("uniquePriority", builder.getI32IntegerAttr(caseEnum));
   }
 
   if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
@@ -748,9 +771,12 @@ void CaseOp::print(OpAsmPrinter &p) {
     p << "casex ";
   else if (caseStyle() == CaseStmtType::CaseZStmt)
     p << "casez ";
+  if (uniquePriority().hasValue())
+    p << stringifyUniquePriorityType(uniquePriority().getValue()) << " ";
   p << cond() << " : " << cond().getType();
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          /*elidedAttrs=*/{"casePatterns", "caseStyle"});
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"casePatterns", "caseStyle", "uniquePriority"});
 
   for (auto caseInfo : getCases()) {
     p.printNewline();

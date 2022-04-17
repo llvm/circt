@@ -298,6 +298,11 @@ def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
 def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
                                    [CaseStmt, CaseXStmt, CaseZStmt]>;
 
+def UniquePriorityUnique: I32EnumAttrCase<"UniquePriorityUnique", 0, "unique">;
+def UniquePriorityUnique0: I32EnumAttrCase<"UniquePriorityUnique0", 1, "unique0">;
+def UniquePriorityPriority: I32EnumAttrCase<"UniquePriorityPriority", 2, "priority">;
+def UniquePriorityTypeAttr: I32EnumAttr<"UniquePriorityType", "unique priority type",
+              [UniquePriorityUnique, UniquePriorityUnique0, UniquePriorityPriority]>;
 
 def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
                            ProceduralRegion, ProceduralOp]> {
@@ -307,7 +312,7 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
-                       HWIntegerType:$cond, ArrayAttr:$casePatterns);
+                       HWIntegerType:$cond, ArrayAttr:$casePatterns, OptionalAttr<UniquePriorityTypeAttr>: $uniquePriority);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
