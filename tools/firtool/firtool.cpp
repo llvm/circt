@@ -84,6 +84,10 @@ static cl::opt<bool>
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
 
+static cl::opt<bool> allowUnregisteredDialect(
+    "allow-unregistered-dialect",
+    cl::desc("Allow operation with no registered dialects"), cl::init(false));
+
 static cl::opt<bool> inliner("inline",
                              cl::desc("Run the FIRRTL module inliner"),
                              cl::init(true));
@@ -725,6 +729,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   // Register our dialects.
   context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
                       hw::HWDialect, comb::CombDialect, sv::SVDialect>();
+  context.allowUnregisteredDialects(allowUnregisteredDialect);
 
   // Process the input.
   if (failed(processInput(context, ts, std::move(input), outputFile)))
