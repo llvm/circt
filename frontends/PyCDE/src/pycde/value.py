@@ -178,6 +178,7 @@ def wrap_opviews_with_values(dialect, module_name):
     if isinstance(cls, type) and issubclass(cls, ir.OpView):
 
       def specialize_create(cls):
+
         def create(*args, **kwargs):
           # If any of the arguments are Value objects, we need to convert them.
           args = [v.value if isinstance(v, Value) else v for v in args]
@@ -193,6 +194,7 @@ def wrap_opviews_with_values(dialect, module_name):
           # Return a Value.
           assert len(created.results) == 1
           return Value(created.results[0])
+
         return create
 
       wrapped_class = specialize_create(cls)
