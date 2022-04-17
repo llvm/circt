@@ -150,7 +150,7 @@ class _SpecializedModule:
     for (idx, (name, type)) in enumerate(self.output_ports):
       setattr(
           self.modcls, name,
-          property(lambda self, idx=idx, type=type: Value.get(
+          property(lambda self, idx=idx, type=type: Value(
               self._instantiation.operation.results[idx], type)))
 
   # Bug: currently only works with one System. See notes at the top of this
@@ -368,7 +368,7 @@ def _module_base(cls, extern_name: str, params={}):
                                                       mod._pycde_mod.circt_mod,
                                                       loc=loc)
           self.backedges[idx] = backedge
-          value = Value.get(backedge.result)
+          value = Value(backedge.result)
         inputs[name] = value
 
       instance_name = cls.__name__
@@ -507,7 +507,7 @@ class _GeneratorPortAccess:
     if name in self._mod.input_port_lookup:
       idx = self._mod.input_port_lookup[name]
       val = self._mod.circt_mod.entry_block.arguments[idx]
-      return Value.get(val)
+      return Value(val)
     if name in self._mod.output_port_lookup:
       if name not in self._output_values:
         raise ValueError("Must set output value before accessing it")
