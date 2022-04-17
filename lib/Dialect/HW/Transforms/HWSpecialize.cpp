@@ -240,7 +240,7 @@ static LogicalResult specializeModule(OpBuilder builder, ArrayAttr parameters,
     BlockAndValueMapping bvMapper;
     for (auto operand : op.getOperands())
       bvMapper.map(operand, mapper.get(operand));
-    auto newOp = builder.clone(op, bvMapper);
+    auto *newOp = builder.clone(op, bvMapper);
     for (auto &&[oldRes, newRes] :
          llvm::zip(op.getResults(), newOp->getResults()))
       mapper.set(oldRes, newRes);
