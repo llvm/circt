@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from .support import get_user_loc
 
+from circt.dialects import esi
 import circt.support as support
 
 import mlir.ir as ir
@@ -172,6 +173,24 @@ class StructValue(Value):
           v.name = f"{self.name}__{attr}"
         return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
+
+
+class ChannelValue(Value):
+
+  def __init__(self, value, type):
+    self.value = value
+    self.type = type
+
+  def reg(self, clk, rst=None, name=None):
+    raise TypeError("Cannot register a channel")
+
+  def unwrap(self, ready):
+    from .pycde_types import types
+    from .support import _obj_to_value
+    ready = _obj_to_value(ready, types.i1)
+    unwrap_op = esi.UnwrapValidReady(self.type.inner_type, types.i1, self.value,
+                                     ready.value)
+    return Value.get(unwrap_op.rawOutput), Value.get(unwrap_op.valid)
 
 
 def wrap_opviews_with_values(dialect, module_name):

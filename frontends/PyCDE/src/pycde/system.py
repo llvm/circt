@@ -2,7 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde.devicedb import EntityExtern, PlacementDB, PrimitiveDB, PhysicalRegion
+from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
+                            PhysicalRegion)
 
 from .module import _SpecializedModule
 from .pycde_types import types
@@ -42,6 +43,7 @@ class System:
   PASSES = """
     msft-lower-constructs, msft-lower-instances, {partition}
     lower-msft-to-hw{{verilog-file={verilog_file}}},
+    lower-esi-to-physical, lower-esi-ports, lower-esi-to-hw,
     lower-seq-to-sv, hw.module(prettify-verilog), hw.module(hw-cleanup),
     msft-export-tcl{{tops={tops} tcl-file={tcl_file}}}
   """

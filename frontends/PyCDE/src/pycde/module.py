@@ -14,7 +14,7 @@ from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
 from .value import Value
 
 from circt import support
-from circt.dialects import hw, msft
+from circt.dialects import esi, hw, msft
 from circt.support import BackedgeBuilder, attribute_to_var
 
 import mlir.ir
@@ -44,11 +44,27 @@ class ModuleDecl:
 
 
 class Output(ModuleDecl):
-  pass
+  """Create an RTL-level output port"""
+
+
+class OutputChannel(Output):
+  """Create an ESI output channel port."""
+
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    esi_type = esi.ChannelType.get(type)
+    super().__init__(esi_type, name)
 
 
 class Input(ModuleDecl):
-  pass
+  """Create an RTL-level input port."""
+
+
+class InputChannel(Input):
+  """Create an ESI input channel port."""
+
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    esi_type = esi.ChannelType.get(type)
+    super().__init__(esi_type, name)
 
 
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
