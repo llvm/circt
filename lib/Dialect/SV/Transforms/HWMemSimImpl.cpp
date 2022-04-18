@@ -322,6 +322,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
   // Add logic to initialize the memory and any internal registers to random
   // values.
   constexpr unsigned randomWidth = 32;
+  sv::RegOp randomMemReg;
   b.create<sv::IfDefOp>("SYNTHESIS", std::function<void()>(), [&]() {
     sv::RegOp randReg;
     StringRef initvar;
@@ -330,6 +331,11 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     b.create<sv::IfDefOp>("RANDOMIZE_MEM_INIT", [&]() {
       initvar = moduleNamespace.newName("initvar");
       b.create<sv::VerbatimOp>("integer " + Twine(initvar) + ";\n");
+      randomMemReg = b.create<sv::RegOp>(
+          b.getIntegerType(llvm::divideCeil(mem.dataWidth, randomWidth) *
+                           randomWidth),
+          b.getStringAttr("_RANDOM_MEM"),
+          b.getStringAttr(moduleNamespace.newName("_RANDOM_MEM")));
     });
 
     // Declare variables for use by register randomization logic.
@@ -349,30 +355,31 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     b.create<sv::InitialOp>([&]() {
       b.create<sv::VerbatimOp>("`INIT_RANDOM_PROLOG_");
 
-      // Memory randomization logic.  Every entry in the memory is randomized to
-      // the same value.
+      // Memory randomization logic.  The entire memory is randomized.
       b.create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
-        SmallString<32> rhs;
-        if (mem.dataWidth > randomWidth)
-          rhs.append("{");
-        for (size_t i = 0, e = (mem.dataWidth + randomWidth - 1) / randomWidth;
-             i != e; ++i) {
+        std::string verbatimForLoop;
+        llvm::raw_string_ostream s(verbatimForLoop);
+        s << "for (" << initvar << " = 0; " << initvar << " < " << mem.depth
+          << "; " << initvar << " = " << initvar << " + 1) begin\n"
+          << "  {{0}} = ";
+        auto repetitionCount = llvm::divideCeil(mem.dataWidth, randomWidth);
+        if (repetitionCount > 1)
+          s << "{";
+        for (size_t i = 0; i != repetitionCount; ++i) {
           if (i > 0)
-            rhs.append(", ");
-          rhs.append("{`RANDOM}");
+            s << ", ";
+          s << "{`RANDOM}";
         }
-        if (mem.dataWidth > randomWidth)
-          rhs.append("}");
-        if (mem.dataWidth % randomWidth != 0)
-          ("[" + Twine(mem.dataWidth - 1) + ":0]").toVector(rhs);
-        rhs.append(";");
-
+        if (repetitionCount > 1)
+          s << "}";
+        s << ";\n";
+        s << "  Memory[" << initvar << "] = "
+          << "{{0}}[" << mem.dataWidth - 1 << ":" << 0 << "];\n"
+          << "end";
         b.create<sv::VerbatimOp>(
-            b.getStringAttr("for (" + initvar + " = 0; " + initvar + " < " +
-                            Twine(mem.depth) + "; " + initvar + " = " +
-                            initvar + " + 1)\n" + "  Memory[" + initvar +
-                            "] = " + rhs),
-            ValueRange{}, ArrayAttr{});
+            verbatimForLoop, ValueRange{},
+            b.getArrayAttr({hw::InnerRefAttr::get(
+                op.getNameAttr(), randomMemReg.inner_symAttr())}));
       });
 
       // Register randomization logic.  Randomize every register to a random
