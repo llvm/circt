@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -18,7 +19,9 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -102,6 +105,7 @@ private:
 
   void update(TypeID typeID) { update(typeID.getAsOpaquePointer()); }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(BundleType type) {
     update(type.getTypeID());
     for (auto &element : type.getElements()) {
@@ -110,15 +114,14 @@ private:
     }
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion)
   void update(Type type) {
     if (auto bundle = type.dyn_cast<BundleType>())
       return update(bundle);
     update(type.getAsOpaquePointer());
   }
 
-  void update(BlockArgument arg) {
-    indexes[arg] = currentIndex++;
-  }
+  void update(BlockArgument arg) { indexes[arg] = currentIndex++; }
 
   void update(OpResult result) {
     indexes[result] = currentIndex++;
@@ -196,6 +199,344 @@ private:
   // This is the actual running hash calculation. This is a stateful element
   // that should be reinitialized after each hash is produced.
   llvm::SHA256 sha;
+};
+
+//===----------------------------------------------------------------------===//
+// Equivalence
+//===----------------------------------------------------------------------===//
+
+/// This class is for reporting differences between two modules which should
+/// have been deduplicated.
+struct Equivalence {
+  Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
+      : instanceGraph(instanceGraph) {
+    portTypesAttr = StringAttr::get(context, "portTypes");
+    nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
+    nonessentialAttributes.insert(StringAttr::get(context, "name"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portNames"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portTypes"));
+    nonessentialAttributes.insert(StringAttr::get(context, "portSyms"));
+    nonessentialAttributes.insert(StringAttr::get(context, "sym_name"));
+    nonessentialAttributes.insert(StringAttr::get(context, "inner_sym"));
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
+                      Operation *a, BundleType aType, Operation *b,
+                      BundleType bType) {
+    if (aType.getNumElements() != bType.getNumElements()) {
+      diag.attachNote(a->getLoc())
+          << message << " bundle type has different number of elements";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+
+    for (auto elementPair :
+         llvm::zip(aType.getElements(), bType.getElements())) {
+      auto aElement = std::get<0>(elementPair);
+      auto bElement = std::get<1>(elementPair);
+      if (aElement.isFlip != bElement.isFlip) {
+        diag.attachNote(a->getLoc()) << message << " bundle element "
+                                     << aElement.name << " flip does not match";
+        diag.attachNote(b->getLoc()) << "second operation here";
+        return failure();
+      }
+
+      if (failed(check(diag,
+                       "bundle element \'" + aElement.name.getValue() + "'", a,
+                       aElement.type, b, bElement.type)))
+        return failure();
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, const Twine &message,
+                      Operation *a, Type aType, Operation *b, Type bType) {
+    if (aType == bType)
+      return success();
+    if (aType.isa<BundleType>() && bType.isa<BundleType>())
+      return check(diag, message, a, aType.cast<BundleType>(), b,
+                   bType.cast<BundleType>());
+    diag.attachNote(a->getLoc())
+        << message << " types don't match, first type is " << aType;
+    diag.attachNote(b->getLoc()) << "second type is " << bType;
+    return failure();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, Block &aBlock, Operation *b,
+                      Block &bBlock) {
+
+    // Block Arguments.
+    if (aBlock.getNumArguments() != bBlock.getNumArguments()) {
+      diag.attachNote(a->getLoc())
+          << "modules have a different number of ports";
+      diag.attachNote(b->getLoc()) << "second module here";
+      return failure();
+    }
+
+    // Block argument types.
+    auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
+    auto portNo = 0;
+    for (auto argPair :
+         llvm::zip(aBlock.getArguments(), bBlock.getArguments())) {
+      auto &aArg = std::get<0>(argPair);
+      auto &bArg = std::get<1>(argPair);
+      // TODO: we should print the port number if there are no port names, but
+      // there are always port names ;).
+      StringRef portName;
+      if (portNames) {
+        if (auto portNameAttr = portNames[portNo].dyn_cast<StringAttr>())
+          portName = portNameAttr.getValue();
+      }
+      // Assumption here that block arguments correspond to ports.
+      if (failed(check(diag, "module port '" + portName + "'", a,
+                       aArg.getType(), b, bArg.getType())))
+        return failure();
+      map.map(aArg, bArg);
+      portNo++;
+    }
+
+    // Blocks operations.
+    auto aIt = aBlock.begin();
+    auto aEnd = aBlock.end();
+    auto bIt = bBlock.begin();
+    auto bEnd = bBlock.end();
+    while (aIt != aEnd && bIt != bEnd)
+      if (failed(check(diag, map, &*aIt++, &*bIt++)))
+        return failure();
+    if (aIt != aEnd) {
+      diag.attachNote(aIt->getLoc()) << "first block has more operations";
+      diag.attachNote(b->getLoc()) << "second block here";
+      return failure();
+    }
+    if (bIt != bEnd) {
+      diag.attachNote(bIt->getLoc()) << "second block has more operations";
+      diag.attachNote(a->getLoc()) << "first block here";
+      return failure();
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, Region &aRegion, Operation *b,
+                      Region &bRegion) {
+    auto aIt = aRegion.begin();
+    auto aEnd = aRegion.end();
+    auto bIt = bRegion.begin();
+    auto bEnd = bRegion.end();
+
+    // Region blocks.
+    while (aIt != aEnd && bIt != bEnd)
+      if (failed(check(diag, map, a, *aIt++, b, *bIt++)))
+        return failure();
+    if (aIt != aEnd || bIt != bEnd) {
+      diag.attachNote(a->getLoc())
+          << "operation regions have different number of blocks";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, Operation *a, IntegerAttr aAttr,
+                      Operation *b, IntegerAttr bAttr) {
+    if (aAttr == bAttr)
+      return success();
+    auto aDirections = direction::unpackAttribute(aAttr);
+    auto bDirections = direction::unpackAttribute(bAttr);
+    auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
+    for (unsigned i = 0, e = aDirections.size(); i < e; ++i) {
+      auto aDirection = aDirections[i];
+      auto bDirection = bDirections[i];
+      if (aDirection != bDirection) {
+        auto &note = diag.attachNote(a->getLoc()) << "module port ";
+        if (portNames)
+          note << "'" << portNames[i].cast<StringAttr>().getValue() << "'";
+        else
+          note << i;
+        note << " directions don't match, first direction is '"
+             << direction::toString(aDirection) << "'";
+        diag.attachNote(b->getLoc()) << "second direction is '"
+                                     << direction::toString(bDirection) << "'";
+        return failure();
+      }
+    }
+    return success();
+  }
+
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, DictionaryAttr aDict, Operation *b,
+                      DictionaryAttr bDict) {
+    // Fast path.
+    if (aDict == bDict)
+      return success();
+
+    DenseSet<Attribute> seenAttrs;
+    for (auto namedAttr : aDict) {
+      auto attrName = namedAttr.getName();
+      if (nonessentialAttributes.contains(attrName))
+        continue;
+
+      auto aAttr = namedAttr.getValue();
+      auto bAttr = bDict.get(attrName);
+      if (!bAttr) {
+        diag.attachNote(a->getLoc())
+            << "second operation is missing attribute " << attrName;
+        diag.attachNote(b->getLoc()) << "second operation here";
+        return diag;
+      }
+
+      if (attrName == "portDirections") {
+        // Special handling for the port directions attribute for better
+        // error messages.
+        if (failed(check(diag, a, aAttr.cast<IntegerAttr>(), b,
+                         bAttr.cast<IntegerAttr>())))
+          return failure();
+      } else if (aAttr != bAttr) {
+        diag.attachNote(a->getLoc())
+            << "first operation has attribute '" << attrName.getValue()
+            << "' with value " << aAttr;
+        diag.attachNote(b->getLoc()) << "second operation has value " << bAttr;
+        return failure();
+      }
+      seenAttrs.insert(attrName);
+    }
+    if (aDict.getValue().size() != bDict.getValue().size()) {
+      for (auto namedAttr : bDict) {
+        auto attrName = namedAttr.getName();
+        // Skip the attribute if we don't care about this particular one or it
+        // is one that is known to be in both dictionaries.
+        if (nonessentialAttributes.contains(attrName) ||
+            seenAttrs.contains(attrName))
+          continue;
+        // We have found an attribute that is only in the second operation.
+        diag.attachNote(a->getLoc())
+            << "first operation is missing attribute " << attrName;
+        diag.attachNote(b->getLoc()) << "second operation here";
+        return failure();
+      }
+    }
+    return success();
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
+    auto aName = a.moduleNameAttr().getAttr();
+    auto bName = b.moduleNameAttr().getAttr();
+    // If the modules instantiate are different we will want to know why the
+    // sub module did not dedupliate. This code recursively checks the child
+    // module.
+    if (aName != bName) {
+      diag.attachNote(a->getLoc()) << "first instance targets module " << aName;
+      diag.attachNote(b->getLoc())
+          << "second instance targets module " << bName;
+      diag.report();
+      auto aModule = instanceGraph.getReferencedModule(a);
+      auto bModule = instanceGraph.getReferencedModule(b);
+      // Create a new error for the submodule.
+      auto newDiag = emitError(aModule->getLoc())
+                     << "module " << aName << " not deduplicated with "
+                     << bName;
+      check(newDiag, aModule, bModule);
+      return failure();
+    }
+    return success();
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  LogicalResult check(InFlightDiagnostic &diag, BlockAndValueMapping &map,
+                      Operation *a, Operation *b) {
+    // Operation name.
+    if (a->getName() != b->getName()) {
+      diag.attachNote(a->getLoc()) << "first operation is a " << a->getName();
+      diag.attachNote(b->getLoc()) << "second operation is a " << b->getName();
+      return failure();
+    }
+
+    // If its an instance operaiton, perform some checking and possibly
+    // recurse.
+    if (auto aInst = dyn_cast<InstanceOp>(a)) {
+      auto bInst = cast<InstanceOp>(b);
+      if (failed(check(diag, aInst, bInst)))
+        return failure();
+    }
+
+    // Operation results.
+    if (a->getNumResults() != b->getNumResults()) {
+      diag.attachNote(a->getLoc())
+          << "operations have different number of results";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    for (auto resultPair : llvm::zip(a->getResults(), b->getResults())) {
+      auto &aValue = std::get<0>(resultPair);
+      auto &bValue = std::get<1>(resultPair);
+      if (failed(check(diag, "operation result", a, aValue.getType(), b,
+                       bValue.getType())))
+        return failure();
+      map.map(aValue, bValue);
+    }
+
+    // Operations operands.
+    if (a->getNumOperands() != b->getNumOperands()) {
+      diag.attachNote(a->getLoc())
+          << "operations have different number of operands";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    for (auto operandPair : llvm::zip(a->getOperands(), b->getOperands())) {
+      auto &aValue = std::get<0>(operandPair);
+      auto &bValue = std::get<1>(operandPair);
+      if (bValue != map.lookup(aValue)) {
+        diag.attachNote(a->getLoc())
+            << "operations use different operands, first operand is '"
+            << getFieldName(getFieldRefFromValue(aValue)) << "'";
+        diag.attachNote(b->getLoc())
+            << "second operand is '"
+            << getFieldName(getFieldRefFromValue(bValue))
+            << "', but should have been '"
+            << getFieldName(getFieldRefFromValue(map.lookup(aValue))) << "'";
+        return failure();
+      }
+    }
+
+    // Operation regions.
+    if (a->getNumRegions() != b->getNumRegions()) {
+      diag.attachNote(a->getLoc())
+          << "operations have different number of regions";
+      diag.attachNote(b->getLoc()) << "second operation here";
+      return failure();
+    }
+    for (auto regionPair : llvm::zip(a->getRegions(), b->getRegions())) {
+      auto &aRegion = std::get<0>(regionPair);
+      auto &bRegion = std::get<1>(regionPair);
+      if (failed(check(diag, map, a, aRegion, b, bRegion)))
+        return failure();
+    }
+
+    // Operation attributes.
+    if (failed(check(diag, map, a, a->getAttrDictionary(), b,
+                     b->getAttrDictionary())))
+      return failure();
+    return success();
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
+    BlockAndValueMapping map;
+    if (failed(check(diag, map, a, b)))
+      return;
+    diag.attachNote(a->getLoc()) << "first module here";
+    diag.attachNote(b->getLoc()) << "second module here";
+  }
+
+  // This is a cached "portTypes" string attr.
+  StringAttr portTypesAttr;
+  // This is a set of every attribute we should ignore.
+  DenseSet<Attribute> nonessentialAttributes;
+  InstanceGraph &instanceGraph;
 };
 
 //===----------------------------------------------------------------------===//
@@ -897,6 +1238,7 @@ class DedupPass : public DedupBase<DedupPass> {
     NLAMap nlaMap = createNLAMap(circuit);
     Deduper deduper(instanceGraph, symbolTable, nlaMap, circuit);
     StructuralHasher hasher(&getContext());
+    Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;
 
     // Modules annotated with this should not be considered for deduplication.
@@ -951,11 +1293,13 @@ class DedupPass : public DedupBase<DedupPass> {
 
     // Get the group number from a module path.
     auto failed = false;
-    auto getGroup = [&](Attribute path) -> unsigned {
+    auto parseModule = [&](Attribute path) -> StringAttr {
       // Each module is listed as a target "~Circuit|Module" which we have to
       // parse.
       auto [_, rhs] = path.cast<StringAttr>().getValue().split('|');
-      auto module = StringAttr::get(context, rhs);
+      return StringAttr::get(context, rhs);
+    };
+    auto getGroup = [&](StringAttr module) -> unsigned {
       auto it = groupMap.find(module);
       if (it == groupMap.end()) {
         auto diag = emitError(circuit.getLoc(),
@@ -984,17 +1328,22 @@ class DedupPass : public DedupBase<DedupPass> {
       if (modules.size() == 0)
         return true;
       // Get the first element.
-      auto first = getGroup(modules[0]);
+      auto firstModule = parseModule(modules[0]);
+      auto first = getGroup(firstModule);
       if (failed)
         return false;
       // Verify that the remaining elements are all the same as the first.
       for (auto attr : modules.getValue().drop_front()) {
-        auto next = getGroup(attr);
+        auto nextModule = parseModule(attr);
+        auto next = getGroup(nextModule);
         if (failed)
           return false;
         if (first != next) {
-          emitError(circuit.getLoc(), "module ")
-              << attr << " not deduplicated with " << modules[0];
+          auto diag = emitError(circuit.getLoc(), "module ")
+                      << nextModule << " not deduplicated with " << firstModule;
+          auto a = instanceGraph.lookup(firstModule)->getModule();
+          auto b = instanceGraph.lookup(nextModule)->getModule();
+          equiv.check(diag, a, b);
           failed = true;
           return false;
         }
