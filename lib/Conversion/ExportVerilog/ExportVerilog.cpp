@@ -3211,8 +3211,9 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
   indent();
-  if (op.uniquePriority())
-    os << stringifyUniquePriorityType(*op.uniquePriority()) << " ";
+  if (op.validationQualifier().hasValue())
+    os << stringifyValidationQualifierType(op.validationQualifier().getValue())
+       << " ";
   const char *opname = nullptr;
   switch (op.caseStyle()) {
   case CaseStmtType::CaseStmt:
