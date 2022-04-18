@@ -20,6 +20,37 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
+// If there was no name specified, check to see if there was a useful name
+// specified in the asm file.
+static void setNameFromResult(OpAsmParser &parser, OperationState &result) {
+  if (result.attributes.getNamed("name"))
+    return;
+  // If there is no explicit name attribute, get it from the SSA result name.
+  // If numeric, just use an empty name.
+  StringRef resultName = parser.getResultName(0).first;
+  if (!resultName.empty() && isdigit(resultName[0]))
+    resultName = "";
+  result.addAttribute("name", parser.getBuilder().getStringAttr(resultName));
+}
+
+static bool canElideName(OpAsmPrinter &p, Operation *op) {
+  if (!op->hasAttr("name"))
+    return true;
+
+  auto name = op->getAttrOfType<StringAttr>("name").getValue();
+  if (name.empty())
+    return true;
+
+  SmallString<32> resultNameStr;
+  llvm::raw_svector_ostream tmpStream(resultNameStr);
+  p.printOperand(op->getResult(0), tmpStream);
+  auto actualName = tmpStream.str().drop_front();
+  return actualName == name;
+}
+
+//===----------------------------------------------------------------------===//
+// CompRegOp
+
 ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
 
@@ -55,16 +86,7 @@ ParseResult CompRegOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   Type i1 = IntegerType::get(result.getContext(), 1);
 
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (!result.attributes.getNamed("name")) {
-    // If there is no explicit name attribute, get it from the SSA result name.
-    // If numeric, just use an empty name.
-    StringRef resultName = parser.getResultName(0).first;
-    if (!resultName.empty() && isdigit(resultName[0]))
-      resultName = "";
-    result.addAttribute("name", parser.getBuilder().getStringAttr(resultName));
-  }
+  setNameFromResult(parser, result);
 
   result.addTypes({ty});
   if (operands.size() == 2)
@@ -87,16 +109,8 @@ void CompRegOp::print(::mlir::OpAsmPrinter &p) {
     p << ", " << getReset() << ", " << getResetValue() << ' ';
 
   // Determine if 'name' can be elided.
-  if (getName().empty()) {
+  if (canElideName(p, *this))
     elidedAttrs.push_back("name");
-  } else {
-    SmallString<32> resultNameStr;
-    llvm::raw_svector_ostream tmpStream(resultNameStr);
-    p.printOperand(getData(), tmpStream);
-    auto actualName = tmpStream.str().drop_front();
-    if (actualName == getName())
-      elidedAttrs.push_back("name");
-  }
 
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
   p << " : " << getInput().getType();
@@ -106,6 +120,149 @@ void CompRegOp::print(::mlir::OpAsmPrinter &p) {
 /// attribute.
 void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
+  if (!getName().empty())
+    setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
+// FirRegOp
+
+void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
+                     Value clk, StringAttr name, StringAttr innerSym) {
+
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addOperands(input);
+  result.addOperands(clk);
+
+  result.addAttribute(getNameAttrName(result.name), name);
+  result.addAttribute(getIsAsyncAttrName(result.name),
+                      builder.getBoolAttr(false));
+
+  if (innerSym)
+    result.addAttribute(getInnerSymAttrName(result.name), innerSym);
+
+  result.addTypes(input.getType());
+}
+
+void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
+                     Value clk, StringAttr name, Value reset, Value resetValue,
+                     StringAttr innerSym, bool isAsync) {
+
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addOperands(input);
+  result.addOperands(clk);
+  result.addOperands(reset);
+  result.addOperands(resetValue);
+
+  result.addAttribute(getNameAttrName(result.name), name);
+  result.addAttribute(getIsAsyncAttrName(result.name),
+                      builder.getBoolAttr(isAsync));
+
+  if (innerSym)
+    result.addAttribute(getInnerSymAttrName(result.name), innerSym);
+
+  result.addTypes(input.getType());
+}
+
+ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+  llvm::SMLoc loc = parser.getCurrentLocation();
+
+  using Op = OpAsmParser::UnresolvedOperand;
+
+  Op next, clk;
+  if (parser.parseOperand(next) || parser.parseKeyword("clock") ||
+      parser.parseOperand(clk))
+    return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    StringAttr symName;
+    if (parser.parseSymbolName(symName, "inner_sym", result.attributes))
+      return failure();
+  }
+
+  // Parse reset [sync|async] %reset, %value
+  Optional<std::pair<Op, Op>> resetAndValue;
+  if (succeeded(parser.parseOptionalKeyword("reset"))) {
+    bool isAsync;
+    if (succeeded(parser.parseOptionalKeyword("async")))
+      isAsync = true;
+    else if (succeeded(parser.parseOptionalKeyword("sync")))
+      isAsync = false;
+    else
+      return parser.emitError(loc, "invalid reset, expected 'sync' or 'async'");
+    if (isAsync)
+      result.attributes.append("isAsync", builder.getUnitAttr());
+
+    resetAndValue = {{}, {}};
+    if (parser.parseOperand(resetAndValue->first) || parser.parseComma() ||
+        parser.parseOperand(resetAndValue->second))
+      return failure();
+  }
+
+  Type ty;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(ty))
+    return failure();
+  result.addTypes({ty});
+
+  setNameFromResult(parser, result);
+
+  Type i1 = IntegerType::get(result.getContext(), 1);
+  if (parser.resolveOperand(next, ty, result.operands) ||
+      parser.resolveOperand(clk, i1, result.operands))
+    return failure();
+
+  if (resetAndValue) {
+    if (parser.resolveOperand(resetAndValue->first, i1, result.operands) ||
+        parser.resolveOperand(resetAndValue->second, ty, result.operands))
+      return failure();
+  }
+
+  return success();
+}
+
+void FirRegOp::print(::mlir::OpAsmPrinter &p) {
+  SmallVector<StringRef> elidedAttrs = {getInnerSymAttrName(),
+                                        getIsAsyncAttrName()};
+
+  p << ' ' << getNext() << " clock " << getClk();
+
+  if (auto sym = getInnerSym()) {
+    p << " sym ";
+    p.printSymbolName(*sym);
+  }
+
+  if (hasReset()) {
+    p << " reset " << (getIsAsync() ? "async" : "sync") << ' ';
+    p << getReset() << ", " << getResetValue();
+  }
+
+  if (canElideName(p, *this))
+    elidedAttrs.push_back("name");
+
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+  p << " : " << getNext().getType();
+}
+
+/// Verifier for the FIR register op.
+LogicalResult FirRegOp::verify() {
+  if (getReset() || getResetValue() || getIsAsync()) {
+    if (!getReset() || !getResetValue())
+      return emitOpError("must specify reset and reset value");
+  } else {
+    if (getIsAsync())
+      return emitOpError("register with no reset cannot be async");
+  }
+  return success();
+}
+
+/// Suggest a name for each result value based on the saved result names
+/// attribute.
+void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the register has an optional 'name' attribute, use it.
   if (!getName().empty())
     setNameFn(getResult(), getName());
 }
