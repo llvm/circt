@@ -393,6 +393,22 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
        // CHECK-NEXT: $fwrite(32'h80000002, "one");
        sv.fwrite %fd, "one"
      } // CHECK-NEXT: endcase
+
+    // CHECK-NEXT: priority case (cond)
+    sv.case %cond : i1 {validationQualifier = #sv<"validation_qualifier priority">}
+    // CHECK-NEXT: default:
+    default: {
+      // CHECK-NEXT: $fwrite(32'h80000002, "zero");
+      sv.fwrite %fd, "zero"
+    } // CHECK-NEXT: endcase
+
+    // CHECK-NEXT: unique casez (cond)
+    sv.case casez %cond : i1 {validationQualifier = #sv<"validation_qualifier unique">}
+    // CHECK-NEXT: default:
+    default: {
+      // CHECK-NEXT: $fwrite(32'h80000002, "zero");
+      sv.fwrite %fd, "zero"
+    } // CHECK-NEXT: endcase
   }// CHECK-NEXT:   {{end // initial$}}
 
   sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR

@@ -3210,6 +3210,11 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
 LogicalResult StmtEmitter::visitSV(CaseOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
+  indent();
+  if (op.validationQualifier().hasValue())
+    os << stringifyValidationQualifierTypeEnumAttr(
+              op.validationQualifier().getValue())
+       << " ";
   const char *opname = nullptr;
   switch (op.caseStyle()) {
   case CaseStmtType::CaseStmt:
@@ -3222,7 +3227,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
     opname = "casez";
     break;
   }
-  indent() << opname << " (";
+  os << opname << " (";
   emitExpression(op.cond(), ops);
   os << ')';
   emitLocationInfoAndNewLine(ops);

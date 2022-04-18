@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 /// Ensure symbol is one of the hw module.* types
 def isModuleSymbol : AttrConstraint<
   CPred<
@@ -298,6 +300,16 @@ def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
 def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
                                    [CaseStmt, CaseXStmt, CaseZStmt]>;
 
+def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 0, "unique">;
+def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 1, "unique0">;
+def ValidationQualifierPriority: I32EnumAttrCase<"ValidationQualifierPriority", 2, "priority">;
+def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnumAttr", "validation qualifier type",
+              [ValidationQualifierUnique, ValidationQualifierUnique0, ValidationQualifierPriority]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::sv";
+}
+
+def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
 
 def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
                            ProceduralRegion, ProceduralOp]> {
@@ -307,7 +319,8 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
-                       HWIntegerType:$cond, ArrayAttr:$casePatterns);
+                       HWIntegerType:$cond, ArrayAttr:$casePatterns,
+                       OptionalAttr<ValidationQualifierTypeAttr>: $validationQualifier);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;

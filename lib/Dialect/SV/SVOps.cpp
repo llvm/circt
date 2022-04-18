@@ -643,6 +643,12 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
   return result;
 }
 
+/// Parse case op.
+/// case op ::= `sv.case` case-style? cond `:` type attr-dict  case-pattern^*
+/// case-style ::= `case` | `casex` | `casez`
+/// validation-qualifier (see SV Spec 12.5.3) ::= `unique` | `unique0`
+///                                             | `priority`
+/// case-pattern ::= `case` bit-pattern `:` region
 ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
