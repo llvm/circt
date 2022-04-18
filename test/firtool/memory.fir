@@ -79,10 +79,10 @@ circuit Qux: %[[{
 ;CHECK-SAME:        (%[[multbit_mux_wire]], %[[array_get]])
 ;CHECK:    %[[v7:.+]] = sv.read_inout %[[multbit_mux_wire]] : !hw.inout<i8>
 ;CHECK:    sv.always posedge %clock {
-;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
 ;CHECK-NEXT:      sv.passign %[[memory_0]]
 ;CHECK-NEXT:      sv.passign %[[memory_1]]
 ;CHECK-NEXT:      sv.passign %[[memory_2]]
 ;CHECK-NEXT:      sv.passign %[[memory_3]]
+;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
 ;CHECK-NEXT:    }
 ;CHECK:    hw.output %[[v6]], %[[v7]]

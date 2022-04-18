@@ -23,6 +23,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
@@ -643,6 +645,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createSimpleCanonicalizerPass());
       }
     } else {
+      pm.addPass(seq::createSeqLowerToSVPass());
       pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
       if (extractTestCode)
@@ -855,7 +858,8 @@ static LogicalResult executeFirtool(MLIRContext &context) {
 
   // Register our dialects.
   context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
-                      hw::HWDialect, comb::CombDialect, sv::SVDialect>();
+                      hw::HWDialect, comb::CombDialect, seq::SeqDialect,
+                      sv::SVDialect>();
 
   // Process the input.
   if (failed(processInput(context, ts, std::move(input), outputFile)))
