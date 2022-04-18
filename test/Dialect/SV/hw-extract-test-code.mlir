@@ -1,4 +1,4 @@
-// RUN:  circt-opt --sv-extract-test-code %s | FileCheck %s
+// RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
 // CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3/"
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
@@ -57,5 +57,26 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
     hw.instance "bar_assume" @foo_assume(a: %clock : i1) -> ()
     hw.instance "bar_assert" @foo_assert(a: %clock : i1) -> ()
     hw.output
+  }
+}
+
+// -----
+
+// Check that a module that is already going to be extracted does not have its
+// asserts also extracted.  This avoids a problem where certain simulators do
+// not like to bind instances into bound instances.  See:
+//   - https://github.com/llvm/circt/issues/2910
+//
+// CHECK-LABEL: @AlreadyExtracted
+// CHECK-COUNT-1: doNotPrint
+// CHECK-NOT:     doNotPrint
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @AlreadyExtracted(%clock: i1) -> () {
+    sv.always posedge %clock  {
+      sv.assert %clock, immediate
+    }
+  }
+  hw.module @Top(%clock: i1) -> () {
+    hw.instance "submodule" @AlreadyExtracted(clock: %clock: i1) -> () {doNotPrint = true}
   }
 }
