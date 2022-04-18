@@ -3212,7 +3212,8 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   ops.insert(op);
   indent();
   if (op.validationQualifier().hasValue())
-    os << stringifyValidationQualifierType(op.validationQualifier().getValue())
+    os << stringifyValidationQualifierTypeEnumAttr(
+              op.validationQualifier().getValue())
        << " ";
   const char *opname = nullptr;
   switch (op.caseStyle()) {

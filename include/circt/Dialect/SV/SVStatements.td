@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 /// Ensure symbol is one of the hw module.* types
 def isModuleSymbol : AttrConstraint<
   CPred<
@@ -301,8 +303,13 @@ def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
 def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 0, "unique">;
 def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 1, "unique0">;
 def ValidationQualifierPriority: I32EnumAttrCase<"ValidationQualifierPriority", 2, "priority">;
-def ValidationQualifierTypeAttr: I32EnumAttr<"ValidationQualifierType", "unique priority type",
-              [ValidationQualifierUnique, ValidationQualifierUnique0, ValidationQualifierPriority]>;
+def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnumAttr", "validation qualifier type",
+              [ValidationQualifierUnique, ValidationQualifierUnique0, ValidationQualifierPriority]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::circt::sv";
+}
+
+def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
 
 def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
                            ProceduralRegion, ProceduralOp]> {
