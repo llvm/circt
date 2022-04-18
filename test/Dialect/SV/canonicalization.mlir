@@ -158,7 +158,7 @@ hw.module @assert_canonicalization(%clock: i1) {
 hw.module @case_stmt(%arg: i3) {
   %fd = hw.constant 0x80000002 : i32
   sv.initial {
-    // CHECK: sv.case %arg
+    // CHECK: sv.case case %arg
     sv.case casez %arg : i3
     case b000: {
       sv.fwrite %fd, "x"
@@ -167,7 +167,7 @@ hw.module @case_stmt(%arg: i3) {
       sv.fwrite %fd, "z"
     }
 
-    // CHECK: sv.case %arg
+    // CHECK: sv.case case %arg
     sv.case casez %arg : i3
     case b00x: {
       sv.fwrite %fd, "x"
@@ -198,7 +198,7 @@ hw.module @case_stmt(%arg: i3) {
     }
 
 
-    // CHECK: sv.case %arg
+    // CHECK: sv.case case %arg
     sv.case casex %arg : i3
     case b000: {
       sv.fwrite %fd, "x"
@@ -238,8 +238,8 @@ hw.module @case_stmt(%arg: i3) {
     }
 
 
-    // CHECK: sv.case %arg
-    sv.case %arg : i3
+    // CHECK: sv.case case %arg
+    sv.case case %arg : i3
     case b000: {
       sv.fwrite %fd, "x"
     }
@@ -247,8 +247,8 @@ hw.module @case_stmt(%arg: i3) {
       sv.fwrite %fd, "z"
     }
 
-    // CHECK: sv.case %arg
-    sv.case %arg : i3
+    // CHECK: sv.case case %arg
+    sv.case case %arg : i3
     case b00x: {
       sv.fwrite %fd, "x"
     }
@@ -256,8 +256,8 @@ hw.module @case_stmt(%arg: i3) {
       sv.fwrite %fd, "z"
     }
 
-    // CHECK: sv.case %arg
-    sv.case %arg : i3
+    // CHECK: sv.case case %arg
+    sv.case case %arg : i3
     case b00z: {
       sv.fwrite %fd, "x"
     }
@@ -265,8 +265,8 @@ hw.module @case_stmt(%arg: i3) {
       sv.fwrite %fd, "z"
     }
 
-    // CHECK: sv.case %arg
-    sv.case %arg : i3
+    // CHECK: sv.case case %arg
+    sv.case case %arg : i3
     case b00z: {
       sv.fwrite %fd, "x"
     }

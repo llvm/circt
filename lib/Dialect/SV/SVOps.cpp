@@ -644,43 +644,37 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
 }
 
 /// Parse case op.
-/// case op ::= `sv.case` ?case-style ?unique-priority cond attr-dict `:` type
-///              case-pattern^*
+/// case op ::= `sv.case` case-style validation-qualifier? cond attr-dict `:`
+///             type case-pattern^*
 /// case-style ::= `case` | `casex` | `casez`
-/// unique-priority (see SV Spec 12.5.3) ::= `unique` | `unique0` | `priority`
+/// validation-qualifier (see SV Spec 12.5.3) ::= `unique` | `unique0`
+///                                             | `priority`
 /// case-pattern ::= `case` bit-pattern `:` region
 ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
   OpAsmParser::UnresolvedOperand condOperand;
   Type condType;
-  // Track `unique`, `unique0` or `priority`.
-  llvm::Optional<UniquePriorityType> uniquePriority;
 
   auto loc = parser.getCurrentLocation();
 
   StringRef keyword;
-  if (!parser.parseOptionalKeyword(&keyword)) {
+  if (!parser.parseKeyword(&keyword)) {
     auto kind = symbolizeCaseStmtType(keyword);
-    if (kind.hasValue()) {
-      auto caseEnum = static_cast<int32_t>(kind.getValue());
-      result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
-    } else {
-      uniquePriority = symbolizeUniquePriorityType(keyword);
-      if (!uniquePriority)
-        return parser.emitError(loc, "expected 'case', 'casex', 'casez', "
-                                     "'unique', 'unique0', or 'priority'");
-    }
+    if (!kind.hasValue())
+      return parser.emitError(loc, "expected 'case', 'casex' or 'casez'");
+    auto caseEnum = static_cast<int32_t>(kind.getValue());
+    result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
   }
 
-  if (uniquePriority || !parser.parseOptionalKeyword(&keyword)) {
-    if (!uniquePriority)
-      uniquePriority = symbolizeUniquePriorityType(keyword);
-    if (!uniquePriority)
+  if (!parser.parseOptionalKeyword(&keyword)) {
+    auto kind = symbolizeValidationQualifierType(keyword);
+    if (!kind.hasValue())
       return parser.emitError(loc,
-                              "expected 'unique', 'unique0', or 'priority'");
-    auto caseEnum = static_cast<int32_t>(uniquePriority.getValue());
-    result.addAttribute("uniquePriority", builder.getI32IntegerAttr(caseEnum));
+                              "expected 'unique', 'unique0' or 'priority'");
+    auto validationQualifierEnum = static_cast<int32_t>(kind.getValue());
+    result.addAttribute("validationQualifier",
+                        builder.getI32IntegerAttr(validationQualifierEnum));
   }
 
   if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
@@ -766,17 +760,14 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void CaseOp::print(OpAsmPrinter &p) {
-  p << ' ';
-  if (caseStyle() == CaseStmtType::CaseXStmt)
-    p << "casex ";
-  else if (caseStyle() == CaseStmtType::CaseZStmt)
-    p << "casez ";
-  if (uniquePriority().hasValue())
-    p << stringifyUniquePriorityType(uniquePriority().getValue()) << " ";
+  p << ' ' << stringifyCaseStmtType(caseStyle()) << ' ';
+  if (validationQualifier().hasValue())
+    p << stringifyValidationQualifierType(validationQualifier().getValue())
+      << ' ';
   p << cond() << " : " << cond().getType();
   p.printOptionalAttrDict(
       (*this)->getAttrs(),
-      /*elidedAttrs=*/{"casePatterns", "caseStyle", "uniquePriority"});
+      /*elidedAttrs=*/{"casePatterns", "caseStyle", "ValidationQualifier"});
 
   for (auto caseInfo : getCases()) {
     p.printNewline();

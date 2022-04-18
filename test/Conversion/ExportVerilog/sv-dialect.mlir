@@ -395,7 +395,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
      } // CHECK-NEXT: endcase
 
     // CHECK-NEXT: priority case (cond)
-    sv.case priority %cond : i1
+    sv.case case priority %cond : i1
     // CHECK-NEXT: default:
     default: {
       // CHECK-NEXT: $fwrite(32'h80000002, "zero");
@@ -403,7 +403,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     } // CHECK-NEXT: endcase
 
     // CHECK-NEXT: unique casez (cond)
-    sv.case casez unique %cond : i1
+    sv.case casez unique %cond : i1 // {validationQualifier = "priority"}
     // CHECK-NEXT: default:
     default: {
       // CHECK-NEXT: $fwrite(32'h80000002, "zero");

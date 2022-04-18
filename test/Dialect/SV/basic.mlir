@@ -125,14 +125,14 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   }
 
   // CHECK-NEXT: sv.initial {
-  // CHECK-NEXT:   sv.case %arg1 : i1
+  // CHECK-NEXT:   sv.case case %arg1 : i1
   // CHECK-NEXT:   case b0: {
   // CHECK-NEXT:     sv.fwrite [[FD]], "zero"
   // CHECK-NEXT:   }
   // CHECK-NEXT:   case b1: {
   // CHECK-NEXT:     sv.fwrite [[FD]], "one"
   // CHECK-NEXT:   }
-  // CHECK-NEXT:   sv.case %arg1 : i1
+  // CHECK-NEXT:   sv.case case %arg1 : i1
   // CHECK-NEXT:   case b0: {
   // CHECK-NEXT:     sv.fwrite [[FD]], "zero"
   // CHECK-NEXT:   }
@@ -155,7 +155,7 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   sv.initial {
-    sv.case %arg1 : i1
+    sv.case case %arg1 : i1
     case b0: {
       sv.fwrite %fd, "zero"
     }
