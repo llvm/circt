@@ -1,5 +1,5 @@
 ; RUN: firtool %s --format=fir  --ir-fir | FileCheck %s 
-; RUN: firtool %s --format=fir  --ir-hw | FileCheck --check-prefix=HW %s 
+; RUN: firtool %s --format=fir  --ir-sv | FileCheck --check-prefix=HW %s
 
 circuit Foo : %[[
   {
