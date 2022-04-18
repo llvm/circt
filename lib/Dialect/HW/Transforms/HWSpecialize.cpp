@@ -67,10 +67,7 @@ static bool isParametricOp(Operation *op) {
 static FailureOr<Value> narrowValueToArrayWidth(OpBuilder &builder, Value array,
                                                 Value value) {
   OpBuilder::InsertionGuard g(builder);
-  if (value.isa<BlockArgument>())
-    builder.setInsertionPointToStart(value.getParentBlock());
-  else
-    builder.setInsertionPointAfter(value.getDefiningOp());
+  builder.setInsertionPointAfterValue(value);
   auto arrayType = array.getType().cast<hw::ArrayType>();
   unsigned hiBit = llvm::Log2_64_Ceil(arrayType.getSize());
 
