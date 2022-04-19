@@ -346,9 +346,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>) {
     // CHECK: [[ADD:%.+]] = comb.add
 
-    // CHECK: sv.always posedge %clock {
-    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
-    // CHECK-NEXT:   } else  {
+    // CHECK:      sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: } else  {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
@@ -386,21 +386,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @Stop
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 
-    // CHECK-NEXT: sv.always posedge %clock1 {
-    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
-    // CHECK-NEXT:   } else {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.always posedge %clock1 {
     // CHECK-NEXT:     %STOP_COND_ = sv.verbatim.expr "`STOP_COND_" : () -> i1
     // CHECK-NEXT:     %0 = comb.and %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.fatal
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
-    // CHECK-NEXT: }
     firrtl.stop %clock1, %reset, 42
 
-    // CHECK-NEXT: sv.always posedge %clock2 {
-    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
-    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:   sv.always posedge %clock2 {
     // CHECK-NEXT:     %STOP_COND_ = sv.verbatim.expr "`STOP_COND_" : () -> i1
     // CHECK-NEXT:     %0 = comb.and %STOP_COND_, %reset : i1
     // CHECK-NEXT:     sv.if %0 {
@@ -574,9 +571,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and %enable, [[TMP1]]
-    // CHECK-NEXT: sv.always posedge %clock {
-    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
-    // CHECK-NEXT:   } else {
+    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   sv.always posedge %clock {
     // CHECK-NEXT:     sv.if [[TMP2]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.verbatim.expr "`ASSERT_VERBOSE_COND_"
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {

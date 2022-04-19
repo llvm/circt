@@ -20,8 +20,8 @@ circuit Foo:
     input other : UInt<1>
     input sum : UInt<42>
 
-    ; CHECK: always @(posedge clock) begin
-    ; CHECK-NEXT: `ifndef SYNTHESIS
+    ; CHECK: `ifndef SYNTHESIS
+    ; CHECK-NEXT: always @(posedge clock) begin
 
     ; assert with predicate only
     ; CHECK-NEXT: if (enable & ~(predicate1 | reset)) begin
@@ -68,8 +68,8 @@ circuit Foo:
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"ifElseFatal\"},\"baseMsg\":\"Assertion failed (verification library): expected sum === 2.U but got %d\"}</extraction-summary> bar", sum)
       stop(clock, enable, 1)
 
-    ; CHECK-NEXT: `endif
     ; CHECK-NEXT: end
+    ; CHECK-NEXT: `endif
 
 
     ; assert emitted as SVA
@@ -117,16 +117,16 @@ circuit Foo:
       stop(clock, enable, 1)
 
     ; if-else-fatal style assert with conditional compilation toggles
-    ; CHECK-NEXT:   always @(posedge clock) begin
-    ; CHECK-NEXT:   `ifndef SYNTHESIS
+    ; CHECK-NEXT:  `ifndef SYNTHESIS
+    ; CHECK-NEXT:    always @(posedge clock) begin
     ; CHECK-NEXT:     if (enable & ~(predicate9 | reset)) begin
     ; CHECK-NEXT:       if (`ASSERT_VERBOSE_COND_)
     ; CHECK-NEXT:         $error("Assertion failed (verification library): Conditional compilation example with if-else-fatal style assert");
     ; CHECK-NEXT:       if (`STOP_COND_)
     ; CHECK-NEXT:         $fatal;
     ; CHECK-NEXT:     end
-    ; CHECK-NEXT:   `endif
-    ; CHECK-NEXT:   end
+    ; CHECK-NEXT:    end
+    ; CHECK-NEXT:  `endif
     ; CHECK-NEXT: `endif
     when not(or(predicate9, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"}],\"format\":{\"type\":\"ifElseFatal\"},\"baseMsg\":\"Assertion failed (verification library): Conditional compilation example with if-else-fatal style assert\"}</extraction-summary> bar")
