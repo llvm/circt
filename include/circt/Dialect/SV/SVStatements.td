@@ -33,7 +33,7 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
-  let arguments = (ins StrAttr:$cond);
+  let arguments = (ins MacroIdentAttr:$cond);
   let results = (outs);
 
   let hasCanonicalizeMethod = true;
@@ -47,6 +47,9 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "StringAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "MacroIdentAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -78,7 +81,7 @@ def IfDefProceduralOp
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
-  let arguments = (ins StrAttr:$cond);
+  let arguments = (ins MacroIdentAttr:$cond);
   let results = (outs);
 
   let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";

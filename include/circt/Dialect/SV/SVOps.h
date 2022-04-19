@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SV_OPS_H
 #define CIRCT_DIALECT_SV_OPS_H
 
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVTypes.h"
 #include "mlir/IR/OpImplementation.h"
@@ -127,11 +128,6 @@ public:
 } // namespace circt
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/SV/SVEnums.h.inc"
-#define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/SV/SVAttributes.h.inc"
-// Clang format shouldn't reorder these headers.
 #include "circt/Dialect/SV/SV.h.inc"
-#include "circt/Dialect/SV/SVStructs.h.inc"
 
 #endif // CIRCT_DIALECT_SV_OPS_H

@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTSV
+  SVAttributes.cpp
   SVDialect.cpp
   SVOps.cpp
   SVTypes.cpp

@@ -2440,7 +2440,7 @@ private:
   LogicalResult visitStmt(TypeScopeOp op);
   LogicalResult visitStmt(TypedeclOp op);
 
-  LogicalResult emitIfDef(Operation *op, StringRef cond);
+  LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
   LogicalResult visitSV(IfDefProceduralOp op) {
     return emitIfDef(op, op.cond());
@@ -2971,12 +2971,14 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
   return emitConcurrentAssertion(op, "cover");
 }
 
-LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
+LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
+  StringRef ident = cond.getName();
+
   bool hasEmptyThen = op->getRegion(0).front().empty();
   if (hasEmptyThen)
-    indent() << "`ifndef " << cond;
+    indent() << "`ifndef " << ident;
   else
-    indent() << "`ifdef " << cond;
+    indent() << "`ifdef " << ident;
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
