@@ -57,6 +57,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       }
     } else if (option == "explicitBitcastAddMul") {
       explicitBitcastAddMul = true;
+    } else if (option == "emitReplicatedOpsToHeader") {
+      emitReplicatedOpsToHeader = true;
     } else if (option.startswith("maximumNumberOfTermsPerExpression=")) {
       option = option.drop_front(strlen("maximumNumberOfTermsPerExpression="));
       if (option.getAsInteger(10, maximumNumberOfTermsPerExpression)) {
@@ -85,6 +87,8 @@ std::string LoweringOptions::toString() const {
     options += "verifLabels,";
   if (explicitBitcastAddMul)
     options += "explicitBitcastAddMul,";
+  if (emitReplicatedOpsToHeader)
+    options += "emitReplicatedOpsToHeader,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -143,7 +147,8 @@ struct LoweringCLOptions {
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul"),
+          "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul, "
+          "emitReplicatedOpsToHeader"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
