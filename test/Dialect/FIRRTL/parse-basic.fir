@@ -90,6 +90,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.connect %_t, %_t_2
     _t <- _t_2
+    
+    ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog(0)
+    ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog(0)
+    ; CHECK: firrtl.attach [[a1]], [[a0]]
+    wire bundleWithAnalog : {a: Analog<1>}
+    bundleWithAnalog <- bundleWithAnalog
 
     ; CHECK: [[INV:%.+]]  = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.strictconnect %auto, [[INV]] : !firrtl.uint<1>
