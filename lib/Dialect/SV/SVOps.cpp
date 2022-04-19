@@ -296,21 +296,21 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
-static bool isEmptyBlockExceptForTerminator(Block *block) {
-  assert(block && "Blcok must be non-null");
-  return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
-}
-
 // If both thenRegion and elseRegion are empty, erase op.
-LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
-  if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+template <class Op>
+static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
+  if (!op.getThenBlock()->empty())
     return failure();
 
-  if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+  if (op.hasElse() && !op.getElseBlock()->empty())
     return failure();
 
   rewriter.eraseOp(op);
   return success();
+}
+
+LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
+  return canonicalizeIfDefLike(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -321,6 +321,11 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               std::function<void()> elseCtor) {
   IfDefOp::build(builder, result, cond, std::move(thenCtor),
                  std::move(elseCtor));
+}
+
+LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
+                                              PatternRewriter &rewriter) {
+  return canonicalizeIfDefLike(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
