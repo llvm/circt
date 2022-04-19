@@ -3567,9 +3567,9 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     }
   }
 
-  addToAlwaysBlock(clock, [&]() {
-    // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+  // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    addToAlwaysBlock(clock, [&]() {
       circuitState.used_PRINTF_COND = true;
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
@@ -3596,10 +3596,10 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   if (!clock || !cond)
     return failure();
 
-  // Emit this into an "sv.always posedge" body.
-  addToAlwaysBlock(clock, [&]() {
-    // Emit an "#ifndef SYNTHESIS" guard into the always block.
-    addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+  // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    // Emit this into an "sv.always posedge" body.
+    addToAlwaysBlock(clock, [&]() {
       circuitState.used_STOP_COND = true;
 
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
@@ -3731,8 +3731,8 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     if (format && format.getValue() == "ifElseFatal") {
       predicate = comb::createOrFoldNot(predicate, builder);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
-      addToAlwaysBlock(clock, [&]() {
-        addToIfDefProceduralBlock("SYNTHESIS", {}, [&]() {
+      addToIfDefBlock("SYNTHESIS", {}, [&]() {
+        addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
             circuitState.used_ASSERT_VERBOSE_COND = true;
             circuitState.used_STOP_COND = true;
