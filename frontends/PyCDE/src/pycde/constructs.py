@@ -22,8 +22,8 @@ def SystolicArray(row_inputs, col_inputs, pe_builder):
   pe_block = dummy_op.regions[0].blocks.append(row_inputs_type.element_type,
                                                col_inputs_type.element_type)
   with _ir.InsertionPoint(pe_block):
-    result = pe_builder(_Value.get(pe_block.arguments[0]),
-                        _Value.get(pe_block.arguments[1]))
+    result = pe_builder(_Value(pe_block.arguments[0]),
+                        _Value(pe_block.arguments[1]))
     value = _obj_to_value(result, result.type)
     pe_output_type = value.type
     _msft.PEOutputOp(value.value)

@@ -16,9 +16,12 @@ import re
 
 class Value:
 
-  @staticmethod
-  def get(value, type=None):
-    from .pycde_types import PyCDEType
+  # Dummy __init__ as everything is done in __new__.
+  def __init__(self, value, type=None):
+    pass
+
+  def __new__(cls, value, type=None):
+    from .pycde_types import Type
 
     if value is None or isinstance(value, Value):
       return value
@@ -28,8 +31,11 @@ class Value:
 
     if type is None:
       type = resvalue.type
-    type = PyCDEType(type)
-    return type.get_value(value)
+    type = Type(type)
+    v = super().__new__(type._get_value_class())
+    v.value = resvalue
+    v.type = type
+    return v
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
@@ -84,17 +90,10 @@ class Value:
 
 
 class RegularValue(Value):
-
-  def __init__(self, value, type):
-    self.value = value
-    self.type = type
+  pass
 
 
 class BitVectorValue(Value):
-
-  def __init__(self, value, type):
-    self.value = value
-    self.type = type
 
   def __getitem__(self, idxOrSlice: Union[int, slice]):
     if isinstance(idxOrSlice, int):
@@ -123,10 +122,6 @@ class BitVectorValue(Value):
 
 class ListValue(Value):
 
-  def __init__(self, value, type):
-    self.value = value
-    self.type = type
-
   def __getitem__(self, sub):
     if isinstance(sub, int):
       idx = int(sub)
@@ -150,10 +145,6 @@ class ListValue(Value):
 
 
 class StructValue(Value):
-
-  def __init__(self, value, type):
-    self.value = value
-    self.type = type
 
   def __getitem__(self, sub):
     if sub not in [name for name, _ in self.type.strip.fields]:
@@ -186,31 +177,27 @@ def wrap_opviews_with_values(dialect, module_name):
 
     if isinstance(cls, type) and issubclass(cls, ir.OpView):
 
-      class ValueOpView(Value):
-        _opview_cls = cls
+      def specialize_create(cls):
 
-        def __init__(self, *args, **kwargs):
-          from .pycde_types import PyCDEType
-          from .dialects import hw
-
-          created = self._opview_cls.create(*args, **kwargs)
+        def create(*args, **kwargs):
+          # If any of the arguments are Value objects, we need to convert them.
+          args = [v.value if isinstance(v, Value) else v for v in args]
+          kwargs = {
+              k: v.value if isinstance(v, Value) else v
+              for k, v in kwargs.items()
+          }
+          # Create the OpView.
+          created = cls.create(*args, **kwargs)
           if isinstance(created, support.NamedValueOpView):
             created = created.opview
 
+          # Return a Value.
           assert len(created.results) == 1
-          value = created.results[0]
-          type = PyCDEType(value.type)
-          self._inst = type.get_value(value)
-          if hasattr(self._inst, "__len__"):
-            setattr(self, "__len__", lambda x: len(x._inst))
+          return Value(created.results[0])
 
-        def __getitem__(self, sub):
-          return self._inst[sub]
+        return create
 
-        def __getattr__(self, attr):
-          return getattr(self._inst, attr)
-
-      wrapped_class = ValueOpView
+      wrapped_class = specialize_create(cls)
       setattr(module, attr, wrapped_class)
     else:
       setattr(module, attr, cls)
