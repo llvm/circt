@@ -1485,4 +1485,11 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
     in %a: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @foo}>],
     in %b: !firrtl.bundle<foo: uint<1>> [#firrtl.subAnno<fieldID=1, {circt.nonlocal = @bar}>]) {
   }
+
+  // Ensure 0 bit fields are handled properly.
+  firrtl.module @ZeroWideMem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+    %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, groupID = 1 : i32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<entry: bundle<reserved: uint<0>, pscid: uint<20>, reserved0: uint<42>>>, mask: bundle<entry: bundle<reserved: uint<1>, pscid: uint<1>, reserved0: uint<1>>>>
+    //FLATTEN   %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<62>, mask: uint<31>>
+  }
+
 } // CIRCUIT
