@@ -53,6 +53,7 @@ func @if_dead_condition(%arg0: i1) {
 // CHECK-LABEL: func @empy_op(%arg0: i1) {
 // CHECK-NOT:     sv.if
 // CHECK-NOT:     sv.ifdef
+// CHECK-NOT:     sv.ifdef.procedural
 // CHECK-NOT:     sv.always
 // CHECK-NOT:     sv.initial
 // CHECK-NEXT:    return
@@ -61,6 +62,8 @@ func @empy_op(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {}
     sv.if %arg0 {} else {}
+    sv.ifdef.procedural "SYNTHESIS" {}
+    sv.ifdef.procedural "SYNTHESIS" {} else {}
   }
   sv.ifdef "SYNTHESIS" {}
   sv.ifdef "SYNTHESIS" {} else {}

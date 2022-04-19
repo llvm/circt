@@ -80,6 +80,7 @@ def IfDefProceduralOp
     This operation is for procedural regions and its body is procedural.
   }];
 
+  let hasCanonicalizeMethod = true;
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins MacroIdentAttr:$cond);
   let results = (outs);
