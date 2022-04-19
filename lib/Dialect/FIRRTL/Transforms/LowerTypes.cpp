@@ -1094,7 +1094,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
                     realOldField, m.index(), m.index());
                 // Check how many times the mask bit needs to be prepend.
                 for (size_t repeat = 0; repeat < m.value(); repeat++)
-                  if (m.index() == 0 && repeat == 0)
+                  if ((m.index() == 0 && repeat == 0) || !catMasks)
                     catMasks = mBit;
                   else
                     catMasks = builder->createOrFold<CatPrimOp>(mBit, catMasks);
