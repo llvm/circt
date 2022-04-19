@@ -55,7 +55,7 @@ parseArrayOfDicts(ArrayAttr attr, StringRef key) {
   return result;
 }
 
-static void constructProblem(Problem &prob, FuncOp func) {
+static void constructProblem(Problem &prob, func::FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setLatency(unitOpr, 1);
@@ -96,7 +96,7 @@ static void constructProblem(Problem &prob, FuncOp func) {
   }
 }
 
-static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
+static void constructCyclicProblem(CyclicProblem &prob, func::FuncOp func) {
   // parse auxiliary dependences in the testcase (again), in order to set the
   // optional distance in the cyclic problem
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
@@ -112,7 +112,7 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
   }
 }
 
-static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
+static void constructChainingProblem(ChainingProblem &prob, func::FuncOp func) {
   // patch the default operator type to have zero-delay
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setIncomingDelay(unitOpr, 0.0f);
@@ -132,7 +132,7 @@ static void constructChainingProblem(ChainingProblem &prob, FuncOp func) {
 }
 
 static void constructSharedOperatorsProblem(SharedOperatorsProblem &prob,
-                                            FuncOp func) {
+                                            func::FuncOp func) {
   // parse operator type info (again) to extract optional operator limit
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
     for (auto &elem : parseArrayOfDicts(attr, "limit")) {
@@ -156,7 +156,7 @@ static void emitSchedule(Problem &prob, StringRef attrName,
 
 namespace {
 struct TestProblemPass
-    : public PassWrapper<TestProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestProblemPass, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestProblemPass)
 
   void runOnOperation() override;
@@ -195,7 +195,7 @@ void TestProblemPass::runOnOperation() {
 
 namespace {
 struct TestCyclicProblemPass
-    : public PassWrapper<TestCyclicProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestCyclicProblemPass, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestCyclicProblemPass)
 
   void runOnOperation() override;
@@ -239,7 +239,7 @@ void TestCyclicProblemPass::runOnOperation() {
 
 namespace {
 struct TestChainingProblemPass
-    : public PassWrapper<TestChainingProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestChainingProblemPass, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestChainingProblemPass)
 
   void runOnOperation() override;
@@ -283,7 +283,7 @@ void TestChainingProblemPass::runOnOperation() {
 namespace {
 struct TestSharedOperatorsProblemPass
     : public PassWrapper<TestSharedOperatorsProblemPass,
-                         OperationPass<FuncOp>> {
+                         OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSharedOperatorsProblemPass)
 
   void runOnOperation() override;
@@ -326,7 +326,7 @@ void TestSharedOperatorsProblemPass::runOnOperation() {
 
 namespace {
 struct TestModuloProblemPass
-    : public PassWrapper<TestModuloProblemPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestModuloProblemPass, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestModuloProblemPass)
 
   void runOnOperation() override;
@@ -371,7 +371,7 @@ void TestModuloProblemPass::runOnOperation() {
 
 namespace {
 struct TestASAPSchedulerPass
-    : public PassWrapper<TestASAPSchedulerPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestASAPSchedulerPass, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestASAPSchedulerPass)
 
   void runOnOperation() override;
@@ -409,7 +409,8 @@ void TestASAPSchedulerPass::runOnOperation() {
 
 namespace {
 struct TestSimplexSchedulerPass
-    : public PassWrapper<TestSimplexSchedulerPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestSimplexSchedulerPass,
+                         OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSimplexSchedulerPass)
 
   TestSimplexSchedulerPass() = default;
@@ -564,7 +565,7 @@ void TestSimplexSchedulerPass::runOnOperation() {
 
 namespace {
 struct TestLPSchedulerPass
-    : public PassWrapper<TestLPSchedulerPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestLPSchedulerPass, OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestLPSchedulerPass)
 
   TestLPSchedulerPass() = default;

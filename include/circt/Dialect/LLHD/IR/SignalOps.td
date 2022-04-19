@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 def LLHD_SigOp : LLHD_Op<"sig", [
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",

@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 /// An attribute to indicate the output file an operation should be emitted to.
 def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
   let summary = "Ouput file attribute";

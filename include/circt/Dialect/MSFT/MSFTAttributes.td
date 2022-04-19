@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 // "Forward-declare" these HW attributes rather than including or duplicating
 // them here. This lets us to refer to them in ODS, but delegates to HW in C++.
 // These are used to represent parameters to MSFTModuleExternOp.

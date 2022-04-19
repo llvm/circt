@@ -183,8 +183,8 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
 
 class HandshakeExecuter {
 public:
-  /// Entry point for mlir::FuncOp top-level functions
-  HandshakeExecuter(mlir::FuncOp &toplevel,
+  /// Entry point for mlir::func::FuncOp top-level functions
+  HandshakeExecuter(mlir::func::FuncOp &toplevel,
                     llvm::DenseMap<mlir::Value, Any> &valueMap,
                     llvm::DenseMap<mlir::Value, double> &timeMap,
                     std::vector<Any> &results, std::vector<double> &resultTimes,
@@ -558,7 +558,7 @@ LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
   // implement function calls.
   auto op = callOp.getOperation();
   mlir::Operation *calledOp = callOp.resolveCallable();
-  if (auto funcOp = dyn_cast<mlir::FuncOp>(calledOp)) {
+  if (auto funcOp = dyn_cast<mlir::func::FuncOp>(calledOp)) {
     unsigned outputs = funcOp.getNumResults();
     llvm::DenseMap<mlir::Value, Any> newValueMap;
     llvm::DenseMap<mlir::Value, double> newTimeMap;
@@ -659,7 +659,7 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
 enum ExecuteStrategy { Default = 1 << 0, Continue = 1 << 1, Return = 1 << 2 };
 
 HandshakeExecuter::HandshakeExecuter(
-    mlir::FuncOp &toplevel, llvm::DenseMap<mlir::Value, Any> &valueMap,
+    mlir::func::FuncOp &toplevel, llvm::DenseMap<mlir::Value, Any> &valueMap,
     llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
     std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
     std::vector<double> &storeTimes)
@@ -912,8 +912,8 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   unsigned realInputs;
   unsigned realOutputs;
 
-  if (mlir::FuncOp toplevel =
-          module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
+  if (mlir::func::FuncOp toplevel =
+          module->lookupSymbol<mlir::func::FuncOp>(toplevelFunction)) {
     ftype = toplevel.getFunctionType();
     mlir::Block &entryBlock = toplevel.getBody().front();
     blockArgs = entryBlock.getArguments();
@@ -984,8 +984,8 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   std::vector<Any> results(realOutputs);
   std::vector<double> resultTimes(realOutputs);
   bool succeeded = false;
-  if (mlir::FuncOp toplevel =
-          module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
+  if (mlir::func::FuncOp toplevel =
+          module->lookupSymbol<mlir::func::FuncOp>(toplevelFunction)) {
     succeeded = HandshakeExecuter(toplevel, valueMap, timeMap, results,
                                   resultTimes, store, storeTimes)
                     .succeeded();

@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/IR/EnumAttr.td"
 
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :

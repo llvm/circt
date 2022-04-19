@@ -30,7 +30,7 @@ using namespace mlir;
 /// and associate operator types.
 circt::analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
     Operation *op, AnalysisManager &am) {
-  auto funcOp = cast<FuncOp>(op);
+  auto funcOp = cast<func::FuncOp>(op);
 
   MemoryDependenceAnalysis &memoryAnalysis =
       am.getAnalysis<MemoryDependenceAnalysis>();

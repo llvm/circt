@@ -277,7 +277,7 @@ static void populateLegality(ConversionTarget &target) {
   addGenericLegality<func::ReturnOp>(target);
   addGenericLegality<UnrealizedConversionCastOp>(target);
 
-  target.addDynamicallyLegalOp<FuncOp>([](FuncOp op) {
+  target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
       return hasMooreType(block.getArguments());
     });
@@ -326,8 +326,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on
-  mlir::populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
-                                                                 typeConverter);
+  mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
+      patterns, typeConverter);
 }
 
 //===----------------------------------------------------------------------===//
