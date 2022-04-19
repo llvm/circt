@@ -14,6 +14,8 @@
 #define CIRCT_DIALECT_HW_SYMCACHE_H
 
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "mlir/IR/SymbolTable.h"
+#include "llvm/Support/Casting.h"
 
 namespace circt {
 namespace hw {
@@ -50,6 +52,17 @@ public:
     assert(!isFrozen && "cannot mutate a frozen cache");
     auto key = InnerRefAttr::get(modSymbol.getContext(), modSymbol, name);
     symbolCache.try_emplace(key, op, port);
+  }
+
+  /// Populate the symbol cache with all symbol-defining operations within the
+  /// 'top' operation.
+  void addDefinitions(mlir::Operation *top) {
+    for (auto &region : top->getRegions())
+      for (auto &block : region.getBlocks())
+        for (mlir::Operation &op : block)
+          if (auto symOp = llvm::dyn_cast<mlir::SymbolOpInterface>(op))
+            if (auto name = symOp.getNameAttr())
+              addDefinition(name, symOp);
   }
 
   // Add inner names, which might be ports
