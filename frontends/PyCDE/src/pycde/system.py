@@ -2,8 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
-                            PhysicalRegion)
+from pycde.devicedb import EntityExtern, PlacementDB, PrimitiveDB, PhysicalRegion
 
 from .module import _SpecializedModule
 from .pycde_types import types
