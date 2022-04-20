@@ -15,7 +15,10 @@
 #ifndef CIRCT_SUPPORT_BACKEDGEBUILDER_H
 #define CIRCT_SUPPORT_BACKEDGEBUILDER_H
 
+#include "circt/Dialect/HW/HWOps.h"
+
 #include "mlir/IR/Location.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -27,7 +30,25 @@ class Operation;
 
 namespace circt {
 
-class Backedge;
+/// `Backedge` is a wrapper class around a `Value`. When assigned another
+/// `Value`, it replaces all uses of itself with the new `Value` then become a
+/// wrapper around the new `Value`.
+class Backedge {
+public:
+  Backedge(mlir::Operation *op) : value(op->getResult(0)){};
+
+  operator mlir::Value() { return value; }
+  void setValue(mlir::Value newValue) {
+    assert(value.getType() == newValue.getType());
+    assert(!set && "backedge already set to a value!");
+    value.replaceAllUsesWith(newValue);
+    set = true;
+  }
+
+private:
+  mlir::Value value;
+  bool set = false;
+};
 
 /// Instantiate one of these and use it to build typed backedges. Backedges
 /// which get used as operands must be assigned to with the actual value before
@@ -43,43 +64,46 @@ class Backedge;
 ///   // When the actual value is available,
 ///   ready.set(anotherOp.getResult(0));
 /// ```
-class BackedgeBuilder {
-  friend class Backedge;
-
+///
+/// This template is to enable the use of an operation in any dialect which
+/// looks like a backedge op. Backedge ops have no arguments and return any
+/// type. There is a standard one in the 'HW' dialect, but presumably not every
+/// piece of code wants to load the 'HW' dialect. For the common case, an alias
+/// is provided below.
+template <typename BackedgeOp>
+class BackedgeBuilderImpl {
 public:
   /// To build a backedge op and manipulate it, we need a `PatternRewriter` and
   /// a `Location`. Store them during construct of this instance and use them
   /// when building.
-  BackedgeBuilder(mlir::OpBuilder &builder, mlir::Location loc);
-  BackedgeBuilder(mlir::PatternRewriter &rewriter, mlir::Location loc);
-  ~BackedgeBuilder();
+  BackedgeBuilderImpl(mlir::OpBuilder &builder, mlir::Location loc)
+      : builder(builder), rewriter(nullptr), loc(loc) {}
+  BackedgeBuilderImpl(mlir::PatternRewriter &rewriter, mlir::Location loc)
+      : builder(rewriter), rewriter(&rewriter), loc(loc) {}
+  ~BackedgeBuilderImpl() {
+    for (Operation *op : edges) {
+      assert(op->use_empty() && "Backedge still in use");
+      if (rewriter)
+        rewriter->eraseOp(op);
+      else
+        op->erase();
+    }
+  }
   /// Create a typed backedge.
-  Backedge get(mlir::Type resultType);
+  Backedge get(mlir::Type resultType) {
+    auto be = builder.create<BackedgeOp>(loc, resultType);
+    edges.push_back(be);
+    return Backedge(be.getOperation());
+  }
 
 private:
   mlir::OpBuilder &builder;
   mlir::PatternRewriter *rewriter;
   mlir::Location loc;
-  llvm::SmallVector<mlir::Operation *, 16> edges;
+  llvm::SmallVector<BackedgeOp, 16> edges;
 };
 
-/// `Backedge` is a wrapper class around a `Value`. When assigned another
-/// `Value`, it replaces all uses of itself with the new `Value` then become a
-/// wrapper around the new `Value`.
-class Backedge {
-  friend class BackedgeBuilder;
-
-  /// `Backedge` is constructed exclusively by `BackedgeBuilder`.
-  Backedge(mlir::Operation *op);
-
-public:
-  operator mlir::Value();
-  void setValue(mlir::Value);
-
-private:
-  mlir::Value value;
-  bool set = false;
-};
+using BackedgeBuilder = BackedgeBuilderImpl<hw::BackedgeOp>;
 
 } // namespace circt
 

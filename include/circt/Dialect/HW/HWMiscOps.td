@@ -82,3 +82,13 @@ def ParamValueOp : HWOp<"param.value",
   let hasVerifier = 1;
   let hasFolder = true;
 }
+
+def BackedgeOp: HWOp<"backedge", [NoSideEffect, ConstantLike]> {
+  let summary = [{
+    This op is intended to be temporarily created during IR construction to
+    support backedges. Used by support/BackedgeBuilder.
+  }];
+
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "type($result) attr-dict";
+}
