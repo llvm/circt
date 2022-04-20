@@ -336,10 +336,10 @@ public:
 
     // Only run conversion on call ops within the body of the function. callee
     // functions are rewritten by rewriteFunctions=true. We do not use
-    // populatefunc::FuncOpTypeConversionPattern to rewrite the function
-    // signatures, since non-called functions should not have their types
-    // converted. It is up to users of this pass to define how these rewritten
-    // functions are to be implemented.
+    // populateFuncOpTypeConversionPattern to rewrite the function signatures,
+    // since non-called functions should not have their types converted.
+    // It is up to users of this pass to define how these rewritten functions
+    // are to be implemented.
     patterns.add<CallOpConversion>(typeConverter, ctx,
                                    /*rewriteFunctions=*/true);
 
