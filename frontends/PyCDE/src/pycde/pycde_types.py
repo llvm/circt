@@ -4,10 +4,11 @@
 
 from collections import OrderedDict
 
-from .value import RegularValue, ListValue, StructValue, BitVectorValue
+from .value import (BitVectorValue, ChannelValue, ListValue, StructValue,
+                    RegularValue, Value)
 
 import mlir.ir
-from circt.dialects import hw, sv
+from circt.dialects import esi, hw, sv
 import circt.support
 
 
@@ -30,6 +31,9 @@ class _Types:
             size: int,
             name: str = None) -> hw.ArrayType:
     return self.wrap(hw.ArrayType.get(inner, size), name)
+
+  def channel(self, inner):
+    return self.wrap(esi.ChannelType.get(inner))
 
   def struct(self, members, name: str = None) -> hw.StructType:
     members = OrderedDict(members)
@@ -123,6 +127,8 @@ class Type(mlir.ir.Type):
       ret = super().__new__(TypeAliasType)
     if isinstance(type, mlir.ir.IntegerType):
       ret = super().__new__(BitVectorType)
+    if isinstance(type, esi.ChannelType):
+      ret = super().__new__(ChannelType)
     if ret is None:
       ret = super().__new__(Type)
     ret._type = type
@@ -226,6 +232,27 @@ class BitVectorType(Type):
 
   def _get_value_class(self):
     return BitVectorValue
+
+
+class ChannelType(Type):
+  """An ESI channel type."""
+
+  @property
+  def inner_type(self):
+    return Type(self._type.inner)
+
+  def _get_value_class(self):
+    return ChannelValue
+
+  def __str__(self):
+    return f"channel<{self.inner_type}>"
+
+  def wrap(self, value, valid):
+    from .support import _obj_to_value
+    value = _obj_to_value(value, self._type.inner)
+    valid = _obj_to_value(valid, types.i1)
+    wrap_op = esi.WrapValidReady(self._type, types.i1, value.value, valid.value)
+    return Value(wrap_op.chanOutput), BitVectorValue(wrap_op.ready, types.i1)
 
 
 def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> ArrayType:

@@ -87,7 +87,7 @@ def type_to_pytype(t):
   if t.__class__ != ir.Type:
     return t
 
-  from circt.dialects import hw
+  from circt.dialects import esi, hw
   try:
     return ir.IntegerType(t)
   except ValueError:
@@ -102,6 +102,10 @@ def type_to_pytype(t):
     pass
   try:
     return hw.TypeAliasType(t)
+  except ValueError:
+    pass
+  try:
+    return esi.ChannelType(t)
   except ValueError:
     pass
 
