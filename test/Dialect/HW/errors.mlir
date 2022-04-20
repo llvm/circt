@@ -26,7 +26,7 @@ func private @notModule () {
 }
 
 hw.module @A(%arg0: i1) {
-  // expected-error @+1 {{symbol reference 'notModule' isn't a module}}
+  // expected-error @+1 {{'hw.instance' op attribute 'moduleName' failed to satisfy constraint: flat symbol reference attribute is module like}}
   hw.instance "foo" @notModule(a: %arg0: i1) -> ()
 }
 

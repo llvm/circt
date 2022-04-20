@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/EnumAttr.td"
+
 class MooreTypeDef<string name> : TypeDef<MooreDialect, name> { }
 
 def LValueTypeImpl : MooreTypeDef<"LValue"> {

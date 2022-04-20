@@ -35,7 +35,7 @@ static bool isUniDimensional(MemRefType memref) {
 /// A struct for maintaining function declarations which needs to be rewritten,
 /// if they contain memref arguments that was flattened.
 struct FunctionRewrite {
-  FuncOp op;
+  func::FuncOp op;
   FunctionType type;
 };
 
@@ -206,17 +206,17 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
     // Override any definition corresponding to the updated signature.
     // It is up to users of this pass to define how these rewritten functions
     // are to be implemented.
-    rewriter.setInsertionPoint(op->getParentOfType<FuncOp>());
+    rewriter.setInsertionPoint(op->getParentOfType<func::FuncOp>());
     auto *calledFunction = dyn_cast<CallOpInterface>(*op).resolveCallable();
     FunctionType funcType = FunctionType::get(
         op.getContext(), newCallOp.getOperandTypes(), convResTypes);
-    FuncOp newFuncOp;
+    func::FuncOp newFuncOp;
     if (calledFunction)
-      newFuncOp = rewriter.replaceOpWithNewOp<FuncOp>(calledFunction,
-                                                      op.getCallee(), funcType);
+      newFuncOp = rewriter.replaceOpWithNewOp<func::FuncOp>(
+          calledFunction, op.getCallee(), funcType);
     else
       newFuncOp =
-          rewriter.create<FuncOp>(op.getLoc(), op.getCallee(), funcType);
+          rewriter.create<func::FuncOp>(op.getLoc(), op.getCallee(), funcType);
     newFuncOp.setVisibility(SymbolTable::Visibility::Private);
 
     return success();
@@ -248,7 +248,7 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
   addGenericLegalityConstraint<func::CallOp>(target);
   addGenericLegalityConstraint<func::ReturnOp>(target);
 
-  target.addDynamicallyLegalOp<FuncOp>([](FuncOp op) {
+  target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
     auto argsConverted = llvm::none_of(op.getBlocks(), [](auto &block) {
       return hasMultiDimMemRef(block.getArguments());
     });
@@ -311,8 +311,8 @@ public:
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  ReturnOpConversion, CondBranchOpConversion, BranchOpConversion,
                  CallOpConversion>(typeConverter, ctx);
-    populateFunctionOpInterfaceTypeConversionPattern<FuncOp>(patterns,
-                                                             typeConverter);
+    populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
+        patterns, typeConverter);
 
     ConversionTarget target(*ctx);
     populateFlattenMemRefsLegality(target);

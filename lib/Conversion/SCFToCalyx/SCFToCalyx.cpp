@@ -737,14 +737,13 @@ static calyx::RegisterOp createReg(ComponentLoweringState &compState,
 /// and then perform their own walking of the IR. FuncOpPartialLoweringPatterns
 /// have direct access to the ComponentLoweringState for the corresponding
 /// component of the matched FuncOp.
-class FuncOpPartialLoweringPattern
-    : public PartialLoweringPattern<mlir::FuncOp> {
+class FuncOpPartialLoweringPattern : public PartialLoweringPattern<FuncOp> {
 public:
   FuncOpPartialLoweringPattern(MLIRContext *context, LogicalResult &resRef,
                                FuncMapping &_funcMap, ProgramLoweringState &pls)
       : PartialLoweringPattern(context, resRef), funcMap(_funcMap), pls(pls) {}
 
-  LogicalResult partiallyLower(mlir::FuncOp funcOp,
+  LogicalResult partiallyLower(FuncOp funcOp,
                                PatternRewriter &rewriter) const override final {
     // Initialize the component op references if a calyx::ComponentOp has been
     // created for the matched funcOp.
@@ -779,8 +778,7 @@ public:
 
   /// Partial lowering implementation.
   virtual LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
-                           PatternRewriter &rewriter) const = 0;
+  PartiallyLowerFuncToComp(FuncOp funcOp, PatternRewriter &rewriter) const = 0;
 
 protected:
   FuncMapping &funcMap;
@@ -801,7 +799,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     /// We walk the operations of the funcOp to ensure that all def's have
     /// been visited before their uses.
@@ -822,7 +820,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// static logic
                              staticlogic::PipelineTerminatorOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
-              .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp,
+              .template Case<scf::WhileOp, FuncOp, scf::ConditionOp,
                              staticlogic::PipelineWhileOp,
                              staticlogic::PipelineRegisterOp,
                              staticlogic::PipelineStageOp>([&](auto) {
@@ -1370,7 +1368,7 @@ class ConvertIndexTypes : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](Block *block) {
       for (auto arg : block->getArguments())
@@ -1518,7 +1516,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     /// Maintain a mapping between funcOp input arguments and the port index
     /// which the argument will eventually map to.
@@ -1630,7 +1628,7 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     LogicalResult res = success();
     funcOp.walk([&](Operation *op) {
@@ -1719,7 +1717,7 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](Block *block) {
       /// Do not register component input values.
@@ -1747,7 +1745,7 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](staticlogic::PipelineRegisterOp op) {
       // Condition registers are handled in BuildWhileGroups.
@@ -1807,7 +1805,7 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     for (auto pipeline : funcOp.getOps<staticlogic::PipelineWhileOp>())
       for (auto stage :
@@ -1946,7 +1944,7 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
 
     for (auto argType : enumerate(funcOp.getResultTypes())) {
@@ -2019,7 +2017,7 @@ class BuildControl : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     auto *entryBlock = &funcOp.getBlocks().front();
     rewriter.setInsertionPointToStart(getComponent()->getControlOp().getBody());
@@ -2313,7 +2311,7 @@ private:
 class LateSSAReplacement : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
-  LogicalResult PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  LogicalResult PartiallyLowerFuncToComp(FuncOp funcOp,
                                          PatternRewriter &) const override {
     funcOp.walk([&](scf::WhileOp op) {
       /// The yielded values returned from the while op will be present in the
@@ -2348,7 +2346,7 @@ class CleanupFuncOps : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
 
   LogicalResult
-  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+  PartiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
     rewriter.eraseOp(funcOp);
     return success();
@@ -2457,7 +2455,7 @@ public:
     } else {
       /// No top level function set; infer top level if the module only contains
       /// a single function, else, throw error.
-      auto funcOps = moduleOp.getOps<mlir::FuncOp>();
+      auto funcOps = moduleOp.getOps<FuncOp>();
       if (std::distance(funcOps.begin(), funcOps.end()) == 1)
         topLevelFunction = (*funcOps.begin()).getSymName().str();
       else {
@@ -2508,7 +2506,7 @@ public:
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
                       MulIOp, DivUIOp, RemUIOp, ReturnOp, arith::ConstantOp,
-                      IndexCastOp, mlir::FuncOp>();
+                      IndexCastOp, FuncOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());

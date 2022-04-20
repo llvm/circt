@@ -28,7 +28,8 @@ using namespace circt::analysis;
 
 namespace {
 struct TestDependenceAnalysisPass
-    : public PassWrapper<TestDependenceAnalysisPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestDependenceAnalysisPass,
+                         OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestDependenceAnalysisPass)
 
   void runOnOperation() override;
@@ -78,7 +79,8 @@ void TestDependenceAnalysisPass::runOnOperation() {
 
 namespace {
 struct TestSchedulingAnalysisPass
-    : public PassWrapper<TestSchedulingAnalysisPass, OperationPass<FuncOp>> {
+    : public PassWrapper<TestSchedulingAnalysisPass,
+                         OperationPass<func::FuncOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestSchedulingAnalysisPass)
 
   void runOnOperation() override;

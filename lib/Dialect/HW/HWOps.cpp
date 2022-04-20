@@ -1258,7 +1258,10 @@ LogicalResult InstanceOp::verify() {
   for (auto param : parameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto value = paramAttr.getValue();
-    assert(value && "SymbolUses verifier should already check this exists");
+    // The SymbolUses verifier which checks that this exists may not have been
+    // run yet. Let it issue the error.
+    if (!value)
+      continue;
 
     if (value.getType() != paramAttr.getType().getValue())
       return emitOpError("parameter ") << paramAttr << " should have type "
