@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "FIRLexer.h"
+#include "circt/Support/String.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -63,52 +64,9 @@ std::string FIRToken::getStringValue() const {
 std::string FIRToken::getStringValue(StringRef spelling) {
   // Start by dropping the quotes.
   StringRef bytes = spelling.drop_front().drop_back();
-
-  std::string result;
-  result.reserve(bytes.size());
-  for (size_t i = 0, e = bytes.size(); i != e;) {
-    auto c = bytes[i++];
-    if (c != '\\') {
-      result.push_back(c);
-      continue;
-    }
-
-    assert(i + 1 <= e && "invalid string should be caught by lexer");
-    auto c1 = bytes[i++];
-    switch (c1) {
-    case '\\':
-    case '"':
-    case '\'':
-      result.push_back(c1);
-      continue;
-    case 'b':
-      result.push_back('\b');
-      continue;
-    case 'n':
-      result.push_back('\n');
-      continue;
-    case 't':
-      result.push_back('\t');
-      continue;
-    case 'f':
-      result.push_back('\f');
-      continue;
-    case 'r':
-      result.push_back('\r');
-      continue;
-      // TODO: Handle the rest of the escapes (octal and unicode).
-    default:
-      break;
-    }
-
-    assert(i + 1 <= e && "invalid string should be caught by lexer");
-    auto c2 = bytes[i++];
-
-    assert(llvm::isHexDigit(c1) && llvm::isHexDigit(c2) && "invalid escape");
-    result.push_back((llvm::hexDigitValue(c1) << 4) | llvm::hexDigitValue(c2));
-  }
-
-  return result;
+  auto raw = unescape(bytes);
+  assert(raw && "cannot unescape string");
+  return *raw;
 }
 
 /// Given a token containing a raw string, return its value, including removing

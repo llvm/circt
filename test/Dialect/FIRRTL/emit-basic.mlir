@@ -83,7 +83,7 @@ firrtl.circuit "Foo" {
     // CHECK: skip
     firrtl.skip
     // CHECK: printf(someClock, ui1, "some\n magic\"stuff\"", ui1, someReset) : foo
-    firrtl.printf %someClock, %ui1, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.uint<1>, !firrtl.reset
+    firrtl.printf %someClock, %ui1, "some\\n magic\\\"stuff\\\"" {name = "foo"} (%ui1, %someReset) : !firrtl.uint<1>, !firrtl.reset
     // CHECK: assert(someClock, ui1, ui1, "msg") : foo
     // CHECK: assume(someClock, ui1, ui1, "msg") : foo
     // CHECK: cover(someClock, ui1, ui1, "msg") : foo

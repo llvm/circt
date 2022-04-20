@@ -10,7 +10,7 @@ module {
     %c1Shl = hw.instance "shl" @shl (a: %c1: i1) -> (b: i1)
     sv.always posedge %clk {
       %fd = hw.constant 0x80000002 : i32
-      sv.fwrite %fd, "tick\n"
+      sv.fwrite %fd, "tick\\n"
     }
   }
 

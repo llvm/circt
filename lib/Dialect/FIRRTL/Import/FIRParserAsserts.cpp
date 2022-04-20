@@ -14,6 +14,7 @@
 #include "FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/String.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
@@ -450,13 +451,20 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   case VerifFlavor::VerifLibAssert:
   case VerifFlavor::VerifLibAssume: {
     // Isolate the JSON text in the `<extraction-summary>` XML tag.
-    StringRef prefix, exStr, suffix;
-    std::tie(prefix, exStr) = fmt.split("<extraction-summary>");
-    std::tie(exStr, suffix) = exStr.split("</extraction-summary>");
+    StringRef prefix, exStrRaw, suffix;
+    std::tie(prefix, exStrRaw) = fmt.split("<extraction-summary>");
+    std::tie(exStrRaw, suffix) = exStrRaw.split("</extraction-summary>");
+
+    // Convert escape sequences to allow the JSON to be parsed.
+    auto exStr = unescape(exStrRaw);
+    if (!exStr) {
+      printOp.emitError("invalid escape sequence in JSON extraction summary");
+      return failure();
+    }
 
     // The extraction summary is necessary for this kind of assertion, so we
     // throw an error if it is missing.
-    if (exStr.empty()) {
+    if (exStr->empty()) {
       auto diag = printOp.emitError(
           "printf-encoded assert/assume requires extraction summary");
       diag.attachNote(printOp.getLoc())
@@ -470,7 +478,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
 
     // Parse the extraction summary, which contains additional parameters for
     // the assertion.
-    auto ex = json::parse(exStr);
+    auto ex = json::parse(*exStr);
     if (auto err = ex.takeError()) {
       handleAllErrors(std::move(err), [&](const json::ParseError &a) {
         printOp.emitError("failed to parse JSON extraction summary")
@@ -550,10 +558,10 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
         }))
       return failure();
 
-    StringRef message = fmt;
+    std::string message = fmt.str();
     if (parseJson(printOp.getLoc(), exObj, [&](const auto &ex) {
           return ex.withStringField("baseMsg", [&](const auto &ex) {
-            message = ex.value;
+            message = escape(ex.value);
             return success();
           });
         }))

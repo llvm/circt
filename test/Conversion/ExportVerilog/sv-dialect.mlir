@@ -31,7 +31,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond, %verb_tmp : i1
       sv.if %tmp3 {
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
-        sv.fwrite %fd, "Hi\n"
+        sv.fwrite %fd, "Hi\\n"
       }
 
   // CHECK-NEXT: release forceWire;
@@ -64,7 +64,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: always_ff @(posedge clock)
   // CHECK-NEXT:   $fwrite(32'h80000002, "Yo\n");
   sv.alwaysff(posedge %clock) {
-    sv.fwrite %fd, "Yo\n"
+    sv.fwrite %fd, "Yo\\n"
   }
 
   // CHECK-NEXT: always_ff @(posedge clock) begin
@@ -74,9 +74,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Main Block\n");
   // CHECK-NEXT: end // always_ff @(posedge)
   sv.alwaysff(posedge %clock) {
-    sv.fwrite %fd, "Sync Main Block\n"
+    sv.fwrite %fd, "Sync Main Block\\n"
   } ( syncreset : posedge %cond) {
-    sv.fwrite %fd, "Sync Reset Block\n"
+    sv.fwrite %fd, "Sync Reset Block\\n"
   }
 
   // CHECK-NEXT: always_ff @(posedge clock or negedge cond) begin
@@ -86,9 +86,9 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:     $fwrite(32'h80000002, "Async Main Block\n");
   // CHECK-NEXT: end // always_ff @(posedge or negedge)
   sv.alwaysff(posedge %clock) {
-    sv.fwrite %fd, "Async Main Block\n"
+    sv.fwrite %fd, "Async Main Block\\n"
   } ( asyncreset : negedge %cond) {
-    sv.fwrite %fd, "Async Reset Block\n"
+    sv.fwrite %fd, "Async Reset Block\\n"
   }
 
   // CHECK-NEXT:  initial begin
@@ -119,7 +119,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       %add = comb.add %val, %c42 : i8
 
       // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", 8'(val + 8'h2A));
-      sv.fwrite %fd, "Inlined! %x\n"(%add) : i8
+      sv.fwrite %fd, "Inlined! %x\\n"(%add) : i8
     }
 
     // begin/end required here to avoid else-confusion.
@@ -129,23 +129,23 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: if (clock)
       sv.if %clock {
         // CHECK-NEXT: $fwrite(32'h80000002, "Inside Block\n");
-        sv.fwrite %fd, "Inside Block\n"
+        sv.fwrite %fd, "Inside Block\\n"
       }
       // CHECK-NEXT: end
     } else { // CHECK-NEXT: else
       // CHECK-NOT: begin
       // CHECK-NEXT: $fwrite(32'h80000002, "Else Block\n");
-      sv.fwrite %fd, "Else Block\n"
+      sv.fwrite %fd, "Else Block\\n"
     }
 
     // CHECK-NEXT:   if (cond) begin
     sv.if %cond {
       // CHECK-NEXT:     $fwrite(32'h80000002, "Hi\n");
-      sv.fwrite %fd, "Hi\n"
+      sv.fwrite %fd, "Hi\\n"
 
       // CHECK-NEXT:     $fwrite(32'h80000002, "Bye %x\n", 8'(val + val));
       %tmp = comb.add %val, %val : i8
-      sv.fwrite %fd, "Bye %x\n"(%tmp) : i8
+      sv.fwrite %fd, "Bye %x\\n"(%tmp) : i8
 
       // CHECK-NEXT:     assert(cond);
       sv.assert %cond, immediate
@@ -235,7 +235,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       %text = sv.verbatim.expr "`MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
 
       // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(8'(val + 8'h2A), val ^ 8'h2A));
-      sv.fwrite %fd, "M: %x\n"(%text) : i8
+      sv.fwrite %fd, "M: %x\\n"(%text) : i8
 
     }// CHECK-NEXT:   {{end$}}
   }

@@ -415,9 +415,7 @@ void Emitter::emitStatement(PrintFOp op) {
   emitExpression(op.clock());
   os << ", ";
   emitExpression(op.cond());
-  os << ", \"";
-  os.write_escaped(op.formatString());
-  os << "\"";
+  os << ", \"" << op.formatString() << '"';
   for (auto operand : op.operands()) {
     os << ", ";
     emitExpression(operand);
@@ -437,9 +435,7 @@ void Emitter::emitVerifStatement(T op, StringRef mnemonic) {
   emitExpression(op.predicate());
   os << ", ";
   emitExpression(op.enable());
-  os << ", \"";
-  os.write_escaped(op.message());
-  os << "\"";
+  os << ", \"" << op.message() << '"';
   os << ")";
   if (!op.name().empty()) {
     os << " : " << op.name();

@@ -29,6 +29,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Path.h"
+#include "circt/Support/String.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -2731,9 +2732,7 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
 
   emitExpression(op.fd(), ops);
 
-  os << ", \"";
-  os.write_escaped(op.string());
-  os << '"';
+  os << ", \"" << op.string() << '"';
 
   for (auto operand : op.operands()) {
     os << ", ";
@@ -2837,9 +2836,7 @@ LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
     if (message) {
       if (verbosity)
         os << ", ";
-      os << "\"";
-      os.write_escaped(message.getValue());
-      os << "\"";
+      os << "\"" << message.getValue() << '"';
       for (auto operand : operands) {
         os << ", ";
         emitExpression(operand, ops);
@@ -2894,9 +2891,7 @@ void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
                                        bool isConcurrent = false) {
   if (!message)
     return;
-  os << " else $error(\"";
-  os.write_escaped(message.getValue());
-  os << "\"";
+  os << " else $error(\"" << message.getValue() << '"';
   for (auto arg : args) {
     os << ", ";
     emitExpression(arg, ops);

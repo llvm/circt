@@ -30,7 +30,7 @@ hw.module @top(%clock : i1, %reset: i1,
 
   sv.alwaysff(posedge %clock) {
     %fd = hw.constant 0x80000002 : i32
-    sv.fwrite %fd, "Yo\n"
+    sv.fwrite %fd, "Yo\\n"
   }
   
   hw.output %0, %1 : i4, i4

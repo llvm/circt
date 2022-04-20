@@ -2524,6 +2524,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
+/// Remove quotes from a string.
+static StringRef unquote(StringRef str) {
+  assert(str.size() >= 2 && "string too short");
+  assert(str.front() == '"' && str.back() == '"' && "not quoted");
+  return str.drop_front().drop_back();
+}
+
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
@@ -2552,10 +2559,9 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   builder.create<PrintFOp>(clock, condition,
-                           builder.getStringAttr(formatStrUnescaped), operands,
-                           name);
+                           builder.getStringAttr(unquote(formatString)),
+                           operands, name);
   return success();
 }
 
@@ -2613,8 +2619,7 @@ ParseResult FIRStmtParser::parseAssert() {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssertOp>(clock, predicate, enable, messageUnescaped,
+  builder.create<AssertOp>(clock, predicate, enable, unquote(message),
                            ValueRange{}, name.getValue());
   return success();
 }
@@ -2636,8 +2641,7 @@ ParseResult FIRStmtParser::parseAssume() {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
+  builder.create<AssumeOp>(clock, predicate, enable, unquote(message),
                            ValueRange{}, name.getValue());
   return success();
 }
@@ -2659,8 +2663,7 @@ ParseResult FIRStmtParser::parseCover() {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
+  builder.create<CoverOp>(clock, predicate, enable, unquote(message),
                           ValueRange{}, name.getValue());
   return success();
 }

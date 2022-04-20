@@ -69,7 +69,7 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
       // CHECK: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
       // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
       %2 = comb.mul %0, %z : i8
-      sv.fwrite %fd, "Hi %x\0A"(%2) : i8
+      sv.fwrite %fd, "Hi %x\\n"(%2) : i8
       sv.fatal 1
     }
   }

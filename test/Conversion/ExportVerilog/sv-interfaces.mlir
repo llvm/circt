@@ -73,7 +73,7 @@ module {
 
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
       // CHECK: $fwrite(32'h80000002, "valid: %d\n", iface.valid);
-      sv.fwrite %fd, "valid: %d\n" (%validValue) : i1
+      sv.fwrite %fd, "valid: %d\\n" (%validValue) : i1
       // CHECK: assert(iface.valid);
       sv.assert %validValue, immediate
 
