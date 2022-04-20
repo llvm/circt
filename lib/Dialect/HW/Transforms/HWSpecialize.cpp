@@ -274,7 +274,7 @@ void HWSpecializePass::runOnOperation() {
       parametersUsers;
 
   // Maintain a symbol cache for fast looking during module specialization.
-  SymbolCache sc;
+  MutableSymbolCache sc;
   sc.addDefinitions(module);
   sc.freeze();
 
