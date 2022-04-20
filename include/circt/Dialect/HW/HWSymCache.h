@@ -104,6 +104,9 @@ private:
 };
 
 /// Like a SymbolCache, but allows for unfreezing to add new definitions.
+/// Unlike SymbolCache, the MutableSymbolCache is not thread safe, and the
+/// caller is expected to perform synchronization if used in a multithreaded
+/// context.
 class MutableSymbolCache : public SymbolCache {
 public:
   /// Mark the cache as unfrozen, allowing for mutation. Caller should ensure
