@@ -89,6 +89,9 @@ public:
 
   Item getDefinition(InnerRefAttr name) const { return lookup(name); }
 
+protected:
+  bool isFrozen = false;
+
 private:
   Item lookup(InnerRefAttr attr) const {
     assert(isFrozen && "cannot read from this cache until it is frozen");
@@ -105,14 +108,23 @@ private:
     return it->second.getOp();
   }
 
-  bool isFrozen = false;
-
   /// This stores a lookup table from symbol attribute to the operation
   /// (hw.module, hw.instance, etc) that defines it.
   /// TODO: It is super annoying that symbols are *defined* as StringAttr, but
   /// are then referenced as FlatSymbolRefAttr.  Why can't we have nice
   /// pointer uniqued things?? :-(
   llvm::DenseMap<mlir::Attribute, Item> symbolCache;
+};
+
+/// Like a SymbolCache, but allows for unfreezing to add new definitions.
+/// Unlike SymbolCache, the MutableSymbolCache is not thread safe, and the
+/// caller is expected to perform synchronization if used in a multithreaded
+/// context.
+class MutableSymbolCache : public SymbolCache {
+public:
+  /// Mark the cache as unfrozen, allowing for mutation. Caller should ensure
+  /// that the cache is no longer being read from after unfreezing occurs.
+  void unfreeze() { isFrozen = false; }
 };
 
 } // namespace hw
