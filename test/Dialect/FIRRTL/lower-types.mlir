@@ -1492,4 +1492,22 @@ firrtl.module private @Issue2315(in %x: !firrtl.vector<uint<10>, 5>, in %source:
     //FLATTEN   %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<62>, mask: uint<31>>
   }
 
+  firrtl.module @ZeroBitMasks(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %io: !firrtl.bundle<reserved: uint<0>, pscid: uint<20>>) {
+    %invalid = firrtl.invalidvalue : !firrtl.bundle<reserved: uint<1>, pscid: uint<1>>
+    %invalid_0 = firrtl.invalidvalue : !firrtl.bundle<reserved: uint<0>, pscid: uint<20>>
+    %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, groupID = 1 : i32, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<reserved: uint<0>, pscid: uint<20>>, mask: bundle<reserved: uint<1>, pscid: uint<1>>>
+    %3 = firrtl.subfield %ram_MPORT(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<reserved: uint<0>, pscid: uint<20>>, mask: bundle<reserved: uint<1>, pscid: uint<1>>>) -> !firrtl.bundle<reserved: uint<0>, pscid: uint<20>>
+    firrtl.strictconnect %3, %invalid_0 : !firrtl.bundle<reserved: uint<0>, pscid: uint<20>>
+    %4 = firrtl.subfield %ram_MPORT(4) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<reserved: uint<0>, pscid: uint<20>>, mask: bundle<reserved: uint<1>, pscid: uint<1>>>) -> !firrtl.bundle<reserved: uint<1>, pscid: uint<1>>
+    firrtl.strictconnect %4, %invalid : !firrtl.bundle<reserved: uint<1>, pscid: uint<1>>
+    // FLATTEN:  %ram_MPORT = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<20>, mask: uint<1>>
+    // FLATTEN:  %[[v4:.+]] = firrtl.subfield %ram_MPORT(4) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<20>, mask: uint<1>>) -> !firrtl.uint<1>
+    // FLATTEN:  %[[v5:.+]] = firrtl.cat %ram_MPORT_mask_pscid, %ram_MPORT_mask_reserved : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // FLATTEN:  %[[v6:.+]] = firrtl.bits %[[v5]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+    // FLATTEN:  %[[v7:.+]] = firrtl.bits %[[v5]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+    // FLATTEN:  firrtl.strictconnect %[[v4]], %[[v7]] : !firrtl.uint<1>
+    firrtl.connect %3, %io : !firrtl.bundle<reserved: uint<0>, pscid: uint<20>>, !firrtl.bundle<reserved: uint<0>, pscid: uint<20>>
+  }
+
+
 } // CIRCUIT
