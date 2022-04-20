@@ -697,7 +697,7 @@ void ParamExprAttr::print(AsmPrinter &p) const {
 // corresponding value from the map of provided parameters.
 static FailureOr<Attribute>
 replaceDeclRefInExpr(Location loc,
-                     const std::map<std::string, IntegerAttr> &parameters,
+                     const std::map<std::string, Attribute> &parameters,
                      Attribute paramAttr) {
   if (paramAttr.dyn_cast<IntegerAttr>()) {
     // Nothing to do, constant value.
@@ -731,13 +731,10 @@ replaceDeclRefInExpr(Location loc,
 FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
                                             Attribute paramAttr) {
   // Create a map of the provided parameters for faster lookup.
-  std::map<std::string, IntegerAttr> parameterMap;
+  std::map<std::string, Attribute> parameterMap;
   for (auto param : parameters) {
     auto paramDecl = param.cast<ParamDeclAttr>();
-    auto paramValue = paramDecl.getValue().dyn_cast<IntegerAttr>();
-    if (!paramValue)
-      return emitError(loc) << "Expected parameter value to be a known integer";
-    parameterMap[paramDecl.getName().str()] = paramValue;
+    parameterMap[paramDecl.getName().str()] = paramDecl.getValue();
   }
 
   // First, replace any ParamDeclRefAttr in the expression with its
@@ -757,10 +754,12 @@ FailureOr<APInt> hw::evaluateParametricAttr(Location loc, ArrayAttr parameters,
     auto resAttr = ParamExprAttr::get(paramExprAttr.getOpcode(),
                                       paramExprAttr.getOperands());
     auto resIntAttr = resAttr.dyn_cast<IntegerAttr>();
-    assert(resIntAttr &&
-           "Expected evaluated parametric expression to "
-           "canonicalize to a constant. Since not, this means that some parts "
-           "of the expression did not resolve to a constant");
+    if (!resIntAttr)
+      return emitError(loc,
+                       "Could not evaluate the expression to a constant value")
+                 .attachNote()
+             << "This means that some parts of the expression did not resolve "
+                "to a constant";
     return resIntAttr.getValue();
   }
 
