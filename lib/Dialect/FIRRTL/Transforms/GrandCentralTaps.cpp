@@ -399,13 +399,26 @@ void GrandCentralTapsPass::runOnOperation() {
     maybeExtractDirectory = directory;
   }
 
+  // Build a generator for absolute module and instance paths in the design.
+  InstancePathCache instancePaths(getAnalysis<InstanceGraph>());
+
   // Gather a list of extmodules that have data or mem tap annotations to be
   // expanded.
   SmallVector<AnnotatedExtModule, 4> modules;
-  for (auto &op : *circuitOp.getBody()) {
-    auto extModule = dyn_cast<FExtModuleOp>(&op);
-    if (!extModule)
-      continue;
+  for (auto extModule : llvm::make_early_inc_range(
+           circuitOp.getBody()->getOps<FExtModuleOp>())) {
+    // If the external module indicates that it is a data or mem tap, but does
+    // not actually contain any taps (it has no ports), then delete the module
+    // and all instantiations of it.
+    AnnotationSet annotations(extModule);
+    if (annotations.hasAnnotation(dataTapsClass) && !extModule.getNumPorts()) {
+      LLVM_DEBUG(llvm::dbgs() << "Extmodule " << extModule.getName()
+                              << " is a data/memtap that has no ports and "
+                                 "will be deleted\n";);
+      for (auto *use : instancePaths.instanceGraph[extModule]->uses())
+        use->getInstance().erase();
+      extModule.erase();
+    }
 
     // Go through the module ports and collect the annotated ones.
     AnnotatedExtModule result{extModule, {}, {}, {}};
@@ -450,9 +463,6 @@ void GrandCentralTapsPass::runOnOperation() {
     markAllAnalysesPreserved();
     return;
   }
-
-  // Build a generator for absolute module and instance paths in the design.
-  InstancePathCache instancePaths(getAnalysis<InstanceGraph>());
 
   // Gather the annotated ports and operations throughout the design that we are
   // supposed to tap in one way or another.
