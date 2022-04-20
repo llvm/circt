@@ -795,3 +795,25 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
       })
       .Default([&](auto) { return type; });
 }
+
+// Returns true if any part of this parametric attribute contains a reference
+// to a parameter declaration.
+static bool isParamAttrWithParamRef(Attribute expr) {
+  return llvm::TypeSwitch<Attribute, bool>(expr)
+      .Case([](ParamExprAttr attr) {
+        return llvm::any_of(attr.getOperands(), isParamAttrWithParamRef);
+      })
+      .Case([](ParamDeclRefAttr) { return true; })
+      .Default([](auto) { return false; });
+}
+
+bool hw::isParametricType(mlir::Type t) {
+  return llvm::TypeSwitch<Type, bool>(t)
+      .Case<hw::IntType>(
+          [&](hw::IntType t) { return isParamAttrWithParamRef(t.getWidth()); })
+      .Case<hw::ArrayType>([&](hw::ArrayType arrayType) {
+        return isParametricType(arrayType.getElementType()) ||
+               isParamAttrWithParamRef(arrayType.getSizeAttr());
+      })
+      .Default([](auto) { return false; });
+}

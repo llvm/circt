@@ -20,4 +20,17 @@ def PrintInstanceGraph : Pass<"hw-print-instance-graph", "mlir::ModuleOp"> {
   let constructor =  "circt::hw::createPrintInstanceGraphPass()";
 }
 
+def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
+  let summary = "Specializes instances of parametric hw.modules";
+  let constructor = "circt::hw::createHWSpecializePass()";
+  let description = [{
+    Any `hw.instance` operation instantiating a parametric `hw.module` will
+    trigger a specialization procedure which resolves all parametric types and
+    values within the module based on the set of provided parameters to the
+    `hw.instance` operation. This specialized module is created as a new
+    `hw.module` and the referring `hw.instance` operation is rewritten to
+    instantiate the newly specialized module.
+  }];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD

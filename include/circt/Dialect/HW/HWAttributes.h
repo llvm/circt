@@ -37,6 +37,9 @@ mlir::FailureOr<mlir::APInt> evaluateParametricAttr(mlir::Location loc,
                                                     mlir::ArrayAttr parameters,
                                                     mlir::Attribute paramAttr);
 
+/// Returns true if any part of t is parametric.
+bool isParametricType(mlir::Type t);
+
 } // namespace hw
 } // namespace circt
 
