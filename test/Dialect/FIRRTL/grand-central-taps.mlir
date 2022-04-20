@@ -522,3 +522,20 @@ firrtl.circuit "Top" {
   // CHECK-SAME: symbols = [@Top, #hw.innerNameRef<@Top::@dut>, #hw.innerNameRef<@DUT::@submodule_2>, #hw.innerNameRef<@Submodule::@bar>]
   firrtl.extmodule @MemTap_2(out mem_0: !firrtl.uint<1> [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 1 : i64, word = 0 : i64}]) attributes {defname = "MemTap"}
 }
+
+// -----
+
+// Check that an empty data tap module and its instantiations is deleted.
+
+// CHECK-LABEL: "Top"
+// CHECK-NOT: firrtl.extmodule {{.+}}@DataTap
+// CHECK-NOT: firrtl.instance DataTap @DataTap()
+firrtl.circuit "Top" {
+  firrtl.extmodule @DataTap() attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]}
+  firrtl.module @DUT() {
+    firrtl.instance DataTap @DataTap()
+  }
+  firrtl.module @Top() {
+    firrtl.instance dut @DUT()
+  }
+}
