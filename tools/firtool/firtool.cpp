@@ -538,7 +538,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat != OutputIRFir) {
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
                                          nonConstAsyncResetValueIsError));
-    pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
 
     if (outputFormat == OutputIRHW) {
       if (!disableOptimization) {
@@ -547,6 +546,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createSimpleCanonicalizerPass());
       }
     } else {
+      pm.addPass(sv::createHWMemSimImplPass(replSeqMem, ignoreReadEnableMem));
+
       if (extractTestCode)
         pm.addPass(sv::createSVExtractTestCodePass());
 
@@ -555,6 +556,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         auto &modulePM = pm.nest<hw::HWModuleOp>();
         modulePM.addPass(createCSEPass());
         modulePM.addPass(createSimpleCanonicalizerPass());
+        modulePM.addPass(createCSEPass());
         modulePM.addPass(sv::createHWCleanupPass());
       }
     }

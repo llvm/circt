@@ -15,6 +15,7 @@
 
 #include "PassDetail.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
@@ -366,10 +367,26 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
+  auto &instanceGraph = getAnalysis<circt::hw::InstanceGraph>();
+  auto isBound = [&instanceGraph](hw::HWModuleLike op) -> bool {
+    auto *node = instanceGraph.lookup(op);
+    return llvm::any_of(node->uses(), [](hw::InstanceRecord *a) {
+      auto inst = a->getInstance();
+      if (!inst)
+        return false;
+      return inst->hasAttr("doNotPrint");
+    });
+  };
+
   for (auto &op : topLevelModule->getOperations()) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
-      // Extract two sets of ops to different modules.
-      // This will add modules, but not affect modules in the symbol table.
+      // Extract two sets of ops to different modules.  This will add modules,
+      // but not affect modules in the symbol table.  If any instance of the
+      // module is bound, then extraction is skipped.  This avoids problems
+      // where certain simulators dislike having binds that target bound
+      // modules.
+      if (isBound(rtlmod))
+        continue;
       doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
       doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
       doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);

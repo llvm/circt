@@ -141,6 +141,9 @@ struct FileInfo {
 
   /// Whether to include this file as part of the emitted file list.
   bool addToFilelist = true;
+
+  /// If true, the file is a header.
+  bool isHeader = false;
 };
 
 /// This class wraps an operation or a fixed string that should be emitted.
@@ -238,7 +241,8 @@ struct SharedEmitterState {
 
   using EmissionList = std::vector<StringOrOpToEmit>;
 
-  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
+  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit,
+                         bool emitHeader = false);
   void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
 };
 

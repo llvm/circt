@@ -156,3 +156,27 @@ firrtl.circuit "PreserveOutputFile" {
     firrtl.instance sub {output_file = #hw.output_file<"hello">} @Sub(in a: !firrtl.uint<1>)
   }
 }
+
+// -----
+
+// CHECK-LABEL: "UnusedOutput"
+firrtl.circuit "UnusedOutput"  {
+  // CHECK: firrtl.module {{.+}}@SingleDriver
+  // CHECK-NOT:     out %c
+  firrtl.module private @SingleDriver(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
+    // CHECK-NEXT: %[[c_wire:.+]] = firrtl.wire
+    // CHECK-NEXT: firrtl.strictconnect %b, %[[c_wire]]
+    firrtl.strictconnect %b, %c : !firrtl.uint<1>
+    // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
+    %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %[[c_wire]], %[[not_a]]
+    firrtl.strictconnect %c, %0 : !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @UnusedOutput
+  firrtl.module @UnusedOutput(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    // CHECK: %singleDriver_a, %singleDriver_b = firrtl.instance singleDriver
+    %singleDriver_a, %singleDriver_b, %singleDriver_c = firrtl.instance singleDriver @SingleDriver(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
+    firrtl.strictconnect %singleDriver_a, %a : !firrtl.uint<1>
+    firrtl.strictconnect %b, %singleDriver_b : !firrtl.uint<1>
+  }
+}

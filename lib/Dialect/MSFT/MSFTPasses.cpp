@@ -191,10 +191,7 @@ void LowerInstancesPass::runOnOperation() {
 
   // Populate the top level symbol cache.
   hw::SymbolCache topSyms;
-  for (Operation &op : top.getOps())
-    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-      if (auto name = symOp.getNameAttr())
-        topSyms.addDefinition(name, symOp);
+  topSyms.addDefinitions(top);
   topSyms.freeze();
   DenseSet<StringAttr> newSyms;
 
@@ -531,7 +528,6 @@ protected:
   hw::SymbolCache topLevelSyms;
   DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
-  void populateSymbolCache(ModuleOp topMod);
   LogicalResult verifyInstances(ModuleOp topMod);
 
   // Find all the modules and use the partial order of the instantiation DAG
@@ -631,15 +627,6 @@ void PassCommon::getAndSortModules(ModuleOp topMod,
       [&](MSFTModuleOp mod) { getAndSortModulesVisitor(mod, mods, modsSeen); });
 }
 
-/// Fill a symbol cache with all the top level symbols.
-void PassCommon::populateSymbolCache(mlir::ModuleOp mod) {
-  for (Operation &op : mod.getBody()->getOperations())
-    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-      if (auto name = symOp.getNameAttr())
-        topLevelSyms.addDefinition(name, symOp);
-  topLevelSyms.freeze();
-}
-
 LogicalResult PassCommon::verifyInstances(mlir::ModuleOp mod) {
   WalkResult r = mod.walk([&](InstanceOp inst) {
     Operation *modOp = topLevelSyms.getDefinition(inst.moduleNameAttr());
@@ -681,7 +668,8 @@ private:
 void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   ctxt = outerMod.getContext();
-  populateSymbolCache(outerMod);
+  topLevelSyms.addDefinitions(outerMod);
+  topLevelSyms.freeze();
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
     return;
@@ -1443,7 +1431,8 @@ struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
 
 void WireCleanupPass::runOnOperation() {
   ModuleOp topMod = getOperation();
-  populateSymbolCache(topMod);
+  topLevelSyms.addDefinitions(topMod);
+  topLevelSyms.freeze();
   if (failed(verifyInstances(topMod))) {
     signalPassFailure();
     return;

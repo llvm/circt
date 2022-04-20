@@ -54,6 +54,8 @@ using namespace ExportVerilog;
 
 constexpr int INDENT_AMOUNT = 2;
 constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
+StringRef circtHeader = "circt_header.svh";
+StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -2438,7 +2440,7 @@ private:
   LogicalResult visitStmt(TypeScopeOp op);
   LogicalResult visitStmt(TypedeclOp op);
 
-  LogicalResult emitIfDef(Operation *op, StringRef cond);
+  LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
   LogicalResult visitSV(IfDefProceduralOp op) {
     return emitIfDef(op, op.cond());
@@ -2969,12 +2971,14 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
   return emitConcurrentAssertion(op, "cover");
 }
 
-LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
+LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
+  StringRef ident = cond.getName();
+
   bool hasEmptyThen = op->getRegion(0).front().empty();
   if (hasEmptyThen)
-    indent() << "`ifndef " << cond;
+    indent() << "`ifndef " << ident;
   else
-    indent() << "`ifdef " << cond;
+    indent() << "`ifdef " << ident;
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -3210,6 +3214,11 @@ LogicalResult StmtEmitter::visitSV(InitialOp op) {
 LogicalResult StmtEmitter::visitSV(CaseOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
+  indent();
+  if (op.validationQualifier().hasValue())
+    os << stringifyValidationQualifierTypeEnumAttr(
+              op.validationQualifier().getValue())
+       << " ";
   const char *opname = nullptr;
   switch (op.caseStyle()) {
   case CaseStmtType::CaseStmt:
@@ -3222,7 +3231,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
     opname = "casez";
     break;
   }
-  indent() << opname << " (";
+  os << opname << " (";
   emitExpression(op.cond(), ops);
   os << ')';
   emitLocationInfoAndNewLine(ops);
@@ -4226,10 +4235,19 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 /// Given a FileInfo, collect all the replicated and designated operations
 /// that go into it and append them to "thingsToEmit".
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
-                                           EmissionList &thingsToEmit) {
+                                           EmissionList &thingsToEmit,
+                                           bool emitHeader) {
   // If we're emitting replicated ops, keep track of where we are in the list.
   size_t lastReplicatedOp = 0;
-  size_t numReplicatedOps = file.emitReplicatedOps ? replicatedOps.size() : 0;
+
+  bool emitHeaderInclude =
+      emitHeader && file.emitReplicatedOps && !file.isHeader;
+
+  if (emitHeaderInclude)
+    thingsToEmit.emplace_back(circtHeaderInclude);
+
+  size_t numReplicatedOps =
+      file.emitReplicatedOps && !emitHeaderInclude ? replicatedOps.size() : 0;
 
   thingsToEmit.reserve(thingsToEmit.size() + numReplicatedOps +
                        file.ops.size());
@@ -4364,6 +4382,11 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(false);
 
+  if (emitter.options.emitReplicatedOpsToHeader)
+    module.emitWarning()
+        << "`emitReplicatedOpsToHeader` option is enabled but an header is "
+           "created only at SplitExportVerilog";
+
   SharedEmitterState::EmissionList list;
 
   // Collect the contents of the main file. This is a container for anything
@@ -4458,7 +4481,8 @@ static void createSplitOutputFile(StringAttr fileName, FileInfo &file,
     return;
 
   SharedEmitterState::EmissionList list;
-  emitter.collectOpsForFile(file, list);
+  emitter.collectOpsForFile(file, list,
+                            emitter.options.emitReplicatedOpsToHeader);
 
   // Emit the file, copying the global options into the individual module
   // state.  Don't parallelize emission of the ops within this file - we
@@ -4477,6 +4501,23 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 
   SharedEmitterState emitter(module, options, std::move(globalNames));
   emitter.gatherFiles(true);
+
+  if (emitter.options.emitReplicatedOpsToHeader) {
+    // Add a header to the file list.
+    bool insertSuccess =
+        emitter.files
+            .insert({StringAttr::get(module.getContext(), circtHeader),
+                     FileInfo{/*ops*/ {},
+                              /*emitReplicatedOps*/ true,
+                              /*addToFilelist*/ true,
+                              /*isHeader*/ true}})
+            .second;
+    if (!insertSuccess) {
+      module.emitError() << "tried to emit a heder to " << circtHeader
+                         << ", but the file is used as an output too.";
+      return failure();
+    }
+  }
 
   // Emit each file in parallel if context enables it.
   parallelForEach(module->getContext(), emitter.files.begin(),

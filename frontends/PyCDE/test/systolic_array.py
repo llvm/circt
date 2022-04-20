@@ -18,11 +18,11 @@ class Top:
   out = Output(dim(8, 2, 3))
 
   @generator
-  def build(mod):
+  def build(ports):
     # If we just feed constants, CIRCT pre-computes the outputs in the
     # generated Verilog! Keep these for demo purposes.
-    # row_data = dim(8, 3)([1, 2, 3]).value
-    # col_data = dim(8, 2)([4, 5]).value
+    # row_data = dim(8, 3)([1, 2, 3])
+    # col_data = dim(8, 2)([4, 5])
 
     # CHECK-LABEL: %{{.+}} = msft.systolic.array [%{{.+}} : 3 x i8] [%{{.+}} : 2 x i8] pe (%arg0, %arg1) -> (i8) {
     # CHECK:         [[SUM:%.+]] = comb.add %arg0, %arg1 {sv.namehint = "sum"} : i8
@@ -31,11 +31,11 @@ class Top:
     def pe(r, c):
       sum = comb.AddOp(r, c)
       sum.name = "sum"
-      return sum.reg(mod.clk)
+      return sum.reg(ports.clk)
 
-    pe_outputs = SystolicArray(mod.row_data, mod.col_data, pe)
+    pe_outputs = SystolicArray(ports.row_data, ports.col_data, pe)
 
-    mod.out = pe_outputs
+    ports.out = pe_outputs
 
 
 t = pycde.System([Top], name="SATest", output_directory=sys.argv[1])

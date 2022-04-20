@@ -79,11 +79,23 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
     if (port.isInput() && !arg.use_empty())
       continue;
 
+    auto portIsUnused = [&](InstanceRecord *a) -> bool {
+      auto port = a->getInstance()->getResult(arg.getArgNumber());
+      return port.getUses().empty();
+    };
+
     // Output port.
     if (port.isOutput()) {
       if (arg.use_empty()) {
         // Sometimes the connection is already removed possibly by IMCP.
         // In that case, regard the port value as an invalid value.
+        outputPortConstants.push_back(None);
+      } else if (llvm::all_of(instanceGraphNode->uses(), portIsUnused)) {
+        // Replace the port with a wire if it is unused.
+        auto builder =
+            ImplicitLocOpBuilder::atBlockBegin(arg.getLoc(), module.getBody());
+        auto wire = builder.create<WireOp>(arg.getType());
+        arg.replaceAllUsesWith(wire);
         outputPortConstants.push_back(None);
       } else if (arg.hasOneUse()) {
         // If the port has a single use, check the port is only connected to
