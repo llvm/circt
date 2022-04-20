@@ -3215,9 +3215,10 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
   SmallPtrSet<Operation *, 8> ops, emptyOps;
   ops.insert(op);
   indent();
-  if (op.validationQualifier().hasValue())
-    os << stringifyValidationQualifierTypeEnumAttr(
-              op.validationQualifier().getValue())
+  if (op.validationQualifier() !=
+      ValidationQualifierTypeEnum::ValidationQualifierPlain)
+    os << circt::sv::stringifyValidationQualifierTypeEnum(
+              op.validationQualifier())
        << " ";
   const char *opname = nullptr;
   switch (op.caseStyle()) {
