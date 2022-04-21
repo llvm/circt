@@ -1188,9 +1188,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   return success();
 }
 
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult WireOp::verify() { return verifyInNonProceduralRegion(*this); }
-
 //===----------------------------------------------------------------------===//
 // ReadInOutOp
 //===----------------------------------------------------------------------===//
