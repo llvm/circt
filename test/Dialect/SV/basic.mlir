@@ -320,3 +320,14 @@ hw.module @XMR_src(%a : i23) {
     // CHECK: = sv.indexed_part_select %[[v4]][%[[in4:.+]]  decrement : 5] : i18, i4
     hw.output %c, %d : i3, i5
 }
+
+// CHECK-LABEL: hw.module @nested_wire
+hw.module @nested_wire(%a: i1) {
+  // CHECK: sv.ifdef "foo"
+  sv.ifdef "foo" {
+    // CHECK: sv.wire
+    %wire = sv.wire : !hw.inout<i1>
+    // CHECK: sv.assign
+    sv.assign %wire, %a : i1
+  }
+}
