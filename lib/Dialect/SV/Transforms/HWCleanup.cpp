@@ -66,70 +66,69 @@ struct AlwaysLikeOpInfo : public llvm::DenseMapInfo<Operation *> {
   }
 };
 
+void eraseOpWithoutUse(Operation *op) {
+  if (op && op->use_empty())
+    op->erase();
+}
+
 // This struct analyses given two conditions. We decompose the atomic values
-// (i.e. non AndOp) in the two conditions into three sets `lhsAtoms`, `rhsAtoms`
-// and `commonAtoms` so that the following relation holds. This struct is used
-// to hoist values in commonAtoms outer if op.
+// (i.e. non AndOp) in the two conditions into three sets `lhsOperands`,
+// `rhsOperands` and `commonOperands` so that the following relation holds. This
+// struct is used to hoist values in commonOperands outer if op.
 //
-// lhs = lhsAtoms /\ commonAtoms
-// rhs = rhsAtoms /\ commonAtoms
+// lhs = lhsOperands /\ commonOperands
+// rhs = rhsOperands /\ commonOperands
 struct ConditionPairInformation {
-  ConditionPairInformation(Value lhs, Value rhs) {
-    peelAtoms(lhs, lhsAtoms);
-    peelAtoms(rhs, rhsAtoms);
+  ConditionPairInformation(Value lhs, Value rhs) : lhs(lhs), rhs(rhs) {
+    peelOperands(lhs, lhsOperands);
+    peelOperands(rhs, rhsOperands);
 
     // Take an intersection.
-    for (auto atom : lhsAtoms)
-      if (rhsAtoms.contains(atom))
-        commonAtoms.push_back(atom);
+    for (auto operand : lhsOperands)
+      if (rhsOperands.contains(operand))
+        commonOperand.push_back(operand);
 
-    if (commonAtoms.empty())
+    if (commonOperand.empty())
       return;
 
-    // If lhsAtoms are equal to lhsAtoms, all conditions are the same.
-    if (commonAtoms.size() == lhsAtoms.size() &&
-        commonAtoms.size() == rhsAtoms.size()) {
-      lhsAtoms.clear();
-      rhsAtoms.clear();
+    // If lhsOperands are equal to rhsOperands, all conditions are the same.
+    if (commonOperand.size() == lhsOperands.size() &&
+        commonOperand.size() == rhsOperands.size()) {
+      lhsOperands.clear();
+      rhsOperands.clear();
       return;
     }
 
     // Remove all common values from both sets.
-    for (auto atom : commonAtoms) {
-      lhsAtoms.remove(atom);
-      rhsAtoms.remove(atom);
+    for (auto operand : commonOperand) {
+      lhsOperands.remove(operand);
+      rhsOperands.remove(operand);
     }
   }
 
   // Remove ops.
   void cleanUpOps() {
-    for (Operation *op : andOperations)
-      if (op->use_empty())
-        op->erase();
+    eraseOpWithoutUse(lhs.getDefiningOp());
+    eraseOpWithoutUse(rhs.getDefiningOp());
   }
 
+  Value lhs, rhs;
   // Unique values in the condition lhs and rhs.
-  llvm::SmallSetVector<Value, 4> lhsAtoms, rhsAtoms;
+  llvm::SmallSetVector<Value, 4> lhsOperands, rhsOperands;
   // Common values in two conditions.
-  llvm::SmallVector<Value> commonAtoms;
+  llvm::SmallVector<Value> commonOperand;
 
 private:
-  // Track decomposed operations which might be dead after if-merging.
-  llvm::SmallSetVector<comb::AndOp, 4> andOperations;
-
-  // Helper function to accmulate atoms.
-  void peelAtoms(Value cond, llvm::SmallSetVector<Value, 4> &result) {
+  // Helper function to accmulate operands.
+  static void peelOperands(Value cond, llvm::SmallSetVector<Value, 4> &result) {
     auto andOp = dyn_cast_or_null<comb::AndOp>(cond.getDefiningOp());
     if (!andOp) {
       result.insert(cond);
       return;
     }
 
-    // Insert op before recursing into operands to make `cleanUpOps` traverse
-    // operations from users.
-    andOperations.insert(andOp);
     llvm::for_each(andOp.getOperands(),
-                   [&](Value cond) { peelAtoms(cond, result); });
+                   [&](Value cond) { result.insert(cond); });
   }
 };
 
@@ -163,14 +162,15 @@ static void mergeRegions(Region *region1, Region *region2) {
 
 namespace {
 struct HWCleanupPass : public sv::HWCleanupBase<HWCleanupPass> {
-  HWCleanupPass(bool aggressiveIfOpMergeFlag) {
-    aggressiveIfOpMerge = aggressiveIfOpMergeFlag;
+  HWCleanupPass(bool convertIfToCaseFlag) {
+    convertIfToCase = convertIfToCaseFlag;
   }
   void runOnOperation() override;
 
   void runOnRegionsInOp(Operation &op);
   void runOnGraphRegion(Region &region);
   void runOnProceduralRegion(Region &region);
+  void runIfOpsToCaseOnBlock(Block &block);
 
 private:
   /// Inline all regions from the second operation into the first and delete the
@@ -197,8 +197,8 @@ private:
       return ifOp;
     }
 
-    // If aggressiveIfOpMerge is not enabled, just return first if op.
-    if (!aggressiveIfOpMerge)
+    // If convertIfToCase is not enabled, just return first if op.
+    if (!convertIfToCase)
       return ifOp;
 
     return hoistIfOpConditions(ifOp, prevIfOp);
@@ -335,6 +335,10 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
       lastSideEffectingOp = &op;
   }
 
+  // Convert if ops into casez.
+  if (convertIfToCase)
+    runIfOpsToCaseOnBlock(body);
+
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Recursively process any regions in the op.
     if (op.getNumRegions() != 0)
@@ -361,12 +365,12 @@ sv::IfOp HWCleanupPass::hoistIfOpConditions(sv::IfOp ifOp, sv::IfOp prevIfOp) {
   ConditionPairInformation condPairInfo(ifOp.cond(), prevIfOp.cond());
 
   // If there is nothing in common, we cannot merge.
-  if (condPairInfo.commonAtoms.empty())
+  if (condPairInfo.commonOperand.empty())
     return ifOp;
 
-  // If both lhsAtoms and rhsAtoms are empty, it means the conditions
+  // If both lhsOperands and rhsOperands are empty, it means the conditions
   // are actually equivalent.
-  if (condPairInfo.lhsAtoms.empty() && condPairInfo.rhsAtoms.empty()) {
+  if (condPairInfo.lhsOperands.empty() && condPairInfo.rhsOperands.empty()) {
     mergeOperationsIntoFrom(ifOp, prevIfOp);
     return ifOp;
   }
@@ -386,12 +390,13 @@ sv::IfOp HWCleanupPass::hoistIfOpConditions(sv::IfOp ifOp, sv::IfOp prevIfOp) {
   };
 
   auto merge = [&]() {
-    // If rhsAtoms is empty, it means we can move ifOp to the block of prevIfOp.
-    if (condPairInfo.rhsAtoms.empty()) {
+    // If rhsOperands is empty, it means we can move ifOp to the block of
+    // prevIfOp.
+    if (condPairInfo.rhsOperands.empty()) {
       // Move ifOp to the end of prevIfOp's then block.
       builder.setInsertionPointToEnd(prevIfOp.getThenBlock());
       auto newCond1 =
-          generateCondValue(ifOp.cond().getLoc(), condPairInfo.lhsAtoms);
+          generateCondValue(ifOp.cond().getLoc(), condPairInfo.lhsOperands);
       ifOp.setOperand(newCond1);
       // op1 might contain ops defined between op2 and op1, we have to move op2
       // to the position of op1 to ensure that the dominance doesn't break.
@@ -400,12 +405,13 @@ sv::IfOp HWCleanupPass::hoistIfOpConditions(sv::IfOp ifOp, sv::IfOp prevIfOp) {
       return prevIfOp;
     }
 
-    // If lhsAtoms is empty, it means we can move prevIfOp to the block of ifOp.
-    if (condPairInfo.lhsAtoms.empty()) {
+    // If lhsOperands is empty, it means we can move prevIfOp to the block of
+    // ifOp.
+    if (condPairInfo.lhsOperands.empty()) {
       // Move prevIfOp to the start of ifOp's then block.
       builder.setInsertionPointToStart(ifOp.getThenBlock());
       auto newCond2 =
-          generateCondValue(prevIfOp.cond().getLoc(), condPairInfo.rhsAtoms);
+          generateCondValue(prevIfOp.cond().getLoc(), condPairInfo.rhsOperands);
       prevIfOp.setOperand(newCond2);
       prevIfOp->moveAfter(ifOp.getThenBlock(), ifOp.getThenBlock()->begin());
       return ifOp;
@@ -415,10 +421,11 @@ sv::IfOp HWCleanupPass::hoistIfOpConditions(sv::IfOp ifOp, sv::IfOp prevIfOp) {
     builder.setInsertionPoint(ifOp);
 
     // Create new conditions.
-    auto newCond1 = generateCondValue(ifOp.getLoc(), condPairInfo.lhsAtoms);
-    auto newCond2 = generateCondValue(prevIfOp.getLoc(), condPairInfo.rhsAtoms);
+    auto newCond1 = generateCondValue(ifOp.getLoc(), condPairInfo.lhsOperands);
+    auto newCond2 =
+        generateCondValue(prevIfOp.getLoc(), condPairInfo.rhsOperands);
     auto cond = builder.createOrFold<comb::AndOp>(ifOp.getLoc(),
-                                                  condPairInfo.commonAtoms);
+                                                  condPairInfo.commonOperand);
     auto newIf = builder.create<sv::IfOp>(prevIfOp.getLoc(), cond, [&]() {});
 
     prevIfOp->moveBefore(newIf.getThenBlock(), newIf.getThenBlock()->begin());
@@ -433,6 +440,99 @@ sv::IfOp HWCleanupPass::hoistIfOpConditions(sv::IfOp ifOp, sv::IfOp prevIfOp) {
   return returnedIfOp;
 }
 
-std::unique_ptr<Pass> circt::sv::createHWCleanupPass(bool aggressiveIfOpMerge) {
-  return std::make_unique<HWCleanupPass>(aggressiveIfOpMerge);
+// This function converts successive if ops into a case satatement by
+// pattern matching.
+void HWCleanupPass::runIfOpsToCaseOnBlock(Block &body) {
+  // This indicates the value which might be used as a condition of casez.
+  Value comparedValue;
+  llvm::MapVector<APInt, SmallVector<sv::IfOp>> caseIntegerToIfOps;
+
+  auto tryConstructingCaseZ = [&](Operation *op) {
+    // If there is only one case, or `comparedValue` is not set yet, we don't
+    // create casez.
+    if (caseIntegerToIfOps.size() <= 1 || !comparedValue) {
+      caseIntegerToIfOps.clear();
+      comparedValue = nullptr;
+      return;
+    }
+
+    auto caseIntegerAndIfOps = caseIntegerToIfOps.takeVector();
+    // Renew the map since `takeVector` moves the underlying vector.
+    caseIntegerToIfOps = llvm::MapVector<APInt, SmallVector<sv::IfOp>>();
+
+    OpBuilder builder(op->getContext());
+    builder.setInsertionPoint(op);
+    // Create case op with `caseValueAndIfOps.size()` cases.
+    auto casez = builder.create<sv::CaseOp>(
+        comparedValue.getLoc(), CaseStmtType::CaseStmt, comparedValue,
+        caseIntegerAndIfOps.size(),
+        [&](size_t caseIdx) -> circt::sv::CasePattern {
+          auto constant = caseIntegerAndIfOps[caseIdx].first;
+
+          circt::sv::CasePattern thePattern =
+              circt::sv::CasePattern(constant, op->getContext());
+          return thePattern;
+        });
+
+    for (unsigned idx : llvm::seq(0ul, caseIntegerAndIfOps.size())) {
+      auto *block = casez.getCases()[idx].block;
+      auto &ifOps = caseIntegerAndIfOps[idx].second;
+      // Append all blocks of registered ifOps.
+      for (auto ifOp : ifOps) {
+        block->getOperations().splice(block->end(),
+                                      ifOp.getThenBlock()->getOperations());
+        comb::ICmpOp icmp = cast<comb::ICmpOp>(ifOp.cond().getDefiningOp());
+        ifOp.erase();
+        eraseOpWithoutUse(icmp.rhs().getDefiningOp());
+        eraseOpWithoutUse(icmp);
+      }
+    }
+
+    comparedValue = nullptr;
+  };
+
+  Operation *op = nullptr;
+  for (auto it = body.begin(), end = body.end(); it != end; it++) {
+    op = &*it;
+
+    // This function checks that it is possible to merge the op into the current
+    // case. TODO: Consider to use mlir::PatternMatch utils.
+    auto patternMatchIfOp = [&](Operation *op) {
+      auto ifOp = dyn_cast<sv::IfOp>(op);
+      if (!ifOp || ifOp.hasElse())
+        return false;
+
+      // Check that condition is ICmpOp.
+      auto icmpOp = dyn_cast_or_null<comb::ICmpOp>(ifOp.cond().getDefiningOp());
+      if (!icmpOp || icmpOp.predicate() != comb::ICmpPredicate::eq)
+        return false;
+      auto constant =
+          dyn_cast_or_null<circt::hw::ConstantOp>(icmpOp.rhs().getDefiningOp());
+      if (!constant)
+        return false;
+
+      // Check that the comaparison is consistent with the casez we are
+      // creating.
+      if (!comparedValue)
+        comparedValue = icmpOp.lhs();
+      else if (comparedValue != icmpOp.lhs())
+        return false;
+
+      // Register the if op.
+      caseIntegerToIfOps[constant.getValue()].push_back(ifOp);
+      return true;
+    };
+
+    bool success = patternMatchIfOp(op);
+    if (!success && !mlir::MemoryEffectOpInterface::hasNoEffect(op))
+      tryConstructingCaseZ(op);
+  }
+
+  // We also have to construct case in the end.
+  if (op)
+    tryConstructingCaseZ(op);
+}
+
+std::unique_ptr<Pass> circt::sv::createHWCleanupPass(bool convertIfToCase) {
+  return std::make_unique<HWCleanupPass>(convertIfToCase);
 }

@@ -20,14 +20,9 @@ circuit Foo:
     input other : UInt<1>
     input sum : UInt<42>
 
-<<<<<<< HEAD
     ; CHECK: `ifndef SYNTHESIS
     ; CHECK-NEXT: always @(posedge clock) begin
-=======
-    ; CHECK: always @(posedge clock) begin
-    ; CHECK-NEXT: `ifndef SYNTHESIS
     ; CHECK-NEXT:   if (enable) begin
->>>>>>> 38bcfb149 ([HWCleanUp] Aggressive if conditions hoisting)
 
     ; assert with predicate only
     ; CHECK-NEXT: if (~(predicate1 | reset)) begin

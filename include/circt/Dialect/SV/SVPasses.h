@@ -20,8 +20,7 @@ namespace circt {
 namespace sv {
 
 std::unique_ptr<mlir::Pass> createPrettifyVerilogPass();
-std::unique_ptr<mlir::Pass>
-createHWCleanupPass(bool aggressiveIfOpMerge = false);
+std::unique_ptr<mlir::Pass> createHWCleanupPass(bool convertIfToCase = false);
 std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();

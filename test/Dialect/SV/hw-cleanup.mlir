@@ -1,4 +1,4 @@
-// RUN: circt-opt -hw-cleanup='aggressive-if-op-merge=true' %s | FileCheck %s
+// RUN: circt-opt -hw-cleanup='convert-if-to-case=true' %s | FileCheck %s
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
@@ -338,49 +338,108 @@ hw.module @nested_regions() {
 }
 
 // CHECK-LABEL: hw.module @if_condition_hosting(
-// CHECK:      sv.initial  {
-// CHECK-NEXT:   sv.if %a  {
-// CHECK-NEXT:     sv.if %c  {
-// CHECK-NEXT:       sv.if %b  {
-// CHECK-NEXT:         sv.fwrite "A_B_C"
-// CHECK-NEXT:         sv.if %d  {
-// CHECK-NEXT:           sv.fwrite "A_B_C_D"
-// CHECK-NEXT:         }
-// CHECK-NEXT:       }
-// CHECK-NEXT:       sv.if %d  {
-// CHECK-NEXT:         sv.fwrite "A_C_D"
-// CHECK-NEXT:       }
-// CHECK-NEXT:     }
-// CHECK-NEXT:     sv.if %d  {
-// CHECK-NEXT:       sv.fwrite "A_D"
-// CHECK-NEXT:       %0 = comb.and %b, %c : i1
-// CHECK-NEXT:       sv.if %0  {
-// CHECK-NEXT:         sv.fwrite "A_B_C_D again"
-// CHECK-NEXT:       }
-// CHECK-NEXT:     }
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
 hw.module @if_condition_hosting(%a: i1, %b: i1, %c:i1, %d:i1) {
   %0 = comb.and %a, %b, %c, %d: i1
   %1 = comb.and %a, %b, %c: i1
   %2 = comb.and %a, %c, %d: i1
   %3 = comb.and %a, %d, %d: i1
+  %fd = hw.constant 0 : i32
+  // CHECK:      sv.initial  {
+  // CHECK-NEXT:   sv.if %a  {
+  // CHECK-NEXT:     sv.if %c  {
+  // CHECK-NEXT:       sv.if %b  {
+  // CHECK-NEXT:         sv.fwrite [[FD:%.*]], "A_B_C"
+  // CHECK-NEXT:         sv.if %d  {
+  // CHECK-NEXT:           sv.fwrite [[FD]], "A_B_C_D"
+  // CHECK-NEXT:         }
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:       sv.if %d  {
+  // CHECK-NEXT:         sv.fwrite [[FD]], "A_C_D"
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:     sv.if %d  {
+  // CHECK-NEXT:       sv.fwrite [[FD]], "A_D"
+  // CHECK-NEXT:       %0 = comb.and %b, %c : i1
+  // CHECK-NEXT:       sv.if %0  {
+  // CHECK-NEXT:         sv.fwrite [[FD]], "A_B_C_D again"
+  // CHECK-NEXT:       }
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
   sv.initial {
     sv.if %0 {
-      sv.fwrite "A_B_C_D"
+      sv.fwrite %fd, "A_B_C_D"
     }
     sv.if %1 {
-      sv.fwrite "A_B_C"
+      sv.fwrite %fd, "A_B_C"
     }
     sv.if %2 {
-      sv.fwrite "A_C_D"
+      sv.fwrite %fd, "A_C_D"
     }
     sv.if %3 {
-      sv.fwrite "A_D"
+      sv.fwrite %fd, "A_D"
     }
     sv.if %0 {
-      sv.fwrite "A_B_C_D again"
+      sv.fwrite %fd, "A_B_C_D again"
     }
   }
 
+}
+
+hw.module @case(%sel1: i2, %sel2: i2) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c3_i2 = hw.constant 3 : i2
+  %0 = comb.icmp eq %sel1, %c0_i2 : i2
+  %1 = comb.icmp eq %sel1, %c1_i2 : i2
+  %2 = comb.icmp eq %sel1, %c3_i2 : i2
+  %3 = comb.icmp eq %sel2, %c3_i2 : i2
+  %fd = hw.constant 0 : i32
+
+  // CHECK: sv.initial
+  sv.initial {
+    // CHECK-NEXT:   sv.case %sel1 : i2
+    // CHECK-NEXT:   case b00: {
+    // CHECK-NEXT:     sv.fwrite [[FD:%.*]], "sel1 = 0"
+    // CHECK-NEXT:     sv.fwrite [[FD]], "sel1 = 0 again"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   case b01: {
+    // CHECK-NEXT:     sv.fwrite [[FD]], "sel1 = 1"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   case b11: {
+    // CHECK-NEXT:     sv.fwrite [[FD]], "sel1 = 3"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.if %0  {
+    // CHECK-NEXT:     sv.fwrite [[FD]], "it should not be merged"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.case %sel1 : i2
+    // CHECK-NEXT:   case b00: {
+    // CHECK-NEXT:     sv.fwrite [[FD]], "sel1 = 0"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   case b01: {
+    // CHECK-NEXT:     sv.fwrite [[FD]], "sel1 = 1"
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    sv.if %0 {
+      sv.fwrite %fd, "sel1 = 0"
+    }
+    sv.if %1 {
+      sv.fwrite %fd, "sel1 = 1"
+    }
+    sv.if %2 {
+      sv.fwrite %fd, "sel1 = 3"
+    }
+    sv.if %0 {
+      sv.fwrite %fd, "sel1 = 0 again"
+    }
+    sv.if %3 {
+      sv.fwrite %fd, "it should not be merged"
+    }
+    sv.if %0 {
+      sv.fwrite %fd, "sel1 = 0"
+    }
+    sv.if %1 {
+      sv.fwrite %fd, "sel1 = 1"
+    }
+  }
 }

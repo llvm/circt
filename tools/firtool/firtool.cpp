@@ -557,7 +557,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         modulePM.addPass(createCSEPass());
         modulePM.addPass(createSimpleCanonicalizerPass());
         modulePM.addPass(createCSEPass());
-        modulePM.addPass(sv::createHWCleanupPass());
+        modulePM.addPass(sv::createHWCleanupPass(/*convertIfToCase*/ true));
       }
     }
   }

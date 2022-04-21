@@ -26,8 +26,8 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
 
   let constructor = "circt::sv::createHWCleanupPass()";
   let options = [
-    Option<"aggressiveIfOpMerge", "aggressive-if-op-merge",
-           "bool", "false", "Merge successive if ops by hoisting common conditions">
+    Option<"convertIfToCase", "convert-if-to-case",
+           "bool", "false", "Convert if ops to case op">
    ];
 }
 
