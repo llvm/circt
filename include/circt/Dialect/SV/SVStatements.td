@@ -19,6 +19,7 @@ def isModuleSymbol : AttrConstraint<
       "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
   >, "is module like">;
 
+
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
@@ -662,4 +663,16 @@ def InfoOp : NonfatalMessageOp<"info"> {
   let description = [{
     This system task indicates a message with no specific severity.
   }] # messageDescription;
+}
+
+def DepositOp : SVOp<"nonstandard.deposit", 
+    [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
+  let summary = "`$deposit` system task";
+  let description = [{
+    This system task sets the value of a net or variable, but doesn't hold it.
+    This is a common simulation vendor extension.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` qualified(type($src))";
 }

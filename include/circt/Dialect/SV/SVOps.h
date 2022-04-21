@@ -124,6 +124,15 @@ public:
   }
 };
 
+/// This class provides a verifier for ops that are expecting their parent
+/// to be one of the given parent ops
+template <typename ConcreteType>
+class VendorExtension
+    : public mlir::OpTrait::TraitBase<ConcreteType, VendorExtension> {
+public:
+  static LogicalResult verifyTrait(Operation *op) { return success(); }
+};
+
 } // namespace sv
 } // namespace circt
 

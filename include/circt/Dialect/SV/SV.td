@@ -37,6 +37,11 @@ def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
   let cppNamespace = "::circt::sv";
 }
 
+/// Mark an operation as being a vendor extension.
+def VendorExtension : NativeOpTrait<"VendorExtension"> {
+  let cppNamespace = "::circt::sv";
+}
+
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/SV/SVAttributes.td"
