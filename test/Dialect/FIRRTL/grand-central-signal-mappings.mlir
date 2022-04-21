@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-grand-central-signal-mappings))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-grand-central-signal-mappings))' --split-input-file %s | FileCheck %s
 
 firrtl.circuit "SubCircuit" {
   firrtl.extmodule @FooExtern(in clockIn: !firrtl.clock, out clockOut: !firrtl.clock)
@@ -73,5 +73,23 @@ firrtl.circuit "SubCircuit" {
     firrtl.instance foo @Foo()
     firrtl.instance bar @Bar()
     %baz_data_source, %baz_data_sink = firrtl.instance baz @Baz(out data_source: !firrtl.uint<42>, in data_sink: !firrtl.uint<42>)
+  }
+}
+
+// -----
+
+// Check that no work is done for a GCT signal driver that only drives
+// zero-width ports.
+//
+// CHECK-LABEL: "signal_driver"
+// CHECK-COUNT-1: firrtl.module
+// CHECK-NOT:     firrtl.module
+firrtl.circuit "signal_driver" {
+  firrtl.module @signal_driver() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
+    %_w_sink = firrtl.wire sym @w_sink  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<0>
+    %w_sink = firrtl.node sym @w_sink_0 %_w_sink  : !firrtl.uint<0>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.tail %c1_ui1, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
+    firrtl.connect %_w_sink, %0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 }

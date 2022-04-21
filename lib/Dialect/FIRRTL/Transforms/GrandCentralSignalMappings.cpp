@@ -120,6 +120,14 @@ void ModuleSignalMappings::run() {
     });
   });
 
+  // If this module either
+  if (mappings.empty()) {
+    LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
+                            << "` (has no non-zero sources or sinks)\n");
+    allAnalysesPreserved = true;
+    return;
+  }
+
   // Pick a name for the module that implements the signal mappings.
   CircuitNamespace circuitNamespace(module->getParentOfType<CircuitOp>());
   mappingsModuleName =
@@ -137,6 +145,10 @@ void ModuleSignalMappings::run() {
 /// `SignalMapping` information and adds an entry to the `mappings` array, to be
 /// later consumed when the mappings module is constructed.
 void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
+  // Ignore the target if it is zero width.
+  if (!value.getType().cast<FIRRTLType>().getBitWidthOrSentinel())
+    return;
+
   // We're emitting code for the "local" side of these annotations, which
   // sits in the sub-circuit and interacts with the main circuit on the
   // "remote" side.
