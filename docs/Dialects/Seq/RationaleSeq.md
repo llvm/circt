@@ -99,6 +99,112 @@ optimization) another op could be added.
   targets "reset-agnostic code", the reset style shouldn't affect logical
   correctness. It should, therefore, be determined by a lowering pass.
 
+## The FIRRTL register operation [Provisional]
+
+The `seq.firreg` carries all the information required to represent a FIRRTL
+register and lower it to SystemVerilog.
+
+`FirReg` has the following operands:
+
+- **input**: Value to set the register to on the positive edge of the clock
+signal.
+- **clk**: Clock signal driving the register.
+- **name**: A name for the register, passed directly to the `sv.reg`.
+- **inner_sym**: A optional symbol for the register, passed directly to the
+`sv.reg`. Is a symbol is not specified and the register is randomised, one is
+created during the lowering to SV. Registers without symbols can be removed
+from the design.
+- **reset**: Signal to trigger the reset.
+- **resetValue**: A value which is set upon reset. Must be a constant if the
+reset is asynchronous.
+- **isAsync**: Optional boolean flag indicating whether the reset is
+asynchronous.
+- **randomized**: Unit attribute indicating whether the register should be
+initialised to a random value.
+
+```mlir
+%reg = seq.firreg %input, %clk
+    [ sym @sym ]
+    [ reset (sync|async) %reset, %value ]
+    [ randomized ] : $type(input)
+```
+
+Examples of registers:
+
+```mlir
+%reg_no_reset = seq.firreg %input, %clk, @sym : i32
+
+%reg_sync_reset_rand  = seq.firreg %input, %clk, @sym
+    reset sync %reset, %value randomized : i64
+
+%reg_async_reset = seq.firreg %input, %clk, @sym
+    reset async %reset, %value : i1
+```
+
+A register without a reset lowers directly to an always block:
+
+```
+always @(posedge clk or [posedge reset]) begin
+  a <= [%input]
+end
+```
+
+In the presence of a reset, an if statement and an always block with the
+proper triggers are emitted:
+
+```
+always @(posedge clk or [posedge reset]) begin
+  if ([%reset])
+    a <= [%resetValue]
+  else
+    a <= [%input]
+end
+```
+
+Additionally, `sv` operations are also included to provide the register with
+a randomized preset value.
+Since items assigned in an `always_ff` block cannot be initialised in an
+`initial` block, this register lowers to `always`.
+
+```
+`ifndef SYNTHESIS
+  `ifdef RANDOMIZE_REG_INIT
+    reg [31:0] _RANDOM;
+  `endif
+  initial begin
+    `INIT_RANDOM_PROLOG_
+    `ifdef RANDOMIZE_REG_INIT
+      _RANDOM = {`RANDOM};
+      a = _RANDOM;
+    `endif
+  end
+`endif
+```
+
+Registers expect the logic assignment to them to be in SSA form.
+For example, a strict connect to a field of a structure:
+
+```firrtl
+%field = firrtl.subfield %a(0)
+firrtl.strictconnect %field, %value
+```
+Is converted into a `hw.struct_inject` operation:
+```mlir
+%reg = seq.firreg %value, %clk, @sym : i32
+%value = hw.struct_inject %reg["x"], %value
+```
+
+In order to avoid generating unnecessary assignments, the lowering of the
+register to `sv` eliminates the SSA form and emits a single parallel assignment
+to the field (`reg.x = value`).
+
+### Rationale
+
+A register specific for FIRRTL is desired as it has a specific lowering while
+also requiring a preset value and asynchronous resets.
+The lowering must also be compatible with the reference FIRRTL lowering, which
+might diverge from the lowering of the computation register.
+
 ### Future considerations
 
 - Enable signal: if this proves difficult to detect (or non-performant if we
