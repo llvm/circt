@@ -304,11 +304,14 @@ def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
 def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
                                    [CaseStmt, CaseXStmt, CaseZStmt]>;
 
-def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 0, "unique">;
-def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 1, "unique0">;
-def ValidationQualifierPriority: I32EnumAttrCase<"ValidationQualifierPriority", 2, "priority">;
-def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnumAttr", "validation qualifier type",
-              [ValidationQualifierUnique, ValidationQualifierUnique0, ValidationQualifierPriority]> {
+def ValidationQualifierPlain: I32EnumAttrCase<"ValidationQualifierPlain", 0, "plain">;
+def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 1, "unique">;
+def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 2, "unique0">;
+def ValidationQualifierPriority: I32EnumAttrCase<"ValidationQualifierPriority", 3, "priority">;
+
+def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnum", "validation qualifier type",
+              [ValidationQualifierPlain, ValidationQualifierUnique,
+               ValidationQualifierUnique0, ValidationQualifierPriority]> {
   let genSpecializedAttr = 0;
   let cppNamespace = "::circt::sv";
 }
@@ -324,7 +327,9 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
                        HWIntegerType:$cond, ArrayAttr:$casePatterns,
-                       OptionalAttr<ValidationQualifierTypeAttr>: $validationQualifier);
+                       DefaultValuedAttr<ValidationQualifierTypeAttr,
+                       "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
+                       $validationQualifier);
   let results = (outs);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;

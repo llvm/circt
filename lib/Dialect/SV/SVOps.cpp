@@ -654,7 +654,8 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
 }
 
 /// Parse case op.
-/// case op ::= `sv.case` case-style? cond `:` type attr-dict  case-pattern^*
+/// case op ::= `sv.case` case-style? validation-qualifier? cond `:` type
+///             attr-dict case-pattern^*
 /// case-style ::= `case` | `casex` | `casez`
 /// validation-qualifier (see SV Spec 12.5.3) ::= `unique` | `unique0`
 ///                                             | `priority`
@@ -668,12 +669,19 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
   auto loc = parser.getCurrentLocation();
 
   StringRef keyword;
-  if (!parser.parseOptionalKeyword(&keyword)) {
+  if (!parser.parseOptionalKeyword(&keyword, {"case", "casex", "casez"})) {
     auto kind = symbolizeCaseStmtType(keyword);
-    if (!kind.hasValue())
-      return parser.emitError(loc, "expected 'case', 'casex', or 'casez'");
     auto caseEnum = static_cast<int32_t>(kind.getValue());
     result.addAttribute("caseStyle", builder.getI32IntegerAttr(caseEnum));
+  }
+
+  // Parse validation qualifier.
+  if (!parser.parseOptionalKeyword(
+          &keyword, {"plain", "priority", "unique", "unique0"})) {
+    auto kind = symbolizeValidationQualifierTypeEnum(keyword);
+    result.addAttribute("validationQualifier",
+                        ValidationQualifierTypeEnumAttr::get(
+                            builder.getContext(), kind.getValue()));
   }
 
   if (parser.parseOperand(condOperand) || parser.parseColonType(condType) ||
@@ -764,9 +772,15 @@ void CaseOp::print(OpAsmPrinter &p) {
     p << "casex ";
   else if (caseStyle() == CaseStmtType::CaseZStmt)
     p << "casez ";
+
+  if (validationQualifier() !=
+      ValidationQualifierTypeEnum::ValidationQualifierPlain)
+    p << stringifyValidationQualifierTypeEnum(validationQualifier()) << ' ';
+
   p << cond() << " : " << cond().getType();
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          /*elidedAttrs=*/{"casePatterns", "caseStyle"});
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"casePatterns", "caseStyle", "validationQualifier"});
 
   for (auto caseInfo : getCases()) {
     p.printNewline();
