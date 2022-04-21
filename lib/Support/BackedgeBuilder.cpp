@@ -12,6 +12,8 @@
 
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
+
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
@@ -38,17 +40,12 @@ BackedgeBuilder::~BackedgeBuilder() {
 Backedge::operator mlir::Value() { return value; }
 
 BackedgeBuilder::BackedgeBuilder(OpBuilder &builder, Location loc)
-    : builder(builder), rewriter(nullptr), loc(loc) {
-  loc.getContext()->allowUnregisteredDialects();
-}
+    : builder(builder), rewriter(nullptr), loc(loc) {}
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
-    : builder(rewriter), rewriter(&rewriter), loc(loc) {
-  loc.getContext()->allowUnregisteredDialects();
-}
+    : builder(rewriter), rewriter(&rewriter), loc(loc) {}
 Backedge BackedgeBuilder::get(Type t) {
-  OperationState s(loc, "TemporaryBackedge");
-  s.addTypes(t);
-  auto *op = builder.create(s);
+  Operation *op =
+      builder.create<mlir::UnrealizedConversionCastOp>(loc, t, ValueRange{});
   edges.push_back(op);
   return Backedge(op);
 }
