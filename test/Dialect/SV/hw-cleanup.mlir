@@ -1,4 +1,4 @@
-// RUN: circt-opt -hw-cleanup %s | FileCheck %s
+// RUN: circt-opt -hw-cleanup='aggressive-if-op-merge=true' %s | FileCheck %s
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT:   [[FD:%.*]] = hw.constant -2147483646 : i32
@@ -335,4 +335,52 @@ hw.module @nested_regions() {
       }
     }
   }
+}
+
+// CHECK-LABEL: hw.module @if_condition_hosting(
+// CHECK:      sv.initial  {
+// CHECK-NEXT:   sv.if %a  {
+// CHECK-NEXT:     sv.if %c  {
+// CHECK-NEXT:       sv.if %b  {
+// CHECK-NEXT:         sv.fwrite "A_B_C"
+// CHECK-NEXT:         sv.if %d  {
+// CHECK-NEXT:           sv.fwrite "A_B_C_D"
+// CHECK-NEXT:         }
+// CHECK-NEXT:       }
+// CHECK-NEXT:       sv.if %d  {
+// CHECK-NEXT:         sv.fwrite "A_C_D"
+// CHECK-NEXT:       }
+// CHECK-NEXT:     }
+// CHECK-NEXT:     sv.if %d  {
+// CHECK-NEXT:       sv.fwrite "A_D"
+// CHECK-NEXT:       %0 = comb.and %b, %c : i1
+// CHECK-NEXT:       sv.if %0  {
+// CHECK-NEXT:         sv.fwrite "A_B_C_D again"
+// CHECK-NEXT:       }
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+hw.module @if_condition_hosting(%a: i1, %b: i1, %c:i1, %d:i1) {
+  %0 = comb.and %a, %b, %c, %d: i1
+  %1 = comb.and %a, %b, %c: i1
+  %2 = comb.and %a, %c, %d: i1
+  %3 = comb.and %a, %d, %d: i1
+  sv.initial {
+    sv.if %0 {
+      sv.fwrite "A_B_C_D"
+    }
+    sv.if %1 {
+      sv.fwrite "A_B_C"
+    }
+    sv.if %2 {
+      sv.fwrite "A_C_D"
+    }
+    sv.if %3 {
+      sv.fwrite "A_D"
+    }
+    sv.if %0 {
+      sv.fwrite "A_B_C_D again"
+    }
+  }
+
 }

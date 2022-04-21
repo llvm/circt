@@ -25,6 +25,10 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
   }];
 
   let constructor = "circt::sv::createHWCleanupPass()";
+  let options = [
+    Option<"aggressiveIfOpMerge", "aggressive-if-op-merge",
+           "bool", "false", "Merge successive if ops by hoisting common conditions">
+   ];
 }
 
 def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
