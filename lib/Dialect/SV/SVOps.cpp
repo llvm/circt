@@ -1189,11 +1189,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult WireOp::verify() {
-  if ((*this)->getParentOp()->hasTrait<ProceduralRegion>())
-    return emitError("sv.wire must not be in a procedural region");
-  return success();
-}
+LogicalResult WireOp::verify() { return verifyInNonProceduralRegion(*this); }
 
 //===----------------------------------------------------------------------===//
 // ReadInOutOp
