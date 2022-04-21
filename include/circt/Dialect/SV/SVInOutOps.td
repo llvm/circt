@@ -46,7 +46,6 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
       return result().getType().cast<InOutType>().getElementType();
     }
   }];
-  let hasVerifier = 1;
 }
 
 def RegOp : SVOp<"reg", [
