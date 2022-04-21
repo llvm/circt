@@ -517,10 +517,14 @@ bool Inliner::doesNLAMatchCurrentPath(NonLocalAnchor nla) {
 /// these are unique in the namespace.
 void Inliner::rename(StringRef prefix, Operation *op,
                      ModuleNamespace &moduleNamespace) {
-  // Add a prefix to _anything_ that has a "name" attribute.
-  if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
-    op->setAttr("name", StringAttr::get(op->getContext(),
-                                        (prefix + nameAttr.getValue())));
+  // Add a prefix to things that has a "name" attribute.  We don't prefix
+  // memories since it will affect the name of the generated module.
+  // TODO: We should find a way to prefix the instance of a memory module.
+  if (!isa<MemOp, SeqMemOp, CombMemOp, MemoryPortOp>(op)) {
+    if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      op->setAttr("name", StringAttr::get(op->getContext(),
+                                          (prefix + nameAttr.getValue())));
+  }
 
   // If the operation has an inner symbol, ensure that it is unique.  Record
   // renames for any NLAs that this participates in if the symbol was renamed.
