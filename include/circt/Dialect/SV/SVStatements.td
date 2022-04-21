@@ -659,12 +659,12 @@ def InfoOp : NonfatalMessageOp<"info"> {
   }] # messageDescription;
 }
 
-def DepositOp : SVOp<"cadence.deposit", 
+def DepositOp : SVOp<"nonstandard.deposit", 
     [ProceduralOp, VendorExtension, InOutTypeConstraint<"src", "dest">]> {
   let summary = "`$deposit` system task";
   let description = [{
     This system task sets the value of a net or variable, but doesn't hold it.
-    This is a Cadence vendor extension.
+    This is a common simulation vendor extension.
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
