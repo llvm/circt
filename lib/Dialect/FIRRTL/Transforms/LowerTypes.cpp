@@ -1080,13 +1080,21 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
             mkConnect(builder, realOldField, newField);
           } else {
             // Cast the input aggregate write data to flat type.
-            realOldField = builder->create<BitCastOp>(
-                newField.getType().cast<FIRRTLType>(), oldField);
+            auto newFieldType = newField.getType().cast<FIRRTLType>();
+            auto oldFieldBitWidth = getBitWidth(oldField.getType());
+            // Following condition is true, if a data field is 0 bits. Then
+            // newFieldType is of smaller bits than old.
+            if (getBitWidth(newFieldType) != oldFieldBitWidth.getValue())
+              newFieldType =
+                  UIntType::get(context, oldFieldBitWidth.getValue());
+            realOldField = builder->create<BitCastOp>(newFieldType, oldField);
             // Mask bits require special handling, since some of the mask bits
             // need to be repeated, direct bitcasting wouldn't work. Depending
             // on the mask granularity, some mask bits will be repeated.
+            // This also handles the case, when some of the data fields are 0
+            // bit, then the mask bits for zero bit data fields must be ignored.
             if ((name == "mask" || name == "wmask") &&
-                (maskWidths.size() < totalmaskWidths)) {
+                (maskWidths.size() != totalmaskWidths)) {
               Value catMasks;
               for (auto m : llvm::enumerate(maskWidths)) {
                 // Get the mask bit.
@@ -1094,7 +1102,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
                     realOldField, m.index(), m.index());
                 // Check how many times the mask bit needs to be prepend.
                 for (size_t repeat = 0; repeat < m.value(); repeat++)
-                  if (m.index() == 0 && repeat == 0)
+                  if ((m.index() == 0 && repeat == 0) || !catMasks)
                     catMasks = mBit;
                   else
                     catMasks = builder->createOrFold<CatPrimOp>(mBit, catMasks);
