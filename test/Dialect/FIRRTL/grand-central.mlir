@@ -1081,6 +1081,69 @@ firrtl.circuit "BlackBoxDirectoryBehavior" attributes {
 
 // -----
 
+firrtl.circuit "InterfaceInTestHarness" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        description = "description of foo",
+        name = "foo",
+        id = 1 : i64}],
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"},
+    {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+     dirname = "testbenchDir"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]} {
+  }
+  firrtl.module @InterfaceInTestHarness() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}]} {
+    firrtl.instance dut @DUT()
+    %a = firrtl.wire {annotations = [
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 1 : i64},
+      {class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+    firrtl.instance View_companion @View_companion()
+  }
+}
+
+// Check that an interface, instantiated inside the test harness (technically,
+// in a module which is not a child of the marked Design Under Test), will not
+// be extracted via a bind.  Also, check that interfaces only inside the test
+// harness will be written to the test harness directory.
+//
+// CHECK-LABEL: "InterfaceInTestHarness"
+// CHECK:       firrtl.module @InterfaceInTestHarness
+// CHECK:         firrtl.instance View_companion
+// CHECK-NOT:       output_file
+// CHECK-NOT:       lowerToBind
+// CHECK:         sv.interface.instance
+// CHECK-NOT:       output_file
+// CHECK-NOT:       lowerToBind
+// CHECK-SAME:      !sv.interface
+// CHECK-NEXT:  }
+// CHECK:       sv.interface
+// CHECK-SAME:    output_file = #hw.output_file<"testbenchDir/Foo.sv", excludeFromFileList>
+
+// -----
+
 firrtl.circuit "YAMLOutputEmptyInterface" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",

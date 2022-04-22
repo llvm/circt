@@ -576,6 +576,15 @@ private:
   /// before the pass finishes.
   DenseSet<StringAttr> deadNLAs;
 
+  /// The design-under-test (DUT) as determined by the presence of a
+  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no DUT
+  /// was found.
+  FModuleLike dut;
+
+  /// An optional directory for testbench-related files.  This is null if no
+  /// "TestBenchDirAnnotation" is found.
+  StringAttr testbenchDir;
+
   /// Return a string containing the name of an interface.  Apply correct
   /// prefixing from the interfacePrefix and module-level prefix parameter.
   std::string getInterfaceName(StringAttr prefix,
@@ -1013,7 +1022,16 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
   auto loc = getOperation().getLoc();
   auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
-  if (maybeExtractInfo)
+  if (dut &&
+      !instancePaths->instanceGraph.isAncestor(companionIDMap[id].companion,
+                                               cast<hw::HWModuleLike>(*dut)) &&
+      testbenchDir)
+    iface->setAttr("output_file",
+                   hw::OutputFileAttr::getFromDirectoryAndFilename(
+                       &getContext(), testbenchDir.getValue(),
+                       iFaceName + ".sv",
+                       /*excludFromFileList=*/true));
+  else if (maybeExtractInfo)
     iface->setAttr("output_file",
                    hw::OutputFileAttr::getFromDirectoryAndFilename(
                        &getContext(), getOutputDirectory().getValue(),
@@ -1192,8 +1210,33 @@ void GrandCentralPass::runOnOperation() {
       interfacePrefix = prefix.getValue();
       return true;
     }
+    if (anno.isClass(testbenchDirAnnoClass)) {
+      testbenchDir = anno.getMember<StringAttr>("dirname");
+      return false;
+    }
     return false;
   });
+
+  // Find the DUT if it exists.  This needs to be known before the circuit is
+  // walked.
+  for (auto mod : circuitOp.getOps<FModuleLike>()) {
+    if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
+      continue;
+
+    // TODO: This check is duplicated multiple places, e.g., in
+    // WireDFT.  This should be factored out as part of the annotation
+    // lowering pass.
+    if (dut) {
+      auto diag = emitError(mod.getLoc())
+                  << "is marked with a '" << dutAnnoClass << "', but '"
+                  << dut.moduleName()
+                  << "' also had such an annotation (this should "
+                     "be impossible!)";
+      diag.attachNote(dut.getLoc()) << "the first DUT was found here";
+      removalError = true;
+    }
+    dut = mod;
+  }
 
   if (removalError)
     return signalPassFailure();
@@ -1212,6 +1255,11 @@ void GrandCentralPass::runOnOperation() {
                    << "\n";
     else
       llvm::dbgs() << "  <none>\n";
+    llvm::dbgs() << "DUT: ";
+    if (dut)
+      llvm::dbgs() << dut.moduleName() << "\n";
+    else
+      llvm::dbgs() << "<none>\n";
     llvm::dbgs()
         << "Prefix Info (from PrefixInterfacesAnnotation):\n"
         << "  prefix: " << interfacePrefix << "\n"
@@ -1399,7 +1447,9 @@ void GrandCentralPass::runOnOperation() {
             //   3. Instatiate the mapping module in the companion.
             //   4. Check that the companion is instantated exactly once.
             //   5. Set attributes on that lone instance so it will become a
-            //      bind if extraction information was provided.
+            //      bind if extraction information was provided.  If a DUT is
+            //      known, then anything in the test harness will not be
+            //      extracted.
             if (tpe.getValue() == "companion") {
               builder.setInsertionPointToEnd(circuitOp.getBody());
 
@@ -1434,6 +1484,12 @@ void GrandCentralPass::runOnOperation() {
               // If no extraction info was provided, exit.  Otherwise, setup the
               // lone instance of the companion to be lowered as a bind.
               if (!maybeExtractInfo)
+                return true;
+
+              // If the companion is instantiated above the DUT, then don't
+              // extract it.
+              if (dut && !instancePaths->instanceGraph.isAncestor(
+                             op, cast<hw::HWModuleLike>(*dut)))
                 return true;
 
               instance.getValue()->setAttr("lowerToBind", trueAttr);
@@ -1673,6 +1729,13 @@ void GrandCentralPass::runOnOperation() {
     if (!maybeExtractInfo)
       continue;
 
+    // If the interface is associated with a companion that is instantiated
+    // above the DUT (e.g.., in the test harness), then don't extract it.
+    if (dut && !instancePaths->instanceGraph.isAncestor(
+                   companionIDMap[bundle.getID()].companion,
+                   cast<hw::HWModuleLike>(*dut)))
+      continue;
+
     instance->setAttr("doNotPrint", trueAttr);
     builder.setInsertionPointToStart(
         instance->getParentOfType<CircuitOp>().getBody());
@@ -1695,6 +1758,7 @@ void GrandCentralPass::runOnOperation() {
     llvm::yaml::Output yout(stream);
     yamlize(yout, interfaceVec, true, yamlContext);
 
+    builder.setInsertionPointToStart(circuitOp.getBody());
     builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
         ->setAttr("output_file",
                   hw::OutputFileAttr::getFromFilename(
