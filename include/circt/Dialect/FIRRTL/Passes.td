@@ -367,6 +367,7 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
