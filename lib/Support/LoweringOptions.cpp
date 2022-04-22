@@ -33,12 +33,11 @@ LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
 
 static Optional<LoweringOptions::LocationInfoStyle>
 parseLocationInfoStyle(StringRef option) {
-  if (option == "plain")
-    return LoweringOptions::Plain;
-  if (option == "wrapInAtSquareBracket")
-    return LoweringOptions::WrapInAtSquareBracket;
-
-  return llvm::None;
+  return llvm::StringSwitch<llvm::Optional<LoweringOptions::LocationInfoStyle>>(
+             option)
+      .Case("plain", LoweringOptions::Plain)
+      .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
+      .Default(llvm::None);
 }
 
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
