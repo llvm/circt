@@ -372,6 +372,10 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let description = [{
     This pass checks combinational cycles in the IR and emit errors.
   }];
+  let options = [
+    Option<"printSimpleCycle", "print-simple-cycle", "bool", "true",
+      "Print a simple cycle instead of printing all operations in SCC">
+  ];
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
