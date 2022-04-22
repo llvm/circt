@@ -362,7 +362,7 @@ def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
 }
 
 def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
-                                      "FModuleOp"> {
+                                      "firrtl::CircuitOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
 }

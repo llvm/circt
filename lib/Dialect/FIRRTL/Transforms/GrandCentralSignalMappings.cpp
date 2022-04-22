@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "gct"
 
@@ -260,10 +261,23 @@ class GrandCentralSignalMappingsPass
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
-  FModuleOp module = getOperation();
-  ModuleSignalMappings mapper(module);
-  mapper.run();
-  if (mapper.allAnalysesPreserved)
+  CircuitOp circuit = getOperation();
+
+  auto processModule = [](FModuleOp module) -> bool {
+    ModuleSignalMappings mapper(module);
+    mapper.run();
+    return mapper.allAnalysesPreserved;
+  };
+
+  SmallVector<FModuleOp> modules(circuit.body().getOps<FModuleOp>());
+  // Note: this uses (unsigned)true instead of (bool)true for the reduction
+  // because llvm::parallelTransformReduce uses the "data" method of std::vector
+  // which is NOT provided for bool for optimization reasons.
+  bool allAnalysesPreserved = llvm::parallelTransformReduce(
+      modules.begin(), modules.end(), (unsigned)true,
+      [](bool acc, bool x) { return acc && x; }, processModule);
+
+  if (allAnalysesPreserved)
     markAllAnalysesPreserved();
 }
 

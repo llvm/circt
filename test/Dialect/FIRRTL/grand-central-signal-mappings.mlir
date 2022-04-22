@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-grand-central-signal-mappings))' --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-grand-central-signal-mappings)' --split-input-file %s | FileCheck %s
 
 firrtl.circuit "SubCircuit" {
   firrtl.extmodule @FooExtern(in clockIn: !firrtl.clock, out clockOut: !firrtl.clock)
