@@ -13,11 +13,17 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/Parallel.h"
+#include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "gct"
+
+namespace json = llvm::json;
 
 using namespace circt;
 using namespace firrtl;
@@ -266,13 +272,50 @@ public:
 void GrandCentralSignalMappingsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
 
+  bool emitJSON = false;
+  StringAttr circuitPackage;
+  AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
+    if (!anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation"))
+      return false;
+
+    emitJSON = anno.getDict().contains("emitJSON");
+    circuitPackage = anno.getMember<StringAttr>("circuitPackage");
+    return true;
+  });
+
+  if (emitJSON && !circuitPackage) {
+    emitError(circuit->getLoc())
+        << "has invalid SignalDriverAnnotation (JSON emission is enabled, but "
+           "no circuitPacakge was provided";
+    return signalPassFailure();
+  }
+
   auto processModule = [](FModuleOp module) -> bool {
     ModuleSignalMappings mapper(module);
     mapper.run();
     return mapper.allAnalysesPreserved;
   };
 
-  SmallVector<FModuleOp> modules(circuit.body().getOps<FModuleOp>());
+  SmallVector<FModuleOp> modules;
+  struct {
+    // External modules put in the vsrcs field of the JSON.
+    SmallVector<FExtModuleOp> vsrc;
+    // External modules put in the "load_jsons" field of the JSON.
+    SmallVector<FExtModuleOp> json;
+  } extmodules;
+
+  for (auto op : circuit.body().getOps<FModuleLike>()) {
+    if (auto *extModule = dyn_cast<FExtModuleOp>(&op)) {
+      AnnotationSet annotations(*extModule);
+      if (annotations.hasAnnotation("firrtl.transforms.BlackBoxInlineAnno")) {
+        extmodules.vsrc.push_back(*extModule);
+        continue;
+      }
+      extmodules.json.push_back(*extModule);
+      continue;
+    }
+    modules.push_back(cast<FModuleOp>(op));
+  }
   // Note: this uses (unsigned)true instead of (bool)true for the reduction
   // because llvm::parallelTransformReduce uses the "data" method of std::vector
   // which is NOT provided for bool for optimization reasons.
@@ -282,6 +325,54 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 
   if (allAnalysesPreserved)
     markAllAnalysesPreserved();
+
+  // If this is a subcircuit, then continue on and emit JSON information
+  // necessary to drive SiFive tools.
+  if (!emitJSON)
+    return;
+
+  std::string jsonString;
+  llvm::raw_string_ostream jsonStream(jsonString);
+  json::OStream j(jsonStream, 2);
+  j.object([&] {
+    j.attributeObject("vendor", [&]() {
+      j.attributeObject("vcs", [&]() {
+        j.attributeArray("vsrcs", [&]() {
+          for (FModuleOp module : circuit.body().getOps<FModuleOp>()) {
+            SmallVector<char> file(outputFilename.begin(),
+                                   outputFilename.end());
+            llvm::sys::fs::make_absolute(file);
+            llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
+            j.value(file);
+          }
+          for (FExtModuleOp ext : extmodules.vsrc) {
+            SmallVector<char> file(outputFilename.begin(),
+                                   outputFilename.end());
+            llvm::sys::fs::make_absolute(file);
+            llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
+            j.value(file);
+          }
+        });
+      });
+      j.attributeObject("verilator", [&]() {
+        j.attributeArray("error", [&]() {
+          j.value("force statement is not supported in verilator");
+        });
+      });
+    });
+    j.attributeArray("remove_vsrcs", []() {});
+    j.attributeArray("vsrcs", []() {});
+    j.attributeArray("load_jsons", [&]() {
+      for (FExtModuleOp extModule : extmodules.json)
+        j.value((Twine(extModule.moduleName()) + ".json").str());
+    });
+  });
+  auto b = OpBuilder::atBlockEnd(circuit.getBody());
+  auto jsonOp = b.create<sv::VerbatimOp>(b.getUnknownLoc(), jsonString);
+  jsonOp->setAttr(
+      "output_file",
+      hw::OutputFileAttr::getFromFilename(
+          b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
 }
 
 std::unique_ptr<mlir::Pass>

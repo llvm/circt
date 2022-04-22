@@ -93,3 +93,66 @@ firrtl.circuit "signal_driver" {
     firrtl.connect %_w_sink, %0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 }
+
+// -----
+
+// Check that GCT-SM generates a SiFive-specific JSON configuration file.  The
+// following things are specifically checked:
+//   1. "vendor.verilator.vsrcs" contains the subcircuit and mappings
+//   2. "vendor.verilator.vsrcs" also contains subcircuit inline blackboxes
+//   3. "load_jsons" contains undefined external modules with a .json suffix
+//
+// CHECK-LABEL: "GenerateJSON"
+firrtl.circuit "GenerateJSON"  attributes {
+  annotations = [
+    {annotations = [],
+    circuit = "",
+    circuitPackage = "driving",
+    class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+    emitJSON,
+    id = 0 : i64}]} {
+  firrtl.extmodule private @ExternalModule(out out: !firrtl.uint<1>) attributes {defname = "ExternalModule"}
+  firrtl.extmodule private @InlineExternalModule(out out: !firrtl.uint<1>) attributes {
+    annotations = [
+      {class = "firrtl.transforms.BlackBoxInlineAnno",
+       name = "InlineExternalModule",
+       text = "// hello"}],
+       defname = "InlineExternalModule"}
+  firrtl.module @GenerateJSON() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+       id = 0 : i64}]} {
+    %source = firrtl.wire sym @source  {
+      annotations = [
+        {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+         dir = "source",
+         id = 0 : i64,
+         peer = "~SignalDrivingTop|SignalDrivingTop>_y",
+         side = "local",
+         targetId = 1 : i64}]} : !firrtl.uint<1>
+    %sub_out = firrtl.instance sub  @ExternalModule(out out: !firrtl.uint<1>)
+    %sub2_out = firrtl.instance sub2  @InlineExternalModule(out out: !firrtl.uint<1>)
+  }
+  // CHECK:      sv.verbatim "{
+  // CHECK-SAME:   \22vendor\22: {
+  // CHECK-SAME:     \22vcs\22: {
+  // CHECK-SAME:       \22vsrcs\22: [
+  // CHECK-SAME:         \22{{.+}}/GenerateJSON_signal_mappings.sv\22,
+  // CHECK-SAME:         \22{{.+}}/GenerateJSON.sv\22,
+  // CHECK-SAME:         \22{{.+}}/InlineExternalModule.sv\22
+  // CHECK-SAME:       ]
+  // CHECK-SAME:     },
+  // CHECK-SAME:     \22verilator\22: {
+  // CHECK-SAME:       \22error\22: [
+  // CHECK-SAME:         \22force statement is not supported in verilator\22
+  // CHECK-SAME:       ]
+  // CHECK-SAME:     }
+  // CHECK-SAME:   },
+  // CHECK-SAME:   \22remove_vsrcs\22: [],
+  // CHECK-SAME:   \22vsrcs\22: [],
+  // CHECK-SAME:   \22load_jsons\22: [
+  // CHECK-SAME:     \22ExternalModule.json\22
+  // CHECK-SAME:   ]
+  // CHECK-SAME: }"
+  // CHECK-SAME: #hw.output_file<"driving.subcircuit.json", excludeFromFileList>
+}
