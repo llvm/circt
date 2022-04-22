@@ -365,6 +365,8 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
                                       "firrtl::CircuitOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
+  let options = [Option<"outputFilename", "file", "std::string", "",
+      "Output file for the JSON-serialized OMIR data">];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
