@@ -1587,10 +1587,10 @@ bool circt::firrtl::scatterCustomAnnotations(
       fields.append("annotations", annotationsAttr);
       fields.append("circuit", circuitAttr);
       fields.append("circuitPackage", circuitPackageAttr);
-      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
 
       // A callback that will scatter every source and sink target pair to the
       // corresponding two ends of the connection.
+      bool emitJSON = false;
       llvm::StringSet annotatedModules;
       auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
         auto targetId = newID();
@@ -1632,6 +1632,12 @@ bool circt::firrtl::scatterCustomAnnotations(
                 prefix.consume_front("|"))) {
             continue;
           }
+
+          // If we get to this point, then we are processing the subcircuit.
+          // Indicate that this requires JSON emission (whereas the main circuit
+          // does not).
+          if (pair.second)
+            emitJSON = true;
 
           // Assemble the annotation on this side of the connection.
           NamedAttrList fields;
@@ -1694,6 +1700,12 @@ bool circt::firrtl::scatterCustomAnnotations(
       for (auto attr : sinksAttr)
         if (!handleTarget(attr, i++, false))
           return false;
+
+      // Add the emitJSON attribute as we now have enough information to know if
+      // we are in the subcircuit or the main circuit.
+      if (emitJSON)
+        fields.append("emitJSON", UnitAttr::get(context));
+      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
 
       // Indicate which modules have embedded `SignalDriverAnnotation`s.
       for (auto &module : annotatedModules) {
