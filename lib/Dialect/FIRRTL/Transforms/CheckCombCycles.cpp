@@ -513,8 +513,13 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
                      mlir::InFlightDiagnostic &diag) {
   // Sample a cycle to print.
   SmallVector<Node> cycle = sampleCycle(scc);
-  for (unsigned i = 0, e = cycle.size(); i < e; ++i) {
-    Node current = cycle[i];
+  unsigned cycleSize = cycle.size();
+
+  // NOTE: We visit the start element twice to explicitly indicate the path
+  // forms a cycle.
+  for (unsigned i = 0, e = cycleSize + 1; i < e; ++i) {
+    Node current = cycle[i % cycleSize];
+    bool lastNode = i == cycleSize;
     auto attachInfo = [&]() -> mlir::Diagnostic & {
       return diag.attachNote(current.value.getLoc())
              << module.getName().str() << ".";
@@ -535,12 +540,11 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
           // If the op is InstanceOp or SubfieldOp, it is necessary to
           // investigate the next value since output values do not expilicty
           // appear in the cycle.
-          Node next = cycle[(i + 1) % e];
+          Node next = cycle[(i + 1) % cycleSize];
           for (auto iter = GT::child_begin(current),
                     end = GT::child_end(current);
                iter != end; ++iter) {
-            auto node = *iter;
-            if (node.value != next.value)
+            if ((*iter).value != next.value)
               continue;
 
             auto iterImpl = iter.getIteratorImpl();
@@ -552,8 +556,9 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
                   std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
               attachInfo() << instance.name() << "."
                            << instance.getPortName(inputPort).str();
-              attachInfo() << instance.name() << "."
-                           << instance.getPortName(outputPort).str();
+              if (!lastNode)
+                attachInfo() << instance.name() << "."
+                             << instance.getPortName(outputPort).str();
             } else if (std::holds_alternative<SubfieldNodeIterator>(iterImpl)) {
               // SubfieldNodeIterator represents the connection between addr
               // port and data port.
@@ -562,9 +567,10 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
                   std::get<SubfieldNodeIterator>(iterImpl).getDataPort();
 
               attachInfo() << getFieldName(getFieldRefFromValue(subfieldAddr));
-              diag.attachNote(subfieldData.getLoc())
-                  << module.getName().str() << "."
-                  << getFieldName(getFieldRefFromValue(subfieldData));
+              if (!lastNode)
+                diag.attachNote(subfieldData.getLoc())
+                    << module.getName().str() << "."
+                    << getFieldName(getFieldRefFromValue(subfieldData));
             }
             break;
           }
