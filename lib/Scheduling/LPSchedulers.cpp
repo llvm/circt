@@ -23,11 +23,13 @@ using namespace operations_research;
 
 LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
   Operation *containingOp = prob.getContainingOp();
+  if (!prob.hasOperation(lastOp))
+    return containingOp->emitError("problem does not include last operation");
 
   MPSolver::OptimizationProblemType problemType;
   if (!MPSolver::ParseSolverType("GLOP_LINEAR_PROGRAMMING", &problemType) ||
       !MPSolver::SupportsProblemType(problemType))
-    return containingOp->emitError("Solver is unvailable");
+    return containingOp->emitError("GLOP is unvailable");
 
   MPSolver solver("Problem", problemType);
   double infinity = solver.infinity();
@@ -78,11 +80,13 @@ LogicalResult scheduling::scheduleLP(Problem &prob, Operation *lastOp) {
 
 LogicalResult scheduling::scheduleLP(CyclicProblem &prob, Operation *lastOp) {
   Operation *containingOp = prob.getContainingOp();
+  if (!prob.hasOperation(lastOp))
+    return containingOp->emitError("problem does not include last operation");
 
   MPSolver::OptimizationProblemType probType;
   if (!MPSolver::ParseSolverType("CBC_MIXED_INTEGER_PROGRAMMING", &probType) ||
       !MPSolver::SupportsProblemType(probType))
-    return containingOp->emitError("Solver is unavailable");
+    return containingOp->emitError("Cbc is unavailable");
 
   MPSolver solver("CyclicProblem", probType);
   double infinity = solver.infinity();
