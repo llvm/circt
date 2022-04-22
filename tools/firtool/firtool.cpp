@@ -500,7 +500,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
     circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
-    circuitPM.addPass(firrtl::createGrandCentralSignalMappingsPass());
+    circuitPM.addPass(
+        firrtl::createGrandCentralSignalMappingsPass(outputFilename));
   }
 
   // Read black box source files into the IR.

@@ -258,6 +258,9 @@ void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
 class GrandCentralSignalMappingsPass
     : public GrandCentralSignalMappingsBase<GrandCentralSignalMappingsPass> {
   void runOnOperation() override;
+
+public:
+  std::string outputFilename;
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
@@ -282,6 +285,9 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 }
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createGrandCentralSignalMappingsPass() {
-  return std::make_unique<GrandCentralSignalMappingsPass>();
+circt::firrtl::createGrandCentralSignalMappingsPass(StringRef outputFilename) {
+  auto pass = std::make_unique<GrandCentralSignalMappingsPass>();
+  if (!outputFilename.empty())
+    pass->outputFilename = outputFilename;
+  return pass;
 }
