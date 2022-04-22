@@ -75,9 +75,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-DAG: hw.constant 2 : i3
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
+    // CHECK-DAG: %false = hw.constant false {sv.namehint = "clockWire"}
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %clockWire = firrtl.wire : !firrtl.clock
+    firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
 
     // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
-    // CHECK: %out5 = sv.wire : !hw.inout<i4>
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %out5 = firrtl.wire : !firrtl.uint<4>
     // CHECK: sv.wire sym @__Simple{{.*}}
@@ -88,13 +91,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: sv.wire sym @__Simple__dntnode
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
-    // CHECK: %clockWire = sv.wire  : !hw.inout<i1>
-    // CHECK: sv.assign %clockWire, %false : i1
-    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
-    %clockWire = firrtl.wire : !firrtl.clock
-    firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
-
-    // CHECK: sv.assign %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
@@ -115,7 +111,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[PADRES:%.+]] = comb.concat  [[PADRES_SIGN]], %in2 : i1, i2
     %3 = firrtl.pad %in2s, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
-    // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
+    // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2, %in2 {sv.namehint = "out5"} : i2, i2
     %4 = firrtl.pad %in2, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
 
     // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
@@ -134,7 +130,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: comb.concat %in1, %in2
     %7 = firrtl.cat %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<6>
 
-    // CHECK-NEXT: sv.assign %out5, [[PADRES2]] : i4
     firrtl.connect %out5, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK-NEXT: sv.assign %out4, [[XOR]] : i4
@@ -147,14 +142,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %test-name = sv.wire sym @"__Simple__test-name" : !hw.inout<i4>
     firrtl.wire {name = "test-name", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
-    // CHECK-NEXT: = sv.wire : !hw.inout<i2>
-    %_t_1 = firrtl.wire : !firrtl.uint<2>
+    // CHECK-NEXT: = sv.wire sym @_t_1 : !hw.inout<i2>
+    %_t_1 = firrtl.wire sym @_t_1: !firrtl.uint<2>
 
-    // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi1>>
-    %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
+    // CHECK-NEXT: = sv.wire sym @_t_2 : !hw.inout<array<13xi1>>
+    %_t_2 = firrtl.wire sym @_t_2: !firrtl.vector<uint<1>, 13>
 
-    // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi2>>
-    %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    // CHECK-NEXT: = sv.wire sym @_t_3 : !hw.inout<array<13xi2>>
+    %_t_3 = firrtl.wire sym @_t_3: !firrtl.vector<uint<2>, 13>
 
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
     %8 = firrtl.bits %6 7 to 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
@@ -632,14 +627,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @issue314
   firrtl.module private @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
     // CHECK: %c0_i38 = hw.constant 0 : i38
-    // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : i38, i27
     // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inpi : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
-    // CHECK-NEXT: %2 = comb.extract %1 from 0 : (i65) -> i27
-    // CHECK-NEXT: sv.assign %tmp48, %2 : i27
+    // CHECK-NEXT: %2 = comb.extract %1 from 0 {sv.namehint = "tmp48"} : (i65) -> i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
   }
 
@@ -1244,14 +1237,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @BitCast3() {
     %a = firrtl.wire : !firrtl.uint<26>
     %b = firrtl.bitcast %a : (!firrtl.uint<26>) -> (!firrtl.vector<uint<2>, 13>)
-    // CHECK: hw.bitcast %0 : (i26) -> !hw.array<13xi2>
+    // CHECK: hw.bitcast %x_i26 : (i26) -> !hw.array<13xi2>
   }
 
   // CHECK-LABEL: hw.module private @BitCast4
   firrtl.module private @BitCast4() {
     %a = firrtl.wire : !firrtl.uint<3>
     %b = firrtl.bitcast %a : (!firrtl.uint<3>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>)
-    // CHECK: hw.bitcast %0 : (i3) -> !hw.struct<valid: i1, ready: i1, data: i1>
+    // CHECK: hw.bitcast %x_i3 : (i3) -> !hw.struct<valid: i1, ready: i1, data: i1>
 
   }
   // CHECK-LABEL: hw.module private @BitCast5

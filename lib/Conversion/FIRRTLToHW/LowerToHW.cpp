@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/Namespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -1304,10 +1305,12 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
         builder(module.getLoc(), module.getContext()),
+        backedgeBuilder(builder, module.getLoc()),
         moduleNamespace(hw::ModuleNamespace(module)) {}
 
   LogicalResult run();
 
+  void connectWires();
   void optimizeTemporaryWire(sv::WireOp wire);
 
   // Helpers.
@@ -1488,9 +1491,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
       StringAttr nameAttr, bool isConcurrent, EventControl eventControl);
 
   LogicalResult visitStmt(SkipOp op);
+
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(PartialConnectOp op);
   LogicalResult visitStmt(StrictConnectOp op);
+
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
@@ -1510,6 +1515,9 @@ private:
   /// This builder is set to the right location for each visit call.
   ImplicitLocOpBuilder builder;
 
+  /// This builder creates back-edges.
+  BackedgeBuilder backedgeBuilder;
+
   /// Each value lowered (e.g. operation result) is kept track in this map.
   /// The key should have a FIRRTL type, the result will have an HW dialect
   /// type.
@@ -1524,6 +1532,11 @@ private:
   /// caches a known ReadInOutOp for the given value and is managed by
   /// `getReadInOutOp(v)`.
   DenseMap<Value, Value> readInOutCreated;
+
+  /// Mapping from wire ops to the back-edges with which they will be replaced.
+  DenseMap<WireOp, std::pair<Backedge, Value>> wires;
+  /// Mapping from values to wires they originate from.
+  DenseMap<Value, WireOp> wireBackedges;
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
@@ -1594,6 +1607,9 @@ LogicalResult FIRRTLLowering::run() {
     }
   }
 
+  // Resolve wire backedges.
+  connectWires();
+
   // Now that all of the operations that can be lowered are, remove the
   // original values.  We know that any lowered operations will be dead (if
   // removed in reverse order) at this point - any users of them from
@@ -1651,6 +1667,64 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   // And remove the write and wire itself.
   write.erase();
   wire.erase();
+}
+
+void FIRRTLLowering::connectWires() {
+  // In case of wires assigned to other wires, transitively identify the
+  // first value which is not built from a backedge.
+  for (auto it = wires.begin(), end = wires.end(); it != end; ++it) {
+    using WireIt = DenseMap<WireOp, std::pair<Backedge, Value>>::iterator;
+    std::function<Value(WireIt)> collapse = [&](WireIt it) {
+      auto &edgeAndValue = it->second;
+      // If the value is not provided by a backedge, return it.
+      auto bt = wireBackedges.find(edgeAndValue.second);
+      if (bt == wireBackedges.end())
+        return edgeAndValue.second;
+
+      // Otherwise, find the wire defining the backendge and follow it.
+      auto wt = wires.find(bt->second);
+      assert(wt != wires.end() && "missing wire");
+      edgeAndValue.second = collapse(wt);
+
+      // Eagerly overwrite the mapping to avoid chasing the same path twice.
+      return edgeAndValue.second;
+    };
+    collapse(it);
+  }
+
+  // Cache constant x values to improve IR readability.
+  DenseMap<Type, Value> constantX;
+
+  // To preserve last connect behaviour, resolve the value of the backedge here,
+  // setting the wire to the last value recorded as connected to it.
+  for (auto &[wire, edgeAndValue] : wires) {
+    auto &[edge, value] = edgeAndValue;
+
+    auto loc = wire.getLoc();
+
+    Value wireValue;
+    if (value) {
+      wireValue = value;
+      if (auto *def = value.getDefiningOp())
+        tryCopyName(def, wire);
+    } else {
+      // If the wire is never connected, replace it with a don't care.
+      // Similar wires are also canonicalised to don't cares later on.
+      builder.setInsertionPoint(wire);
+      auto ty = static_cast<Value>(edge).getType();
+      if (auto it = constantX.find(ty); it != constantX.end()) {
+        wireValue = it->second;
+      } else {
+        wireValue = builder.create<sv::ConstantXOp>(loc, ty);
+        constantX.insert({ty, wireValue});
+      }
+    }
+
+    // Add the location of the wire definition to the source location
+    // of the value with which it will be replaced.
+    wireValue.setLoc(FusedLoc::get(wire.getContext(), wireValue.getLoc(), loc));
+    edge.setValue(wireValue);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -2305,9 +2379,23 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
                                     name.getValue());
   }
 
-  // This is not a temporary wire created by the compiler, so attach a symbol
-  // name.
-  return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
+  // Lower to an explicit `sv.wire` if the wire must be materialized to be
+  // referenced as a symbol or has users that require an `inout` input.
+  // TODO: permit elimination even when the type is not an integer type.
+  auto hasInOutUsers = [&] {
+    for (auto *user : op->getUsers())
+      if (isa<ForceOp>(user))
+        return true;
+    return false;
+  };
+  if (symName || hasInOutUsers() || !hw::isHWIntegerType(resultType))
+    return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
+
+  // Otherwise, create a temporary placeholder and record for rewriting.
+  Backedge wireEdge = backedgeBuilder.get(resultType);
+  wires.insert({op, std::make_pair(wireEdge, Value{})});
+  wireBackedges.insert({wireEdge, op});
+  return setLowering(op, wireEdge);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -3391,9 +3479,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (!destVal)
     return failure();
 
-  if (!destVal.getType().isa<hw::InOutType>())
-    return op.emitError("destination isn't an inout type");
-
   auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
 
   // If this is an assignment to a register, then the connect implicitly
@@ -3425,6 +3510,16 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     return success();
   }
 
+  if (auto wireOp = dyn_cast_or_null<WireOp>(definingOp)) {
+    if (auto it = wires.find(wireOp); it != wires.end()) {
+      it->second.second = srcVal;
+      return success();
+    }
+  }
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
   builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
@@ -3443,9 +3538,6 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!destVal)
     return failure();
-
-  if (!destVal.getType().isa<hw::InOutType>())
-    return op.emitError("destination isn't an inout type");
 
   auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
 
@@ -3477,6 +3569,16 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
                      [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
   }
+
+  if (auto wireOp = dyn_cast_or_null<WireOp>(definingOp)) {
+    if (auto it = wires.find(wireOp); it != wires.end()) {
+      it->second.second = srcVal;
+      return success();
+    }
+  }
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
 
   if (srcVal.getType().isa<hw::ArrayType>() && destType != op.src().getType()) {
     // If the connection is about array and types do not match, it might be a
@@ -3525,9 +3627,6 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   if (!destVal)
     return failure();
 
-  if (!destVal.getType().isa<hw::InOutType>())
-    return op.emitError("destination isn't an inout type");
-
   auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
 
   // If this is an assignment to a register, then the connect implicitly
@@ -3557,6 +3656,13 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
                      sv::EventControl::AtPosEdge, resetSignal,
                      [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
     return success();
+  }
+
+  if (auto wireOp = dyn_cast_or_null<WireOp>(definingOp)) {
+    if (auto it = wires.find(wireOp); it != wires.end()) {
+      it->second.second = srcVal;
+      return success();
+    }
   }
 
   builder.create<sv::AssignOp>(destVal, srcVal);

@@ -100,21 +100,10 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: %.outB.output = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
-    // CHECK: [[OUTC:%.+]] = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTD:%.+]] = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
-
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // Multi connect
-    firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inA : i4
     firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inB : i4
 
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
@@ -124,7 +113,7 @@ firrtl.circuit "Simple" {
 
     // Extension for outE
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : i1, i3
-    // CHECK: hw.output %inA, [[OUTBR]], [[OUTCR]], [[OUTDR]], [[OUTE]]
+    // CHECK: hw.output %inA, %inB, %x_i4, %x_i4, [[OUTE]]
   }
 
   // CHECK-LABEL: hw.module private @Analog(%a1: !hw.inout<i1>) -> (outClock: i1) {
