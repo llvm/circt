@@ -15,43 +15,58 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace circt::calyx;
 using namespace circt::hw;
-using namespace circt::sv;
 
-hw::HWModuleExternOp circt::calyx::getExternHWModule(OpBuilder &builder,
-                                                     ComponentOp op) {
-  SmallVector<hw::PortInfo, 8> hwPortInfos;
-  auto addHWPortInfo = [&](auto portInfos, hw::PortDirection direction) {
-    for (auto portInfo : enumerate(portInfos)) {
-      hw::PortInfo hwPortInfo;
-      hwPortInfo.direction = direction;
-      hwPortInfo.type = portInfo.value().type;
-      hwPortInfo.argNum = portInfo.index();
-      hwPortInfo.name = portInfo.value().name;
-      hwPortInfos.push_back(hwPortInfo);
-    }
-  };
+/// ConversionPatterns.
 
-  addHWPortInfo(op.getInputPortInfo(), hw::PortDirection::INPUT);
-  addHWPortInfo(op.getOutputPortInfo(), hw::PortDirection::OUTPUT);
+struct ConvertProgramOp : public OpConversionPattern<ProgramOp> {
+  using OpConversionPattern::OpConversionPattern;
 
-  return builder.create<hw::HWModuleExternOp>(
-      op->getLoc(), builder.getStringAttr(op.getName()), hwPortInfos);
-}
+  LogicalResult
+  matchAndRewrite(ProgramOp program, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ModuleOp mod = program->getParentOfType<ModuleOp>();
+    rewriter.inlineRegionBefore(program.body(), &mod.getBodyRegion().front());
+    rewriter.eraseBlock(&mod.getBodyRegion().back());
+    return success();
+  }
+};
+
+/// Pass entrypoint.
 
 namespace {
 class CalyxToHWPass : public CalyxToHWBase<CalyxToHWPass> {
 public:
   void runOnOperation() override;
+
+private:
+  LogicalResult runOnProgram(ProgramOp program);
 };
 } // end anonymous namespace
 
 void CalyxToHWPass::runOnOperation() {
-  // auto op = getOperation();
+  ModuleOp mod = getOperation();
+  for (auto program : llvm::make_early_inc_range(mod.getOps<ProgramOp>()))
+    if (failed(runOnProgram(program)))
+      return signalPassFailure();
+}
+
+LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
+  MLIRContext &context = getContext();
+
+  ConversionTarget target(context);
+  // target.addIllegalDialect<CalyxDialect>();
+  target.addIllegalOp<ProgramOp>();
+
+  RewritePatternSet patterns(&context);
+  patterns.add<ConvertProgramOp>(&context);
+
+  return applyPartialConversion(program, target, std::move(patterns));
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxToHWPass() {
