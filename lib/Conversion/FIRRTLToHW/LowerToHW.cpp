@@ -2323,8 +2323,8 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
   if (!symbols)
     symbols = ArrayAttr::get(op.getContext(), {});
 
-  return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
-                                           operands, symbols);
+  return setLoweringTo<sv::VerbatimExprSEOp>(op, resultTy, op.textAttr(),
+                                             operands, symbols);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
