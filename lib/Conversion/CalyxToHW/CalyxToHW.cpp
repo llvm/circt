@@ -15,6 +15,7 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -22,6 +23,7 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::calyx;
 using namespace circt::hw;
+using namespace circt::sv;
 
 /// ConversionPatterns.
 
@@ -72,6 +74,25 @@ private:
   }
 };
 
+struct ConvertCellOp : public OpInterfaceConversionPattern<CellInterface> {
+  using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CellInterface cell, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    assert(operands.empty() && "calyx cells do not have operands");
+
+    SmallVector<Value> portWires;
+    for (auto port : cell.getPortInfo())
+      portWires.push_back(
+          rewriter.create<sv::WireOp>(cell.getLoc(), port.type, port.name));
+
+    rewriter.replaceOp(cell, portWires);
+
+    return success();
+  }
+};
+
 /// Pass entrypoint.
 
 namespace {
@@ -98,11 +119,14 @@ LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
   // target.addIllegalDialect<CalyxDialect>();
   target.addIllegalOp<ProgramOp>();
   target.addIllegalOp<ComponentOp>();
+
   target.addLegalDialect<HWDialect>();
+  target.addLegalDialect<SVDialect>();
 
   RewritePatternSet patterns(&context);
   patterns.add<ConvertProgramOp>(&context);
   patterns.add<ConvertComponentOp>(&context);
+  patterns.add<ConvertCellOp>(&context);
 
   return applyPartialConversion(program, target, std::move(patterns));
 }
