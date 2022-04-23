@@ -190,6 +190,14 @@ struct Emitter {
   //   f = std_foo(32);
   void emitLibraryPrimTypedByFirstInputPort(Operation *op);
 
+  // Emits a library primitive with a single template parameter based on the
+  // first output port.
+  // e.g.:
+  //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
+  // emits:
+  //   f = std_foo(1);
+  void emitLibraryPrimTypedByFirstOutputPort(Operation *op);
+
 private:
   /// Used to track which imports are required for this program.
   ImportTracker importTracker;
@@ -479,8 +487,10 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
                 SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
-                NotLibOp, OrLibOp, XorLibOp, MultPipeLibOp, DivPipeLibOp>(
+                NotLibOp, OrLibOp, XorLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
+          .Case<MultPipeLibOp, DivPipeLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -574,6 +584,16 @@ void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
 void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
   auto cell = cast<CellInterface>(op);
   unsigned bitWidth = cell.getInputPorts()[0].getType().getIntOrFloatBitWidth();
+  StringRef opName = op->getName().getStringRef();
+  indent() << getAttributes(op) << cell.instanceName() << space() << equals()
+           << space() << removeCalyxPrefix(opName) << LParen() << bitWidth
+           << RParen() << semicolonEndL();
+}
+
+void Emitter::emitLibraryPrimTypedByFirstOutputPort(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  unsigned bitWidth =
+      cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
   StringRef opName = op->getName().getStringRef();
   indent() << getAttributes(op) << cell.instanceName() << space() << equals()
            << space() << removeCalyxPrefix(opName) << LParen() << bitWidth

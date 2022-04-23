@@ -1706,7 +1706,7 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 //===----------------------------------------------------------------------===//
 
 SmallVector<StringRef> MultPipeLibOp::portNames() {
-  return {"left", "right", "go", "clk", "reset", "out", "done"};
+  return {"clk", "reset", "go", "left", "right", "out", "done"};
 }
 
 SmallVector<Direction> MultPipeLibOp::portDirections() {
@@ -1726,11 +1726,11 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),             /* Lhs    */
-      DictionaryAttr(),             /* Rhs    */
-      go.getDictionary(context),    /* Go     */
       clk.getDictionary(context),   /* Clk    */
       reset.getDictionary(context), /* Reset  */
+      go.getDictionary(context),    /* Go     */
+      DictionaryAttr(),             /* Lhs    */
+      DictionaryAttr(),             /* Rhs    */
       DictionaryAttr(),             /* Out    */
       done.getDictionary(context)   /* Done   */
   };
@@ -1741,7 +1741,7 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
 //===----------------------------------------------------------------------===//
 
 SmallVector<StringRef> DivPipeLibOp::portNames() {
-  return {"left",         "right",         "go",  "clk", "reset",
+  return {"clk",          "reset",         "go",  "left", "right",
           "out_quotient", "out_remainder", "done"};
 }
 
@@ -1762,11 +1762,11 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),             /* Lhs       */
-      DictionaryAttr(),             /* Rhs       */
-      go.getDictionary(context),    /* Go        */
       clk.getDictionary(context),   /* Clk       */
       reset.getDictionary(context), /* Reset     */
+      go.getDictionary(context),    /* Go        */
+      DictionaryAttr(),             /* Lhs       */
+      DictionaryAttr(),             /* Rhs       */
       DictionaryAttr(),             /* Quotient  */
       DictionaryAttr(),             /* Remainder */
       done.getDictionary(context)   /* Done      */
