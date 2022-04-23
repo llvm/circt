@@ -74,6 +74,34 @@ private:
   }
 };
 
+struct ConvertWiresOp : public OpConversionPattern<WiresOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WiresOp wires, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    HWModuleOp hwMod = wires->getParentOfType<HWModuleOp>();
+    rewriter.inlineRegionBefore(wires.body(), hwMod.getBodyRegion(),
+                                hwMod.getBodyRegion().end());
+    rewriter.eraseOp(wires);
+    rewriter.mergeBlockBefore(&hwMod.getBodyRegion().getBlocks().back(),
+                              &hwMod.getBodyBlock()->back());
+    return success();
+  }
+};
+
+struct ConvertControlOp : public OpConversionPattern<ControlOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ControlOp control, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    assert(control.getBody()->empty() && "calyx control must be structural");
+    rewriter.eraseOp(control);
+    return success();
+  }
+};
+
 struct ConvertCellOp : public OpInterfaceConversionPattern<CellInterface> {
   using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
 
@@ -83,12 +111,27 @@ struct ConvertCellOp : public OpInterfaceConversionPattern<CellInterface> {
     assert(operands.empty() && "calyx cells do not have operands");
 
     SmallVector<Value> portWires;
-    for (auto port : cell.getPortInfo())
-      portWires.push_back(
-          rewriter.create<sv::WireOp>(cell.getLoc(), port.type, port.name));
+    for (auto port : cell.getPortInfo()) {
+      auto wire =
+          rewriter.create<sv::WireOp>(cell.getLoc(), port.type, port.name);
+      auto wireRead = rewriter.create<sv::ReadInOutOp>(cell.getLoc(), wire);
+      portWires.push_back(wireRead);
+    }
 
     rewriter.replaceOp(cell, portWires);
 
+    return success();
+  }
+};
+
+struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(calyx::AssignOp assign, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, assign.dest(),
+                                              assign.src());
     return success();
   }
 };
@@ -119,6 +162,9 @@ LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
   // target.addIllegalDialect<CalyxDialect>();
   target.addIllegalOp<ProgramOp>();
   target.addIllegalOp<ComponentOp>();
+  target.addIllegalOp<WiresOp>();
+  target.addIllegalOp<ControlOp>();
+  target.addIllegalOp<calyx::AssignOp>();
 
   target.addLegalDialect<HWDialect>();
   target.addLegalDialect<SVDialect>();
@@ -126,7 +172,10 @@ LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
   RewritePatternSet patterns(&context);
   patterns.add<ConvertProgramOp>(&context);
   patterns.add<ConvertComponentOp>(&context);
+  patterns.add<ConvertWiresOp>(&context);
+  patterns.add<ConvertControlOp>(&context);
   patterns.add<ConvertCellOp>(&context);
+  patterns.add<ConvertAssignOp>(&context);
 
   return applyPartialConversion(program, target, std::move(patterns));
 }
