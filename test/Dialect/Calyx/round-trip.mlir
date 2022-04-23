@@ -30,6 +30,7 @@ calyx.program "main" {
     // CHECK-NEXT: %pad.in, %pad.out = calyx.std_pad @pad : i8, i9
     // CHECK-NEXT: %slice.in, %slice.out = calyx.std_slice @slice : i8, i7
     // CHECK-NEXT: %not.in, %not.out = calyx.std_not @not : i8, i8
+    // CHECK-NEXT: %wire.in, %wire.out = calyx.std_wire @wire : i8, i8
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1
     %mu.clk, %mu.reset, %mu.go, %mu.lhs, %mu.rhs, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
     %du.clk, %du.reset, %du.go, %du.left, %du.right, %du.out_quotient, %du.out_remainder, %du.done = calyx.std_div_pipe @du : i1, i1, i1, i32, i32, i32, i32, i1
@@ -42,6 +43,7 @@ calyx.program "main" {
     %pad.in, %pad.out = calyx.std_pad @pad : i8, i9
     %slice.in, %slice.out = calyx.std_slice @slice : i8, i7
     %not.in, %not.out = calyx.std_not @not : i8, i8
+    %wire.in, %wire.out = calyx.std_wire @wire : i8, i8
     %c1_i1 = hw.constant 1 : i1
     %c0_i6 = hw.constant 0 : i6
     %c0_i8 = hw.constant 0 : i8

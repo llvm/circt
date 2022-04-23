@@ -1825,6 +1825,7 @@ LogicalResult SliceLibOp::verify() {
 ImplUnaryOpCellInterface(PadLibOp)
 ImplUnaryOpCellInterface(SliceLibOp)
 ImplUnaryOpCellInterface(NotLibOp)
+ImplUnaryOpCellInterface(WireLibOp)
 
 ImplBinOpCellInterface(LtLibOp)
 ImplBinOpCellInterface(GtLibOp)

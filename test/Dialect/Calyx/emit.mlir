@@ -70,6 +70,7 @@ calyx.program "main" {
     // CHECK-NEXT:    m1 = std_mem_d2(8, 64, 64, 6, 6);
     // CHECK-NEXT:    @generated a0 = std_add(32);
     // CHECK-NEXT:    @generated s0 = std_slice(32, 8);
+    // CHECK-NEXT:    @generated wire = std_wire(8);
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance @c0 of @A : i32, i1, i1, i1, i32, i1
     %c1.in, %c1.go, %c1.clk, %c1.reset, %c1.out, %c1.done = calyx.instance @c1 of @B {not_calyx_attr="foo", precious} : i1, i1, i1, i1, i1, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1
@@ -77,6 +78,7 @@ calyx.program "main" {
     %m1.addr0, %m1.addr1, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory @m1 <[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     %a0.left, %a0.right, %a0.out = calyx.std_add @a0 {generated} : i32, i32, i32
     %s0.in, %s0.out = calyx.std_slice @s0 {generated} : i32, i8
+    %wire.in, %wire.out = calyx.std_wire @wire {generated} : i8, i8
     %c0 = hw.constant 0 : i1
     %c1 = hw.constant 1 : i1
     %c1_i32 = hw.constant 1 : i32
