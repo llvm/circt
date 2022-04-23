@@ -63,7 +63,7 @@ func @minimal() {
 // CHECK-DAG:     %[[SLICE1_IN:.+]], %[[SLICE1_OUT:.+]] = calyx.std_slice @std_slice_1
 // CHECK-DAG:     %[[ADD0_LEFT:.+]], %[[ADD0_RIGHT:.+]], %[[ADD0_OUT:.+]] = calyx.std_add @std_add_0
 // CHECK-DAG:     %[[ADD1_LEFT:.+]], %[[ADD1_RIGHT:.+]], %[[ADD1_OUT:.+]] = calyx.std_add @std_add_1
-// CHECK-DAG:     %[[MUL_LEFT:.+]], %[[MUL_RIGHT:.+]], %[[MUL_GO:.+]], {{.+}}, {{.+}}, %[[MUL_OUT:.+]], %[[MUL_DONE:.+]] = calyx.std_mult_pipe
+// CHECK-DAG:     {{.+}}, {{.+}}, %[[MUL_GO:.+]], %[[MUL_LEFT:.+]], %[[MUL_RIGHT:.+]], %[[MUL_OUT:.+]], %[[MUL_DONE:.+]] = calyx.std_mult_pipe
 // CHECK-DAG:     %[[LT_LEFT:.+]], %[[LT_RIGHT:.+]], %[[LT_OUT:.+]] = calyx.std_lt
 // CHECK-DAG:     %[[ITER_ARG0_IN:.+]], %[[ITER_ARG0_EN:.+]], {{.+}}, {{.+}}, %[[ITER_ARG0_OUT:.+]], %[[ITER_ARG0_DONE:.+]] = calyx.register @while_0_arg0_reg
 // CHECK-DAG:     %[[ITER_ARG1_IN:.+]], %[[ITER_ARG1_EN:.+]], {{.+}}, {{.+}}, %[[ITER_ARG1_OUT:.+]], %[[ITER_ARG1_DONE:.+]] = calyx.register @while_0_arg1_reg

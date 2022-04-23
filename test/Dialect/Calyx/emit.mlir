@@ -18,7 +18,7 @@ calyx.program "main" {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
     %s.in, %s.write_en, %s.clk, %s.reset, %s.out, %s.done = calyx.register @s : i32, i1, i1, i1, i32, i1
     // CHECK: mu = std_mult_pipe(32);
-    %mu.left, %mu.right, %mu.go, %mu.clk, %mu.reset, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i32, i32, i1, i1, i1, i32, i1
+    %mu.clk, %mu.reset, %mu.go, %mu.left, %mu.right, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
     %c1_1 = hw.constant 1 : i1
     %c4_32 = hw.constant 4 : i32
     calyx.wires {
