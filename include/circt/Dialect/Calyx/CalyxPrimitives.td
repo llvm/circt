@@ -209,7 +209,8 @@ def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
   );
 }
 
-class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [Combinational]> {
+class UnaryLibraryOp<string mnemonic, list<Trait> traits = []> :
+    CalyxLibraryOp<mnemonic, !listconcat(traits, [Combinational])> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
 }
 
@@ -222,3 +223,5 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
 }
 
 def NotLibOp  : UnaryLibraryOp<"not"> {}
+
+def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {}
