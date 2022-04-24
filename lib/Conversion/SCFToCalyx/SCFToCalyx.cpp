@@ -162,6 +162,33 @@ private:
 // Utility functions
 //===----------------------------------------------------------------------===//
 
+/// Returns whether this operation is a leaf node in the Calyx control.
+static bool IsControlLeafNode(Operation *op) {
+  // TODO(github.com/llvm/circt/issues/1679): Add Invoke.
+  return isa<calyx::EnableOp>(op);
+}
+
+// Walks the control and appends source information for leaf nodes.
+static WalkResult GetCiderSourceLocationMetadata(calyx::ControlOp control,
+                                                 llvm::raw_ostream &os,
+                                                 int64_t &count) {
+  Builder builder(control->getContext());
+  return control.walk([&](Operation *op) {
+    if (!IsControlLeafNode(op))
+      return WalkResult::advance();
+    // <count>: <debugging-information>\n
+    os << count << ": ";
+    op->getLoc()->print(os);
+    os << "\n";
+
+    // Append the tag to this operation's attributes.
+    op->setAttr("tag", builder.getI64IntegerAttr(count));
+
+    ++count;
+    return WalkResult::advance();
+  });
+}
+
 /// Tries to match a constant value defined by op. If the match was
 /// successful, returns true and binds the constant to 'value'. If unsuccessful,
 /// the value is unmodified.
@@ -2529,7 +2556,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -2538,7 +2565,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
@@ -2681,6 +2708,18 @@ void SCFToCalyxPass::runOnOperation() {
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();
     return;
+  }
+
+  if (!ciderDebugMetadataPath.empty()) {
+    // Debugging information for the Cider debugger.
+    // Reference: https://docs.calyxir.org/debug/cider.html
+    std::error_code error;
+    llvm::raw_fd_stream os(ciderDebugMetadataPath, error);
+    int64_t count = 0;
+    getOperation()->walk([&](calyx::ComponentOp component) {
+      return GetCiderSourceLocationMetadata(component.getControlOp(), os,
+                                            count);
+    });
   }
 }
 

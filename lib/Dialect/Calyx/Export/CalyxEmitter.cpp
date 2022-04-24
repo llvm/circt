@@ -49,19 +49,16 @@ static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 static constexpr std::string_view addressSymbol() { return "@"; }
 
-// clang-format off
 /// A list of integer attributes supported by the native Calyx compiler.
-// NOLINTNEXTLINE(readability-identifier-naming)
-constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
-  "external", "static", "share", "bound", "write_together", "read_together"
+constexpr std::array<StringRef, 7> CalyxIntegerAttributes{
+    "external",       "static",        "share", "bound",
+    "write_together", "read_together", "tag",
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.
-// NOLINTNEXTLINE(readability-identifier-naming)
 constexpr std::array<StringRef, 7> CalyxBooleanAttributes{
-  "clk", "done", "go", "reset", "generated", "precious", "toplevel"
+    "clk", "done", "go", "reset", "generated", "precious", "toplevel",
 };
-// clang-format on
 
 /// Determines whether the given identifier is a valid Calyx attribute.
 static bool isValidCalyxAttribute(StringRef identifier) {
