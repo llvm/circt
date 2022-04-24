@@ -169,7 +169,7 @@ static bool isControlLeafNode(Operation *op) {
 }
 
 // Walks the control of this component, and appends source information for leaf
-// nodes. It also appends a `tag` attribute that connects the source location
+// nodes. It also appends a position attribute that connects the source location
 // metadata to the corresponding control operation.
 static WalkResult getCiderSourceLocationMetadata(calyx::ComponentOp component,
                                                  llvm::raw_ostream &os,
