@@ -52,7 +52,7 @@ static constexpr std::string_view addressSymbol() { return "@"; }
 /// A list of integer attributes supported by the native Calyx compiler.
 constexpr std::array<StringRef, 7> integerAttributes{
     "external",       "static",        "share", "bound",
-    "write_together", "read_together", "tag",
+    "write_together", "read_together", "pos",
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.

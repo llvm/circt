@@ -183,7 +183,7 @@ static WalkResult getCiderSourceLocationMetadata(calyx::ComponentOp component,
     op->getLoc()->print(os);
     os << "\n";
 
-    op->setAttr("tag", builder.getI64IntegerAttr(count));
+    op->setAttr("pos", builder.getI64IntegerAttr(count));
 
     ++count;
     return WalkResult::advance();
