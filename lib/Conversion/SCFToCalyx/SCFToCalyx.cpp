@@ -175,7 +175,7 @@ static WalkResult GetCiderSourceLocationMetadata(calyx::ComponentOp component,
                                                  llvm::raw_ostream &os,
                                                  int64_t &count) {
   Builder builder(component->getContext());
-  return component.GetControlOp().walk([&](Operation *op) {
+  return component.getControlOp().walk([&](Operation *op) {
     if (!IsControlLeafNode(op))
       return WalkResult::advance();
     // <count>: <source-location>\n
