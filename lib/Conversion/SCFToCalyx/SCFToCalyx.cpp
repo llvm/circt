@@ -163,7 +163,7 @@ private:
 //===----------------------------------------------------------------------===//
 
 /// Returns whether this operation is a leaf node in the Calyx control.
-static bool IsControlLeafNode(Operation *op) {
+static bool isControlLeafNode(Operation *op) {
   // TODO(github.com/llvm/circt/issues/1679): Add Invoke.
   return isa<calyx::EnableOp>(op);
 }
@@ -171,12 +171,12 @@ static bool IsControlLeafNode(Operation *op) {
 // Walks the control of this component, and appends source information for leaf
 // nodes. It also appends a `tag` attribute that connects the source location
 // metadata to the corresponding control operation.
-static WalkResult GetCiderSourceLocationMetadata(calyx::ComponentOp component,
+static WalkResult getCiderSourceLocationMetadata(calyx::ComponentOp component,
                                                  llvm::raw_ostream &os,
                                                  int64_t &count) {
   Builder builder(component->getContext());
   return component.getControlOp().walk([&](Operation *op) {
-    if (!IsControlLeafNode(op))
+    if (!isControlLeafNode(op))
       return WalkResult::advance();
     // <count>: <source-location>\n
     os << count << ": ";
@@ -2718,7 +2718,7 @@ void SCFToCalyxPass::runOnOperation() {
     llvm::raw_fd_stream os(ciderDebugMetadataPath, error);
     int64_t count = 0;
     getOperation()->walk([&](calyx::ComponentOp component) {
-      return GetCiderSourceLocationMetadata(component, os, count);
+      return getCiderSourceLocationMetadata(component, os, count);
     });
   }
 }
