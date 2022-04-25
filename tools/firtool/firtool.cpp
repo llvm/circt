@@ -573,6 +573,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputIRVerilog) {
     PassManager exportPm(&context);
     exportPm.enableTiming(ts);
+    applyPassManagerCLOptions(exportPm);
     if (verbosePassExecutions)
       exportPm.addInstrumentation(
           std::make_unique<FirtoolPassInstrumentation>());
