@@ -65,7 +65,7 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
   // This is a random number to start the groupIDs at, large enough to not
   // conflict with existing IDs.
   // TODO: Move this logic out of this pass.
-  unsigned baseGroupID = -1;
+  unsigned baseGroupID = std::numeric_limits<unsigned>::max();
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isTestHarness = !dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
