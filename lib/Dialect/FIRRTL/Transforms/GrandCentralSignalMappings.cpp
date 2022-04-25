@@ -127,6 +127,16 @@ void ModuleSignalMappings::run() {
     });
   });
 
+  // Remove connections to sources.  This is done to cleanup invalidations that
+  // occur from the Chisel API of Grand Central.
+  for (auto mapping : mappings)
+    if (mapping.dir == MappingDirection::ProbeRemote) {
+      for (auto &use : llvm::make_early_inc_range(mapping.localValue.getUses()))
+        if (auto connect = dyn_cast<FConnectLike>(use.getOwner()))
+          if (connect.dest() == mapping.localValue)
+            connect.erase();
+    }
+
   // If this module either
   if (mappings.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
