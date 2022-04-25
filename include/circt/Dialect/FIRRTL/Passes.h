@@ -46,6 +46,8 @@ std::unique_ptr<mlir::Pass> createInlinerPass();
 
 std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
+std::unique_ptr<mlir::Pass> createLowerMemoryPass();
+
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass>

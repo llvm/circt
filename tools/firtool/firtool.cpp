@@ -466,6 +466,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
+  if (replSeqMem)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLowerMemoryPass());
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
