@@ -65,13 +65,13 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
   // This is a random number to start the groupIDs at, large enough to not
   // conflict with existing IDs.
   // TODO: Move this logic out of this pass.
-  unsigned baseGroupID = 200;
+  unsigned baseGroupID = -1;
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isTestHarness = !dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
       if (isTestHarness && !memOp.groupID().hasValue())
         memOp.groupIDAttr(
-            IntegerAttr::get(IntegerType::get(ctxt, 32), ++baseGroupID));
+            IntegerAttr::get(IntegerType::get(ctxt, 32), --baseGroupID));
 
       memOpList.push_back(memOp);
       auto firMem = memOp.getSummary();
@@ -373,8 +373,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       "freechips.rocketchip.util.BlackBoxedROM", "chisel3.shim.CloneModule",
       "sifive.enterprise.grandcentral.MemTap"};
   std::array<StringRef, 6> blackListedAnnos = {
-      "firrtl.transforms.BlackBox",
-      "firrtl.transforms.BlackBoxInlineAnno",
+      "firrtl.transforms.BlackBox", "firrtl.transforms.BlackBoxInlineAnno",
       "sifive.enterprise.grandcentral.DataTapsAnnotation",
       "sifive.enterprise.grandcentral.MemTapAnnotation",
       "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};
