@@ -36,3 +36,19 @@ hw.module @large_use_in_procedural(%clock: i1, %a: i1) {
     }
   }
 }
+
+// CHECK-LABEL: module large_use_in_procedural_successive
+hw.module @large_use_in_procedural_successive(%clock: i1, %a: i1) {
+  sv.always posedge %clock {
+    %0 = comb.and %a, %a, %a, %a, %a : i1
+    %1 = comb.and %a, %a, %a, %a, %a : i1
+    // CHECK:      assign {{.*}} = a & a & a & a & a;
+    // CHECK-NEXT: assign {{.*}} = a & a & a & a & a;
+    sv.if %0 {
+      sv.exit
+    }
+    sv.if %1 {
+      sv.exit
+    }
+  }
+}
