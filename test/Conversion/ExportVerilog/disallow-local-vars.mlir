@@ -166,3 +166,20 @@ hw.module @ReadInoutAggregate(%clock: i1) {
   // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, [[READ]][15:0]};
   hw.output
 }
+
+// CHECK-LABEL: DefinedInDifferentBlock
+// CHECK: `ifdef DEF
+// CHECK-NEXT: initial begin
+// CHECK-NEXT:   if (a == b)
+// CHECK-NEXT:     $error("error")
+hw.module @DefinedInDifferentBlock(%a: i1, %b: i1) {
+  sv.ifdef "DEF" {
+    %0 = comb.icmp eq %a, %b : i1
+    sv.initial {
+      sv.if %0 {
+        sv.error "error"
+      }
+    }
+  }
+  hw.output
+}
