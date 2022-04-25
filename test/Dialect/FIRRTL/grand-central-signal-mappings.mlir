@@ -156,3 +156,21 @@ firrtl.circuit "GenerateJSON"  attributes {
   // CHECK-SAME: }"
   // CHECK-SAME: #hw.output_file<"driving.subcircuit.json", excludeFromFileList>
 }
+
+// -----
+
+// Check that GCT-SM removes drivers of sources in the signal mapping module.
+// This is needed because the Chisel-level API for describing GCT-SM sources
+// will invalidate the sources.  MFC needs to clean these up to avoid doubly
+// driven wires in the output.
+//
+// CHECK-LABEL: "RemoveDrivers"
+firrtl.circuit "RemoveDrivers" {
+  // CHECK: firrtl.module @RemoveDrivers
+  firrtl.module @RemoveDrivers() attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
+    %source = firrtl.wire sym @source  {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 0 : i64, peer = "~Foo|Bar>w", side = "local", targetId = 1 : i64}]} : !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.strictconnect %source, %invalid_ui1
+    firrtl.strictconnect %source, %invalid_ui1 : !firrtl.uint<1>
+  }
+}
