@@ -307,10 +307,21 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   };
 
   SmallVector<FModuleOp> modules;
-  SmallVector<FExtModuleOp> extModules;
+  struct {
+    // External modules put in the vsrcs field of the JSON.
+    SmallVector<FExtModuleOp> vsrc;
+    // External modules put in the "load_jsons" field of the JSON.
+    SmallVector<FExtModuleOp> json;
+  } extmodules;
+
   for (auto op : circuit.body().getOps<FModuleLike>()) {
     if (auto *extModule = dyn_cast<FExtModuleOp>(&op)) {
-      extModules.push_back(*extModule);
+      AnnotationSet annotations(*extModule);
+      if (annotations.hasAnnotation("firrtl.transforms.BlackBoxInlineAnno")) {
+        extmodules.vsrc.push_back(*extModule);
+        continue;
+      }
+      extmodules.json.push_back(*extModule);
       continue;
     }
     modules.push_back(cast<FModuleOp>(op));
@@ -344,6 +355,13 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
             llvm::sys::path::append(file, Twine(module.moduleName()) + ".sv");
             j.value(file);
           }
+          for (FExtModuleOp ext : extmodules.vsrc) {
+            SmallVector<char> file(outputFilename.begin(),
+                                   outputFilename.end());
+            llvm::sys::fs::make_absolute(file);
+            llvm::sys::path::append(file, Twine(ext.moduleName()) + ".sv");
+            j.value(file);
+          }
         });
       });
       j.attributeObject("verilator", [&]() {
@@ -355,7 +373,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     j.attributeArray("remove_vsrcs", []() {});
     j.attributeArray("vsrcs", []() {});
     j.attributeArray("load_jsons", [&]() {
-      for (FExtModuleOp extModule : extModules)
+      for (FExtModuleOp extModule : extmodules.json)
         j.value((Twine(extModule.moduleName()) + ".json").str());
     });
   });
