@@ -399,7 +399,7 @@ static void collectFileLineColLocs(Location loc,
 
 /// Return the location information as a (potentially empty) string.
 static std::string
-getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
+getLocationInfoAsStringImpl(const SmallPtrSet<Operation *, 8> &ops) {
   std::string resultStr;
   llvm::raw_string_ostream sstr(resultStr);
 
@@ -486,8 +486,25 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
     }
     sstr << '}';
   }
-
   return sstr.str();
+}
+
+/// Return the location information in the specified style.
+static std::string
+getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops,
+                        LoweringOptions::LocationInfoStyle style) {
+  auto str = getLocationInfoAsStringImpl(ops);
+  // If the location information is empty, just return an empty string.
+  if (str.empty())
+    return str;
+  switch (style) {
+  case LoweringOptions::LocationInfoStyle::Plain:
+    return str;
+  case LoweringOptions::LocationInfoStyle::WrapInAtSquareBracket:
+    return "@[" + str + ']';
+  }
+
+  llvm_unreachable("all styles must be handled");
 }
 
 /// Most expressions are invalid to bit-select from in Verilog, but some
@@ -709,7 +726,8 @@ public:
   /// aggregate it together and print a pretty comment specifying where the
   /// operations came from.  In any case, print a newline.
   void emitLocationInfoAndNewLine(const SmallPtrSet<Operation *, 8> &ops) {
-    auto locInfo = getLocationInfoAsString(ops);
+    auto locInfo =
+        getLocationInfoAsString(ops, state.options.locationInfoStyle);
     if (!locInfo.empty())
       os << "\t// " << locInfo;
     os << '\n';
