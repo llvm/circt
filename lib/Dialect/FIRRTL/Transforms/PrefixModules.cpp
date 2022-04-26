@@ -105,7 +105,7 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   /// This is a map from a module name to new prefixes to be applied.
   PrefixMap prefixMap;
 
-  DenseMap<StringRef, size_t> prefixIdMap;
+  DenseMap<StringRef, uint32_t> prefixIdMap;
 
   /// A map of Grand Central interface ID to prefix.
   DenseMap<Attribute, std::string> interfacePrefixMap;
@@ -125,7 +125,7 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
 /// any referenced module in the prefix map.
 void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   auto *context = module.getContext();
-  size_t groupID = 0;
+  uint32_t groupID = 0;
   auto iter = prefixIdMap.find(prefix);
   if (iter == prefixIdMap.end()) {
     groupID = prefixIdMap.size() + 1;
@@ -176,8 +176,8 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
-      memOp.groupIDAttr(
-          IntegerAttr::get(IntegerType::get(context, 32), groupID));
+      memOp.groupIDAttr(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), groupID));
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       auto target = dyn_cast<FModuleLike>(
           *instanceGraph->getReferencedModule(instanceOp));
