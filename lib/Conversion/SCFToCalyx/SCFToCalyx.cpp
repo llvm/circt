@@ -2557,7 +2557,7 @@ public:
     GreedyRewriteConfig config;
     config.enableRegionSimplification = false;
     if (runOnce)
-      config.maxIterations = 1;
+      config.maxIterations = 0;
 
     /// Can't return applyPatternsAndFoldGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,
