@@ -174,3 +174,55 @@ firrtl.circuit "RemoveDrivers" {
     firrtl.strictconnect %source, %invalid_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Check that GCT-SM generates a dummy wire for any input ports which are
+// forced.  This is done to work around the way that SystemVerilog force
+// statements work.  If an input port is forced, this will force that entire
+// net.  If there is NOT a wire used at the connection of the input port, the
+// effect of the force can be extremely far-reaching.  The Scala-based FIRRTL
+// Compiler (SFC) _always_ emits a wire and never saw this problem.
+// Specifically, check the following things:
+//   1. An input port that is forced gets a dummy wire.
+//   2. An output port that is forced does NOT get a dummy wire.
+//
+// CHECK-LABEL: firrtl.circuit "AddWireToForcedInputs"
+firrtl.circuit "AddWireToForcedInputs"  attributes {
+  annotations = [
+    {annotations = [],
+     circuit = "circuit empty :\0A  module empty :\0A\0A    skip\0A",
+     circuitPackage = "driving",
+     class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+     id = 0 : i64}]} {
+  firrtl.module private @ForcedPort(
+    in %in: !firrtl.uint<1> sym @in [
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+       dir = "sink",
+       id = 0 : i64,
+       peer = "~signal_driver|signal_driver>in_sink",
+       side = "remote",
+       targetId = 3 : i64}],
+    out %out: !firrtl.uint<1> sym @out [
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+       dir = "sink",
+       id = 0 : i64,
+       peer = "~signal_driver|signal_driver>out_sink",
+       side = "remote",
+       targetId = 4 : i64}]) attributes {
+    annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {}
+  // CHECK: firrtl.module @AddWireToForcedInputs
+  firrtl.module @AddWireToForcedInputs(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 0 : i64}]} {
+    // CHECK-NEXT: firrtl.instance sub
+    %sub_in, %sub_out = firrtl.instance sub  @ForcedPort(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    // CHECK-NEXT: %[[sub_in_wire:.+]] = firrtl.wire sym @[[sub_in_wire_sym:.+]] : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %sub_in, %[[sub_in_wire]]
+    // CHECK-NEXT: firrtl.strictconnect %[[sub_in_wire]], %in
+    firrtl.strictconnect %sub_in, %in : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.strictconnect %out, %sub_out
+    firrtl.strictconnect %out, %sub_out : !firrtl.uint<1>
+    // CHECK-NEXT: }
+  }
+}
