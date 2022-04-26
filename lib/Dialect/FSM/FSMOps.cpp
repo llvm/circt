@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FSM/FSMOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"

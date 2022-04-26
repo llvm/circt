@@ -33,8 +33,7 @@ ParseResult parseModuleFunctionSignature(
     OpAsmParser &parser,
     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
-    SmallVectorImpl<Location> &argLocs, bool &isVariadic,
-    SmallVectorImpl<Type> &resultTypes,
+    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames);
 
