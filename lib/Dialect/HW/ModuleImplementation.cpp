@@ -69,7 +69,8 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
     OpAsmParser &parser,
     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+    SmallVectorImpl<Location> &argLocs, bool &isVariadic,
+    SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
 
@@ -77,7 +78,7 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
   bool allowArgAttrs = true;
   bool allowVariadic = false;
   if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
-                                argTypes, argAttrs, isVariadic))
+                                argTypes, argAttrs, argLocs, isVariadic))
     return failure();
 
   if (succeeded(parser.parseOptionalArrow()))

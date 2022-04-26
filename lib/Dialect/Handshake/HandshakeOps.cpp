@@ -12,7 +12,6 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -536,10 +535,14 @@ static ParseResult parseFuncOpArgs(
     SmallVectorImpl<NamedAttrList> &resAttrs) {
   auto *context = parser.getContext();
 
+  SmallVector<Location, 4> argLocs(
+      entryArgs.size(),
+      parser.getEncodedSourceLoc(parser.getCurrentLocation()));
+
   bool isVariadic;
   if (mlir::function_interface_impl::parseFunctionSignature(
           parser, /*allowVariadic=*/true, entryArgs, argTypes, argAttrs,
-          isVariadic, resTypes, resAttrs)
+          argLocs, isVariadic, resTypes, resAttrs)
           .failed())
     return failure();
 
