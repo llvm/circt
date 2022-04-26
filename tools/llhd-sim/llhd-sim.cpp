@@ -84,7 +84,7 @@ static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root),
 
 enum OptLevel { O0, O1, O2, O3 };
 
-cl::opt<OptLevel>
+static cl::opt<OptLevel>
     optimizationLevel(cl::desc("Choose optimization level:"), cl::init(O2),
                       cl::values(clEnumVal(O0, "Run passes and codegen at O0"),
                                  clEnumVal(O1, "Run passes and codegen at O1"),
