@@ -46,19 +46,30 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   LogicalResult
   matchAndRewrite(ComponentOp component, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    SmallVector<hw::PortInfo> hwPortInfo;
-    auto calyxPortInfo = component.getPortInfo();
-    for (auto portInfo : calyxPortInfo)
-      hwPortInfo.push_back(
+    SmallVector<hw::PortInfo> hwInputInfo;
+    auto inputPortInfo = component.getInputPortInfo();
+    for (auto portInfo : inputPortInfo)
+      hwInputInfo.push_back(
           {portInfo.name, hwDirection(portInfo.direction), portInfo.type});
 
     auto hwMod = rewriter.create<HWModuleOp>(
-        component.getLoc(), component.getNameAttr(), hwPortInfo);
+        component.getLoc(), component.getNameAttr(), hwInputInfo);
 
     rewriter.inlineRegionBefore(component.body(), hwMod.getBodyRegion(),
                                 hwMod.getBodyRegion().begin());
     rewriter.eraseOp(component);
     rewriter.eraseBlock(&hwMod.getBodyRegion().back());
+
+    ConversionPatternRewriter::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToEnd(hwMod.getBodyBlock());
+
+    // TODO: keep a map from component block arg number to output index.
+    SmallVector<Value> hwOutputTemps;
+    auto outputPortInfo = component.getOutputPortInfo();
+    for (auto portInfo : outputPortInfo)
+      hwOutputTemps.push_back(
+          rewriter.create<ConstantOp>(component.getLoc(), portInfo.type, 0));
+    rewriter.create<OutputOp>(component.getLoc(), hwOutputTemps);
 
     return success();
   }
@@ -130,8 +141,18 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
   LogicalResult
   matchAndRewrite(calyx::AssignOp assign, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Special case for assigning to an output. Add source of assign to output,
+    // erase the dest, remove the block argument.
+    if (auto arg = assign.dest().dyn_cast<BlockArgument>()) {
+      llvm::errs() << "assign to arg " << arg.getArgNumber() << ' ';
+      arg.getOwner()->getParentOp()->dump();
+      auto hwMod = cast<HWModuleOp>(arg.getOwner()->getParentOp());
+    }
+
+    // General case converts to SV directly.
     rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, assign.dest(),
                                               assign.src());
+
     return success();
   }
 };
