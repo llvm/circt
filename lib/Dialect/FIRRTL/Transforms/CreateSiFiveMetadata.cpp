@@ -62,8 +62,17 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
   std::map<FirMemory, StringAttr> memNameMap;
   auto *ctxt = circuitOp.getContext();
   auto modNameAttr = StringAttr::get(ctxt, "modName");
-  for (auto mod : circuitOp.getOps<FModuleOp>())
+  // This is a random number to start the groupIDs at, large enough to not
+  // conflict with existing IDs.
+  // TODO: Move this logic out of this pass.
+  unsigned baseGroupID = std::numeric_limits<unsigned>::max();
+  for (auto mod : circuitOp.getOps<FModuleOp>()) {
+    bool isTestHarness = !dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
+      if (isTestHarness && !memOp.groupID().hasValue())
+        memOp.groupIDAttr(
+            IntegerAttr::get(IntegerType::get(ctxt, 32), --baseGroupID));
+
       memOpList.push_back(memOp);
       auto firMem = memOp.getSummary();
       auto insert = memNameMap.find(firMem);
@@ -76,6 +85,7 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
       } else
         memOp->setAttr(modNameAttr, insert->second);
     }
+  }
 }
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
@@ -363,8 +373,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       "freechips.rocketchip.util.BlackBoxedROM", "chisel3.shim.CloneModule",
       "sifive.enterprise.grandcentral.MemTap"};
   std::array<StringRef, 6> blackListedAnnos = {
-      "firrtl.transforms.BlackBox",
-      "firrtl.transforms.BlackBoxInlineAnno",
+      "firrtl.transforms.BlackBox", "firrtl.transforms.BlackBoxInlineAnno",
       "sifive.enterprise.grandcentral.DataTapsAnnotation",
       "sifive.enterprise.grandcentral.MemTapAnnotation",
       "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};
@@ -463,8 +472,6 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   auto circuitOp = getOperation();
   auto *body = circuitOp.getBody();
 
-  renameMemory(circuitOp);
-
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
     return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
@@ -477,6 +484,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
+  renameMemory(circuitOp);
+
   if (failed(emitRetimeModulesMetadata()) ||
       failed(emitSitestBlackboxMetadata()) || failed(emitMemoryMetadata()))
     return signalPassFailure();
