@@ -485,10 +485,8 @@ void ExportVerilog::prepareHWModule(Block &block,
         // block. The expression splitting and canonicalization below will
         // happen after we recurse back up. If we're not in a procedural region,
         // the expression can continue being worked on.
-        if (isProceduralRegion) {
-          ++opIterator;
+        if (isProceduralRegion)
           continue;
-        }
       }
     }
 
