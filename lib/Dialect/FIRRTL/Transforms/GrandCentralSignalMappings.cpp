@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -74,6 +75,7 @@ struct ModuleSignalMappings {
   bool allAnalysesPreserved = false;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
+  DenseSet<unsigned> forcedInputPorts;
 };
 } // namespace
 
@@ -166,12 +168,6 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   if (!value.getType().cast<FIRRTLType>().getBitWidthOrSentinel())
     return;
 
-  // We're emitting code for the "local" side of these annotations, which
-  // sits in the sub-circuit and interacts with the main circuit on the
-  // "remote" side.
-  if (anno.getMember<StringAttr>("side").getValue() != "local")
-    return;
-
   SignalMapping mapping;
   mapping.dir = anno.getMember<StringAttr>("dir").getValue() == "source"
                     ? MappingDirection::ProbeRemote
@@ -179,6 +175,25 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   mapping.remoteTarget = anno.getMember<StringAttr>("peer");
   mapping.localValue = value;
   mapping.type = value.getType().cast<FIRRTLType>();
+
+  // Only continue to emit signal driving code for the "local" side of these
+  // annotations, which sits in the sub-circuit and interacts with the main
+  // circuit on the "remote" side.  If we are in the "remote" side of the
+  // annotation, which sits in the main circuit, then record if we ever see any
+  // forces of module inputs.  These require special fixups due to the fact that
+  // SV force will force the entire net connected to the port as well.
+  if (anno.getMember<StringAttr>("side").getValue() != "local") {
+    if (mapping.dir != MappingDirection::DriveRemote)
+      return;
+    auto blockArg = value.dyn_cast<BlockArgument>();
+    if (!blockArg)
+      return;
+    auto portIdx = blockArg.getArgNumber();
+    if (module.getPortDirection(portIdx) == Direction::Out)
+      return;
+    forcedInputPorts.insert(portIdx);
+    return;
+  }
 
   // Guess a name for the local value. This is only for readability's sake,
   // giving the pass a hint for picking the names of the generated module ports.
@@ -300,10 +315,17 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  auto processModule = [](FModuleOp module) -> bool {
+  typedef struct {
+    bool allAnalysesPreserved;
+    DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
+  } Result;
+
+  auto processModule = [](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module);
     mapper.run();
-    return mapper.allAnalysesPreserved;
+    return {mapper.allAnalysesPreserved,
+            DenseMap<FModuleOp, DenseSet<unsigned>>(
+                {{module, mapper.forcedInputPorts}})};
   };
 
   SmallVector<FModuleOp> modules;
@@ -326,14 +348,40 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     }
     modules.push_back(cast<FModuleOp>(op));
   }
+
+  auto reduce = [](const Result &acc, Result result) -> Result {
+    DenseMap<FModuleOp, DenseSet<unsigned>> foo = acc.forcedInputPorts;
+    foo.insert(result.forcedInputPorts.begin(), result.forcedInputPorts.end());
+    return {acc.allAnalysesPreserved && result.allAnalysesPreserved, foo};
+  };
   // Note: this uses (unsigned)true instead of (bool)true for the reduction
   // because llvm::parallelTransformReduce uses the "data" method of std::vector
   // which is NOT provided for bool for optimization reasons.
-  bool allAnalysesPreserved = llvm::parallelTransformReduce(
-      modules.begin(), modules.end(), (unsigned)true,
-      [](bool acc, bool x) { return acc && x; }, processModule);
+  Result result = llvm::parallelTransformReduce(
+      modules.begin(), modules.end(), Result(), reduce, processModule);
 
-  if (allAnalysesPreserved)
+  auto *instanceGraph = &getAnalysis<InstanceGraph>();
+  DenseMap<FModuleOp, ModuleNamespace> moduleNamespaces;
+  for (auto fixup : result.forcedInputPorts) {
+    for (auto portIdx : fixup.second) {
+      for (auto *use : instanceGraph->lookup(fixup.first)->uses()) {
+        auto inst = use->getInstance();
+        auto port = inst->getResult(portIdx);
+        OpBuilder builder(inst.getContext());
+        builder.setInsertionPointAfter(inst);
+        auto parentModule = inst->getParentOfType<FModuleOp>();
+        ModuleNamespace &moduleNamespace = moduleNamespaces[parentModule];
+        auto wire = builder.create<WireOp>(
+            builder.getUnknownLoc(), port.getType(), builder.getStringAttr({}),
+            builder.getArrayAttr({}),
+            builder.getStringAttr(moduleNamespace.newName("_GEN")));
+        port.replaceAllUsesWith(wire);
+        builder.create<StrictConnectOp>(builder.getUnknownLoc(), port, wire);
+      }
+    }
+  }
+
+  if (result.allAnalysesPreserved)
     markAllAnalysesPreserved();
 
   // If this is a subcircuit, then continue on and emit JSON information
