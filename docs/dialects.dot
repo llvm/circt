@@ -42,7 +42,10 @@ digraph G {
     // Internal tools
     subgraph internal_tools{
       node [fillcolor="#fdc086"]
-      ExportVerilog FIRRTLParser Scheduling llhd_sim PyCDE
+      FIRRTLParser llhd_sim
+      ExportVerilog [URL="https://circt.llvm.org/docs/VerilogGeneration/"]
+      PyCDE [URL="https://circt.llvm.org/docs/PyCDE/"]
+      Scheduling [URL="https://circt.llvm.org/docs/Scheduling/"]
     }
   }
 
