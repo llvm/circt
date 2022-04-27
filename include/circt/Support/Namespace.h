@@ -83,9 +83,9 @@ public:
   StringRef newName(const Twine &name, const Twine &suffix) {
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
-    Twine nameS = name + suffix;
     llvm::SmallString<64> tryName;
-    auto inserted = nextIndex.insert({nameS.toStringRef(tryName), 0});
+    auto inserted =
+        nextIndex.insert({name.concat(suffix).toStringRef(tryName), 0});
     if (inserted.second)
       return inserted.first->getKey();
 
