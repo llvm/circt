@@ -73,6 +73,41 @@ public:
     return inserted.first->getKey();
   }
 
+  /// Return a unique name, derived from the input `name` and ensure the
+  /// returned name has the input `suffix`. Also add the new name to the
+  /// internal namespace.
+  /// There are two possible outcomes for the returned name:
+  /// 1. The original name  + suffix is returned.
+  /// 2. The name is given a suffix `_<n>_<suffix>` where `<n>` is a number
+  /// starting from `_0` and incrementing by one each time.
+  StringRef newName(const Twine &name, const Twine &suffix) {
+    // Special case the situation where there is no name collision to avoid
+    // messing with the SmallString allocation below.
+    llvm::SmallString<64> tryName;
+    auto inserted =
+        nextIndex.insert({name.concat(suffix).toStringRef(tryName), 0});
+    if (inserted.second)
+      return inserted.first->getKey();
+
+    // Try different suffixes until we get a collision-free one.
+    tryName.clear();
+    name.toVector(tryName); // toStringRef may leave tryName unfilled
+
+    // Indexes less than nextIndex[tryName] are lready used, so skip them.
+    // Indexes larger than nextIndex[tryName] may be used in another name.
+    size_t &i = nextIndex[tryName];
+    tryName.push_back('_');
+    size_t baseLength = tryName.size();
+    do {
+      tryName.resize(baseLength);
+      Twine(i++).toVector(tryName); // append integer to tryName
+      suffix.toVector(tryName);
+      inserted = nextIndex.insert({tryName, 0});
+    } while (!inserted.second);
+
+    return inserted.first->getKey();
+  }
+
 protected:
   // The "next index" that will be tried when trying to unique a string within a
   // namespace.  It follows that all values less than the "next index" value are

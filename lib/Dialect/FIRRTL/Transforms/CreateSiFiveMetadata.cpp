@@ -78,7 +78,7 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
       auto insert = memNameMap.find(firMem);
       if (insert == memNameMap.end()) {
         auto name = memOp->getAttrOfType<StringAttr>("name");
-        auto modName = circuitNamespace.newName(name.getValue() + "_ext");
+        auto modName = circuitNamespace.newName(name.getValue(), "_ext");
         name = StringAttr::get(ctxt, modName);
         memOp->setAttr(modNameAttr, name);
         memNameMap[firMem] = name;

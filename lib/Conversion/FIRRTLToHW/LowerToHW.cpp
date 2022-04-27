@@ -2746,8 +2746,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
-      resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
-      builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
+      resultTypes, builder.getStringAttr(memName + "_ext"), memModuleAttr,
+      operands, builder.getArrayAttr(argNames),
+      builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
       /*sym_name=*/op.inner_symAttr());
   // Update all users of the result of read ports
