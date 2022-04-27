@@ -353,7 +353,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
   } Result;
 
-  auto processModule = [this](FModuleOp module) -> bool {
+  auto processModule = [this](FModuleOp module) -> Result {
     ModuleSignalMappings mapper(module, markDut, Prefix);
     mapper.run();
     return {mapper.allAnalysesPreserved,
