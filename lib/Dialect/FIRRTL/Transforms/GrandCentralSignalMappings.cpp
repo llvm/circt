@@ -60,14 +60,13 @@ struct SignalMapping {
   /// The name of the local value, for reuse in the generated signal mappings
   /// module.
   StringAttr localName;
-  
 };
 
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
-  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef Prefix) 
-  : module(module), markDut(markDut), Prefix(Prefix) {}
+  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef Prefix)
+      : module(module), markDut(markDut), Prefix(Prefix) {}
   void run();
   void addTarget(Value value, Annotation anno);
   FModuleOp emitMappingsModule();
@@ -246,14 +245,15 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
     // generally live in a separate circuit. Multiple circuits are not fully
     // supported at the moment.
     SmallString<32> remoteXmrName;
-    auto [circuitName,pathName] = mapping.remoteTarget.getValue().split('|');
-    //llvm::errs() << "Rewriting " << circuitName << " " << pathName << "\nWith: " << markDut << " " << Prefix << "\n";
+    auto [circuitName, pathName] = mapping.remoteTarget.getValue().split('|');
+    // llvm::errs() << "Rewriting " << circuitName << " " << pathName <<
+    // "\nWith: " << markDut << " " << Prefix << "\n";
     bool seenRoot = false;
     if (markDut.empty()) {
       remoteXmrName += circuitName.drop_front();
       seenRoot = true;
     }
-    auto [modulePath,varPath] = pathName.split('>');
+    auto [modulePath, varPath] = pathName.split('>');
     do {
       auto [item, tail] = modulePath.split(':');
       modulePath = tail;
@@ -268,8 +268,8 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
       if (!markDut.empty() && !seenRoot)
         continue;
       if (!instName.empty()) {
-      remoteXmrName += '.';
-      remoteXmrName += instName;
+        remoteXmrName += '.';
+        remoteXmrName += instName;
       }
     } while (true);
     remoteXmrName.push_back('.');
@@ -279,7 +279,7 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
       else if (c != ']')
         remoteXmrName.push_back(c);
     }
-    //llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
+    // llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx++));
@@ -465,8 +465,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
           b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
 }
 
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createGrandCentralSignalMappingsPass(StringRef outputFilename, StringRef markDut, StringRef Prefix) {
+std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
+    StringRef outputFilename, StringRef markDut, StringRef Prefix) {
   auto pass = std::make_unique<GrandCentralSignalMappingsPass>();
   if (!outputFilename.empty())
     pass->outputFilename = outputFilename;
