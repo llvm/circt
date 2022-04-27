@@ -30,6 +30,9 @@ digraph G {
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
 
+    // Invisible node to make space for RTL cluster's incoming edges.
+    space_above_RTL [style = invis, label=""]
+
     subgraph cluster_RTL {
       label = "RTL dialects"
       Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
@@ -42,7 +45,10 @@ digraph G {
     // Internal tools
     subgraph internal_tools{
       node [fillcolor="#fdc086"]
-      ExportVerilog FIRRTLParser Scheduling llhd_sim PyCDE
+      FIRRTLParser llhd_sim
+      ExportVerilog [URL="https://circt.llvm.org/docs/VerilogGeneration/"]
+      PyCDE [URL="https://circt.llvm.org/docs/PyCDE/"]
+      Scheduling [URL="https://circt.llvm.org/docs/Scheduling/"]
     }
   }
 
@@ -70,8 +76,8 @@ digraph G {
   // ===== Connections =====
   // Dialect conversions
   SCF -> Calyx
-  Affine -> StaticLogic [style=dashed]
-  StaticLogic -> Calyx [style=dashed]
+  Affine -> StaticLogic
+  StaticLogic -> Calyx
   Arith -> {Handshake Calyx} [ltail=cluster_std_arith_dialect]
 
   Handshake -> FIRRTL
@@ -79,7 +85,7 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {FIRRTL FSM ESI MSFT PyCDE} -> HW [lhead=cluster_RTL]
+  {FIRRTL FSM ESI MSFT} -> HW [lhead=cluster_RTL]
   Seq -> SV
   HW -> LLHD
   Comb -> ExportVerilog
@@ -102,12 +108,19 @@ digraph G {
   MSFT -> TCL
   PyFile -> PyCDE
   PyCDE -> ESI [style=dashed]
+  PyCDE -> MSFT
+  Scheduling -> MSFT [dir=both, style=dashed]
 
   // ====== Some fake edges to coerce a good layout ======
   // Note: Modify these if you make changes to the above diagram, and things
   // start looking weird.
-  Standard -> Scheduling [weight=999 style=invis]
+  Affine -> Scheduling [weight=999 style=invis]
   FIRFile -> PyFile [weight=999 style=invis]
+
+  // Leave one rank free above the RTL cluster to improve routing of incoming
+  // edges.
+  {FIRRTL FSM ESI MSFT} -> space_above_RTL [weight=999, style=invis]
+  space_above_RTL -> {Seq HW Comb} [lhead=cluster_RTL, weight=999, style=invis]
 
   // Fix the following sink nodes below the CIRCT cluster
   llhd_sim -> {SVFile Circilator TCL CapNProto} [weight=999 style=invis]
