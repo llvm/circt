@@ -153,6 +153,30 @@ firrtl.module private @leaf() {
 // CHECK-NOT:   @flatinline
 // CHECK-NOT:   @leaf
 
+// Test behavior retaining public modules but not their annotations
+firrtl.circuit "TestPubAnno" {
+firrtl.module @TestPubAnno() {
+  firrtl.instance fi @flatinline()
+}
+firrtl.module @flatinline() attributes {annotations =
+        [{class = "firrtl.transforms.FlattenAnnotation"},
+         {class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance leaf @leaf()
+}
+firrtl.module private @leaf() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+}
+}
+// CHECK-LABEL: firrtl.circuit "TestPubAnno"
+// CHECK-NEXT:    firrtl.module @TestPubAnno
+// CHECK-NOT: annotation
+// This is preserved, public
+// CHECK:         firrtl.module @flatinline
+// But annotations should be removed?
+// CHECK-NOT: annotation
+// CHECK-NOT: @leaf
+
 // This is testing that connects are properly replaced when inlining. This is
 // also testing that the deep clone and remapping values is working correctly.
 firrtl.circuit "TestConnections" {
