@@ -1249,12 +1249,10 @@ class DedupPass : public DedupBase<DedupPass> {
     llvm::DenseMap<std::array<uint8_t, 32>, Operation *, SHA256HashDenseMapInfo>
         moduleHashes;
 
-    // We track the "group" that each module is deduped into, so that we can
-    // make sure all modules which are marked "must dedup" with each other all
-    // belong to the same group.
-    DenseMap<Attribute, unsigned> groupMap;
-    // This is the next unused group ID.
-    unsigned currentGroup = 0;
+    // We track the name of the module that each module is deduped into, so that
+    // we can make sure all modules which are marked "must dedup" with each
+    // other were all deduped to the same module.
+    DenseMap<Attribute, StringAttr> dedupMap;
 
     // We must iterate the modules from the bottom up so that we can properly
     // deduplicate the modules. We have to store the visit order first so that
@@ -1271,7 +1269,7 @@ class DedupPass : public DedupBase<DedupPass> {
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
-        groupMap[module.moduleNameAttr()] = groupMap[original.moduleNameAttr()];
+        dedupMap[module.moduleNameAttr()] = original.moduleNameAttr();
         deduper.dedup(original, module);
         erasedModules++;
         anythingChanged = true;
@@ -1280,28 +1278,31 @@ class DedupPass : public DedupBase<DedupPass> {
       // Any module not deduplicated must be recorded.
       deduper.record(module);
       // Add the module to a new dedup group.
-      groupMap[module.moduleNameAttr()] = currentGroup++;
+      auto moduleName = module.moduleNameAttr();
+      dedupMap[moduleName] = moduleName;
       // Record the module's hash.
       moduleHashes[h] = module;
     }
 
     // This part verifies that all modules marked by "MustDedup" have been
     // properly deduped with each other. For this check to succeed, all modules
-    // have to belong to the same dedup group. If a module is in a different
-    // dedup group, then it was either not deduped or deduped with the wrong
-    // thing.
+    // have to been deduped to the same module. It is possible that a module was
+    // deduped with the wrong thing.
 
-    // Get the group number from a module path.
     auto failed = false;
+    // This parses the module name out of a target string.
     auto parseModule = [&](Attribute path) -> StringAttr {
       // Each module is listed as a target "~Circuit|Module" which we have to
       // parse.
       auto [_, rhs] = path.cast<StringAttr>().getValue().split('|');
       return StringAttr::get(context, rhs);
     };
-    auto getGroup = [&](StringAttr module) -> unsigned {
-      auto it = groupMap.find(module);
-      if (it == groupMap.end()) {
+    // This gets the name of the module which the current module was deduped
+    // with. If the named module isn't in the map, then we didn't encounter it
+    // in the circuit.
+    auto getLead = [&](StringAttr module) -> StringAttr {
+      auto it = dedupMap.find(module);
+      if (it == dedupMap.end()) {
         auto diag = emitError(circuit.getLoc(),
                               "MustDeduplicateAnnotation references module ")
                     << module << " which does not exist";
@@ -1329,20 +1330,20 @@ class DedupPass : public DedupBase<DedupPass> {
         return true;
       // Get the first element.
       auto firstModule = parseModule(modules[0]);
-      auto first = getGroup(firstModule);
+      auto firstLead = getLead(firstModule);
       if (failed)
         return false;
       // Verify that the remaining elements are all the same as the first.
       for (auto attr : modules.getValue().drop_front()) {
         auto nextModule = parseModule(attr);
-        auto next = getGroup(nextModule);
+        auto nextLead = getLead(nextModule);
         if (failed)
           return false;
-        if (first != next) {
+        if (firstLead != nextLead) {
           auto diag = emitError(circuit.getLoc(), "module ")
                       << nextModule << " not deduplicated with " << firstModule;
-          auto a = instanceGraph.lookup(firstModule)->getModule();
-          auto b = instanceGraph.lookup(nextModule)->getModule();
+          auto a = instanceGraph.lookup(firstLead)->getModule();
+          auto b = instanceGraph.lookup(nextLead)->getModule();
           equiv.check(diag, a, b);
           failed = true;
           return false;

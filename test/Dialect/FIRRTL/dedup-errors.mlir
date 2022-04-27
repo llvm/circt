@@ -386,3 +386,29 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance test1 @Test1()
   }
 }
+
+// -----
+
+// This test is checking that we don't crash when the two modules we want
+// deduped were actually deduped with another module.
+
+// expected-error@below {{module "Test3" not deduplicated with "Test1"}}
+firrtl.circuit "MustDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test1", "~MustDedup|Test3"]
+    }]} {
+  
+  // expected-note@below {{first operation has attribute 'test' with value "a"}}
+  firrtl.module @Test0() attributes {test = "a"} { }
+  firrtl.module @Test1() attributes {test = "a"} { }
+  // expected-note@below {{second operation has value "b"}}
+  firrtl.module @Test2() attributes {test = "b"} { }
+  firrtl.module @Test3() attributes {test = "b"} { }
+  firrtl.module @MustDedup() {
+    firrtl.instance test0 @Test0()
+    firrtl.instance test1 @Test1()
+    firrtl.instance test2 @Test2()
+    firrtl.instance test3 @Test3()
+  }
+}
+
