@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
+// RUN: circt-opt --split-input-file -lower-std-to-handshake %s | FileCheck %s
 
 // CHECK-LABEL:   handshake.func @main(
 // CHECK:                         %[[VAL_0:.*]]: i1, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: none, ...) -> (i32, none)
@@ -11,4 +11,13 @@
 func @main(%c : i1, %a : i32, %b : i32) -> i32 {
   %0 = arith.select %c, %a, %b : i32
   return %0 : i32
+}
+
+// -----
+
+// Test function without body (external function).
+
+// CHECK-LABEL: handshake.func private @foo(none, ...) -> (i32, none)
+module {
+  func private @foo(%a:i32, %b: i32) -> i32
 }

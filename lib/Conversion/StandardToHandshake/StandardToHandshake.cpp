@@ -240,6 +240,9 @@ void FuncOpLowering::setBlockEntryControl(Block *block, Value v) {
 /// a valid graph region, since multi-basic block regions are not allowed to
 /// be graph regions currently.
 void removeBasicBlocks(handshake::FuncOp funcOp) {
+  if (funcOp.isExternal())
+    return; // nothing to do, external funcOp.
+
   auto &entryBlock = funcOp.getBody().front().getOperations();
 
   // Erase all TerminatorOp, and move ReturnOp to the end of entry block.
@@ -1813,17 +1816,20 @@ LogicalResult FuncOpLowering::finalize(ConversionPatternRewriter &rewriter,
 
   auto funcType = rewriter.getFunctionType(newArgTypes, resTypes);
   f.setType(funcType);
-  auto ctrlArg =
-      f.front().addArgument(rewriter.getNoneType(), rewriter.getUnknownLoc());
 
-  // We've now added all types to the handshake.funcOp; resolve arg- and
-  // res names to ensure they are up to date with the final type
-  // signature.
-  f.resolveArgAndResNames();
+  if (!f.isExternal()) {
+    auto ctrlArg =
+        f.front().addArgument(rewriter.getNoneType(), rewriter.getUnknownLoc());
 
-  Operation *startOp = findStartOp(&f.getRegion());
-  startOp->getResult(0).replaceAllUsesWith(ctrlArg);
-  rewriter.eraseOp(startOp);
+    // We've now added all types to the handshake.funcOp; resolve arg- and
+    // res names to ensure they are up to date with the final type
+    // signature.
+    f.resolveArgAndResNames();
+
+    Operation *startOp = findStartOp(&f.getRegion());
+    startOp->getResult(0).replaceAllUsesWith(ctrlArg);
+    rewriter.eraseOp(startOp);
+  }
   rewriter.eraseOp(origFunc);
   return success();
 }
@@ -1871,40 +1877,43 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
 
   FuncOpLowering fol(newFuncOp);
 
-  // Perform initial dataflow conversion. This process allows for the use of
-  // non-deterministic merge-like operations.
-  MemRefToMemoryAccessOp memOps;
-  returnOnError(
-      fol.runPartialLowering(&FuncOpLowering::replaceMemoryOps, memOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::setControlOnlyPath));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::addMergeOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
-  returnOnError(fol.runPartialLowering(&FuncOpLowering::addBranchOps));
-
-  // The following passes modifies the dataflow graph to being safe for task
-  // pipelining. In doing so, non-deterministic merge structures are replaced
-  // for deterministic structures.
-  if (!disableTaskPipelining) {
+  // Perform dataflow conversion. This process allows for the use of
+  // non-deterministic merge-like operations. Dataflow conversion is skipped for
+  // empty (external) functions.
+  if (!newFuncOp.isExternal()) {
+    MemRefToMemoryAccessOp memOps;
     returnOnError(
-        fol.runPartialLowering(&FuncOpLowering::loopNetworkRewriting));
+        fol.runPartialLowering(&FuncOpLowering::replaceMemoryOps, memOps));
+    returnOnError(fol.runPartialLowering(&FuncOpLowering::setControlOnlyPath));
+    returnOnError(fol.runPartialLowering(&FuncOpLowering::addMergeOps));
+    returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
+    returnOnError(fol.runPartialLowering(&FuncOpLowering::replaceCallOps));
+    returnOnError(fol.runPartialLowering(&FuncOpLowering::addBranchOps));
+
+    // The following passes modifies the dataflow graph to being safe for task
+    // pipelining. In doing so, non-deterministic merge structures are replaced
+    // for deterministic structures.
+    if (!disableTaskPipelining) {
+      returnOnError(
+          fol.runPartialLowering(&FuncOpLowering::loopNetworkRewriting));
+    }
+
+    // Fork/sink materialization. @todo: this should be removed and
+    // materialization should be run as a separate pass afterward initial
+    // dataflow conversion! However, connectToMemory has some hard-coded
+    // assumptions on the existence of fork/sink operations...
+    returnOnError(
+        partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
+    returnOnError(fol.runPartialLowering(
+        &FuncOpLowering::connectConstantsToControl, sourceConstants));
+    returnOnError(
+        partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
+    returnOnError(checkDataflowConversion(newFuncOp, disableTaskPipelining));
+
+    bool lsq = false;
+    returnOnError(
+        fol.runPartialLowering(&FuncOpLowering::connectToMemory, memOps, lsq));
   }
-
-  // Fork/sink materialization. @todo: this should be removed and
-  // materialization should be run as a separate pass afterward initial dataflow
-  // conversion! However, connectToMemory has some hard-coded assumptions on the
-  // existence of fork/sink operations...
-  returnOnError(
-      partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
-  returnOnError(fol.runPartialLowering(
-      &FuncOpLowering::connectConstantsToControl, sourceConstants));
-  returnOnError(
-      partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
-  returnOnError(checkDataflowConversion(newFuncOp, disableTaskPipelining));
-
-  bool lsq = false;
-  returnOnError(
-      fol.runPartialLowering(&FuncOpLowering::connectToMemory, memOps, lsq));
 
   // Add  control argument to entry block, replace references to the
   // temporary handshake::StartOp operation, and finally remove the start
