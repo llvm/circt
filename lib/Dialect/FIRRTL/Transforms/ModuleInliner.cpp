@@ -434,9 +434,7 @@ private:
                                      const DenseSet<Attribute> &localSymbols,
                                      ModuleNamespace &moduleNamespace);
 
-  /// Returns true if the operation is annotated to be flattened.  This removes
-  /// the flattened annotation (hence, this should only be called once on a
-  /// module).
+  /// Returns true if the operation is annotated to be flattened.
   bool shouldFlatten(Operation *op);
 
   /// Returns true if the operation is annotated to be inlined.
@@ -655,9 +653,7 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet::removeAnnotations(op, [](Annotation a) {
-    return a.isClass("firrtl.transforms.FlattenAnnotation");
-  });
+  return AnnotationSet(op).hasAnnotation("firrtl.transforms.FlattenAnnotation");
 }
 
 bool Inliner::shouldInline(Operation *op) {
