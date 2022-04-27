@@ -969,6 +969,17 @@ void Inliner::run() {
     mod.erase();
   }
 
+  // Remove leftover inline annotations, and check no flatten annotations
+  // remain as they should have been processed and removed.
+  for (auto mod : circuit.getBody()->getOps<FModuleLike>()) {
+    if (shouldInline(mod)) {
+      assert(cast<hw::HWModuleLike>(*mod).isPublic() &&
+             "non-public module with inline annotation still present");
+      AnnotationSet::removeAnnotations(mod, "firrtl.passes.InlineAnnotation");
+    }
+    assert(!shouldFlatten(mod) && "flatten annotation found on live module");
+  }
+
   LLVM_DEBUG({
     llvm::dbgs() << "NLA modifications:\n";
     for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {

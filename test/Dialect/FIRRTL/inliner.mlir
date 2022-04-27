@@ -173,7 +173,6 @@ firrtl.module private @leaf() {
 // CHECK-NOT: annotation
 // This is preserved, public
 // CHECK:         firrtl.module @flatinline
-// But annotations should be removed?
 // CHECK-NOT: annotation
 // CHECK-NOT: @leaf
 
