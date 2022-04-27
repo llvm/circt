@@ -91,6 +91,9 @@ std::unique_ptr<mlir::Pass> createRemoveInvalidPass();
 
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
+
+std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
