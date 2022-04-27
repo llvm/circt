@@ -1848,15 +1848,13 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
 
   // Get function arguments
   llvm::SmallVector<mlir::Type, 8> argTypes;
-  for (auto &arg : funcOp.getArguments()) {
-    mlir::Type type = arg.getType();
-    argTypes.push_back(type);
-  }
+  for (auto &argType : funcOp.getArgumentTypes())
+    argTypes.push_back(argType);
 
   // Get function results
   llvm::SmallVector<mlir::Type, 8> resTypes;
-  for (auto arg : funcOp.getResultTypes())
-    resTypes.push_back(arg);
+  for (auto resType : funcOp.getResultTypes())
+    resTypes.push_back(resType);
 
   handshake::FuncOp newFuncOp;
 

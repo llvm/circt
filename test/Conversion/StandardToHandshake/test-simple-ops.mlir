@@ -17,7 +17,7 @@ func @main(%c : i1, %a : i32, %b : i32) -> i32 {
 
 // Test function without body (external function).
 
-// CHECK-LABEL: handshake.func private @foo(none, ...) -> (i32, none)
+// CHECK-LABEL: handshake.func private @foo(i32, i32, none, ...) -> (i32, none)
 module {
   func private @foo(%a:i32, %b: i32) -> i32
 }
