@@ -30,7 +30,7 @@ digraph G {
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
 
-    // Invisible node to make space for RTL cluster's incoming edges
+    // Invisible node to make space for RTL cluster's incoming edges.
     space_above_RTL [style = invis, label=""]
 
     subgraph cluster_RTL {
