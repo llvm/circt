@@ -65,8 +65,8 @@ struct SignalMapping {
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
-  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef Prefix)
-      : module(module), markDut(markDut), Prefix(Prefix) {}
+  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef prefix)
+      : module(module), markDut(markDut), prefix(prefix) {}
   void run();
   void addTarget(Value value, Annotation anno);
   FModuleOp emitMappingsModule();
@@ -78,7 +78,7 @@ struct ModuleSignalMappings {
   SmallString<64> mappingsModuleName;
 
   StringRef markDut;
-  StringRef Prefix;
+  StringRef prefix;
   DenseSet<unsigned> forcedInputPorts;
 };
 } // namespace
@@ -259,7 +259,7 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
       modulePath = tail;
       auto [modName, instName] = item.split('/');
       if (!markDut.empty() && markDut == modName) {
-        remoteXmrName += Prefix;
+        remoteXmrName += prefix;
         remoteXmrName += markDut;
         seenRoot = true;
       }
@@ -323,7 +323,7 @@ class GrandCentralSignalMappingsPass
 public:
   std::string outputFilename;
   std::string markDut;
-  std::string Prefix;
+  std::string prefix;
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
@@ -353,7 +353,7 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   } Result;
 
   auto processModule = [this](FModuleOp module) -> Result {
-    ModuleSignalMappings mapper(module, markDut, Prefix);
+    ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
     return {mapper.allAnalysesPreserved,
             DenseMap<FModuleOp, DenseSet<unsigned>>(
@@ -466,13 +466,13 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
-    StringRef outputFilename, StringRef markDut, StringRef Prefix) {
+    StringRef outputFilename, StringRef markDut, StringRef prefix) {
   auto pass = std::make_unique<GrandCentralSignalMappingsPass>();
   if (!outputFilename.empty())
     pass->outputFilename = outputFilename;
   if (!markDut.empty())
     pass->markDut = markDut;
-  if (!Prefix.empty())
-    pass->Prefix = Prefix;
+  if (!prefix.empty())
+    pass->prefix = prefix;
   return pass;
 }
