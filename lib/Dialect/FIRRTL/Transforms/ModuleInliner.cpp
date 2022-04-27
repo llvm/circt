@@ -948,14 +948,14 @@ void Inliner::run() {
     auto module = worklist.pop_back_val();
     if (shouldFlatten(module)) {
       flattenInstances(module);
-      continue;
+      // Delete the flatten annotation, the transform was performed.
+      // Even if visited again in our walk (for inlining),
+      // we've just flattened it and so the annotation is no longer needed.
+      AnnotationSet::removeAnnotations(module,
+                                       "firrtl.transforms.FlattenAnnotation");
+    } else {
+      inlineInstances(module);
     }
-    inlineInstances(module);
-
-    // Delete the flatten annotations. Any module with the inline annotation
-    // will be deleted, as there won't be any remaining instances of it.
-    AnnotationSet(module).removeAnnotationsWithClass(
-        "firrtl.transforms.FlattenAnnotation");
   }
 
   // Delete all unreferenced modules.  Mark any NLAs that originate from dead
