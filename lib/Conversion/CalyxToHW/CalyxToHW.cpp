@@ -15,6 +15,7 @@
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -47,29 +48,41 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
   matchAndRewrite(ComponentOp component, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     SmallVector<hw::PortInfo> hwInputInfo;
-    auto inputPortInfo = component.getInputPortInfo();
-    for (auto portInfo : inputPortInfo)
+    for (auto portInfo : component.getPortInfo())
       hwInputInfo.push_back(
           {portInfo.name, hwDirection(portInfo.direction), portInfo.type});
 
     auto hwMod = rewriter.create<HWModuleOp>(
         component.getLoc(), component.getNameAttr(), hwInputInfo);
 
-    rewriter.inlineRegionBefore(component.body(), hwMod.getBodyRegion(),
-                                hwMod.getBodyRegion().begin());
-    rewriter.eraseOp(component);
-    rewriter.eraseBlock(&hwMod.getBodyRegion().back());
-
+    rewriter.eraseOp(hwMod.getBodyBlock()->getTerminator());
     ConversionPatternRewriter::InsertionGuard g(rewriter);
     rewriter.setInsertionPointToEnd(hwMod.getBodyBlock());
 
-    // TODO: keep a map from component block arg number to output index.
-    SmallVector<Value> hwOutputTemps;
-    auto outputPortInfo = component.getOutputPortInfo();
-    for (auto portInfo : outputPortInfo)
-      hwOutputTemps.push_back(
-          rewriter.create<ConstantOp>(component.getLoc(), portInfo.type, 0));
-    rewriter.create<OutputOp>(component.getLoc(), hwOutputTemps);
+    SmallVector<Value> argValues;
+    SmallVector<Value> outputWires;
+    size_t portIdx = 0;
+    for (auto portInfo : component.getPortInfo()) {
+      switch (portInfo.direction) {
+      case calyx::Direction::Input:
+        assert(hwMod.getArgument(portIdx).getType() == portInfo.type);
+        argValues.push_back(hwMod.getArgument(portIdx));
+        break;
+      case calyx::Direction::Output:
+        auto wire = rewriter.create<sv::WireOp>(component.getLoc(),
+                                                portInfo.type, portInfo.name);
+        auto wireRead =
+            rewriter.create<sv::ReadInOutOp>(component.getLoc(), wire);
+        argValues.push_back(wireRead);
+        outputWires.push_back(wireRead);
+        break;
+      }
+      ++portIdx;
+    }
+
+    rewriter.mergeBlocks(component.getBody(), hwMod.getBodyBlock(), argValues);
+    rewriter.create<OutputOp>(component.getLoc(), outputWires);
+    rewriter.eraseOp(component);
 
     return success();
   }
@@ -141,17 +154,16 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
   LogicalResult
   matchAndRewrite(calyx::AssignOp assign, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Special case for assigning to an output. Add source of assign to output,
-    // erase the dest, remove the block argument.
-    if (auto arg = assign.dest().dyn_cast<BlockArgument>()) {
-      llvm::errs() << "assign to arg " << arg.getArgNumber() << ' ';
-      arg.getOwner()->getParentOp()->dump();
-      auto hwMod = cast<HWModuleOp>(arg.getOwner()->getParentOp());
-    }
+    auto dest = adaptor.dest();
 
-    // General case converts to SV directly.
-    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, assign.dest(),
-                                              assign.src());
+    // To make life easy in ConvertComponentOp, we read from the output wires so
+    // the dialect conversion block argument mapping would work without a type
+    // converter. This means assigns to ComponentOp outputs will try to assign
+    // to a read from a wire, so we need to map to the wire.
+    if (auto readInOut = dyn_cast<ReadInOutOp>(adaptor.dest().getDefiningOp()))
+      dest = readInOut.input();
+
+    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, adaptor.src());
 
     return success();
   }
