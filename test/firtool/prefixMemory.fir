@@ -114,9 +114,9 @@ circuit Foo : %[[
     readData <= _readData_T
 
 ; CHECK-LABEL:  firrtl.module private @prefix1_Bar
-; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = 2 : i32, modName = "prefix1_mem_ext", name = "prefix1_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
+; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = -2 : i32, modName = "prefix1_mem_ext", name = "prefix1_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
 ; CHECK-LABEL:  firrtl.module private @prefix2_Baz
-; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = 3 : i32, modName = "prefix2_mem_ext", name = "prefix2_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
+; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = -3 : i32, modName = "prefix2_mem_ext", name = "prefix2_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
 
-; HW-LABEL:  hw.module @prefix1_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
 ; HW-LABEL:  hw.module @prefix2_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
+; HW-LABEL:  hw.module @prefix1_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)

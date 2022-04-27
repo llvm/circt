@@ -1,5 +1,6 @@
 ; RUN: firtool %s -dedup=false --format=fir  --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" --verilog |  FileCheck %s
 
+; CHECK-LABEL: external module tbMemoryKind1_ext_0
 
 ; CHECK-LABEL: external module tbMemoryKind1_ext
 
@@ -94,7 +95,7 @@ circuit test:
     tbMemoryKind1.w.data <= wData
 
 ; CHECK=LABEL: module hier1
-; CHECK:  tbMemoryKind1_ext tbMemoryKind1
+; CHECK:  tbMemoryKind1_ext_0 tbMemoryKind1
 
 
   module hier2: 
@@ -175,10 +176,12 @@ circuit test:
 ; CHECK: dutModule2 [[m:.+]] (
 
 ; CHECK-LABEL:      FILE "metadata/tb_seq_mems.json"
-; CHECK: [{"module_name":"tbMemoryKind1_ext","depth":16,"width":8,
-; CHECK:          "masked":false,"read":true,"write":true,"readwrite":false
-; CHECK:          "extra_ports":[],"hierarchy":
-; CHECK:          ["test.h2.m.tbMemoryKind1","test.h1.tbMemoryKind1"]}
+; CHECK: [{"module_name":"tbMemoryKind1_ext_0","depth":16,"width":8,
+; CHECK-SAME: "masked":false,"read":true,"write":true,"readwrite":false,
+; CHECK-SAME: "extra_ports":[],"hierarchy":["test.h1.tbMemoryKind1"]},
+; CHECK-SAME: {"module_name":"tbMemoryKind1_ext","depth":16,"width":8,"masked":false,
+; CHECK-SAME: "read":true,"write":true,"readwrite":false,"extra_ports":[],
+; CHECK-SAME: "hierarchy":["test.h2.m.tbMemoryKind1"]}]
 
 ; CHECK-LABEL:       FILE "metadata/seq_mems.json"
 ; CHECK:  [{"module_name":"dutMemory_ext","depth":32,"width":8,"masked":false,"read":true,
@@ -187,4 +190,5 @@ circuit test:
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"
 ; CHECK: name dutMemory_ext depth 32 width 8 ports write,read
+; CHECK: name tbMemoryKind1_ext_0 depth 16 width 8 ports write,read
 ; CHECK: name tbMemoryKind1_ext depth 16 width 8 ports write,read

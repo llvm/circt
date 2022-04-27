@@ -69,7 +69,7 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isTestHarness = !dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
-      if (isTestHarness && !memOp.groupID().hasValue())
+      if (isTestHarness)
         memOp.groupIDAttr(
             IntegerAttr::get(IntegerType::get(ctxt, 32), --baseGroupID));
 
