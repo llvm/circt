@@ -79,7 +79,9 @@ std::unique_ptr<mlir::Pass> createGrandCentralPass();
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
 std::unique_ptr<mlir::Pass>
-createGrandCentralSignalMappingsPass(StringRef outputFilename = "");
+createGrandCentralSignalMappingsPass(StringRef outputFilename = "",
+                                     StringRef markDut = "",
+                                     StringRef Prefix = "");
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 

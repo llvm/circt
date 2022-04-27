@@ -65,7 +65,8 @@ struct SignalMapping {
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
-  ModuleSignalMappings(FModuleOp module) : module(module) {}
+  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef prefix)
+      : module(module), markDut(markDut), prefix(prefix) {}
   void run();
   void addTarget(Value value, Annotation anno);
   FModuleOp emitMappingsModule();
@@ -75,6 +76,9 @@ struct ModuleSignalMappings {
   bool allAnalysesPreserved = false;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
+
+  StringRef markDut;
+  StringRef prefix;
   DenseSet<unsigned> forcedInputPorts;
 };
 } // namespace
@@ -240,16 +244,42 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
     // much better, but the modules that `EmitSignalMappings` interacts with
     // generally live in a separate circuit. Multiple circuits are not fully
     // supported at the moment.
-    auto circuitSplit = mapping.remoteTarget.getValue().split('|').second;
-    auto moduleSplit = circuitSplit.split('>');
-    SmallString<32> remoteXmrName(moduleSplit.first.split(':').first);
+    SmallString<32> remoteXmrName;
+    auto [circuitName, pathName] = mapping.remoteTarget.getValue().split('|');
+    // llvm::errs() << "Rewriting " << circuitName << " " << pathName <<
+    // "\nWith: " << markDut << " " << Prefix << "\n";
+    bool seenRoot = false;
+    if (markDut.empty()) {
+      remoteXmrName += circuitName.drop_front();
+      seenRoot = true;
+    }
+    auto [modulePath, varPath] = pathName.split('>');
+    do {
+      auto [item, tail] = modulePath.split(':');
+      modulePath = tail;
+      auto [modName, instName] = item.split('/');
+      if (!markDut.empty() && markDut == modName) {
+        remoteXmrName += prefix;
+        remoteXmrName += markDut;
+        seenRoot = true;
+      }
+      if (tail.empty())
+        break;
+      if (!markDut.empty() && !seenRoot)
+        continue;
+      if (!instName.empty()) {
+        remoteXmrName += '.';
+        remoteXmrName += instName;
+      }
+    } while (true);
     remoteXmrName.push_back('.');
-    for (auto c : moduleSplit.second) {
+    for (auto c : varPath) {
       if (c == '[' || c == '.')
         remoteXmrName.push_back('_');
       else if (c != ']')
         remoteXmrName.push_back(c);
     }
+    // llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx++));
@@ -292,6 +322,8 @@ class GrandCentralSignalMappingsPass
 
 public:
   std::string outputFilename;
+  std::string markDut;
+  std::string prefix;
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
@@ -320,8 +352,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     DenseMap<FModuleOp, DenseSet<unsigned>> forcedInputPorts;
   } Result;
 
-  auto processModule = [](FModuleOp module) -> Result {
-    ModuleSignalMappings mapper(module);
+  auto processModule = [this](FModuleOp module) -> Result {
+    ModuleSignalMappings mapper(module, markDut, prefix);
     mapper.run();
     return {mapper.allAnalysesPreserved,
             DenseMap<FModuleOp, DenseSet<unsigned>>(
@@ -433,10 +465,14 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
           b.getContext(), Twine(circuitPackage) + ".subcircuit.json", true));
 }
 
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createGrandCentralSignalMappingsPass(StringRef outputFilename) {
+std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralSignalMappingsPass(
+    StringRef outputFilename, StringRef markDut, StringRef prefix) {
   auto pass = std::make_unique<GrandCentralSignalMappingsPass>();
   if (!outputFilename.empty())
     pass->outputFilename = outputFilename;
+  if (!markDut.empty())
+    pass->markDut = markDut;
+  if (!prefix.empty())
+    pass->prefix = prefix;
   return pass;
 }
