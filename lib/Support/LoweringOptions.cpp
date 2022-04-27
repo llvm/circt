@@ -31,6 +31,15 @@ LoweringOptions::LoweringOptions(mlir::ModuleOp module) : LoweringOptions() {
   parseFromAttribute(module);
 }
 
+static Optional<LoweringOptions::LocationInfoStyle>
+parseLocationInfoStyle(StringRef option) {
+  return llvm::StringSwitch<llvm::Optional<LoweringOptions::LocationInfoStyle>>(
+             option)
+      .Case("plain", LoweringOptions::Plain)
+      .Case("wrapInAtSquareBracket", LoweringOptions::WrapInAtSquareBracket)
+      .Default(llvm::None);
+}
+
 void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
   while (!text.empty()) {
     // Remove the first option from the text.
@@ -65,6 +74,13 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
+    } else if (option.startswith("locationInfoStyle=")) {
+      option = option.drop_front(strlen("locationInfoStyle="));
+      if (auto style = parseLocationInfoStyle(option)) {
+        locationInfoStyle = *style;
+      } else {
+        errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -89,6 +105,8 @@ std::string LoweringOptions::toString() const {
     options += "explicitBitcastAddMul,";
   if (emitReplicatedOpsToHeader)
     options += "emitReplicatedOpsToHeader,";
+  if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
+    options += "locationInfoStyle=wrapInAtSquareBracket,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';

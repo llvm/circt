@@ -94,6 +94,12 @@ struct LoweringOptions {
 
   /// If true, replicated ops are emitted to a header file.
   bool emitReplicatedOpsToHeader = false;
+
+  /// This option controls emitted location information style.
+  enum LocationInfoStyle {
+    Plain,                // Default.
+    WrapInAtSquareBracket // Wrap location info in @[..].
+  } locationInfoStyle = Plain;
 };
 
 /// Register commandline options for the verilog emitter.
