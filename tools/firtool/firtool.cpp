@@ -193,6 +193,11 @@ static cl::opt<bool>
                 cl::init(true));
 
 static cl::opt<bool>
+    injectDUTHierarchy("inject-dut-hierarchy",
+                       cl::desc("add a level of hierarchy to the DUT"),
+                       cl::init(true));
+
+static cl::opt<bool>
     prefixModules("prefix-modules",
                   cl::desc("prefix modules with NestedPrefixAnnotation"),
                   cl::init(true));
@@ -442,6 +447,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (!disableOptimization)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
+
+  if (injectDUTHierarchy)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createInjectDUTHierarchyPass());
 
   if (lowerCHIRRTL)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
