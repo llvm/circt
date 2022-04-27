@@ -109,7 +109,6 @@ void ModuleSignalMappings::run() {
     allAnalysesPreserved = true;
     return;
   }
-
   LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
                           << "`\n");
 
@@ -280,7 +279,7 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
       else if (c != ']')
         remoteXmrName.push_back(c);
     }
-    llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
+    //llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx++));
