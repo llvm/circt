@@ -59,12 +59,14 @@ struct SignalMapping {
   /// The name of the local value, for reuse in the generated signal mappings
   /// module.
   StringAttr localName;
+  
 };
 
 /// A helper structure that collects the data necessary to generate the signal
 /// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
-  ModuleSignalMappings(FModuleOp module) : module(module) {}
+  ModuleSignalMappings(FModuleOp module, StringRef markDut, StringRef Prefix) 
+  : module(module), markDut(markDut), Prefix(Prefix) {}
   void run();
   void addTarget(Value value, Annotation anno);
   FModuleOp emitMappingsModule();
@@ -74,7 +76,9 @@ struct ModuleSignalMappings {
   bool allAnalysesPreserved = false;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
-};
+
+  StringRef markDut;
+  StringRef Prefix;};
 } // namespace
 
 // Allow `SignalMapping` to be printed.
@@ -102,6 +106,7 @@ void ModuleSignalMappings::run() {
     allAnalysesPreserved = true;
     return;
   }
+
   LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
                           << "`\n");
 
@@ -225,16 +230,41 @@ FModuleOp ModuleSignalMappings::emitMappingsModule() {
     // much better, but the modules that `EmitSignalMappings` interacts with
     // generally live in a separate circuit. Multiple circuits are not fully
     // supported at the moment.
-    auto circuitSplit = mapping.remoteTarget.getValue().split('|').second;
-    auto moduleSplit = circuitSplit.split('>');
-    SmallString<32> remoteXmrName(moduleSplit.first.split(':').first);
+    SmallString<32> remoteXmrName;
+    auto [circuitName,pathName] = mapping.remoteTarget.getValue().split('|');
+    //llvm::errs() << "Rewriting " << circuitName << " " << pathName << "\nWith: " << markDut << " " << Prefix << "\n";
+    bool seenRoot = false;
+    if (markDut.empty()) {
+      remoteXmrName += circuitName.drop_front();
+      seenRoot = true;
+    }
+    auto [modulePath,varPath] = pathName.split('>');
+    do {
+      auto [item, tail] = modulePath.split(':');
+      modulePath = tail;
+      auto [modName, instName] = item.split('/');
+      if (!markDut.empty() && markDut == modName) {
+        remoteXmrName += Prefix;
+        remoteXmrName += markDut;
+        seenRoot = true;
+      }
+      if (tail.empty())
+        break;
+      if (!markDut.empty() && !seenRoot)
+        continue;
+      if (!instName.empty()) {
+      remoteXmrName += '.';
+      remoteXmrName += instName;
+      }
+    } while (true);
     remoteXmrName.push_back('.');
-    for (auto c : moduleSplit.second) {
+    for (auto c : varPath) {
       if (c == '[' || c == '.')
         remoteXmrName.push_back('_');
       else if (c != ']')
         remoteXmrName.push_back(c);
     }
+    llvm::errs() << "XMR: " << remoteXmrName << "\n\n";
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx++));
@@ -277,6 +307,8 @@ class GrandCentralSignalMappingsPass
 
 public:
   std::string outputFilename;
+  std::string markDut;
+  std::string Prefix;
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
@@ -300,8 +332,8 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  auto processModule = [](FModuleOp module) -> bool {
-    ModuleSignalMappings mapper(module);
+  auto processModule = [this](FModuleOp module) -> bool {
+    ModuleSignalMappings mapper(module, markDut, Prefix);
     mapper.run();
     return mapper.allAnalysesPreserved;
   };
@@ -386,9 +418,13 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
 }
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createGrandCentralSignalMappingsPass(StringRef outputFilename) {
+circt::firrtl::createGrandCentralSignalMappingsPass(StringRef outputFilename, StringRef markDut, StringRef Prefix) {
   auto pass = std::make_unique<GrandCentralSignalMappingsPass>();
   if (!outputFilename.empty())
     pass->outputFilename = outputFilename;
+  if (!markDut.empty())
+    pass->markDut = markDut;
+  if (!Prefix.empty())
+    pass->Prefix = Prefix;
   return pass;
 }
