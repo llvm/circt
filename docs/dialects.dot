@@ -76,8 +76,8 @@ digraph G {
   // ===== Connections =====
   // Dialect conversions
   SCF -> Calyx
-  Affine -> StaticLogic [style=dashed]
-  StaticLogic -> Calyx [style=dashed]
+  Affine -> StaticLogic
+  StaticLogic -> Calyx
   Arith -> {Handshake Calyx} [ltail=cluster_std_arith_dialect]
 
   Handshake -> FIRRTL

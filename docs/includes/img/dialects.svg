@@ -67,7 +67,7 @@
 <!-- Affine&#45;&gt;StaticLogic -->
 <g id="edge2" class="edge">
 <title>Affine&#45;&gt;StaticLogic</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M125.78,-741.95C130.93,-736.51 136.95,-730.7 143,-726 148.66,-721.61 153.4,-724.2 157,-718 174.15,-688.45 158.69,-649.16 144.59,-623.73"/>
+<path fill="none" stroke="black" d="M125.78,-741.95C130.93,-736.51 136.95,-730.7 143,-726 148.66,-721.61 153.4,-724.2 157,-718 174.15,-688.45 158.69,-649.16 144.59,-623.73"/>
 <polygon fill="black" stroke="black" points="147.58,-621.91 139.52,-615.03 141.53,-625.43 147.58,-621.91"/>
 </g>
 <!-- Scheduling -->
@@ -175,7 +175,7 @@
 <!-- StaticLogic&#45;&gt;Calyx -->
 <g id="edge3" class="edge">
 <title>StaticLogic&#45;&gt;Calyx</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M124.79,-578.7C123.35,-570.98 121.63,-561.71 120.04,-553.11"/>
+<path fill="none" stroke="black" d="M124.79,-578.7C123.35,-570.98 121.63,-561.71 120.04,-553.11"/>
 <polygon fill="black" stroke="black" points="123.44,-552.3 118.18,-543.1 116.56,-553.58 123.44,-552.3"/>
 </g>
 <!-- MSFT -->
