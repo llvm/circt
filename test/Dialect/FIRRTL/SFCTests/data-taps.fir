@@ -85,6 +85,6 @@ circuit Top :
 ; CHECK: module MemTap_2_impl_0(
 ; CHECK:   output  _1,
 ; CHECK:           _0);
-; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_1.Memory[1];
-; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_1.Memory[0];
+; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_ext.Memory[1];
+; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_ext.Memory[0];
 ; CHECK: endmodule
