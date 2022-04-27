@@ -68,8 +68,8 @@ void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
 
 // Insert Fork Operation for every operation and function argument with more
 // than one successor.
-LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  for (Operation &op : f.getOps()) {
+LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
+  for (Operation &op : r.getOps()) {
     // Ignore terminators, and don't add Forks to Forks.
     if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
       for (auto result : op.getResults()) {
@@ -80,7 +80,7 @@ LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
     }
   }
 
-  for (auto barg : f.front().getArguments())
+  for (auto barg : r.front().getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
       insertFork(barg, false, rewriter);
 
@@ -88,10 +88,10 @@ LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
 }
 
 // Create sink for every unused result
-LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
+LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
   BlockValues liveOuts;
 
-  for (Block &block : f) {
+  for (Block &block : r) {
     for (Operation &op : block) {
       // Do not add sinks for unused MLIR operations which the rewriter will
       // later remove We have already replaced these ops with their handshake
@@ -126,7 +126,8 @@ struct HandshakeMaterializeForksSinksPass
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
     OpBuilder builder(op);
-    if (addForkOps(op, builder).failed() || addSinkOps(op, builder).failed() ||
+    if (addForkOps(op.getRegion(), builder).failed() ||
+        addSinkOps(op.getRegion(), builder).failed() ||
         verifyAllValuesHasOneUse(op).failed())
       return signalPassFailure();
   };
