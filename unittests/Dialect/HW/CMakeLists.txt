@@ -1,4 +1,5 @@
 add_circt_unittest(CIRCTHWTests
+  HWModuleTest.cpp
   InstanceGraphTest.cpp
 )
 
