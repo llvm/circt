@@ -134,6 +134,15 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
+  let summary = "Flatten aggregate memory data to a UInt";
+  let description = [{
+    This pass flattens the aggregate data of memory into a UInt, and inserts
+    appropriate bitcasts to access the data.
+  }];
+  let constructor = "circt::firrtl::createFlattenMemoryPass()";
+}
+
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
   let summary = "Wires test enables to clock gates for DFT infrastructure";
   let description = [{
@@ -409,12 +418,4 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createInferReadWritePass()";
 }
 
-def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::FModuleOp"> {
-  let summary = "Flatten aggregate memory data to a UInt";
-  let description = [{
-    This pass flattens aggregate memory data field into a UInt, and
-    inserts the appropriate logic to access the data.
-  }];
-  let constructor = "circt::firrtl::createLowerMemoryPass()";
-}
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
