@@ -409,4 +409,12 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createInferReadWritePass()";
 }
 
+def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::FModuleOp"> {
+  let summary = "Flatten aggregate memory data to a UInt";
+  let description = [{
+    This pass flattens aggregate memory data field into a UInt, and
+    inserts the appropriate logic to access the data.
+  }];
+  let constructor = "circt::firrtl::createLowerMemoryPass()";
+}
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
