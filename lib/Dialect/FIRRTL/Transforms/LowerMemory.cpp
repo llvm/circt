@@ -98,8 +98,9 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
 
       auto flatMem = builder.create<MemOp>(
           ports, memOp.readLatency(), memOp.writeLatency(), memOp.depth(),
-          memOp.ruw(), portNames, memOp.name(), memOp.annotations().getValue(),
-          memOp.portAnnotations().getValue(), memOp.inner_symAttr());
+          memOp.ruw(), builder.getArrayAttr(portNames), memOp.nameAttr(),
+          memOp.annotations(), memOp.portAnnotations(), memOp.inner_symAttr(),
+          memOp.groupIDAttr());
       // Hook up the new memory to the wires the old memory was replaced with.
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
