@@ -978,14 +978,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %tmp27, %3 : !firrtl.uint<23>, !firrtl.uint<23>
   }
 
-  //CHECK-LABEL: hw.module private @test_partialconnect(%clock: i1) {
-  //CHECK: sv.always posedge %clock
-  firrtl.module private @test_partialconnect(in %clock : !firrtl.clock) {
-    %b = firrtl.reg %clock {name = "pcon"} : !firrtl.uint<1>
-    %a = firrtl.constant 0 : !firrtl.uint<2>
-    firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
-  }
-
   // CHECK-LABEL: hw.module private @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (fldout: i64) {
   // CHECK-NEXT:    %0 = hw.struct_extract %source["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
   // CHECK-NEXT:    hw.output %0 : i64
@@ -1419,26 +1411,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0 : !hw.array<1xi3>
   }
 
-  // CHECK-LABEL: hw.module private @partialConnectVector
-  firrtl.module private @partialConnectVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<3>, 1>, out %b: !firrtl.vector<uint<1>, 1>) {
-    %r = firrtl.reg %clock  : !firrtl.vector<uint<2>, 1>
-    firrtl.partialconnect %r, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<3>, 1>
-    firrtl.partialconnect %b, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<2>, 1>
-    // CHECK:      %2 = hw.array_get %a[%false] : !hw.array<1xi3>
-    // CHECK-NEXT: %3 = comb.extract %2 from 0 : (i3) -> i2
-    // CHECK-NEXT: %4 = hw.array_create %3 : i2
-    // CHECK-NEXT: sv.always posedge %clock  {
-    // CHECK-NEXT:   sv.passign %r, %4 : !hw.array<1xi2>
-    // CHECK-NEXT: }
-    // CHECK-NEXT: %5 = hw.array_get %1[%false] : !hw.array<1xi2>
-    // CHECK-NEXT: %6 = comb.extract %5 from 0 : (i2) -> i1
-    // CHECK-NEXT: %7 = hw.array_create %6 : i1
-    // CHECK-NEXT: %8 = sv.array_index_inout %.b.output[%false] : !hw.inout<array<1xi1>>, i1
-    // CHECK-NEXT: %9 = hw.array_get %7[%false] : !hw.array<1xi1>
-    // CHECK-NEXT: sv.assign %8, %9 : i1
-    // CHECK-NEXT: hw.output %0 : !hw.array<1xi1>
-  }
-
   // CHECK-LABEL: hw.module private @SubIndex
   firrtl.module private @SubIndex(in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
     %r1 = firrtl.reg %clock  : !firrtl.uint<1>
@@ -1456,22 +1428,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   sv.passign %r2, %2 : !hw.array<1xi1>
     // CHECK-NEXT: }
     // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<1xi1>
-  }
-
-  // CHECK-LABEL: hw.module private @partialConnectDifferentVectorLength
-  firrtl.module private @partialConnectDifferentVectorLength(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
-    firrtl.connect %r1, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
-    firrtl.partialconnect %b, %r1 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 2>
-    // CHECK:      sv.always posedge %clock  {
-    // CHECK-NEXT:   sv.passign %r1, %a : !hw.array<2xi1>
-    // CHECK-NEXT: }
-    // CHECK-NEXT: %2 = hw.array_get %1[%false] : !hw.array<2xi1>
-    // CHECK-NEXT: %3 = hw.array_create %2 : i1
-    // CHECK-NEXT: %4 = sv.array_index_inout %.b.output[%false] : !hw.inout<array<1xi1>>, i1
-    // CHECK-NEXT: %5 = hw.array_get %3[%false] : !hw.array<1xi1>
-    // CHECK-NEXT: sv.assign %4, %5 : i1
-    // CHECK-NEXT: hw.output %0 : !hw.array<1xi1>
   }
 
   // CHECK-LABEL: hw.module private @SubindexDestination
