@@ -101,16 +101,6 @@ firrtl.circuit "Foo" {
 // -----
 firrtl.circuit "Foo"  {
   firrtl.module @Foo() {
-    %w0 = firrtl.wire  : !firrtl.vector<uint<3>, 10>
-    // expected-error @+1 {{uninferred width: wire "w1[0]" is unconstrained}}
-    %w1 = firrtl.wire  : !firrtl.vector<uint, 0>
-    firrtl.partialconnect %w1, %w0 : !firrtl.vector<uint, 0>, !firrtl.vector<uint<3>, 10>
-  }
-}
-
-// -----
-firrtl.circuit "Foo"  {
-  firrtl.module @Foo() {
     // expected-error @+1 {{uninferred width: invalid value is unconstrained}}
     %0 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
   }
