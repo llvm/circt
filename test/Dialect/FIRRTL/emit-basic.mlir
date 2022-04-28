@@ -91,9 +91,7 @@ firrtl.circuit "Foo" {
     firrtl.assume %someClock, %ui1, %ui1, "msg" {name = "foo"}
     firrtl.cover %someClock, %ui1, %ui1, "msg" {name = "foo"}
     // CHECK: someOut <= ui1
-    // CHECK: someOut <- ui1
     firrtl.connect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.partialconnect %someOut, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: inst someInst of Simple
     // CHECK: someInst.someIn <= ui1
     // CHECK: someOut <= someInst.someOut
