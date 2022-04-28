@@ -513,6 +513,7 @@ bool Inliner::doesNLAMatchCurrentPath(NonLocalAnchor nla) {
 /// If this operation or any child operation has a name, add the prefix to that
 /// operation's name.  If the operation has any inner symbols, make sure that
 /// these are unique in the namespace.
+// NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::rename(StringRef prefix, Operation *op,
                      ModuleNamespace &moduleNamespace) {
   // Add a prefix to things that has a "name" attribute.  We don't prefix
@@ -660,6 +661,7 @@ bool Inliner::shouldInline(Operation *op) {
   return AnnotationSet(op).hasAnnotation("firrtl.passes.InlineAnnotation");
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
                           BlockAndValueMapping &mapper, FModuleOp parent,
                           DenseSet<Attribute> localSymbols,
@@ -759,6 +761,7 @@ void Inliner::flattenInstances(FModuleOp module) {
   }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
                          BlockAndValueMapping &mapper, FModuleOp parent,
                          DenseMap<Attribute, Attribute> &symbolRenames,
