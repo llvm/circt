@@ -1395,8 +1395,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 static StrictConnectOp getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
-    // If we see a partial connect or attach, just conservatively fail.
-    if (isa<AttachOp, PartialConnectOp>(user))
+    // If we see an attach, just conservatively fail.
+    if (isa<AttachOp>(user))
       return {};
 
     if (auto aConnect = dyn_cast<StrictConnectOp>(user))
@@ -1482,7 +1482,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
 
 static LogicalResult canonicalizeIntTypeConnect(ConnectOp op,
                                                 PatternRewriter &rewriter) {
-  // If a partial connect exists from a shorter int to a longer int, simplify
+  // If a connect exists from a shorter int to a longer int, simplify
   // to an extend and strict connect.
   auto destType =
       op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
@@ -1604,43 +1604,6 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
         return success();
       }
     }
-  }
-  return failure();
-}
-
-LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
-                                             PatternRewriter &rewriter) {
-  // If a partial connect exists from a longer int to a shorter int, simplify
-  // to a truncation and connect.
-  auto destType =
-      op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
-  auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
-  if (destType == srcType) {
-    // bundle is passive on both sides, this can be a strictconnect.
-    rewriter.create<StrictConnectOp>(op->getLoc(), op.getOperand(0),
-                                     op.getOperand(1));
-    rewriter.eraseOp(op);
-    return success();
-  }
-
-  auto srcWidth = srcType.getBitWidthOrSentinel();
-  auto destWidth = destType.getBitWidthOrSentinel();
-
-  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
-      destWidth >= 0 && destWidth < srcWidth) {
-    // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType = destType.cast<IntType>();
-    if (tmpType.isSigned())
-      tmpType = UIntType::get(destType.getContext(), destWidth);
-    auto shortened = rewriter.createOrFold<TailPrimOp>(
-        op.getLoc(), tmpType, op.getOperand(1), srcWidth - destWidth);
-    // Insert the cast back to signed if needed.
-    if (tmpType != destType)
-      shortened =
-          rewriter.createOrFold<AsSIntPrimOp>(op.getLoc(), destType, shortened);
-    rewriter.create<StrictConnectOp>(op.getLoc(), op.getOperand(0), shortened);
-    rewriter.eraseOp(op);
-    return success();
   }
   return failure();
 }

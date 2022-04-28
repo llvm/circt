@@ -40,25 +40,6 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasCanonicalizeMethod = true;
 }
 
-def PartialConnectOp : FIRRTLOp<"partialconnect"> {
-  let summary = "Connect two signals";
-  let description = [{
-    Connect two values with fewer constraints:
-    ```
-      firrtl.partialconnect %dest, %src : t1, t2
-    ```
-    }];
-
-  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
-  let results = (outs);
-  let hasCanonicalizeMethod = true;
-
-  let hasVerifier = 1;
-
-  let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
-}
-
 def StrictConnectOp : FIRRTLOp<"strictconnect", [SameTypeOperands, FConnectLike]> {
   let summary = "Connect two signals";
   let description =  [{

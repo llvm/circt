@@ -266,10 +266,6 @@ public:
       declareSinks(result, Flow::Sink);
   }
 
-  void visitStmt(PartialConnectOp op) {
-    llvm_unreachable("PartialConnectOps should have been removed.");
-  }
-
   void visitStmt(ConnectOp op) {
     setLastConnect(getFieldRefFromValue(op.dest()), op);
   }
