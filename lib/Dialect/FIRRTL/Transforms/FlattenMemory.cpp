@@ -1,4 +1,4 @@
-//===- LowerMemory.cpp - Lower Memory Pass -----------------------===//
+//===- FlattenMemroy.cpp - Flatten Memory Pass ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the LowerMemory pass.
+// This file defines the FlattenMemory pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +26,7 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
+struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
   /// This pass flattens the aggregate data of memory into a UInt, and inserts
   /// appropriate bitcasts to access the data.
   void runOnOperation() override {
@@ -225,6 +225,6 @@ private:
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerMemoryPass() {
-  return std::make_unique<LowerMemoryPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createFlattenMemoryPass() {
+  return std::make_unique<FlattenMemoryPass>();
 }

@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
+  FlattenMemory.cpp
   GrandCentral.cpp
   GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp
@@ -15,7 +16,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferWidths.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
-  LowerMemory.cpp
   LowerTypes.cpp
   MergeConnections.cpp
   ModuleInliner.cpp
