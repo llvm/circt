@@ -240,20 +240,18 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
   dutVerbatimOp->setAttr("output_file", fileAttr);
 
-  if (!seqMemConfStr.empty()) {
-    auto confVerbatimOp =
-        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
-    if (replSeqMemFile.empty()) {
-      circuitOp->emitError("metadata emission failed, the option "
-                           "`-repl-seq-mem-file=<filename>` is mandatory for "
-                           "specifying a valid seq mem metadata file");
-      return failure();
-    }
-
-    auto fileAttr = hw::OutputFileAttr::getFromFilename(
-        context, replSeqMemFile, /*excludeFromFilelist=*/true);
-    confVerbatimOp->setAttr("output_file", fileAttr);
+  auto confVerbatimOp =
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
+  if (replSeqMemFile.empty()) {
+    circuitOp->emitError("metadata emission failed, the option "
+                         "`-repl-seq-mem-file=<filename>` is mandatory for "
+                         "specifying a valid seq mem metadata file");
+    return failure();
   }
+
+  fileAttr = hw::OutputFileAttr::getFromFilename(context, replSeqMemFile,
+                                                 /*excludeFromFilelist=*/true);
+  confVerbatimOp->setAttr("output_file", fileAttr);
 
   return success();
 }
