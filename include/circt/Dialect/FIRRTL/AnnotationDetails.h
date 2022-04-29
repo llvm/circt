@@ -32,6 +32,15 @@ constexpr const char *omirFileAnnoClass =
 constexpr const char *omirTrackerAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRTracker";
 
+constexpr const char *blackBoxTargetDirAnnoClass =
+    "firrtl.transforms.BlackBoxTargetDirAnno";
+constexpr const char *blackBoxResourceFileNameAnnoClass =
+    "firrtl.transforms.BlackBoxResourceFileNameAnno";
+constexpr const char *extractCoverageAnnoClass =
+    "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+constexpr const char *testBenchDirAnnoClass =
+    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
+
 // Grand Central Annotations
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";

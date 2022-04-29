@@ -428,7 +428,8 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following will be handled after lowering FModule ops, since
             // they are still needed on the circuit until after lowering
             // FModules.
-            moduleHierAnnoClass, testHarnessHierAnnoClass))
+            moduleHierAnnoClass, testHarnessHierAnnoClass,
+            blackBoxTargetDirAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +

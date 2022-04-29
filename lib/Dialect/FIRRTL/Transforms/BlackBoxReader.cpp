@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -96,12 +97,6 @@ void BlackBoxReaderPass::runOnOperation() {
   bool anythingChanged = false;
 
   // Internalize some string attributes for easy reference later.
-  StringRef targetDirAnnoClass = "firrtl.transforms.BlackBoxTargetDirAnno";
-  StringRef resourceFileNameAnnoClass =
-      "firrtl.transforms.BlackBoxResourceFileNameAnno";
-  StringRef coverAnnoClass =
-      "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
-  StringRef testbenchAnno = "sifive.enterprise.firrtl.TestBenchDirAnnotation";
 
   // Determine the target directory and resource file name from the
   // annotations present on the circuit operation.
@@ -112,45 +107,44 @@ void BlackBoxReaderPass::runOnOperation() {
   // will affect how the rest of the annotations are resolved.
   SmallVector<Attribute, 4> filteredAnnos;
   for (auto annot : AnnotationSet(circuitOp)) {
-    // Handle target dir annotation.
-    if (annot.isClass(targetDirAnnoClass)) {
-      if (auto target = annot.getMember<StringAttr>("targetDir")) {
-        targetDir = target.getValue();
-        continue;
-      }
-      circuitOp->emitError(targetDirAnnoClass)
-          << " annotation missing \"targetDir\" attribute";
-      signalPassFailure();
-      continue;
-    }
-
     // Handle resource file name annotation.
-    if (annot.isClass(resourceFileNameAnnoClass)) {
+    if (annot.isClass(blackBoxResourceFileNameAnnoClass)) {
       if (auto resourceFN = annot.getMember<StringAttr>("resourceFileName")) {
         resourceFileName = resourceFN.getValue();
         continue;
       }
 
-      circuitOp->emitError(resourceFileNameAnnoClass)
+      circuitOp->emitError(blackBoxResourceFileNameAnnoClass)
           << " annotation missing \"resourceFileName\" attribute";
       signalPassFailure();
       continue;
     }
-
     filteredAnnos.push_back(annot.getDict());
 
     // Get the testbench and cover directories.
-    if (annot.isClass(coverAnnoClass))
+    if (annot.isClass(extractCoverageAnnoClass))
       if (auto dir = annot.getMember<StringAttr>("directory")) {
         coverDir = dir.getValue();
         continue;
       }
 
-    if (annot.isClass(testbenchAnno))
+    if (annot.isClass(testBenchDirAnnoClass))
       if (auto dir = annot.getMember<StringAttr>("dirname")) {
         testBenchDir = dir.getValue();
         continue;
       }
+
+    // Handle target dir annotation.
+    if (annot.isClass(blackBoxTargetDirAnnoClass)) {
+      if (auto target = annot.getMember<StringAttr>("targetDir")) {
+        targetDir = target.getValue();
+        continue;
+      }
+      circuitOp->emitError(blackBoxTargetDirAnnoClass)
+          << " annotation missing \"targetDir\" attribute";
+      signalPassFailure();
+      continue;
+    }
   }
   // Apply the filtered annotations to the circuit.  If we updated the circuit
   // and record that they changed.
