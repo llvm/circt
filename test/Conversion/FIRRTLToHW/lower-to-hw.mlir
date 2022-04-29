@@ -747,8 +747,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @InitReg1(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                           in %io_d: !firrtl.uint<32>, in %io_en: !firrtl.uint<1>,
                           out %io_q: !firrtl.uint<32>) {
-    // CHECK: %c0_i32 = hw.constant 0 : i32
+    // CHECK:      %c1_i32 = hw.constant 1 : i32
+    // CHECK-NEXT: %c0_i32 = hw.constant 0 : i32
     %c0_ui32 = firrtl.constant 0 : !firrtl.uint<32>
+    %c1_ui32 = firrtl.constant 1 : !firrtl.uint<32>
 
     %4 = firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
@@ -762,11 +764,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   } else  {
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
+    // CHECK-NEXT: %reg3 = sv.reg sym @[[reg3_sym:.+]] : !hw.inout<i32
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.ifdef "RANDOMIZE_REG_INIT" {
     // CHECK-NEXT:     %[[RANDOM:.+]] = sv.reg sym @[[RANDOM_SYM:[_A-Za-z0-9]+]] {{.+}}
     // CHECK-NEXT:     %[[RANDOM_2:.+]] = sv.reg sym @[[RANDOM_2_SYM:[_A-Za-z0-9]+]] {{.+}}
+    // CHECK-NEXT:     %[[RANDOM_3:.+]] = sv.reg sym @[[RANDOM_3_SYM:[_A-Za-z0-9]+]] {{.+}}
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.initial {
     // CHECK-NEXT:     sv.verbatim "`INIT_RANDOM_PROLOG_"
@@ -775,6 +779,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_SYM]]>]}
     // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
     // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg2_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_2_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
+    // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg3_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.if %reset {
+    // CHECK-NEXT:       sv.bpassign %reg, %c0_i32 : i32
+    // CHECK-NEXT:       sv.bpassign %reg3, %c1_i32 : i32
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
@@ -786,12 +796,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
     // CHECK-NEXT:   sv.if %reset  {
     // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT:     sv.passign %reg3, %c1_i32 : i32
     // CHECK-NEXT:   } else  {
     // CHECK-NEXT:     sv.passign %reg, %6 : i32
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
     %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
+    %reg3 = firrtl.regreset %clock, %4, %c1_ui32 {name = "reg3"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
 
     %sum = firrtl.add %reg, %reg2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
     %shorten = firrtl.head %sum, 32 : (!firrtl.uint<33>) -> !firrtl.uint<32>
