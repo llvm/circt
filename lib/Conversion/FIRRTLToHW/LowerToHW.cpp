@@ -2511,7 +2511,7 @@ void FIRRTLLowering::initializeRegister(
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       circuitState.used_RANDOMIZE_REG_INIT = 1;
-      auto block = builder.getBlock();
+      auto *block = builder.getBlock();
 
       // Randomized values are assigned to registers in `ifdef
       // RANDOMIZE_REG_INIT block.
