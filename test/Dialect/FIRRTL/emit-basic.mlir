@@ -100,9 +100,14 @@ firrtl.circuit "Foo" {
     %someInst_someIn, %someInst_someOut = firrtl.instance someInst @Simple(in someIn: !firrtl.uint<1>, out someOut: !firrtl.uint<1>)
     firrtl.connect %someInst_someIn, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %someOut, %someInst_someOut : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NOT: _invalid
     // CHECK: someOut is invalid
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     firrtl.connect %someOut, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NOT: _invalid
+    // CHECK: someOut is invalid
+    %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
     %an1 = firrtl.wire : !firrtl.analog<1>
