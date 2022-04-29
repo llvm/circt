@@ -71,10 +71,11 @@ struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
   // conversion.
   DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
 
-  hw::SymbolCache topSyms;
-  DenseSet<StringAttr> newSyms;
+  // Cache the top-level symbols. Insert the new ones we're creating for new
+  // global ref ops.
+  hw::MutableSymbolCache topSyms;
 
-  // In order to be efficient, cache the symbols in each module.
+  // In order to be efficient, cache the "symbols" in each module.
   DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
   // Accessor for `perModSyms` which lazily constructs each cache.
   const hw::SymbolCache &getSyms(MSFTModuleOp mod);
@@ -86,7 +87,7 @@ const hw::SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
 
-  // Build the cache if necessary;
+  // Build the cache.
   hw::SymbolCache &syms = perModSyms[mod];
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
@@ -102,22 +103,30 @@ const hw::SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
 LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
 
   hw::GlobalRefOp ref = nullptr;
+
+  // If 'inst' doesn't contain any ops which use a global ref op, don't create
+  // one.
   if (llvm::any_of(inst.getOps(), [](Operation &op) {
         return isa<DynInstDataOpInterface>(op);
       })) {
+
     // Come up with a unique symbol name.
     auto refSym = StringAttr::get(&getContext(), "instref");
     auto origRefSym = refSym;
     unsigned ctr = 0;
-    while (topSyms.getDefinition(refSym) || newSyms.contains(refSym))
+    while (topSyms.getDefinition(refSym))
       refSym = StringAttr::get(&getContext(),
                                origRefSym.getValue() + "_" + Twine(++ctr));
-    newSyms.insert(refSym);
 
     // Create a global ref to replace us.
     ArrayAttr globalRefPath = inst.globalRefPath();
     ref = b.create<hw::GlobalRefOp>(inst.getLoc(), refSym, globalRefPath);
     auto refAttr = hw::GlobalRefAttr::get(ref);
+
+    // Add the new symbol to the symbol cache.
+    topSyms.unfreeze();
+    topSyms.addDefinition(refSym, ref);
+    topSyms.freeze();
 
     // For each level of `globalRef`, find the static operation which needs a
     // back reference to the global ref which is replacing us.
@@ -155,8 +164,10 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
     b.insert(&op);
 
     // Assign a ref for ops which need it.
-    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op))
+    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op)) {
+      assert(ref);
       specOp.setGlobalRef(ref);
+    }
   }
 
   inst.erase();
@@ -172,14 +183,20 @@ void LowerInstancesPass::runOnOperation() {
 
   size_t numFailed = 0;
   OpBuilder builder(ctxt);
-  top.walk([&](InstanceHierarchyOp hier) {
-    builder.setInsertionPoint(hier);
-    hier.walk([&](DynamicInstanceOp inst) {
+
+  // Find all of the InstanceHierarchyOps.
+  for (Operation &op : llvm::make_early_inc_range(top.getOps())) {
+    if (!isa<InstanceHierarchyOp>(op))
+      continue;
+    builder.setInsertionPoint(&op);
+    // Walk the child dynamic instances in _post-order_ so we lower and delete
+    // the children first.
+    op.walk<mlir::WalkOrder::PostOrder>([&](DynamicInstanceOp inst) {
       if (failed(lower(inst, builder)))
         ++numFailed;
     });
-    hier.erase();
-  });
+    op.erase();
+  }
   if (numFailed)
     signalPassFailure();
 
