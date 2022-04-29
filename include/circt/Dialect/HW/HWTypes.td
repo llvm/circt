@@ -58,6 +58,15 @@ def UnionType : DialectType<HWDialect,
 // Type Definitions
 //===----------------------------------------------------------------------===//
 
+/// Points to a name within a module.
+def HWInnerRefAttr : Attr<
+  CPred<"$_self.isa<::circt::hw::InnerRefAttr>()">,
+        "name reference attribute"> {
+  let returnType = "::circt::hw::InnerRefAttr";
+  let storageType = "::circt::hw::InnerRefAttr";
+  let convertFromStorage = "$_self";
+}
+
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
   CPred<"$_self.isa<::mlir::FlatSymbolRefAttr, ::circt::hw::InnerRefAttr>()">,

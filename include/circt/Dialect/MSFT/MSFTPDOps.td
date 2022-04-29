@@ -65,8 +65,22 @@ def PDPhysRegionOp : MSFTOp<"pd.physregion",
   }];
 }
 
+def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",
+                                 [HasParent<"mlir::ModuleOp">, NoTerminator]> {
+  let summary = "The root of an instance hierarchy";
+
+  let arguments = (ins FlatSymbolRefAttr:$topModuleRef);
+  let regions = (region SizedRegion<1>:$instances);
+
+  let assemblyFormat = [{
+    $topModuleRef $instances attr-dict
+  }];
+}
+
 def DynamicInstanceOp : MSFTOp<"instance.dynamic",
-                               [HasParent<"mlir::ModuleOp">, NoTerminator]> {
+                               [ParentOneOf<["circt::msft::InstanceHierarchyOp",
+                                             "circt::msft::DynamicInstanceOp"]>,
+                                NoTerminator]> {
 
   let summary = "A module instance in the instance hierarchy";
   let description = [{
@@ -83,14 +97,14 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
     gives them the symbol of the globalref which was created to replace the
     dynamic instance.
   }];
-  let arguments = (ins NameRefArrayAttr:$appid);
+  let arguments = (ins HWInnerRefAttr:$instanceRef);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $appid $body attr-dict
+    custom<ImplicitInnerRef>($instanceRef) $body attr-dict
   }];
 
   let extraClassDeclaration = [{
-    bool isRootedIn(Operation *top);
+    ::mlir::ArrayAttr globalRefPath();
   }];
 }
