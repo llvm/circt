@@ -36,18 +36,18 @@ circuit Sub :
 ; CHECK:                   data_source_w_1);
 ; CHECK:   `ifndef VERILATOR
 ; CHECK:   initial begin
-; CHECK:     force Foo.clock = clock_sink;
-; CHECK:     force Foo.dataIn_a_b_c = data_sink_u;
-; CHECK:     force Foo.dataIn_d = data_sink_v;
-; CHECK:     force Foo.dataIn_e = data_sink_w_0;
-; CHECK:     force Foo.dataIn_e = data_sink_w_1;
+; CHECK:     force Top.clock = clock_sink;
+; CHECK:     force Top.dataIn_a_b_c = data_sink_u;
+; CHECK:     force Top.dataIn_d = data_sink_v;
+; CHECK:     force Top.dataIn_e = data_sink_w_0;
+; CHECK:     force Top.dataIn_e = data_sink_w_1;
 ; CHECK:   end
 ; CHECK:   `endif
 ; CHECK:   assign clock_source = Top.clock;
-; CHECK:   assign data_source_u = Foo.dataOut_x_y_z;
-; CHECK:   assign data_source_v = Foo.dataOut_w;
-; CHECK:   assign data_source_w_0 = Foo.dataOut_p;
-; CHECK:   assign data_source_w_1 = Foo.dataOut_p;
+; CHECK:   assign data_source_u = Top.dataOut_x_y_z;
+; CHECK:   assign data_source_v = Top.dataOut_w;
+; CHECK:   assign data_source_w_0 = Top.dataOut_p;
+; CHECK:   assign data_source_w_1 = Top.dataOut_p;
 ; CHECK: endmodule
 
 

@@ -1843,9 +1843,9 @@ FirMemory MemOp::getSummary() {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-  size_t groupID = 0;
+  uint32_t groupID = 0;
   if (auto gID = op.groupIDAttr())
-    groupID = gID.getInt();
+    groupID = gID.getUInt();
   StringAttr modName;
   if (op->hasAttr("modName"))
     modName = op->getAttrOfType<StringAttr>("modName");

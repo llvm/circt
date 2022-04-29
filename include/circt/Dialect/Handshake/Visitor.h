@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HANDSHAKE_VISITORS_H
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
