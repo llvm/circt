@@ -789,11 +789,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    if (src.getType().isa<AnalogType>())
-      builder->create<AttachOp>(ArrayRef<Value>{dest, src});
-    else {
-      mkConnect(builder, dest, src);
-    }
+    mkConnect(builder, dest, src);
   }
   return true;
 }
