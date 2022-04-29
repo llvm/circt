@@ -767,194 +767,77 @@ firrtl.circuit "TopLevel" {
     // CHECK:  %a_a_a = firrtl.wire
     // CHECK-NEXT:  %ax_a_a = firrtl.wire
     firrtl.connect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
-    firrtl.partialconnect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
     // a <= ax
-    // CHECK-NEXT: firrtl.strictconnect %a_a_a, %ax_a_a : !firrtl.uint<1>
-    // a <- ax
     // CHECK-NEXT: firrtl.strictconnect %a_a_a, %ax_a_a : !firrtl.uint<1>
     %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %1 = firrtl.subfield %ax(0) : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     firrtl.connect %0, %1 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
-    firrtl.partialconnect %0, %1 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     // a.a <= ax.a
     // CHECK: firrtl.strictconnect %a_a_a, %ax_a_a : !firrtl.uint<1>
-    // a.a <- ax.a
-    // CHECK-NEXT: firrtl.strictconnect %a_a_a, %ax_a_a : !firrtl.uint<1>
     %2 = firrtl.subfield %a(0) : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %3 = firrtl.subfield %2(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     %4 = firrtl.subfield %ax(0) : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %5 = firrtl.subfield %4(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %3, %5 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.partialconnect %3, %5 : !firrtl.uint<1>, !firrtl.uint<1>
     // a.a.a <= ax.a.a
     // CHECK: firrtl.connect %a_a_a, %ax_a_a
-    // a.a.a <- ax.a.a
-    // CHECK-NEXT: firrtl.strictconnect %a_a_a, %ax_a_a
     %b = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
     %bx = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
     // CHECK %b_a_a = firrtl.wire
     // CHECK %bx_a_a = firrtl.wire
     firrtl.connect %b, %bx : !firrtl.bundle<a: bundle<a flip: uint<1>>>, !firrtl.bundle<a: bundle<a flip: uint<1>>>
-    firrtl.partialconnect %b, %bx : !firrtl.bundle<a: bundle<a flip: uint<1>>>, !firrtl.bundle<a: bundle<a flip: uint<1>>>
     // b <= bx
-    // CHECK: firrtl.strictconnect %bx_a_a, %b_a_a
-    // b <- bx
     // CHECK: firrtl.strictconnect %bx_a_a, %b_a_a
     %6 = firrtl.subfield %b(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     %7 = firrtl.subfield %bx(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     firrtl.connect %6, %7 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
-    firrtl.partialconnect %6, %7 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     // b.a <= bx.a
-    // CHECK: firrtl.strictconnect %bx_a_a, %b_a_a
-    // b.a <- bx.a
     // CHECK: firrtl.strictconnect %bx_a_a, %b_a_a
     %8 = firrtl.subfield %b(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     %9 = firrtl.subfield %8(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
     %10 = firrtl.subfield %bx(0) : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     %11 = firrtl.subfield %10(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %9, %11 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.partialconnect %9, %11 : !firrtl.uint<1>, !firrtl.uint<1>
     // b.a.a <= bx.a.a
     // CHECK: firrtl.connect %b_a_a, %bx_a_a
-    // b.a.a <- bx.a.a
-    // CHECK: firrtl.strictconnect %b_a_a, %bx_a_a
     %c = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
     %cx = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
     // CHECK: %c_a_a = firrtl.wire : !firrtl.uint<1>
     // CHECK-NEXT: %cx_a_a = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %c, %cx : !firrtl.bundle<a flip: bundle<a: uint<1>>>, !firrtl.bundle<a flip: bundle<a: uint<1>>>
-    firrtl.partialconnect %c, %cx : !firrtl.bundle<a flip: bundle<a: uint<1>>>, !firrtl.bundle<a flip: bundle<a: uint<1>>>
     // c <= cx
-    // CHECK: firrtl.strictconnect %cx_a_a, %c_a_a
-    // c <- cx
     // CHECK: firrtl.strictconnect %cx_a_a, %c_a_a
     %12 = firrtl.subfield %c(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %13 = firrtl.subfield %cx(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     firrtl.connect %12, %13 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
-    firrtl.partialconnect %12, %13 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     // c.a <= cx.a
-    // CHECK: firrtl.strictconnect %c_a_a, %cx_a_a
-    // c.a <- cx.a
     // CHECK: firrtl.strictconnect %c_a_a, %cx_a_a
     %14 = firrtl.subfield %c(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %15 = firrtl.subfield %14(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     %16 = firrtl.subfield %cx(0) : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %17 = firrtl.subfield %16(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %15, %17 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.partialconnect %15, %17 : !firrtl.uint<1>, !firrtl.uint<1>
     // c.a.a <= cx.a.a
     // CHECK: firrtl.connect %c_a_a, %cx_a_a
-    // c.a.a <- cx.a.a
-    // CHECK: firrtl.strictconnect %c_a_a, %cx_a_a
     %d = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     %dx = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     // CHECK: %d_a_a = firrtl.wire : !firrtl.uint<1>
     // CHECK-NEXT: %dx_a_a = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %d, %dx : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
-    firrtl.partialconnect %d, %dx : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     // d <= dx
-    // CHECK: firrtl.strictconnect %d_a_a, %dx_a_a
-    // d <- dx
     // CHECK: firrtl.strictconnect %d_a_a, %dx_a_a
     %18 = firrtl.subfield %d(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     %19 = firrtl.subfield %dx(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     firrtl.connect %18, %19 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
-    firrtl.partialconnect %18, %19 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     // d.a <= dx.a
-    // CHECK: firrtl.strictconnect %dx_a_a, %d_a_a
-    // d.a <- dx.a
     // CHECK: firrtl.strictconnect %dx_a_a, %d_a_a
     %20 = firrtl.subfield %d(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     %21 = firrtl.subfield %20(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
     %22 = firrtl.subfield %dx(0) : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
     %23 = firrtl.subfield %22(0) : (!firrtl.bundle<a flip: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %21, %23 : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.partialconnect %21, %23 : !firrtl.uint<1>, !firrtl.uint<1>
     // d.a.a <= dx.a.a
     // CHECK: firrtl.connect %d_a_a, %dx_a_a
-    // d.a.a <- dx.a.a
-    // CHECK: firrtl.strictconnect %d_a_a, %dx_a_a
-  }
-
-// Test corner cases of partial connect semantics.
- // CHECK-LABEL: firrtl.module private @PartialConnectEdgeCases
-  firrtl.module private @PartialConnectEdgeCases() {
-    // Only matching fields are connected.
-    %a = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>>
-    %b = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<1>>
-    firrtl.partialconnect %a, %b : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
-    // CHECK: firrtl.strictconnect %a_a, %b_a
-    // CHECK-NEXT: firrtl.strictconnect %a_b, %b_b
-    // CHECK-NOT: firrtl.strictconnect %a_
-    // CHECK-NOT: firrtl.connect %a_
-
-    firrtl.partialconnect %b, %a : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>>
-    // CHECK: firrtl.strictconnect %b_a, %a_a
-    // CHECK-NEXT: firrtl.strictconnect %b_b, %a_b
-    // CHECK-NOT: firrtl.connect %b_
-    // CHECK-NOT: firrtl.strictconnect %b_
-
-    // Only the first 'n' elements in a vector are connected.
-    %c = firrtl.wire : !firrtl.vector<uint<1>, 2>
-    %d = firrtl.wire : !firrtl.vector<uint<1>, 3>
-    firrtl.partialconnect %c, %d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 3>
-    // CHECK: firrtl.strictconnect %c_0, %d_0
-    // CHECK-NEXT: firrtl.strictconnect %c_1, %d_1
-    // CHECK-NOT: firrtl.connect %c_
-    // CHECK-NOT: firrtl.strictconnect %c_
-
-    firrtl.partialconnect %d, %c : !firrtl.vector<uint<1>, 3>, !firrtl.vector<uint<1>, 2>
-    // CHECK: firrtl.strictconnect %d_0, %c_0
-    // CHECK-NEXT: firrtl.strictconnect %d_1, %c_1
-    // CHECK-NOT: firrtl.connect %d_
-    // CHECK-NOT: firrtl.strictconnect %d_
-  }
-
-
-// Test partial connect truncation.
- // CHECK-LABEL: firrtl.module private @PartialConnectTruncation
-  firrtl.module private @PartialConnectTruncation() {
-    // It should not truncate when they are the same
-    %a = firrtl.wire : !firrtl.uint<0>
-    %b = firrtl.wire : !firrtl.uint<0>
-    firrtl.partialconnect %a, %b : !firrtl.uint<0>, !firrtl.uint<0>
-    // CHECK: firrtl.strictconnect %a, %b : !firrtl.uint<0>
-
-    // It should truncate the larger source.
-    %c = firrtl.wire : !firrtl.uint<2>
-    %d = firrtl.wire : !firrtl.uint<3>
-    firrtl.partialconnect %c, %d : !firrtl.uint<2>, !firrtl.uint<3>
-    // CHECK: [[TAIL:%.*]] = firrtl.tail %d, 1 : (!firrtl.uint<3>) -> !firrtl.uint<2>
-    // CHECK: firrtl.strictconnect %c, [[TAIL]] : !firrtl.uint<2>
-
-    // It should truncate and cast the larger source.
-    %e = firrtl.wire : !firrtl.sint<2>
-    %f = firrtl.wire : !firrtl.sint<3>
-    firrtl.partialconnect %e, %f : !firrtl.sint<2>, !firrtl.sint<3>
-    // CHECK: [[TAIL:%.*]] = firrtl.tail %f, 1 : (!firrtl.sint<3>) -> !firrtl.uint<2>
-    // CHECK: [[CAST:%.*]] = firrtl.asSInt [[TAIL]] : (!firrtl.uint<2>) -> !firrtl.sint<2>
-    // CHECK: firrtl.strictconnect %e, [[CAST]] : !firrtl.sint<2>
-  }
-
-// Bug: must strip the flip type from the LHS of a value.
- // CHECK-LABEL: firrtl.module private @PartialConnectLHSFlip
-  firrtl.module private @PartialConnectLHSFlip(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) { }
-   // CHECK-LABEL: firrtl.module private @FooFlipType
-  firrtl.module private @FooFlipType(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) {
-    %mgmt_a = firrtl.instance mgmt @PartialConnectLHSFlip(in a: !firrtl.bundle<b: bundle<c flip: uint<2>>>)
-    %0 = firrtl.subfield %mgmt_a(0) : (!firrtl.bundle<b: bundle<c flip: uint<2>>>) -> !firrtl.bundle<c flip: uint<2>>
-    %1 = firrtl.subfield %0(0) : (!firrtl.bundle<c flip: uint<2>>) -> !firrtl.uint<2>
-    // CHECK: firrtl.strictconnect %a_b_c, %mgmt_a_b_c : !firrtl.uint<2>
-    firrtl.partialconnect %mgmt_a, %a : !firrtl.bundle<b: bundle<c flip: uint<2>>>, !firrtl.bundle<b: bundle<c flip: uint<2>>>
-  }
-
-// Test partial connect with analogs are transformed to attaches.
-  firrtl.module private @PartialConnectAnalogs() {
-    // CHECK-LABEL: @PartialConnectAnalogs
-    %a = firrtl.wire : !firrtl.bundle<a: analog<1>>
-    %b = firrtl.wire : !firrtl.bundle<a: analog<1>>
-    firrtl.partialconnect %a, %b : !firrtl.bundle<a: analog<1>>, !firrtl.bundle<a: analog<1>>
-    // CHECK: firrtl.attach %a_a, %b_a : !firrtl.analog<1>, !firrtl.analog<1>
   }
 
 // Test that a vector of bundles with a write works.
@@ -999,29 +882,6 @@ firrtl.circuit "TopLevel" {
     firrtl.module private @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> [#firrtl.subAnno<fieldID = 1, {a}>]) {}
     // CHECK-LABEL: firrtl.module private @PortBundle
     // CHECK-COUNT-1: [{a}]
-
-// Test that a truncating connect emitted during lower types correctly adds an
-// AsPassive cast on a FlipType originating from an instance.
-//
-// See: https://github.com/llvm/circt/issues/1276
-
-  firrtl.extmodule @Bar2(in a: !firrtl.uint<2>)
-// CHECK-LABEL: firrtl.module private @TruncatingConnectWithFlip
-  firrtl.module private @TruncatingConnectWithFlip() {
-    // CHECK: %[[a_b:.+]] = firrtl.wire
-    %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
-    // CHECK-NEXT: %bar_a = firrtl.instance bar @Bar
-    %bar_a = firrtl.instance bar @Bar2(in a: !firrtl.uint<2>)
-    // CHECK-NEXT: %invalid_ui2 = firrtl.invalidvalue
-    %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.connect %bar_a, %invalid_ui2
-    firrtl.connect %bar_a, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
-    // CHECK: %[[bar_a_tail:.+]] = firrtl.tail %bar_a, 1
-    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<b: uint<1>>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %[[a_b]], %[[bar_a_tail]]
-    firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.uint<2>
-  }
-
 
 // circuit Foo:
 //   module Foo:
@@ -1252,30 +1112,11 @@ firrtl.circuit "TopLevel" {
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: bundle<baz: uint<8>, qux: uint<8>>, wmode: uint<1>, wdata: bundle<baz: uint<8>, qux: uint<8>>, wmask: bundle<baz: uint<1>, qux: uint<1>>>
   }
 
-// Test that partial connects can extend
-// CHECK-LABEL: firrtl.module private @TLBBB
-firrtl.module private @TLBBB() {
-  %invalid_ui9 = firrtl.invalidvalue : !firrtl.uint<9>
-  %in_bits = firrtl.wire  : !firrtl.uint<9>
-  firrtl.connect %in_bits, %invalid_ui9 : !firrtl.uint<9>, !firrtl.uint<9>
-  %out0_bits = firrtl.wire  : !firrtl.uint<128>
-// CHECK: firrtl.strictconnect %out0_bits
-  firrtl.partialconnect %out0_bits, %in_bits : !firrtl.uint<128>, !firrtl.uint<9>
-}
-
 // This simply has to not crash
 // CHECK-LABEL: firrtl.module private @vecmem
 // FLATTEN-LABEL: firrtl.module private @vecmem
 firrtl.module private @vecmem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
   %vmem_MPORT, %vmem_rdwrPort = firrtl.mem Undefined  {depth = 32 : i64, name = "vmem", portNames = ["MPORT", "rdwrPort"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: vector<uint<17>, 8>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: vector<uint<17>, 8>, wmode: uint<1>, wdata: vector<uint<17>, 8>, wmask: vector<uint<1>, 8>>
-}
-
-// CHECK-LABEL: firrtl.module private @bofa
-firrtl.module private @bofa(out %auto: !firrtl.bundle<io_out: bundle<foo: bundle<bar: analog<1>>>>) {
-  %0 = firrtl.subfield %auto(0) : (!firrtl.bundle<io_out: bundle<foo: bundle<bar: analog<1>>>>) -> !firrtl.bundle<foo: bundle<bar: analog<1>>>
-  %io = firrtl.wire  : !firrtl.bundle<foo: bundle<bar: analog<1>>>
-  firrtl.partialconnect %0, %io : !firrtl.bundle<foo: bundle<bar: analog<1>>>, !firrtl.bundle<foo: bundle<bar: analog<1>>>
-// CHECK: firrtl.attach %auto_io_out_foo_bar, %io_foo_bar
 }
 
 // Issue 1436
