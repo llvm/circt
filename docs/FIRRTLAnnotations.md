@@ -876,6 +876,90 @@ Example:
 }
 ```
 
+### Instance Extraction
+
+#### ExtractBlackBoxAnnotation
+
+| Property    | Type   | Description                                                                 |
+| --------    | ----   | -----------                                                                 |
+| class       | string | `sifive.enterprise.firrtl.ExtractBlackBoxAnnotation`                        |
+| target      | string | Reference target to the instance to be extracted                            |
+| filename    | string | Output file to be filled with the applied hierarchy changes                 |
+| prefix      | string | Prefix for the extracted instance                                           |
+| dest        | string | Name of an optional wrapper module under which to group extracted instances |
+
+This annotation causes the `ExtractInstances` pass to move the annotated
+instance, or all instances if the annotation is on a module, upwards in the
+hierarchy. If the `dest` field is present and non-empty, the instances are
+placed in a module underneath the DUT (marked by `MarkDUTAnnotation`) with the
+name provided in that field. If the `dest` field is empty, the instances are
+extracted out of the DUT, such that the DUT gains additional ports that
+correspond to the extracted instance ports. This allows the DUT to be
+instantiated and custom implementations for the extracted instances to be
+provided at the instantiation site. Instances are never extracted out of the
+root module of the design.
+
+Applies to modules and instances.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation",
+  "target": "~TestHarness|MyBlackBox",
+  "filename": "BlackBoxes.txt",
+  "prefix": "bb",
+  "dest": "BlackBoxes" // optional
+}
+```
+
+#### ExtractClockGatesFileAnnotation
+
+| Property    | Type   | Description                                                                 |
+| --------    | ----   | -----------                                                                 |
+| class       | string | `sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation`                  |
+| filename    | string | Output file to be filled with the applied hierarchy changes                 |
+| group       | string | Name of an optional wrapper module under which to group extracted instances |
+
+This annotation causes the `ExtractInstances` pass to move instances of
+extmodules with defname `EICG_wrapper` upwards in the hierarchy, either out of
+the DUT if `group` is omitted or empty, or into a submodule of the DUT with the
+name given in `group`. The wiring prefix is hard-coded to `clock_gate`.
+
+Applies to the circuit.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation",
+  "filename": "ClockGates.txt",
+  "group": "ClockGates" // optional
+}
+```
+
+#### ExtractSeqMemsFileAnnotation
+
+| Property    | Type   | Description                                                                 |
+| --------    | ----   | -----------                                                                 |
+| class       | string | `sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation`                  |
+| filename    | string | Output file to be filled with the applied hierarchy changes                 |
+| group       | string | Name of an optional wrapper module under which to group extracted instances |
+
+This annotation causes the `ExtractInstances` pass to move memory instances
+upwards in the hierarchy, either out of the DUT if `group` is omitted or empty,
+or into a submodule of the DUT with the name given in `group`. The wiring
+prefix is hard-coded to `mem_wiring`.
+
+Applies to the circuit.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation",
+  "filename": "SeqMems.txt",
+  "group": "SeqMems" // optional
+}
+```
+
 ## FIRRTL specific attributes applied to HW Modules
 
 ### Design Under Test
