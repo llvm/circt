@@ -759,7 +759,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     // Parse the port name.
     if (hasSSAIdentifiers) {
       OpAsmParser::UnresolvedOperand arg;
-      if (parser.parseRegionArgument(arg))
+      if (parser.parseOperand(arg, false))
         return failure();
       entryArgs.push_back(arg);
       // The name of an argument is of the form "%42" or "%id", and since
@@ -1881,17 +1881,6 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
-
-/// Infer the return types of this operation.
-LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
-                                       Optional<Location> loc,
-                                       ValueRange operands,
-                                       DictionaryAttr attrs,
-                                       mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &results) {
-  results.push_back(operands[0].getType());
-  return success();
-}
 
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());

@@ -501,10 +501,14 @@ parseArgumentList(OpAsmParser &parser,
   auto parseElt = [&]() -> ParseResult {
     OpAsmParser::UnresolvedOperand argument;
     Type argType;
-    if (succeeded(parser.parseOptionalRegionArgument(argument))) {
-      if (!argument.name.empty() && succeeded(parser.parseColonType(argType))) {
-        args.push_back(argument);
-        argTypes.push_back(argType);
+    auto optArg = parser.parseOptionalOperand(argument, false);
+    if (optArg.hasValue()) {
+      if (succeeded(optArg.getValue())) {
+        if (!argument.name.empty() &&
+            succeeded(parser.parseColonType(argType))) {
+          args.push_back(argument);
+          argTypes.push_back(argType);
+        }
       }
     }
     return success();
@@ -726,22 +730,24 @@ static ParseResult parseProcArgumentList(
     // Parse argument name if present.
     OpAsmParser::UnresolvedOperand argument;
     Type argumentType;
-    if (succeeded(parser.parseOptionalRegionArgument(argument)) &&
-        !argument.name.empty()) {
-      // Reject this if the preceding argument was missing a name.
-      if (argNames.empty() && !argTypes.empty())
-        return parser.emitError(loc, "expected type instead of SSA identifier");
-      argNames.push_back(argument);
+    auto optArg = parser.parseOptionalOperand(argument, false);
+    if (optArg.hasValue()) {
+      if (succeeded(optArg.getValue())) {
+        // Reject this if the preceding argument was missing a name.
+        if (argNames.empty() && !argTypes.empty())
+          return parser.emitError(loc,
+                                  "expected type instead of SSA identifier");
+        argNames.push_back(argument);
 
-      if (parser.parseColonType(argumentType))
+        if (parser.parseColonType(argumentType))
+          return failure();
+      } else if (!argNames.empty()) {
+        // Reject this if the preceding argument had a name.
+        return parser.emitError(loc, "expected SSA identifier");
+      } else if (parser.parseType(argumentType)) {
         return failure();
-    } else if (!argNames.empty()) {
-      // Reject this if the preceding argument had a name.
-      return parser.emitError(loc, "expected SSA identifier");
-    } else if (parser.parseType(argumentType)) {
-      return failure();
+      }
     }
-
     // Add the argument type.
     argTypes.push_back(argumentType);
 
