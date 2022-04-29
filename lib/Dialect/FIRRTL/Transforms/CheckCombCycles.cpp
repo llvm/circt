@@ -603,8 +603,7 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
   std::queue<Node> que;
   que.push(start);
   while (!que.empty()) {
-    auto current = que.front();
-    que.pop();
+    Node current = que.front();
     if (current == end)
       break;
     for (auto child :
@@ -616,6 +615,8 @@ void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
       previousNode.insert({child, current});
       que.push(child);
     }
+
+    que.pop();
   }
 
   SmallVector<Node> path;
