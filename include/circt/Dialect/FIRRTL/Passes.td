@@ -134,6 +134,15 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
+  let summary = "Flatten aggregate memory data to a UInt";
+  let description = [{
+    This pass flattens the aggregate data of memory into a UInt, and inserts
+    appropriate bitcasts to access the data.
+  }];
+  let constructor = "circt::firrtl::createFlattenMemoryPass()";
+}
+
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
   let summary = "Wires test enables to clock gates for DFT infrastructure";
   let description = [{
@@ -362,9 +371,12 @@ def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
 }
 
 def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
-                                      "FModuleOp"> {
+                                      "firrtl::CircuitOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
+  let options = [Option<"outputFilename", "file", "std::string", "",
+      "Output file for the JSON-serialized OMIR data">];
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
@@ -372,6 +384,10 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let description = [{
     This pass checks combinational cycles in the IR and emit errors.
   }];
+  let options = [
+    Option<"printSimpleCycle", "print-simple-cycle", "bool", "true",
+      "Print a simple cycle instead of printing all operations in SCC">
+  ];
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 

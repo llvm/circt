@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
+  FlattenMemory.cpp
   GrandCentral.cpp
   GrandCentralTaps.cpp
   GrandCentralSignalMappings.cpp

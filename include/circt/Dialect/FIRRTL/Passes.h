@@ -29,8 +29,7 @@ createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false);
 
 std::unique_ptr<mlir::Pass>
-createLowerFIRRTLTypesPass(bool replSeqMem = false,
-                           bool preserveAggregate = false,
+createLowerFIRRTLTypesPass(bool preserveAggregate = false,
                            bool preservePublicTypes = true);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
@@ -46,6 +45,7 @@ std::unique_ptr<mlir::Pass> createInlinerPass();
 
 std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
+
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass>
@@ -60,6 +60,8 @@ std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createEmitOMIRPass(StringRef outputFilename = "");
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
+
+std::unique_ptr<mlir::Pass> createFlattenMemoryPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
 
@@ -78,7 +80,10 @@ std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
-std::unique_ptr<mlir::Pass> createGrandCentralSignalMappingsPass();
+std::unique_ptr<mlir::Pass>
+createGrandCentralSignalMappingsPass(StringRef outputFilename = "",
+                                     StringRef markDut = "",
+                                     StringRef Prefix = "");
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 

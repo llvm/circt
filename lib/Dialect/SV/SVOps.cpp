@@ -1188,13 +1188,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   return success();
 }
 
-/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
-LogicalResult WireOp::verify() {
-  if (!isa<hw::HWModuleOp>((*this)->getParentOp()))
-    return emitError("sv.wire must not be in an always or initial block");
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // ReadInOutOp
 //===----------------------------------------------------------------------===//

@@ -18,6 +18,7 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -1060,7 +1061,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Type width = mul.getResult().getType(), one = rewriter.getI1Type();
   auto mulPipe =
       getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
-          rewriter, loc, {width, width, one, one, one, width, one});
+          rewriter, loc, {one, one, one, width, width, width, one});
   return buildLibraryBinaryPipeOp<calyx::MultPipeLibOp>(rewriter, mul, mulPipe,
                                                         /*out=*/mulPipe.out());
 }
@@ -1071,7 +1072,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Type width = div.getResult().getType(), one = rewriter.getI1Type();
   auto divPipe =
       getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
-          rewriter, loc, {width, width, one, one, one, width, width, one});
+          rewriter, loc, {one, one, one, width, width, width, width, one});
   return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
       rewriter, div, divPipe,
       /*out=*/divPipe.out_quotient());
@@ -1083,7 +1084,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Type width = rem.getResult().getType(), one = rewriter.getI1Type();
   auto remPipe =
       getComponentState().getNewLibraryOpInstance<calyx::DivPipeLibOp>(
-          rewriter, loc, {width, width, one, one, one, width, width, one});
+          rewriter, loc, {one, one, one, width, width, width, width, one});
   return buildLibraryBinaryPipeOp<calyx::DivPipeLibOp>(
       rewriter, rem, remPipe,
       /*out=*/remPipe.out_remainder());
@@ -2556,7 +2557,7 @@ public:
     GreedyRewriteConfig config;
     config.enableRegionSimplification = false;
     if (runOnce)
-      config.maxIterations = 1;
+      config.maxIterations = 0;
 
     /// Can't return applyPatternsAndFoldGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,

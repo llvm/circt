@@ -785,6 +785,26 @@ struct DetachSubaccesses : public Reduction {
   llvm::DenseSet<Operation *> opsToErase;
 };
 
+/// This reduction removes symbols on node ops. Name preservation creates a lot
+/// of nodes ops with symbols to keep name information but it also prevents
+/// normal canonicalizations.
+struct NodeSymbolRemover : public Reduction {
+
+  bool match(Operation *op) override {
+    if (auto nodeOp = dyn_cast<firrtl::NodeOp>(op))
+      return nodeOp.inner_sym() && !nodeOp.inner_sym().getValue().empty();
+    return false;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    auto nodeOp = cast<firrtl::NodeOp>(op);
+    nodeOp.removeInner_symAttr();
+    return success();
+  }
+
+  std::string getName() const override { return "node-symbol-remover"; }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -824,6 +844,7 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(
       context, firrtl::createRemoveUnusedPortsPass(/*ignoreDontTouch=*/true)));
   add(std::make_unique<PassReduction>(context, createCSEPass()));
+  add(std::make_unique<NodeSymbolRemover>());
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<Constantifier>());
   add(std::make_unique<OperandForwarder<0>>());

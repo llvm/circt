@@ -196,7 +196,7 @@ def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 def MultPipeLibOp : ArithBinaryLibraryOp<"mult_pipe", [
     SameTypeConstraint<"left", "out">
   ]> {
-  let results = (outs AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
+  let results = (outs I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right, AnyType:$out, I1:$done);
 }
 
 def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
@@ -204,12 +204,13 @@ def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
     SameTypeConstraint<"right", "out_remainder">
   ]> {
   let results = (outs
-    AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset,
+    I1:$clk, I1:$reset, I1:$go, AnyType:$left, AnyType:$right,
     AnyType:$out_quotient, AnyType:$out_remainder, I1:$done
   );
 }
 
-class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [Combinational]> {
+class UnaryLibraryOp<string mnemonic, list<Trait> traits = []> :
+    CalyxLibraryOp<mnemonic, !listconcat(traits, [Combinational])> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
 }
 
@@ -222,3 +223,5 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
 }
 
 def NotLibOp  : UnaryLibraryOp<"not"> {}
+
+def WireLibOp : UnaryLibraryOp<"wire", [SameTypeConstraint<"in", "out">]> {}

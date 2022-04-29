@@ -62,20 +62,30 @@ void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
   std::map<FirMemory, StringAttr> memNameMap;
   auto *ctxt = circuitOp.getContext();
   auto modNameAttr = StringAttr::get(ctxt, "modName");
-  for (auto mod : circuitOp.getOps<FModuleOp>())
+  // This is a random number to start the groupIDs at, large enough to not
+  // conflict with existing IDs.
+  // TODO: Move this logic out of this pass.
+  uint32_t baseGroupID = std::numeric_limits<uint32_t>::max();
+  for (auto mod : circuitOp.getOps<FModuleOp>()) {
+    bool isTestHarness = !dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
+      if (isTestHarness)
+        memOp.groupIDAttr(IntegerAttr::get(
+            IntegerType::get(ctxt, 32, IntegerType::Unsigned), --baseGroupID));
+
       memOpList.push_back(memOp);
       auto firMem = memOp.getSummary();
       auto insert = memNameMap.find(firMem);
       if (insert == memNameMap.end()) {
         auto name = memOp->getAttrOfType<StringAttr>("name");
-        auto modName = circuitNamespace.newName(name.getValue() + "_ext");
+        auto modName = circuitNamespace.newName(name.getValue(), "_ext");
         name = StringAttr::get(ctxt, modName);
         memOp->setAttr(modNameAttr, name);
         memNameMap[firMem] = name;
       } else
         memOp->setAttr(modNameAttr, insert->second);
     }
+  }
 }
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
@@ -230,20 +240,18 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
   dutVerbatimOp->setAttr("output_file", fileAttr);
 
-  if (!seqMemConfStr.empty()) {
-    auto confVerbatimOp =
-        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
-    if (replSeqMemFile.empty()) {
-      circuitOp->emitError("metadata emission failed, the option "
-                           "`-repl-seq-mem-file=<filename>` is mandatory for "
-                           "specifying a valid seq mem metadata file");
-      return failure();
-    }
-
-    auto fileAttr = hw::OutputFileAttr::getFromFilename(
-        context, replSeqMemFile, /*excludeFromFilelist=*/true);
-    confVerbatimOp->setAttr("output_file", fileAttr);
+  auto confVerbatimOp =
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
+  if (replSeqMemFile.empty()) {
+    circuitOp->emitError("metadata emission failed, the option "
+                         "`-repl-seq-mem-file=<filename>` is mandatory for "
+                         "specifying a valid seq mem metadata file");
+    return failure();
   }
+
+  fileAttr = hw::OutputFileAttr::getFromFilename(context, replSeqMemFile,
+                                                 /*excludeFromFilelist=*/true);
+  confVerbatimOp->setAttr("output_file", fileAttr);
 
   return success();
 }
@@ -363,8 +371,7 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
       "freechips.rocketchip.util.BlackBoxedROM", "chisel3.shim.CloneModule",
       "sifive.enterprise.grandcentral.MemTap"};
   std::array<StringRef, 6> blackListedAnnos = {
-      "firrtl.transforms.BlackBox",
-      "firrtl.transforms.BlackBoxInlineAnno",
+      "firrtl.transforms.BlackBox", "firrtl.transforms.BlackBoxInlineAnno",
       "sifive.enterprise.grandcentral.DataTapsAnnotation",
       "sifive.enterprise.grandcentral.MemTapAnnotation",
       "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"};
@@ -463,8 +470,6 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   auto circuitOp = getOperation();
   auto *body = circuitOp.getBody();
 
-  renameMemory(circuitOp);
-
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
     return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
@@ -477,6 +482,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
+  renameMemory(circuitOp);
+
   if (failed(emitRetimeModulesMetadata()) ||
       failed(emitSitestBlackboxMetadata()) || failed(emitMemoryMetadata()))
     return signalPassFailure();

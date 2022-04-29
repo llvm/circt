@@ -796,7 +796,6 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
-  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -823,8 +822,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> resultNames;
   if (parseOptionalParameters(parser, parameters) ||
       module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
-          resultTypes, resultAttrs, resultNames) ||
+          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
+          resultAttrs, resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();

@@ -434,9 +434,7 @@ private:
                                      const DenseSet<Attribute> &localSymbols,
                                      ModuleNamespace &moduleNamespace);
 
-  /// Returns true if the operation is annotated to be flattened.  This removes
-  /// the flattened annotation (hence, this should only be called once on a
-  /// module).
+  /// Returns true if the operation is annotated to be flattened.
   bool shouldFlatten(Operation *op);
 
   /// Returns true if the operation is annotated to be inlined.
@@ -515,6 +513,7 @@ bool Inliner::doesNLAMatchCurrentPath(NonLocalAnchor nla) {
 /// If this operation or any child operation has a name, add the prefix to that
 /// operation's name.  If the operation has any inner symbols, make sure that
 /// these are unique in the namespace.
+// NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::rename(StringRef prefix, Operation *op,
                      ModuleNamespace &moduleNamespace) {
   // Add a prefix to things that has a "name" attribute.  We don't prefix
@@ -655,15 +654,14 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet::removeAnnotations(op, [](Annotation a) {
-    return a.isClass("firrtl.transforms.FlattenAnnotation");
-  });
+  return AnnotationSet(op).hasAnnotation("firrtl.transforms.FlattenAnnotation");
 }
 
 bool Inliner::shouldInline(Operation *op) {
   return AnnotationSet(op).hasAnnotation("firrtl.passes.InlineAnnotation");
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
                           BlockAndValueMapping &mapper, FModuleOp parent,
                           DenseSet<Attribute> localSymbols,
@@ -763,6 +761,7 @@ void Inliner::flattenInstances(FModuleOp module) {
   }
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
                          BlockAndValueMapping &mapper, FModuleOp parent,
                          DenseMap<Attribute, Attribute> &symbolRenames,
@@ -952,14 +951,14 @@ void Inliner::run() {
     auto module = worklist.pop_back_val();
     if (shouldFlatten(module)) {
       flattenInstances(module);
-      continue;
+      // Delete the flatten annotation, the transform was performed.
+      // Even if visited again in our walk (for inlining),
+      // we've just flattened it and so the annotation is no longer needed.
+      AnnotationSet::removeAnnotations(module,
+                                       "firrtl.transforms.FlattenAnnotation");
+    } else {
+      inlineInstances(module);
     }
-    inlineInstances(module);
-
-    // Delete the flatten annotations. Any module with the inline annotation
-    // will be deleted, as there won't be any remaining instances of it.
-    AnnotationSet(module).removeAnnotationsWithClass(
-        "firrtl.transforms.FlattenAnnotation");
   }
 
   // Delete all unreferenced modules.  Mark any NLAs that originate from dead
@@ -971,6 +970,17 @@ void Inliner::run() {
     for (auto nla : rootMap[mod.moduleNameAttr()])
       nlaMap[nla].markDead();
     mod.erase();
+  }
+
+  // Remove leftover inline annotations, and check no flatten annotations
+  // remain as they should have been processed and removed.
+  for (auto mod : circuit.getBody()->getOps<FModuleLike>()) {
+    if (shouldInline(mod)) {
+      assert(cast<hw::HWModuleLike>(*mod).isPublic() &&
+             "non-public module with inline annotation still present");
+      AnnotationSet::removeAnnotations(mod, "firrtl.passes.InlineAnnotation");
+    }
+    assert(!shouldFlatten(mod) && "flatten annotation found on live module");
   }
 
   LLVM_DEBUG({

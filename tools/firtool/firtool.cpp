@@ -299,6 +299,15 @@ static cl::opt<bool> stripDebugInfo(
     cl::desc("Disable source locator information in output Verilog"),
     cl::init(false));
 
+static cl::opt<std::string>
+    sigmapPrefix("sigmap-prefix",
+                 cl::desc("prefix for signal mapping module dut path"),
+                 cl::init(""));
+static cl::opt<std::string>
+    sigmapDut("sigmap-dut",
+              cl::desc("dut for signal mapping target correction"),
+              cl::init(""));
+
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
@@ -457,11 +466,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
+  if (replSeqMem)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createFlattenMemoryPass());
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
-        replSeqMem, preserveAggregate, preservePublicTypes));
+        preserveAggregate, preservePublicTypes));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
@@ -500,8 +512,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
     circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
-    circuitPM.nest<firrtl::FModuleOp>().addPass(
-        firrtl::createGrandCentralSignalMappingsPass());
+    circuitPM.addPass(firrtl::createGrandCentralSignalMappingsPass(
+        outputFilename, sigmapDut, sigmapPrefix));
   }
 
   // Read black box source files into the IR.
@@ -574,6 +586,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputIRVerilog) {
     PassManager exportPm(&context);
     exportPm.enableTiming(ts);
+    applyPassManagerCLOptions(exportPm);
     if (verbosePassExecutions)
       exportPm.addInstrumentation(
           std::make_unique<FirtoolPassInstrumentation>());

@@ -17,6 +17,7 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/SmallSet.h"
 #include <variant>
 
 using namespace circt;
@@ -206,6 +207,8 @@ public:
     return *this;
   }
 
+  unsigned getPortNumber() const { return *portIt; }
+
 private:
   InstanceOp instance;
   SmallVectorImpl<size_t>::iterator portEnd;
@@ -264,6 +267,7 @@ public:
           (portKind == MemOp::PortKind::ReadWrite &&
            index == (unsigned)ReadWritePortSubfield::rdata)) {
         child = ChildIterator(currentSubfield.result());
+        dataPort = currentSubfield.result();
         return;
       }
     }
@@ -276,6 +280,11 @@ public:
       child = ChildIterator();
     return *this;
   }
+
+  Value getDataPort() { return dataPort; }
+
+private:
+  Value dataPort;
 };
 } // namespace
 
@@ -372,6 +381,8 @@ public:
     }
   }
 
+  const variant_iterator &getIteratorImpl() const { return impl; }
+
   Node operator*() {
     switch (impl.index()) {
     case 0:
@@ -463,6 +474,111 @@ struct GraphTraits<Node> {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+using SCCIterator = llvm::scc_iterator<Node>;
+using GT = llvm::GraphTraits<Node>;
+
+// Sample a cycle from SCC.
+SmallVector<Node> sampleCycle(SCCIterator &scc) {
+  llvm::SmallDenseSet<Node, 4> sccNodes;
+  for (auto node : *scc)
+    sccNodes.insert(node);
+
+  auto current = *(*scc).begin();
+  SmallVector<Node> path;
+  SmallDenseMap<Node, unsigned> visitOrder;
+  while (true) {
+    for (auto child :
+         llvm::make_range(GT::child_begin(current), GT::child_end(current))) {
+      // If the child is out of SCC, we don't explore.
+      if (!sccNodes.contains(child))
+        continue;
+
+      auto it = visitOrder.find(child);
+      // If the child is visited before, path[visitedOrder[c]] ... path.end()
+      // forms a cycle.
+      if (it != visitOrder.end())
+        return SmallVector<Node>(path.begin() + it->second, path.end());
+
+      visitOrder.insert({child, path.size()});
+      path.push_back(child);
+      current = child;
+      break;
+    }
+  }
+  llvm_unreachable("a cycle must be found in SCC");
+}
+
+void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
+                     mlir::InFlightDiagnostic &diag) {
+  // Sample a cycle to print.
+  SmallVector<Node> cycle = sampleCycle(scc);
+  unsigned cycleSize = cycle.size();
+
+  // NOTE: We visit the start element twice to explicitly indicate the path
+  // forms a cycle.
+  for (unsigned i = 0, e = cycleSize + 1; i < e; ++i) {
+    Node current = cycle[i % cycleSize];
+    bool lastNode = i == cycleSize;
+    auto attachInfo = [&]() -> mlir::Diagnostic & {
+      return diag.attachNote(current.value.getLoc())
+             << module.getName().str() << ".";
+    };
+
+    // If the current value is port, emit its name.
+    if (auto arg = current.value.dyn_cast<BlockArgument>()) {
+      attachInfo() << module.getPortName(arg.getArgNumber());
+      continue;
+    }
+
+    TypeSwitch<Operation *>(current.value.getDefiningOp())
+        .Case<WireOp, RegOp, RegResetOp>(
+            // For operations which declare signals, we simply print signal
+            // names.
+            [&](auto op) { attachInfo() << op.name(); })
+        .Case<InstanceOp, SubfieldOp>([&](auto op) {
+          // If the op is InstanceOp or SubfieldOp, it is necessary to
+          // investigate the next value since output values do not expilicty
+          // appear in the cycle.
+          Node next = cycle[(i + 1) % cycleSize];
+          for (auto iter = GT::child_begin(current),
+                    end = GT::child_end(current);
+               iter != end; ++iter) {
+            if ((*iter).value != next.value)
+              continue;
+
+            auto iterImpl = iter.getIteratorImpl();
+            if (std::holds_alternative<InstanceNodeIterator>(iterImpl)) {
+              // Instance. Print names of input and output ports.
+              auto instance = current.value.getDefiningOp<InstanceOp>();
+              auto inputPort = current.value.cast<OpResult>().getResultNumber();
+              auto outputPort =
+                  std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
+              attachInfo() << instance.name() << "."
+                           << instance.getPortName(inputPort).str();
+              if (!lastNode)
+                attachInfo() << instance.name() << "."
+                             << instance.getPortName(outputPort).str();
+            } else if (std::holds_alternative<SubfieldNodeIterator>(iterImpl)) {
+              // SubfieldNodeIterator represents the connection between addr
+              // port and data port.
+              auto subfieldAddr = current.value.getDefiningOp<SubfieldOp>();
+              auto subfieldData =
+                  std::get<SubfieldNodeIterator>(iterImpl).getDataPort();
+
+              attachInfo() << getFieldName(getFieldRefFromValue(subfieldAddr));
+              if (!lastNode)
+                diag.attachNote(subfieldData.getLoc())
+                    << module.getName().str() << "."
+                    << getFieldName(getFieldRefFromValue(subfieldData));
+            }
+            break;
+          }
+        })
+        .Default([&](auto op) {});
+  }
+}
+
 /// This pass constructs a local graph for each module to detect combinational
 /// cycles. To capture the cross-module combinational cycles, this pass inlines
 /// the combinational paths between IOs of its subinstances into a subgraph and
@@ -485,7 +601,6 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         // FIRRTL module is an SSA region, all cycles must contain at least one
         // connect op. Thus we introduce a dummy source node to iterate on the
         // `dest`s of all connect ops in the module.
-        using SCCIterator = llvm::scc_iterator<Node>;
         for (auto combSCC = SCCIterator::begin(dummyNode); !combSCC.isAtEnd();
              ++combSCC) {
           if (combSCC.hasCycle()) {
@@ -493,9 +608,13 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
             auto errorDiag = mlir::emitError(
                 module.getLoc(),
                 "detected combinational cycle in a FIRRTL module");
-            for (auto node : *combSCC) {
-              auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
-              noteDiag << "this operation is part of the combinational cycle";
+            if (printSimpleCycle)
+              dumpSimpleCycle(combSCC, module, errorDiag);
+            else {
+              for (auto node : *combSCC) {
+                auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
+                noteDiag << "this operation is part of the combinational cycle";
+              }
             }
           }
         }

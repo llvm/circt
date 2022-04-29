@@ -117,6 +117,64 @@ firrtl.module private @test3() {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 
+// Test behavior inlining a flattened module into multiple parents
+firrtl.circuit "TestInliningFlatten" {
+firrtl.module @TestInliningFlatten() {
+  firrtl.instance test1 @test1()
+  firrtl.instance test2 @test2()
+}
+firrtl.module private @test1() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance fi @flatinline()
+}
+firrtl.module private @test2() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance fi @flatinline()
+}
+firrtl.module private @flatinline() attributes {annotations =
+        [{class = "firrtl.transforms.FlattenAnnotation"},
+         {class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance leaf @leaf()
+}
+firrtl.module private @leaf() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+}
+}
+// CHECK-LABEL: firrtl.circuit "TestInliningFlatten"
+// CHECK-NEXT:    firrtl.module @TestInliningFlatten
+// inlining a flattened module should not contain 'instance's:
+// CHECK:       firrtl.module private @test1()
+// CHECK-NOT:     firrtl.instance
+// inlining a flattened module should not contain 'instance's:
+// CHECK:       firrtl.module private @test2()
+// CHECK-NOT:     firrtl.instance
+// These should be removed
+// CHECK-NOT:   @flatinline
+// CHECK-NOT:   @leaf
+
+// Test behavior retaining public modules but not their annotations
+firrtl.circuit "TestPubAnno" {
+firrtl.module @TestPubAnno() {
+  firrtl.instance fi @flatinline()
+}
+firrtl.module @flatinline() attributes {annotations =
+        [{class = "firrtl.transforms.FlattenAnnotation"},
+         {class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance leaf @leaf()
+}
+firrtl.module private @leaf() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+}
+}
+// CHECK-LABEL: firrtl.circuit "TestPubAnno"
+// CHECK-NEXT:    firrtl.module @TestPubAnno
+// CHECK-NOT: annotation
+// This is preserved, public
+// CHECK:         firrtl.module @flatinline
+// CHECK-NOT: annotation
+// CHECK-NOT: @leaf
 
 // This is testing that connects are properly replaced when inlining. This is
 // also testing that the deep clone and remapping values is working correctly.

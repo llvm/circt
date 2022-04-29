@@ -385,7 +385,6 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
-  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   auto &builder = parser.getBuilder();
 
@@ -405,8 +404,8 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
   if (hw::module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
-          resultTypes, resultAttrs, resultNames))
+          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
+          resultAttrs, resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -634,7 +633,6 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
-  SmallVector<Location, 4> argLocs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -650,8 +648,8 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
   SmallVector<Attribute> resultNames;
   if (parseParameterList(parser, parameters) ||
       hw::module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, argLocs, isVariadic,
-          resultTypes, resultAttrs, resultNames) ||
+          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
+          resultAttrs, resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();

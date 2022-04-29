@@ -317,6 +317,56 @@ Example:
 }
 ```
 
+### AddSeqMemPortAnnotation
+
+| Property | Type    | Description                                                   |
+| -------- | ------  | -------------                                                 |
+| class    | string  | `sifive.enterprise.firrtl.AddSeqMemPortAnnotation`            |
+| name     | string  | The name of the port to insert                                |
+| input    | bool    | If true this is an input port, otherwise it is an output port |
+| width    | integer | The width of the port                                         |
+
+This annotation causes an extra port to be added to all SRAMs modules in the
+DUT. The extra port is a regular module port of unsigned integer type with the
+specified width. These extra ports are commonly used to implement SRAM features
+not represented by the FIRRTL memory op, such as MBIST.  The added port will be
+wired to the DUT, where it will be tied to 0.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.AddSeqMemPortAnnotation",
+  "name":"user_outputs",
+  "input":false,
+  "width":1
+}
+```
+
+### AddSeqMemPortsFileAnnotation
+
+| Property | Type   | Description                                             |
+| -------- | ------ | -------------                                           |
+| class    | string | `sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation` |
+| filename | string | The filename to output to                               |
+
+This annotation is used to emit metadata about the extra ports created by
+`AddSeqMemPortAnnotation`.  This file is emitted relative to the
+`MetadataDirAnnotation`. The file lists each SRAM and provides the mapping to
+where it is in the hierarchy, and gives its IO prefix at the DUT top level.
+
+```
+0 -> Dut.submodule.sram0.sram0_ext
+1 -> Dut.submodule.sram1.sram1_ext
+```
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.AddSeqMemPortsFileAnnotation",
+  "filename":"SRAMPorts.txt"
+}
+```
+
 ### [DontTouchAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/DontTouchAnnotation.html)
 
 | Property   | Type   | Description                             |
