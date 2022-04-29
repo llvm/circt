@@ -371,17 +371,8 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
-    // Initialization at the MemoryPortOp.  Use helper to connect if the
-    // address driver is larger than the port width.
-    auto addressLHS = address.getType().cast<FIRRTLType>().getPassiveType();
-    auto addressRHS =
-        cmemoryPortAccess.index().getType().cast<FIRRTLType>().getPassiveType();
-    if (addressLHS != addressRHS && addressLHS.getBitWidthOrSentinel() >= 0 &&
-        addressLHS.getBitWidthOrSentinel() < addressRHS.getBitWidthOrSentinel())
-      emitConnect(portBuilder, address, cmemoryPortAccess.index());
-    else
-      mkConnect(portBuilder, address, cmemoryPortAccess.index());
-
+    // Initialization at the MemoryPortOp.
+    emitConnect(portBuilder, address, cmemoryPortAccess.index());
     // Sequential+Read ports have a more complicated "enable inference".
     auto useEnableInference = isSequential && portKind == MemOp::PortKind::Read;
     auto *addressOp = cmemoryPortAccess.index().getDefiningOp();
