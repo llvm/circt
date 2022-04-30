@@ -78,6 +78,17 @@ class System:
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
 
+  def _release_ops(self):
+    """Clear all of the MLIR ops we store. Call this before each transition to
+    MLIR C++."""
+    self._symbols = None
+    [inst._clear_cache() for inst in self._instance_cache.values()]
+    num_ops_live = ir.Context.current._clear_live_operations()
+    if num_ops_live > 0:
+      sys.stderr.write(
+          f"Warning: something is holding references to {num_ops_live} MLIR ops"
+      )
+
   @staticmethod
   def set_debug():
     ir._GlobalDebug.flag = True
@@ -224,11 +235,15 @@ class System:
     if len(self._generate_queue) > 0:
       print("WARNING: running lowering passes on partially generated design!",
             file=sys.stderr)
-    pm = mlir.passmanager.PassManager.parse(self._passes(partition))
-    # Invalidate the symbol cache
-    self._symbols = None
-    [inst._clear_cache() for inst in self._instance_cache.values()]
+
+    # By now, we have all the types defined so we can go through and output the
+    # typedefs delcarations.
     types.declare_types(self.mod)
+
+    self._release_ops()
+
+
+    pm = mlir.passmanager.PassManager.parse(self._passes(partition))
     pm.run(self.mod)
     self.passed = True
 
