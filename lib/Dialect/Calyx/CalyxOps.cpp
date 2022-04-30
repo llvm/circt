@@ -444,7 +444,7 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
     OpAsmParser::UnresolvedOperand port;
     Type portType;
     // Expect each port to have the form `%<ssa-name> : <type>`.
-    if (parser.parseOperand(port, false) || parser.parseColon() ||
+    if (parser.parseRegionArgument(port) || parser.parseColon() ||
         parser.parseType(portType))
       return failure();
     ports.push_back(port);

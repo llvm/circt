@@ -214,6 +214,16 @@ def NodeOp : FIRRTLOp<"node",
   }];
 
   let hasCanonicalizer = true;
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 def RegOp : FIRRTLOp<"reg", [HasCustomSSAName/*MemAlloc*/]> {
