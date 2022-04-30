@@ -370,6 +370,13 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   return true;
 }
 
+/// Check whether an op is a declaration that can be moved.
+static bool isMovableDeclaration(Operation *op) {
+  return op->getNumResults() == 1 &&
+         op->getResult(0).getType().isa<InOutType>() &&
+         op->getNumOperands() == 0;
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
@@ -557,9 +564,7 @@ void ExportVerilog::prepareHWModule(Block &block,
 
       // If this is a reg/wire declaration, then we move it to the top of the
       // block.  We can't abstract the inout result.
-      if (op.getNumResults() == 1 &&
-          op.getResult(0).getType().isa<InOutType>() &&
-          op.getNumOperands() == 0) {
+      if (isMovableDeclaration(&op)) {
         op.moveBefore(&block.front());
         continue;
       }
@@ -568,6 +573,17 @@ void ExportVerilog::prepareHWModule(Block &block,
       if (isConstantExpression(&op)) {
         op.moveBefore(&block.front());
         continue;
+      }
+
+      // If this is a an operation reading from a declaration, move it up,
+      // along with the corresponding declaration.
+      if (auto readInOut = dyn_cast<ReadInOutOp>(op)) {
+        auto *def = readInOut.input().getDefiningOp();
+        if (isMovableDeclaration(def)) {
+          op.moveBefore(&block.front());
+          def->moveBefore(&block.front());
+          continue;
+        }
       }
 
       // Otherwise, we need to lower this to a wire to resolve this.

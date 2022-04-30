@@ -614,21 +614,20 @@ hw.module @ArrayLHS(%clock: i1) {
   }
 }
 
-// CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
-hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
-  // CHECK: wire _GEN;
+// CHECK-LABEL: module noTemporaryIfReadInOutIsAfterUse
+hw.module @noTemporaryIfReadInOutIsAfterUse(%clock: i1, %x: i1) {
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+
   %0 = comb.and %1, %x : i1
   // CHECK: always_ff @(posedge clock) begin
   sv.alwaysff(posedge %clock) {
-    // CHECK: if (_GEN & x) begin
+    // CHECK: if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa & x) begin
     sv.if %0  {
       sv.verbatim "// hello"
     }
   }
 
   // CHECK: end // always_ff @(posedge)
-  // CHECK: assign _GEN = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
   %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
 }
