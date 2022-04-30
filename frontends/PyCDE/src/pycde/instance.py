@@ -7,16 +7,26 @@ from typing import List, Optional, Union
 
 from .appid import AppID
 
-from circt.dialects import hw, msft
+from circt.dialects import msft
 
 import mlir.ir as _ir
 
 
 class InstanceLike:
+  """Parent class for anything which should be walked and can contain PD ops."""
   from .module import _SpecializedModule
 
   def __init__(self, inside_of: _SpecializedModule,
                tgt_mod: Optional[_SpecializedModule], root: InstanceHierarchy):
+    """
+    Construct a new instance. Since the terminology can be confusing:
+    - inside_of: the module which contains this instance (e.g. the instantiation
+      site).
+    - tgt_mod: if the instance is an instantation, `tgt_mod` is the module being
+      instantiated. Examples of things which aren't instantiations:
+      `seq.compreg`s.
+    """
+
     self.inside_of = inside_of
     self.tgt_mod = tgt_mod
     self.root = root
@@ -24,6 +34,10 @@ class InstanceLike:
     self._op_cache = root.system._op_cache
 
   def _create_instance(self, parent: Instance, static_op: _ir.Operation):
+    """Create a new `Instance` which is a child of `parent` in the instance
+    hierarchy and corresponds to the given static operation. The static
+    operation need not be a module instantiation."""
+
     sym_name = static_op.attributes["sym_name"]
     tgt_mod = None
     if isinstance(static_op, msft.InstanceOp):
@@ -35,7 +49,8 @@ class InstanceLike:
                     root=self.root)
     return inst
 
-  def _get_sym_ops_in_module(self):
+  def _get_sym_ops_in_module(self) -> List[_ir.Operation]:
+    """Look into the IR for any ops which have a `sym_name` attribute."""
     if self.tgt_mod is None:
       return []
     circt_mod = self._op_cache.get_circt_mod(self.tgt_mod)
@@ -48,24 +63,20 @@ class InstanceLike:
     return [op for op in circt_mod.entry_block if has_symbol(op)]
 
   @property
-  def _dyn_inst(self) -> msft.DynamicInstanceOp:
-    """Return the raw CIRCT op backing this Instance.
-       DANGEROUS! If used, take care to not hold on to the result object."""
-    return self._op_cache._create_or_get_dyn_inst(self)
-
-  @property
-  def _inside_of_symbol(self):
+  def _inside_of_symbol(self) -> str:
+    """Return the string symbol of the module which contains this instance."""
     return self._op_cache.get_module_symbol(self.inside_of)
 
   def __repr__(self):
-    path_names = map(lambda i: i.name, self.path)
+    path_names = [i.name for i in self.path]
     return "<instance: [" + ", ".join(path_names) + "]>"
 
   @property
   def appid(self):
     return AppID(*[i.name for i in self.path])
 
-  def children(self):
+  def children(self) -> List[Instance]:
+    """Return a list of this instances children. Cache said list."""
     if self._child_cache is not None:
       return self._child_cache
     symbols_in_mod = self._get_sym_ops_in_module()
@@ -116,26 +127,29 @@ class Instance(InstanceLike):
     super().__init__(inside_of, tgt_mod, root)
     self.parent = parent
     self.symbol = instance_sym
-    self._ref = hw.InnerRefAttr.get(_ir.StringAttr.get(self._inside_of_symbol),
-                                    instance_sym)
 
   @property
-  def path(self) -> list[Instance]:
-    return self.parent.path + [self]
+  def _dyn_inst(self) -> msft.DynamicInstanceOp:
+    """Returns the raw CIRCT op backing this Instance."""
+    return self._op_cache._create_or_get_dyn_inst(self)
 
   def _get_ip(self) -> _ir.InsertionPoint:
     return _ir.InsertionPoint(self._dyn_inst.body.blocks[0])
 
   @property
-  def name(self):
+  def path(self) -> list[Instance]:
+    return self.parent.path + [self]
+
+  @property
+  def name(self) -> str:
     return _ir.StringAttr(self.symbol).value
 
 
 class InstanceHierarchy(InstanceLike):
   """
-  A root of an instance hierarchy starting at top-level 'module'.
-
-  Provides a (necessary) level of indirection into CIRCT IR.
+  A root of an instance hierarchy starting at top-level 'module'. Different from
+  an `Instance` since the base cases differ, and doesn't have an instance symbol
+  (since it addresses the 'top' module). Plus, CIRCT models it this way.
   """
   import pycde.system as system
   from .module import _SpecializedModule

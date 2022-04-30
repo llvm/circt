@@ -9,7 +9,7 @@ from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance, InstanceHierarchy
 
-from circt.dialects import msft
+from circt.dialects import hw, msft
 
 import mlir
 import mlir.ir as ir
@@ -275,7 +275,7 @@ class _OpCache:
       symbol = symbol.value
     return self._symbol_modules[symbol]
 
-  def get_module_symbol(self, spec_mod):
+  def get_module_symbol(self, spec_mod) -> str:
     """Get the symbol for a module or its associated _SpecializedModule."""
     if not isinstance(spec_mod, _SpecializedModule):
       if not hasattr(spec_mod, "_pycde_mod"):
@@ -309,10 +309,12 @@ class _OpCache:
 
     return self._instance_hier_cache[root_mod_symbol]
 
-  def _create_or_get_dyn_inst(self, inst: Instance):
+  def _create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
     # We don't support cache rebuilding yet
     assert self._instance_cache is not None
     if inst not in self._instance_cache:
+      ref = hw.InnerRefAttr.get(ir.StringAttr.get(inst._inside_of_symbol),
+                                inst.symbol)
       with inst.parent._get_ip():
-        self._instance_cache[inst] = msft.DynamicInstanceOp.create(inst._ref)
+        self._instance_cache[inst] = msft.DynamicInstanceOp.create(ref)
     return self._instance_cache[inst]
