@@ -175,3 +175,13 @@ class DynamicInstanceOp:
     inst = _msft.DynamicInstanceOp(name_ref)
     inst.body.blocks.append()
     return inst
+
+  @property
+  def instance_path(self):
+    path = []
+    next = self
+    while isinstance(next, DynamicInstanceOp):
+      path.append(next.attributes["instanceRef"])
+      next = next.operation.parent.opview
+    path.reverse()
+    return _ir.ArrayAttr.get(path)
