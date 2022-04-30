@@ -110,8 +110,6 @@ class Instance(InstanceLike):
 
   __slots__ = ["parent", "_ref", "module"]
 
-  global_ref_counter = 0
-
   def __init__(self, parent: Instance, instance_sym: _ir.Attribute,
                inside_of: _SpecializedModule,
                tgt_mod: Optional[_SpecializedModule], root: InstanceHierarchy):
@@ -127,14 +125,6 @@ class Instance(InstanceLike):
 
   def _get_ip(self) -> _ir.InsertionPoint:
     return _ir.InsertionPoint(self._dyn_inst.body.blocks[0])
-
-  # def _path_attr(self) -> _ir.ArrayAttr:
-  #   module_names = [self._root._module_symbol] + \
-  #       [instance._module_symbol for instance in self.path[:-1]]
-  #   modules = [_ir.StringAttr.get(name) for name in module_names]
-  #   instances = [instance._name_attr for instance in self.path]
-  #   inner_refs = [hw.InnerRefAttr.get(m, i) for m, i in zip(modules, instances)]
-  #   return _ir.ArrayAttr.get(inner_refs)
 
   @property
   def name(self):
@@ -154,12 +144,6 @@ class InstanceHierarchy(InstanceLike):
     self.system = sys
     super().__init__(inside_of=module, tgt_mod=module, root=self)
     sys._op_cache.get_or_create_instance_hier_op(self)
-
-  def _get_static_op(self, inst: Instance):
-    # We don't support cache rebuilds yet.
-    assert self._inst_to_static_op_cache is not None
-    assert inst in self._inst_to_static_op_cache
-    return self._inst_to_static_op_cache[inst]
 
   @property
   def name(self):
