@@ -111,6 +111,8 @@ MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias);
 MLIR_CAPI_EXPORTED bool hwAttrIsAInnerRefAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
                                                    MlirAttribute innerSym);
+MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGetName(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGetModule(MlirAttribute);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAGlobalRefAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwGlobalRefAttrGet(MlirAttribute symName);

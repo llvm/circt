@@ -140,9 +140,16 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       });
 
   mlir_attribute_subclass(m, "InnerRefAttr", hwAttrIsAInnerRefAttr)
-      .def_classmethod("get", [](py::object cls, MlirAttribute moduleName,
-                                 MlirAttribute innerSym) {
-        return cls(hwInnerRefAttrGet(moduleName, innerSym));
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirAttribute moduleName, MlirAttribute innerSym) {
+            return cls(hwInnerRefAttrGet(moduleName, innerSym));
+          })
+      .def_property_readonly(
+          "module",
+          [](MlirAttribute self) { return hwInnerRefAttrGetModule(self); })
+      .def_property_readonly("name", [](MlirAttribute self) {
+        return hwInnerRefAttrGetName(self);
       });
 
   mlir_attribute_subclass(m, "GlobalRefAttr", hwAttrIsAGlobalRefAttr)

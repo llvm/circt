@@ -145,6 +145,14 @@ MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
   return wrap(InnerRefAttr::get(moduleNameAttr, innerSymAttr));
 }
 
+MlirAttribute hwInnerRefAttrGetName(MlirAttribute innerRefAttr) {
+  return wrap((Attribute)unwrap(innerRefAttr).cast<InnerRefAttr>().getName());
+}
+
+MlirAttribute hwInnerRefAttrGetModule(MlirAttribute innerRefAttr) {
+  return wrap((Attribute)unwrap(innerRefAttr).cast<InnerRefAttr>().getModule());
+}
+
 bool hwAttrIsAGlobalRefAttr(MlirAttribute attr) {
   return unwrap(attr).isa<GlobalRefAttr>();
 }
