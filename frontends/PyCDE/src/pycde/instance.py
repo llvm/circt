@@ -51,7 +51,7 @@ class Instance:
   @property
   def _module_symbol(self):
     assert self._spec_mod is not None
-    return self._root._system._get_module_symbol(self._spec_mod)
+    return self._root._system._op_cache.get_module_symbol(self._spec_mod)
 
   def _path_attr(self) -> _ir.ArrayAttr:
     module_names = [self._root._module_symbol] + \
@@ -142,7 +142,7 @@ class RootInstance(Instance):
     self._system = sys
     self._root = self
     self._subsymbol_cache = {}
-    self._inst_to_static_op_cache = {self: sys._get_circt_mod(module)}
+    self._inst_to_static_op_cache = {self: sys._op_cache.get_circt_mod(module)}
     self._inst_to_dyn_op_cache = {}
     self._child_cache = None
     return self
@@ -189,14 +189,14 @@ class RootInstance(Instance):
     import circt.dialects.msft as circtms
     spec_mod = None
     if isinstance(static_op, circtms.InstanceOp):
-      spec_mod = self._system._get_symbol_module(static_op.moduleName)
+      spec_mod = self._system._op_cache.get_symbol_module(static_op.moduleName)
     inst = Instance._get(self, parent, spec_mod)
     self._inst_to_static_op_cache[inst] = static_op
     return inst
 
   def _get_sym_ops_in_module(self, instance_module: _SpecializedModule):
     if instance_module not in self._subsymbol_cache:
-      circt_mod = self._system._get_circt_mod(instance_module)
+      circt_mod = self._system._op_cache.get_circt_mod(instance_module)
       if isinstance(circt_mod, msft.MSFTModuleExternOp):
         return []
 
