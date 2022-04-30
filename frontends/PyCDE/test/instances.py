@@ -72,8 +72,8 @@ test_inst = t.get_instance(Test)
 t.createdb(primdb)
 mod = test_inst.walk(lambda inst: print(inst))
 
-
 print("=== Placements")
+
 
 def place_inst(inst):
   if inst.name == "UnParameterized_1":
