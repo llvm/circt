@@ -72,6 +72,8 @@ test_inst = t.get_instance(Test)
 t.createdb(primdb)
 mod = test_inst.walk(lambda inst: print(inst))
 
+print("=== Placements")
+
 
 def place_inst(inst):
   if inst.name == "UnParameterized_1":
@@ -110,10 +112,9 @@ test_inst.walk(instance_attrs.apply_attributes_visitor)
 # reserved_loc = PhysLocation(PrimitiveType.M20K, 40, 40, 0)
 # entity_extern = t.create_entity_extern("tag")
 # test_inst.placedb.reserve_location(reserved_loc, entity_extern)
-
-assert test_inst.placedb.get_instance_at(loc[1]) is not None
-assert test_inst.placedb.get_instance_at(
-    PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None
+assert t.placedb.get_instance_at(loc[1]) is not None
+assert t.placedb.get_instance_at(PhysLocation(PrimitiveType.M20K, 0, 0,
+                                              0)) is None
 # assert test_inst.placedb.get_instance_at(reserved_loc) is not None
 
 assert instance_attrs.find_unused() is None

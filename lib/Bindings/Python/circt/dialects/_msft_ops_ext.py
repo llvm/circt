@@ -163,6 +163,10 @@ class InstanceHierarchyOp:
     hier.instances.blocks.append()
     return hier
 
+  @property
+  def top_module_ref(self):
+    return self.attributes["topModuleRef"]
+
 
 class DynamicInstanceOp:
 

@@ -7,7 +7,9 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
 
 from .module import _SpecializedModule
 from .pycde_types import types
-from .instance import Instance, RootInstance
+from .instance import Instance, InstanceHierarchy
+
+from circt.dialects import hw, msft
 
 import mlir
 import mlir.ir as ir
@@ -37,7 +39,7 @@ class System:
 
   __slots__ = [
       "mod", "top_modules", "name", "passed", "_old_system_token", "_op_cache",
-      "_generate_queue", "_output_directory", "files", "_instance_cache",
+      "_generate_queue", "_output_directory", "files", "_instance_roots",
       "_placedb"
   ]
 
@@ -60,7 +62,8 @@ class System:
     self._op_cache: _OpCache = _OpCache(self.mod)
 
     self._generate_queue = []
-    self._instance_cache: dict[_SpecializedModule, RootInstance] = {}
+    self._instance_roots: dict[_SpecializedModule, RootInstance] = {}
+
     self._placedb: PlacementDB = None
     self.files: Set[str] = set()
 
@@ -73,11 +76,6 @@ class System:
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
-
-  def _get_op_cache(self):
-    if self._op_cache is None:
-      self._op_cache = _OpCache(self.mod)
-    return self._op_cache
 
   @staticmethod
   def set_debug():
@@ -169,11 +167,11 @@ class System:
         i += 1
     return len(self._generate_queue)
 
-  def get_instance(self, mod_cls: object) -> Instance:
+  def get_instance(self, mod_cls: object) -> InstanceHierarchy:
     mod = mod_cls._pycde_mod
-    if mod not in self._instance_cache:
-      self._instance_cache[mod] = RootInstance._get(mod, self)
-    return self._instance_cache[mod]
+    if mod not in self._instance_roots:
+      self._instance_roots[mod] = InstanceHierarchy(mod, self)
+    return self._instance_roots[mod]
 
   def run_passes(self, partition=False):
     if self.passed:
@@ -185,7 +183,6 @@ class System:
     # By now, we have all the types defined so we can go through and output the
     # typedefs delcarations.
     types.declare_types(self.mod)
-    [inst._clear_cache() for inst in self._instance_cache.values()]
     self._op_cache.release_ops()
 
     pm = mlir.passmanager.PassManager.parse(self._passes(partition))
@@ -210,7 +207,10 @@ class System:
 class _OpCache:
   """Used to cache CIRCT operations and handle symbols."""
 
-  __slots__ = ["_module", "_symbols", "_module_symbols", "_symbol_modules"]
+  __slots__ = [
+      "_module", "_symbols", "_module_symbols", "_symbol_modules",
+      "_instance_hier_cache", "_instance_cache"
+  ]
 
   def __init__(self, module: ir.Module):
     self._module = module
@@ -218,10 +218,15 @@ class _OpCache:
     self._module_symbols: dict[_SpecializedModule, str] = {}
     self._symbol_modules: dict[str, _SpecializedModule] = {}
 
+    self._instance_hier_cache: dict[str, msft.InstanceHierarchyOp] = None
+    self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
+
   def release_ops(self):
     """Clear all of the MLIR ops we store. Call this before each transition to
     MLIR C++."""
     self._symbols = None
+    self._instance_hier_cache = None
+    self._instance_cache.clear()
     gc.collect()
     num_ops_live = ir.Context.current._clear_live_operations()
     if num_ops_live > 0:
@@ -270,7 +275,7 @@ class _OpCache:
       symbol = symbol.value
     return self._symbol_modules[symbol]
 
-  def get_module_symbol(self, spec_mod):
+  def get_module_symbol(self, spec_mod) -> str:
     """Get the symbol for a module or its associated _SpecializedModule."""
     if not isinstance(spec_mod, _SpecializedModule):
       if not hasattr(spec_mod, "_pycde_mod"):
@@ -283,3 +288,33 @@ class _OpCache:
   def get_circt_mod(self, spec_mod: _SpecializedModule):
     """Get the CIRCT module op for a PyCDE module."""
     return self.symbols[self.get_module_symbol(spec_mod)]
+
+  def get_or_create_instance_hier_op(
+      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
+
+    # If the cache doesn't exist, build it.
+    if self._instance_hier_cache is None:
+      self._instance_hier_cache = {}
+      for op in self._module.operation.regions[0].blocks[0]:
+        if isinstance(op, msft.InstanceHierarchyOp):
+          self._instance_hier_cache[op.top_module_ref] = op
+
+    # Lookup in the cache and create if not found.
+    root_mod_symbol = ir.FlatSymbolRefAttr.get(
+        self.get_module_symbol(inst_hier.inside_of))
+    if root_mod_symbol not in self._instance_hier_cache:
+      with ir.InsertionPoint(self._module.body):
+        hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol)
+        self._instance_hier_cache[root_mod_symbol] = hier_op
+
+    return self._instance_hier_cache[root_mod_symbol]
+
+  def _create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
+    # We don't support cache rebuilding yet
+    assert self._instance_cache is not None
+    if inst not in self._instance_cache:
+      ref = hw.InnerRefAttr.get(ir.StringAttr.get(inst._inside_of_symbol),
+                                inst.symbol)
+      with inst.parent._get_ip():
+        self._instance_cache[inst] = msft.DynamicInstanceOp.create(ref)
+    return self._instance_cache[inst]
