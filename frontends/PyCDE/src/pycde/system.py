@@ -7,9 +7,9 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
 
 from .module import _SpecializedModule
 from .pycde_types import types
-from .instance import Instance, RootInstance
+from .instance import Instance, InstanceHierarchy
 
-from pycde.dialects import msft
+from circt.dialects import msft
 
 import mlir
 import mlir.ir as ir
@@ -20,9 +20,10 @@ import circt.dialects.msft
 import circt.support
 
 from contextvars import ContextVar
+import gc
 import os
 import sys
-import typing
+from typing import Callable, Dict, Set, Tuple
 
 _current_system = ContextVar("current_pycde_system")
 
@@ -37,9 +38,9 @@ class System:
   output SystemVerilog."""
 
   __slots__ = [
-      "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue", "_output_directory",
-      "files", "_instance_hier_cache", "_placedb"
+      "mod", "top_modules", "name", "passed", "_old_system_token", "_op_cache",
+      "_generate_queue", "_output_directory", "files", "_instance_roots",
+      "_placedb"
   ]
 
   PASSES = """
@@ -51,71 +52,34 @@ class System:
   """
 
   def __init__(self,
-               modules,
+               top_modules: list,
                name: str = "PyCDESystem",
                output_directory: str = None):
     self.passed = False
     self.mod = ir.Module.create()
-    self.modules = list(modules)
+    self.top_modules = list(top_modules)
     self.name = name
-    self._module_symbols: dict[_SpecializedModule, str] = {}
-    self._symbol_modules: dict[str, _SpecializedModule] = {}
-    self._symbols: typing.Set[str] = None
+    self._op_cache: _OpCache = _OpCache(self.mod)
+
     self._generate_queue = []
     self._instance_roots: dict[_SpecializedModule, RootInstance] = {}
-    self._instance_hier_cache: dict[_SpecializedModule,
-                                    msft.InstanceHierarchyOp] = {}
+
     self._placedb: PlacementDB = None
-    self.files: typing.Set[str] = set()
+    self.files: Set[str] = set()
 
     if output_directory is None:
       output_directory = os.path.join(os.getcwd(), self.name)
     self._output_directory = output_directory
 
     with self:
-      [m._pycde_mod.create() for m in modules]
+      [m._pycde_mod.create() for m in top_modules]
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
 
-  def _release_ops(self):
-    """Clear all of the MLIR ops we store. Call this before each transition to
-    MLIR C++."""
-    self._symbols = None
-    [inst._clear_cache() for inst in self._instance_cache.values()]
-    num_ops_live = ir.Context.current._clear_live_operations()
-    if num_ops_live > 0:
-      sys.stderr.write(
-          f"Warning: something is holding references to {num_ops_live} MLIR ops"
-      )
-
   @staticmethod
   def set_debug():
     ir._GlobalDebug.flag = True
-
-  # TODO: Return a read-only proxy.
-  @property
-  def symbols(self) -> typing.Dict[str, ir.Operation]:
-    """Get the set of top level symbols in the design. Read from a cache which
-    will be invalidated whenever control is given to CIRCT."""
-    if self._symbols is None:
-      self._symbols = dict()
-      for op in self.mod.operation.regions[0].blocks[0]:
-        if "sym_name" in op.attributes:
-          self._symbols[mlir.ir.StringAttr(
-              op.attributes["sym_name"]).value] = op
-    return self._symbols
-
-  def create_symbol(self, basename: str) -> str:
-    """Create a unique symbol and add it to the cache. If it is to be preserved,
-    the caller must use it as the symbol on a top-level op."""
-    ctr = 0
-    ret = basename
-    while ret in self.symbols:
-      ctr += 1
-      ret = basename + "_" + str(ctr)
-    self.symbols[ret] = None
-    return ret
 
   def create_physical_region(self, name: str = None):
     with self._get_ip():
@@ -130,42 +94,21 @@ class System:
   def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
     """Wrapper for a callback (which actually builds the CIRCT op) which
     controls all the bookkeeping around CIRCT module ops."""
-    if spec_mod in self._module_symbols:
+
+    (symbol, install_func) = self._op_cache.create_symbol(spec_mod)
+    if symbol is None:
       return
-    symbol = self.create_symbol(spec_mod.name)
-    # Bookkeeping.
-    self._module_symbols[spec_mod] = symbol
-    self._symbol_modules[symbol] = spec_mod
+
     # Build the correct op.
     op = create_cb(symbol)
     # Install the op in the cache.
-    self._symbols[symbol] = op
+    install_func(op)
     # Add to the generation queue, if necessary.
     if isinstance(op, circt.dialects.msft.MSFTModuleOp):
       self._generate_queue.append(spec_mod)
       file_name = spec_mod.modcls.__name__ + ".sv"
       self.files.add(os.path.join(self._output_directory, file_name))
       op.fileName = ir.StringAttr.get(file_name)
-
-  def _get_symbol_module(self, symbol):
-    """Get the _SpecializedModule for a symbol."""
-    if isinstance(symbol, ir.FlatSymbolRefAttr):
-      symbol = symbol.value
-    return self._symbol_modules[symbol]
-
-  def _get_module_symbol(self, spec_mod):
-    """Get the symbol for a module or its associated _SpecializedModule."""
-    if not isinstance(spec_mod, _SpecializedModule):
-      if not hasattr(spec_mod, "_pycde_mod"):
-        raise TypeError("Expected _SpecializedModule or pycde module")
-      spec_mod = spec_mod._pycde_mod
-    if spec_mod not in self._module_symbols:
-      return None
-    return self._module_symbols[spec_mod]
-
-  def _get_circt_mod(self, spec_mod):
-    """Get the CIRCT module op for a PyCDE module."""
-    return self.symbols[self._get_module_symbol(spec_mod)]
 
   @staticmethod
   def current():
@@ -188,7 +131,8 @@ class System:
     return self.mod.body
 
   def _passes(self, partition):
-    tops = ",".join([self._get_module_symbol(m) for m in self.modules])
+    tops = ",".join(
+        [self._op_cache.get_module_symbol(m) for m in self.top_modules])
     verilog_file = self.name + ".sv"
     tcl_file = self.name + ".tcl"
     self.files.add(os.path.join(self._output_directory, verilog_file))
@@ -223,11 +167,11 @@ class System:
         i += 1
     return len(self._generate_queue)
 
-  def get_instance(self, mod_cls: object) -> RootInstance:
+  def get_instance(self, mod_cls: object) -> InstanceHierarchy:
     mod = mod_cls._pycde_mod
-    if mod not in self._instance_cache:
-      self._instance_hier_cache[mod] = RootInstance(mod, self)
-    return self._instance_cache[mod]
+    if mod not in self._instance_roots:
+      self._instance_roots[mod] = InstanceHierarchy(mod, self)
+    return self._instance_roots[mod]
 
   def run_passes(self, partition=False):
     if self.passed:
@@ -239,9 +183,7 @@ class System:
     # By now, we have all the types defined so we can go through and output the
     # typedefs delcarations.
     types.declare_types(self.mod)
-
-    self._release_ops()
-
+    self._op_cache.release_ops()
 
     pm = mlir.passmanager.PassManager.parse(self._passes(partition))
     pm.run(self.mod)
@@ -260,3 +202,117 @@ class System:
   def createdb(self, primdb: PrimitiveDB = None):
     if self._placedb is None:
       self._placedb = PlacementDB(self.mod, primdb)
+
+
+class _OpCache:
+  """Used to cache CIRCT operations and handle symbols."""
+
+  __slots__ = [
+      "_module", "_symbols", "_module_symbols", "_symbol_modules",
+      "_instance_hier_cache", "_instance_cache"
+  ]
+
+  def __init__(self, module: ir.Module):
+    self._module = module
+    self._symbols: Dict[str, ir.OpView] = None
+    self._module_symbols: dict[_SpecializedModule, str] = {}
+    self._symbol_modules: dict[str, _SpecializedModule] = {}
+
+    self._instance_hier_cache: dict[str, msft.InstanceHierarchyOp] = None
+    self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
+
+  def release_ops(self):
+    """Clear all of the MLIR ops we store. Call this before each transition to
+    MLIR C++."""
+    self._symbols = None
+    self._instance_hier_cache = None
+    self._instance_cache.clear()
+    gc.collect()
+    num_ops_live = ir.Context.current._clear_live_operations()
+    if num_ops_live > 0:
+      sys.stderr.write(
+          f"Warning: something is holding references to {num_ops_live} MLIR ops"
+      )
+
+  @property
+  def symbols(self):
+    if self._symbols is None:
+      self._symbols = {}
+      for op in self._module.operation.regions[0].blocks[0]:
+        if "sym_name" in op.attributes:
+          self._symbols[ir.StringAttr(op.attributes["sym_name"]).value] = op
+    return self._symbols
+
+  def op(self, symbol: str) -> ir.OpView:
+    """Resolve a symbol to an op."""
+    return self.symbols[symbol]
+
+  def create_symbol(self, spec_mod: _SpecializedModule) -> Tuple[str, Callable]:
+    """Create a unique symbol and add it to the cache. If it is to be preserved,
+    the caller must use it as the symbol on a top-level op. Returns the symbol
+    string and a callback to install the mapping. Return (None, None) if
+    `spec_mod` already has a symbol."""
+
+    if spec_mod in self._module_symbols:
+      return (None, None)
+    ctr = 0
+    basename = spec_mod.name
+    symbol = basename
+    while symbol in self.symbols:
+      ctr += 1
+      symbol = basename + "_" + str(ctr)
+
+    def install(op):
+      self._symbols[symbol] = op
+      self._module_symbols[spec_mod] = symbol
+      self._symbol_modules[symbol] = spec_mod
+
+    return symbol, install
+
+  def get_symbol_module(self, symbol):
+    """Get the _SpecializedModule for a symbol."""
+    if isinstance(symbol, ir.FlatSymbolRefAttr):
+      symbol = symbol.value
+    return self._symbol_modules[symbol]
+
+  def get_module_symbol(self, spec_mod):
+    """Get the symbol for a module or its associated _SpecializedModule."""
+    if not isinstance(spec_mod, _SpecializedModule):
+      if not hasattr(spec_mod, "_pycde_mod"):
+        raise TypeError("Expected _SpecializedModule or pycde module")
+      spec_mod = spec_mod._pycde_mod
+    if spec_mod not in self._module_symbols:
+      return None
+    return self._module_symbols[spec_mod]
+
+  def get_circt_mod(self, spec_mod: _SpecializedModule):
+    """Get the CIRCT module op for a PyCDE module."""
+    return self.symbols[self.get_module_symbol(spec_mod)]
+
+  def get_or_create_instance_hier_op(
+      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
+
+    # If the cache doesn't exist, build it.
+    if self._instance_hier_cache is None:
+      self._instance_hier_cache = {}
+      for op in self._module.operation.regions[0].blocks[0]:
+        if isinstance(op, msft.InstanceHierarchyOp):
+          self._instance_hier_cache[op.top_module_ref] = op
+
+    # Lookup in the cache and create if not found.
+    root_mod_symbol = ir.FlatSymbolRefAttr.get(
+        self.get_module_symbol(inst_hier.inside_of))
+    if root_mod_symbol not in self._instance_hier_cache:
+      with ir.InsertionPoint(self._module.body):
+        hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol)
+        self._instance_hier_cache[root_mod_symbol] = hier_op
+
+    return self._instance_hier_cache[root_mod_symbol]
+
+  def _create_or_get_dyn_inst(self, inst: Instance):
+    # We don't support cache rebuilding yet
+    assert self._instance_cache is not None
+    if inst not in self._instance_cache:
+      with inst.parent._get_ip():
+        self._instance_cache[inst] = msft.DynamicInstanceOp.create(inst._ref)
+    return self._instance_cache[inst]

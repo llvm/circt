@@ -213,7 +213,7 @@ class _SpecializedModule:
   def circt_mod(self):
     from .system import System
     sys = System.current()
-    return sys._get_circt_mod(self)
+    return sys._op_cache.get_circt_mod(self)
 
   def instantiate(self, instance_name: str, inputs: dict, loc):
     """Create a instance op."""
