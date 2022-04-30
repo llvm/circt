@@ -32,7 +32,7 @@ class InstanceLike:
     self.inside_of = inside_of
     self.tgt_mod = tgt_mod
     self.root = root
-    self._child_cache: List[Instance] = None
+    self._child_cache: Dict[ir.StringAttr, Instance] = None
     self._op_cache = root.system._op_cache
 
   def _create_instance(self, parent: Instance,
@@ -84,8 +84,8 @@ class InstanceLike:
       return self._child_cache
     symbols_in_mod = self._get_sym_ops_in_module()
     children = {
-        op.attributes["sym_name"]: self._create_instance(self, op)
-        for op in symbols_in_mod
+        ir.StringAttr(op.attributes["sym_name"]):
+        self._create_instance(self, op) for op in symbols_in_mod
     }
     # TODO: make these weak refs
     self._child_cache = children
