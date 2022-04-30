@@ -2,7 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from pycde.devicedb import EntityExtern, PlacementDB, PrimitiveDB, PhysicalRegion
+from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
+                            PhysicalRegion)
 
 from .module import _SpecializedModule
 from .pycde_types import types
@@ -60,7 +61,7 @@ class System:
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
     self._instance_cache: dict[_SpecializedModule, RootInstance] = {}
-    self._placedb: devdb.PlacementDB = None
+    self._placedb: PlacementDB = None
     self.files: typing.Set[str] = set()
 
     if output_directory is None:
