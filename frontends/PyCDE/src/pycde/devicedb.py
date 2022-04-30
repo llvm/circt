@@ -24,7 +24,7 @@ class PhysLocation:
                prim_type: Union[str, PrimitiveType],
                x: int,
                y: int,
-               num: Union[int, None] = None):
+               num: Optional[int] = None):
 
     if isinstance(prim_type, str):
       prim_type = getattr(PrimitiveType, prim_type)
@@ -103,7 +103,7 @@ class PrimitiveDB:
                  prim_type: Union[str, PrimitiveType],
                  x: int,
                  y: int,
-                 num: Union[int, None] = None):
+                 num: Optional[int] = None):
     self.add(PhysLocation(prim_type, x, y, num))
 
   def add(self, physloc: PhysLocation):

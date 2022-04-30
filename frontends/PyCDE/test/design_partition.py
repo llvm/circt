@@ -2,9 +2,8 @@
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
 import pycde
-from pycde import (DesignPartition, Input, Output, module, externmodule,
-                   generator, types)
-
+from pycde import (Input, Output, module, externmodule, generator, types)
+from pycde.module import DesignPartition
 import sys
 
 
