@@ -72,12 +72,33 @@ void PDPhysRegionOp::setGlobalRef(hw::GlobalRefOp ref) {
 }
 FlatSymbolRefAttr PDPhysRegionOp::getGlobalRefSym() { return refAttr(); }
 
-bool DynamicInstanceOp::isRootedIn(Operation *hwMod) {
-  if (appid().empty())
-    return false;
+ParseResult parseImplicitInnerRef(OpAsmParser &p, hw::InnerRefAttr &innerRef) {
+  SymbolRefAttr sym;
+  if (p.parseAttribute(sym))
+    return failure();
+  auto loc = p.getCurrentLocation();
+  if (sym.getNestedReferences().size() != 1)
+    return p.emitError(loc, "expected <module sym>::<inner name>");
+  innerRef = hw::InnerRefAttr::get(
+      sym.getRootReference(),
+      sym.getNestedReferences().front().getRootReference());
+  return success();
+}
+void printImplicitInnerRef(OpAsmPrinter &p, Operation *,
+                           hw::InnerRefAttr innerRef) {
+  p << SymbolRefAttr::get(innerRef.getModule(),
+                          {FlatSymbolRefAttr::get(innerRef.getName())});
+}
 
-  return SymbolTable::getSymbolName(hwMod) ==
-         appid()[0].cast<hw::InnerRefAttr>().getModule();
+ArrayAttr DynamicInstanceOp::globalRefPath() {
+  SmallVector<Attribute, 16> path;
+  DynamicInstanceOp next = *this;
+  do {
+    path.push_back(next.instanceRefAttr());
+    next = next->getParentOfType<DynamicInstanceOp>();
+  } while (next);
+  std::reverse(path.begin(), path.end());
+  return ArrayAttr::get(getContext(), path);
 }
 
 //===----------------------------------------------------------------------===//

@@ -39,6 +39,8 @@ def MSFTDialect : Dialect {
     /// Register all MSFT attributes.
     void registerAttributes();
   }];
+
+  let dependentDialects = ["::circt::hw::HWDialect"];
 }
 // Base class for the operation in this dialect.
 class MSFTOp<string mnemonic, list<Trait> traits = []> :

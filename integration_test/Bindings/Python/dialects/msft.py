@@ -69,7 +69,11 @@ with ir.Context() as ctx, ir.Location.unknown():
   db = msft.PlacementDB(mod)
 
   with ir.InsertionPoint(mod.body):
-    dyn_inst = msft.DynamicInstanceOp.create(path)
+    hier = msft.InstanceHierarchyOp.create(ir.FlatSymbolRefAttr.get("top"))
+    with ir.InsertionPoint(hier.instances.blocks[0]):
+      dyn_inst = msft.DynamicInstanceOp.create(path[0])
+      with ir.InsertionPoint(dyn_inst.body.blocks[0]):
+        dyn_inst = msft.DynamicInstanceOp.create(path[1])
   assert db.get_instance_at(physAttr) is None
   # TODO: LLVM doesn't yet have none coersion for Locations.
   place_rc = db.place(dyn_inst, physAttr, "foo_subpath", ir.Location.current)
@@ -119,7 +123,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   def print_placement(loc, locOp):
     appid = "(unoccupied)"
     if locOp is not None:
-      appid = locOp.parent.attributes["appid"]
+      appid = locOp.parent.opview.instance_path
     print(f"{loc}, {appid}")
 
   print("=== Placements:")

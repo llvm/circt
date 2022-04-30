@@ -155,10 +155,29 @@ class EntityExternOp:
     return _msft.EntityExternOp(symbol_attr, metadata_attr)
 
 
+class InstanceHierarchyOp:
+
+  @staticmethod
+  def create(root_mod):
+    hier = _msft.InstanceHierarchyOp(root_mod)
+    hier.instances.blocks.append()
+    return hier
+
+
 class DynamicInstanceOp:
 
   @staticmethod
-  def create(appid):
-    inst = _msft.DynamicInstanceOp(appid)
+  def create(name_ref):
+    inst = _msft.DynamicInstanceOp(name_ref)
     inst.body.blocks.append()
     return inst
+
+  @property
+  def instance_path(self):
+    path = []
+    next = self
+    while isinstance(next, DynamicInstanceOp):
+      path.append(next.attributes["instanceRef"])
+      next = next.operation.parent.opview
+    path.reverse()
+    return _ir.ArrayAttr.get(path)

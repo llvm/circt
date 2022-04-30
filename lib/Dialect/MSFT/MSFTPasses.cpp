@@ -62,48 +62,32 @@ static SymbolRefAttr getPart(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower MSFT's dynamic instance to global ref and associated PD ops.
-struct DynamicInstanceOpLowering
-    : public OpConversionPattern<DynamicInstanceOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
+struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
+  void runOnOperation() override;
 
-  DynamicInstanceOpLowering(
-      MLIRContext *ctxt, const hw::SymbolCache &topSyms,
-      DenseSet<StringAttr> &newSyms,
-      DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>>
-          &globalRefsToApply)
-      : OpConversionPattern(ctxt), topSyms(topSyms), newSyms(newSyms),
-        globalRefsToApply(globalRefsToApply) {}
+  LogicalResult lower(DynamicInstanceOp inst, OpBuilder &b);
 
-  LogicalResult
-  matchAndRewrite(DynamicInstanceOp, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final;
+  // Aggregation of the global ref attributes populated as a side-effect of the
+  // conversion.
+  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
 
-private:
-  // Symbol cache for top module symbols.
-  const hw::SymbolCache &topSyms;
-  // List of symbols which have been created in this pass. Along with `topSyms`,
-  // used to generate unique symbol names.
-  DenseSet<StringAttr> &newSyms;
-  // Aggregate the globalRef attributes which have to be applied to static
-  // operations.
-  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> &globalRefsToApply;
+  // Cache the top-level symbols. Insert the new ones we're creating for new
+  // global ref ops.
+  hw::MutableSymbolCache topSyms;
 
-  // In order to be efficient, cache the symbols in each module.
-  mutable DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
+  // In order to be efficient, cache the "symbols" in each module.
+  DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
   // Accessor for `perModSyms` which lazily constructs each cache.
-  const hw::SymbolCache &getSyms(MSFTModuleOp mod) const;
+  const hw::SymbolCache &getSyms(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
-const hw::SymbolCache &
-DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
+const hw::SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
   auto symsFound = perModSyms.find(mod);
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
 
-  // Build the cache if necessary;
+  // Build the cache.
   hw::SymbolCache &syms = perModSyms[mod];
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
@@ -116,96 +100,104 @@ DynamicInstanceOpLowering::getSyms(MSFTModuleOp mod) const {
   return syms;
 }
 
-LogicalResult DynamicInstanceOpLowering::matchAndRewrite(
-    DynamicInstanceOp inst, OpAdaptor adaptor,
-    ConversionPatternRewriter &rewriter) const {
+LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
 
-  // Come up with a unique symbol name.
-  auto refSym = StringAttr::get(getContext(), "instref");
-  auto origRefSym = refSym;
-  unsigned ctr = 0;
-  while (topSyms.getDefinition(refSym) || newSyms.contains(refSym))
-    refSym = StringAttr::get(getContext(),
-                             origRefSym.getValue() + "_" + Twine(++ctr));
-  newSyms.insert(refSym);
+  hw::GlobalRefOp ref = nullptr;
 
-  // Create a global ref to replace us.
-  auto ref =
-      rewriter.create<hw::GlobalRefOp>(inst.getLoc(), refSym, inst.appid());
-  auto refAttr = hw::GlobalRefAttr::get(ref);
+  // If 'inst' doesn't contain any ops which use a global ref op, don't create
+  // one.
+  if (llvm::any_of(inst.getOps(), [](Operation &op) {
+        return isa<DynInstDataOpInterface>(op);
+      })) {
 
-  // For each level of `appid`, find the static operation which needs a back
-  // reference to the global ref which is replacing us.
-  bool symNotFound = false;
-  for (auto innerRef : inst.appid().getAsRange<hw::InnerRefAttr>()) {
-    MSFTModuleOp mod =
-        cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
-    const hw::SymbolCache &modSyms = getSyms(mod);
-    Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
-    if (!tgtOp) {
-      symNotFound = true;
-      inst.emitOpError("Could not find ")
-          << innerRef.getName() << " in module " << innerRef.getModule();
-      continue;
+    // Come up with a unique symbol name.
+    auto refSym = StringAttr::get(&getContext(), "instref");
+    auto origRefSym = refSym;
+    unsigned ctr = 0;
+    while (topSyms.getDefinition(refSym))
+      refSym = StringAttr::get(&getContext(),
+                               origRefSym.getValue() + "_" + Twine(++ctr));
+
+    // Create a global ref to replace us.
+    ArrayAttr globalRefPath = inst.globalRefPath();
+    ref = b.create<hw::GlobalRefOp>(inst.getLoc(), refSym, globalRefPath);
+    auto refAttr = hw::GlobalRefAttr::get(ref);
+
+    // Add the new symbol to the symbol cache.
+    topSyms.unfreeze();
+    topSyms.addDefinition(refSym, ref);
+    topSyms.freeze();
+
+    // For each level of `globalRef`, find the static operation which needs a
+    // back reference to the global ref which is replacing us.
+    bool symNotFound = false;
+    for (auto innerRef : globalRefPath.getAsRange<hw::InnerRefAttr>()) {
+      MSFTModuleOp mod =
+          cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
+      const hw::SymbolCache &modSyms = getSyms(mod);
+      Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
+      if (!tgtOp) {
+        symNotFound = true;
+        inst.emitOpError("Could not find ")
+            << innerRef.getName() << " in module " << innerRef.getModule();
+        continue;
+      }
+      // Add the backref to the list of attributes to apply.
+      globalRefsToApply[tgtOp].push_back(refAttr);
+
+      // Since GlobalRefOp uses the `inner_sym` attribute, assign the
+      // 'inner_sym' attribute if it's not already assigned.
+      if (!tgtOp->hasAttr("inner_sym")) {
+        tgtOp->setAttr("inner_sym", innerRef.getName());
+      }
     }
-    // Add the backref to the list of attributes to apply.
-    globalRefsToApply[tgtOp].push_back(refAttr);
-
-    // Since GlobalRefOp uses the `inner_sym` attribute, assign the 'inner_sym'
-    // attribute if it's not already assigned.
-    if (!tgtOp->hasAttr("inner_sym")) {
-      tgtOp->setAttr("inner_sym", innerRef.getName());
-    }
+    if (symNotFound)
+      return inst.emitOpError(
+          "Could not find operation corresponding to instance reference");
   }
-  if (symNotFound)
-    return rewriter.notifyMatchFailure(
-        inst, "Could not find operation corresponding to appid");
 
   // Relocate all my children.
-  rewriter.setInsertionPointAfter(inst);
   for (Operation &op : llvm::make_early_inc_range(inst.getOps())) {
+    // Child instances should have been lowered already.
+    assert(!isa<DynamicInstanceOp>(op));
     op.remove();
-    rewriter.insert(&op);
+    b.insert(&op);
 
     // Assign a ref for ops which need it.
-    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op))
+    if (auto specOp = dyn_cast<DynInstDataOpInterface>(op)) {
+      assert(ref);
       specOp.setGlobalRef(ref);
+    }
   }
 
-  rewriter.eraseOp(inst);
+  inst.erase();
   return success();
 }
-
-namespace {
-struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
-  void runOnOperation() override;
-};
-} // anonymous namespace
-
 void LowerInstancesPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
-  // Aggregation of the global ref attributes populated as a side-effect of the
-  // conversion.
-  DenseMap<Operation *, SmallVector<hw::GlobalRefAttr, 0>> globalRefsToApply;
 
   // Populate the top level symbol cache.
-  hw::SymbolCache topSyms;
   topSyms.addDefinitions(top);
   topSyms.freeze();
-  DenseSet<StringAttr> newSyms;
 
-  ConversionTarget target(*ctxt);
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<sv::SVDialect>();
-  target.addLegalDialect<msft::MSFTDialect>();
-  target.addIllegalOp<DynamicInstanceOp>();
+  size_t numFailed = 0;
+  OpBuilder builder(ctxt);
 
-  RewritePatternSet patterns(ctxt);
-  patterns.insert<DynamicInstanceOpLowering>(ctxt, topSyms, newSyms,
-                                             globalRefsToApply);
-
-  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+  // Find all of the InstanceHierarchyOps.
+  for (Operation &op : llvm::make_early_inc_range(top.getOps())) {
+    if (!isa<InstanceHierarchyOp>(op))
+      continue;
+    builder.setInsertionPoint(&op);
+    // Walk the child dynamic instances in _post-order_ so we lower and delete
+    // the children first.
+    op.walk<mlir::WalkOrder::PostOrder>([&](DynamicInstanceOp inst) {
+      if (failed(lower(inst, builder)))
+        ++numFailed;
+    });
+    op.erase();
+  }
+  if (numFailed)
     signalPassFailure();
 
   // Since applying a large number of attributes is very expensive in MLIR (both
