@@ -70,8 +70,9 @@ print("=== Hierarchy")
 # CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
 test_inst = t.get_instance(Test)
 t.createdb(primdb)
-mod = test_inst.walk(lambda inst: print(inst))
+test_inst.walk(lambda inst: print(inst))
 
+# CHECK-LABEL: === Placements
 print("=== Placements")
 
 
@@ -106,6 +107,13 @@ instance_attrs.lookup(pycde.AppID("UnParameterized",
 test_inst = t.get_instance(Test)
 t.createdb()
 test_inst.walk(instance_attrs.apply_attributes_visitor)
+
+test_inst.walk(lambda inst: print(inst, inst.locations))
+# CHECK: <instance: []> []
+# CHECK: <instance: [UnParameterized]> [(PhysLocation<PrimitiveType.M20K, x:15, y:25, num:0>, 'memory|bank')]
+# CHECK: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]
+# CHECK: <instance: [UnParameterized_1]> [(PhysLocation<PrimitiveType.M20K, x:39, y:25, num:0>, 'memory|bank')]
+# CHECK: <instance: [UnParameterized_1, Nothing]> []
 
 # TODO: add back anonymous reservations
 

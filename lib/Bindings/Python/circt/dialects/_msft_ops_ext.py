@@ -185,3 +185,10 @@ class DynamicInstanceOp:
       next = next.operation.parent.opview
     path.reverse()
     return _ir.ArrayAttr.get(path)
+
+
+class PDPhysLocationOp:
+
+  @property
+  def loc(self):
+    return _msft.PhysLocationAttr(self.attributes["loc"])

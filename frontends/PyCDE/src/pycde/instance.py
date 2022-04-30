@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from .appid import AppID
 
@@ -115,6 +115,26 @@ class InstanceLike:
     loc = devdb.PhysLocation(devtype, x, y, num)
     self.root.system.placedb.place(self, loc, subpath)
 
+  @property
+  def locations(self) -> List[Tuple[object, str]]:
+    """Returns a list of physical locations assigned to this instance in
+    (PhysLocation, subpath) format."""
+
+    def conv(op):
+      import pycde.devicedb as devdb
+      loc = devdb.PhysLocation(op.loc)
+      subPath = op.subPath
+      if subPath is not None:
+        subPath = ir.StringAttr(subPath).value
+      return (loc, subPath)
+
+    dyn_inst_block = self._dyn_inst.operation.regions[0].blocks[0]
+    return [
+        conv(op)
+        for op in dyn_inst_block
+        if isinstance(op, msft.PDPhysLocationOp)
+    ]
+
 
 class Instance(InstanceLike):
   """Represents a _specific_ instance, unique in a design. This is in contrast
@@ -163,6 +183,11 @@ class InstanceHierarchy(InstanceLike):
     self.system = sys
     super().__init__(inside_of=module, tgt_mod=module, root=self)
     sys._op_cache.get_or_create_instance_hier_op(self)
+
+  @property
+  def _dyn_inst(self) -> msft.InstanceHierarchyOp:
+    """Returns the raw CIRCT op backing this Instance."""
+    return self._op_cache.get_or_create_instance_hier_op(self)
 
   @property
   def name(self) -> str:

@@ -7,8 +7,10 @@ import typing
 
 from circt.dialects import msft
 
-from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr, Location
+from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
 from pycde.support import get_user_loc
+
+from functools import singledispatchmethod
 
 PrimitiveType = msft.PrimitiveType
 
@@ -16,6 +18,7 @@ PrimitiveType = msft.PrimitiveType
 class PhysLocation:
   __slots__ = ["_loc"]
 
+  @singledispatchmethod
   def __init__(self,
                prim_type: typing.Union[str, PrimitiveType],
                x: int,
@@ -34,9 +37,16 @@ class PhysLocation:
     assert isinstance(num, int)
     self._loc = msft.PhysLocationAttr.get(prim_type, x, y, num)
 
+  @__init__.register(msft.PhysLocationAttr)
+  def __from_loc(self, loc):
+    self._loc = loc
+
   def __str__(self) -> str:
     loc = self._loc
     return f"PhysLocation<{loc.devtype}, x:{loc.x}, y:{loc.y}, num:{loc.num}>"
+
+  def __repr__(self) -> str:
+    return self.__str__()
 
 
 class PhysicalRegion:
