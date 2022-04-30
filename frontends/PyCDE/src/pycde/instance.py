@@ -120,9 +120,7 @@ class RootInstance(Instance):
   """
   A root of an instance hierarchy starting at top-level 'module'.
 
-  Provides:
-    - The placement database.
-    - A (necessary) level of indirection into CIRCT IR.
+  Provides a (necessary) level of indirection into CIRCT IR.
   """
   import pycde.system as system
   import pycde.devicedb as devdb
@@ -167,10 +165,6 @@ class RootInstance(Instance):
   @property
   def _name_attr(self):
     return None
-
-  @property
-  def placedb(self):
-    return self._system.placedb
 
   @property
   def path(self) -> list[Instance]:

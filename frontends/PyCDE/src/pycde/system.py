@@ -9,6 +9,8 @@ from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance, RootInstance
 
+from pycde.dialects import msft
+
 import mlir
 import mlir.ir as ir
 import mlir.passmanager
@@ -37,7 +39,7 @@ class System:
   __slots__ = [
       "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
       "_old_system_token", "_symbols", "_generate_queue", "_output_directory",
-      "files", "_instance_cache", "_placedb"
+      "files", "_instance_hier_cache", "_placedb"
   ]
 
   PASSES = """
@@ -60,7 +62,9 @@ class System:
     self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
-    self._instance_cache: dict[_SpecializedModule, RootInstance] = {}
+    self._instance_roots: dict[_SpecializedModule, RootInstance] = {}
+    self._instance_hier_cache: dict[_SpecializedModule,
+                                    msft.InstanceHierarchyOp] = {}
     self._placedb: PlacementDB = None
     self.files: typing.Set[str] = set()
 
@@ -208,10 +212,10 @@ class System:
         i += 1
     return len(self._generate_queue)
 
-  def get_instance(self, mod_cls: object) -> Instance:
+  def get_instance(self, mod_cls: object) -> RootInstance:
     mod = mod_cls._pycde_mod
     if mod not in self._instance_cache:
-      self._instance_cache[mod] = RootInstance._get(mod, self)
+      self._instance_hier_cache[mod] = RootInstance(mod, self)
     return self._instance_cache[mod]
 
   def run_passes(self, partition=False):
