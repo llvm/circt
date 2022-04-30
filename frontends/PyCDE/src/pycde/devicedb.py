@@ -3,9 +3,10 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-import typing
+from typing import Any, Optional, Union
 
 from circt.dialects import msft
+from circt.support import attribute_to_var
 
 from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
 from pycde.support import get_user_loc
@@ -20,10 +21,10 @@ class PhysLocation:
 
   @singledispatchmethod
   def __init__(self,
-               prim_type: typing.Union[str, PrimitiveType],
+               prim_type: Union[str, PrimitiveType],
                x: int,
                y: int,
-               num: typing.Union[int, None] = None):
+               num: Union[int, None] = None):
 
     if isinstance(prim_type, str):
       prim_type = getattr(PrimitiveType, prim_type)
@@ -99,10 +100,10 @@ class PrimitiveDB:
     self._db = msft.PrimitiveDB()
 
   def add_coords(self,
-                 prim_type: typing.Union[str, PrimitiveType],
+                 prim_type: Union[str, PrimitiveType],
                  x: int,
                  y: int,
-                 num: typing.Union[int, None] = None):
+                 num: Union[int, None] = None):
     self.add(PhysLocation(prim_type, x, y, num))
 
   def add(self, physloc: PhysLocation):
@@ -110,24 +111,20 @@ class PrimitiveDB:
 
 
 class PlacementDB:
-  __slots__ = ["_db"]
+  __slots__ = ["_db", "_sys"]
 
-  def __init__(self, _circt_mod, seed: typing.Union[PrimitiveDB, None]):
+  def __init__(self, sys, _circt_mod, seed: Optional[PrimitiveDB]):
     self._db = msft.PlacementDB(_circt_mod, seed._db if seed else None)
+    self._sys = sys
 
-  def get_instance_at_coords(self,
-                             prim_type: typing.Union[str, PrimitiveType],
-                             x: int,
-                             y: int,
-                             num: typing.Union[int, None] = None) -> object:
-    return self.get_instance_at(PhysLocation(prim_type, x, y, num))
-
-  def get_instance_at(self, loc: PhysLocation) -> object:
-    inst = self._db.get_instance_at(loc._loc)
-    if inst is None:
+  def get_instance_at(self, loc: PhysLocation):
+    """Get the instance placed at `loc`. Returns (Instance, subpath)."""
+    loc_op = self._db.get_instance_at(loc._loc)
+    if loc_op is None:
       return None
-    # TODO: resolve instance and return it.
-    return inst
+    inst = self._sys._op_cache.get_or_create_inst_from_op(loc_op.parent.opview)
+    subpath = attribute_to_var(loc_op.opview.subPath)
+    return (inst, subpath)
 
   def reserve_location(self, loc: PhysLocation, entity: EntityExtern):
     sym_name = entity._entity_extern.sym_name.value
@@ -143,5 +140,5 @@ class PlacementDB:
 class EntityExtern:
   __slots__ = ["_entity_extern"]
 
-  def __init__(self, tag: str, metadata: typing.Any = ""):
+  def __init__(self, tag: str, metadata: Any = ""):
     self._entity_extern = msft.EntityExternOp.create(tag, metadata)

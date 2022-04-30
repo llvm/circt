@@ -118,6 +118,8 @@ def type_to_pytype(t):
 def attribute_to_var(attr):
   import mlir.ir as ir
 
+  if attr is None:
+    return None
   if not isinstance(attr, ir.Attribute):
     raise TypeError("attribute_to_var only accepts MLIR Attributes")
 
