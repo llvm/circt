@@ -9,7 +9,7 @@ from .appid import AppID
 
 from circt.dialects import msft
 
-import mlir.ir as _ir
+import mlir.ir as ir
 
 
 class InstanceLike:
@@ -33,7 +33,7 @@ class InstanceLike:
     self._child_cache: List[Instance] = None
     self._op_cache = root.system._op_cache
 
-  def _create_instance(self, parent: Instance, static_op: _ir.Operation):
+  def _create_instance(self, parent: Instance, static_op: ir.Operation):
     """Create a new `Instance` which is a child of `parent` in the instance
     hierarchy and corresponds to the given static operation. The static
     operation need not be a module instantiation."""
@@ -49,7 +49,7 @@ class InstanceLike:
                     root=self.root)
     return inst
 
-  def _get_sym_ops_in_module(self) -> List[_ir.Operation]:
+  def _get_sym_ops_in_module(self) -> List[ir.Operation]:
     """Look into the IR for any ops which have a `sym_name` attribute."""
     if self.tgt_mod is None:
       return []
@@ -121,7 +121,7 @@ class Instance(InstanceLike):
 
   __slots__ = ["parent", "_ref", "module"]
 
-  def __init__(self, parent: Instance, instance_sym: _ir.Attribute,
+  def __init__(self, parent: Instance, instance_sym: ir.Attribute,
                inside_of: _SpecializedModule,
                tgt_mod: Optional[_SpecializedModule], root: InstanceHierarchy):
     super().__init__(inside_of, tgt_mod, root)
@@ -133,8 +133,8 @@ class Instance(InstanceLike):
     """Returns the raw CIRCT op backing this Instance."""
     return self._op_cache._create_or_get_dyn_inst(self)
 
-  def _get_ip(self) -> _ir.InsertionPoint:
-    return _ir.InsertionPoint(self._dyn_inst.body.blocks[0])
+  def _get_ip(self) -> ir.InsertionPoint:
+    return ir.InsertionPoint(self._dyn_inst.body.blocks[0])
 
   @property
   def path(self) -> list[Instance]:
@@ -142,7 +142,7 @@ class Instance(InstanceLike):
 
   @property
   def name(self) -> str:
-    return _ir.StringAttr(self.symbol).value
+    return ir.StringAttr(self.symbol).value
 
 
 class InstanceHierarchy(InstanceLike):
@@ -163,8 +163,8 @@ class InstanceHierarchy(InstanceLike):
   def name(self):
     return "<<root>>"
 
-  def _get_ip(self) -> _ir.InsertionPoint:
-    return _ir.InsertionPoint(
+  def _get_ip(self) -> ir.InsertionPoint:
+    return ir.InsertionPoint(
         self._op_cache.get_or_create_instance_hier_op(self).instances.blocks[0])
 
   @property
