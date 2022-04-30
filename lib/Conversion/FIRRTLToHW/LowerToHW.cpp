@@ -1324,7 +1324,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
-  void initializeRegister(Value reg);
+  void initializeRegister(Value reg, llvm::Optional<std::pair<Value, Value>>
+                                         asyncRegResetInitPair = llvm::None);
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
@@ -1531,6 +1532,10 @@ private:
       alwaysBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
+
+  llvm::SmallDenseMap<Block *, sv::IfDefProceduralOp> randomizeRegInitIfOp;
+  llvm::SmallDenseMap<std::pair<Block *, Value>, sv::IfOp>
+      asyncRegPostRandomizationIfOp;
 
   /// This is a set of wires that get inserted as an artifact of the
   /// lowering process.  LowerToHW should attempt to clean these up after
@@ -2365,7 +2370,8 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
   randomizePrologEmitted = true;
 }
 
-void FIRRTLLowering::initializeRegister(Value reg) {
+void FIRRTLLowering::initializeRegister(
+    Value reg, llvm::Optional<std::pair<Value, Value>> asyncRegResetInitPair) {
   typedef std::pair<Attribute, std::pair<unsigned, unsigned>> SymbolAndRange;
 
   // The point in the design where we should add randomization register
@@ -2505,7 +2511,30 @@ void FIRRTLLowering::initializeRegister(Value reg) {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
       circuitState.used_RANDOMIZE_REG_INIT = 1;
-      addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() { randomInit(); });
+      auto *block = builder.getBlock();
+
+      // Randomized values are assigned to registers in `ifdef
+      // RANDOMIZE_REG_INIT block.
+      auto &op = randomizeRegInitIfOp[block];
+      if (!op)
+        op = builder.create<sv::IfDefProceduralOp>("RANDOMIZE_REG_INIT",
+                                                   [&]() {});
+      runWithInsertionPointAtEndOfBlock(randomInit, op.thenRegion());
+
+      // If the register is async reset, we need to insert extra initialization
+      // in post-randomization so that we can set the reset value to register if
+      // the reset signal is enabled.
+      if (asyncRegResetInitPair.hasValue()) {
+        Value resetSignal, resetValue;
+        std::tie(resetSignal, resetValue) = *asyncRegResetInitPair;
+        // Merge if op if their reset values are same.
+        auto &op = asyncRegPostRandomizationIfOp[{block, resetSignal}];
+        if (!op)
+          op = builder.create<sv::IfOp>(resetSignal, [&]() {});
+        runWithInsertionPointAtEndOfBlock(
+            [&]() { builder.create<sv::BPAssignOp>(reg, resetValue); },
+            op.thenRegion());
+      }
     });
   });
 }
@@ -2579,7 +2608,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
                      ::ResetType::SyncReset, sv::EventControl::AtPosEdge,
                      resetSignal, std::function<void()>(), resetFn);
   }
-  initializeRegister(regResult);
+  llvm::Optional<std::pair<Value, Value>> asyncRegResetInitPair;
+  if (op.resetSignal().getType().isa<AsyncResetType>())
+    asyncRegResetInitPair = {resetSignal, resetValue};
+  initializeRegister(regResult, asyncRegResetInitPair);
   return success();
 }
 
