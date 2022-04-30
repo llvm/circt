@@ -55,8 +55,19 @@ module  {
   // Combination loop through an instance
   // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
-    firrtl.module @thru(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    // expected-note @+2 {{hasloops.inner2.inner1.in}}
+    // expected-note @+1 {{hasloops.inner2.inner1.out}}
+    firrtl.module @thru1(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
       firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+
+    // expected-note @+2 {{hasloops.inner2.in}}
+    // expected-note @+1 {{hasloops.inner2.out}}
+    firrtl.module @thru2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+      // expected-note @+1 {{Instance hasloops.inner2.inner1: in ---> out}}
+      %inner_in, %inner_out = firrtl.instance inner1 @thru1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+      firrtl.connect %inner_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
     }
     // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
     firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
@@ -65,9 +76,9 @@ module  {
       // expected-note @+1 {{hasloops.z}}
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+2 {{hasloops.inner.in}}
-      // expected-note @+1 {{hasloops.inner.out}}
-      %inner_in, %inner_out = firrtl.instance inner @thru(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+      // expected-note @+2 {{Instance hasloops.inner2: in ---> out}}
+      // expected-note @+1 {{hasloops.inner2.in}}
+      %inner_in, %inner_out = firrtl.instance inner2 @thru2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
       firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
