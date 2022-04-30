@@ -16,6 +16,8 @@ class InstanceLike:
   """Parent class for anything which should be walked and can contain PD ops."""
   from .module import _SpecializedModule
 
+  __slots__ = ["inside_of", "tgt_mod", "root", "_child_cache", "_op_cache"]
+
   def __init__(self, inside_of: _SpecializedModule,
                tgt_mod: Optional[_SpecializedModule], root: InstanceHierarchy):
     """
@@ -120,7 +122,7 @@ class Instance(InstanceLike):
 
   from .module import _SpecializedModule
 
-  __slots__ = ["parent", "_ref", "module"]
+  __slots__ = ["parent", "symbol"]
 
   def __init__(self, parent: Instance, instance_sym: ir.Attribute,
                inside_of: _SpecializedModule,
@@ -152,10 +154,12 @@ class InstanceHierarchy(InstanceLike):
   an `Instance` since the base cases differ, and doesn't have an instance symbol
   (since it addresses the 'top' module). Plus, CIRCT models it this way.
   """
-  import pycde.system as system
+  import pycde.system as cdesys
   from .module import _SpecializedModule
 
-  def __init__(self, module: _SpecializedModule, sys: system.System):
+  __slots__ = ["system"]
+
+  def __init__(self, module: _SpecializedModule, sys: cdesys.System):
     self.system = sys
     super().__init__(inside_of=module, tgt_mod=module, root=self)
     sys._op_cache.get_or_create_instance_hier_op(self)
