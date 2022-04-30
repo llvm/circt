@@ -509,29 +509,32 @@ SmallVector<Node> sampleCycle(SCCIterator &scc) {
   llvm_unreachable("a cycle must be found in SCC");
 }
 
-void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
-                     mlir::InFlightDiagnostic &diag) {
-  // Sample a cycle to print.
-  SmallVector<Node> cycle = sampleCycle(scc);
-  unsigned cycleSize = cycle.size();
+// This function dumps a (shortest) path from `inputPort` to `outputPort` by
+// looking at a module referred by `instance`.
+void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
+                                InstanceOp instance, unsigned inputPort,
+                                unsigned outputPort, NodeContext *context,
+                                mlir::InFlightDiagnostic &diag);
 
-  // NOTE: We visit the start element twice to explicitly indicate the path
-  // forms a cycle.
-  for (unsigned i = 0, e = cycleSize + 1; i < e; ++i) {
-    Node current = cycle[i % cycleSize];
-    bool lastNode = i == cycleSize;
+// Dump a path to a diagnostic.
+void dumpPath(SmallVector<Node> &path, SmallString<16> &instancePath,
+              FModuleOp module, bool isCycle, mlir::InFlightDiagnostic &diag) {
+  unsigned pathSize = isCycle ? path.size() + 1 : path.size();
+  for (unsigned i = 0, e = pathSize; i < e; ++i) {
+    Node current = path[i % path.size()];
+    Value currentValue = current.value;
+    bool isCycleEnd = i == path.size();
     auto attachInfo = [&]() -> mlir::Diagnostic & {
-      return diag.attachNote(current.value.getLoc())
-             << module.getName().str() << ".";
+      return diag.attachNote(currentValue.getLoc()) << instancePath << ".";
     };
 
-    // If the current value is port, emit its name.
-    if (auto arg = current.value.dyn_cast<BlockArgument>()) {
+    // If the currentValue is port, emit its name.
+    if (auto arg = currentValue.dyn_cast<BlockArgument>()) {
       attachInfo() << module.getPortName(arg.getArgNumber());
       continue;
     }
 
-    TypeSwitch<Operation *>(current.value.getDefiningOp())
+    TypeSwitch<Operation *>(currentValue.getDefiningOp())
         .Case<WireOp, RegOp, RegResetOp>(
             // For operations which declare signals, we simply print signal
             // names.
@@ -540,7 +543,7 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
           // If the op is InstanceOp or SubfieldOp, it is necessary to
           // investigate the next value since output values do not expilicty
           // appear in the cycle.
-          Node next = cycle[(i + 1) % cycleSize];
+          Node next = path[(i + 1) % path.size()];
           for (auto iter = GT::child_begin(current),
                     end = GT::child_end(current);
                iter != end; ++iter) {
@@ -550,24 +553,26 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
             auto iterImpl = iter.getIteratorImpl();
             if (std::holds_alternative<InstanceNodeIterator>(iterImpl)) {
               // Instance. Print names of input and output ports.
-              auto instance = current.value.getDefiningOp<InstanceOp>();
-              auto inputPort = current.value.cast<OpResult>().getResultNumber();
+              auto instance = currentValue.getDefiningOp<InstanceOp>();
+              auto inputPort = currentValue.cast<OpResult>().getResultNumber();
               auto outputPort =
                   std::get<InstanceNodeIterator>(iterImpl).getPortNumber();
-              attachInfo() << instance.name() << "."
-                           << instance.getPortName(inputPort).str();
-              if (!lastNode)
+              if (isCycleEnd)
                 attachInfo() << instance.name() << "."
-                             << instance.getPortName(outputPort).str();
+                             << instance.getPortName(inputPort).str();
+              else
+                dumpPathBetweenModulePorts(instancePath, instance, inputPort,
+                                           outputPort, current.context, diag);
+
             } else if (std::holds_alternative<SubfieldNodeIterator>(iterImpl)) {
               // SubfieldNodeIterator represents the connection between addr
               // port and data port.
-              auto subfieldAddr = current.value.getDefiningOp<SubfieldOp>();
+              auto subfieldAddr = currentValue.getDefiningOp<SubfieldOp>();
               auto subfieldData =
                   std::get<SubfieldNodeIterator>(iterImpl).getDataPort();
 
               attachInfo() << getFieldName(getFieldRefFromValue(subfieldAddr));
-              if (!lastNode)
+              if (!isCycleEnd)
                 diag.attachNote(subfieldData.getLoc())
                     << module.getName().str() << "."
                     << getFieldName(getFieldRefFromValue(subfieldData));
@@ -577,6 +582,67 @@ void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
         })
         .Default([&](auto op) {});
   }
+}
+
+// This function dumps a (shortest) path from `inputPort` to `outputPort` by
+// looking at a module referred by `instance`.
+void dumpPathBetweenModulePorts(SmallString<16> &instancePath,
+                                InstanceOp instance, unsigned inputPort,
+                                unsigned outputPort, NodeContext *context,
+                                mlir::InFlightDiagnostic &diag) {
+  auto module = dyn_cast<FModuleOp>(*instance.getReferencedModule());
+  if (!module)
+    return;
+  unsigned instancePathSize = instancePath.size();
+  instancePath += ".";
+  instancePath += instance.name();
+  auto start = Node(module.getArgument(inputPort), context);
+  auto end = Node(module.getArgument(outputPort), context);
+  llvm::DenseMap<Node, Node> previousNode;
+  // Find a shortest path from input port to output port by BFS.
+  std::queue<Node> que;
+  que.push(start);
+  while (!que.empty()) {
+    Node current = que.front();
+    if (current == end)
+      break;
+    for (auto child :
+         llvm::make_range(GT::child_begin(current), GT::child_end(current))) {
+      // If a child is marked before, skip it.
+      if (previousNode.count(child))
+        continue;
+      // Record a previous node.
+      previousNode.insert({child, current});
+      que.push(child);
+    }
+
+    que.pop();
+  }
+
+  SmallVector<Node> path;
+  Node current = end;
+  // Reconstruct a path backwardly.
+  while (current.value) {
+    path.push_back(current);
+    current = previousNode[current];
+  }
+  std::reverse(path.begin(), path.end());
+
+  diag.attachNote(instance.getLoc())
+      << "Instance " << instancePath << ": "
+      << instance.getPortName(inputPort).str() << " ---> "
+      << instance.getPortName(outputPort).str();
+  dumpPath(path, instancePath, module, /*isCycle=*/false, diag);
+  instancePath.resize(instancePathSize);
+}
+
+void dumpSimpleCycle(SCCIterator &scc, FModuleOp module,
+                     mlir::InFlightDiagnostic &diag) {
+  // Sample a cycle to print.
+  SmallVector<Node> cycle = sampleCycle(scc);
+  SmallString<16> instancePath;
+  instancePath += module.getName();
+  dumpPath(cycle, instancePath, module, /*isCycle=*/true, diag);
 }
 
 /// This pass constructs a local graph for each module to detect combinational
