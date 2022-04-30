@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-import typing
+from typing import Any, Optional, Union
 
 from circt.dialects import msft
 
@@ -20,10 +20,10 @@ class PhysLocation:
 
   @singledispatchmethod
   def __init__(self,
-               prim_type: typing.Union[str, PrimitiveType],
+               prim_type: Union[str, PrimitiveType],
                x: int,
                y: int,
-               num: typing.Union[int, None] = None):
+               num: Optional[int] = None):
 
     if isinstance(prim_type, str):
       prim_type = getattr(PrimitiveType, prim_type)
@@ -99,10 +99,10 @@ class PrimitiveDB:
     self._db = msft.PrimitiveDB()
 
   def add_coords(self,
-                 prim_type: typing.Union[str, PrimitiveType],
+                 prim_type: Union[str, PrimitiveType],
                  x: int,
                  y: int,
-                 num: typing.Union[int, None] = None):
+                 num: Optional[int] = None):
     self.add(PhysLocation(prim_type, x, y, num))
 
   def add(self, physloc: PhysLocation):
@@ -112,14 +112,14 @@ class PrimitiveDB:
 class PlacementDB:
   __slots__ = ["_db"]
 
-  def __init__(self, _circt_mod, seed: typing.Union[PrimitiveDB, None]):
+  def __init__(self, _circt_mod, seed: Union[PrimitiveDB, None]):
     self._db = msft.PlacementDB(_circt_mod, seed._db if seed else None)
 
   def get_instance_at_coords(self,
-                             prim_type: typing.Union[str, PrimitiveType],
+                             prim_type: Union[str, PrimitiveType],
                              x: int,
                              y: int,
-                             num: typing.Union[int, None] = None) -> object:
+                             num: Optional[int] = None) -> object:
     return self.get_instance_at(PhysLocation(prim_type, x, y, num))
 
   def get_instance_at(self, loc: PhysLocation) -> object:
@@ -143,5 +143,5 @@ class PlacementDB:
 class EntityExtern:
   __slots__ = ["_entity_extern"]
 
-  def __init__(self, tag: str, metadata: typing.Any = ""):
+  def __init__(self, tag: str, metadata: Any = ""):
     self._entity_extern = msft.EntityExternOp.create(tag, metadata)

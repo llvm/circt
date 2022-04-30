@@ -6,7 +6,7 @@ import pycde
 import pycde.dialects.hw
 
 from pycde.attributes import placement
-from pycde.devicedb import PhysLocation, PrimitiveType
+from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
 
@@ -41,7 +41,7 @@ class Test:
 
 # Set up the primitive locations. Errors out if location is placed but doesn't
 # exist.
-primdb = pycde.PrimitiveDB()
+primdb = PrimitiveDB()
 primdb.add_coords("M20K", 39, 25)
 primdb.add_coords(PrimitiveType.M20K, 15, 25)
 primdb.add_coords(PrimitiveType.M20K, 40, 40)

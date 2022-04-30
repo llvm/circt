@@ -4,11 +4,9 @@
 
 from __future__ import annotations
 from typing import Tuple, Union, Dict
-import typing
 
 from pycde.support import _obj_to_value
 
-from .pycde_types import TypeAliasType, types
 from .support import (get_user_loc, _obj_to_attribute, OpOperandConnect,
                       create_type_string, create_const_zero)
 from .value import Value
@@ -25,8 +23,7 @@ import inspect
 import sys
 
 # A memoization table for module parameterization function calls.
-_MODULE_CACHE: typing.Dict[Tuple[builtins.function, mlir.ir.DictAttr],
-                           object] = {}
+_MODULE_CACHE: Dict[Tuple[builtins.function, mlir.ir.DictAttr], object] = {}
 
 
 class ModuleDecl:

@@ -62,7 +62,7 @@ class System:
     self._op_cache: _OpCache = _OpCache(self.mod)
 
     self._generate_queue = []
-    self._instance_roots: dict[_SpecializedModule, RootInstance] = {}
+    self._instance_roots: dict[_SpecializedModule, InstanceHierarchy] = {}
 
     self._placedb: PlacementDB = None
     self.files: Set[str] = set()
