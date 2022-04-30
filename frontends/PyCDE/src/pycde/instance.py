@@ -33,7 +33,8 @@ class InstanceLike:
     self._child_cache: List[Instance] = None
     self._op_cache = root.system._op_cache
 
-  def _create_instance(self, parent: Instance, static_op: ir.Operation):
+  def _create_instance(self, parent: Instance,
+                       static_op: ir.Operation) -> Instance:
     """Create a new `Instance` which is a child of `parent` in the instance
     hierarchy and corresponds to the given static operation. The static
     operation need not be a module instantiation."""
@@ -67,12 +68,12 @@ class InstanceLike:
     """Return the string symbol of the module which contains this instance."""
     return self._op_cache.get_module_symbol(self.inside_of)
 
-  def __repr__(self):
+  def __repr__(self) -> str:
     path_names = [i.name for i in self.path]
     return "<instance: [" + ", ".join(path_names) + "]>"
 
   @property
-  def appid(self):
+  def appid(self) -> AppID:
     return AppID(*[i.name for i in self.path])
 
   def children(self) -> List[Instance]:
@@ -160,7 +161,7 @@ class InstanceHierarchy(InstanceLike):
     sys._op_cache.get_or_create_instance_hier_op(self)
 
   @property
-  def name(self):
+  def name(self) -> str:
     return "<<root>>"
 
   def _get_ip(self) -> ir.InsertionPoint:
@@ -168,5 +169,5 @@ class InstanceHierarchy(InstanceLike):
         self._op_cache.get_or_create_instance_hier_op(self).instances.blocks[0])
 
   @property
-  def path(self):
+  def path(self) -> list:
     return []
