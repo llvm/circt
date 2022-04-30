@@ -82,6 +82,10 @@ namespace staticlogic {
 class StaticLogicDialect;
 } // namespace staticlogic
 
+namespace seq {
+class SeqDialect;
+} // namespace seq
+
 namespace sv {
 class SVDialect;
 } // namespace sv
