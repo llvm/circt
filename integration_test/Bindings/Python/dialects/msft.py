@@ -70,7 +70,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   with ir.InsertionPoint(mod.body):
     hier = msft.InstanceHierarchyOp.create(ir.FlatSymbolRefAttr.get("top"))
-    with ir.InsertionPoint(hier.instances.blocks[0]):
+    with ir.InsertionPoint(hier.body.blocks[0]):
       dyn_inst = msft.DynamicInstanceOp.create(path[0])
       with ir.InsertionPoint(dyn_inst.body.blocks[0]):
         dyn_inst = msft.DynamicInstanceOp.create(path[1])

@@ -52,18 +52,8 @@ class InstanceLike:
                     root=self.root)
     return inst
 
-  def _get_sym_ops_in_module(self) -> List[ir.Operation]:
-    """Look into the IR for any ops which have a `sym_name` attribute."""
-    if self.tgt_mod is None:
-      return []
-    circt_mod = self._op_cache.get_circt_mod(self.tgt_mod)
-    if isinstance(circt_mod, msft.MSFTModuleExternOp):
-      return []
-
-    def has_symbol(op):
-      return "sym_name" in op.attributes
-
-    return [op for op in circt_mod.entry_block if has_symbol(op)]
+  def _get_ip(self) -> ir.InsertionPoint:
+    return ir.InsertionPoint(self._dyn_inst.body.blocks[0])
 
   @property
   def _inside_of_symbol(self) -> str:
@@ -82,10 +72,10 @@ class InstanceLike:
     """Return a list of this instances children. Cache said list."""
     if self._child_cache is not None:
       return self._child_cache
-    symbols_in_mod = self._get_sym_ops_in_module()
+    symbols_in_mod = self._op_cache.get_sym_ops_in_module(self.tgt_mod)
     children = {
-        ir.StringAttr(op.attributes["sym_name"]):
-        self._create_instance(self, op) for op in symbols_in_mod
+        sym: self._create_instance(self, op)
+        for (sym, op) in symbols_in_mod.items()
     }
     # TODO: make these weak refs
     self._child_cache = children
@@ -157,10 +147,10 @@ class Instance(InstanceLike):
   @property
   def _dyn_inst(self) -> msft.DynamicInstanceOp:
     """Returns the raw CIRCT op backing this Instance."""
-    return self._op_cache._create_or_get_dyn_inst(self)
-
-  def _get_ip(self) -> ir.InsertionPoint:
-    return ir.InsertionPoint(self._dyn_inst.body.blocks[0])
+    op = self._op_cache.create_or_get_dyn_inst(self)
+    if op is None:
+      raise InstanceDoesNotExistError(str(self))
+    return op
 
   @property
   def path(self) -> list[Instance]:
@@ -185,21 +175,34 @@ class InstanceHierarchy(InstanceLike):
   def __init__(self, module: _SpecializedModule, sys: cdesys.System):
     self.system = sys
     super().__init__(inside_of=module, tgt_mod=module, root=self)
-    sys._op_cache.get_or_create_instance_hier_op(self)
+    sys._op_cache.create_instance_hier_op(self)
 
   @property
   def _dyn_inst(self) -> msft.InstanceHierarchyOp:
     """Returns the raw CIRCT op backing this Instance."""
-    return self._op_cache.get_or_create_instance_hier_op(self)
+    op = self._op_cache.get_instance_hier_op(self)
+    if op is None:
+      raise InstanceDoesNotExistError(self.inside_of.modcls.__name__)
+    return op
 
   @property
   def name(self) -> str:
     return "<<root>>"
 
-  def _get_ip(self) -> ir.InsertionPoint:
-    return ir.InsertionPoint(
-        self._op_cache.get_or_create_instance_hier_op(self).instances.blocks[0])
-
   @property
   def path(self) -> list:
     return []
+
+
+class InstanceError(Exception):
+  """An error related to dynamic instances."""
+
+  def __init__(self, msg: str):
+    super().__init__(msg)
+
+
+class InstanceDoesNotExistError(Exception):
+  """The instance which you are trying to reach does not exist (anymore)"""
+
+  def __init__(self, inst_str: str):
+    super().__init__(f"Instance {self} does not exist (anymore)")

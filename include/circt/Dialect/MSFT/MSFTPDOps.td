@@ -70,10 +70,10 @@ def InstanceHierarchyOp : MSFTOp<"instance.hierarchy",
   let summary = "The root of an instance hierarchy";
 
   let arguments = (ins FlatSymbolRefAttr:$topModuleRef);
-  let regions = (region SizedRegion<1>:$instances);
+  let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $topModuleRef $instances attr-dict
+    $topModuleRef $body attr-dict
   }];
 }
 
