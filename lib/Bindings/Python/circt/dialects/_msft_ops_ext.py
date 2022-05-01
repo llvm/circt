@@ -186,6 +186,10 @@ class DynamicInstanceOp:
     path.reverse()
     return _ir.ArrayAttr.get(path)
 
+  @property
+  def instanceRef(self):
+    return self.attributes["instanceRef"]
+
 
 class PDPhysLocationOp:
 

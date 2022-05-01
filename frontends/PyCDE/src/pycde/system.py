@@ -201,7 +201,7 @@ class System:
 
   def createdb(self, primdb: PrimitiveDB = None):
     if self._placedb is None:
-      self._placedb = PlacementDB(self.mod, primdb)
+      self._placedb = PlacementDB(self, self.mod, primdb)
 
 
 class _OpCache:
@@ -209,7 +209,7 @@ class _OpCache:
 
   __slots__ = [
       "_module", "_symbols", "_module_symbols", "_symbol_modules",
-      "_instance_hier_cache", "_instance_cache"
+      "_instance_hier_cache", "_instance_hier_obj_cache", "_instance_cache"
   ]
 
   def __init__(self, module: ir.Module):
@@ -219,6 +219,7 @@ class _OpCache:
     self._symbol_modules: dict[str, _SpecializedModule] = {}
 
     self._instance_hier_cache: dict[str, msft.InstanceHierarchyOp] = None
+    self._instance_hier_obj_cache: dict[str, InstanceHierarchy] = {}
     self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
 
   def release_ops(self):
@@ -306,6 +307,7 @@ class _OpCache:
       with ir.InsertionPoint(self._module.body):
         hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol)
         self._instance_hier_cache[root_mod_symbol] = hier_op
+        self._instance_hier_obj_cache[root_mod_symbol] = inst_hier
 
     return self._instance_hier_cache[root_mod_symbol]
 
@@ -318,3 +320,13 @@ class _OpCache:
       with inst.parent._get_ip():
         self._instance_cache[inst] = msft.DynamicInstanceOp.create(ref)
     return self._instance_cache[inst]
+
+  def get_or_create_inst_from_op(self, op: ir.OpView):
+    if isinstance(op, msft.InstanceHierarchyOp):
+      return self._instance_hier_obj_cache[op.top_module_ref]
+    if isinstance(op, msft.DynamicInstanceOp):
+      parent_inst = self.get_or_create_inst_from_op(op.operation.parent.opview)
+      instance_ref = hw.InnerRefAttr(op.instanceRef)
+      return parent_inst.children()[instance_ref.name]
+    raise TypeError(
+        "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")

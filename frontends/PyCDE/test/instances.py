@@ -120,7 +120,10 @@ test_inst.walk(lambda inst: print(inst, inst.locations))
 # reserved_loc = PhysLocation(PrimitiveType.M20K, 40, 40, 0)
 # entity_extern = t.create_entity_extern("tag")
 # test_inst.placedb.reserve_location(reserved_loc, entity_extern)
-assert t.placedb.get_instance_at(loc[1]) is not None
+
+# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0> has (<instance: [UnParameterized, Nothing]>, None)
+print(f"{loc[1]} has {t.placedb.get_instance_at(loc[1])}")
+
 assert t.placedb.get_instance_at(PhysLocation(PrimitiveType.M20K, 0, 0,
                                               0)) is None
 # assert test_inst.placedb.get_instance_at(reserved_loc) is not None

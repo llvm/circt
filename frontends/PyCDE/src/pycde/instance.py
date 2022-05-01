@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from .appid import AppID
 
@@ -32,7 +32,7 @@ class InstanceLike:
     self.inside_of = inside_of
     self.tgt_mod = tgt_mod
     self.root = root
-    self._child_cache: List[Instance] = None
+    self._child_cache: Dict[ir.StringAttr, Instance] = None
     self._op_cache = root.system._op_cache
 
   def _create_instance(self, parent: Instance,
@@ -78,12 +78,15 @@ class InstanceLike:
   def appid(self) -> AppID:
     return AppID(*[i.name for i in self.path])
 
-  def children(self) -> List[Instance]:
+  def children(self) -> Dict[str, Instance]:
     """Return a list of this instances children. Cache said list."""
     if self._child_cache is not None:
       return self._child_cache
     symbols_in_mod = self._get_sym_ops_in_module()
-    children = [self._create_instance(self, op) for op in symbols_in_mod]
+    children = {
+        ir.StringAttr(op.attributes["sym_name"]):
+        self._create_instance(self, op) for op in symbols_in_mod
+    }
     # TODO: make these weak refs
     self._child_cache = children
     return children
@@ -91,7 +94,7 @@ class InstanceLike:
   def walk(self, callback):
     """Descend the instance hierarchy, calling back on each instance."""
     callback(self)
-    for child in self.children():
+    for child in self.children().values():
       child.walk(callback)
 
   def _attach_attribute(self, attr):

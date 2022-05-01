@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Optional, Union
 
 from circt.dialects import msft
+from circt.support import attribute_to_var
 
 from mlir.ir import StringAttr, ArrayAttr, FlatSymbolRefAttr
 from pycde.support import get_user_loc
@@ -110,24 +111,20 @@ class PrimitiveDB:
 
 
 class PlacementDB:
-  __slots__ = ["_db"]
+  __slots__ = ["_db", "_sys"]
 
-  def __init__(self, _circt_mod, seed: Union[PrimitiveDB, None]):
+  def __init__(self, sys, _circt_mod, seed: Optional[PrimitiveDB]):
     self._db = msft.PlacementDB(_circt_mod, seed._db if seed else None)
+    self._sys = sys
 
-  def get_instance_at_coords(self,
-                             prim_type: Union[str, PrimitiveType],
-                             x: int,
-                             y: int,
-                             num: Optional[int] = None) -> object:
-    return self.get_instance_at(PhysLocation(prim_type, x, y, num))
-
-  def get_instance_at(self, loc: PhysLocation) -> object:
-    inst = self._db.get_instance_at(loc._loc)
-    if inst is None:
+  def get_instance_at(self, loc: PhysLocation):
+    """Get the instance placed at `loc`. Returns (Instance, subpath)."""
+    loc_op = self._db.get_instance_at(loc._loc)
+    if loc_op is None:
       return None
-    # TODO: resolve instance and return it.
-    return inst
+    inst = self._sys._op_cache.get_or_create_inst_from_op(loc_op.parent.opview)
+    subpath = attribute_to_var(loc_op.opview.subPath)
+    return (inst, subpath)
 
   def reserve_location(self, loc: PhysLocation, entity: EntityExtern):
     sym_name = entity._entity_extern.sym_name.value
