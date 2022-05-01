@@ -48,6 +48,7 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 static constexpr std::string_view addressSymbol() { return "@"; }
+static constexpr std::string_view endl() { return "\n"; }
 
 /// A list of integer attributes supported by the native Calyx compiler.
 constexpr std::array<StringRef, 7> integerAttributes{
@@ -127,6 +128,21 @@ struct Emitter {
 
   // Program emission
   void emitProgram(ProgramOp op);
+
+  // Metadata emission for the Cider debugger.
+  void emitCiderMetadata(mlir::ModuleOp op) {
+    auto metadata = op->getAttrOfType<ArrayAttr>("calyx.metadata");
+    if (!metadata)
+      return;
+
+    os << endl() << "METADATA " << LBraceEndL();
+    for (auto sourceLoc : llvm::enumerate(metadata)) {
+      // <index>: <source-location>\n
+      os << std::to_string(sourceLoc.index()) << colon() << space();
+      os << sourceLoc.value().cast<StringAttr>().getValue() << endl();
+    }
+    os << RBraceEndL();
+  }
 
   /// Import emission.
   void emitImports(ProgramOp op) {
@@ -664,6 +680,7 @@ mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
       emitter.emitProgram(program);
     });
   }
+  emitter.emitCiderMetadata(module);
   return emitter.finalize();
 }
 

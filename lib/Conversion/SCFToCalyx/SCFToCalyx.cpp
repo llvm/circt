@@ -171,21 +171,22 @@ static bool isControlLeafNode(Operation *op) {
 // Walks the control of this component, and appends source information for leaf
 // nodes. It also appends a position attribute that connects the source location
 // metadata to the corresponding control operation.
-static WalkResult getCiderSourceLocationMetadata(calyx::ComponentOp component,
-                                                 llvm::raw_ostream &os,
-                                                 int64_t &count) {
+static WalkResult
+getCiderSourceLocationMetadata(calyx::ComponentOp component,
+                               SmallVectorImpl<Attribute> &sourceLocations) {
   Builder builder(component->getContext());
   return component.getControlOp().walk([&](Operation *op) {
     if (!isControlLeafNode(op))
       return WalkResult::advance();
-    // <count>: <source-location>\n
-    os << count << ": ";
+
+    std::string sourceLocation;
+    llvm::raw_string_ostream os(sourceLocation);
     op->getLoc()->print(os);
-    os << "\n";
+    int64_t position = sourceLocations.size();
+    sourceLocations.push_back(
+        StringAttr::get(op->getContext(), sourceLocation));
 
-    op->setAttr("pos", builder.getI64IntegerAttr(count));
-
-    ++count;
+    op->setAttr("pos", builder.getI64IntegerAttr(position));
     return WalkResult::advance();
   });
 }
@@ -2711,15 +2712,17 @@ void SCFToCalyxPass::runOnOperation() {
     return;
   }
 
-  if (!ciderDebugMetadataPath.empty()) {
+  if (ciderSourceLocationMetadata) {
     // Debugging information for the Cider debugger.
     // Reference: https://docs.calyxir.org/debug/cider.html
-    std::error_code error;
-    llvm::raw_fd_stream os(ciderDebugMetadataPath, error);
-    int64_t count = 0;
+    SmallVector<Attribute, 16> sourceLocations;
     getOperation()->walk([&](calyx::ComponentOp component) {
-      return getCiderSourceLocationMetadata(component, os, count);
+      return getCiderSourceLocationMetadata(component, sourceLocations);
     });
+
+    MLIRContext *context = getOperation()->getContext();
+    getOperation()->setAttr("calyx.metadata",
+                            ArrayAttr::get(context, sourceLocations));
   }
 }
 

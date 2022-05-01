@@ -90,8 +90,8 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
     Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
             "Identifier of top-level function to be the entry-point component"
             " of the Calyx program.">,
-    Option<"ciderDebugMetadataPath", "cider-debug-path", "std::string", "",
-            "Path to Cider debugging metadata.">
+    Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
+            "Whether to track source location for the Cider debugger.">
   ];
 }
 
