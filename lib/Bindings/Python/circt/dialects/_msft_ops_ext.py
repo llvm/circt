@@ -160,7 +160,7 @@ class InstanceHierarchyOp:
   @staticmethod
   def create(root_mod):
     hier = _msft.InstanceHierarchyOp(root_mod)
-    hier.instances.blocks.append()
+    hier.body.blocks.append()
     return hier
 
   @property

@@ -207,9 +207,12 @@ class System:
 class _OpCache:
   """Used to cache CIRCT operations and handle symbols."""
 
+  import pycde.instance as pi
+
   __slots__ = [
       "_module", "_symbols", "_module_symbols", "_symbol_modules",
-      "_instance_hier_cache", "_instance_hier_obj_cache", "_instance_cache"
+      "_instance_hier_cache", "_instance_hier_obj_cache", "_instance_cache",
+      "_module_inside_sym_cache", "_dyn_insts_in_inst"
   ]
 
   def __init__(self, module: ir.Module):
@@ -222,17 +225,25 @@ class _OpCache:
     self._instance_hier_obj_cache: dict[str, InstanceHierarchy] = {}
     self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
 
+    self._module_inside_sym_cache: Dict[ir.Operation, Dict[ir.Attribute,
+                                                           ir.Operation]] = {}
+    self._dyn_insts_in_inst: Dict[ir.Operation,
+                                  Dict[ir.Attribute,
+                                       msft.DynamicInstanceOp]] = {}
+
   def release_ops(self):
     """Clear all of the MLIR ops we store. Call this before each transition to
     MLIR C++."""
     self._symbols = None
     self._instance_hier_cache = None
     self._instance_cache.clear()
+    self._module_inside_sym_cache.clear()
+    self._dyn_insts_in_inst.clear()
     gc.collect()
     num_ops_live = ir.Context.current._clear_live_operations()
     if num_ops_live > 0:
       sys.stderr.write(
-          f"Warning: something is holding references to {num_ops_live} MLIR ops"
+          f"Warning: something is holding references to {num_ops_live} MLIR ops\n"
       )
 
   @property
@@ -286,42 +297,79 @@ class _OpCache:
       return None
     return self._module_symbols[spec_mod]
 
-  def get_circt_mod(self, spec_mod: _SpecializedModule):
+  def get_circt_mod(self, spec_mod: _SpecializedModule) -> ir.Operation:
     """Get the CIRCT module op for a PyCDE module."""
     return self.symbols[self.get_module_symbol(spec_mod)]
 
-  def get_or_create_instance_hier_op(
-      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
-
-    # If the cache doesn't exist, build it.
+  def _build_instance_hier_cache(self):
+    """If the instance hierarchy cache doesn't exist, build it."""
     if self._instance_hier_cache is None:
       self._instance_hier_cache = {}
       for op in self._module.operation.regions[0].blocks[0]:
         if isinstance(op, msft.InstanceHierarchyOp):
           self._instance_hier_cache[op.top_module_ref] = op
 
-    # Lookup in the cache and create if not found.
+  def create_instance_hier_op(
+      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
+    """Create an instance hierarchy op 'inst_hier' and add it to the cache.
+    Assert if one already exists in the cache."""
+
     root_mod_symbol = ir.FlatSymbolRefAttr.get(
         self.get_module_symbol(inst_hier.inside_of))
-    if root_mod_symbol not in self._instance_hier_cache:
-      with ir.InsertionPoint(self._module.body):
-        hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol)
-        self._instance_hier_cache[root_mod_symbol] = hier_op
-        self._instance_hier_obj_cache[root_mod_symbol] = inst_hier
 
-    return self._instance_hier_cache[root_mod_symbol]
+    self._build_instance_hier_cache()
+    assert root_mod_symbol not in self._instance_hier_cache, \
+      "Cannot create two instance hierarchy roots for same module"
 
-  def _create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
-    # We don't support cache rebuilding yet
-    assert self._instance_cache is not None
+    with ir.InsertionPoint(self._module.body):
+      hier_op = msft.InstanceHierarchyOp.create(root_mod_symbol)
+      self._instance_hier_cache[root_mod_symbol] = hier_op
+      self._instance_hier_obj_cache[root_mod_symbol] = inst_hier
+
+    return hier_op
+
+  def get_instance_hier_op(
+      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
+    """Lookup an instance hierarchy op in the cache. None if not found."""
+
+    self._build_instance_hier_cache()
+    root_mod_symbol = ir.FlatSymbolRefAttr.get(
+        self.get_module_symbol(inst_hier.inside_of))
+    return self._instance_hier_cache.get(root_mod_symbol, None)
+
+  def create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
+    """Get the dynamic instance op corresponding to 'inst'. Returns 'None' if
+    the instance doesn't have a static op in the IR."""
+
+    # Check static op existence.
+    inside_of_syms = self.get_sym_ops_in_module(inst.inside_of)
+    if inst.symbol not in inside_of_syms:
+      return None
+
     if inst not in self._instance_cache:
       ref = hw.InnerRefAttr.get(ir.StringAttr.get(inst._inside_of_symbol),
                                 inst.symbol)
-      with inst.parent._get_ip():
-        self._instance_cache[inst] = msft.DynamicInstanceOp.create(ref)
+      # Check if the dynamic instance op exists.
+      parent_op = inst.parent._dyn_inst
+      insts_in_parent = self.get_dyn_insts_in_inst(parent_op)
+      if ref in insts_in_parent:
+        # If it is, install it into the instance cache
+        inst_op = insts_in_parent[ref]
+        self._instance_cache[inst] = inst_op
+      else:
+        # If not, create a new one and install it into the instance cache and
+        # add it to the insts in parent cache.
+        with inst.parent._get_ip():
+          new_inst = msft.DynamicInstanceOp.create(ref)
+          self._instance_cache[inst] = new_inst
+          insts_in_parent[ref] = new_inst
+
     return self._instance_cache[inst]
 
-  def get_or_create_inst_from_op(self, op: ir.OpView):
+  def get_or_create_inst_from_op(self, op: ir.OpView) -> pi.InstanceLike:
+    """Descend the Python instance hierarchy from the CIRCT IR, returning the
+    Python Instance corresponding to 'op'."""
+
     if isinstance(op, msft.InstanceHierarchyOp):
       return self._instance_hier_obj_cache[op.top_module_ref]
     if isinstance(op, msft.DynamicInstanceOp):
@@ -330,3 +378,33 @@ class _OpCache:
       return parent_inst.children()[instance_ref.name]
     raise TypeError(
         "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")
+
+  def get_sym_ops_in_module(
+      self, module: _SpecializedModule) -> Dict[ir.Attribute, ir.Operation]:
+    """Look into the IR inside 'module' for any ops which have a `sym_name`
+    attribute. Cached."""
+
+    if module is None:
+      return {}
+    circt_mod = self.get_circt_mod(module)
+    if isinstance(circt_mod, msft.MSFTModuleExternOp):
+      return {}
+
+    if circt_mod not in self._module_inside_sym_cache:
+      self._module_inside_sym_cache[circt_mod] = \
+        {op.attributes["sym_name"]: op
+         for op in circt_mod.entry_block
+         if "sym_name" in op.attributes}
+
+    return self._module_inside_sym_cache[circt_mod]
+
+  def get_dyn_insts_in_inst(
+      self, inst: ir.Operation) -> Dict[ir.Attribute, msft.DynamicInstanceOp]:
+    """Get a mapping of existing dynamic instances inside of instance-like
+    'inst'."""
+
+    if inst not in self._dyn_insts_in_inst:
+      self._dyn_insts_in_inst[inst] = \
+        {op.instanceRef: op for op in inst.body.blocks[0]
+         if isinstance(op, msft.DynamicInstanceOp)}
+    return self._dyn_insts_in_inst[inst]

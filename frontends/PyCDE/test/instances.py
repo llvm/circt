@@ -10,6 +10,8 @@ from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
 
+from pycde.instance import InstanceDoesNotExistError
+
 
 @pycde.externmodule
 class Nothing:
@@ -132,11 +134,31 @@ assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
 assert (len(instance_attrs.find_unused()) == 1)
 
+# CHECK-LABEL: === Force-clean all the caches and test rebuilds
+print("=== Force-clean all the caches and test rebuilds")
+t._op_cache.release_ops()
+
+test_inst.walk(lambda inst: print(inst, inst.locations))
+# CHECK: <instance: []> []
+# CHECK: <instance: [UnParameterized]> [(PhysLocation<PrimitiveType.M20K, x:15, y:25, num:0>, 'memory|bank')]
+# CHECK: <instance: [UnParameterized, Nothing]> [(PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>, None)]
+# CHECK: <instance: [UnParameterized_1]> [(PhysLocation<PrimitiveType.M20K, x:39, y:25, num:0>, 'memory|bank')]
+# CHECK: <instance: [UnParameterized_1, Nothing]> []
+
+# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0> has (<instance: [UnParameterized, Nothing]>, None)
+print(f"{loc[1]} has {t.placedb.get_instance_at(loc[1])}")
+
 print("=== Pre-pass mlir dump")
 t.print()
 
 print("=== Running passes")
 t.run_passes()
+
+try:
+  test_inst._dyn_inst()
+  assert False
+except InstanceDoesNotExistError:
+  pass
 
 print("=== Final mlir dump")
 t.print()
