@@ -100,6 +100,7 @@ struct WhileOpInterface {
   }
 
   Operation *getOperation() { return impl; }
+  Location getLoc() { return impl->getLoc(); }
 
 private:
   Operation *impl;
@@ -955,7 +956,7 @@ private:
     auto groupName = getComponentState().getUniqueName(
         getComponentState().getProgramState().blockName(block));
     return createGroup<TGroupOp>(rewriter, getComponentState().getComponentOp(),
-                                 block->front().getLoc(), groupName);
+                                 op->getLoc(), groupName);
   }
 
   /// buildLibraryBinaryPipeOp will build a TCalyxLibBinaryPipeOp, to
@@ -1164,7 +1165,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
   assert(whileOp);
   WhileOpInterface whileOpInterface(whileOp);
-  yieldOp.getOperands();
+
   auto assignGroup = buildWhileIterArgAssignments(
       rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
       getComponentState().getUniqueName(whileOp) + "_latch",
@@ -2075,13 +2076,14 @@ private:
     for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
-        rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name());
+        rewriter.create<calyx::EnableOp>(groupPtr->getLoc(),
+                                         groupPtr->sym_name());
       } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
         auto whileCtrlOp =
-            buildWhileCtrlOp(whileOp, whileSchedPtr->initGroups, loc, rewriter);
+            buildWhileCtrlOp(whileOp, whileSchedPtr->initGroups, rewriter);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
         auto whileBodyOp =
             rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
@@ -2094,8 +2096,10 @@ private:
 
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
-        rewriter.create<calyx::EnableOp>(
-            loc, getComponentState().getWhileLatchGroup(whileOp).getName());
+        calyx::GroupOp whileLatchGroup =
+            getComponentState().getWhileLatchGroup(whileOp);
+        rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
+                                         whileLatchGroup.getName());
 
         if (res.failed())
           return res;
@@ -2104,7 +2108,7 @@ private:
         auto &whileOp = pipeSchedPtr->whileOp;
 
         auto whileCtrlOp =
-            buildWhileCtrlOp(whileOp, pipeSchedPtr->initGroups, loc, rewriter);
+            buildWhileCtrlOp(whileOp, pipeSchedPtr->initGroups, rewriter);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
         auto whileBodyOp =
             rewriter.create<calyx::ParOp>(whileOp.getOperation()->getLoc());
@@ -2115,7 +2119,8 @@ private:
             getComponentState().getBlockScheduleables(whileOp.getBodyBlock());
         for (auto &group : bodyBlockScheduleables)
           if (auto *groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr)
-            rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name());
+            rewriter.create<calyx::EnableOp>(groupPtr->getLoc(),
+                                             groupPtr->sym_name());
           else
             return whileOp.getOperation()->emitError(
                 "Unsupported block schedulable");
@@ -2149,7 +2154,7 @@ private:
     auto preSeqOp = rewriter.create<calyx::SeqOp>(loc);
     rewriter.setInsertionPointToEnd(preSeqOp.getBody());
     for (auto barg : getComponentState().getBlockArgGroups(from, to))
-      rewriter.create<calyx::EnableOp>(loc, barg.sym_name());
+      rewriter.create<calyx::EnableOp>(barg.getLoc(), barg.sym_name());
 
     return buildCFGControl(path, rewriter, parentCtrlBlock, from, to);
   }
@@ -2220,16 +2225,16 @@ private:
 
   calyx::WhileOp buildWhileCtrlOp(WhileOpInterface whileOp,
                                   SmallVector<calyx::GroupOp> initGroups,
-                                  Location loc,
                                   PatternRewriter &rewriter) const {
+    Location loc = whileOp.getLoc();
     /// Insert while iter arg initialization group(s). Emit a
     /// parallel group to assign one or more registers all at once.
     {
       PatternRewriter::InsertionGuard g(rewriter);
       auto parOp = rewriter.create<calyx::ParOp>(loc);
       rewriter.setInsertionPointToStart(parOp.getBody());
-      for (auto group : initGroups)
-        rewriter.create<calyx::EnableOp>(loc, group.getName());
+      for (calyx::GroupOp group : initGroups)
+        rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
     }
 
     /// Insert the while op itself.
