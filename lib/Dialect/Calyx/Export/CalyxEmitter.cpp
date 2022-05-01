@@ -137,11 +137,15 @@ struct Emitter {
 
     constexpr std::string_view metadataIdentifier = "METADATA";
     os << endl() << metadataIdentifier << space() << LBraceEndL();
+
+    addIndent();
     for (auto sourceLoc : llvm::enumerate(metadata)) {
       // <index>: <source-location>\n
-      os << std::to_string(sourceLoc.index()) << colon() << space();
+      os << std::to_string(sourceLoc.index()) << colon();
       os << sourceLoc.value().cast<StringAttr>().getValue() << endl();
     }
+    reduceIndent();
+
     os << RBraceEndL();
   }
 
