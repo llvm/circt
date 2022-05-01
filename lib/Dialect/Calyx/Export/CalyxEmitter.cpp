@@ -135,7 +135,8 @@ struct Emitter {
     if (!metadata)
       return;
 
-    os << endl() << "METADATA " << LBraceEndL();
+    constexpr std::string_view metadataIdentifier = "METADATA";
+    os << endl() << metadataIdentifier << space() << LBraceEndL();
     for (auto sourceLoc : llvm::enumerate(metadata)) {
       // <index>: <source-location>\n
       os << std::to_string(sourceLoc.index()) << colon() << space();
