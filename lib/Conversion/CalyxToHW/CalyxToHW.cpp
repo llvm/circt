@@ -222,9 +222,10 @@ private:
           auto right = wireIn(op.right(), op.instanceName() + "_right", b);
 
           auto mul = b.create<MulOp>(left, right);
+          auto mulReg = reg(mul, clk, reset, op.instanceName(), b);
           auto doneReg = reg(go, clk, reset, op.instanceName() + "_done", b);
 
-          auto out = wireOut(mul, op.instanceName() + "_out", b);
+          auto out = wireOut(mulReg, op.instanceName() + "_out", b);
           auto done = wireOut(doneReg, op.instanceName() + "_done", b);
           wires.append({clk.input(), reset.input(), go.input(), left.input(),
                         right.input(), out, done});
