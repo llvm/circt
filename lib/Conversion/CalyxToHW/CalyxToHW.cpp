@@ -324,9 +324,14 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
     if (auto readInOut = dyn_cast<ReadInOutOp>(adaptor.dest().getDefiningOp()))
       dest = readInOut.input();
 
-    // TODO: gate by the optional guard.
+    auto src = adaptor.src();
+    if (auto guard = adaptor.guard()) {
+      auto zero =
+          rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
+      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero);
+    }
 
-    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, adaptor.src());
+    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, src);
 
     return success();
   }
