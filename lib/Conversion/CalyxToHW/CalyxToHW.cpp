@@ -361,15 +361,9 @@ LogicalResult CalyxToHWPass::runOnProgram(ProgramOp program) {
   MLIRContext &context = getContext();
 
   ConversionTarget target(context);
-  // target.addIllegalDialect<CalyxDialect>();
-  target.addIllegalOp<ProgramOp>();
-  target.addIllegalOp<ComponentOp>();
-  target.addIllegalOp<WiresOp>();
-  target.addIllegalOp<ControlOp>();
-  target.addIllegalOp<calyx::AssignOp>();
-
-  target.addLegalDialect<CombDialect>();
+  target.addIllegalDialect<CalyxDialect>();
   target.addLegalDialect<HWDialect>();
+  target.addLegalDialect<CombDialect>();
   target.addLegalDialect<SeqDialect>();
   target.addLegalDialect<SVDialect>();
 
