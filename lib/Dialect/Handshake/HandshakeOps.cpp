@@ -894,7 +894,7 @@ void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 }
 
 void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
-                                ArrayRef<Value> operands) {
+                                ValueRange operands) {
   result.addOperands(operands);
 }
 
@@ -1173,7 +1173,7 @@ std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
 }
 
 void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
-                             Value memref, ArrayRef<Value> inputs, int ldCount,
+                             Value memref, ValueRange inputs, int ldCount,
                              int stCount, int id) {
   SmallVector<Value> ops;
   ops.push_back(memref);
@@ -1196,7 +1196,7 @@ void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<Value> operands, int outputs, int control_outputs,
+                     ValueRange operands, int outputs, int controlOutputs,
                      bool lsq, int id, Value memref) {
   result.addOperands(operands);
 
@@ -1206,7 +1206,7 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   result.types.append(outputs, memrefType.getElementType());
 
   // Control outputs
-  result.types.append(control_outputs, builder.getNoneType());
+  result.types.append(controlOutputs, builder.getNoneType());
   result.addAttribute("lsq", builder.getBoolAttr(lsq));
   result.addAttribute("memRefType", TypeAttr::get(memrefType));
 
@@ -1217,7 +1217,7 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   if (!lsq) {
     result.addAttribute("ldCount", builder.getIntegerAttr(i32Type, outputs));
     result.addAttribute(
-        "stCount", builder.getIntegerAttr(i32Type, control_outputs - outputs));
+        "stCount", builder.getIntegerAttr(i32Type, controlOutputs - outputs));
   }
 }
 
@@ -1285,7 +1285,7 @@ std::string handshake::LoadOp::getResultName(unsigned int idx) {
 }
 
 void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
-                              Value memref, ArrayRef<Value> indices) {
+                              Value memref, ValueRange indices) {
   // Address indices
   // result.addOperands(memref);
   result.addOperands(indices);
@@ -1375,7 +1375,7 @@ std::string handshake::StoreOp::getResultName(unsigned int idx) {
 }
 
 void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
-                               Value valueToStore, ArrayRef<Value> indices) {
+                               Value valueToStore, ValueRange indices) {
 
   // Address indices
   result.addOperands(indices);
@@ -1399,7 +1399,7 @@ ParseResult StoreOp::parse(OpAsmParser &parser, OperationState &result) {
 void StoreOp::print(OpAsmPrinter &p) { return printMemoryAccessOp(p, *this); }
 
 void JoinOp::build(OpBuilder &builder, OperationState &result,
-                   ArrayRef<Value> operands) {
+                   ValueRange operands) {
   auto type = builder.getNoneType();
   result.types.push_back(type);
 
