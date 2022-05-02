@@ -23,6 +23,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/SetVector.h"
@@ -631,6 +632,9 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Type, 4> argTypes, resTypes;
   SmallVector<NamedAttrList, 4> argAttributes, resAttributes;
   SmallVector<Attribute> argNames;
+
+  // Parse visibility.
+  mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
