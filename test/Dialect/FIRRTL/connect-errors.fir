@@ -1,0 +1,20 @@
+; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
+
+circuit Foo:
+  module Foo:
+    output a: { flip a: UInt<1> }
+    output b: { a: UInt<1> }
+
+; expected-error @+1 {{cannot connect non-equivalent}}
+    b <= a
+
+;// -----
+
+circuit Bar:
+; expected-note @+1 {{left-hand-side}}
+  module Bar:
+    output a: { flip a: UInt<1> }
+    input b: { flip a: UInt<1> }
+
+; expected-error @+1 {{invalid flow}}
+    b <= a
