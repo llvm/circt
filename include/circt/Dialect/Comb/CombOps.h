@@ -33,6 +33,9 @@ class PatternRewriter;
 #include "circt/Dialect/Comb/Comb.h.inc"
 
 namespace circt {
+namespace hw {
+class ConstantOp;
+}
 namespace comb {
 
 using llvm::KnownBits;
@@ -52,6 +55,17 @@ Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
 /// Create a ``Not'' gate on a value.
 Value createOrFoldNot(Location loc, Value value, OpBuilder &builder);
 Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder);
+
+/// Given a mux `rootMux`, check to see if the "on true" value (or "on false"
+/// value if isFalseSide=true) is a mux tree with the same condition.  This
+/// allows us to detect a mux tree like `mux(VAL == 0, A, (mux (VAL == 1), B,
+/// C))`. Return true if the pattern maching successes, and set results to
+/// arguments. For the example above, `indexValue` is `VAL`,  `defaultValue` is
+/// C, and `valuesFound` is `{{0, A}, {1, B}}`.
+bool getLinearMuxChainsComparison(
+    MuxOp rootMux, bool isFalseSide, Value &indexValue, Value &defaultValue,
+    SmallVectorImpl<Location> &locationsFound,
+    SmallVectorImpl<std::pair<circt::hw::ConstantOp, Value>> &valuesFound);
 
 } // namespace comb
 } // namespace circt

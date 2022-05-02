@@ -1596,124 +1596,28 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-/// Check to see if the condition to the specified mux is an equality
-/// comparison `indexValue` and one or more constants.  If so, put the
-/// constants in the constants vector and return true, otherwise return false.
-///
-/// This is part of foldMuxChain.
-///
-static bool
-getMuxChainCondConstant(Value cond, Value indexValue, bool isInverted,
-                        std::function<void(hw::ConstantOp)> constantFn) {
-  // Handle `idx == 42` and `idx != 42`.
-  if (auto cmp = cond.getDefiningOp<ICmpOp>()) {
-    // TODO: We could handle things like "x < 2" as two entries.
-    auto requiredPredicate =
-        (isInverted ? ICmpPredicate::eq : ICmpPredicate::ne);
-    if (cmp.lhs() == indexValue && cmp.predicate() == requiredPredicate) {
-      if (auto cst = cmp.rhs().getDefiningOp<hw::ConstantOp>()) {
-        constantFn(cst);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Handle mux(`idx == 1 || idx == 3`, value, muxchain).
-  if (auto orOp = cond.getDefiningOp<OrOp>()) {
-    if (!isInverted)
-      return false;
-    for (auto operand : orOp.getOperands())
-      if (!getMuxChainCondConstant(operand, indexValue, isInverted, constantFn))
-        return false;
-    return true;
-  }
-
-  // Handle mux(`idx != 1 && idx != 3`, muxchain, value).
-  if (auto andOp = cond.getDefiningOp<AndOp>()) {
-    if (isInverted)
-      return false;
-    for (auto operand : andOp.getOperands())
-      if (!getMuxChainCondConstant(operand, indexValue, isInverted, constantFn))
-        return false;
-    return true;
-  }
-
-  return false;
-}
-
 /// Given a mux, check to see if the "on true" value (or "on false" value if
 /// isFalseSide=true) is a mux tree with the same condition.  This allows us
 /// to turn things like `mux(VAL == 0, A, (mux (VAL == 1), B, C))` into
 /// `array_get (array_create(A, B, C), VAL)` which is far more compact and
 /// allows synthesis tools to do more interesting optimizations.
 ///
-/// This returns false if we cannot form the mux tree (or do not want to) and
-/// returns true if the mux was replaced.
+/// This returns false if we cannot form the mux tree (or do not want to)
+/// and returns true if the mux was replaced.
 static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
                          PatternRewriter &rewriter) {
-  // Get the index value being compared.  Later we check to see if it is
-  // compared to a constant with the right predicate.
-  auto rootCmp = rootMux.cond().getDefiningOp<ICmpOp>();
-  if (!rootCmp)
-    return false;
-  Value indexValue = rootCmp.lhs();
-
-  // Return the value to use if the equality match succeeds.
-  auto getCaseValue = [&](MuxOp mux) -> Value {
-    return mux.getOperand(1 + unsigned(!isFalseSide));
-  };
-
-  // Return the value to use if the equality match fails.  This is the next
-  // mux in the sequence or the "otherwise" value.
-  auto getTreeValue = [&](MuxOp mux) -> Value {
-    return mux.getOperand(1 + unsigned(isFalseSide));
-  };
-
   // Start scanning the mux tree to see what we've got.  Keep track of the
   // constant comparison value and the SSA value to use when equal to it.
   SmallVector<Location> locationsFound;
   SmallVector<std::pair<hw::ConstantOp, Value>, 4> valuesFound;
-
-  /// Extract constants and values into `valuesFound` and return true if this is
-  /// part of the mux tree, otherwise return false.
-  auto collectConstantValues = [&](MuxOp mux) -> bool {
-    return getMuxChainCondConstant(
-        mux.cond(), indexValue, isFalseSide, [&](hw::ConstantOp cst) {
-          valuesFound.push_back({cst, getCaseValue(mux)});
-          locationsFound.push_back(mux.cond().getLoc());
-          locationsFound.push_back(mux->getLoc());
-        });
-  };
-
-  // Make sure the root is a correct comparison with a constant.
-  if (!collectConstantValues(rootMux))
+  Value defaultValue, indexValue;
+  if (!getLinearMuxChainsComparison(rootMux, isFalseSide, indexValue,
+                                    defaultValue, locationsFound, valuesFound))
     return false;
 
-  // Make sure that we're not looking at the intermediate node in a mux tree.
-  if (rootMux->hasOneUse()) {
-    if (auto userMux = dyn_cast<MuxOp>(*rootMux->user_begin())) {
-      if (getTreeValue(userMux) == rootMux.getResult() &&
-          getMuxChainCondConstant(userMux.cond(), indexValue, isFalseSide,
-                                  [&](hw::ConstantOp cst) {}))
-        return false;
-    }
-  }
-
-  // Scan up the tree linearly.
-  auto nextTreeValue = getTreeValue(rootMux);
-  while (1) {
-    auto nextMux = nextTreeValue.getDefiningOp<MuxOp>();
-    if (!nextMux || !nextMux->hasOneUse())
-      break;
-    if (!collectConstantValues(nextMux))
-      break;
-    nextTreeValue = getTreeValue(nextMux);
-  }
-
   // We need to have more than three values to create an array.  This is an
-  // arbitrary threshold which is saying that one or two muxes together is ok,
-  // but three should be folded.
+  // arbitrary threshold which is saying that one or two muxes together is
+  // ok, but three should be folded.
   if (valuesFound.size() < 3)
     return false;
 
@@ -1732,7 +1636,7 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
 
   // Ok, we're going to do the transformation, start by building the table
   // filled with the "otherwise" value.
-  SmallVector<Value, 8> table(tableSize, nextTreeValue);
+  SmallVector<Value, 8> table(tableSize, defaultValue);
 
   // Fill in entries in the table from the leaf to the root of the expression.
   // This ensures that any duplicate matches end up with the ultimate value,
