@@ -137,7 +137,6 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
       $_state.addTypes(module.getResultTypes());
-      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
@@ -199,7 +198,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let arguments = (ins Variadic<AnyType> : $operands, NoneType : $control);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
 
   let hasVerifier = 1;
   let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
@@ -679,7 +678,7 @@ def MemoryOp : Handshake_Op<"memory", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "ArrayRef<Value>":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
+      ins "ValueRange":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
       "int":$id, "Value":$memref)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $inputs `)` attr-dict `:` $memRefType `,` functional-type($inputs, $outputs)";
@@ -719,7 +718,7 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ldCount, "int":$stCount,
+      ins "Value":$memref, "ValueRange":$inputs, "int":$ldCount, "int":$stCount,
       "int":$id)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
@@ -751,7 +750,7 @@ def LoadOp : Handshake_Op<"load", [
   let arguments = (ins Variadic<AnyType>:$addresses, AnyType:$data, NoneType:$ctrl);
   let results = (outs AnyType:$dataResult, Variadic<AnyType>:$addressResults);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
+  let builders = [OpBuilder<(ins "Value":$memref, "ValueRange":$indices)>];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -784,7 +783,7 @@ def StoreOp : Handshake_Op<"store", [
   let results = (outs AnyType:$dataResult, Variadic<AnyType>:$addressResult);
 
   let builders =
-      [OpBuilder<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
+      [OpBuilder<(ins "Value":$valueToStore, "ValueRange":$indices)>];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -807,7 +806,7 @@ def JoinOp : Handshake_Op<"join", [
   let results = (outs NoneType : $result);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
   let hasCustomAssemblyFormat = 1;
 }
 
