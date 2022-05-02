@@ -228,10 +228,12 @@ void LazyForkOp::build(OpBuilder &builder, OperationState &result,
   // Fork is control-only if it is the no-data output of a ControlMerge or a
   // StartOp
   auto *op = operand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    operand == op->getResult(0))
-                       ? true
-                       : false;
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
+                   operand == op->getResult(0);
+
+  // Alternatively, the control signal could originate from a BlockArgument
+  isControl = isControl || (operand.isa<BlockArgument>() &&
+                            operand.getType().isa<NoneType>());
   sost::addAttributes(result, outputs, type, isControl);
 }
 
@@ -721,12 +723,14 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(dataOperand);
 
   // Branch is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp This holds because Branches are inserted before Forks
+  // StartOp. This holds because Branches are inserted before Forks
   auto *op = dataOperand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    dataOperand == op->getResult(0))
-                       ? true
-                       : false;
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
+                   dataOperand == op->getResult(0);
+
+  // Alternatively, the control signal could originate from a BlockArgument
+  isControl = isControl || (dataOperand.isa<BlockArgument>() &&
+                            dataOperand.getType().isa<NoneType>());
   sost::addAttributes(result, 1, type, isControl);
 }
 
@@ -813,10 +817,9 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
   // Branch is control-only if it is the no-data output of a ControlMerge or a
   // StartOp This holds because Branches are inserted before Forks
   auto *op = dataOperand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    dataOperand == op->getResult(0))
-                       ? true
-                       : false;
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
+                   dataOperand == op->getResult(0);
+
   if (isControl || type.isa<NoneType>())
     result.addAttribute("control", builder.getBoolAttr(true));
 }
