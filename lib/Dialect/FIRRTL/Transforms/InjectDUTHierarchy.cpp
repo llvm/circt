@@ -24,6 +24,13 @@ using namespace firrtl;
 
 namespace {
 struct InjectDUTHierarchy : public InjectDUTHierarchyBase<InjectDUTHierarchy> {
+  void runOnOperation() override;
+};
+} // namespace
+
+void InjectDUTHierarchy::runOnOperation() {
+
+  CircuitOp circuit = getOperation();
 
   /// The design-under-test (DUT).  This is kept up-to-date by the pass as the
   /// DUT changes due to internal logic.
@@ -38,14 +45,6 @@ struct InjectDUTHierarchy : public InjectDUTHierarchyBase<InjectDUTHierarchy> {
   /// Mutable indicator that an error occurred for some reason.  If this is ever
   /// true, then the pass can just signalPassFailure.
   bool error = false;
-
-  void runOnOperation() override;
-};
-} // namespace
-
-void InjectDUTHierarchy::runOnOperation() {
-
-  CircuitOp circuit = getOperation();
 
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
     if (!anno.isClass(injectDUTHierarchyAnnoClass))
@@ -74,6 +73,14 @@ void InjectDUTHierarchy::runOnOperation() {
     return true;
   });
 
+  if (error)
+    return signalPassFailure();
+
+  // The prerequisites for the pass to run were not met.  Indicate that no work
+  // was done and exit.
+  if (!wrapperName)
+    return markAllAnalysesPreserved();
+
   // TODO: Combine this logic with GrandCentral and other places that need to
   // find the DUT.  Consider changing the MarkDUTAnnotation scattering to put
   // this information on the Circuit so that we don't have to dig through all
@@ -94,6 +101,9 @@ void InjectDUTHierarchy::runOnOperation() {
     dut = mod;
   }
 
+  if (error)
+    return signalPassFailure();
+
   // If a hierarchy annotation was provided, ensure that a DUT annotation also
   // exists.  The pass could silently ignore this case and do nothing, but it is
   // better to provide an error.
@@ -104,17 +114,8 @@ void InjectDUTHierarchy::runOnOperation() {
     error = true;
   }
 
-  // The pass is in an error state due to invalid annotations.  Exit indicating
-  // failure.
   if (error)
     return signalPassFailure();
-
-  // The prerequisites for the pass to run were not met.  Indicate that no work
-  // was done and exit.
-  if (!dut || !wrapperName) {
-    markAllAnalysesPreserved();
-    return;
-  }
 
   // Create a module that will become the new DUT.  The original DUT is renamed
   // to become the wrapper.  This is done to save copying into the wrapper.
@@ -131,8 +132,7 @@ void InjectDUTHierarchy::runOnOperation() {
                                       dut.getPorts(), dut.annotations());
 
     SymbolTable::setSymbolVisibility(newDUT, dut.getVisibility());
-    dut->setAttr("sym_name",
-                 b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
+    dut.setName(b.getStringAttr(circuitNS.newName(wrapperName.getValue())));
 
     // The original DUT module is now the wrapper.  The new module we just
     // created becomse the DUT.
@@ -170,7 +170,7 @@ void InjectDUTHierarchy::runOnOperation() {
     dutPortSyms.insert(port.sym);
   }
 
-  // Update NLAs invovle the DUT.  There are three cases to consider:
+  // Update NLAs involving the DUT.  There are three cases to consider:
   //   1. The DUT or a DUT port is a leaf ref.  Do nothing.
   //   2. The DUT is the root.  Update the root module to be the wrapper.
   //   3. The NLA passes through the DUT.  Remove the original InnerRef and
@@ -184,23 +184,21 @@ void InjectDUTHierarchy::runOnOperation() {
     // The DUT is the root module.
     auto namepath = nla.namepath().getValue();
     if (nla.root() == dut.getNameAttr()) {
-      auto tail = namepath.drop_front();
-      SmallVector<Attribute> newNamepath({hw::InnerRefAttr::get(
+      SmallVector<Attribute> newNamepath{hw::InnerRefAttr::get(
           wrapper.getNameAttr(),
-          namepath.front().cast<hw::InnerRefAttr>().getName())});
+          namepath.front().cast<hw::InnerRefAttr>().getName())};
+      auto tail = namepath.drop_front();
       newNamepath.append(tail.begin(), tail.end());
       nla->setAttr("namepath", b.getArrayAttr(newNamepath));
       continue;
     }
 
     // The NLA passes through the DUT.
-    size_t nlaIdx = 0;
-    for (auto attr : namepath) {
-      auto innerRef = attr.cast<hw::InnerRefAttr>();
-      if (innerRef.getModule() == dut.moduleName())
-        break;
-      nlaIdx++;
-    }
+    auto nlaIdx = std::distance(
+        namepath.begin(), llvm::find_if(namepath, [&](Attribute attr) {
+          return attr.cast<hw::InnerRefAttr>().getModule() ==
+                 dut.moduleNameAttr();
+        }));
     auto front = namepath.take_front(nlaIdx);
     auto dutRef = namepath[nlaIdx].cast<hw::InnerRefAttr>();
     auto back = namepath.drop_front(nlaIdx + 1);
