@@ -1689,7 +1689,10 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
                                       Value src) {
   auto type = dst.getType().cast<FIRRTLType>();
-  if (!type.containsAnalog()) {
+  auto stype = src.getType().cast<FIRRTLType>();
+  // If simple direct connect is possible, emit it.
+  // Non-passive source types require connect components individually
+  if (!type.containsAnalog() && stype.isPassive()) {
     builder.create<ConnectOp>(dst, src);
   } else if (type.isa<AnalogType>()) {
     builder.create<AttachOp>(SmallVector{dst, src});

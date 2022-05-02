@@ -18,7 +18,7 @@ circuit Bar :
     wire flip: {flip a: UInt<1>}
     ; CHECK: %_flip = firrtl.wire  : !firrtl.bundle<a flip: uint<1>>
     ; CHECK: %flip = firrtl.wire sym @flip  : !firrtl.bundle<a: uint<1>>
-    ; CHECK: firrtl.connect %flip, %_flip
+    ; CHECK-NOT: firrtl.connect %flip, %_flip
 
     ; Analog values should be tapped with a node.
     wire analog: Analog<1>
