@@ -66,6 +66,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       }
     } else if (option == "explicitBitcastAddMul") {
       explicitBitcastAddMul = true;
+    } else if (option == "enforceParenthesesToReductionOperators") {
+      enforceParenthesesToReductionOperators = true;
     } else if (option == "emitReplicatedOpsToHeader") {
       emitReplicatedOpsToHeader = true;
     } else if (option.startswith("maximumNumberOfTermsPerExpression=")) {
@@ -103,6 +105,8 @@ std::string LoweringOptions::toString() const {
     options += "verifLabels,";
   if (explicitBitcastAddMul)
     options += "explicitBitcastAddMul,";
+  if (enforceParenthesesToReductionOperators)
+    options += "enforceParenthesesToReductionOperators,";
   if (emitReplicatedOpsToHeader)
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
@@ -166,6 +170,7 @@ struct LoweringCLOptions {
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul, "
+          "enforceParenthesesToReductionOperators, "
           "emitReplicatedOpsToHeader"),
       llvm::cl::value_desc("option")};
 };
