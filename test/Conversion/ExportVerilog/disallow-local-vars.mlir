@@ -189,10 +189,16 @@ hw.module @DefinedInDifferentBlock(%a: i1, %b: i1) {
   hw.output
 }
 
+// CHECK-LABEL: module TemporaryWireAtDifferentBlock(
+// DISALLOW-LABEL: module TemporaryWireAtDifferentBlock(
 hw.module @TemporaryWireAtDifferentBlock(%a: i1) -> (b: i1) {
-  // CHECK: wire _GEN;
-  // DISALLOW: wire _GEN;
-
+  // Check that %0 and %1 are not inlined.
+  // CHECK:      wire [[GEN1:.+]];
+  // CHECK:      wire [[GEN2:.+]] = [[GEN1]] + [[GEN1]];
+  // CHECK:      if ([[GEN1]])
+  // DISALLOW:   wire [[GEN1:.+]];
+  // DISALLOW:   wire [[GEN2:.+]] = [[GEN1]] + [[GEN1]];
+  // DISALLOW:   if ([[GEN1]])
   %1 = comb.add %0, %0 : i1
   sv.initial {
     sv.if %0 {
