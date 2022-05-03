@@ -10,15 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Ensure symbol is one of the hw module.* types.  Passes on failed lookup, so
-/// more basic symbol validation can provide more useful error messages.
-def isModuleSymbol : AttrConstraint<
-    CPred<"!::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()) || "
-          "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()))"
-    >, "is module like">;
-
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
@@ -388,7 +379,7 @@ def InstanceOp : HWOp<"instance", [
   }];
 
   let arguments = (ins StrAttr:$instanceName,
-                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
+                       FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
