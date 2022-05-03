@@ -180,7 +180,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
               // If we see the DUT module on the way to the memory op, then
               // reset the hierarchical name from the DUT module to match SFC.
               auto parentModule = inst->getParentOfType<FModuleOp>();
-              if (dutModuleSet.contains(parentModule))
+              if (dutMod == parentModule)
                 hierName = parentModule.getName().str();
               hierName = hierName + "." + inst.name().str();
             }
