@@ -1639,9 +1639,7 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
   SmallVector<Value, 8> table(tableSize, defaultValue);
 
   // Fill in entries in the table from the leaf to the root of the expression.
-  // This ensures that any duplicate matches end up with the ultimate value,
-  // which is the one closer to the root.
-  for (auto &elt : llvm::reverse(valuesFound)) {
+  for (auto &elt : valuesFound) {
     uint64_t idx = elt.first.getValue().getZExtValue();
     assert(idx < table.size() && "constant should be same bitwidth as index");
     table[idx] = elt.second;

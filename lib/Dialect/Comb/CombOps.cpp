@@ -15,6 +15,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
@@ -119,14 +120,18 @@ bool comb::getLinearMuxChainsComparison(
     return mux.getOperand(1 + unsigned(isFalseSide));
   };
 
+  llvm::DenseSet<APInt> conditionsFound;
+
   /// Extract constants and values into `valuesFound` and return true if this is
   /// part of the mux tree, otherwise return false.
   auto collectConstantValues = [&](MuxOp mux) -> bool {
     return getMuxChainCondConstant(
         mux.cond(), indexValue, isFalseSide, [&](hw::ConstantOp cst) {
-          valuesFound.push_back({cst, getCaseValue(mux)});
-          locationsFound.push_back(mux.cond().getLoc());
-          locationsFound.push_back(mux->getLoc());
+          if (conditionsFound.insert(cst.value()).second) {
+            valuesFound.push_back({cst, getCaseValue(mux)});
+            locationsFound.push_back(mux.cond().getLoc());
+            locationsFound.push_back(mux->getLoc());
+          }
         });
   };
 

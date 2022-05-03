@@ -807,8 +807,8 @@ hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
 // CHECK-LABEL: hw.module @fold_mux_tree3
 // This has two selectors for the same index value. Make sure we get the
 // right one.  "%c" should not be used.
-hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
-  // CHECK-NEXT: %0 = hw.array_create %d, %d, %b, %a : i8
+hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8, %e: i8) -> (y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %e, %d, %b, %a : i8
   // CHECK-NEXT: %1 = hw.array_get %0[%sel]
   // CHECK-NEXT: hw.output %1
   %c2_i2 = hw.constant 0 : i2
@@ -822,7 +822,11 @@ hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (y: i8) {
   %c0_i2 = hw.constant 0 : i2
   %4 = comb.icmp eq %sel, %c0_i2 : i2
   %5 = comb.mux %4, %a, %3 : i8
-  hw.output %5 : i8
+
+  %c3_i2 = hw.constant 3 : i2
+  %6 = comb.icmp eq %sel, %c3_i2 : i2
+  %7 = comb.mux %6, %e, %5 : i8
+  hw.output %7 : i8
 }
 
 // CHECK-LABEL: hw.module @fold_mux_tree4

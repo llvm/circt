@@ -70,7 +70,7 @@ MuxChainCaseOpConverter::matchAndRewrite(MuxOp op,
   // NOTE: We have to use `priority` to preserve the semantics of mux chains.
   rewriter.create<sv::CaseOp>(
       FusedLoc::get(context, locationsFound), CaseStmtType::CaseStmt,
-      sv::ValidationQualifierTypeEnum::ValidationQualifierPriority, indexValue,
+      sv::ValidationQualifierTypeEnum::ValidationQualifierUnique, indexValue,
       valuesFound.size() + 1, [&](size_t caseIdx) -> CasePattern {
         // Use a default pattern for the last value, even if we are complete.
         // This avoids tools thinking they need to insert a latch due to

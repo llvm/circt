@@ -11,9 +11,13 @@ hw.module @TableLookup(%t_0: i5, %t_1: i5, %t_2: i5, %t_3: i5, %t_4: i5, %t_5: i
   // CHECK-NEXT:   [[RES:%.+]] = sv.read_inout [[REG]] : !hw.inout<i5>
 
   // CHECK-NEXT:   sv.alwayscomb {
-  // CHECK-NEXT:     sv.case priority %key : i5
+  // CHECK-NEXT:     sv.case unique %key : i5
+
   %10 = comb.icmp eq %key, %c-8_i5 : i5
-  %11 = comb.mux %10, %t_5, %9 : i5
+  %11 = comb.mux %10, %t_4, %9 : i5
+  %12 = comb.mux %10, %t_5, %11 : i5
+  // Make sure that t_4 is not assigned here. %11 and %12 are using the
+  // same condtion (key == 24) but t_5 should be prioritized.
   // CHECK-NEXT:     case b11000: {
   // CHECK-NEXT:       sv.bpassign [[REG]], %t_5 : i5
   // CHECK-NEXT:     }
@@ -54,5 +58,5 @@ hw.module @TableLookup(%t_0: i5, %t_1: i5, %t_2: i5, %t_3: i5, %t_4: i5, %t_5: i
 
   // CHECK-NEXT:   hw.output [[RES]] : i5
   // CHECK-NEXT: }
-  hw.output %11 : i5
+  hw.output %12 : i5
 }
