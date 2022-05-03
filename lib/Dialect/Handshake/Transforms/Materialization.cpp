@@ -40,6 +40,13 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
   return;
 }
 
+static void insertSink(Value val, OpBuilder &rewriter) {
+  rewriter.setInsertionPointAfterValue(val);
+  auto sinkOp = rewriter.create<SinkOp>(val.getLoc(), val);
+  if (val.getType().isa<NoneType>())
+    sinkOp->setAttr("control", rewriter.getBoolAttr(true));
+}
+
 namespace circt {
 namespace handshake {
 
@@ -92,6 +99,10 @@ LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
   BlockValues liveOuts;
 
   for (Block &block : r) {
+    for (auto arg : block.getArguments()) {
+      if (arg.use_empty())
+        insertSink(arg, rewriter);
+    }
     for (Operation &op : block) {
       // Do not add sinks for unused MLIR operations which the rewriter will
       // later remove We have already replaced these ops with their handshake
@@ -105,12 +116,8 @@ LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
         continue;
 
       for (auto result : op.getResults())
-        if (result.use_empty()) {
-          rewriter.setInsertionPointAfter(&op);
-          auto sinkOp = rewriter.create<SinkOp>(op.getLoc(), result);
-          if (result.getType().isa<NoneType>())
-            sinkOp->setAttr("control", rewriter.getBoolAttr(true));
-        }
+        if (result.use_empty())
+          insertSink(result, rewriter);
     }
   }
   return success();
