@@ -495,7 +495,7 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   firrtl.module @Simple0() { }
   // CHECK-NOT: @Simple1
   firrtl.module @Simple1() { }
-  // CHECK: firrtl.module @MustDedup 
+  // CHECK: firrtl.module @MustDedup
   firrtl.module @MustDedup() {
     firrtl.instance simple0 @Simple0()
     firrtl.instance simple1 @Simple1()
