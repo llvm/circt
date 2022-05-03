@@ -284,8 +284,9 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
   let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
 
-def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
-      [IsolatedFromAbove]> {
+def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+      IsolatedFromAbove]> {
   let summary = "HW Generated Module";
   let description = [{
     The "hw.module.generated" operation represents a reference to an external

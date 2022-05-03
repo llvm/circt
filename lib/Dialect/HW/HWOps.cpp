@@ -1072,11 +1072,11 @@ Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
-LogicalResult HWModuleGeneratedOp::verify() {
-  if (failed(verifyModuleCommon(*this)))
-    return failure();
+LogicalResult
+HWModuleGeneratedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *referencedKind =
+      symbolTable.lookupNearestSymbolFrom(*this, generatorKindAttr());
 
-  auto *referencedKind = getGeneratorKindOp();
   if (referencedKind == nullptr)
     return emitError("Cannot find generator definition '")
            << generatorKind() << "'";
@@ -1098,6 +1098,10 @@ LogicalResult HWModuleGeneratedOp::verify() {
   }
 
   return success();
+}
+
+LogicalResult HWModuleGeneratedOp::verify() {
+  return verifyModuleCommon(*this);
 }
 
 void HWModuleGeneratedOp::getAsmBlockArgumentNames(
