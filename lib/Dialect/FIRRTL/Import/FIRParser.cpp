@@ -2798,15 +2798,6 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   auto lhsType = lhs.getType().cast<FIRRTLType>();
   auto rhsType = rhs.getType().cast<FIRRTLType>();
-  auto lhsPType = lhsType.getPassiveType();
-  auto rhsPType = rhsType.getPassiveType();
-  if (lhsPType == rhsPType && false) {
-    if (lhsPType.hasUninferredWidth())
-      builder.create<ConnectOp>(lhs, rhs);
-    else
-      builder.create<StrictConnectOp>(lhs, rhs);
-    return success();
-  }
 
   if (kind == FIRToken::less_equal) {
     if (!areTypesEquivalent(lhsType, rhsType))
