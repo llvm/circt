@@ -3994,9 +3994,20 @@ DoneParsing:
   if (foundUnappliedAnnotations)
     return failure();
 
-  // If the module has an entry point that is not an external module, set the
-  // visibility of all non-main modules to private.
   auto main = circuit.getMainModule();
+  if (!main) {
+    // Give more specific error if no modules defined at all
+    if (circuit.getOps<FModuleLike>().empty()) {
+      return mlir::emitError(circuit.getLoc())
+             << "no modules found, circuit must contain one or more modules";
+    }
+    return mlir::emitError(circuit.getLoc())
+           << "no main module found, circuit '" << circuit.name()
+           << "' must contain a module named '" << circuit.name() << "'";
+  }
+
+  // If the circuit has an entry point that is not an external module, set the
+  // visibility of all non-main modules to private.
   if (isa<FModuleOp>(main)) {
     for (auto mod : circuit.getOps<FModuleLike>()) {
       if (mod != main)
