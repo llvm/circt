@@ -12,3 +12,17 @@ handshake.func @missing_fork_and_sink(%arg0 : i32, %ctrl: none) -> (none) {
   %0 = arith.addi %arg0, %arg0 : i32
   return %ctrl: none
 }
+
+// -----
+
+
+// CHECK-LABEL: handshake.func @missing_arg_sink(
+// CHECK-SAME:                                   %[[VAL_0:.*]]: i32,
+// CHECK-SAME:                                   %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["arg0", "ctrl"], resNames = ["outCtrl"]} {
+// CHECK:    sink %[[VAL_0]] : i32
+// CHECK:    return %[[VAL_1]] : none
+// CHECK:  }
+handshake.func @missing_arg_sink(%arg0 : i32, %ctrl: none) -> (none) {
+  return %ctrl: none
+}
+
