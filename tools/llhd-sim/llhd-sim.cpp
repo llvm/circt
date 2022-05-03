@@ -38,49 +38,59 @@ using namespace mlir::func;
 using namespace circt;
 using namespace circt::llhd::sim;
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input-file>"), cl::init("-"));
+static cl::OptionCategory mainCategory("llhd-sim Options");
+
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input-file>"),
+                                          cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
-                                           cl::init("-"));
+                                           cl::init("-"),
+                                           cl::cat(mainCategory));
 
 static cl::opt<int> nSteps("n", cl::desc("Set the maximum number of steps"),
-                           cl::value_desc("max-steps"));
+                           cl::value_desc("max-steps"), cl::cat(mainCategory));
 
 static cl::opt<uint64_t> maxTime(
     "T",
     cl::desc("Stop the simulation after the given amount of simulation time in "
              "picoseconds, including all sub-steps for that real-time step"),
-    cl::value_desc("max-time"));
+    cl::value_desc("max-time"), cl::cat(mainCategory));
 
 static cl::opt<bool>
     dumpLLVMDialect("dump-llvm-dialect",
-                    cl::desc("Dump the LLVM IR dialect module"));
+                    cl::desc("Dump the LLVM IR dialect module"),
+                    cl::cat(mainCategory));
 
 static cl::opt<bool> dumpLLVMIR("dump-llvm-ir",
-                                cl::desc("Dump the LLVM IR module"));
+                                cl::desc("Dump the LLVM IR module"),
+                                cl::cat(mainCategory));
 
 static cl::opt<bool> dumpMLIR("dump-mlir",
-                              cl::desc("Dump the original MLIR module"));
+                              cl::desc("Dump the original MLIR module"),
+                              cl::cat(mainCategory));
 
 static cl::opt<bool> dumpLayout("dump-layout",
-                                cl::desc("Dump the gathered instance layout"));
+                                cl::desc("Dump the gathered instance layout"),
+                                cl::cat(mainCategory));
 
 static cl::opt<std::string> root(
     "root",
     cl::desc("Specify the name of the entity to use as root of the design"),
-    cl::value_desc("root_name"), cl::init("root"));
-static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root));
+    cl::value_desc("root_name"), cl::init("root"), cl::cat(mainCategory));
+static cl::alias rootA("r", cl::desc("Alias for -root"), cl::aliasopt(root),
+                       cl::cat(mainCategory));
 
 enum OptLevel { O0, O1, O2, O3 };
 
-cl::opt<OptLevel> optimizationLevel(
-    cl::desc("Choose optimization level:"), cl::init(O2),
-    cl::values(clEnumVal(O0, "Run passes and codegen at O0"),
-               clEnumVal(O1, "Run passes and codegen at O1"),
-               clEnumVal(O2, "Run passes and codegen at O2"),
-               clEnumVal(O3, "Run passes and codegen at O3")));
+static cl::opt<OptLevel>
+    optimizationLevel(cl::desc("Choose optimization level:"), cl::init(O2),
+                      cl::values(clEnumVal(O0, "Run passes and codegen at O0"),
+                                 clEnumVal(O1, "Run passes and codegen at O1"),
+                                 clEnumVal(O2, "Run passes and codegen at O2"),
+                                 clEnumVal(O3, "Run passes and codegen at O3")),
+                      cl::cat(mainCategory));
 
 static cl::opt<TraceMode> traceMode(
     "trace-format", cl::desc("Choose the dump format:"),
@@ -101,14 +111,16 @@ static cl::opt<TraceMode> traceMode(
             TraceMode::NamedOnly, "named-only",
             "Only dump changes for real-time steps, only for top-level "
             "instance and signals not having the default name '(sig)?[0-9]*'"),
-        clEnumValN(TraceMode::None, "none", "Don't dump a signal trace")));
+        clEnumValN(TraceMode::None, "none", "Don't dump a signal trace")),
+    cl::cat(mainCategory));
 
 static cl::list<std::string>
     sharedLibs("shared-libs",
                cl::desc("Libraries to link dynamically. Specify absolute path "
                         "to llhd-signals-runtime-wrappers for GCC or Windows. "
                         "Optional otherwise."),
-               cl::ZeroOrMore, cl::MiscFlags::CommaSeparated);
+               cl::ZeroOrMore, cl::MiscFlags::CommaSeparated,
+               cl::cat(mainCategory));
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
@@ -147,6 +159,9 @@ static LogicalResult applyMLIRPasses(ModuleOp module) {
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Hide default LLVM options, other than for this tool.
+  cl::HideUnrelatedOptions(mainCategory);
 
   cl::ParseCommandLineOptions(argc, argv, "LLHD simulator\n");
 

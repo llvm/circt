@@ -53,194 +53,206 @@ using namespace circt;
 /// input.
 enum InputFormatKind { InputUnspecified, InputFIRFile, InputMLIRFile };
 
+static cl::OptionCategory mainCategory("firtool Options");
+
 static cl::opt<InputFormatKind> inputFormat(
     "format", cl::desc("Specify input file format:"),
     cl::values(clEnumValN(InputUnspecified, "autodetect",
                           "Autodetect input format"),
                clEnumValN(InputFIRFile, "fir", "Parse as .fir file"),
                clEnumValN(InputMLIRFile, "mlir", "Parse as .mlir file")),
-    cl::init(InputUnspecified));
+    cl::init(InputUnspecified), cl::cat(mainCategory));
 
-static cl::opt<std::string>
-    inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
+static cl::opt<std::string> inputFilename(cl::Positional,
+                                          cl::desc("<input file>"),
+                                          cl::init("-"), cl::cat(mainCategory));
 
-static cl::opt<std::string>
-    outputFilename("o",
-                   cl::desc("Output filename, or directory for split output"),
-                   cl::value_desc("filename"), cl::init("-"));
+static cl::opt<std::string> outputFilename(
+    "o", cl::desc("Output filename, or directory for split output"),
+    cl::value_desc("filename"), cl::init("-"), cl::cat(mainCategory));
 
 static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
                             "chunk independently"),
-                   cl::init(false), cl::Hidden);
+                   cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyDiagnostics("verify-diagnostics",
                       cl::desc("Check that emitted diagnostics match "
                                "expected-* lines on the corresponding line"),
-                      cl::init(false), cl::Hidden);
+                      cl::init(false), cl::Hidden, cl::cat(mainCategory));
 
 static cl::opt<bool> disableOptimization("disable-opt",
-                                         cl::desc("disable optimizations"));
+                                         cl::desc("disable optimizations"),
+                                         cl::cat(mainCategory));
 
 static cl::opt<bool> inliner("inline",
                              cl::desc("Run the FIRRTL module inliner"),
-                             cl::init(true));
+                             cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> enableAnnotationWarning(
     "warn-on-unprocessed-annotations",
     cl::desc("Warn about annotations that were not removed by lower-to-hw"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsClassless(
     "disable-annotation-classless",
     cl::desc("Ignore annotations without a class when parsing"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> disableAnnotationsUnknown(
     "disable-annotation-unknown",
-    cl::desc("Ignore unknown annotations when parsing"), cl::init(false));
+    cl::desc("Ignore unknown annotations when parsing"), cl::init(false),
+    cl::cat(mainCategory));
 
 static cl::opt<bool> disableNamePreservation(
     "disable-name-preservation",
     cl::desc("Don't generate debug taps for named FIRRTL wires and nodes"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> emitOMIR("emit-omir",
                               cl::desc("emit OMIR annotations to a JSON file"),
-                              cl::init(true));
+                              cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> replSeqMem(
     "repl-seq-mem",
     cl::desc(
         "replace the seq mem for macro replacement and emit relevant metadata"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     preserveAggregate("preserve-aggregate",
                       cl::desc("preserve aggregate types in lower types"),
-                      cl::init(false));
+                      cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> preservePublicTypes(
     "preserve-public-types",
     cl::desc("force to lower ports of toplevel and external modules"),
-    cl::init(true));
+    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     replSeqMemCircuit("repl-seq-mem-circuit",
                       cl::desc("circuit root for seq mem metadata"),
-                      cl::init(""));
+                      cl::init(""), cl::cat(mainCategory));
+
 static cl::opt<std::string>
     replSeqMemFile("repl-seq-mem-file",
-                   cl::desc("file name for seq mem metadata"), cl::init(""));
+                   cl::desc("file name for seq mem metadata"), cl::init(""),
+                   cl::cat(mainCategory));
 
 static cl::opt<bool>
     ignoreReadEnableMem("ignore-read-enable-mem",
                         cl::desc("ignore the read enable signal, instead of "
                                  "assigning X on read disable"),
-                        cl::init(false));
+                        cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
         "Enable intermodule constant propagation and dead code elimination"),
-    cl::init(true));
+    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     lowerTypes("lower-types",
                cl::desc("run the lower-types pass within lower-to-hw"),
-               cl::init(true));
+               cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> expandWhens("expand-whens",
                                  cl::desc("disable the expand-whens pass"),
-                                 cl::init(true));
+                                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     blackBoxMemory("blackbox-memory",
                    cl::desc("Create a black box for all memory operations"),
-                   cl::init(false));
+                   cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     dedup("dedup", cl::desc("deduplicate structurally identical modules"),
-          cl::init(false));
+          cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
-                       cl::init(false));
+                       cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     lowerCHIRRTL("lower-chirrtl",
                  cl::desc("lower CHIRRTL memories to FIRRTL memories"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> wireDFT("wire-dft", cl::desc("wire the DFT ports"),
-                             cl::init(true));
+                             cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
-                cl::init(true));
+                cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     inferResets("infer-resets",
                 cl::desc("run the reset inference pass on firrtl"),
-                cl::init(true));
+                cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     injectDUTHierarchy("inject-dut-hierarchy",
                        cl::desc("add a level of hierarchy to the DUT"),
-                       cl::init(true));
+                       cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     prefixModules("prefix-modules",
                   cl::desc("prefix modules with NestedPrefixAnnotation"),
-                  cl::init(true));
+                  cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
-                                     cl::init(false));
+                                     cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     grandCentral("firrtl-grand-central",
                  cl::desc("create interfaces and data/memory taps from SiFive "
                           "Grand Central annotations"),
-                 cl::init(false));
+                 cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> exportModuleHierarchy(
     "export-module-hierarchy",
-    cl::desc("export module and instance hierarchy as JSON"), cl::init(false));
+    cl::desc("export module and instance hierarchy as JSON"), cl::init(false),
+    cl::cat(mainCategory));
 
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
-                    cl::init(false));
+                    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> newAnno("new-anno",
                              cl::desc("enable new annotation handling"),
-                             cl::init(false));
+                             cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> removeUnusedPorts("remove-unused-ports",
                                        cl::desc("enable unused ports pruning"),
-                                       cl::init(true));
+                                       cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool> mergeConnections(
     "merge-connections",
     cl::desc("merge field-level connections into full aggregate connections"),
-    cl::init(true));
+    cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     mergeConnectionsAgggresively("merge-connections-aggressive-merging",
                                  cl::desc("merge connections aggressively"),
-                                 cl::init(false));
+                                 cl::init(false), cl::cat(mainCategory));
 
 /// Enable the pass to merge the read and write ports of a memory, if their
 /// enable conditions are mutually exclusive.
 static cl::opt<bool>
     inferMemReadWrite("infer-rw",
                       cl::desc("enable infer read write ports for memory"),
-                      cl::init(true));
+                      cl::init(true), cl::cat(mainCategory));
 
 enum OutputFormatKind {
   OutputParseOnly,
@@ -268,50 +280,48 @@ static cl::opt<OutputFormatKind> outputFormat(
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
         clEnumValN(OutputDisabled, "disable-output", "Do not output anything")),
-    cl::init(OutputVerilog));
+    cl::init(OutputVerilog), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verifyPasses("verify-each",
                  cl::desc("Run the verifier after each transformation pass"),
-                 cl::init(true));
+                 cl::init(true), cl::cat(mainCategory));
 
-static cl::list<std::string>
-    inputAnnotationFilenames("annotation-file",
-                             cl::desc("Optional input annotation file"),
-                             cl::CommaSeparated, cl::value_desc("filename"));
+static cl::list<std::string> inputAnnotationFilenames(
+    "annotation-file", cl::desc("Optional input annotation file"),
+    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
-static cl::list<std::string>
-    inputOMIRFilenames("omir-file",
-                       cl::desc("Optional input object model 2.0 file"),
-                       cl::CommaSeparated, cl::value_desc("filename"));
+static cl::list<std::string> inputOMIRFilenames(
+    "omir-file", cl::desc("Optional input object model 2.0 file"),
+    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
-                cl::init(""));
+                cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
-    cl::value_desc("path"), cl::init(""));
+    cl::value_desc("path"), cl::init(""), cl::cat(mainCategory));
 
 static cl::opt<bool>
     verbosePassExecutions("verbose-pass-executions",
                           cl::desc("Log executions of toplevel module passes"),
-                          cl::init(false));
+                          cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> stripDebugInfo(
     "strip-debug-info",
     cl::desc("Disable source locator information in output Verilog"),
-    cl::init(false));
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<std::string>
     sigmapPrefix("sigmap-prefix",
                  cl::desc("prefix for signal mapping module dut path"),
-                 cl::init(""));
+                 cl::init(""), cl::cat(mainCategory));
 static cl::opt<std::string>
     sigmapDut("sigmap-dut",
               cl::desc("dut for signal mapping target correction"),
-              cl::init(""));
+              cl::init(""), cl::cat(mainCategory));
 
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
@@ -777,6 +787,10 @@ static LogicalResult executeFirtool(MLIRContext &context) {
 /// MLIRContext and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
+
+  // Hide default LLVM options, other than for this tool.
+  // MLIR options are added below.
+  cl::HideUnrelatedOptions(mainCategory);
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
