@@ -1689,7 +1689,10 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
                                       Value src) {
   auto type = dst.getType().cast<FIRRTLType>();
-  if (!type.containsAnalog()) {
+  auto stype = src.getType().cast<FIRRTLType>();
+  // If simple direct connect is possible, emit it.
+  // Non-passive source types require connect components individually
+  if (!type.containsAnalog() && stype.isPassive()) {
     builder.create<ConnectOp>(dst, src);
   } else if (type.isa<AnalogType>()) {
     builder.create<AttachOp>(SmallVector{dst, src});
@@ -2796,20 +2799,13 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
-  auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
-  auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
-  if (lhsPType == rhsPType && false) {
-    if (lhsPType.hasUninferredWidth())
-      builder.create<ConnectOp>(lhs, rhs);
-    else
-      builder.create<StrictConnectOp>(lhs, rhs);
-    return success();
-  }
+  auto lhsType = lhs.getType().cast<FIRRTLType>();
+  auto rhsType = rhs.getType().cast<FIRRTLType>();
 
   if (kind == FIRToken::less_equal) {
-    if (!areTypesEquivalent(lhsPType, rhsPType))
+    if (!areTypesEquivalent(lhsType, rhsType))
       return emitError(loc, "cannot connect non-equivalent type ")
-             << rhsPType << " to " << lhsPType;
+             << rhsType << " to " << lhsType;
     emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");

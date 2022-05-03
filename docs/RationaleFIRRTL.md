@@ -235,7 +235,7 @@ As an example of the second problem, consider the following circuit:
 ```scala
 module Bar:
   output a: { flip a: UInt<1> }
-  input b: { flip b: UInt<1> }
+  input b: { flip a: UInt<1> }
 
   b <= a
 ```
@@ -247,7 +247,7 @@ circuit:
 ``` scala
 module Bar:
   input a: { a: UInt<1> }
-  output b: { b: UInt<1> }
+  output b: { a: UInt<1> }
 
   b <= a
 ```
