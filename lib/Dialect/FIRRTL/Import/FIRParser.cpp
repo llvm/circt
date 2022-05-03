@@ -2809,6 +2809,10 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
+    if (!areTypesWeaklyEquivalent(lhsType, rhsType))
+      return emitError(loc,
+                       "cannot partially connect non-weakly-equivalent type ")
+             << rhsType << " to " << lhsType;
     emitPartialConnect(builder, lhs, rhs);
   }
   return success();
