@@ -67,6 +67,7 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = true;
 }
 
 def InstanceOp : FSMOp<"instance", [Symbol, HasCustomSSAName]> {
@@ -157,6 +158,11 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
 
   let assemblyFormat = [{
     $sym_name attr-dict `output` $output `transitions` $transitions
+  }];
+
+  let extraClassDeclaration = [{
+    /// Returns all possible next states from this state.
+    llvm::SetVector<StateOp> getNextStates();
   }];
 }
 
