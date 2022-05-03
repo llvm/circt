@@ -91,24 +91,24 @@ firrtl.circuit "Annotations" {
   firrtl.nla @annos_nla0 [#hw.innerNameRef<@Annotations::@annotations0>, #hw.innerNameRef<@Annotations0::@d>]
   firrtl.nla @annos_nla1 [#hw.innerNameRef<@Annotations::@annotations1>, #hw.innerNameRef<@Annotations1::@i>]
 
-  // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA3]], class = "one"}]} 
+  // CHECK: firrtl.module @Annotations0() attributes {annotations = [{circt.nonlocal = [[NLA3]], class = "one"}]}
   firrtl.module @Annotations0() {
     // Same annotation on both ops should stay local.
     // CHECK: %a = firrtl.wire  {annotations = [{class = "both"}]}
     %a = firrtl.wire {annotations = [{class = "both"}]} : !firrtl.uint<1>
-    
+
     // Annotation from other module becomes non-local.
     // CHECK: %b = firrtl.wire sym @b  {annotations = [{circt.nonlocal = [[NLA0]], class = "one"}]}
     %b = firrtl.wire : !firrtl.uint<1>
-    
+
     // Annotation from this module becomes non-local.
     // CHECK: %c = firrtl.wire sym @c  {annotations = [{circt.nonlocal = [[NLA1]], class = "one"}]}
     %c = firrtl.wire {annotations = [{class = "one"}]} : !firrtl.uint<1>
-    
+
     // Two non-local annotations are unchanged, as they have enough context in the NLA already.
     // CHECK: %d = firrtl.wire sym @d  {annotations = [{circt.nonlocal = @annos_nla1, class = "NonLocal"}, {circt.nonlocal = @annos_nla0, class = "NonLocal"}]}
     %d = firrtl.wire sym @d {annotations = [{circt.nonlocal = @annos_nla0, class = "NonLocal"}]} : !firrtl.uint<1>
-    
+
     // Subannotations should be handled correctly.
     // CHECK: %e = firrtl.wire sym @e  {annotations = [#firrtl.subAnno<fieldID = 1, {circt.nonlocal = [[NLA2]], class = "subanno"}>]}
     %e = firrtl.wire {annotations = [#firrtl.subAnno<fieldID = 1, {class = "subanno"}>]} : !firrtl.bundle<a: uint<1>>
@@ -174,7 +174,7 @@ firrtl.circuit "Breadcrumb" {
   // CHECK:  @breadcrumb_nla3 [#hw.innerNameRef<@Breadcrumb::@breadcrumb1>, #hw.innerNameRef<@Breadcrumb0::@crumb0>, #hw.innerNameRef<@Crumb::@w>]
   firrtl.nla @breadcrumb_nla3 [#hw.innerNameRef<@Breadcrumb::@breadcrumb1>, #hw.innerNameRef<@Breadcrumb1::@crumb1>, #hw.innerNameRef<@Crumb::@w>]
   firrtl.module @Crumb(in %in: !firrtl.uint<1> sym @in [
-      {circt.nonlocal = @breadcrumb_nla0, class = "port0"}, 
+      {circt.nonlocal = @breadcrumb_nla0, class = "port0"},
       {circt.nonlocal = @breadcrumb_nla1, class = "port1"}]) {
     %w = firrtl.wire sym @w {annotations = [
       {circt.nonlocal = @breadcrumb_nla2, class = "wire0"},
@@ -241,7 +241,7 @@ firrtl.circuit "Context" {
       {circt.nonlocal = @context_nla0, class = "port0"},
       {circt.nonlocal = @context_nla2, class = "port1"}
     ]) {
-  
+
     // CHECK: %w = firrtl.wire sym @w  {annotations = [
     // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "fake0"}
     // CHECK-SAME: {circt.nonlocal = [[NLA3]], class = "fake1"}
@@ -297,7 +297,7 @@ firrtl.circuit "ExtModuleTest" {
   }
 }
 
-// External modules with NLAs on ports should be properly rewritten. 
+// External modules with NLAs on ports should be properly rewritten.
 // https://github.com/llvm/circt/issues/2713
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
@@ -381,12 +381,12 @@ firrtl.circuit "Bundle" {
     %a = firrtl.instance bundle0 @Bundle0(out a: !firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>)
     // CHECK: firrtl.instance bundle1  @Bundle0
     %e = firrtl.instance bundle1 @Bundle1(out e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>)
-    
+
     // CHECK: [[B:%.+]] = firrtl.subfield %bundle0_a(0)
     %b = firrtl.subfield %a(0) : (!firrtl.bundle<b: bundle<c flip: uint<1>, d: uint<1>>>) -> !firrtl.bundle<c flip: uint<1>, d: uint<1>>
     // CHECK: [[F:%.+]] = firrtl.subfield %bundle1_a(0)
     %f = firrtl.subfield %e(0) : (!firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>) -> !firrtl.bundle<g flip: uint<1>, h: uint<1>>
-  
+
     // Check that we properly fixup connects when the field names change.
     %w0 = firrtl.wire : !firrtl.bundle<g flip: uint<1>, h: uint<1>>
     // CHECK: [[W0_G:%.+]] = firrtl.subfield %w0(0)
@@ -476,7 +476,7 @@ firrtl.circuit "NoEmptyAnnos" {
 firrtl.circuit "NoDedup" {
   firrtl.module @Simple0() { }
   firrtl.module @Simple1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
-  // CHECK: firrtl.module @NoDedup 
+  // CHECK: firrtl.module @NoDedup
   firrtl.module @NoDedup() {
     firrtl.instance simple0 @Simple0()
     firrtl.instance simple1 @Simple1()
