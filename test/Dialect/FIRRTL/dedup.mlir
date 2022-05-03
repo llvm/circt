@@ -501,3 +501,17 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
     firrtl.instance simple1 @Simple1()
   }
 }
+
+// Check that the declaration order of modules determines deduplication order,
+// not instantiation order.
+//
+// CHECK-LABEL: firrtl.circuit "DeclarationOrderNotInstantiationOrder"
+firrtl.circuit "DeclarationOrderNotInstantiationOrder" {
+  // CHECK-NEXT: firrtl.module private @X
+  firrtl.module private @X(in %a: !firrtl.uint<1>) {}
+  firrtl.module private @Y(in %a: !firrtl.uint<1>) {}
+  firrtl.module @DeclarationOrderNotInstantiationOrder() {
+    %y_a = firrtl.instance y @Y(in a: !firrtl.uint<1>)
+    %x_a = firrtl.instance x @X(in a: !firrtl.uint<1>)
+  }
+}

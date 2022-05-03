@@ -1266,6 +1266,13 @@ class DedupPass : public DedupBase<DedupPass> {
     // other were all deduped to the same module.
     DenseMap<Attribute, StringAttr> dedupMap;
 
+    // Compute a module ordering based on declaration order.  This will be used
+    // to override instantiation order when determining which module dedups into
+    // which other module.
+    DenseMap<Operation *, unsigned> declarationOrder;
+    for (auto pair : llvm::enumerate(circuit.getOps<FModuleLike>()))
+      declarationOrder.insert({pair.value(), pair.index()});
+
     // We must iterate the modules from the bottom up so that we can properly
     // deduplicate the modules. We have to store the visit order first so that
     // we can safely delete nodes as we go from the instance graph.
@@ -1287,6 +1294,14 @@ class DedupPass : public DedupBase<DedupPass> {
       auto it = moduleHashes.find(h);
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
+        // If the original module comes after the current module, then dedup the
+        // original into the current module..
+        if (declarationOrder[original] > declarationOrder[module]) {
+          deduper.record(module);
+          dedupMap[moduleName] = moduleName;
+          moduleHashes[h] = module;
+          std::swap(module, original);
+        }
         // Record the group ID of the other module.
         dedupMap[moduleName] = original.moduleNameAttr();
         deduper.dedup(original, module);
