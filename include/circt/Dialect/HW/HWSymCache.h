@@ -50,7 +50,7 @@ public:
   void addDefinition(mlir::StringAttr modSymbol, mlir::StringAttr name,
                      mlir::Operation *op, size_t port = ~0ULL) {
     assert(!isFrozen && "cannot mutate a frozen cache");
-    auto key = InnerRefAttr::get(modSymbol.getContext(), modSymbol, name);
+    auto key = InnerRefAttr::get(modSymbol, name);
     symbolCache.try_emplace(key, op, port);
   }
 
@@ -84,7 +84,7 @@ public:
   }
 
   Item getDefinition(mlir::StringAttr modSymbol, mlir::StringAttr name) const {
-    return lookup(InnerRefAttr::get(modSymbol.getContext(), modSymbol, name));
+    return lookup(InnerRefAttr::get(modSymbol, name));
   }
 
   Item getDefinition(InnerRefAttr name) const { return lookup(name); }

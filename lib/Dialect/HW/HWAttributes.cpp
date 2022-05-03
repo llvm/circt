@@ -179,9 +179,7 @@ Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
     return Attribute();
   if (attr.getNestedReferences().size() != 1)
     return Attribute();
-  auto *context = p.getContext();
-  return InnerRefAttr::get(context, attr.getRootReference(),
-                           attr.getLeafReference());
+  return InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference());
 }
 
 void InnerRefAttr::print(AsmPrinter &p) const {

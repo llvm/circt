@@ -1535,7 +1535,6 @@ void LowerTypesPass::runOnOperation() {
       SmallVector<Attribute> path(namepath.begin(), namepath.end());
       // Update the leaf element of the instance path to the new symbol.
       path[path.size() - 1] = hw::InnerRefAttr::get(
-          &getContext(),
           path[path.size() - 1].cast<hw::InnerRefAttr>().getModule(),
           nlaToSym.newSym);
       auto newPath = ArrayAttr::get(&getContext(), path);

@@ -3334,7 +3334,7 @@ bool NonLocalAnchor::inlineModule(StringAttr moduleToDrop) {
         updateMade = true;
       } else if (!inlinedInstanceName.empty()) {
         newPath.push_back(hw::InnerRefAttr::get(
-            getContext(), ref.getModule(),
+            ref.getModule(),
             StringAttr::get(getContext(), inlinedInstanceName + "_" +
                                               ref.getName().getValue())));
         inlinedInstanceName = "";
