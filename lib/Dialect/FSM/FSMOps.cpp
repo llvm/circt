@@ -28,7 +28,7 @@ static SmallVector<StateOp> unreachableStates(MachineOp machine) {
   SmallVector<StateOp, 4> queue;
   queue.push_back(machine.getInitialStateOp());
   while (!queue.empty()) {
-    auto state = queue.begin();
+    auto *state = queue.begin();
     queue.erase(state);
     if (reachableStates.contains(*state))
       continue;
