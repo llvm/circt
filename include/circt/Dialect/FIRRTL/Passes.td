@@ -418,4 +418,17 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createInferReadWritePass()";
 }
 
+def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
+  let summary = "Add a level of hierarchy outside the DUT";
+  let description = [{
+    This pass takes the DUT (as indicated by the presence of a
+    MarkDUTAnnotation) and moves all the contents of it into a new module
+    insided the DUT named by an InjectDUTHierarchyAnnotation.  This pass is
+    intended to be used in conjunction with passes that pull things out of the
+    DUT, e.g., SRAM extraction, to give the extracted modules a new home that is
+    still inside the original DUT.
+  }];
+  let constructor = "circt::firrtl::createInjectDUTHierarchyPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

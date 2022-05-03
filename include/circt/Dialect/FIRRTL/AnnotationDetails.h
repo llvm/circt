@@ -53,6 +53,8 @@ constexpr const char *dutAnnoClass =
     "sifive.enterprise.firrtl.MarkDUTAnnotation";
 constexpr const char *testbenchDirAnnoClass =
     "sifive.enterprise.firrtl.TestBenchDirAnnotation";
+constexpr const char *injectDUTHierarchyAnnoClass =
+    "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
 
 } // namespace firrtl
 } // namespace circt

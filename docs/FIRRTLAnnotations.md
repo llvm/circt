@@ -445,6 +445,30 @@ Example:
 }
 ```
 
+### InjectDUTHierarchyAnnotation
+
+| Property | Type   | Description                                             |
+|----------|--------|---------------------------------------------------------|
+| class    | string | `sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation` |
+| name     | string | The name of the module containing original DUT logic    |
+
+This annotation can be used to add an extra level of hierarchy in the design
+under the DUT (indicated with a `MarkDUTAnnotation`).  All logic in the original
+DUT will be moved into a module with the specified `name`.  This is typically
+used in combination with `ExtractBlackBoxAnnotation` (or with passes that add
+these annotations to extract components like clock gates or memories) to not
+intermix the original DUT contents with extracted module instantiations.
+
+This annotation should only appear zero or once.
+
+Example:
+``` json
+{
+  "class": "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+  "name": "Logic"
+}
+```
+
 ### [InlineAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/passes/InlineAnnotation.html)
 
 | Property   | Type   | Description                      |
