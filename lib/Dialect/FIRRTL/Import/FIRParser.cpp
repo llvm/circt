@@ -1695,12 +1695,13 @@ void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
     builder.create<AttachOp>(SmallVector{dst, src});
   } else if (auto bundle = type.dyn_cast<BundleType>()) {
     for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstField) {
+      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstRef) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubfieldOp>(dst, i);
+        dstRef = builder.create<SubfieldOp>(dst, i);
       }
+      auto dstField = dstRef; // copy to ensure not invalidated
       auto &srcField = moduleContext.getCachedSubaccess(src, i);
       if (!srcField) {
         OpBuilder::InsertionGuard guard(builder);
@@ -1711,12 +1712,13 @@ void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
     }
   } else if (auto vector = type.dyn_cast<FVectorType>()) {
     for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstField) {
+      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstRef) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubindexOp>(dst, i);
+        dstRef = builder.create<SubindexOp>(dst, i);
       }
+      auto dstField = dstRef; // copy to ensure not invalidated
       auto &srcField = moduleContext.getCachedSubaccess(src, i);
       if (!srcField) {
         OpBuilder::InsertionGuard guard(builder);
@@ -1778,12 +1780,13 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
     // Partial connect will connect all elements up to the end of the array.
     auto numElements = std::min(dstNumElements, srcNumEelemnts);
     for (size_t i = 0; i != numElements; ++i) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstField) {
+      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstRef) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubindexOp>(dst, i);
+        dstRef = builder.create<SubindexOp>(dst, i);
       }
+      auto dstField = dstRef; // copy to ensure not invalidated
       auto &srcField = moduleContext.getCachedSubaccess(src, i);
       if (!srcField) {
         OpBuilder::InsertionGuard guard(builder);
