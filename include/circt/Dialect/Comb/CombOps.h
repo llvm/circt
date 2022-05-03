@@ -35,7 +35,7 @@ class PatternRewriter;
 namespace circt {
 namespace hw {
 class ConstantOp;
-}
+} // namespace hw
 namespace comb {
 
 using llvm::KnownBits;
