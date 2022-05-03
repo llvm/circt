@@ -202,7 +202,7 @@ static cl::opt<bool>
 static cl::opt<bool>
     injectDUTHierarchy("inject-dut-hierarchy",
                        cl::desc("add a level of hierarchy to the DUT"),
-                       cl::init(true));
+                       cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     prefixModules("prefix-modules",
