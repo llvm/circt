@@ -212,7 +212,46 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   for (auto transition : transitionsToErase)
     rewriter.eraseOp(transition);
 
+  // Check for a trivial transition; this case occurs when a state has an always
+  // taken transition, there is no output in the state, and the always taken
+  // transition has no action.
+  if (!op.hasOutput() && hasAlwaysTakenTransition) {
+    auto alwaysTransition = *op.transitions().getOps<TransitionOp>().begin();
+    if (!alwaysTransition.hasAction()) {
+      // Rewrite all transitions to this state to the target state of the always
+      // taken transition, and erase this op.
+      auto targetState = alwaysTransition.getNextState();
+      if (auto uses = op.getSymbolUses(op->getParentOfType<MachineOp>());
+          uses.hasValue()) {
+        for (auto use : uses.getValue()) {
+          TransitionOp transition = dyn_cast<TransitionOp>(use.getUser());
+          assert(transition &&
+                 "State referenced by something other than a transition?");
+          transition->setAttr("nextState", SymbolRefAttr::get(targetState));
+        }
+      }
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+
   return failure(transitionsToErase.empty());
+}
+
+bool StateOp::hasOutput() {
+  if ((*this)
+          ->getParentOfType<MachineOp>()
+          .getFunctionType()
+          .getResults()
+          .empty()) {
+    // The FSM itself does not have any outputs. Ensure that there are no other
+    // side-effects in the output segment.
+    auto outputOps = output().getOps();
+    if (std::distance(outputOps.begin(), outputOps.end()) == 1 &&
+        isa<OutputOp>(*outputOps.begin()))
+      return false;
+  }
+  return true;
 }
 
 //===----------------------------------------------------------------------===//

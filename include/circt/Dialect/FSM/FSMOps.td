@@ -157,6 +157,12 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol,
   let assemblyFormat = [{
     $sym_name attr-dict `output` $output `transitions` $transitions
   }];
+
+  let extraClassDeclaration = [{
+    /// Returns whether this state has any output.
+    bool hasOutput();
+  }];
+
 }
 
 def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
