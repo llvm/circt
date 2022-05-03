@@ -210,6 +210,8 @@ private:
 struct Equivalence {
   Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {
+    noDedupClass =
+        StringAttr::get(context, "firrtl.transforms.NoDedupAnnotation");
     portTypesAttr = StringAttr::get(context, "portTypes");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
@@ -526,6 +528,14 @@ struct Equivalence {
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
     BlockAndValueMapping map;
+    if (AnnotationSet(a).hasAnnotation(noDedupClass)) {
+      diag.attachNote(a->getLoc()) << "module marked NoDedup";
+      return;
+    }
+    if (AnnotationSet(b).hasAnnotation(noDedupClass)) {
+      diag.attachNote(b->getLoc()) << "module marked NoDedup";
+      return;
+    }
     if (failed(check(diag, map, a, b)))
       return;
     diag.attachNote(a->getLoc()) << "first module here";
@@ -534,6 +544,8 @@ struct Equivalence {
 
   // This is a cached "portTypes" string attr.
   StringAttr portTypesAttr;
+  // This is a cached "NoDedup" annotation class string attr.
+  StringAttr noDedupClass;
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
   InstanceGraph &instanceGraph;
@@ -1259,9 +1271,16 @@ class DedupPass : public DedupBase<DedupPass> {
     // we can safely delete nodes as we go from the instance graph.
     for (auto *node : llvm::post_order(&instanceGraph)) {
       auto module = cast<FModuleLike>(*node->getModule());
+      auto moduleName = module.moduleNameAttr();
       // If the module is marked with NoDedup, just skip it.
-      if (AnnotationSet(module).hasAnnotation(noDedupClass))
+      if (AnnotationSet(module).hasAnnotation(noDedupClass)) {
+        // We record it in the dedup map to help detect errors when the user
+        // marks the module as both NoDedup and MustDedup. We do not record this
+        // module in the hasher to make sure no other module dedups "into" this
+        // one.
+        dedupMap[moduleName] = moduleName;
         continue;
+      }
       // Calculate the hash of the module.
       auto h = hasher.hash(module);
       // Check if there a module with the same hash.
@@ -1269,7 +1288,7 @@ class DedupPass : public DedupBase<DedupPass> {
       if (it != moduleHashes.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
-        dedupMap[module.moduleNameAttr()] = original.moduleNameAttr();
+        dedupMap[moduleName] = original.moduleNameAttr();
         deduper.dedup(original, module);
         erasedModules++;
         anythingChanged = true;
@@ -1278,7 +1297,6 @@ class DedupPass : public DedupBase<DedupPass> {
       // Any module not deduplicated must be recorded.
       deduper.record(module);
       // Add the module to a new dedup group.
-      auto moduleName = module.moduleNameAttr();
       dedupMap[moduleName] = moduleName;
       // Record the module's hash.
       moduleHashes[h] = module;
