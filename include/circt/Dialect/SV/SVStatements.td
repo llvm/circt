@@ -94,6 +94,9 @@ def IfDefProceduralOp
   let builders = [
     OpBuilder<(ins "StringRef":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "MacroIdentAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 

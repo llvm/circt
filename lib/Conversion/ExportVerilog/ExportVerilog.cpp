@@ -130,6 +130,10 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
       return true;
   }
 
+  // If this is a macro reference without side effects, allow duplication.
+  if (isa<MacroRefExprOp>(op))
+    return true;
+
   return false;
 }
 
@@ -1538,6 +1542,7 @@ private:
   SubExprInfo visitSV(VerbatimExprSEOp op) {
     return visitVerbatimExprOp(op, op.symbols());
   }
+  SubExprInfo visitSV(MacroRefExprOp op);
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1973,6 +1978,11 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
       names);
 
   return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+  os << "`" << op.ident().getName();
+  return {LowestPrecedence, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
