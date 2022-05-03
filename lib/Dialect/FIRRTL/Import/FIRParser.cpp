@@ -2793,6 +2793,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
+  auto lhsType = lhs.getType().cast<FIRRTLType>();
+  auto rhsType = rhs.getType().cast<FIRRTLType>();
   auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
   auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
   if (lhsPType == rhsPType && false) {
@@ -2804,9 +2806,9 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   if (kind == FIRToken::less_equal) {
-    if (!areTypesEquivalent(lhsPType, rhsPType))
+    if (!areTypesEquivalent(lhsType, rhsType))
       return emitError(loc, "cannot connect non-equivalent type ")
-             << rhsPType << " to " << lhsPType;
+             << rhsType << " to " << lhsType;
     emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
