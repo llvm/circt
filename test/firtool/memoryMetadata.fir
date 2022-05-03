@@ -186,7 +186,7 @@ circuit test:
 ; CHECK-LABEL:       FILE "metadata/seq_mems.json"
 ; CHECK:  [{"module_name":"dutMemory_ext","depth":32,"width":8,"masked":false,"read":true,
 ; CHECK:  "write":true,"readwrite":false,"extra_ports":[],
-; CHECK:  "hierarchy":["test.m2.m.dutMemory"]}]
+; CHECK:  "hierarchy":["dutModule.m.dutMemory"]}]
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"
 ; CHECK: name dutMemory_ext depth 32 width 8 ports write,read

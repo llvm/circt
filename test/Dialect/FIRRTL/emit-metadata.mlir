@@ -121,7 +121,7 @@ firrtl.circuit "top"
 firrtl.circuit "top"
 {
     firrtl.module @top()  {
-      firrtl.instance dut @dut()
+      firrtl.instance dut @DUT()
       firrtl.instance mem1 @Mem1()
       firrtl.instance mem2 @Mem2()
     }
@@ -131,7 +131,7 @@ firrtl.circuit "top"
     firrtl.module @Mem2() {
       %head_MPORT_3 = firrtl.mem Undefined  {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>
     }
-    firrtl.module @dut() attributes {annotations = [
+    firrtl.module @DUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
       firrtl.instance mem1 @Mem()
     }
@@ -141,7 +141,7 @@ firrtl.circuit "top"
     }
     // CHECK: sv.verbatim "[{\22module_name\22:\22head_0_ext\22,\22depth\22:20,\22width\22:5,\22masked\22:false,\22read\22:false,\22write\22:true,\22readwrite\22:false,\22extra_ports\22:[],\22hierarchy\22:[\22top.mem2.head\22]},{\22module_name\22:\22head_ext\22,\22depth\22:20,\22width\22:5,\22masked\22:false,\22read\22:false,\22write\22:true,\22readwrite\22:false,\22extra_ports\22:[],\22hierarchy\22:[\22top.mem1.head\22]}]"
     // CHECK-SAME:  {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
-    // CHECK: sv.verbatim "[{\22module_name\22:\22memory_ext\22,\22depth\22:16,\22width\22:8,\22masked\22:false,\22read\22:true,\22write\22:false,\22readwrite\22:true,\22extra_ports\22:[],\22hierarchy\22:[\22top.dut.mem1.memory\22]
+    // CHECK: sv.verbatim "[{\22module_name\22:\22memory_ext\22,\22depth\22:16,\22width\22:8,\22masked\22:false,\22read\22:true,\22write\22:false,\22readwrite\22:true,\22extra_ports\22:[],\22hierarchy\22:[\22DUT.mem1.memory\22]
     // CHECK-SAME: output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []
     // CHECK: sv.verbatim "name memory_ext depth 16 width 8 ports rw\0Aname head_0_ext depth 20 width 5 ports write\0Aname head_ext depth 20 width 5 ports write\0A" 
     // CHECK-SAME: {output_file = #hw.output_file<"\22metadata/dut.conf\22", excludeFromFileList>, symbols = []}
