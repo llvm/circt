@@ -2649,6 +2649,19 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         if (xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>())
           return combineEqualityICmpWithXorOfConstant(op, xorOp, rhs, rewriter),
                  success();
+
+      // Simplify icmp eq(replicate(v, n), c) -> icmp eq(v, c) if c is zero or
+      // all one.
+      if (auto replicateOp = op.lhs().getDefiningOp<ReplicateOp>())
+        if (rhs.isAllOnes() || rhs.isZero()) {
+          auto width = replicateOp.input().getType().getIntOrFloatBitWidth();
+          auto cst = rewriter.create<hw::ConstantOp>(
+              op.getLoc(), rhs.isAllOnes() ? APInt::getAllOnes(width)
+                                           : APInt::getZero(width));
+          rewriter.replaceOpWithNewOp<ICmpOp>(op, op.predicate(),
+                                              replicateOp.input(), cst);
+          return success();
+        }
     }
   }
 
