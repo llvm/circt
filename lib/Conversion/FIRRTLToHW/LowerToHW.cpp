@@ -2353,7 +2353,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                     name.getValue());
   }
 
-  if (symName || !name.empty()) {
+  if (symName || (name && !name.getValue().empty())) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
   }
