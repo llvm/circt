@@ -1,6 +1,6 @@
 // RUN: circt-opt %s | FileCheck %s
 
-// CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {stateType = i1} {
+// CHECK: fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
 // CHECK:   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 // CHECK:   fsm.state "IDLE" output  {
 // CHECK:     %true = arith.constant true
@@ -48,7 +48,7 @@
 // CHECK:   return
 // CHECK: }
 
-fsm.machine @foo(%arg0: i1) -> i1 attributes {stateType = i1} {
+fsm.machine @foo(%arg0: i1) -> i1 attributes {initialState = "IDLE", stateType = i1} {
   %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
 
   fsm.state "IDLE" output  {

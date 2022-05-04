@@ -25,19 +25,20 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionOpInterfa
   }];
 
   let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType,
+                       StrAttr:$initialState,
                        TypeAttrOf<FunctionType>:$function_type);
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
-    OpBuilder<(ins "StringRef":$name, "Type":$stateType,
-      "FunctionType":$function_type,
+    OpBuilder<(ins "StringRef":$name, "StringRef":$initialState,
+      "Type":$stateType, "FunctionType":$function_type,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
       CArg<"ArrayRef<DictionaryAttr>", "{}">:$argAttrs)>
   ];
 
   let extraClassDeclaration = [{
-    /// Get the default state of the machine.
-    StateOp getDefaultState();
+    /// Get the initial state of the machine.
+    StateOp getInitialStateOp();
 
     /// Get the port information of the machine.
     void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);

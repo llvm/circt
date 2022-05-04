@@ -23,13 +23,15 @@ using namespace fsm;
 //===----------------------------------------------------------------------===//
 
 void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
-                      Type stateType, FunctionType type,
-                      ArrayRef<NamedAttribute> attrs,
+                      StringRef initialStateName, Type stateType,
+                      FunctionType type, ArrayRef<NamedAttribute> attrs,
                       ArrayRef<DictionaryAttr> argAttrs) {
   state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
   state.addAttribute("stateType", TypeAttr::get(stateType));
   state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  state.addAttribute("initialStateName",
+                     StringAttr::get(state.getContext(), initialStateName));
   state.attributes.append(attrs.begin(), attrs.end());
   state.addRegion();
 
@@ -40,8 +42,10 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                                                 /*resultAttrs=*/llvm::None);
 }
 
-/// Get the default state of the machine.
-StateOp MachineOp::getDefaultState() { return *getOps<StateOp>().begin(); }
+/// Get the initial state of the machine.
+StateOp MachineOp::getInitialStateOp() {
+  return dyn_cast_or_null<StateOp>(lookupSymbol(initialState()));
+}
 
 /// Get the port information of the machine.
 void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
@@ -114,6 +118,11 @@ LogicalResult MachineOp::verify() {
   // Verify that the machine only has one block terminated with OutputOp.
   if (!llvm::hasSingleElement(*this))
     return emitOpError("must only have a single block");
+
+  // Verify that the initial state exists
+  if (!getInitialStateOp())
+    return emitOpError("initial state '" + initialState() +
+                       "' was not defined in the machine");
 
   return success();
 }
