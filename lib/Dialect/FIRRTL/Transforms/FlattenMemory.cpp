@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -121,7 +122,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           // also go both directions, depending on the port direction.
           if (!(name == "data" || name == "mask" || name == "wdata" ||
                 name == "wmask" || name == "rdata")) {
-            mkConnect(&builder, newField, oldField);
+            emitConnect(builder, newField, oldField);
             continue;
           }
           Value realOldField = oldField;
@@ -130,7 +131,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             newField = builder.createOrFold<BitCastOp>(
                 oldField.getType().cast<FIRRTLType>(), newField);
             // Write the aggregate read data.
-            mkConnect(&builder, realOldField, newField);
+            emitConnect(builder, realOldField, newField);
           } else {
             // Cast the input aggregate write data to flat type.
             // Cast the input aggregate write data to flat type.
@@ -163,9 +164,10 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
             }
             // Now set the mask or write data.
             // Ensure that the types match.
-            mkConnect(&builder, newField,
-                      builder.createOrFold<BitCastOp>(
-                          newField.getType().cast<FIRRTLType>(), realOldField));
+            emitConnect(
+                builder, newField,
+                builder.createOrFold<BitCastOp>(
+                    newField.getType().cast<FIRRTLType>(), realOldField));
           }
         }
       }
@@ -212,15 +214,6 @@ private:
 
     llvm_unreachable("Unknown aggregate type");
     return nullptr;
-  }
-  void mkConnect(ImplicitLocOpBuilder *builder, Value dst, Value src) {
-    auto dstType = dst.getType().cast<FIRRTLType>();
-    auto srcType = src.getType().cast<FIRRTLType>();
-
-    if (srcType == dstType)
-      builder->create<StrictConnectOp>(dst, src);
-    else
-      builder->create<ConnectOp>(dst, src);
   }
 };
 } // end anonymous namespace
