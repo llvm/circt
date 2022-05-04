@@ -25,15 +25,18 @@ NLATable::NLATable(Operation *operation) {
   for (auto &op : *circuit.getBody()) {
     if (auto module = dyn_cast<FModuleLike>(op))
       symToOp[module.moduleNameAttr()] = module;
-    if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
-      symToOp[nla.sym_nameAttr()] = nla;
-      for (auto ent : nla.namepath()) {
-        if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
-          nodeMap[mod.getAttr()].push_back(nla);
-        else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
-          nodeMap[inr.getModule()].push_back(nla);
-      }
-    }
+    if (auto nla = dyn_cast<NonLocalAnchor>(op))
+      addNLA(nla);
+  }
+}
+
+void NLATable::addNLA(NonLocalAnchor nla) {
+  symToOp[nla.sym_nameAttr()] = nla;
+  for (auto ent : nla.namepath()) {
+    if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
+      nodeMap[mod.getAttr()].push_back(nla);
+    else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
+      nodeMap[inr.getModule()].push_back(nla);
   }
 }
 

@@ -51,6 +51,9 @@ public:
   // NLATable is used as an analysis, this is only safe when the pass is
   // on a CircuitOp.
 
+  // Record a new NLA operation.
+  void addNLA(NonLocalAnchor nla);
+
   // Stop tracking a module
   void eraseModule(StringAttr name);
 
