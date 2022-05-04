@@ -2178,20 +2178,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
-/// Checks whether the use block is nested in the definition block through a
-/// chain of ops that do not block the inlining of a definition.
-static bool allowsInlineUses(Block *def, Block *use) {
-  if (def == use)
-    return true;
-
-  // Presently, only `else if` chains allow inlining.
-  auto op = dyn_cast<IfOp>(use->getParentOp());
-  if (op && op.hasElse() && op.getElseBlock() == use && findNestedElseIf(use))
-    return allowsInlineUses(def, op->getBlock());
-
-  return false;
-}
-
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
@@ -2213,23 +2199,9 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (verbatim.string().size() > 32)
       return true;
 
-  auto *opBlock = op->getBlock();
-
-  // If the parent op is not a module op, it is defined locally.
-  bool isLocalDefinition = !isa_and_nonnull<HWModuleOp>(op->getParentOp());
-
-  bool isDuplicatable = isDuplicatableExpression(op);
-
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
-    // If the op is defined locally and the user is in a different block, then
-    // we emit this as an out-of-line declaration into its block and the user
-    // can refer to it unless the operation is duplicatable.
-    if (isLocalDefinition && !isDuplicatable &&
-        !allowsInlineUses(opBlock, user->getBlock()))
-      return true;
-
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     //

@@ -1330,13 +1330,12 @@ hw.module @DoNotChainElseIf(%clock: i1, %flag1 : i1, %flag2: i1) {
 }
 
 // CHECK-LABEL: NestedElseIfHoist
-// CHECK: automatic logic        [[FLAG:.*]] = flag2 & flag4;
-// CHECK: automatic logic [31:0] [[ARG:.*]] = arg0 | arg1 | arg2;
+// CHECK: automatic logic [[FLAG:.*]] = flag2 & flag4;
 // CHECK: if (flag1)
 // CHECK: else if ([[FLAG]])
 // CHECK: else if (flag3 & [[FLAG]])
 // CHECK: else
-// CHECK: [[ARG]]
+// CHECK: arg0 | arg1 | arg2
 hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %flag4 : i1, %arg0: i32, %arg1: i32, %arg2: i32) {
   %fd = hw.constant 0x80000002 : i32
 
