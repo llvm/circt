@@ -1961,11 +1961,13 @@ FirMemory MemOp::getSummary() {
       ++numReadWritePorts;
   }
 
-  auto width = op.getDataType().getBitWidthOrSentinel();
-  if (width <= 0) {
+  auto widthV = getBitWidth(op.getDataType());
+  size_t width;
+  if (!widthV.hasValue()) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
-  }
+  } else
+    width = widthV.getValue();
   uint32_t groupID = 0;
   if (auto gID = op.groupIDAttr())
     groupID = gID.getUInt();

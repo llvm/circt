@@ -447,4 +447,18 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
+def MemToRegOfVecTransform : Pass<"mem-to-regofvec", "firrtl::FModuleOp"> {
+  let summary = "";
+  let description = [{
+  }];
+  let options = [
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
+                "false",
+    "ignore the read enable signal, instead of assigning X on read disable">
+   ];
+  let constructor = "circt::firrtl::createMemToRegOfVecTransformPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
