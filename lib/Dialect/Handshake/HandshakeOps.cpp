@@ -1445,6 +1445,54 @@ LogicalResult InstanceOp::verify() {
   return success();
 }
 
+ParseResult UnpackOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand tuple;
+  TupleType type;
+
+  if (parser.parseOperand(tuple) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  if (parser.resolveOperand(tuple, type, result.operands))
+    return failure();
+
+  result.addTypes(type.getTypes());
+
+  return success();
+}
+
+void UnpackOp::print(OpAsmPrinter &p) {
+  p << " " << input();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << input().getType();
+}
+
+ParseResult PackOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+  TupleType type;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  if (parser.resolveOperands(operands, type.getTypes(), allOperandLoc,
+                             result.operands))
+    return failure();
+
+  result.addTypes(type);
+
+  return success();
+}
+
+void PackOp::print(OpAsmPrinter &p) {
+  p << " " << inputs();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << result().getType();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen'd op method definitions
 //===----------------------------------------------------------------------===//
