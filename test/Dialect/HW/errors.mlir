@@ -39,6 +39,19 @@ hw.module @A(%arg0: i1) {
 
 // -----
 
+hw.generator.schema @S, "Test Schema", ["test"]
+// expected-error @+1 {{Cannot find generator definition 'S2'}}
+hw.module.generated @A, @S2(%arg0: i1) -> (a: i1) attributes { test = 1 }
+
+// -----
+
+hw.module @S() { }
+// expected-error @+1 {{which is not a HWGeneratorSchemaOp}}
+hw.module.generated @A, @S(%arg0: i1) -> (a: i1) attributes { test = 1 }
+
+
+// -----
+
 // expected-error @+1 {{'hw.output' op must have same number of operands as region results}}
 hw.module @A() -> ("": i1) { }
 
