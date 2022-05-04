@@ -70,8 +70,7 @@ private:
 static bool onlyInvalidated(Value arg) {
   return llvm::all_of(arg.getUses(), [](OpOperand &use) {
     auto *op = use.getOwner();
-    if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp,
-             firrtl::StrictConnectOp>(op))
+    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return false;
     if (use.getOperandNumber() != 0)
       return false;
@@ -524,13 +523,12 @@ struct Constantifier : public Reduction {
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
-/// `firrtl.connect` and `firrtl.partialconnect` operations with a
+/// `firrtl.connect` and `firrtl.strictconnect` operations with a
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
   bool match(Operation *op) override {
-    return isa<firrtl::ConnectOp, firrtl::PartialConnectOp,
-               firrtl::StrictConnectOp>(op) &&
+    return isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op) &&
            op->getOperand(1).getType().cast<firrtl::FIRRTLType>().isPassive() &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
   }

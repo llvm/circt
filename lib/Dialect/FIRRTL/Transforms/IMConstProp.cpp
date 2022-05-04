@@ -258,7 +258,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void visitConnect(ConnectOp connect);
   void visitStrictConnect(StrictConnectOp connect);
-  void visitPartialConnect(PartialConnectOp connect);
   void visitOperation(Operation *op);
 
 private:
@@ -605,10 +604,6 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
       << "strictconnect destination is here";
 }
 
-void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
-  partialConnect.emitError("IMConstProp cannot handle partial connect");
-}
-
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -621,8 +616,6 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitConnect(connectOp);
   if (auto strictConnectOp = dyn_cast<StrictConnectOp>(op))
     return visitStrictConnect(strictConnectOp);
-  if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
-    return visitPartialConnect(partialConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return markRegResetOp(regResetOp);
 

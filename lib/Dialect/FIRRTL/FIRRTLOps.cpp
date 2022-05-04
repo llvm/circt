@@ -1983,23 +1983,6 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-LogicalResult PartialConnectOp::verify() {
-  FIRRTLType dstType = dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = src().getType().cast<FIRRTLType>();
-
-  // Destination and source types must be weakly equivalent.
-  if (!areTypesWeaklyEquivalent(dstType, srcType))
-    return emitError("type mismatch between destination ")
-           << dstType << " and source " << srcType
-           << ". Types are not weakly equivalent.";
-
-  // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this)))
-    return failure();
-
-  return success();
-}
-
 LogicalResult StrictConnectOp::verify() {
   FIRRTLType type = dest().getType().cast<FIRRTLType>();
 

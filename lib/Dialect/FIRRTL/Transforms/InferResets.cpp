@@ -163,9 +163,9 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLType type) {
   return createZeroValue(builder, type, cache);
 }
 
-/// Helper function that inserts reset multiplexer into all `ConnectOp`s and
-/// `PartialConnectOp`s with the given target. Looks through `SubfieldOp`,
-/// `SubindexOp`, and `SubaccessOp`, and inserts multiplexers into connects to
+/// Helper function that inserts reset multiplexer into all `ConnectOp`s
+/// with the given target. Looks through `SubfieldOp`, `SubindexOp`,
+/// and `SubaccessOp`, and inserts multiplexers into connects to
 /// these subaccesses as well. Modifies the insertion location of the builder.
 /// Returns true if the `resetValue` was used in any way, false otherwise.
 static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
@@ -181,7 +181,7 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
     TypeSwitch<Operation *>(useOp)
         // Insert a mux on the value connected to the target:
         // connect(dst, src) -> connect(dst, mux(reset, resetValue, src))
-        .Case<ConnectOp, PartialConnectOp, StrictConnectOp>([&](auto op) {
+        .Case<ConnectOp, StrictConnectOp>([&](auto op) {
           if (op.dest() != target)
             return;
           LLVM_DEBUG(llvm::dbgs() << "  - Insert mux into " << op << "\n");
@@ -696,7 +696,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
       llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
   circuit.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
-        .Case<ConnectOp, PartialConnectOp, StrictConnectOp>(
+        .Case<ConnectOp, StrictConnectOp>(
             [&](auto op) { traceResets(op.dest(), op.src(), op.getLoc()); })
 
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
@@ -774,8 +774,8 @@ void InferResetsPass::traceResets(InstanceOp inst) {
   }
 }
 
-/// Analyze a connect or partial connect of one (possibly aggregate) value to
-/// another. Each drive involving a `ResetType` is recorded.
+/// Analyze a connect of one (possibly aggregate) value to another.
+/// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
   // Analyze the actual connection.
   auto dstType = dst.getType().cast<FIRRTLType>();
@@ -783,8 +783,8 @@ void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
   traceResets(dstType, dst, 0, srcType, src, 0, loc);
 }
 
-/// Analyze a connect or partial connect of one (possibly aggregate) value to
-/// another. Each drive involving a `ResetType` is recorded.
+/// Analyze a connect of one (possibly aggregate) value to another.
+/// Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
                                   FIRRTLType srcType, Value src, unsigned srcID,
                                   Location loc) {

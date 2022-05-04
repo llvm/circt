@@ -1086,10 +1086,6 @@ public:
   /// These may be aggregate values. This is used for regular connects.
   void constrainTypes(Value larger, Value smaller);
 
-  /// Constrain the value "larger" to be greater than or equal to "smaller".
-  /// These may be aggregate values. This is used for partial connects.
-  void partiallyConstrainTypes(Value larger, Value smaller);
-
   /// Constrain the expression "larger" to be greater than or equals to
   /// the expression "smaller".
   void constrainTypes(Expr *larger, Expr *smaller);
@@ -1212,8 +1208,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown &&
-      !isa<ConnectOp, PartialConnectOp, StrictConnectOp, AttachOp>(op))
+  if (allWidthsKnown && !isa<ConnectOp, StrictConnectOp, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1418,13 +1413,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           return;
         constrainTypes(op.dest(), op.src());
       })
-      .Case<PartialConnectOp>([&](auto op) {
-        // If the source is an invalid value, we don't set a constraint between
-        // these two types.
-        if (dyn_cast_or_null<InvalidValueOp>(op.src().getDefiningOp()))
-          return;
-        partiallyConstrainTypes(op.dest(), op.src());
-      })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
@@ -1600,54 +1588,6 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
       };
 
   constrain(type, larger, smaller);
-}
-
-/// Establishes constraints to ensure the sizes in the `larger` type are greater
-/// than or equal to the sizes in the `smaller` type. The types do not have to
-/// be identical, but they must be similar in the sense that corresponding
-/// fields must have the same kind (scalars, bundles, vectors).
-///
-/// This function is used to apply partial connects.
-void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
-  // Recurse to every leaf element and set larger >= smaller.
-  std::function<void(FIRRTLType, Value, unsigned, FIRRTLType, Value, unsigned)>
-      constrain = [&](FIRRTLType aType, Value a, unsigned aID, FIRRTLType bType,
-                      Value b, unsigned bID) {
-        if (auto aBundle = aType.dyn_cast<BundleType>()) {
-          auto bBundle = bType.cast<BundleType>();
-          for (unsigned aIndex = 0, e = aBundle.getNumElements(); aIndex < e;
-               ++aIndex) {
-            auto aField = aBundle.getElements()[aIndex].name;
-            auto bIndex = bBundle.getElementIndex(aField);
-            if (!bIndex)
-              continue;
-            auto &aElt = aBundle.getElements()[aIndex];
-            auto &bElt = bBundle.getElements()[*bIndex];
-            if (aElt.isFlip)
-              constrain(bElt.type, b, bID + bBundle.getFieldID(*bIndex),
-                        aElt.type, a, aID + aBundle.getFieldID(aIndex));
-            else
-              constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex),
-                        bElt.type, b, bID + bBundle.getFieldID(*bIndex));
-          }
-        } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
-          // Do not constrain the elements of a zero length vector.
-          if (aVecType.getNumElements() == 0)
-            return;
-          auto bVecType = bType.cast<FVectorType>();
-          constrain(aVecType.getElementType(), a, aID + 1,
-                    bVecType.getElementType(), b, bID + 1);
-        } else if (aType.isGround()) {
-          // Leaf element, look up their expressions, and create the constraint.
-          constrainTypes(getExpr(FieldRef(a, aID)), getExpr(FieldRef(b, bID)));
-        } else {
-          llvm_unreachable("Unknown type inside a bundle!");
-        }
-      };
-
-  auto largerType = larger.getType().cast<FIRRTLType>();
-  auto smallerType = smaller.getType().cast<FIRRTLType>();
-  constrain(largerType, larger, 0, smallerType, smaller, 0);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater

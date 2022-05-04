@@ -64,7 +64,6 @@ firrtl.circuit "Div" {
     %6 = firrtl.subfield %tmp41_w0(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %6, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %7 = firrtl.subfield %tmp41_w0(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<0>
-    firrtl.partialconnect %7, %c0_ui25 : !firrtl.uint<0>, !firrtl.uint<25>
   }
 }
 

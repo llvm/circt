@@ -66,7 +66,6 @@ struct Emitter {
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(StrictConnectOp op);
-  void emitStatement(PartialConnectOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
@@ -317,8 +316,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
-              SeqMemOp, CombMemOp, MemoryPortOp, MemoryPortAccessOp>(
+              InstanceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
+              MemoryPortOp, MemoryPortAccessOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -471,15 +470,6 @@ void Emitter::emitStatement(StrictConnectOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(PartialConnectOp op) {
-  indent();
-  emitExpression(op.dest());
-  // TODO: Check if partial connects can also encode `<dest> is invalid`.
-  os << " <- ";
-  emitExpression(op.src());
-  emitLocationAndNewLine(op);
-}
-
 void Emitter::emitStatement(InstanceOp op) {
   indent() << "inst " << op.name() << " of " << op.moduleName();
   emitLocationAndNewLine(op);
@@ -608,8 +598,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<ConnectOp, PartialConnectOp, StrictConnectOp>(
-                   use.getOwner());
+               isa<ConnectOp, StrictConnectOp>(use.getOwner());
       }))
     return;
 

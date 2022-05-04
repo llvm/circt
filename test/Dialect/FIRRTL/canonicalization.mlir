@@ -842,22 +842,6 @@ firrtl.module @reg_cst_prop3(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
   firrtl.connect %out_b, %xor : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
-// CHECK-LABEL: @pcon
-// CHECK-NEXT:   %0 = firrtl.bits %in 4 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<5>
-// CHECK-NEXT:   firrtl.strictconnect %out, %0 : !firrtl.uint<5>
-// CHECK-NEXT:  }
-firrtl.module @pcon(in %in: !firrtl.uint<9>, out %out: !firrtl.uint<5>) {
-  firrtl.partialconnect %out, %in : !firrtl.uint<5>, !firrtl.uint<9>
-}
-
-// CHECK-LABEL: @pcon_bundle
-// CHECK-NEXT:   firrtl.strictconnect %out, %in : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
-// CHECK-NEXT:  }
-firrtl.module @pcon_bundle(in %in:   !firrtl.bundle<valid: uint<1>, ready: uint<1>>,
-                           out %out: !firrtl.bundle<valid: uint<1>, ready: uint<1>>) {
-  firrtl.partialconnect %out, %in : !firrtl.bundle<valid: uint<1>, ready: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>>
-}
-
 // https://github.com/llvm/circt/issues/788
 
 // CHECK-LABEL: @AttachMerge
@@ -1897,13 +1881,6 @@ firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.ui
     %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
     %0 = firrtl.orr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
     firrtl.connect %tmp62, %0 : !firrtl.uint<1>, !firrtl.uint<1>
-  }
-
-  // CHECK-LABEL: firrtl.module @issue1101
-  // CHECK: firrtl.strictconnect %y, %c-7_si4
-  firrtl.module @issue1101(out %y: !firrtl.sint<4>) {
-    %c9_si10 = firrtl.constant 9 : !firrtl.sint<10>
-    firrtl.partialconnect %y, %c9_si10 : !firrtl.sint<4>, !firrtl.sint<10>
   }
 
 // CHECK-LABEL: firrtl.module @zeroWidthMem

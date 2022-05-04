@@ -10,6 +10,26 @@ circuit Foo:
 
 ;// -----
 
+circuit PartialFoo:
+  module PartialFoo:
+    output a: { flip a: UInt<1> }
+    output b: { a: UInt<1> }
+
+; expected-error @+1 {{cannot partially connect non-weakly-equivalent}}
+    b <- a
+
+;// -----
+
+circuit PartialConnectMismatch:
+  module PartialConnectMismatch:
+    output a: UInt
+    output b: SInt
+
+; expected-error @+1 {{cannot partially connect non-weakly-equivalent}}
+    b <- a
+
+;// -----
+
 circuit Bar:
 ; expected-note @+1 {{left-hand-side}}
   module Bar:

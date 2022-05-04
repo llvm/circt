@@ -1489,7 +1489,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
-  LogicalResult visitStmt(PartialConnectOp op);
   LogicalResult visitStmt(StrictConnectOp op);
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
@@ -3422,92 +3421,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
                          : ::ResetType::SyncReset,
                      sv::EventControl::AtPosEdge, resetSignal,
                      [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  builder.create<sv::AssignOp>(destVal, srcVal);
-  return success();
-}
-
-// This will have to handle struct connects at some point.
-LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
-  auto dest = op.dest();
-  // The source can be a different size integer, adjust it as appropriate if
-  // so.
-  auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
-  auto srcVal = getLoweredAndExtOrTruncValue(op.src(), destType);
-  if (!srcVal)
-    return success(isZeroBitFIRRTLType(op.src().getType()) ||
-                   isZeroBitFIRRTLType(destType));
-
-  auto destVal = getPossiblyInoutLoweredValue(dest);
-  if (!destVal)
-    return failure();
-
-  if (!destVal.getType().isa<hw::InOutType>())
-    return op.emitError("destination isn't an inout type");
-
-  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
-
-  // If this is an assignment to a register, then the connect implicitly
-  // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regOp.clockVal());
-    if (!clockVal)
-      return failure();
-
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  // If this is an assignment to a RegReset, then the connect implicitly
-  // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regResetOp.clockVal());
-    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
-    if (!clockVal || !resetSignal)
-      return failure();
-
-    auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
-                          ? ::ResetType::AsyncReset
-                          : ::ResetType::SyncReset;
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
-                     sv::EventControl::AtPosEdge, resetSignal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  if (srcVal.getType().isa<hw::ArrayType>() && destType != op.src().getType()) {
-    // If the connection is about array and types do not match, it might be a
-    // connection between vectors with different lengths. For such cases, we
-    // can not use usual assignments. It is necessary to assign each elements
-    // recursively.
-    std::function<void(Value, Value, Type, Type)> recurse = [&](Value dest,
-                                                                Value src,
-                                                                Type dstType,
-                                                                Type srcType) {
-      TypeSwitch<Type>(srcType)
-          .Case<FVectorType>([&](auto srcVectorType) {
-            auto destVectorType = destType.cast<FVectorType>();
-            for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
-                                            destVectorType.getNumElements());
-                 i != e; ++i) {
-              auto idx =
-                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
-              auto destInOutOp =
-                  builder.create<sv::ArrayIndexInOutOp>(dest, idx);
-              auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
-
-              recurse(destInOutOp, srcGetOp, destVectorType.getElementType(),
-                      srcVectorType.getElementType());
-            }
-          })
-          .Case<IntType>([&](auto) { builder.create<sv::AssignOp>(dest, src); })
-          .Default([&](auto) { llvm_unreachable("must fail before"); });
-    };
-    recurse(destVal, srcVal, destType, op.src().getType());
-
     return success();
   }
 

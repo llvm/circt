@@ -31,6 +31,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -343,7 +344,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(BitCastOp op);
   bool visitStmt(ConnectOp op);
   bool visitStmt(StrictConnectOp op);
-  bool visitStmt(PartialConnectOp op);
   bool visitStmt(WhenOp op);
 
   SmallVectorImpl<NlaNameNewSym> &getNLAs() { return nlaNameToNewSymList; };
@@ -765,7 +765,7 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
           leaf.getType() == op->getOperand(1).getType())
         mkConnect(builder, leaf, op->getOperand(1));
       else
-        builder->create<PartialConnectOp>(leaf, op->getOperand(1));
+        emitConnect(*builder, leaf, op->getOperand(1));
     });
   }
 }
@@ -789,11 +789,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    if (src.getType().isa<AnalogType>())
-      builder->create<AttachOp>(ArrayRef<Value>{dest, src});
-    else {
-      mkConnect(builder, dest, src);
-    }
+    mkConnect(builder, dest, src);
   }
   return true;
 }
@@ -822,95 +818,6 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
     else
       builder->create<StrictConnectOp>(dest, src);
   }
-  return true;
-}
-
-bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
-  if (processSAPath(op))
-    return true;
-
-  SmallVector<FlatBundleFieldEntry> srcFields, destFields;
-
-  // For partial connects, we give up to preserve aggregates.
-  peelType(op.src().getType(), srcFields,
-           /* allowedToPreserveAggregate */ false);
-  bool dValid = peelType(op.dest().getType(), destFields,
-                         /* allowedToPreserveAggregate */ false);
-
-  // Ground Type
-  if (!dValid) {
-    // check for truncation
-    Value src = op.src();
-    Value dest = op.dest();
-    auto srcType = src.getType().cast<FIRRTLType>();
-    auto destType = dest.getType().cast<FIRRTLType>();
-    auto srcWidth = srcType.getBitWidthOrSentinel();
-    auto destWidth = destType.getBitWidthOrSentinel();
-
-    if (destType == srcType) {
-      builder->create<StrictConnectOp>(dest, src);
-      return true;
-    }
-
-    if (!destType.isa<IntType>() || !srcType.isa<IntType>() || destWidth < 0)
-      return false;
-
-    if (destWidth < srcWidth) {
-      // firrtl.tail always returns uint even for sint operands.
-      IntType tmpType = destType.cast<IntType>();
-      if (tmpType.isSigned())
-        tmpType = UIntType::get(destType.getContext(), destWidth);
-      src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
-      // Insert the cast back to signed if needed.
-      if (tmpType != destType)
-        src = builder->create<AsSIntPrimOp>(destType, src);
-    } else {
-      // Need to extend arg
-      src = builder->create<PadPrimOp>(src, destWidth);
-    }
-    mkConnect(builder, dest, src);
-    return true;
-  }
-
-  // Aggregates
-  if (FVectorType fvector = op.src().getType().dyn_cast<FVectorType>()) {
-    for (int index = 0, e = std::min(srcFields.size(), destFields.size());
-         index != e; ++index) {
-      Value src = builder->create<SubindexOp>(op.src(), index);
-      Value dest = builder->create<SubindexOp>(op.dest(), index);
-      if (src.getType() == dest.getType())
-        builder->create<StrictConnectOp>(dest, src);
-      else
-        builder->create<PartialConnectOp>(dest, src);
-    }
-  } else if (BundleType srcBundle = op.src().getType().dyn_cast<BundleType>()) {
-    // Pairwise connect on matching field names
-    BundleType destBundle = op.dest().getType().cast<BundleType>();
-    for (int srcIndex = 0, srcEnd = srcBundle.getNumElements();
-         srcIndex < srcEnd; ++srcIndex) {
-      auto srcName = srcBundle.getElement(srcIndex).name;
-      for (int destIndex = 0, destEnd = destBundle.getNumElements();
-           destIndex < destEnd; ++destIndex) {
-        auto destName = destBundle.getElement(destIndex).name;
-        if (srcName == destName) {
-          Value src = builder->create<SubfieldOp>(op.src(), srcIndex);
-          Value dest = builder->create<SubfieldOp>(op.dest(), destIndex);
-          if (destFields[destIndex].isOutput)
-            std::swap(src, dest);
-          if (src.getType().isa<AnalogType>())
-            builder->create<AttachOp>(ArrayRef<Value>{dest, src});
-          else if (src.getType() == dest.getType())
-            builder->create<StrictConnectOp>(dest, src);
-          else
-            builder->create<PartialConnectOp>(dest, src);
-          break;
-        }
-      }
-    }
-  } else {
-    op.emitError("Unknown aggregate type");
-  }
-
   return true;
 }
 
