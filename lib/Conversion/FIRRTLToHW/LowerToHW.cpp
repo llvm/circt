@@ -2304,7 +2304,11 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
   }
-
+  if (!symName && name && !name.getValue().empty()) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
@@ -2352,8 +2356,13 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
   }
+  if (!symName && name && !name.getValue().empty()) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
 
-  if (symName || (name && !name.getValue().empty())) {
+  if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
   }

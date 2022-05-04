@@ -205,9 +205,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
-    // Nodes with names but no attribute are just dropped.
+    // Nodes with names become wires.
+    // CHECK-NEXT: %n1 = sv.wire
+    // CHECK-NEXT: sv.assign %n1, %in2
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
-
+    
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
     %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>

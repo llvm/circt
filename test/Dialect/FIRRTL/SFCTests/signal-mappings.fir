@@ -1,4 +1,4 @@
-; RUN: firtool %s --annotation-file %S/signal-mappings-subCircuit.json --disable-name-preservation --firrtl-grand-central --verilog | FileCheck %s
+; RUN: firtool %s --annotation-file %S/signal-mappings-subCircuit.json --firrtl-grand-central --verilog | FileCheck %s
 
 ; Subcircuit:
 

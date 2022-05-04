@@ -62,6 +62,18 @@ bool circt::firrtl::isUselessName(StringRef name) {
   return name.startswith("_");
 }
 
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+bool circt::firrtl::isUselessName(Operation* op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    return isUselessName(wire.name());
+  if (auto node = dyn_cast<NodeOp>(op))
+    return isUselessName(node.name());
+  if (auto reg = dyn_cast<RegOp>(op))
+    return isUselessName(reg.name());
+  return false;
+}
+
 /// Implicitly replace the operand to a constant folding operation with a const
 /// 0 in case the operand is non-constant but has a bit width 0, or if the
 /// operand is an invalid value.
@@ -1414,6 +1426,10 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (getSingleConnectUserOf(op.dest()) != op)
     return failure();
 
+  // Only foward if there is more than one use
+  if (connectedDecl->hasOneUse())
+    return failure();
+
   // Only do this if the connectee and the declaration are in the same block.
   auto *declBlock = connectedDecl->getBlock();
   auto *srcValueOp = op.src().getDefiningOp();
@@ -1455,12 +1471,23 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  // Replace all things *using* the decl with the constant/port, and
-  // remove the declaration.
-  rewriter.replaceOp(connectedDecl, replacement);
+  llvm::errs() << "ADL: ";
+   connectedDecl->dump();
+  llvm::errs() << "\n";
+  if (isUselessName(connectedDecl)) {
+    // Replace all things *using* the decl with the constant/port, and
+    // remove the declaration.
+    rewriter.replaceOp(connectedDecl, replacement);
 
-  // Remove the connect.
-  rewriter.eraseOp(op);
+    // Remove the connect
+    rewriter.eraseOp(op);
+  } else {
+    // bypass the decl, but keep it around
+    rewriter.startRootUpdate(connectedDecl);
+    connectedDecl->replaceAllUsesWith(ArrayRef{replacement});
+    op->setOperand(0, connectedDecl->getResult(0));
+    rewriter.finalizeRootUpdate(connectedDecl);
+  }
 
   return success();
 }
