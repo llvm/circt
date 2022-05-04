@@ -178,8 +178,8 @@ calyx.program "main" {
   }
 }
 
-// CHECK-LABEL: METADATA {
-// CHECK-NEXT:    0: location1
-// CHECK-NEXT:    1: location2
-// CHECK-NEXT:  }
+// CHECK-LABEL: metadata #{
+// CHECK-NEXT:  0: location1
+// CHECK-NEXT:  1: location2
+// CHECK-NEXT:  }#
 }

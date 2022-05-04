@@ -49,6 +49,8 @@ static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 static constexpr std::string_view addressSymbol() { return "@"; }
 static constexpr std::string_view endl() { return "\n"; }
+static constexpr std::string_view metadataLBrace() { return "#{\n"; }
+static constexpr std::string_view metadataRBrace() { return "}#\n"; }
 
 /// A list of integer attributes supported by the native Calyx compiler.
 constexpr std::array<StringRef, 7> integerAttributes{
@@ -135,18 +137,16 @@ struct Emitter {
     if (!metadata)
       return;
 
-    constexpr std::string_view metadataIdentifier = "METADATA";
-    os << endl() << metadataIdentifier << space() << LBraceEndL();
+    constexpr std::string_view metadataIdentifier = "metadata";
+    os << endl() << metadataIdentifier << space() << metadataLBrace();
 
-    addIndent();
     for (auto sourceLoc : llvm::enumerate(metadata)) {
       // <index>: <source-location>\n
       os << std::to_string(sourceLoc.index()) << colon();
       os << sourceLoc.value().cast<StringAttr>().getValue() << endl();
     }
-    reduceIndent();
 
-    os << RBraceEndL();
+    os << metadataRBrace();
   }
 
   /// Import emission.
