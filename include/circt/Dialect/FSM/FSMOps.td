@@ -188,19 +188,19 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
   let summary = "Define a transition of a state";
   let description = [{
     `fsm.transition` represents a transition of a state with a symbol reference
-    of the next state. This op includes a `$guard` region with an `fsm.return`
+    of the next state. This op includes an optional `$guard` region with an `fsm.return`
     as terminator that returns a Boolean value indicating the guard condition of
-    this transition. This op also includes an `$action` region that represents
+    this transition. This op also includes an optional `$action` region that represents
     the actions to be executed when this transition is taken.
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$nextState);
-  let regions = (region SizedRegion<1>:$guard, SizedRegion<1>:$action);
+  let regions = (region AnyRegion:$guard, AnyRegion:$action);
 
   let hasCanonicalizeMethod = true;
 
   let assemblyFormat = [{
-    $nextState attr-dict `guard` $guard `action` $action
+    $nextState attr-dict (`guard` $guard^)? (`action` $action^)?
   }];
 
   let extraClassDeclaration = [{
@@ -214,9 +214,21 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">,
 
     /// Get the return operation of the guard region, this should never fail.
     ReturnOp getGuardReturn() {
+      assert(!guard().empty() && "this transition has no guard");
       return cast<ReturnOp>(guard().front().getTerminator());
     }
 
+    /// Return whether this transition has a guard.
+    bool hasGuard() {
+      return !guard().empty();
+    }
+
+    /// Return whether this transition has an action.
+    bool hasAction() {
+      return !action().empty();
+    }
+
+    /// Returns true if this transition is always taken.
     bool isAlwaysTaken();
   }];
 

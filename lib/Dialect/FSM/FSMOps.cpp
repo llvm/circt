@@ -298,6 +298,9 @@ StateOp TransitionOp::getNextState() {
 }
 
 bool TransitionOp::isAlwaysTaken() {
+  if (!hasGuard())
+    return true;
+
   auto guardReturn = getGuardReturn();
   if (guardReturn.getNumOperands() == 0)
     return true;
@@ -311,24 +314,26 @@ bool TransitionOp::isAlwaysTaken() {
 
 LogicalResult TransitionOp::canonicalize(TransitionOp op,
                                          PatternRewriter &rewriter) {
-  auto guardReturn = op.getGuardReturn();
-  if (guardReturn.getNumOperands() == 1)
-    if (auto constantOp = guardReturn.getOperand(0)
-                              .getDefiningOp<mlir::arith::ConstantOp>()) {
-      // Simplify when the guard region returns a constant value.
-      if (constantOp.getValue().cast<BoolAttr>().getValue()) {
-        // Replace the original return op with a new one without any operands
-        // if the constant is TRUE.
-        rewriter.setInsertionPoint(guardReturn);
-        rewriter.create<fsm::ReturnOp>(guardReturn.getLoc());
-        rewriter.eraseOp(guardReturn);
-      } else {
-        // Erase the whole transition op if the constant is FALSE, because the
-        // transition will never be taken.
-        rewriter.eraseOp(op);
+  if (op.hasGuard()) {
+    auto guardReturn = op.getGuardReturn();
+    if (guardReturn.getNumOperands() == 1)
+      if (auto constantOp = guardReturn.getOperand(0)
+                                .getDefiningOp<mlir::arith::ConstantOp>()) {
+        // Simplify when the guard region returns a constant value.
+        if (constantOp.getValue().cast<BoolAttr>().getValue()) {
+          // Replace the original return op with a new one without any operands
+          // if the constant is TRUE.
+          rewriter.setInsertionPoint(guardReturn);
+          rewriter.create<fsm::ReturnOp>(guardReturn.getLoc());
+          rewriter.eraseOp(guardReturn);
+        } else {
+          // Erase the whole transition op if the constant is FALSE, because the
+          // transition will never be taken.
+          rewriter.eraseOp(op);
+        }
+        return success();
       }
-      return success();
-    }
+  }
 
   return failure();
 }
@@ -339,7 +344,7 @@ LogicalResult TransitionOp::verify() {
            << nextState() << "`";
 
   // Verify the action region.
-  if (action().front().getTerminator()->getNumOperands() != 0)
+  if (hasAction() && action().front().getTerminator()->getNumOperands() != 0)
     return emitOpError("action region must not return any value");
 
   // Verify the transition is located in the correct region.
