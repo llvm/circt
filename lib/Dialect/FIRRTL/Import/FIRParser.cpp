@@ -1555,11 +1555,6 @@ private:
   // the representation simpler and more consistent.
   void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
 
-  /// Connect all elements of two values, emitting attaches or analog values and
-  /// connects for all others. This is useful since it is illegal to connect
-  /// analog values.
-  void connectDebugValue(ImplicitLocOpBuilder &builder, Value dst, Value src);
-
   /// Emit the logic for a partial connect using standard connect.
   void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
 
@@ -1631,6 +1626,8 @@ private:
   StringAttr getSymbolIfMissing(StringAttr oldSym, StringRef id) {
     if (oldSym)
       return oldSym;
+    if (isUselessName(id))
+      return oldSym;
     return StringAttr::get(moduleContext.getContext(),
                            modNameSpace.newName(id));
   }
@@ -1694,55 +1691,6 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
           emitInvalidate(subindex, flow);
         }
       });
-}
-
-void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
-                                      Value src) {
-  auto type = dst.getType().cast<FIRRTLType>();
-  auto stype = src.getType().cast<FIRRTLType>();
-  // If simple direct connect is possible, emit it.
-  // Non-passive source types require connect components individually
-  if (!type.containsAnalog() && stype.isPassive()) {
-    builder.create<ConnectOp>(dst, src);
-  } else if (type.isa<AnalogType>()) {
-    builder.create<AttachOp>(SmallVector{dst, src});
-  } else if (auto bundle = type.dyn_cast<BundleType>()) {
-    for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstRef) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstRef = builder.create<SubfieldOp>(dst, i);
-      }
-      auto dstField = dstRef; // copy to ensure not invalidated
-      auto &srcField = moduleContext.getCachedSubaccess(src, i);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubfieldOp>(src, i);
-      }
-      connectDebugValue(builder, dstField, srcField);
-    }
-  } else if (auto vector = type.dyn_cast<FVectorType>()) {
-    for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
-      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstRef) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstRef = builder.create<SubindexOp>(dst, i);
-      }
-      auto dstField = dstRef; // copy to ensure not invalidated
-      auto &srcField = moduleContext.getCachedSubaccess(src, i);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubindexOp>(src, i);
-      }
-      connectDebugValue(builder, dstField, srcField);
-    }
-  } else {
-    llvm_unreachable("unknown type");
-  }
 }
 
 void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,

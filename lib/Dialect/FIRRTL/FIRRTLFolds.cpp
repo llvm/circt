@@ -21,9 +21,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-// Forward Decl for patterns.
-static bool isUselessName(circt::StringRef name);
-
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
@@ -58,23 +55,11 @@ static bool isUInt1(Type type) {
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
-static bool isUselessName(StringRef name) {
+bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
     return true;
-  // Ignore _T and _T_123
-  if (name.startswith("_T")) {
-    if (name.size() == 2)
-      return true;
-    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
-  }
-
-  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
-  if (name.startswith("_GEN")) {
-    if (name.size() == 4)
-      return true;
-    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
-  }
-  return false;
+  // Ignore _.*
+  return name.startswith("_");
 }
 
 /// Implicitly replace the operand to a constant folding operation with a const
