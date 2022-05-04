@@ -1471,9 +1471,6 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  llvm::errs() << "ADL: ";
-   connectedDecl->dump();
-  llvm::errs() << "\n";
   if (isUselessName(connectedDecl)) {
     // Replace all things *using* the decl with the constant/port, and
     // remove the declaration.
@@ -1666,7 +1663,7 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (node.inner_sym() || !node.annotations().empty())
+    if (!isUselessName(name.getValue()) || node.inner_sym() || !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
     if (expr && !expr->hasAttr("name") && !isUselessName(name))
