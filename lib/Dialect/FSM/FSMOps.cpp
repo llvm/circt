@@ -22,6 +22,29 @@ using namespace fsm;
 // MachineOp
 //===----------------------------------------------------------------------===//
 
+// Returns all states that are unreachable from the initial state.
+static SmallVector<StateOp> unreachableStates(MachineOp machine) {
+  SetVector<StateOp> reachableStates;
+  SmallVector<StateOp, 4> queue;
+  queue.push_back(machine.getInitialStateOp());
+  while (!queue.empty()) {
+    auto *state = queue.begin();
+    queue.erase(state);
+    if (reachableStates.contains(*state))
+      continue;
+    reachableStates.insert(*state);
+    llvm::copy(state->getNextStates(), std::back_inserter(queue));
+  }
+
+  // Get the difference between reachable states and all states in the machine.
+  auto allStates = machine.getOps<StateOp>();
+  SmallVector<StateOp> unreachableStates;
+  std::set_difference(allStates.begin(), allStates.end(),
+                      reachableStates.begin(), reachableStates.end(),
+                      std::back_inserter(unreachableStates));
+  return unreachableStates;
+}
+
 void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                       StringRef initialStateName, Type stateType,
                       FunctionType type, ArrayRef<NamedAttribute> attrs,
@@ -127,6 +150,13 @@ LogicalResult MachineOp::verify() {
   return success();
 }
 
+LogicalResult MachineOp::canonicalize(MachineOp op, PatternRewriter &rewriter) {
+  // Remove any unreachable states.
+  for (auto unreachable : unreachableStates(op))
+    rewriter.eraseOp(unreachable);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
@@ -206,6 +236,15 @@ LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
 //===----------------------------------------------------------------------===//
 // StateOp
 //===----------------------------------------------------------------------===//
+
+SetVector<StateOp> StateOp::getNextStates() {
+  SmallVector<StateOp> nextStates;
+  llvm::transform(
+      transitions().getOps<TransitionOp>(),
+      std::inserter(nextStates, nextStates.begin()),
+      [](TransitionOp transition) { return transition.getNextState(); });
+  return SetVector<StateOp>(nextStates.begin(), nextStates.end());
+}
 
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   bool hasAlwaysTakenTransition = false;
