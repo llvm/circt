@@ -132,3 +132,44 @@ handshake.func @invalid_buffer_init4(%arg0 : i32, %ctrl : none) -> (i32, none) {
   %0 = buffer [1] SEQ %arg0 {initValues = [1]} : i32
   return %0, %ctrl : i32, none
 }
+
+// -----
+
+handshake.func @invalid_unpack_types_not_matching(%arg0 : tuple<i64, i32>, %ctrl : none) -> (i64, none) {
+  // expected-error @+1 {{'handshake.unpack' op failed to verify that result types match element types of 'tuple'}}
+  %0:2 = "handshake.unpack"(%arg0) : (tuple<i64, i32>) -> (i64, i64)
+  return %0#0, %ctrl : i64, none
+}
+
+// -----
+
+handshake.func @invalid_pack_types_not_matching(%arg0 : i32, %arg1 : i64, %ctrl : none) -> (tuple<i64, i32>, none) {
+  // expected-error @+1 {{'handshake.pack' op failed to verify that input types match element types of 'tuple'}}
+  %0 = "handshake.pack"(%arg0, %arg1) : (i32, i64) -> tuple<i64, i32>
+  return %0#0, %ctrl : tuple<i64, i32>, none
+}
+
+// -----
+
+handshake.func @invalid_unpack_type(%arg0 : i64, %ctrl : none) -> (i64, none) {
+  // expected-note @-1 {{prior use here}}
+  // expected-error @+1 {{use of value '%arg0' expects different type than prior uses: 'tuple<i64>' vs 'i64'}}
+  %0 = handshake.unpack %arg0 : tuple<i64>
+  return %0, %ctrl : i64, none
+}
+
+// -----
+
+handshake.func @invalid_unpack_wrong_types(%arg0 : tuple<i64>, %ctrl : none) -> (i64, none) {
+  // expected-error @+1 {{'handshake.unpack' invalid kind of type specified}}
+  %0 = handshake.unpack %arg0 : i64
+  return %0, %ctrl : i64, none
+}
+
+// -----
+
+handshake.func @invalid_pack_wrong_types(%arg0 : i64, %arg1 : i32, %ctrl : none) -> (tuple<i64, i32>, none) {
+  // expected-error @+1 {{'handshake.pack' invalid kind of type specified}}
+  %0 = handshake.pack %arg0, %arg1 : i64, i32
+  return %0, %ctrl : tuple<i64, i32>, none
+}

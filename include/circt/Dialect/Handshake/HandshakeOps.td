@@ -12,6 +12,7 @@
 
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/BuiltinTypes.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
@@ -812,3 +813,67 @@ def JoinOp : Handshake_Op<"join", [
 
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
+
+// TODO(Dinistro): add support for this in the handshake-runner
+def UnpackOp : Handshake_Op<"unpack", [
+  TypesMatchWith<"result types match element types of 'tuple'",
+                     "input", "results",
+                     "$_self.cast<TupleType>().getTypes()">
+]> {
+  let summary = "unpacks a tuple";
+  let description = [{
+    The `unpack` operation assigns each value of a tuple to a separate
+    value for further processing. The number of results corresponds
+    to the number of tuple elements.
+    Similar to `fork`, each output is distributed as soon as the corresponding
+    successor is ready.
+
+    Example:
+    ```mlir
+    %a, %b = handshake.unpack %tuple {attributes} : tuple<i32, i64>
+    ```
+  }];
+
+  let arguments = (ins Builtin_Tuple:$input);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [OpBuilder<(ins "Value":$input), [{
+    $_state.addOperands(input);
+
+    TupleType type = input.getType().dyn_cast_or_null<TupleType>();
+    assert(type && "expect unpack to have a 'TupleType' operand");
+    $_state.addTypes(type.getTypes());
+  }]>];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def PackOp : Handshake_Op<"pack", [
+  TypesMatchWith<"input types match element types of 'tuple'",
+                   "result", "inputs",
+                   "$_self.cast<TupleType>().getTypes()">
+]> {
+
+  let summary = "packs a tuple";
+  let description = [{
+    The `pack` operation constructs a tuple from separate values.
+    The number of operands corresponds to the number of tuple elements.
+    Similar to `join`, the output is ready when all inputs are ready.
+
+    Example:
+    ```mlir
+    %tuple = handshake.pack %a, %b {attributes} : tuple<i32, i64>
+    ```
+    }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Builtin_Tuple:$result);
+
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      $_state.addOperands(operands);
+      $_state.addTypes(TupleType::get($_builder.getContext(), operands.getTypes()));
+  }]>];
+
+  let hasCustomAssemblyFormat = 1;
+}
