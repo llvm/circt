@@ -118,14 +118,6 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
 };
 } // end anonymous namespace
 
-static void mkConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
-  auto srcType = src.getType().cast<FIRRTLType>();
-  if (dst.getType() == src.getType() && !srcType.hasUninferredWidth())
-    builder.create<StrictConnectOp>(dst, src);
-  else
-    builder.create<ConnectOp>(dst, src);
-}
-
 /// Performs the callback for each leaf element of a value.  This will create
 /// any subindex and subfield operations needed to access the leaf values of the
 /// aggregate value.
@@ -149,7 +141,7 @@ static void forEachLeaf(ImplicitLocOpBuilder &builder, Value value,
 static void connectLeafsTo(ImplicitLocOpBuilder &builder, Value bundle,
                            Value value) {
   forEachLeaf(builder, bundle,
-              [&](Value leaf) { mkConnect(builder, leaf, value); });
+              [&](Value leaf) { emitConnect(builder, leaf, value); });
 }
 
 /// Connect each leaf of an aggregate type to invalid.  This does not support
@@ -161,7 +153,7 @@ void LowerCHIRRTLPass::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
     auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
     invalid = builder.create<InvalidValueOp>(getOperation().getLoc(), type);
   }
-  mkConnect(builder, value, invalid);
+  emitConnect(builder, value, invalid);
 }
 
 /// Converts a CHIRRTL memory port direction to a MemoryOp port type.  The
@@ -367,7 +359,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto address = memBuilder.create<SubfieldOp>(memoryPort, "addr");
     emitInvalid(memBuilder, address);
     auto enable = memBuilder.create<SubfieldOp>(memoryPort, "en");
-    mkConnect(memBuilder, enable, getConst(0));
+    emitConnect(memBuilder, enable, getConst(0));
     auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
@@ -383,9 +375,9 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
     // Most memory ports just tie their enable line to one.
     if (!useEnableInference)
-      mkConnect(portBuilder, enable, getConst(1));
+      emitConnect(portBuilder, enable, getConst(1));
 
-    mkConnect(portBuilder, clock, cmemoryPortAccess.clock());
+    emitConnect(portBuilder, clock, cmemoryPortAccess.clock());
 
     if (portKind == MemOp::PortKind::Read) {
       // Store the read information for updating subfield ops.
@@ -407,7 +399,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       // Initialization at the MemoryOp.
       auto rdata = memBuilder.create<SubfieldOp>(memoryPort, "rdata");
       auto wmode = memBuilder.create<SubfieldOp>(memoryPort, "wmode");
-      mkConnect(memBuilder, wmode, getConst(0));
+      emitConnect(memBuilder, wmode, getConst(0));
       auto wdata = memBuilder.create<SubfieldOp>(memoryPort, "wdata");
       emitInvalid(memBuilder, wdata);
       auto wmask = memBuilder.create<SubfieldOp>(memoryPort, "wmask");
@@ -506,7 +498,7 @@ void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
     connectLeafsTo(builder, writeData.mask, getConst(1));
     // Only ReadWrite memories have a write mode.
     if (writeData.mode)
-      mkConnect(builder, writeData.mode, getConst(1));
+      emitConnect(builder, writeData.mode, getConst(1));
   }
   // Check if we are reading from a memory and, if we are, replace the
   // source.
@@ -529,7 +521,7 @@ void LowerCHIRRTLPass::visitStmt(StrictConnectOp connect) {
     connectLeafsTo(builder, writeData.mask, getConst(1));
     // Only ReadWrite memories have a write mode.
     if (writeData.mode)
-      mkConnect(builder, writeData.mode, getConst(1));
+      emitConnect(builder, writeData.mode, getConst(1));
   }
   // Check if we are reading from a memory and, if we are, replace the
   // source.
