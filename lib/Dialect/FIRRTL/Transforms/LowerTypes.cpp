@@ -762,11 +762,7 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
       for (int i = writePath.size() - 2; i >= 0; --i)
         leaf = cloneAccess(builder, writePath[i], leaf);
 
-      if (isa<ConnectOp, StrictConnectOp>(op) ||
-          leaf.getType() == op->getOperand(1).getType())
-        mkConnect(builder, leaf, op->getOperand(1));
-      else
-        emitConnect(*builder, leaf, op->getOperand(1));
+      emitConnect(*builder, leaf, op->getOperand(1));
     });
   }
 }
