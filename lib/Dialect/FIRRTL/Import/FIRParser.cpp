@@ -3130,7 +3130,7 @@ ParseResult FIRStmtParser::parseNode() {
                        moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  sym = getSymbolIfMissing(sym, id);
+  //sym = getSymbolIfMissing(sym, id);
   auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,                                       annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3160,7 +3160,7 @@ ParseResult FIRStmtParser::parseWire() {
                        moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  sym = getSymbolIfMissing(sym, id);
+  //sym = getSymbolIfMissing(sym, id);
   auto result = builder.create<WireOp>(type, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
