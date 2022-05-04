@@ -1,5 +1,5 @@
-; RUN: firtool %s --format=fir  --ir-fir | FileCheck %s 
-; RUN: firtool %s --format=fir  --ir-sv | FileCheck --check-prefix=HW %s
+; RUN: firtool %s --format=fir --repl-seq-mem --repl-seq-mem-file="dummy" --ir-fir | FileCheck %s 
+; RUN: firtool %s --format=fir  --repl-seq-mem --repl-seq-mem-file="dummy" --ir-sv | FileCheck --check-prefix=HW %s
 
 circuit Foo : %[[
   {
@@ -31,7 +31,6 @@ circuit Foo : %[[
       write-latency => 1
       reader => readData_MPORT
       writer => MPORT
-      read-under-write => undefined
     mem.readData_MPORT.addr is invalid
     mem.readData_MPORT.clk is invalid
     mem.readData_MPORT.en <= UInt<1>("h0")
@@ -67,7 +66,6 @@ circuit Foo : %[[
       write-latency => 1
       reader => readData_MPORT
       writer => MPORT
-      read-under-write => undefined
     mem.readData_MPORT.addr is invalid
     mem.readData_MPORT.clk is invalid
     mem.readData_MPORT.en <= UInt<1>("h0")
@@ -118,5 +116,5 @@ circuit Foo : %[[
 ; CHECK-LABEL:  firrtl.module private @prefix2_Baz
 ; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = 4294967293 : ui32, modName = "prefix2_mem_ext", name = "prefix2_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
 
-; HW-LABEL:  hw.module @prefix2_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
-; HW-LABEL:  hw.module @prefix1_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
+; HW-LABEL:  hw.module.extern @prefix2_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
+; HW-LABEL:  hw.module.extern @prefix1_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)

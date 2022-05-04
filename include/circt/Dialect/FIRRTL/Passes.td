@@ -448,8 +448,9 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
 }
 
 def MemToRegOfVecTransform : Pass<"mem-to-regofvec", "firrtl::FModuleOp"> {
-  let summary = "";
+  let summary = "Convert the memory to a Register vector";
   let description = [{
+    This pass generates the logic to implement a memory using Registers.
   }];
   let options = [
     Option<"replSeqMem", "repl-seq-mem", "bool",

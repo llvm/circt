@@ -4,22 +4,24 @@
 ; they should be cleaned up by canonicalize.
 
 ; CHECK-LABEL: firrtl.module @Issue794(in %clock: !firrtl.clock,
-; CHECK-NOT: firrtl.wire
-; CHECK: }
+; CHECK:       %[[memory_0:.+]] = firrtl.reg %clock  : !firrtl.uint<8>
+; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
+; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
+; CHECK:       firrtl.strictconnect %[[memory_0]], %[[v22:.+]]
 circuit Issue794:
   module Issue794:
     input clock: Clock
-    input rAddr: UInt<4>
+    input rAddr: UInt<2>
     input rEn: UInt<1>
     output rData: UInt<8>
-    input wAddr: UInt<4>[2]
+    input wAddr: UInt<2>[2]
     input wEn: UInt<1>[2]
     input wMask: UInt<1>[2]
     input wData: UInt<8>[2]
 
     mem memory:
       data-type => UInt<8>
-      depth => 16
+      depth => 4
       reader => r
       writer => w0,w1
       read-latency => 0
