@@ -2790,8 +2790,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
-  auto *oldModule =
-      circuitState.circuitOp.lookupSymbol(oldInstance.moduleName());
+  Operation *oldModule =
+      circuitState.getInstanceGraph()->getReferencedModule(oldInstance);
   auto newModule = circuitState.getNewModule(oldModule);
   if (!newModule) {
     oldInstance->emitOpError("could not find module referenced by instance");
