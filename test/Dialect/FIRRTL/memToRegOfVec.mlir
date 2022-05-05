@@ -38,6 +38,7 @@ firrtl.circuit "Mem" {
   }
   firrtl.module private @WriteMask() {
     %mem_read, %mem_write = firrtl.mem Undefined  {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 2>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
+    // CHECK-LABEL: firrtl.module private @WriteMask() {
     // CHECK:   %mem = firrtl.reg %2  : !firrtl.vector<vector<uint<8>, 2>, 8>
     // CHECK:   %mem_write = firrtl.wire  : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
     // CHECK:   %[[v5:.+]] = firrtl.subfield %mem_write(0)
@@ -60,6 +61,17 @@ firrtl.circuit "Mem" {
     // CHECK:       firrtl.strictconnect %[[v14]], %[[v15]] : !firrtl.uint<8>
     // CHECK:     }
   }
+	
+  firrtl.module private @MemTap() {
+		%rf_MPORT, %rf_io_rdata_0_MPORT, %rf_io_rdata_1_MPORT = firrtl.mem sym @rf Undefined  {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 11 : i64}], depth = 4 : i64, name = "rf", portNames = ["MPORT", "io_rdata_0_MPORT", "io_rdata_1_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>
+    // CHECK-LABEL: firrtl.module private @MemTap() {
+    // CHECK:       %rf = firrtl.reg sym @rf %2  {annotations = 
+    // CHECK-SAME:  [#firrtl.subAnno<fieldID = 1, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 11 : i64, portID = 0 : i64}>, 
+    // CHECK-SAME:  #firrtl.subAnno<fieldID = 2, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 11 : i64, portID = 1 : i64}>,
+    // CHECK-SAME:  #firrtl.subAnno<fieldID = 3, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 11 : i64, portID = 2 : i64}>,
+    // CHECK-SAME:  #firrtl.subAnno<fieldID = 4, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 11 : i64, portID = 3 : i64}>]}
+    // CHECK-SAME:  : !firrtl.vector<uint<32>, 4>
+	}
 
 }
 
