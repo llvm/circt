@@ -518,11 +518,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  bool nonConstAsyncResetValueIsError = false;
-  if (imconstprop && !disableOptimization) {
+  if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-    nonConstAsyncResetValueIsError = true;
-  }
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
@@ -567,8 +564,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (outputFormat != OutputIRFir) {
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
-                                         nonConstAsyncResetValueIsError));
+    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
 
     if (outputFormat == OutputIRHW) {
       if (!disableOptimization) {

@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw -split-input-file -verify-diagnostics %s
+// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics %s
 
 firrtl.circuit "Div" {
 
@@ -64,28 +64,5 @@ firrtl.circuit "Div" {
     %6 = firrtl.subfield %tmp41_w0(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %6, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %7 = firrtl.subfield %tmp41_w0(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<0>
-  }
-}
-
-// -----
-
-// Constant check should handle trivial cases.
-firrtl.circuit "Foo" {
-  // expected-note @+1 {{reset value defined here:}}
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
-    // expected-warning @+1 {{register with async reset requires constant reset value}}
-    %0 = firrtl.regreset %clock, %reset, %v : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// Constant check should see through nodes.
-firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
-    // expected-note @+1 {{reset value defined here:}}
-    %node = firrtl.node %v : !firrtl.uint<8>
-    // expected-warning @+1 {{register with async reset requires constant reset value}}
-    %1 = firrtl.regreset %clock, %reset, %node : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
   }
 }

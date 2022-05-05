@@ -261,11 +261,9 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool nonConstAsyncResetValueIsError,
                        InstanceGraph *instanceGraph)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
-        enableAnnotationWarning(enableAnnotationWarning),
-        nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {
+        enableAnnotationWarning(enableAnnotationWarning) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -359,10 +357,6 @@ private:
   // Control access to binds.
   std::mutex bindsMutex;
 
-  /// If true, non-constant reset values of async reset registers are printed as
-  /// errors and cause the pass to abort. Otherwise they are warnings.
-  const bool nonConstAsyncResetValueIsError = true;
-
   // The design-under-test (DUT), if it is found.  This will be set if a
   // "sifive.enterprise.firrtl.MarkDUTAnnotation" exists.
   FModuleLike dut;
@@ -443,9 +437,6 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
-  void setNonConstAsyncResetValueIsError() {
-    nonConstAsyncResetValueIsError = true;
-  }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -472,13 +463,10 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 bool nonConstAsyncResetValueIsError) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
-  if (nonConstAsyncResetValueIsError)
-    pass->setNonConstAsyncResetValueIsError();
   return pass;
 }
 
@@ -505,7 +493,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(circuit, enableAnnotationWarning,
-                             nonConstAsyncResetValueIsError,
                              &getAnalysis<InstanceGraph>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
@@ -2591,15 +2578,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
-    if (!firrtl::isConstant(op.resetValue())) {
-      auto diag = circuitState.nonConstAsyncResetValueIsError
-                      ? op.emitError()
-                      : op.emitWarning();
-      diag << "register with async reset requires constant reset value";
-      diag.attachNote(op.resetValue().getLoc()) << "reset value defined here:";
-      if (circuitState.nonConstAsyncResetValueIsError)
-        return failure();
-    }
     addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
                      ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
                      resetSignal, std::function<void()>(), resetFn);
