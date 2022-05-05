@@ -1,6 +1,6 @@
 // RUN: firtool %s --format=mlir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
 // RUN: firtool %s --format=mlir -verilog |           FileCheck %s --check-prefix=VERILOG
-// RUN: firtool %s --format=mlir -verilog -output-mlir=%t | FileCheck %s --check-prefix=VERILOG-WITH-MLIR
+// RUN: firtool %s --format=mlir -verilog -output-final-mlir=%t | FileCheck %s --check-prefix=VERILOG-WITH-MLIR
 // RUN: FileCheck %s --input-file=%t --check-prefix=VERILOG-WITH-MLIR-OUT
 
 firrtl.circuit "Top" {

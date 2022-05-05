@@ -299,9 +299,12 @@ static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
                 cl::init(""), cl::cat(mainCategory));
 
-static cl::opt<std::string> mlirOutFile(
-    "output-mlir", cl::desc("Optional file name to output the final MLIR"),
-    cl::init(""), cl::value_desc("filename"), cl::cat(mainCategory));
+static cl::opt<std::string>
+    mlirOutFile("output-final-mlir",
+                cl::desc("Optional file name to output the final MLIR into, in "
+                         "addition to the output requested by -o"),
+                cl::init(""), cl::value_desc("filename"),
+                cl::cat(mainCategory));
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
