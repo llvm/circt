@@ -1332,11 +1332,11 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),               // In
+      DictionaryAttr::get(context),   // In
       writeEn.getDictionary(context), // Write enable
       clk.getDictionary(context),     // Clk
       reset.getDictionary(context),   // Reset
-      DictionaryAttr(),               // Out
+      DictionaryAttr::get(context),   // Out
       done.getDictionary(context)     // Done
   };
 }
@@ -1373,7 +1373,7 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   MLIRContext *context = getContext();
   for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
-    portAttributes.push_back(DictionaryAttr()); // Addresses
+    portAttributes.push_back(DictionaryAttr::get(context)); // Addresses
 
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
@@ -1381,10 +1381,10 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   writeEn.append("go", isSet);
   clk.append("clk", isSet);
   done.append("done", isSet);
-  portAttributes.append({DictionaryAttr(),               // In
+  portAttributes.append({DictionaryAttr::get(context),   // In
                          writeEn.getDictionary(context), // Write enable
                          clk.getDictionary(context),     // Clk
-                         DictionaryAttr(),               // Out
+                         DictionaryAttr::get(context),   // Out
                          done.getDictionary(context)}    // Done
   );
   return portAttributes;
@@ -1729,9 +1729,9 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
       clk.getDictionary(context),   /* Clk    */
       reset.getDictionary(context), /* Reset  */
       go.getDictionary(context),    /* Go     */
-      DictionaryAttr(),             /* Lhs    */
-      DictionaryAttr(),             /* Rhs    */
-      DictionaryAttr(),             /* Out    */
+      DictionaryAttr::get(context), /* Lhs    */
+      DictionaryAttr::get(context), /* Rhs    */
+      DictionaryAttr::get(context), /* Out    */
       done.getDictionary(context)   /* Done   */
   };
 }
@@ -1765,10 +1765,10 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
       clk.getDictionary(context),   /* Clk       */
       reset.getDictionary(context), /* Reset     */
       go.getDictionary(context),    /* Go        */
-      DictionaryAttr(),             /* Lhs       */
-      DictionaryAttr(),             /* Rhs       */
-      DictionaryAttr(),             /* Quotient  */
-      DictionaryAttr(),             /* Remainder */
+      DictionaryAttr::get(context), /* Lhs       */
+      DictionaryAttr::get(context), /* Rhs       */
+      DictionaryAttr::get(context), /* Quotient  */
+      DictionaryAttr::get(context), /* Remainder */
       done.getDictionary(context)   /* Done      */
   };
 }
@@ -1801,7 +1801,8 @@ LogicalResult SliceLibOp::verify() {
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
-    return {DictionaryAttr(), DictionaryAttr()};                               \
+    return {DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext())};                                \
   }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
@@ -1818,7 +1819,9 @@ LogicalResult SliceLibOp::verify() {
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }                                                                            \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
-    return {DictionaryAttr(), DictionaryAttr(), DictionaryAttr()};             \
+    return {DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext())};                                \
   }
 
 // clang-format off
