@@ -34,7 +34,7 @@ Value getModuleScopedDriver(Value val, bool lookThroughWires,
 
 /// Return true if a value is module-scoped driven by a value of a specific
 /// type.
-template <typename A>
+template <typename A, typename... B>
 static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
                                    bool lookThroughNodes) {
   val = getModuleScopedDriver(val, lookThroughWires, lookThroughNodes);
@@ -46,7 +46,7 @@ static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
   if (!op)
     return false;
 
-  return isa<A>(op);
+  return isa<A, B...>(op);
 }
 
 } // namespace firrtl
