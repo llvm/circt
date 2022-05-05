@@ -27,6 +27,28 @@ IntegerAttr getIntAttr(Type type, const APInt &value);
 
 /// Utility for generating a constant zero attribute.
 IntegerAttr getIntZerosAttr(Type type);
+
+/// Return the module-scoped driver of a value
+Value getModuleScopedDriver(Value val, bool lookThroughWires,
+                            bool lookThroughNodes);
+
+/// Return true if a value is module-scoped driven by a value of a specific
+/// type.
+template <typename A>
+static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
+                                   bool lookThroughNodes) {
+  val = getModuleScopedDriver(val, lookThroughWires, lookThroughNodes);
+
+  if (!val)
+    return false;
+
+  auto *op = val.getDefiningOp();
+  if (!op)
+    return false;
+
+  return isa<A>(op);
+}
+
 } // namespace firrtl
 } // namespace circt
 

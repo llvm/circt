@@ -130,3 +130,71 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
   int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
   return getIntAttr(type, APInt(width, 0));
 }
+
+/// Return the value that drives another FIRRTL value within module scope.  This
+/// is parameterized by looking through or not through certain constructs.  This
+/// assumes a single driver and should only be run after `ExpandWhens`.
+Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
+                                           bool lookThroughNodes) {
+  // Update `val` to the source of the connection driving `thisVal`.  This walks
+  // backwards across users to find the first connection and updates `val` to
+  // the source.  This assumes that only one connect is driving `thisVal`, i.e.,
+  // this pass runs after `ExpandWhens`.
+  auto updateVal = [&](Value thisVal) {
+    for (auto *user : thisVal.getUsers()) {
+      if (auto connect = dyn_cast<FConnectLike>(user)) {
+        if (connect.dest() != val)
+          continue;
+        val = connect.src();
+        return;
+      }
+    }
+    val = nullptr;
+    return;
+  };
+
+  while (val) {
+    // The value is a port.
+    if (auto blockArg = val.dyn_cast<BlockArgument>()) {
+      FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
+      auto direction = op.getPortDirection(blockArg.getArgNumber());
+      // Base case: this is one of the module's input ports.
+      if (direction == Direction::In)
+        return blockArg;
+      updateVal(blockArg);
+      continue;
+    }
+
+    auto *op = val.getDefiningOp();
+
+    // The value is an instance port.
+    if (auto inst = dyn_cast<InstanceOp>(op)) {
+      auto resultNo = val.cast<OpResult>().getResultNumber();
+      // Base case: this is an instance's output port.
+      if (inst.getPortDirection(resultNo) == Direction::Out)
+        return inst.getResult(resultNo);
+      updateVal(val);
+      continue;
+    }
+
+    // If told to look through wires, continue from the driver of the wire.
+    if (lookThroughWires && isa<WireOp>(op)) {
+      updateVal(op->getResult(0));
+      continue;
+    }
+
+    // If told to look through nodes, continue from the node input.
+    if (lookThroughNodes && isa<NodeOp>(op)) {
+      val = cast<NodeOp>(op).input();
+      continue;
+    }
+
+    // Base case: this is a constant/invalid or primop.
+    //
+    // TODO: If needed, this could be modified to look through unary ops which
+    // have an unambiguous single driver.  This should only be added if a need
+    // arises for it.
+    break;
+  };
+  return val;
+}
