@@ -51,7 +51,8 @@ void RemoveInvalidPass::runOnOperation() {
 
     // If the `RegResetOp` has an invalidated initialization, then replace it
     // with a `RegOp`.
-    if (isModuleScopedDrivenBy<InvalidValueOp>(reg.resetValue(), true, false)) {
+    if (isModuleScopedDrivenBy<InvalidValueOp>(reg.resetValue(), true, false,
+                                               false)) {
       LLVM_DEBUG(llvm::dbgs() << "  - RegResetOp '" << reg.name()
                               << "' will be replaced with a RegOp\n");
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);

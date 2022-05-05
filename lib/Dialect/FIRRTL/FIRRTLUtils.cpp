@@ -135,7 +135,8 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 /// is parameterized by looking through or not through certain constructs.  This
 /// assumes a single driver and should only be run after `ExpandWhens`.
 Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
-                                           bool lookThroughNodes) {
+                                           bool lookThroughNodes,
+                                           bool lookThroughCasts) {
   // Update `val` to the source of the connection driving `thisVal`.  This walks
   // backwards across users to find the first connection and updates `val` to
   // the source.  This assumes that only one connect is driving `thisVal`, i.e.,
@@ -186,6 +187,12 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
     // If told to look through nodes, continue from the node input.
     if (lookThroughNodes && isa<NodeOp>(op)) {
       val = cast<NodeOp>(op).input();
+      continue;
+    }
+
+    if (lookThroughCasts &&
+        isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(op)) {
+      val = op->getOperand(0);
       continue;
     }
 

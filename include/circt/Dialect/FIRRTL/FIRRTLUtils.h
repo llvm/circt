@@ -30,14 +30,16 @@ IntegerAttr getIntZerosAttr(Type type);
 
 /// Return the module-scoped driver of a value
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
-                            bool lookThroughNodes);
+                            bool lookThroughNodes, bool lookThroughCasts);
 
 /// Return true if a value is module-scoped driven by a value of a specific
 /// type.
 template <typename A, typename... B>
 static bool isModuleScopedDrivenBy(Value val, bool lookThroughWires,
-                                   bool lookThroughNodes) {
-  val = getModuleScopedDriver(val, lookThroughWires, lookThroughNodes);
+                                   bool lookThroughNodes,
+                                   bool lookThroughCasts) {
+  val = getModuleScopedDriver(val, lookThroughWires, lookThroughNodes,
+                              lookThroughCasts);
 
   if (!val)
     return false;
