@@ -151,6 +151,13 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Gets the Go port of a Calyx component.
       Value getGoPort();
+
+      /// Gets the Clock port of a Calyx component.
+      Value getClkPort();
+
+      /// Gets the Reset port of a Calyx component.
+      Value getResetPort();
+
       void getAsmBlockArgumentNames(mlir::Region &region,
                                     mlir::OpAsmSetValueNameFn setNameFn);
   }];
