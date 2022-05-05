@@ -9,7 +9,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %postUArray: i8,
                         %structA: !hw.struct<foo: i2, bar:i4>,
                         %arrOfStructA: !hw.array<5 x struct<foo: i2>>,
-                        %array1: !hw.array<1xi1>
+                        %array1: !hw.array<1xi1>,
+                        %array2: !hw.array<5xi4>
                         ) -> (
   r0: i4, r2: i4, r4: i4, r6: i4,
   r7: i4, r8: i4, r9: i4, r10: i4,
@@ -22,7 +23,8 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   r35: !hw.array<3xi4>, r36: i12, r37: i4,
   r38: !hw.array<6xi4>,
   r40: !hw.struct<foo: i2, bar:i4>, r41: !hw.struct<foo: i2, bar: i4>,
-  r42: i1
+  r42: i1,
+  r43: !hw.array<5xi4>, r44: !hw.array<5xi4>, r45: !hw.array<5xi4>, r46: !hw.array<5xi4>, r47: !hw.array<5xi4>
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -88,13 +90,21 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %false = hw.constant false
   %43 = hw.array_get %array1[%false] : !hw.array<1xi1>
 
+  %44 = hw.array_inject %array2[0], %a : !hw.array<5xi4>
+  %45 = hw.array_inject %array2[1], %b : !hw.array<5xi4>
+  %46 = hw.array_inject %array2[2], %a : !hw.array<5xi4>
+  %47 = hw.array_inject %array2[3], %a : !hw.array<5xi4>
+  %48 = hw.array_inject %array2[4], %a : !hw.array<5xi4>
+
   hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
-              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42, %43:
+              %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42, %43,
+              %44, %45, %46, %47, %48 :
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
    i12, i2, i9, i4, i4, !hw.array<3xi4>, i12, i4, !hw.array<6xi4>,
-   !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1
+   !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, i1,
+   !hw.array<5xi4>, !hw.array<5xi4>, !hw.array<5xi4>, !hw.array<5xi4>, !hw.array<5xi4>
 }
 // CHECK-LABEL: module TESTSIMPLE(
 // CHECK-NEXT:   input  [3:0]                                              a,
@@ -107,6 +117,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
 // CHECK-NEXT:   input  [0:0]                                              array1,
+// CHECK-NEXT:   input  [4:0][3:0]                                         array2,
 // CHECK-NEXT:   output [3:0]                                              r0,
 // CHECK-NEXT:                                                             r2,
 // CHECK-NEXT:                                                             r4,
@@ -114,7 +125,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:                                                             r7,
 // CHECK-NEXT:                                                             r8,
 // CHECK-NEXT:                                                             r9,
-// CHECK-NEXT:                                                            r10,
+// CHECK-NEXT:                                                             r10,
 // CHECK-NEXT:                                                             r11,
 // CHECK-NEXT:                                                             r12,
 // CHECK-NEXT:                                                             r13,
@@ -144,7 +155,12 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   output [5:0][3:0]                                         r38,
 // CHECK-NEXT:   output struct packed {logic [1:0] foo; logic [3:0] bar; } r40,
 // CHECK-NEXT:                                                             r41,
-// CHECK-NEXT:   output                                                    r42);
+// CHECK-NEXT:   output                                                    r42,
+// CHECK-NEXT:   output [4:0][3:0]                                         r43,
+// CHECK-NEXT:                                                             r44,
+// CHECK-NEXT:                                                             r45,
+// CHECK-NEXT:                                                             r46,
+// CHECK-NEXT:                                                             r47);
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
@@ -188,6 +204,11 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
 // CHECK-NEXT:   assign r41 = '{foo: [[WIRE3]].foo, bar: b};
 // CHECK-NEXT:   assign r42 = array1[1'h0];
+// CHECK-NEXT:  assign r43 = {array2[4:1], a};
+// CHECK-NEXT:  assign r44 = {array2[4:2], b, array2[0]};
+// CHECK-NEXT:  assign r45 = {array2[4:3], a, array2[1:0]};
+// CHECK-NEXT:  assign r46 = {array2[4], a, array2[2:0]};
+// CHECK-NEXT:  assign r47 = {a, array2[3:0]};
 // CHECK-NEXT: endmodule
 
 

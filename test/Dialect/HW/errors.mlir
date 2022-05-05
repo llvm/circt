@@ -116,6 +116,20 @@ hw.module @struct(%a: !hw.struct<foo: i42>, %b: i42) {
 
 // -----
 
+hw.module @struct(%a: !hw.array<5 x i32>, %b: i32) {
+  // expected-error @+1 {{'hw.array_inject' op index outside the bounds of the array}}
+  %aget = hw.array_inject %a[-1], %b : !hw.array<5 x i32>
+}
+
+// -----
+
+hw.module @struct(%a: !hw.array<5 x i32>, %b: i32) {
+  // expected-error @+1 {{'hw.array_inject' op index outside the bounds of the array}}
+  %aget = hw.array_inject %a[10], %b : !hw.array<5 x i32>
+}
+
+// -----
+
 hw.module @struct(%a: !hw.struct<foo: i42>, %b: i42) {
   // expected-error @+1 {{custom op 'hw.struct_inject' invalid field name specified}}
   %aget = hw.struct_inject %a["bar"], %b : !hw.struct<foo: i42>

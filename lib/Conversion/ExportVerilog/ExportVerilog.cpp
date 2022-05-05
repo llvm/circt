@@ -1639,6 +1639,7 @@ private:
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
   SubExprInfo visitTypeOp(ArrayConcatOp op);
+  SubExprInfo visitTypeOp(ArrayInjectOp op);
   SubExprInfo visitTypeOp(StructCreateOp op);
   SubExprInfo visitTypeOp(StructExtractOp op);
   SubExprInfo visitTypeOp(StructInjectOp op);
@@ -2168,6 +2169,38 @@ SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   emitSubExpr(op.index(), LowestPrecedence);
   os << ']';
   return {Selection, arrayPrec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ArrayInjectOp op) {
+  unsigned n = hw::type_cast<ArrayType>(op.getType()).getSize();
+
+  os << '{';
+
+  if (op.index() + 1 != n) {
+    emitSubExpr(op.input(), Selection);
+    os << '[';
+    if (n - 1 == op.index() + 1)
+      os << n - 1;
+    else
+      os << n - 1 << ':' << op.index() + 1;
+    os << "], ";
+  }
+
+  emitSubExpr(op.newValue(), Selection);
+
+  if (op.index() != 0) {
+    os << ", ";
+    emitSubExpr(op.input(), Selection);
+    os << '[';
+    if (op.index() == 1)
+      os << 0;
+    else
+      os << op.index() - 1 << ':' << 0;
+    os << "]";
+  }
+
+  os << '}';
+  return {Unary, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {

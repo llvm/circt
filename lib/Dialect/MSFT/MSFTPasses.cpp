@@ -548,9 +548,9 @@ protected:
 /// Is this operation "free" and copy-able?
 static bool isWireManipulationOp(Operation *op) {
   return isa<hw::ArrayConcatOp, hw::ArrayCreateOp, hw::ArrayGetOp,
-             hw::ArraySliceOp, hw::StructCreateOp, hw::StructExplodeOp,
-             hw::StructExtractOp, hw::StructInjectOp, hw::StructCreateOp,
-             hw::ConstantOp>(op);
+             hw::ArraySliceOp, hw::ArrayInjectOp, hw::StructCreateOp,
+             hw::StructExplodeOp, hw::StructExtractOp, hw::StructInjectOp,
+             hw::StructCreateOp, hw::ConstantOp>(op);
 }
 
 /// Update all the instantiations of 'mod' to match the port list. For any

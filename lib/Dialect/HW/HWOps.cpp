@@ -1989,6 +1989,16 @@ OpFoldResult ArrayGetOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// ArrayInjectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayInjectOp::verify() {
+  if (index().ugt(getType().cast<ArrayType>().getSize()))
+    return this->emitOpError("index outside the bounds of the array");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TypedeclOp
 //===----------------------------------------------------------------------===//
 

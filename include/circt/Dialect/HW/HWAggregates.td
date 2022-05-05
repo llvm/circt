@@ -139,6 +139,23 @@ def ArrayGetOp : HWOp<"array_get",
   let hasFolder = 1;
 }
 
+def ArrayInjectOp : HWOp<"array_inject",
+    [NoSideEffect,ArrayElementTypeConstraint<"newValue", "input">,
+     TypesMatchWith<"input and result types should be equivalent",
+                     "input", "result", [{ $_self }]>]> {
+  let summary = "Inject a value at the given index in an array";
+
+  let arguments = (ins ArrayType:$input, HWNonInOutType:$newValue,
+                       APIntAttr:$index);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $input `[` $index `]` `,` $newValue attr-dict `:` qualified(type($input))
+  }];
+
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Structure Processing Operations
 //===----------------------------------------------------------------------===//
