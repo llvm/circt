@@ -78,6 +78,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       } else {
         errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
       }
+    } else if (option == "disallowPortDeclSharing") {
+      disallowPortDeclSharing = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -104,6 +106,8 @@ std::string LoweringOptions::toString() const {
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
     options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (disallowPortDeclSharing)
+    options += "disallowPortDeclSharing,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -164,7 +168,8 @@ struct LoweringCLOptions {
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul, "
           "emitReplicatedOpsToHeader, "
-          "locationInfoStyle={plain,wrapInAtSquareBracket}"),
+          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
+          "disallowPortDeclSharing"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
