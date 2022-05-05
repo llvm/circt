@@ -365,6 +365,14 @@ Value calyx::ComponentOp::getDonePort() {
   return getBlockArgumentWithName("done", *this);
 }
 
+Value calyx::ComponentOp::getClkPort() {
+  return getBlockArgumentWithName("clk", *this);
+}
+
+Value calyx::ComponentOp::getResetPort() {
+  return getBlockArgumentWithName("reset", *this);
+}
+
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
   auto portTypes = getArgumentTypes();
   ArrayAttr portNamesAttr = portNames(), portAttrs = portAttributes();
