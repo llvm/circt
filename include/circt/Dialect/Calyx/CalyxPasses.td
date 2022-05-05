@@ -33,14 +33,14 @@ def RemoveGroups : Pass<"calyx-remove-groups", "calyx::ComponentOp"> {
 }
 
 def ClkInsertion : Pass<"calyx-clk-insertion", "calyx::ComponentOp"> {
-  let summary = "inserts assignments from component clk to sub-component clk";
+  let summary = "Inserts assignments from component clock to sub-component clock.";
   let description = "";
   let dependentDialects = [];
   let constructor = "circt::calyx::createClkInsertionPass()";
 }
 
 def ResetInsertion : Pass<"calyx-reset-insertion", "calyx::ComponentOp"> {
-  let summary = "connect component reset to sub-component reset for applicable components";
+  let summary = "Connect component reset to sub-component reset for applicable components.";
   let description = "";
   let dependentDialects = [];
   let constructor = "circt::calyx::createResetInsertionPass()";

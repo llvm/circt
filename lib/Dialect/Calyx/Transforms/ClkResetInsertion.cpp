@@ -30,7 +30,7 @@ namespace {
 /// 'portID' to 'fromPort'.
 static void doPortPassthrough(ComponentOp comp, Value fromPort,
                               StringRef portID) {
-  auto *ctx = comp.getContext();
+  MLIRContext *ctx = comp.getContext();
   OpBuilder builder(ctx);
   builder.setInsertionPointToStart(comp.getWiresOp().getBody());
 
