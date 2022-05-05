@@ -48,28 +48,26 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 static constexpr std::string_view addressSymbol() { return "@"; }
+static constexpr std::string_view endl() { return "\n"; }
+static constexpr std::string_view metadataLBrace() { return "#{\n"; }
+static constexpr std::string_view metadataRBrace() { return "}#\n"; }
 
-// clang-format off
 /// A list of integer attributes supported by the native Calyx compiler.
-// NOLINTNEXTLINE(readability-identifier-naming)
-constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
-  "external", "static", "share", "bound", "write_together", "read_together"
+constexpr std::array<StringRef, 7> integerAttributes{
+    "external",       "static",        "share", "bound",
+    "write_together", "read_together", "pos",
 };
 
 /// A list of boolean attributes supported by the native Calyx compiler.
-// NOLINTNEXTLINE(readability-identifier-naming)
-constexpr std::array<StringRef, 7> CalyxBooleanAttributes{
-  "clk", "done", "go", "reset", "generated", "precious", "toplevel"
+constexpr std::array<StringRef, 7> booleanAttributes{
+    "clk", "done", "go", "reset", "generated", "precious", "toplevel",
 };
-// clang-format on
 
 /// Determines whether the given identifier is a valid Calyx attribute.
 static bool isValidCalyxAttribute(StringRef identifier) {
 
-  return llvm::find(CalyxIntegerAttributes, identifier) !=
-             CalyxIntegerAttributes.end() ||
-         llvm::find(CalyxBooleanAttributes, identifier) !=
-             CalyxBooleanAttributes.end();
+  return llvm::find(integerAttributes, identifier) != integerAttributes.end() ||
+         llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
 }
 
 /// A tracker to determine which libraries should be imported for a given
@@ -132,6 +130,24 @@ struct Emitter {
 
   // Program emission
   void emitProgram(ProgramOp op);
+
+  // Metadata emission for the Cider debugger.
+  void emitCiderMetadata(mlir::ModuleOp op) {
+    auto metadata = op->getAttrOfType<ArrayAttr>("calyx.metadata");
+    if (!metadata)
+      return;
+
+    constexpr std::string_view metadataIdentifier = "metadata";
+    os << endl() << metadataIdentifier << space() << metadataLBrace();
+
+    for (auto sourceLoc : llvm::enumerate(metadata)) {
+      // <index>: <source-location>\n
+      os << std::to_string(sourceLoc.index()) << colon();
+      os << sourceLoc.value().cast<StringAttr>().getValue() << endl();
+    }
+
+    os << metadataRBrace();
+  }
 
   /// Import emission.
   void emitImports(ProgramOp op) {
@@ -234,8 +250,8 @@ private:
     llvm::raw_string_ostream buffer(output);
     buffer.reserveExtraSpace(16);
 
-    bool isBooleanAttribute = llvm::find(CalyxBooleanAttributes, identifier) !=
-                              CalyxBooleanAttributes.end();
+    bool isBooleanAttribute =
+        llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
     if (attr.isa<UnitAttr>()) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
@@ -669,6 +685,7 @@ mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
       emitter.emitProgram(program);
     });
   }
+  emitter.emitCiderMetadata(module);
   return emitter.finalize();
 }
 

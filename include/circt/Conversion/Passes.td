@@ -86,10 +86,13 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
     "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
     "comb::CombDialect"
   ];
-  let options =
-      [Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
-              "Identifier of top-level function to be the entry-point component"
-              " of the Calyx program.">];
+  let options = [
+    Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
+            "Identifier of top-level function to be the entry-point component"
+            " of the Calyx program.">,
+    Option<"ciderSourceLocationMetadata", "cider-source-location-metadata", "bool", "",
+            "Whether to track source location for the Cider debugger.">
+  ];
 }
 
 //===----------------------------------------------------------------------===//
