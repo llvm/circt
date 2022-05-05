@@ -150,7 +150,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-// Extract a range of bits from the specified input.
+// Extract the value of a field of a structure.
 def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
 
@@ -166,7 +166,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let hasFolder = 1;
 }
 
-// Extract a range of bits from the specified input.
+// Create a structure by replacing a field with a value in an existing one.
 def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
                            AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
