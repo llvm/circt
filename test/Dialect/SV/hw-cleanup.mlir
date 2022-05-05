@@ -162,8 +162,8 @@ hw.module @ifdef_merge(%arg0: i1) {
 
 // CHECK-LABEL: hw.module @ifdef_proc_merge(%arg0: i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
+// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      %true = hw.constant true
 // CHECK-NEXT:      [[XOR:%.*]] = comb.xor %arg0, %true : i1
 // CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
@@ -175,12 +175,11 @@ hw.module @ifdef_merge(%arg0: i1) {
 // CHECK-NEXT:    }
 hw.module @ifdef_proc_merge(%arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
-
+  %true = hw.constant true
   sv.alwaysff(posedge %arg0) {
     sv.ifdef.procedural "FOO" {
       sv.fwrite %fd, "A1"
     }
-    %true = hw.constant true
     %0 = comb.xor %arg0, %true : i1
     sv.ifdef.procedural "FOO" {
        sv.fwrite %fd, "%x"(%0) : i1
@@ -193,9 +192,9 @@ hw.module @ifdef_proc_merge(%arg0: i1) {
 }
 
 // CHECK-LABEL: hw.module @if_merge(%arg0: i1, %arg1: i1) {
+// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      %true = hw.constant true
 // CHECK-NEXT:      [[XOR:%.*]] = comb.xor %arg1, %true : i1
 // CHECK-NEXT:      sv.if %arg1  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
@@ -335,4 +334,66 @@ hw.module @nested_regions() {
       }
     }
   }
+}
+
+// CHECK-LABEL: hw.module @TableLookup(%t_0: i5, %t_1: i5, %t_2: i5, %t_3: i5, %t_4: i5, %t_5: i5, %default: i5, %key: i5) -> (v: i5) {
+hw.module @TableLookup(%t_0: i5, %t_1: i5, %t_2: i5, %t_3: i5, %t_4: i5, %t_5: i5, %default: i5, %key: i5) -> (v: i5) {
+  %c3_i5 = hw.constant 3 : i5
+  %c-16_i5 = hw.constant -16 : i5
+  %c-14_i5 = hw.constant -14 : i5
+  %c-13_i5 = hw.constant -13 : i5
+  %c-9_i5 = hw.constant -9 : i5
+  %c-8_i5 = hw.constant -8 : i5
+  // CHECK:        [[REG:%.+]] = sv.reg  : !hw.inout<i5>
+  // CHECK-NEXT:   [[RES:%.+]] = sv.read_inout [[REG]] : !hw.inout<i5>
+
+  // CHECK-NEXT:   sv.alwayscomb {
+  // CHECK-NEXT:     sv.case unique %key : i5
+
+  %10 = comb.icmp eq %key, %c-8_i5 : i5
+  %11 = comb.mux %10, %t_4, %9 : i5
+  %12 = comb.mux %10, %t_5, %11 : i5
+  // Make sure that t_4 is not assigned here. %11 and %12 are using the
+  // same condtion (key == 24) but t_5 should be prioritized.
+  // CHECK-NEXT:     case b11000: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %t_5 : i5
+  // CHECK-NEXT:     }
+
+  %8 = comb.icmp eq %key, %c-9_i5 : i5
+  %9 = comb.mux %8, %t_4, %7 : i5
+  // CHECK-NEXT:     case b10111: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %t_4 : i5
+  // CHECK-NEXT:     }
+
+  %6 = comb.icmp eq %key, %c-13_i5 : i5
+  %7 = comb.mux %6, %t_3, %5 : i5
+  // CHECK-NEXT:     case b10011: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %t_3 : i5
+  // CHECK-NEXT:     }
+
+  %4 = comb.icmp eq %key, %c-14_i5 : i5
+  %5 = comb.mux %4, %t_2, %3 : i5
+  // CHECK-NEXT:     case b10010: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %t_2 : i5
+  // CHECK-NEXT:     }
+
+  %2 = comb.icmp eq %key, %c-16_i5 : i5
+  %3 = comb.mux %2, %t_1, %1 : i5
+  // CHECK-NEXT:     case b10000: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %t_1 : i5
+  // CHECK-NEXT:     }
+
+  %0 = comb.icmp eq %key, %c3_i5 : i5
+  %1 = comb.mux %0, %t_0, %default : i5
+  // CHECK-NEXT:     case b00011: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %t_0 : i5
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:     default: {
+  // CHECK-NEXT:       sv.bpassign [[REG]], %default : i5
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+
+  // CHECK-NEXT:   hw.output [[RES]] : i5
+  // CHECK-NEXT: }
+  hw.output %12 : i5
 }

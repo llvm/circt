@@ -14,8 +14,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+using namespace circt;
+using namespace circt::comb;
+using namespace mlir;
 
 using namespace circt;
 
@@ -99,6 +108,8 @@ struct HWCleanupPass : public sv::HWCleanupBase<HWCleanupPass> {
   void runOnGraphRegion(Region &region);
   void runOnProceduralRegion(Region &region);
 
+  void runCombToSVConversion();
+
 private:
   /// Inline all regions from the second operation into the first and delete the
   /// second operation.
@@ -113,12 +124,17 @@ private:
 
   bool anythingChanged;
 };
-} // end anonymous namespace
+} // namespace
 
 void HWCleanupPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
+
+  // Run transformation from comb operations into sv operations.
+  runCombToSVConversion();
+
+  // Run statement simplifications.
   runOnGraphRegion(getOperation().getBody());
 
   // If we did not change anything in the graph mark all analysis as
@@ -243,6 +259,86 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     if (op.getNumRegions() != 0)
       runOnRegionsInOp(op);
   }
+}
+
+namespace {
+struct MuxChainCaseOpConverter : public OpRewritePattern<MuxOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MuxOp op,
+                                PatternRewriter &rewriter) const final;
+};
+} // namespace
+
+LogicalResult
+MuxChainCaseOpConverter::matchAndRewrite(MuxOp op,
+                                         PatternRewriter &rewriter) const {
+
+  SmallVector<Location> locationsFound;
+  SmallVector<std::pair<hw::ConstantOp, Value>, 4> valuesFound;
+  Value defaultValue, indexValue;
+  if (!getLinearMuxChainsComparison(op, /*isFalseSide*/ true, indexValue,
+                                    defaultValue, locationsFound, valuesFound))
+    return failure();
+
+  // If the size of mux chains is not large enough to generate case, then stop
+  // here.
+  if (valuesFound.size() <= 5)
+    return failure();
+
+  // Create a register to store in case conditions.
+  auto reg = rewriter.create<sv::RegOp>(op.getLoc(), op.getType());
+  auto regRead = rewriter.create<sv::ReadInOutOp>(op.getLoc(), reg);
+
+  // If the op is not in a procedural region, then create always_comb.
+  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
+    auto alwaysComb = rewriter.create<sv::AlwaysCombOp>(op.getLoc());
+    rewriter.setInsertionPointToEnd(alwaysComb.getBodyBlock());
+  }
+
+  using sv::CasePattern;
+
+  auto *context = op.getContext();
+  // Create the case.
+  rewriter.create<sv::CaseOp>(
+      FusedLoc::get(context, locationsFound), CaseStmtType::CaseStmt,
+      sv::ValidationQualifierTypeEnum::ValidationQualifierUnique, indexValue,
+      valuesFound.size() + 1, [&](size_t caseIdx) -> CasePattern {
+        // Use a default pattern for the last value, even if we are complete.
+        // This avoids tools thinking they need to insert a latch due to
+        // potentially incomplete case coverage.
+        bool isDefault = caseIdx == valuesFound.size();
+        sv::CasePattern thePattern =
+            isDefault
+                ? CasePattern(indexValue.getType().getIntOrFloatBitWidth(),
+                              CasePattern::DefaultPatternTag(), context)
+                : CasePattern(valuesFound[caseIdx].first.value(), context);
+        rewriter.create<sv::BPAssignOp>(
+            op.getLoc(), reg,
+            isDefault ? defaultValue : valuesFound[caseIdx].second);
+        return thePattern;
+      });
+
+  rewriter.replaceOp(op, {regRead});
+  return success();
+}
+
+/// Run transformations from comb operations into sv operations.
+void HWCleanupPass::runCombToSVConversion() {
+  auto module = getOperation();
+  MLIRContext *ctx = module.getContext();
+  RewritePatternSet patterns(ctx);
+  // Register patterns here.
+  patterns.add<MuxChainCaseOpConverter>(ctx);
+
+  // We assume that patterns are mostly one-shot so we limit the number of
+  // iterations.
+  GreedyRewriteConfig config;
+  config.enableRegionSimplification = false;
+  config.maxIterations = 0;
+  anythingChanged = succeeded(applyPatternsAndFoldGreedily(
+      getOperation(), std::move(patterns), config));
 }
 
 std::unique_ptr<Pass> circt::sv::createHWCleanupPass() {

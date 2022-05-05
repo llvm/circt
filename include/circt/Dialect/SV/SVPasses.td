@@ -132,10 +132,4 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
    ];
 }
 
-def HWGenerateCase : Pass<"hw-generate-case", "hw::HWModuleOp"> {
-  let summary = "Generate case statements by pattern matching combinatorial";
-  let constructor = "circt::sv::createHWGenerateCasePass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::comb::CombDialect"];
-}
-
 #endif // CIRCT_DIALECT_SV_SVPASSES
