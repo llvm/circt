@@ -1,16 +1,20 @@
-//===- RemoveInvalids.cpp - Remove invalid values ---------------*- C++ -*-===//
+//===- SFCCompat.cpp - SFC Compatible Pass ----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// This pass removes invalid values from the circuit.  This is a combination of
-// the Scala FIRRTL Compiler's RemoveRests pass and RemoveValidIf.  This is done
-// to remove two "interpretations" of invalid.  Namely: (1) registers that are
-// initialized to an invalid value (module scoped and looking through wires and
-// connects only) are converted to an unitialized register and (2) invalid
-// values are converted to zero (after rule 1 is applied).
+// This pass makes a number of updates to the circuit that are required to match
+// the behavior of the Scala FIRRTL Compiler (SFC).  This pass removes invalid
+// values from the circuit.  This is a combination of the Scala FIRRTL
+// Compiler's RemoveRests pass and RemoveValidIf.  This is done to remove two
+// "interpretations" of invalid.  Namely: (1) registers that are initialized to
+// an invalid value (module scoped and looking through wires and connects only)
+// are converted to an unitialized register and (2) invalid values are converted
+// to zero (after rule 1 is applied).  Additionally, this pass checks and
+// disallows async reset registers that are not driven with a constant when
+// looking through wires, connects, and nodes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,14 +31,14 @@
 using namespace circt;
 using namespace firrtl;
 
-struct RemoveInvalidPass : public RemoveInvalidBase<RemoveInvalidPass> {
+struct SFCCompatPass : public SFCCompatBase<SFCCompatPass> {
   void runOnOperation() override;
 };
 
-void RemoveInvalidPass::runOnOperation() {
+void SFCCompatPass::runOnOperation() {
   LLVM_DEBUG(
-      llvm::dbgs() << "===----- Running RemoveInvalid "
-                      "----------------------------------------------===\n"
+      llvm::dbgs() << "==----- Running SFCCompat "
+                      "---------------------------------------------------===\n"
                    << "Module: '" << getOperation().getName() << "'\n";);
 
   bool madeModifications = false;
@@ -100,6 +104,6 @@ void RemoveInvalidPass::runOnOperation() {
     return markAllAnalysesPreserved();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createRemoveInvalidPass() {
-  return std::make_unique<RemoveInvalidPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createSFCCompatPass() {
+  return std::make_unique<SFCCompatPass>();
 }

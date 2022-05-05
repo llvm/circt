@@ -1,8 +1,8 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-remove-invalid))' --verify-diagnostics --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-sfc-compat))' --verify-diagnostics --split-input-file %s | FileCheck %s
 
-firrtl.circuit "RemoveResetTests" {
+firrtl.circuit "SFCCompatTests" {
 
-  firrtl.module @RemoveResetTests() {}
+  firrtl.module @SFCCompatTests() {}
 
   // An invalidated regreset should be converted to a reg.
   //

@@ -86,7 +86,7 @@ createGrandCentralSignalMappingsPass(StringRef outputFilename = "",
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
-std::unique_ptr<mlir::Pass> createRemoveInvalidPass();
+std::unique_ptr<mlir::Pass> createSFCCompatPass();
 
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);

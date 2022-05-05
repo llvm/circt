@@ -391,9 +391,9 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
-def RemoveInvalid : Pass<"firrtl-remove-invalid", "firrtl::FModuleOp"> {
-  let summary = "Remove interpretations of invalid values";
-  let constructor = "circt::firrtl::createRemoveInvalidPass()";
+def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
+  let summary = "Perform SFC Compatibility fixes";
+  let constructor = "circt::firrtl::createSFCCompatPass()";
 }
 
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
