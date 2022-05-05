@@ -884,40 +884,31 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
 
   // Handle memory taps.
   if (targetAnno.isClass(memTapClass)) {
-    auto op = tappedOps.lookup(key);
-    if (!op) {
-      blackBox.extModule.emitOpError(
-          "MemTapAnnotation annotation was not scattered to "
-          "an operation: ")
-          << targetAnno.getDict();
-      signalPassFailure();
+
+    // Handle operations.
+    if (auto *op = tappedOps.lookup(key)) {
+      // We require the target to be a wire or node, such that it gets a name
+      // during Verilog emission.
+      if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
+        auto diag = blackBox.extModule.emitError("ReferenceDataTapKey on port ")
+                    << portName << " must be a wire, node, or reg";
+        diag.attachNote(op->getLoc()) << "referenced operation is here:";
+        signalPassFailure();
+        return;
+      }
+
+      if (!nla)
+        wiring.prefices =
+            instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+      wiring.target = PortWiring::Target(op);
+      portWiring.push_back(std::move(wiring));
       return;
     }
-
-    // Extract the memory location we're supposed to access.
-    auto word = portAnno.anno.getMember<IntegerAttr>("word");
-    if (!word) {
-      blackBox.extModule.emitError("MemTapAnnotation annotation on port ")
-          << portName << " missing \"word\" attribute";
-      signalPassFailure();
-      return;
-    }
-
-    // Formulate a hierarchical reference into the memory.
-    // CAVEAT: This just assumes that the memory will map to something that
-    // can be indexed in the final Verilog. If the memory gets turned into
-    // an instance of some sort, we lack the information necessary to go in
-    // and access individual elements of it. This will break horribly since
-    // we generate memory impls out-of-line already, and memories coming
-    // from an external generator are even worse. This needs a special node
-    // in the IR that can properly inject the memory array on emission.
-    if (!nla)
-      wiring.prefices =
-          instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-    wiring.target = PortWiring::Target(op);
-    ("Memory[" + Twine(word.getValue().getLimitedValue()) + "]")
-        .toVector(wiring.suffix);
-    portWiring.push_back(std::move(wiring));
+    blackBox.extModule.emitOpError(
+        "MemTapAnnotation annotation was not scattered to "
+        "an operation: ")
+        << targetAnno.getDict();
+    signalPassFailure();
     return;
   }
 

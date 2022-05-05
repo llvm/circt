@@ -309,11 +309,43 @@ struct MemToRegOfVecTransformPass
     return false;
   }
 
+  void scatterMemTapAnno(RegOp op, ArrayAttr attr,
+                         ImplicitLocOpBuilder &builder) {
+    AnnotationSet annos(attr);
+    StringRef memAnnoClass = "sifive.enterprise.grandcentral.MemTapAnnotation";
+    SmallVector<Attribute> regAnnotations;
+    auto vecType = op.getType().cast<FVectorType>();
+    for (auto anno : annos) {
+      if (anno.isClass(memAnnoClass)) {
+        for (size_t i = 0,
+                    e = op.getType().cast<FVectorType>().getNumElements();
+             i != e; ++i) {
+          NamedAttrList newAnno;
+          newAnno.append("class", anno.getMember("class"));
+          newAnno.append("id", anno.getMember("id"));
+          if (auto nla = anno.getMember("circt.nonlocal"))
+            newAnno.append("circt.nonlocal", nla);
+          newAnno.append(
+              "portID",
+              IntegerAttr::get(IntegerType::get(builder.getContext(), 64), i));
+
+          regAnnotations.push_back(SubAnnotationAttr::get(
+              builder.getContext(), vecType.getFieldID(i),
+              builder.getDictionaryAttr(newAnno)));
+        }
+      } else
+        regAnnotations.push_back(anno.getAttr());
+    }
+    op.annotationsAttr(builder.getArrayAttr(regAnnotations));
+  }
+
   /// Generate the logic for implementing the memory using Registers.
   void generateMemory(MemOp memOp, FirMemory &firMem) {
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
     moduleNamespace.add(memOp->getParentOfType<FModuleOp>());
     auto dataType = memOp.getDataType();
+
+    auto innerSym = memOp.inner_sym();
 
     RegOp regOfVec = {};
     for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
@@ -336,9 +368,12 @@ struct MemToRegOfVecTransformPass
         // Create the register corresponding to the memory.
         regOfVec = builder.create<RegOp>(
             FVectorType::get(dataType, firMem.depth), clk, memOp.nameAttr());
+
         // Copy all the memory annotations.
         if (!memOp.annotationsAttr().empty())
-          regOfVec.annotationsAttr(memOp.annotationsAttr());
+          scatterMemTapAnno(regOfVec, memOp.annotationsAttr(), builder);
+        if (innerSym)
+          regOfVec.inner_symAttr(memOp.inner_symAttr());
       }
       auto portKind = memOp.getPortKind(index);
       if (portKind == MemOp::PortKind::Read) {
