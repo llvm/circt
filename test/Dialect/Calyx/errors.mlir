@@ -831,7 +831,7 @@ calyx.program "main" {
     %c42_i32 = hw.constant 42 : i32
     calyx.wires {
       calyx.assign %std_lt_0.left = %c64_i32 : i32
-      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven}}
+      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven. Other assignment is "calyx.assign"(%0#0, %1) : (i32, i32) -> ()}}
       calyx.assign %std_lt_0.left = %c42_i32 : i32
     }
     calyx.control {
@@ -851,7 +851,7 @@ calyx.program "main" {
     calyx.wires {
       calyx.assign %std_lt_0.left = %c64_i32 : i32
       calyx.group @A {
-      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven}}
+      // expected-error @+1 {{'calyx.assign' op destination is already continuously driven. Other assignment is "calyx.assign"(%0#0, %1) : (i32, i32) -> ()}}
         calyx.assign %std_lt_0.left = %c42_i32 : i32
         calyx.assign %std_lt_0.right = %c42_i32 : i32
         calyx.group_done %r.done : i1
