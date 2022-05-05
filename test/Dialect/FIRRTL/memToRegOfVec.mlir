@@ -47,12 +47,12 @@ firrtl.circuit "Mem" {
     // CHECK:   %[[v8:.+]] = firrtl.subfield %mem_write(3)
     // CHECK:   %[[v9:.+]] = firrtl.subfield %mem_write(4)
     // CHECK:   %[[v10:.+]] = firrtl.subaccess %mem[%5] : !firrtl.vector<vector<uint<8>, 2>, 8>, !firrtl.uint<3>
-    // CHECK:   %[[v11:.+]] = firrtl.subindex %[[v10]][0] : !firrtl.vector<uint<8>, 2>
-    // CHECK:   %[[v12:.+]] = firrtl.subindex %[[v8]][0] : !firrtl.vector<uint<8>, 2>
-    // CHECK:   %[[v13:.+]] = firrtl.subindex %[[v9]][0] : !firrtl.vector<uint<1>, 2>
-    // CHECK:   %[[v14:.+]] = firrtl.subindex %[[v10]][1] : !firrtl.vector<uint<8>, 2>
-    // CHECK:   %[[v15:.+]] = firrtl.subindex %[[v8]][1] : !firrtl.vector<uint<8>, 2>
-    // CHECK:   %[[v16:.+]] = firrtl.subindex %[[v9]][1] : !firrtl.vector<uint<1>, 2>
+    // CHECK:   %[[v11:.+]] = firrtl.subindex
+    // CHECK:   %[[v12:.+]] = firrtl.subindex
+    // CHECK:   %[[v13:.+]] = firrtl.subindex
+    // CHECK:   %[[v14:.+]] = firrtl.subindex
+    // CHECK:   %[[v15:.+]] = firrtl.subindex
+    // CHECK:   %[[v16:.+]] = firrtl.subindex
     // CHECK:   firrtl.when %[[v6]] {
     // CHECK:     firrtl.when %[[v13]] {
     // CHECK:       firrtl.strictconnect %[[v11]], %[[v12]] : !firrtl.uint<8>

@@ -283,19 +283,23 @@ struct MemToRegOfVecTransformPass
       }
       return TypeSwitch<FIRRTLType, bool>(inType)
           .Case<BundleType>([&](BundleType bundle) {
-            for (size_t i = 0, e = bundle.getNumElements(); i != e; ++i)
-              if (!flatAccess(builder.create<SubfieldOp>(reg, i),
-                              builder.create<SubfieldOp>(input, i),
-                              builder.create<SubfieldOp>(mask, i)))
+            for (size_t i = 0, e = bundle.getNumElements(); i != e; ++i) {
+              auto regField = builder.create<SubfieldOp>(reg, i);
+              auto inputField = builder.create<SubfieldOp>(input, i);
+              auto maskField = builder.create<SubfieldOp>(mask, i);
+              if (!flatAccess(regField, inputField, maskField))
                 return false;
+            }
             return true;
           })
           .Case<FVectorType>([&](auto vector) {
-            for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
-              if (!flatAccess(builder.create<SubindexOp>(reg, i),
-                              builder.create<SubindexOp>(input, i),
-                              builder.create<SubindexOp>(mask, i)))
+            for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
+              auto regField = builder.create<SubindexOp>(reg, i);
+              auto inputField = builder.create<SubindexOp>(input, i);
+              auto maskField = builder.create<SubindexOp>(mask, i);
+              if (!flatAccess(regField, inputField, maskField))
                 return false;
+            }
             return true;
           })
           .Case<IntType>([&](auto iType) {
