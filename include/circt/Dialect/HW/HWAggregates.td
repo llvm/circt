@@ -153,6 +153,11 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
 // Extract the value of a field of a structure.
 def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
+  let description = [{
+    ```
+    %result = hw.struct_extract %input["field"] : !hw.struct<field: type>
+    ```
+  }];
 
   let arguments = (ins StructType:$input, StrAttr:$field);
   let results = (outs HWNonInOutType:$result);
@@ -170,6 +175,12 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
 def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
                            AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
+  let description = [{
+    ```
+    %result = hw.struct_inject %input["field"], %newValue
+        : !hw.struct<field: type>
+    ```
+  }];
 
   let arguments = (ins StructType:$input, StrAttr:$field,
                    HWNonInOutType:$newValue);
@@ -179,6 +190,11 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
 
 def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituent parts.";
+  let description = [{
+    ```
+    %result:2 = hw.struct_explode %input : !hw.struct<foo: i19, bar: i7>
+    ```
+  }];
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
   let hasCustomAssemblyFormat = 1;
