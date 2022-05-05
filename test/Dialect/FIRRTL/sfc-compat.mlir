@@ -89,4 +89,57 @@ firrtl.circuit "SFCCompatTests" {
     // CHECK-NEXT: %q, %[[CAST]]
   }
 
+  // All of these should not error as the register is initialzed to a constant
+  // reset value while looking through constructs that the SFC allows.  This is
+  // testing the following cases:
+  //
+  //   1. A wire marked don't touch driven to a constant.
+  //   2. A node driven to a constant.
+  //   3. A wire driven to an invalid.
+  //   4. A constant that passes through SFC-approved primops.
+  //
+  // CHECK-LABEL: firrtl.module @ConstantAsyncReset
+  firrtl.module @ConstantAsyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
+    firrtl.strictconnect %r0_init, %c0_ui1 : !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+
+    %r1_init = firrtl.node %c0_ui1 : !firrtl.uint<1>
+    %r1 = firrtl.regreset %clock, %reset, %r1_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+
+    %inv_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %r2_init = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %r2_init, %inv_ui1 : !firrtl.uint<1>
+    %r2 = firrtl.regreset %clock, %reset, %r2_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+
+    %c0_si1 = firrtl.asSInt %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
+    %c0_clock = firrtl.asClock %c0_si1 : (!firrtl.sint<1>) -> !firrtl.clock
+    %c0_asyncreset = firrtl.asAsyncReset %c0_clock : (!firrtl.clock) -> !firrtl.asyncreset
+    %r3_init = firrtl.asUInt %c0_asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+}
+
+// -----
+
+firrtl.circuit "NonConstantAsyncReset_Port" {
+  // expected-note @+1 {{reset driver is here}}
+  firrtl.module @NonConstantAsyncReset_Port(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %x: !firrtl.uint<1>) {
+    // expected-error @+1 {{'firrtl.regreset' op has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
+    %r0 = firrtl.regreset %clock, %reset, %x : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "NonConstantAsyncReset_PrimOp" {
+  firrtl.module @NonConstantAsyncReset_PrimOp(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-note @+1 {{reset driver is here}}
+    %c1_ui1 = firrtl.not %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.regreset' op has an async reset, but its reset value is not driven with a constant value through wires, nodes, or connects}}
+    %r0 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }

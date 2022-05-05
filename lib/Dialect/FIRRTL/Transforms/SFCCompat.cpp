@@ -67,6 +67,22 @@ void SFCCompatPass::runOnOperation() {
       reg.erase();
       madeModifications = true;
     }
+
+    // If the `RegResetOp` has an asynchronous reset and the reset value is not
+    // a module-scoped constant when looking through wires and nodes, then
+    // generate an error.  This implements the SFC's CheckResets pass.
+    if (!reg.resetSignal().getType().isa<AsyncResetType>())
+      continue;
+    if (isModuleScopedDrivenBy<ConstantOp, InvalidValueOp, SpecialConstantOp>(
+            reg.resetValue(), true, true, true))
+      continue;
+    auto resetDriver =
+        getModuleScopedDriver(reg.resetValue(), true, true, true);
+    auto diag = reg.emitOpError()
+                << "has an async reset, but its reset value is not driven with "
+                   "a constant value through wires, nodes, or connects";
+    diag.attachNote(resetDriver.getLoc()) << "reset driver is here";
+    return signalPassFailure();
   }
 
   // Convert all invalid values to zero.
