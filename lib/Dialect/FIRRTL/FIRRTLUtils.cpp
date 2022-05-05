@@ -191,7 +191,8 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
     }
 
     if (lookThroughCasts &&
-        isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(op)) {
+        isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(
+            op)) {
       val = op->getOperand(0);
       continue;
     }
