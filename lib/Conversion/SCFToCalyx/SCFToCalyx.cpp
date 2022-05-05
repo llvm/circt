@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/SCFToCalyx.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -350,20 +351,6 @@ public:
     return returnRegs[idx];
   }
 
-  /// Returns an SSA value for an arbitrary precision constant defined within
-  /// compOp. A new constant is created if no constant is found.
-  Value getConstant(PatternRewriter &rewriter, Location loc, int64_t value,
-                    unsigned width) {
-    IRRewriter::InsertionGuard guard(rewriter);
-    Value v;
-    auto it = constants.find(APInt(value, width));
-    if (it == constants.end()) {
-      rewriter.setInsertionPointToStart(compOp.getBody());
-      return v = rewriter.create<hw::ConstantOp>(loc, APInt(value, width));
-    }
-    return it->second;
-  }
-
   /// Register 'scheduleable' as being generated through lowering 'block'.
   ///
   /// TODO(mortbopet): Add a post-insertion check to ensure that the use-def
@@ -579,9 +566,6 @@ private:
   /// A mapping from return value indexes to return value registers.
   DenseMap<unsigned, calyx::RegisterOp> returnRegs;
 
-  /// A mapping of currently available constants in this component.
-  DenseMap<APInt, Value> constants;
-
   /// BlockScheduleables is a list of scheduleables that should be
   /// sequentially executed when executing the associated basic block.
   DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
@@ -691,8 +675,9 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   auto loc = inputValue.getLoc();
   rewriter.setInsertionPointToEnd(groupOp.getBody());
   rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
-  rewriter.create<calyx::AssignOp>(loc, reg.write_en(),
-                                   state.getConstant(rewriter, loc, 1, 1));
+  rewriter.create<calyx::AssignOp>(
+      loc, reg.write_en(),
+      createConstant(loc, rewriter, state.getComponentOp(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 }
 
@@ -749,16 +734,6 @@ public:
 private:
   LogicalResult &partialPatternRes;
 };
-
-/// Creates a new register within the component associated to 'compState'.
-static calyx::RegisterOp createReg(ComponentLoweringState &compState,
-                                   PatternRewriter &rewriter, Location loc,
-                                   Twine prefix, size_t width) {
-  IRRewriter::InsertionGuard guard(rewriter);
-  rewriter.setInsertionPointToStart(compState.getComponentOp().getBody());
-  return rewriter.create<calyx::RegisterOp>(loc, (prefix + "_reg").str(),
-                                            width);
-}
 
 //===----------------------------------------------------------------------===//
 // Partial lowering patterns
@@ -970,9 +945,9 @@ private:
     Type width = op.getResult().getType();
     // Pass the result from the Operation to the Calyx primitive.
     op.getResult().replaceAllUsesWith(out);
-    auto reg = createReg(getComponentState(), rewriter, op.getLoc(),
-                         getComponentState().getUniqueName(opName),
-                         width.getIntOrFloatBitWidth());
+    auto reg = createRegister(op.getLoc(), rewriter, *getComponent(),
+                              width.getIntOrFloatBitWidth(),
+                              getComponentState().getUniqueName(opName));
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
     getComponentState().addBlockScheduleable(op->getBlock(), group);
@@ -985,7 +960,7 @@ private:
     // The write enable port is high when the pipeline is done.
     rewriter.create<calyx::AssignOp>(loc, reg.write_en(), opPipe.done());
     rewriter.create<calyx::AssignOp>(
-        loc, opPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
+        loc, opPipe.go(), createConstant(loc, rewriter, *getComponent(), 1, 1));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 
@@ -1053,9 +1028,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // be aware of when a combinational expression references multiple loaded
     // values from the same memory, and then schedule assignments to temporary
     // registers to get around the structural hazard.
-    auto reg = createReg(getComponentState(), rewriter, loadOp.getLoc(),
-                         getComponentState().getUniqueName("load"),
-                         loadOp.getMemRefType().getElementTypeBitWidth());
+    auto reg = createRegister(loadOp.getLoc(), rewriter, *getComponent(),
+                              loadOp.getMemRefType().getElementTypeBitWidth(),
+                              getComponentState().getUniqueName("load"));
     buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group, reg,
                                      memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
@@ -1080,7 +1055,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       storeOp.getLoc(), memoryInterface.writeData(), storeOp.getValueToStore());
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
-      getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1));
+      createConstant(storeOp.getLoc(), rewriter, *getComponent(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
   return success();
 }
@@ -1703,8 +1678,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
             getComponentState().getUniqueName(whileOp.getOperation()).str() +
             "_arg" + std::to_string(arg.index());
         auto reg =
-            createReg(getComponentState(), rewriter, arg.value().getLoc(), name,
-                      arg.value().getType().getIntOrFloatBitWidth());
+            createRegister(arg.value().getLoc(), rewriter, *getComponent(),
+                           arg.value().getType().getIntOrFloatBitWidth(), name);
         getComponentState().addWhileIterReg(whileOp, reg, arg.index());
         arg.value().replaceAllUsesWith(reg.out());
 
@@ -1761,8 +1736,8 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
         unsigned width = argType.getIntOrFloatBitWidth();
         std::string name =
             progState().blockName(block) + "_arg" + std::to_string(arg.index());
-        auto reg = createReg(getComponentState(), rewriter,
-                             arg.value().getLoc(), name, width);
+        auto reg = createRegister(arg.value().getLoc(), rewriter,
+                                  *getComponent(), width, name);
         getComponentState().addBlockArgReg(block, reg, arg.index());
         arg.value().replaceAllUsesWith(reg.out());
       }
@@ -1817,8 +1792,8 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         name += "_register_";
         name += std::to_string(i);
         unsigned width = resultType.getIntOrFloatBitWidth();
-        auto reg = createReg(getComponentState(), rewriter, value.getLoc(),
-                             name, width);
+        auto reg = createRegister(value.getLoc(), rewriter, *getComponent(),
+                                  width, name);
         getComponentState().addPipelineReg(stage, reg, i);
 
         // Note that we do not use replace all uses with here as in BuildBBRegs.
@@ -1983,8 +1958,8 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
       assert(convArgType.isa<IntegerType>() && "unsupported return type");
       unsigned width = convArgType.getIntOrFloatBitWidth();
       std::string name = "ret_arg" + std::to_string(argType.index());
-      auto reg = createReg(getComponentState(), rewriter, funcOp.getLoc(), name,
-                           width);
+      auto reg = createRegister(funcOp.getLoc(), rewriter, *getComponent(),
+                                width, name);
       getComponentState().addReturnReg(reg, argType.index());
 
       rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());

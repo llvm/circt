@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
@@ -23,28 +24,12 @@ using namespace circt;
 using namespace calyx;
 using namespace mlir;
 
-/// A helper function to create constants in the HW dialect.
-static hw::ConstantOp createConstant(OpBuilder &builder, Location loc,
-                                     size_t bitWidth, size_t value) {
-  return builder.create<hw::ConstantOp>(
-      loc, APInt(bitWidth, value, /*unsigned=*/true));
-}
-
 /// Given some number of states, returns the necessary bit width
 /// TODO(Calyx): Probably a better built-in operation?
 static size_t getNecessaryBitWidth(size_t numStates) {
   APInt apNumStates(64, numStates);
   size_t log2 = apNumStates.ceilLogBase2();
   return log2 > 1 ? log2 : 1;
-}
-
-/// Creates a RegisterOp, with input and output port bit widths defined by
-/// `width`.
-static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
-                                 size_t width, StringRef name) {
-  IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(component.getBody());
-  return builder.create<RegisterOp>(component->getLoc(), name, width);
 }
 
 class CompileControlVisitor {
@@ -88,13 +73,14 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   size_t fsmBitWidth = getNecessaryBitWidth(seqOps.size() + 1);
 
   OpBuilder builder(component->getRegion(0));
-  auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
+  auto fsmRegister =
+      createRegister(seq.getLoc(), builder, component, fsmBitWidth, "fsm");
   Value fsmIn = fsmRegister.in();
   Value fsmWriteEn = fsmRegister.write_en();
   Value fsmOut = fsmRegister.out();
 
   builder.setInsertionPointToStart(wiresBody);
-  auto oneConstant = createConstant(builder, wires->getLoc(), 1, 1);
+  auto oneConstant = createConstant(wires.getLoc(), builder, component, 1, 1);
 
   // Create the new compilation group to replace this SeqOp.
   builder.setInsertionPointToEnd(wiresBody);
@@ -115,8 +101,8 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     auto groupOp = symTable.lookup<GroupOp>(groupName);
 
     builder.setInsertionPoint(groupOp);
-    auto fsmCurrentState =
-        createConstant(builder, wires->getLoc(), fsmBitWidth, fsmIndex);
+    auto fsmCurrentState = createConstant(wires->getLoc(), builder, component,
+                                          fsmBitWidth, fsmIndex);
 
     // TODO(Calyx): Eventually, we should canonicalize the GroupDoneOp's guard
     // and source.
@@ -148,8 +134,8 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     goOp->setOperands({oneConstant, groupGoGuard});
 
     // Add guarded assignments to the fsm register `in` and `write_en` ports.
-    fsmNextState =
-        createConstant(builder, wires->getLoc(), fsmBitWidth, fsmIndex + 1);
+    fsmNextState = createConstant(wires->getLoc(), builder, component,
+                                  fsmBitWidth, fsmIndex + 1);
     builder.setInsertionPointToEnd(seqGroup.getBody());
     builder.create<AssignOp>(wires->getLoc(), fsmIn, fsmNextState,
                              groupDoneGuard);
@@ -172,7 +158,8 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   // Add continuous wires to reset the `in` and `write_en` ports of the fsm
   // when the SeqGroup is finished executing.
   builder.setInsertionPointToEnd(wiresBody);
-  auto zeroConstant = createConstant(builder, wires->getLoc(), fsmBitWidth, 0);
+  auto zeroConstant =
+      createConstant(wires->getLoc(), builder, component, fsmBitWidth, 0);
   builder.create<AssignOp>(wires->getLoc(), fsmIn, zeroConstant, isFinalState);
   builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
                            isFinalState);
