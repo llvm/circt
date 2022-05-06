@@ -163,7 +163,8 @@ struct LoweringCLOptions {
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul, "
-          "emitReplicatedOpsToHeader"),
+          "emitReplicatedOpsToHeader, "
+          "locationInfoStyle={plain,wrapInAtSquareBracket}"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
