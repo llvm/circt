@@ -2299,4 +2299,14 @@ firrtl.module @Issue2314(out %clock: !firrtl.clock, out %reset: !firrtl.reset, o
   // CHECK: firrtl.strictconnect %asyncReset, %[[zero_asyncReset]]
 }
 
+// Crasher from issue #3043
+// CHECK-LABEL: @Issue3043
+firrtl.module @Issue3043(out %a: !firrtl.vector<uint<5>, 3>) {
+  %_b = firrtl.wire  : !firrtl.vector<uint<5>, 3>
+  %b = firrtl.node sym @b %_b  : !firrtl.vector<uint<5>, 3>
+  %invalid = firrtl.invalidvalue : !firrtl.vector<uint<5>, 3>
+  firrtl.strictconnect %_b, %invalid : !firrtl.vector<uint<5>, 3>
+  firrtl.connect %a, %_b : !firrtl.vector<uint<5>, 3>, !firrtl.vector<uint<5>, 3>
+}
+
 }
