@@ -431,4 +431,20 @@ def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInjectDUTHierarchyPass()";
 }
 
+def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
+  let summary = "Move annotated instances upwards in the module hierarchy";
+  let description = [{
+    This pass takes instances in the design annotated with one out of a
+    particular set of annotations and pulls them upwards to a location further
+    up in the module hierarchy.
+
+    The annotations that control the behaviour of this pass are:
+    - `MarkDUTAnnotation`
+    - `ExtractBlackBoxAnnotation`
+    - `ExtractClockGatesFileAnnotation`
+  }];
+  let constructor = "circt::firrtl::createExtractInstancesPass()";
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

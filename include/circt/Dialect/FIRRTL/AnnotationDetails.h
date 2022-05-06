@@ -65,6 +65,14 @@ constexpr const char *testbenchDirAnnoClass =
 constexpr const char *injectDUTHierarchyAnnoClass =
     "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
 
+// Instance Extraction
+constexpr const char *extractBlackBoxAnnoClass =
+    "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation";
+constexpr const char *extractClockGatesAnnoClass =
+    "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation";
+constexpr const char *extractSeqMemsAnnoClass =
+    "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation";
+
 } // namespace firrtl
 } // namespace circt
 

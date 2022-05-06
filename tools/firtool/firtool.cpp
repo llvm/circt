@@ -205,6 +205,11 @@ static cl::opt<bool>
                        cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    extractInstances("extract-instances",
+                     cl::desc("extract black boxes, seq mems, and clock gates"),
+                     cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
     prefixModules("prefix-modules",
                   cl::desc("prefix modules with NestedPrefixAnnotation"),
                   cl::init(true), cl::cat(mainCategory));
@@ -549,6 +554,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       pm.nest<firrtl::CircuitOp>().addPass(
           firrtl::createRemoveUnusedPortsPass());
   }
+
+  if (extractInstances)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
