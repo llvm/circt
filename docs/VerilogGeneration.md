@@ -81,6 +81,10 @@ The current set of "style" Lowering Options is:
 
  * `emittedLineLength` (default=`90`).  This is the target width of lines in an
    emitted Verilog source file in columns.
+ * `locationInfoStyle` (default=`plain`).  This option controls emitted location
+   information style.  The available styles are:
+   * `plain`: `// perf/regress/AndNot.fir:3:10, :7:{10,17}`
+   * `wrapInAtSquareBracket`: `// @[perf/regress/AndNot.fir:3:10, :7:{10,17}]`
 
 ### Specifying `LoweringOptions` in a front-end HDL tool
 
