@@ -1607,7 +1607,6 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
 
-
   /// Remove the DontTouch annotation and return a valid symbol name if the
   /// annotation exists. Ignore DontTouch that will apply only to a subfield.
   StringAttr getSymbolIfRequired(ArrayAttr &annotations, StringRef id) {
@@ -1619,17 +1618,6 @@ private:
                              modNameSpace.newName(id));
 
     return {};
-  }
-
-  /// Remove the DontTouch annotation and return a valid symbol name if the
-  /// annotation exists. Ignore DontTouch that will apply only to a subfield.
-  StringAttr getSymbolIfMissing(StringAttr oldSym, StringRef id) {
-    if (oldSym)
-      return oldSym;
-    if (isUselessName(id))
-      return oldSym;
-    return StringAttr::get(moduleContext.getContext(),
-                           modNameSpace.newName(id));
   }
 
   // The builder to build into.
@@ -3130,8 +3118,8 @@ ParseResult FIRStmtParser::parseNode() {
                        moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  //sym = getSymbolIfMissing(sym, id);
-  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,                                       annotations, sym);
+  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
+                                       annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3160,7 +3148,6 @@ ParseResult FIRStmtParser::parseWire() {
                        moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  //sym = getSymbolIfMissing(sym, id);
   auto result = builder.create<WireOp>(type, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }

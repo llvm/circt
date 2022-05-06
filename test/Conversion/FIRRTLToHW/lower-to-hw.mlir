@@ -77,9 +77,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
 
     // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
-    // CHECK: %out5 = sv.wire : !hw.inout<i4>
+    // CHECK: %out5 = sv.wire sym @__Simple__out5 : !hw.inout<i4>
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
-    %out5 = firrtl.wire : !firrtl.uint<4>
+    %out5 = firrtl.wire sym @__Simple__out5 : !firrtl.uint<4>
     // CHECK: sv.wire sym @__Simple{{.*}}
     // CHECK: sv.wire sym @__Simple{{.*}}
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
@@ -88,7 +88,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: sv.wire sym @__Simple__dntnode
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
-    // CHECK: %clockWire = sv.wire  : !hw.inout<i1>
+    // CHECK: %clockWire = sv.wire
     // CHECK: sv.assign %clockWire, %false : i1
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
     %clockWire = firrtl.wire : !firrtl.clock
@@ -634,7 +634,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @issue314
   firrtl.module private @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
     // CHECK: %c0_i38 = hw.constant 0 : i38
-    // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
+    // CHECK: %tmp48 = sv.wire
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : i38, i27
@@ -1120,7 +1120,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @Force
   firrtl.module private @Force(in %in: !firrtl.uint<42>) {
-    // CHECK: %out = sv.wire : !hw.inout<i42>
+    // CHECK: %out = sv.wire
     // CHECK: sv.initial {
     // CHECK:   sv.force %out, %in : i42
     // CHECK: }
@@ -1482,7 +1482,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %c-2_i2 = hw.constant -2 : i2
-    // CHECK-NEXT: %.b.output = sv.wire  : !hw.inout<array<3xi1>>
+    // CHECK-NEXT: %.b.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
     // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%c-2_i2] : !hw.inout<array<3xi1>>, i2
     // CHECK-NEXT: %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>
@@ -1504,7 +1504,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %true = hw.constant true
-    // CHECK-NEXT: %.a.output = sv.wire  : !hw.inout<struct<a: i1>>
+    // CHECK-NEXT: %.a.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.a.output : !hw.inout<struct<a: i1>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.a.output["a"] : !hw.inout<struct<a: i1>>
     // CHECK-NEXT: sv.assign %1, %true : i1
@@ -1517,7 +1517,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: bundle<c: uint<1>>>) -> !firrtl.bundle<c: uint<1>>
     %2 = firrtl.subfield %1(0) : (!firrtl.bundle<c: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %2, %in : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK:      %.sink.output = sv.wire  : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
+    // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.sink.output["a"] : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
     // CHECK-NEXT: %2 = sv.struct_field_inout %1["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>
@@ -1566,7 +1566,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
     %1 = firrtl.subfield %source(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
     firrtl.connect %0, %1 : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
-    // CHECK:      %.sink.output = sv.wire  : !hw.inout<struct<a: !hw.struct<b: i1>>>
+    // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: i1>>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.sink.output["a"] : !hw.inout<struct<a: !hw.struct<b: i1>>>
     // CHECK-NEXT: %2 = hw.struct_extract %source["a"] : !hw.struct<a: !hw.struct<b: i1>>
