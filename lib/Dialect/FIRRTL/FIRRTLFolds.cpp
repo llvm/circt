@@ -64,7 +64,7 @@ bool circt::firrtl::isUselessName(StringRef name) {
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
-bool circt::firrtl::isUselessName(Operation* op) {
+bool circt::firrtl::isUselessName(Operation *op) {
   if (auto wire = dyn_cast<WireOp>(op))
     return isUselessName(wire.name());
   if (auto node = dyn_cast<NodeOp>(op))
@@ -1663,7 +1663,8 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (!isUselessName(name.getValue()) || node.inner_sym() || !node.annotations().empty())
+    if (!isUselessName(name.getValue()) || node.inner_sym() ||
+        !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
     if (expr && !expr->hasAttr("name") && !isUselessName(name))

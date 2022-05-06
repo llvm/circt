@@ -23,7 +23,7 @@ class SourceMgr;
 namespace mlir {
 class LocationAttr;
 class TimingScope;
-}
+} // namespace mlir
 
 namespace circt {
 namespace firrtl {
