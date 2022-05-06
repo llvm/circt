@@ -4024,16 +4024,19 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
-    // emit them in a list on the same line.
-    while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           stripUnpackedTypes(portType) ==
-               stripUnpackedTypes(portInfo[portIdx].type)) {
-      StringRef name = getPortVerilogName(module, portInfo[portIdx]);
-      // Append this to the running port decl.
-      os << ",\n";
-      os.indent(startOfNamePos) << name;
-      printUnpackedTypePostfix(portInfo[portIdx].type, os);
-      ++portIdx;
+    // emit them in a list one per line.
+    // Optionally skip this behavior when requested by user.
+    if (!state.options.disallowPortDeclSharing) {
+      while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
+             stripUnpackedTypes(portType) ==
+                 stripUnpackedTypes(portInfo[portIdx].type)) {
+        StringRef name = getPortVerilogName(module, portInfo[portIdx]);
+        // Append this to the running port decl.
+        os << ",\n";
+        os.indent(startOfNamePos) << name;
+        printUnpackedTypePostfix(portInfo[portIdx].type, os);
+        ++portIdx;
+      }
     }
 
     if (portIdx != e) {

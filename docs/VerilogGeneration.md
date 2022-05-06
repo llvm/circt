@@ -85,6 +85,10 @@ The current set of "style" Lowering Options is:
    information style.  The available styles are:
    * `plain`: `// perf/regress/AndNot.fir:3:10, :7:{10,17}`
    * `wrapInAtSquareBracket`: `// @[perf/regress/AndNot.fir:3:10, :7:{10,17}]`
+ * `disallowPortDeclSharing` (default=`false`).  If true, emit one port per
+   declaration.  Instead of `input a,\n b` this will produce
+   `input a,\n input b`.  When false, ports are emitted using the same
+   declaration when possible.
 
 ### Specifying `LoweringOptions` in a front-end HDL tool
 
