@@ -19,6 +19,7 @@ calyx.program "main" {
   // CHECK-LABEL:   calyx.component @main(%clk: i1 {clk}, %go: i1 {go}, %reset: i1 {reset}) -> (%done: i1 {done}) {
   calyx.component @main(%clk: i1 {clk}, %go: i1 {go}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     // CHECK:      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1
+    // CHECK-NEXT: %r2.in, %r2.write_en, %r2.clk, %r2.reset, %r2.out, %r2.done = calyx.register @r2 : i1, i1, i1, i1, i1, i1
     // CHECK-NEXT: %mu.clk, %mu.reset, %mu.go, %mu.left, %mu.right, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
     // CHECK-NEXT: %du.clk, %du.reset, %du.go, %du.left, %du.right, %du.out_quotient, %du.out_remainder, %du.done = calyx.std_div_pipe @du : i1, i1, i1, i32, i32, i32, i32, i1
     // CHECK-NEXT: %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory @m <[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
@@ -29,9 +30,10 @@ calyx.program "main" {
     // CHECK-NEXT: %gt.left, %gt.right, %gt.out = calyx.std_gt @gt : i8, i8, i1
     // CHECK-NEXT: %pad.in, %pad.out = calyx.std_pad @pad : i8, i9
     // CHECK-NEXT: %slice.in, %slice.out = calyx.std_slice @slice : i8, i7
-    // CHECK-NEXT: %not.in, %not.out = calyx.std_not @not : i8, i8
+    // CHECK-NEXT: %not.in, %not.out = calyx.std_not @not : i1, i1
     // CHECK-NEXT: %wire.in, %wire.out = calyx.std_wire @wire : i8, i8
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1
+    %r2.in, %r2.write_en, %r2.clk, %r2.reset, %r2.out, %r2.done = calyx.register @r2 : i1, i1, i1, i1, i1, i1
     %mu.clk, %mu.reset, %mu.go, %mu.lhs, %mu.rhs, %mu.out, %mu.done = calyx.std_mult_pipe @mu : i1, i1, i1, i32, i32, i32, i1
     %du.clk, %du.reset, %du.go, %du.left, %du.right, %du.out_quotient, %du.out_remainder, %du.done = calyx.std_div_pipe @du : i1, i1, i1, i32, i32, i32, i32, i1
     %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory @m <[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
@@ -42,13 +44,21 @@ calyx.program "main" {
     %gt.left, %gt.right, %gt.out = calyx.std_gt @gt : i8, i8, i1
     %pad.in, %pad.out = calyx.std_pad @pad : i8, i9
     %slice.in, %slice.out = calyx.std_slice @slice : i8, i7
-    %not.in, %not.out = calyx.std_not @not : i8, i8
+    %not.in, %not.out = calyx.std_not @not : i1, i1
     %wire.in, %wire.out = calyx.std_wire @wire : i8, i8
     %c1_i1 = hw.constant 1 : i1
+    %c0_i1 = hw.constant 0 : i1
     %c0_i6 = hw.constant 0 : i6
     %c0_i8 = hw.constant 0 : i8
 
     calyx.wires {
+      // CHECK:      calyx.assign %not.in = %r2.out : i1
+      // CHECK-NEXT: calyx.assign %gt.left = %r2.out ? %adder.out : i8
+      // CHECK-NEXT: calyx.assign %gt.left = %not.out ? %adder.out : i8
+      calyx.assign %not.in = %r2.out : i1
+      calyx.assign %gt.left = %r2.out ? %adder.out : i8
+      calyx.assign %gt.left = %not.out ? %adder.out : i8
+
       // CHECK: calyx.group @Group1 {
       calyx.group @Group1 {
         // CHECK: calyx.assign %c1.in = %c0.out : i8

@@ -739,6 +739,30 @@ LogicalResult WiresOp::verify() {
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
   }
+
+  // Verify that:
+  // - At most one continuous assignment exists for any given value
+  // - A continuously assigned wire has no assignments inside groups.
+  for (auto thisAssignment : getBody()->getOps<AssignOp>()) {
+    // Always assume guarded assignments will not be driven simultaneously. We
+    // liberally assume that guards are mutually exclusive (more elaborate
+    // static and dynamic checking can be performed to validate such cases).
+    if (thisAssignment.guard())
+      continue;
+
+    Value dest = thisAssignment.dest();
+    for (Operation *user : dest.getUsers()) {
+      auto assignUser = dyn_cast<AssignOp>(user);
+      if (!assignUser || assignUser.dest() != dest ||
+          assignUser == thisAssignment)
+        continue;
+
+      return user->emitOpError() << "destination is already continuously "
+                                    "driven. Other assignment is "
+                                 << thisAssignment;
+    }
+  }
+
   return success();
 }
 
