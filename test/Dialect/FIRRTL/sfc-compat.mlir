@@ -120,6 +120,15 @@ firrtl.circuit "SFCCompatTests" {
     %r3 = firrtl.regreset %clock, %reset, %r3_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  // CHECK-LABEL: firrtl.module @TailPrimOp
+  firrtl.module @TailPrimOp(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.pad %c0_ui1, 3 : (!firrtl.uint<1>) -> !firrtl.uint<3>
+    %1 = firrtl.tail %0, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    %r0_init = firrtl.wire sym @r0_init : !firrtl.uint<1>
+    firrtl.strictconnect %r0_init, %1: !firrtl.uint<1>
+    %r0 = firrtl.regreset %clock, %reset, %r0_init : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }
 
 // -----
