@@ -1742,6 +1742,11 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
+  // Introduce extra parentheses to specific patterns of expressions.
+  // If `op` is AndOp, and `op.rhs` is AndROp(embeded into ICmpOp), the output
+  // is like `a & &b`. This is syntactically valid but some tool produces
+  // LINT warnings. Also it would be confusing for users to read such
+  // expressions.
   bool emitRhsParentheses = false;
   if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
     if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
