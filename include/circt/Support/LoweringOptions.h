@@ -92,10 +92,6 @@ struct LoweringOptions {
   /// Add an explicit bitcast for avoiding bitwidth mismatch LINT errors.
   bool explicitBitcastAddMul = false;
 
-  /// Add parentheses to unary reduction operators to avoid LINT warnings and
-  /// also to increase redablitly.
-  bool enforceParenthesesToReductionOperators = false;
-
   /// If true, replicated ops are emitted to a header file.
   bool emitReplicatedOpsToHeader = false;
 

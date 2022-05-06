@@ -1597,8 +1597,7 @@ private:
                          const char *syntax, unsigned emitBinaryFlags = 0);
 
   SubExprInfo emitUnary(Operation *op, const char *syntax,
-                        bool resultAlwaysUnsigned = false,
-                        bool emitParentheses = false);
+                        bool resultAlwaysUnsigned = false);
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
@@ -1694,10 +1693,7 @@ private:
 
   // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
   // regardless of the operands."
-  SubExprInfo visitComb(ParityOp op) {
-    return emitUnary(op, "^", true,
-                     state.options.enforceParenthesesToReductionOperators);
-  }
+  SubExprInfo visitComb(ParityOp op) { return emitUnary(op, "^", true); }
 
   SubExprInfo visitComb(ReplicateOp op);
   SubExprInfo visitComb(ConcatOp op);
@@ -1788,16 +1784,10 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 }
 
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
-                                   bool resultAlwaysUnsigned,
-                                   bool emitParentheses) {
-  if (emitParentheses)
-    os << '(';
+                                   bool resultAlwaysUnsigned) {
   os << syntax;
   auto signedness = emitSubExpr(op->getOperand(0), Selection).signedness;
-  auto prec = emitParentheses ? Selection : Unary;
-  if (emitParentheses)
-    os << ')';
-  return {prec, resultAlwaysUnsigned ? IsUnsigned : signedness};
+  return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
 /// This function split the output buffer into multiple lines if the emitted
@@ -2005,13 +1995,11 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
   // Lower "== -1" to Reduction And.
   if (op.isEqualAllOnes())
-    return emitUnary(op, "&", true,
-                     state.options.enforceParenthesesToReductionOperators);
+    return emitUnary(op, "&", true);
 
   // Lower "!= 0" to Reduction Or.
   if (op.isNotEqualZero())
-    return emitUnary(op, "|", true,
-                     state.options.enforceParenthesesToReductionOperators);
+    return emitUnary(op, "|", true);
 
   auto result = emitBinary(op, Comparison, symop[pred], signop[pred]);
 
@@ -2270,8 +2258,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 //===----------------------------------------------------------------------===//
 // NameCollector
 //===----------------------------------------------------------------------===//
-
-
 
 namespace {
 class NameCollector {

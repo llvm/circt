@@ -959,6 +959,27 @@ hw.module @replicate(%arg0: i7, %arg1: i1) -> (r1: i21, r2: i9, r3: i16, r4: i16
   hw.output %r1, %r2, %r3, %r4 : i21, i9, i16, i16
 }
 
+// CHECK-LABEL: module addParenthesesToSuccessiveOperators
+hw.module @addParenthesesToSuccessiveOperators(%a: i4, %b: i1, %c: i4) -> (o1:i1, o2:i1, o3:i1) {
+  %one4 = hw.constant -1 : i4
+  %zero4 = hw.constant 0 : i4
+  // CHECK: wire [[GEN:.+]] = &c;
+
+  %0 = comb.icmp eq %a, %one4 : i4
+  %and = comb.and %b, %0 : i1
+  // CHECK-NEXT: assign o1 = b & (&a);
+
+  %1 = comb.icmp ne %a, %zero4 : i4
+  %or = comb.or %b, %1 : i1
+  // CHECK-NEXT: assign o2 = b | (|a);
+
+  %3 = comb.icmp eq %c, %one4 : i4
+  %multiuse = comb.and %3, %3 : i1
+  // CHECK-NEXT: assign o3 = [[GEN]] & [[GEN]];
+
+  hw.output %and, %or, %multiuse : i1, i1, i1
+}
+
 // CHECK-LABEL: module parameters
 // CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
 // CHECK-NEXT:   parameter [0:0]  p2) (
