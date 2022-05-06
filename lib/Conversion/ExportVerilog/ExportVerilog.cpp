@@ -561,7 +561,7 @@ static bool isExpressionUnableToInline(Operation *op) {
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
-  for (auto user : op->getUsers()) {
+  for (auto *user : op->getUsers()) {
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     //
