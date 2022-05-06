@@ -379,6 +379,62 @@ result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped
 by the .fir file parser.
 
+
+In the FIRRTL pipeline, the firrtl.mem op can be lowered into either,
+	A. ext module for macro replacement
+	B. Register of Vector
+
+The conditions for macro replacement are as follows:
+	1. –replSeqMem option is passed and
+	2. readLatency == 1  and
+	3. writeLatency == 1 and
+	4. numWritePorts + numReadWritePorts == 1 and
+	5. numReadPorts <= 1 and
+	6. Width of data field > 0
+Any `MemOp` not satisfying the above conditions is lowered to Register vector.
+
+The MemToRegOfVecTransform runs early in the pipeline, after the LowerCHIRRTL
+pass and right before the InferResets pass.
+The LowerCHIRRTL pass transforms the CHIRRTL cmem and smem to firrtl.mem.
+
+#### MemToRegOfVecTransform transformation outline: 
+	1. Select all MemOps that are not candidates for macro replacement, 
+	2. For read ports:
+			`` if (enable)
+					readOut = register[address]
+			``
+	3. For Write ports: 
+			`` if (enable)
+					if (mask[0])
+            register[0] = dataIn[0]
+          if (mask[1])
+            register[1] = dataIn[1]
+          ...
+          ``
+#### Handling of MemTaps
+   The `class = "sifive.enterprise.grandcentral.MemTapAnnotation"`
+   annotation is attached to the `MemOp` and the corresponding
+   Memtap module ports.
+   After lowering the memory to registers, this annotation must
+   be properly scattered such that GrandCentralTaps can generate
+   the appropriate code.
+   The memtap module has memtap annotations, where the number of ports
+   with the annotation is equal to the memory depth.
+   In the `MemToRegOfVec` transformation, after lowering the memory to
+   the register vector, a subannotation is created for each sub-field of the
+   data and the `"sifive.enterprise.grandcentral.MemTapAnnotation"` annotation
+   is copied from the original `MemOp`.
+   The `LowerTypes` pass will handle the subannotations appropriately.
+
+
+#### Interaction with AsyncReset Inference
+  The `AsyncReset` pass runs right after the `MemToRegOfVec`.
+  It will transform the memory registers to async registers if the corresponding
+  annotations are present.
+  Only if a `MemOp` had `sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec`,
+  annotation, then it is not converted to an async reset register.
+
+
 #### `firrtl.mem` Attributes
 A `firrtl.mem` has the following properties
 1. Data type
@@ -389,7 +445,6 @@ A `firrtl.mem` has the following properties
 6. Read under write behavior
 7. Read latency
 8. Write latency
-
 ##### Mask bitwidth
 Any aggregate memory data type is lowered to ground type by the
 `LowerTypes` pass. After lowering the data type, the data bitwidth must be
