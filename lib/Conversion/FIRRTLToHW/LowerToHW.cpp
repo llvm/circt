@@ -981,8 +981,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // If this is in the test harness, make sure it goes to the test directory.
   if (auto testBenchDir = loweringState.getTestBenchDirectory())
-    if (loweringState.isInTestHarness(oldModule))
+    if (loweringState.isInTestHarness(oldModule)) {
       newModule->setAttr("output_file", testBenchDir);
+      newModule->setAttr("firrtl.extract.do_not_extract",
+                         builder.getUnitAttr());
+    }
 
   bool failed = false;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
