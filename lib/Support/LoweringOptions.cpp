@@ -58,8 +58,7 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
       enforceVerifLabels = true;
-    } else if (option.startswith("emittedLineLength=")) {
-      option = option.drop_front(strlen("emittedLineLength="));
+    } else if (option.consume_front("emittedLineLength=")) {
       if (option.getAsInteger(10, emittedLineLength)) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
@@ -68,14 +67,12 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       explicitBitcastAddMul = true;
     } else if (option == "emitReplicatedOpsToHeader") {
       emitReplicatedOpsToHeader = true;
-    } else if (option.startswith("maximumNumberOfTermsPerExpression=")) {
-      option = option.drop_front(strlen("maximumNumberOfTermsPerExpression="));
+    } else if (option.consume_front("maximumNumberOfTermsPerExpression=")) {
       if (option.getAsInteger(10, maximumNumberOfTermsPerExpression)) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
-    } else if (option.startswith("locationInfoStyle=")) {
-      option = option.drop_front(strlen("locationInfoStyle="));
+    } else if (option.consume_front("locationInfoStyle=")) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
       } else {
