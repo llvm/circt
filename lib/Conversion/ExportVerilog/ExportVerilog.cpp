@@ -1679,6 +1679,18 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
+  bool emitRhsParentheses = false;
+  if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
+    if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
+        (rhsICmp.isNotEqualZero() && isa<OrOp>(op))) {
+      if (isExpressionEmittedInline(rhsICmp)) {
+        os << '(';
+        emitRhsParentheses = true;
+        rhsPrec = LowestPrecedence;
+      }
+    }
+  }
+
   // If the RHS operand has self-determined width and always treated as
   // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
   // a shift operation.
@@ -1690,6 +1702,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
   auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
+  if (emitRhsParentheses)
+    os << ')';
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
