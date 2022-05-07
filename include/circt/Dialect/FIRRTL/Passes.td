@@ -100,6 +100,20 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInlinerPass()";
 }
 
+def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
+  let summary = "Add extra ports to memory modules";
+  let description = [{
+    This pass looks for `AddSeqMemPortAnnotation` annotations and adds extra
+    ports to memories.  It will emit metadata based if the
+    `AddSeqMemPortsFileAnnotation` annotation is specified.
+
+    This pass requires that FIRRTL MemOps have been lowered to modules to add
+    the extra ports.
+  }];
+  let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
 def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   let summary = "Replace all FIRRTL memories with an external module black box.";
   let description = [{
