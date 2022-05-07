@@ -155,7 +155,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
     parameters.
     
     A "firrtl.mem" operation is typically lowered to this operation when they
-    are not directly lowered to an implementation by the compiler.
+    are not directly lowered to registers by the compiler.
   }];
   let arguments =
     (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
