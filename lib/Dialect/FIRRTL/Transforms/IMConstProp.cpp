@@ -634,6 +634,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return;
   // TODO: Handle 'when' operations.
 
+  // Nodes might not fold since they might have a name, but should prop
+  if (isa<NodeOp>(op)) {
+    mergeLatticeValue(op->getResult(0), op->getOperand(0));
+    return;
+  }
+
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.
   auto isOverdefinedFn = [&](Value value) { return isOverdefined(value); };
