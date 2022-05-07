@@ -55,9 +55,13 @@ calyx.program "main" {
       // CHECK:      calyx.assign %not.in = %r2.out : i1
       // CHECK-NEXT: calyx.assign %gt.left = %r2.out ? %adder.out : i8
       // CHECK-NEXT: calyx.assign %gt.left = %not.out ? %adder.out : i8
+      // CHECK-NEXT: calyx.assign %r.in = %0 ? %c0_i8 : i8
+      // CHECK-NEXT: %0 = comb.and %true, %true : i1
       calyx.assign %not.in = %r2.out : i1
       calyx.assign %gt.left = %r2.out ? %adder.out : i8
       calyx.assign %gt.left = %not.out ? %adder.out : i8
+      calyx.assign %r.in = %0 ? %c0_i8 : i8
+      %0 = comb.and %c1_i1, %c1_i1 : i1
 
       // CHECK: calyx.group @Group1 {
       calyx.group @Group1 {
