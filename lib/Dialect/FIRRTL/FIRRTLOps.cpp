@@ -506,15 +506,20 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       ++oldIdx;
     }
   };
-  for (auto &port : ports) {
-    migrateOldPorts(port.first);
-    newDirections.push_back(port.second.direction);
-    newNames.push_back(port.second.name);
-    newTypes.push_back(TypeAttr::get(port.second.type));
-    auto annos = port.second.annotations.getArrayAttr();
+  for (auto &pair : llvm::enumerate(ports)) {
+    auto idx = pair.value().first;
+    auto &port = pair.value().second;
+    auto newIdx = pair.index();
+    migrateOldPorts(idx);
+    newDirections.push_back(port.direction);
+    newNames.push_back(port.name);
+    newTypes.push_back(TypeAttr::get(port.type));
+    auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
-    newSyms.push_back(port.second.sym ? port.second.sym : emptyString);
-    body->insertArgument(port.first, port.second.type, port.second.loc);
+    newSyms.push_back(port.sym ? port.sym : emptyString);
+    // Block arguments are inserted one at a time, so for each argument we
+    // insert we have to increase the index by 1.
+    body->insertArgument(idx + newIdx, port.type, port.loc);
   }
   migrateOldPorts(oldNumArgs);
 
