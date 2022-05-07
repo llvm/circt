@@ -1962,12 +1962,11 @@ FirMemory MemOp::getSummary() {
   }
 
   auto widthV = getBitWidth(op.getDataType());
-  size_t width;
-  if (!widthV.hasValue()) {
-    op.emitError("'firrtl.mem' should have simple type and known width");
-    width = 0;
-  } else
+  size_t width = 0;
+  if (widthV.hasValue())
     width = widthV.getValue();
+  else
+    op.emitError("'firrtl.mem' should have simple type and known width");
   uint32_t groupID = 0;
   if (auto gID = op.groupIDAttr())
     groupID = gID.getUInt();

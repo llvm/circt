@@ -1,5 +1,4 @@
-//===- MemToRegOfVecTransform.cpp - MemToRegOfVecTransform Pass
-//----------------------------===//
+//===- MemToRegOfVec.cpp - MemToRegOfVec Pass -----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the MemToRegOfVecTransform pass.
+// This file defines the MemToRegOfVec pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,20 +20,18 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "mem-to-regOfVec"
+#define DEBUG_TYPE "mem-to-reg-of-vec"
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct MemToRegOfVecTransformPass
-    : public MemToRegOfVecTransformBase<MemToRegOfVecTransformPass> {
-  MemToRegOfVecTransformPass(bool replSeqMem, bool ignoreReadEnable)
+struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
+  MemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable)
       : replSeqMem(replSeqMem), ignoreReadEnable(ignoreReadEnable){};
   void runOnOperation() override {
-    LLVM_DEBUG(llvm::dbgs()
-               << "\n Running MemToRegOfVecTransformPass on module:"
-               << getOperation().getName());
+    LLVM_DEBUG(llvm::dbgs() << "\n Running MemToRegOfVecPass on module:"
+                            << getOperation().getName());
     getOperation().getBody()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
 
@@ -403,8 +400,6 @@ private:
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createMemToRegOfVecTransformPass(bool replSeqMem,
-                                                bool ignoreReadEnable) {
-  return std::make_unique<MemToRegOfVecTransformPass>(replSeqMem,
-                                                      ignoreReadEnable);
+circt::firrtl::createMemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable) {
+  return std::make_unique<MemToRegOfVecPass>(replSeqMem, ignoreReadEnable);
 }
