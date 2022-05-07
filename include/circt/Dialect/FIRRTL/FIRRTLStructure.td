@@ -144,6 +144,51 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let hasVerifier = 1;
 }
 
+def FMemModuleOp : FIRRTLOp<"memmodule",
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, OpAsmOpInterface,
+       DeclareOpInterfaceMethods<FModuleLike>,
+       DeclareOpInterfaceMethods<HWModuleLike>]> {
+  let summary = "FIRRTL Generated Module";
+  let description = [{
+    The "firrtl.memmodule" operation represents an external reference to a
+    memory module. See the "firrtl.mem" op for a deeper explantation of the
+    parameters.
+    
+    A "firrtl.mem" operation is typically lowered to this operation when they
+    are not directly lowered to registers by the compiler.
+  }];
+  let arguments =
+    (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
+         UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
+         UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
+         ArrayAttr:$extraPorts, AnnotationArrayAttr:$annotations);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   "uint32_t":$numReadPorts,  "uint32_t":$numWritePorts,
+                   "uint32_t":$numReadWritePorts, "uint32_t":$dataWidth,
+                   "uint32_t":$maskBits, "uint32_t":$readLatency,
+                   "uint32_t":$writeLatency, "uint64_t":$depth,
+                   CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return true if this memory has a mask.
+    bool isMasked() { return maskBits() > 1; }
+
+    /// Inserts the given ports.
+    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
 def NonLocalAnchor : FIRRTLOp<"nla",
       [IsolatedFromAbove, Symbol, 
        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
