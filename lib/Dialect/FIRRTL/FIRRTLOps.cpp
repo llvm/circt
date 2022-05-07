@@ -748,7 +748,7 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t maskBits, uint32_t readLatency,
                          uint32_t writeLatency, uint64_t depth,
                          ArrayAttr annotations) {
-  auto context = builder.getContext();
+  auto *context = builder.getContext();
   buildModule(builder, result, name, ports, annotations);
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
   auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
