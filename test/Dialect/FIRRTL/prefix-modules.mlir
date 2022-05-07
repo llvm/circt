@@ -49,7 +49,6 @@ firrtl.circuit "Top" {
 
 // Check that memories are renamed.
 firrtl.circuit "Top" {
-
   firrtl.module @Top()
     attributes {annotations = [{
       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
@@ -61,6 +60,21 @@ firrtl.circuit "Top" {
   }
 }
 
+// Check that memory modules are renamed.
+// CHECK-LABEL: firrtl.circuit "MemModule"
+firrtl.circuit "MemModule" {
+  // CHECK: firrtl.memmodule @T_MWrite_ext
+  firrtl.memmodule @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  firrtl.module @MemModule()
+    attributes {annotations = [{
+      class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+      prefix = "T_",
+      inclusive = false
+    }]} {
+    // CHECK: firrtl.instance MWrite_ext  @T_MWrite_ext
+    %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+  }
+}
 
 // Check that external modules are not renamed.
 // CHECK: firrtl.circuit "T_Top"
@@ -332,3 +346,27 @@ firrtl.circuit "GCTDataMemTapsPrefix" {
     
   }
 
+// Test that NonLocalAnchors are properly updated with memmodules.
+firrtl.circuit "Test"   {
+  // CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@foo1>, #hw.innerNameRef<@A_Foo1::@bar>, @A_Bar]
+  firrtl.nla @nla_1 [#hw.innerNameRef<@Test::@foo1>, #hw.innerNameRef<@Foo1::@bar>, @Bar]
+  // CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Test::@foo2>, #hw.innerNameRef<@B_Foo2::@bar>, @B_Bar]
+  firrtl.nla @nla_2 [#hw.innerNameRef<@Test::@foo2>, #hw.innerNameRef<@Foo2::@bar>, @Bar]
+
+  firrtl.module @Test() {
+    firrtl.instance foo1 sym @foo1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo1()
+    firrtl.instance foo2 sym @foo2 {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Foo2()
+  }
+
+  firrtl.module @Foo1() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "A_"}]} {
+    firrtl.instance bar sym @bar {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Bar()
+  }
+
+  firrtl.module @Foo2() attributes {annotations = [{class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", inclusive = true, prefix = "B_"}]} {
+    firrtl.instance bar sym @bar {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @Bar()
+  }
+
+  // CHECK: firrtl.memmodule @A_Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}]
+  // CHECK: firrtl.memmodule @B_Bar() attributes {annotations = [{circt.nonlocal = @nla_2, class = "test2"}]
+  firrtl.memmodule @Bar() attributes {annotations = [{circt.nonlocal = @nla_1, class = "test1"}, {circt.nonlocal = @nla_2, class = "test2"}], dataWidth = 1 : ui32, depth = 16 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32,  writeLatency = 1 : ui32}
+}
