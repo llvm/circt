@@ -1076,6 +1076,9 @@ public:
 
   /// This class keeps track of field name renamings in the module scope.
   FieldNameResolver fieldNameResolver;
+
+  /// This keeps track of assignments folded into wire emissions
+  SmallPtrSet<Operation *, 16> assignsInlined;
 };
 
 } // end anonymous namespace
@@ -2227,6 +2230,18 @@ static bool isExpressionUnableToInline(Operation *op) {
   return false;
 }
 
+static ConstantOp isSingleConstantAssign(Operation *op) {
+  auto wire = dyn_cast<WireOp>(op);
+  if (!wire)
+    return {};
+  if (!wire->hasOneUse())
+    return {};
+  auto assign = dyn_cast<AssignOp>(*wire->user_begin());
+  if (!assign)
+    return {};
+  return dyn_cast_or_null<ConstantOp>(assign->getOperand(1).getDefiningOp());
+}
+
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
@@ -2576,6 +2591,9 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
   if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
+    return success();
+
+  if (emitter.assignsInlined.count(op))
     return success();
 
   SmallPtrSet<Operation *, 8> ops;
@@ -3652,6 +3670,12 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       // emit it and we know the value is available for other declaration
       // expressions who might want to reference it.
       emitter.expressionsEmittedIntoDecl.insert(op);
+    }
+
+    if (auto constOp = isSingleConstantAssign(op)) {
+      os << " = ";
+      emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
+      emitter.assignsInlined.insert(*op->user_begin());
     }
 
     os << ';';

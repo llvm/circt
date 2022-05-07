@@ -23,7 +23,7 @@ class SourceMgr;
 namespace mlir {
 class LocationAttr;
 class TimingScope;
-}
+} // namespace mlir
 
 namespace circt {
 namespace firrtl {
@@ -39,11 +39,6 @@ struct FIRParserOptions {
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
   unsigned numAnnotationFiles;
-  /// If true, then the parser will NOT generate debug taps for "named" wires
-  /// and nodes.  A "named" wire/node is one whose name does NOT beging with a
-  /// leading "_".  If false, debug-ability is greatly increased.  If true, much
-  /// more compact Verilog will be generated.
-  bool disableNamePreservation = true;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,

@@ -1,5 +1,4 @@
-; RUN: firtool %s | FileCheck %s --check-prefixes=CHECK,NAMES
-; RUN: firtool %s -disable-name-preservation | FileCheck %s --check-prefixes=CHECK,NO_NAMES
+; RUN: firtool %s | FileCheck %s 
 
 circuit Foo:
   ; CHECK-LABEL: module Foo
@@ -15,11 +14,8 @@ circuit Foo:
     _x <= a
 
     ; Default behavior is to preserve named wires.
-    ; NAMES:        wire x_a;
-    ; NAMES:        wire x_b;
-    ; With -disable-name-preservation, named wires are removed.
-    ; NO_NAMES-NOT: wire x_b;
-    ; NO_NAMES-NOT: wire x_a;
+    ; CHECK:        wire x_a;
+    ; CHECK:        wire x_b;
     wire x: {a: UInt<1>, flip b: UInt<1>}
     x <= _x
 
@@ -28,9 +24,7 @@ circuit Foo:
     node _y_a = x.a
 
     ; Default behavior is to preserve named nodes.
-    ; NAMES:        wire y;
-    ; With -disable-name-preservation, named nodes are removed.
-    ; NO-NAMES-NOT: wire y;
+    ; CHECK:        wire y;
     node y = _y_a
 
     b.a <= y

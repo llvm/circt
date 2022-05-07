@@ -21,9 +21,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-// Forward Decl for patterns.
-static bool isUselessName(circt::StringRef name);
-
 // Declarative canonicalization patterns
 namespace circt {
 namespace firrtl {
@@ -58,22 +55,22 @@ static bool isUInt1(Type type) {
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
-static bool isUselessName(StringRef name) {
+bool circt::firrtl::isUselessName(StringRef name) {
   if (name.empty())
     return true;
-  // Ignore _T and _T_123
-  if (name.startswith("_T")) {
-    if (name.size() == 2)
-      return true;
-    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
-  }
+  // Ignore _.*
+  return name.startswith("_");
+}
 
-  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
-  if (name.startswith("_GEN")) {
-    if (name.size() == 4)
-      return true;
-    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
-  }
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+bool circt::firrtl::isUselessName(Operation *op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    return isUselessName(wire.name());
+  if (auto node = dyn_cast<NodeOp>(op))
+    return isUselessName(node.name());
+  if (auto reg = dyn_cast<RegOp>(op))
+    return isUselessName(reg.name());
   return false;
 }
 
@@ -1429,6 +1426,10 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (getSingleConnectUserOf(op.dest()) != op)
     return failure();
 
+  // Only foward if there is more than one use
+  if (connectedDecl->hasOneUse())
+    return failure();
+
   // Only do this if the connectee and the declaration are in the same block.
   auto *declBlock = connectedDecl->getBlock();
   auto *srcValueOp = op.src().getDefiningOp();
@@ -1470,12 +1471,20 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     }
   }
 
-  // Replace all things *using* the decl with the constant/port, and
-  // remove the declaration.
-  rewriter.replaceOp(connectedDecl, replacement);
+  if (isUselessName(connectedDecl)) {
+    // Replace all things *using* the decl with the constant/port, and
+    // remove the declaration.
+    rewriter.replaceOp(connectedDecl, replacement);
 
-  // Remove the connect.
-  rewriter.eraseOp(op);
+    // Remove the connect
+    rewriter.eraseOp(op);
+  } else {
+    // bypass the decl, but keep it around
+    rewriter.startRootUpdate(connectedDecl);
+    connectedDecl->replaceAllUsesWith(ArrayRef{replacement});
+    op->setOperand(0, connectedDecl->getResult(0));
+    rewriter.finalizeRootUpdate(connectedDecl);
+  }
 
   return success();
 }
@@ -1617,7 +1626,8 @@ struct FoldNodeName : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     auto name = node.nameAttr();
-    if (node.inner_sym() || !node.annotations().empty())
+    if (!isUselessName(name.getValue()) || node.inner_sym() ||
+        !node.annotations().empty())
       return failure();
     auto *expr = node.input().getDefiningOp();
     if (expr && !expr->hasAttr("name") && !isUselessName(name))

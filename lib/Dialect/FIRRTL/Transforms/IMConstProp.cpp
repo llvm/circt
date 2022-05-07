@@ -31,6 +31,9 @@ static bool isAggregate(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    if (!isUselessName(wire.name()))
+      return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 
@@ -623,6 +626,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (isa<RegOp>(op))
     return;
   // TODO: Handle 'when' operations.
+
+  // Nodes might not fold since they might have a name, but should prop
+  if (isa<NodeOp>(op)) {
+    mergeLatticeValue(op->getResult(0), op->getOperand(0));
+    return;
+  }
 
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.

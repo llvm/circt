@@ -2290,10 +2290,14 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
     // is unique in the SymbolTable is non-trivial.
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
+    symName = builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue()));
   }
-
+  if (!symName && !isUselessName(name)) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue()));
+  }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
@@ -2337,6 +2341,11 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName) {
     // name may be empty
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
+  if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
