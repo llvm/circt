@@ -18,7 +18,7 @@
 
 namespace llvm {
 class SourceMgr;
-}
+} // namespace llvm
 
 namespace mlir {
 class LocationAttr;
