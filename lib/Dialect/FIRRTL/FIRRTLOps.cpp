@@ -744,7 +744,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          uint32_t numReadPorts, uint32_t numWritePorts,
-                         uint32_t numReadWritePorts, FIRRTLType dataType,
+                         uint32_t numReadWritePorts, uint32_t dataWidth,
                          uint32_t maskBits, uint32_t readLatency,
                          uint32_t writeLatency, uint64_t depth,
                          ArrayAttr annotations) {
@@ -757,7 +757,7 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                       IntegerAttr::get(ui32Type, numWritePorts));
   result.addAttribute("numReadWritePorts",
                       IntegerAttr::get(ui32Type, numReadWritePorts));
-  result.addAttribute("dataType", TypeAttr::get(dataType));
+  result.addAttribute("dataWidth", IntegerAttr::get(ui32Type, dataWidth));
   result.addAttribute("maskBits", IntegerAttr::get(ui32Type, maskBits));
   result.addAttribute("readLatency", IntegerAttr::get(ui32Type, readLatency));
   result.addAttribute("writeLatency", IntegerAttr::get(ui32Type, writeLatency));
