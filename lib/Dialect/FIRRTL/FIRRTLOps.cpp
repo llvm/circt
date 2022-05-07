@@ -518,7 +518,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym ? port.sym : emptyString);
     // Block arguments are inserted one at a time, so for each argument we
-    // insert we have to increase index by 1.
+    // insert we have to increase the index by 1.
     body->insertArgument(idx + newIdx, port.type, port.loc);
   }
   migrateOldPorts(oldNumArgs);
