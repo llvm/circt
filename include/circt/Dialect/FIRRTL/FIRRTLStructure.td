@@ -159,7 +159,7 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   }];
   let arguments =
     (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
-         UI32Attr:$numReadWritePorts, TypeAttr:$dataType, UI32Attr:$maskBits,
+         UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
          UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
          ArrayAttr:$extraPorts, AnnotationArrayAttr:$annotations);
   let results = (outs);
@@ -169,19 +169,13 @@ def FMemModuleOp : FIRRTLOp<"memmodule",
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    "uint32_t":$numReadPorts,  "uint32_t":$numWritePorts,
-                   "uint32_t":$numReadWritePorts, 
-                   "FIRRTLType":$dataType, "uint32_t":$maskBits,
-                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth,
+                   "uint32_t":$numReadWritePorts, "uint32_t":$dataWidth,
+                   "uint32_t":$maskBits, "uint32_t":$readLatency,
+                   "uint32_t":$writeLatency, "uint64_t":$depth,
                    CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
-    /// Get the width of this memory's data type.
-    size_t dataWidth() {
-      return dataType().cast<FIRRTLType>().getBitWidthOrSentinel();
-    }
-
     /// Return true if this memory has a mask.
     bool isMasked() { return maskBits() > 1; }
 
