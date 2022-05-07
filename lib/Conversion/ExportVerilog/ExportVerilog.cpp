@@ -1078,7 +1078,7 @@ public:
   FieldNameResolver fieldNameResolver;
 
   /// This keeps track of assignments folded into wire emissions
-  SmallPtrSet<Operation*, 16> assignsInlined;
+  SmallPtrSet<Operation *, 16> assignsInlined;
 };
 
 } // end anonymous namespace
@@ -2230,7 +2230,7 @@ static bool isExpressionUnableToInline(Operation *op) {
   return false;
 }
 
-static ConstantOp isSingleConstantAssign(Operation* op) {
+static ConstantOp isSingleConstantAssign(Operation *op) {
   auto wire = dyn_cast<WireOp>(op);
   if (!wire)
     return {};
