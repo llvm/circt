@@ -354,6 +354,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %1, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
   }
 
+  // see https://github.com/llvm/circt/issues/3070
+  // CHECK-LABEL: @MuxBundle
   firrtl.module @MuxBundleOperands(in %a: !firrtl.bundle<a: uint<8>>, in %p: !firrtl.uint<1>, out %c: !firrtl.bundle<a: uint>) {
     // CHECK: %w = firrtl.wire  : !firrtl.bundle<a: uint<8>>
     %w = firrtl.wire  : !firrtl.bundle<a: uint>
