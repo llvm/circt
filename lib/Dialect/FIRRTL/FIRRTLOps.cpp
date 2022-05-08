@@ -1928,7 +1928,7 @@ FirMemory MemOp::getSummary() {
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
   size_t numReadWritePorts = 0;
-  llvm::SmallDenseMap<Value, unsigned> clockToLeader;
+  llvm::SmallDenseMap<FieldRef, unsigned> clockToLeader;
   SmallVector<int32_t> writeClockIDs;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
@@ -1944,8 +1944,8 @@ FirMemory MemOp::getSummary() {
         for (auto *b : clockPort.getUsers()) {
           if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
-              auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
+              auto result = clockToLeader.insert(
+                  {getFieldRefFromValue(connect.src()), numWritePorts});
               if (result.second) {
                 writeClockIDs.push_back(numWritePorts);
               } else {

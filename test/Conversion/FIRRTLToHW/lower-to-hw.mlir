@@ -1186,6 +1186,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
   }
 
+  // CHECK-LABEL: hw.module private @MemoryWriteClockWithSubfield
+  firrtl.module private @MemoryWriteClockWithSubfield(in %bundle: !firrtl.bundle<clock : clock>) {
+    // This memory has both write ports driven by the same clock.  It should be
+    // lowered to an "aa" memory. This is testing that the clock analyser can
+    // see through subfield operations.
+    
+    // These are the same expression:
+    %clock0 = firrtl.subfield %bundle(0) : (!firrtl.bundle<clock : clock>) -> !firrtl.clock
+    %clock1 = firrtl.subfield %bundle(0) : (!firrtl.bundle<clock : clock>) -> !firrtl.clock
+
+    // CHECK: hw.instance "aa_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
+    %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %clk_aa_w0, %clock0 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w1, %clock1 : !firrtl.clock, !firrtl.clock
+}
+
   // CHECK-LABEL: hw.module private @AsyncResetBasic(
   firrtl.module private @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.uint<1>) {
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
