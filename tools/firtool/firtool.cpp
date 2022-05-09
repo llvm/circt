@@ -299,6 +299,13 @@ static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
                 cl::init(""), cl::cat(mainCategory));
 
+static cl::opt<std::string>
+    mlirOutFile("output-final-mlir",
+                cl::desc("Optional file name to output the final MLIR into, in "
+                         "addition to the output requested by -o"),
+                cl::init(""), cl::value_desc("filename"),
+                cl::cat(mainCategory));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -652,6 +659,19 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
     module->print(outputFile.getValue()->os());
+  }
+
+  // If requested, print the final MLIR into mlirOutFile.
+  if (!mlirOutFile.empty()) {
+    std::string mlirOutError;
+    auto mlirFile = openOutputFile(mlirOutFile, &mlirOutError);
+    if (!mlirFile) {
+      llvm::errs() << mlirOutError;
+      return failure();
+    }
+
+    module->print(mlirFile->os());
+    mlirFile->keep();
   }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
