@@ -342,8 +342,16 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let builders = [
     /// This ctor allows you to build a CaseZ with some number of cases, getting
     /// a callback for each case.
+    OpBuilder<(ins "CaseStmtType":$caseStyle,
+                   "ValidationQualifierTypeEnum":$validationQualifier,
+                   "Value":$cond, "size_t":$numCases,
+                   "std::function<CasePattern(size_t)>":$caseCtor)>,
     OpBuilder<(ins "CaseStmtType":$caseStyle, "Value":$cond, "size_t":$numCases,
-               "std::function<CasePattern(size_t)>":$caseCtor)>
+               "std::function<CasePattern(size_t)>":$caseCtor), [{
+      build($_builder, $_state, caseStyle,
+            ValidationQualifierTypeEnum::ValidationQualifierPlain, cond,  numCases,
+            caseCtor);
+    }]>
   ];
 
   let extraClassDeclaration = [{
