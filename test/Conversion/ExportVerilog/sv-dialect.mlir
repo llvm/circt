@@ -1362,6 +1362,26 @@ hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %f
   hw.output
 }
 
+// CHECK-LABEL: ReuseExistingInOut
+// CHECK: input {{.+}},
+// CHECK:       [[INPUT:[:alnum:]+]])
+// CHECK: wire [[WIRE:.+]];
+// CHECK: reg  [[REG:.+]];
+// CHECK: assign [[WIRE]] = [[INPUT]] | [[INPUT]];
+// CHECK: [[REG]] <= [[WIRE]];
+hw.module @ReuseExistingInOut(%clock: i1, %a: i1) {
+  %expr = comb.or %a, %a : i1
+
+  %mywire = sv.wire : !hw.inout<i1>
+  %myreg = sv.reg : !hw.inout<i1>
+
+  sv.assign %mywire, %expr : i1
+
+  sv.always posedge %clock {
+    sv.passign %myreg, %expr : i1
+  }
+}
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>
