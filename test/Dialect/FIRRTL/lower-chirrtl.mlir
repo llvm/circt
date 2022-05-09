@@ -285,7 +285,7 @@ firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl
   // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r(0)
   %addr_node = firrtl.node %addr  : !firrtl.uint<3>
   // CHECK: [[TRUNC:%.+]] = firrtl.tail %addr_node, 1
-  // CHECK: firrtl.connect [[ADDR]], [[TRUNC]]
+  // CHECK: firrtl.strictconnect [[ADDR]], [[TRUNC]]
   chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
   // CHECK: firrtl.connect
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>

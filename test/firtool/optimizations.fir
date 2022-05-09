@@ -27,16 +27,16 @@ circuit test_cse :
 
 ; Both adds persist.
 ; NOOPT: %0 = firrtl.add %a, %a
-; NOOPT: firrtl.connect %b, %0
+; NOOPT: firrtl.strictconnect %b, %0
 ; NOOPT: %1 = firrtl.add %a, %a
-; NOOPT: firrtl.connect %c, %1
+; NOOPT: firrtl.strictconnect %c, %1
 
 ; Ands persist.
 ; NOOPT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
 ; NOOPT: firrtl.and %a, %c0_ui4
-; NOOPT: firrtl.connect %d,
+; NOOPT: firrtl.strictconnect %d,
 
 ; NOOPT-DAG: %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
 ; NOOPT-DAG: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
 ; NOOPT: firrtl.and %c3_ui4, %c1_ui4
-; NOOPT: firrtl.connect %e,
+; NOOPT: firrtl.strictconnect %e,

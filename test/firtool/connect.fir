@@ -4,7 +4,7 @@
 
 ; CHECK-LABEL: @regularConnect
 ; CHECK: %0 = firrtl.pad %b, 5 : (!firrtl.uint<3>) -> !firrtl.uint<5>
-; CHECK: firrtl.connect %a, %0 : !firrtl.uint<5>, !firrtl.uint<5>
+; CHECK: firrtl.strictconnect %a, %0 : !firrtl.uint<5>
 circuit regularConnect :
  module regularConnect :
    output a: UInt<5>
@@ -13,7 +13,7 @@ circuit regularConnect :
 
 ; CHECK-LABEL: @truncatingIntegerConnect
 ; CHECK: %0 = firrtl.tail %b, 2 : (!firrtl.uint<5>) -> !firrtl.uint<3>
-; CHECK: firrtl.connect %a, %0 : !firrtl.uint<3>, !firrtl.uint<3>
+; CHECK: firrtl.strictconnect %a, %0 : !firrtl.uint<3>
 circuit truncatingIntegerConnect :
  module truncatingIntegerConnect :
    output a: UInt<3>
@@ -24,11 +24,11 @@ circuit truncatingIntegerConnect :
 ; CHECK: %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<5>
 ; CHECK: %1 = firrtl.subfield %b(0) : (!firrtl.bundle<a: uint<3>, b: uint<2>>) -> !firrtl.uint<3>
 ; CHECK: %2 = firrtl.pad %1, 5 : (!firrtl.uint<3>) -> !firrtl.uint<5>
-; CHECK: firrtl.connect %0, %2 : !firrtl.uint<5>, !firrtl.uint<5>
+; CHECK: firrtl.strictconnect %0, %2 : !firrtl.uint<5>
 ; CHECK: %3 = firrtl.subfield %a(1) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<3>
 ; CHECK: %4 = firrtl.subfield %b(1) : (!firrtl.bundle<a: uint<3>, b: uint<2>>) -> !firrtl.uint<2>
 ; CHECK: %5 = firrtl.pad %4, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
-; CHECK: firrtl.connect %3, %5 : !firrtl.uint<3>, !firrtl.uint<3>
+; CHECK: firrtl.strictconnect %3, %5 : !firrtl.uint<3>
 circuit regularBundleConnect :
  module regularBundleConnect :
    output a: { a: UInt<5>, b: UInt<3> }
@@ -39,11 +39,11 @@ circuit regularBundleConnect :
 ; CHECK: %0 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<5>
 ; CHECK: %1 = firrtl.subfield %b(0) : (!firrtl.bundle<a: uint<6>, b: uint<1>>) -> !firrtl.uint<6>
 ; CHECK: %2 = firrtl.tail %1, 1 : (!firrtl.uint<6>) -> !firrtl.uint<5>
-; CHECK: firrtl.connect %0, %2 : !firrtl.uint<5>, !firrtl.uint<5>
+; CHECK: firrtl.strictconnect %0, %2 : !firrtl.uint<5>
 ; CHECK: %3 = firrtl.subfield %a(1) : (!firrtl.bundle<a: uint<5>, b: uint<3>>) -> !firrtl.uint<3>
 ; CHECK: %4 = firrtl.subfield %b(1) : (!firrtl.bundle<a: uint<6>, b: uint<1>>) -> !firrtl.uint<1>
 ; CHECK: %5 = firrtl.pad %4, 3 : (!firrtl.uint<1>) -> !firrtl.uint<3>
-; CHECK: firrtl.connect %3, %5 : !firrtl.uint<3>, !firrtl.uint<3>
+; CHECK: firrtl.strictconnect %3, %5 : !firrtl.uint<3>
 circuit truncatingBundleConnect :
  module truncatingBundleConnect :
    output a: { a: UInt<5>, b: UInt<3> }
