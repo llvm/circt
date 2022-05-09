@@ -132,6 +132,34 @@ struct ConvertControlOp : public OpConversionPattern<ControlOp> {
   }
 };
 
+struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(calyx::AssignOp assign, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value dest = adaptor.dest();
+
+    // To make life easy in ConvertComponentOp, we read from the output wires so
+    // the dialect conversion block argument mapping would work without a type
+    // converter. This means assigns to ComponentOp outputs will try to assign
+    // to a read from a wire, so we need to map to the wire.
+    if (auto readInOut = dyn_cast<ReadInOutOp>(adaptor.dest().getDefiningOp()))
+      dest = readInOut.input();
+
+    Value src = adaptor.src();
+    if (auto guard = adaptor.guard()) {
+      auto zero =
+          rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
+      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero);
+    }
+
+    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, src);
+
+    return success();
+  }
+};
+
 struct ConvertCellOp : public OpInterfaceConversionPattern<CellInterface> {
   using OpInterfaceConversionPattern::OpInterfaceConversionPattern;
 
@@ -340,34 +368,6 @@ private:
     if (!portName.empty())
       name += ("_" + portName).str();
     return name;
-  }
-};
-
-struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(calyx::AssignOp assign, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Value dest = adaptor.dest();
-
-    // To make life easy in ConvertComponentOp, we read from the output wires so
-    // the dialect conversion block argument mapping would work without a type
-    // converter. This means assigns to ComponentOp outputs will try to assign
-    // to a read from a wire, so we need to map to the wire.
-    if (auto readInOut = dyn_cast<ReadInOutOp>(adaptor.dest().getDefiningOp()))
-      dest = readInOut.input();
-
-    Value src = adaptor.src();
-    if (auto guard = adaptor.guard()) {
-      auto zero =
-          rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
-      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero);
-    }
-
-    rewriter.replaceOpWithNewOp<sv::AssignOp>(assign, dest, src);
-
-    return success();
   }
 };
 
