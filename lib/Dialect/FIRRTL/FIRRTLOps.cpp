@@ -896,9 +896,8 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
 
-    if (hasSSAIdentifiers) {
+    if (hasSSAIdentifiers)
       entryArgs.back().type = portType;
-    }
 
     // Parse the optional port symbol.
     StringAttr portSym;
