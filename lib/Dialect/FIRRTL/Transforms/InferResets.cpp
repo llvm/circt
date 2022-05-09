@@ -1677,13 +1677,19 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     }
     LLVM_DEBUG(llvm::dbgs() << "- Updating reset of " << regOp << "\n");
 
+    auto reset = regOp.resetSignal();
+    auto value = regOp.resetValue();
+
     // If we arrive here, the register has a sync reset. In order to add an
     // async reset, we have to move the sync reset into a mux in front of the
     // register.
-    insertResetMux(builder, regOp, regOp.resetSignal(), regOp.resetValue());
-    builder.setInsertionPoint(regOp);
+    insertResetMux(builder, regOp, reset, value);
+    builder.setInsertionPointAfterValue(regOp);
+    auto mux = builder.create<MuxPrimOp>(reset, value, regOp);
+    builder.create<ConnectOp>(regOp, mux);
 
     // Replace the existing reset with the async reset.
+    builder.setInsertionPoint(regOp);
     auto zero = createZeroValue(builder, regOp.getType());
     regOp.resetSignalMutable().assign(actualReset);
     regOp.resetValueMutable().assign(zero);
