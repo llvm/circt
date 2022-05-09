@@ -431,7 +431,6 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Type> argTypes;
   for (auto arg : entryArgs)
     argTypes.push_back(arg.type);
-
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
