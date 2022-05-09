@@ -50,6 +50,23 @@ static void escape(std::string &str, const char *c, bool noEscape = false) {
   str = std::regex_replace(str, std::regex(c), replacement);
 };
 
+// Dumps a range of operations to a string in a format suitable for embedding
+// inside a .dot edge/node label.
+template <typename TOpRange>
+static std::string dotSafeDumpOps(TOpRange ops) {
+  std::string dump;
+  llvm::raw_string_ostream ss(dump);
+  llvm::interleave(
+      ops, ss, [&](mlir::Operation &op) { op.print(ss); }, "\\n");
+
+  // Ensure that special characters which may be present in the Op dumps are
+  // properly escaped.
+  escape(dump, R"(")");
+  escape(dump, R"(\{)", /*noEscape=*/true);
+  escape(dump, R"(\})", /*noEscape=*/true);
+  return dump;
+}
+
 } // namespace detail
 
 class FSMStateNode;
@@ -191,7 +208,7 @@ struct llvm::GraphTraits<circt::fsm::FSMStateNode *> {
   }
 };
 
-// Graph traits for the common FSM graph.
+// Graph traits for the FSM graph.
 template <>
 struct llvm::GraphTraits<circt::fsm::FSMGraph *>
     : public llvm::GraphTraits<circt::fsm::FSMStateNode *> {
@@ -225,13 +242,8 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
   static std::string getNodeDescription(circt::fsm::FSMStateNode *node,
                                         circt::fsm::FSMGraph *) {
     // The description of the node is the dump of its Output region.
-    std::string desc;
-    llvm::raw_string_ostream ss(desc);
-    llvm::interleave(
-        node->getState().output().getOps(), ss,
-        [&](mlir::Operation &op) { op.print(ss); }, "\\n");
-
-    return desc;
+    return circt::fsm::detail::dotSafeDumpOps(
+        node->getState().output().getOps());
   }
 
   template <typename Iterator>
@@ -244,12 +256,10 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
     if (!transition.hasGuard())
       return "";
 
-    std::string desc;
-    llvm::raw_string_ostream ss(desc);
-    llvm::interleave(
-        transition.guard().getOps(), ss,
-        [&](mlir::Operation &op) { op.print(ss); }, "\\n");
-    return ("label=\"" + desc + "\"");
+    std::string attrs = "label=\"";
+    attrs += circt::fsm::detail::dotSafeDumpOps(transition.guard().getOps());
+    attrs += "\"";
+    return attrs;
   }
 
   static void addCustomGraphFeatures(const circt::fsm::FSMGraph *graph,
@@ -258,21 +268,10 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
     llvm::raw_ostream &os = gw.getOStream();
 
     os << "variables [shape=record,label=\"Variables|";
-
-    std::string desc;
-    llvm::raw_string_ostream ss(desc);
-    llvm::interleave(
-        llvm::make_filter_range(
-            graph->getMachine().getOps(),
-            [](mlir::Operation &op) { return !isa<circt::fsm::StateOp>(&op); }),
-        ss, [&](mlir::Operation &op) { op.print(ss); }, "\\n");
-
-    // Ensure that special characters which may be present in the Op dumps are
-    // properly escaped.
-    circt::fsm::detail::escape(desc, R"(")");
-    circt::fsm::detail::escape(desc, R"(\{)", /*noEscape=*/true);
-    circt::fsm::detail::escape(desc, R"(\})", /*noEscape=*/true);
-    os << desc << "\"]";
+    os << circt::fsm::detail::dotSafeDumpOps(llvm::make_filter_range(
+        graph->getMachine().getOps(),
+        [](mlir::Operation &op) { return !isa<circt::fsm::StateOp>(&op); }));
+    os << "\"]";
   }
 };
 
