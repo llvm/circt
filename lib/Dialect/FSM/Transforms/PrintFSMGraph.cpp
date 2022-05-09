@@ -24,8 +24,8 @@ namespace {
 struct PrintFSMGraphPass : public PrintFSMGraphBase<PrintFSMGraphPass> {
   PrintFSMGraphPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
-    auto &FSMGraph = getAnalysis<fsm::FSMGraph>();
-    llvm::WriteGraph(os, &FSMGraph, /*ShortNames=*/false);
+    auto &fsmGraph = getAnalysis<fsm::FSMGraph>();
+    llvm::WriteGraph(os, &fsmGraph, /*ShortNames=*/false);
     markAllAnalysesPreserved();
   }
   raw_ostream &os;

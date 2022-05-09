@@ -13,7 +13,7 @@ using namespace fsm;
 
 FSMTransitionEdge *FSMStateNode::addTransition(FSMStateNode *nextState,
                                                TransitionOp transition) {
-  auto transitionEdge = new FSMTransitionEdge(this, transition, nextState);
+  auto *transitionEdge = new FSMTransitionEdge(this, transition, nextState);
   transitions.push_back(transitionEdge);
   return transitionEdge;
 }

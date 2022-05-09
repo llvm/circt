@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FSM_FSMGraph_H
-#define CIRCT_DIALECT_FSM_FSMGraph_H
+#ifndef CIRCT_DIALECT_FSM_FSMGRAPH_H
+#define CIRCT_DIALECT_FSM_FSMGRAPH_H
 
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Support/LLVM.h"
@@ -252,18 +252,18 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
     return ("label=\"" + desc + "\"");
   }
 
-  static void addCustomGraphFeatures(const circt::fsm::FSMGraph *G,
-                                     GraphWriter<circt::fsm::FSMGraph *> &GW) {
+  static void addCustomGraphFeatures(const circt::fsm::FSMGraph *graph,
+                                     GraphWriter<circt::fsm::FSMGraph *> &gw) {
     // Print a separate node for global variables in the FSM.
-    llvm::raw_ostream &O = GW.getOStream();
+    llvm::raw_ostream &os = gw.getOStream();
 
-    O << "variables [shape=record,label=\"Variables|";
+    os << "variables [shape=record,label=\"Variables|";
 
     std::string desc;
     llvm::raw_string_ostream ss(desc);
     llvm::interleave(
         llvm::make_filter_range(
-            G->getMachine().getOps(),
+            graph->getMachine().getOps(),
             [](mlir::Operation &op) { return !isa<circt::fsm::StateOp>(&op); }),
         ss, [&](mlir::Operation &op) { op.print(ss); }, "\\n");
 
@@ -272,8 +272,8 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
     circt::fsm::detail::escape(desc, R"(")");
     circt::fsm::detail::escape(desc, R"(\{)", /*noEscape=*/true);
     circt::fsm::detail::escape(desc, R"(\})", /*noEscape=*/true);
-    O << desc << "\"]";
+    os << desc << "\"]";
   }
 };
 
-#endif // CIRCT_DIALECT_FSM_FSMFSMGraph_H
+#endif // CIRCT_DIALECT_FSM_FSMGRAPH_H
