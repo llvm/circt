@@ -819,11 +819,16 @@ LogicalResult CaseOp::verify() {
 /// This ctor allows you to build a CaseZ with some number of cases, getting
 /// a callback for each case.
 void CaseOp::build(OpBuilder &builder, OperationState &result,
-                   CaseStmtType caseStyle, Value cond, size_t numCases,
+                   CaseStmtType caseStyle,
+                   ValidationQualifierTypeEnum validationQualifier, Value cond,
+                   size_t numCases,
                    std::function<CasePattern(size_t)> caseCtor) {
   result.addOperands(cond);
   result.addAttribute("caseStyle",
                       CaseStmtTypeAttr::get(builder.getContext(), caseStyle));
+  result.addAttribute("validationQualifier",
+                      ValidationQualifierTypeEnumAttr::get(
+                          builder.getContext(), validationQualifier));
   SmallVector<Attribute> casePatterns;
 
   OpBuilder::InsertionGuard guard(builder);
