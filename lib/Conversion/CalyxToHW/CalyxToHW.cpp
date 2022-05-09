@@ -247,7 +247,7 @@ private:
           wires.append({in.input(), writeEn.input(), clk.input(), reset.input(),
                         out, done});
         })
-        // Integer width modifying operations.
+        // Unary operqations.
         .Case([&](SliceLibOp op) {
           auto in = wireIn(op.in(), op.instanceName() + "_in", b);
           auto outWidth = op.out().getType().getIntOrFloatBitWidth();
@@ -257,7 +257,15 @@ private:
           auto out = wireOut(extract, op.instanceName() + "_out", b);
           wires.append({in.input(), out});
         })
-        // Structural operations.
+        .Case([&](NotLibOp op) {
+          auto in = wireIn(op.in(), op.instanceName() + "_in", b);
+          auto one = b.create<hw::ConstantOp>(op.in().getType(), 0);
+
+          auto xorOp = b.create<XorOp>(in, one);
+
+          auto out = wireOut(xorOp, op.instanceName() + "_out", b);
+          wires.append({in.input(), out});
+        })
         .Case([&](WireLibOp op) {
           auto wire = wireIn(op.in(), op.instanceName(), b);
           wires.append({wire.input(), wire});
