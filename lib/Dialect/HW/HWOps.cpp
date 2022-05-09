@@ -788,14 +788,13 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
 
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
+
   using namespace mlir::function_interface_impl;
 
   auto loc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> entryArgs;
-  SmallVector<NamedAttrList, 4> argAttrs;
-  SmallVector<NamedAttrList, 4> resultAttrs;
-  SmallVector<Type, 4> argTypes;
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<DictionaryAttr> resultAttrs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -822,14 +821,18 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> resultNames;
   if (parseOptionalParameters(parser, parameters) ||
       module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames) ||
+          parser, entryArgs, isVariadic, resultTypes, resultAttrs,
+          resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
+  SmallVector<Type> argTypes;
+  for (auto &arg : entryArgs)
+    argTypes.push_back(arg.type);
+
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
@@ -846,7 +849,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> argNames;
   if (!entryArgs.empty()) {
     for (auto &arg : entryArgs)
-      argNames.push_back(module_like_impl::getPortNameAttr(context, arg.name));
+      argNames.push_back(
+          module_like_impl::getPortNameAttr(context, arg.ssaName.name));
   } else if (!argTypes.empty()) {
     // The parser returns empty names in a special way.
     argNames.assign(argTypes.size(), StringAttr::get(context, ""));
@@ -863,17 +867,15 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   if (!hasAttribute("comment", result.attributes))
     result.addAttribute("comment", StringAttr::get(context, ""));
 
-  assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
   if (modKind == PlainMod) {
-    if (parser.parseRegion(*body, entryArgs,
-                           entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+    if (parser.parseRegion(*body, entryArgs))
       return failure();
 
     HWModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);

@@ -144,7 +144,7 @@
 // CHECK:           sink %[[VAL_150]] : index
 // CHECK:           return %[[VAL_149]] : none
 // CHECK:         }
-func @more_imperfectly_nested_loops() {
+func.func @more_imperfectly_nested_loops() {
 ^bb0:
   cf.br ^bb1
 ^bb1:	// pred: ^bb0

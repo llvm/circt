@@ -13,7 +13,7 @@
 // CHECK:           memref.store %[[VAL_5]], %[[VAL_0]]{{\[}}%[[VAL_8]]] : memref<16xi32>
 // CHECK:           return %[[VAL_5]] : i32
 // CHECK:         }
-func @as_func_arg(%a : memref<4x4xi32>, %i : index) -> i32 {
+func.func @as_func_arg(%a : memref<4x4xi32>, %i : index) -> i32 {
   %0 = memref.load %a[%i, %i] : memref<4x4xi32>
   memref.store %0, %a[%i, %i] : memref<4x4xi32>
   return %0 : i32
@@ -32,7 +32,7 @@ func @as_func_arg(%a : memref<4x4xi32>, %i : index) -> i32 {
 // CHECK:           %[[VAL_10:.*]] = memref.load %[[VAL_0]]{{\[}}%[[VAL_9]]] : memref<210xi32>
 // CHECK:           return %[[VAL_10]] : i32
 // CHECK:         }
-func @multidim3(%a : memref<5x6x7xi32>, %i1 : index, %i2 : index, %i3 : index) -> i32 {
+func.func @multidim3(%a : memref<5x6x7xi32>, %i1 : index, %i2 : index, %i3 : index) -> i32 {
   %0 = memref.load %a[%i1, %i2, %i3] : memref<5x6x7xi32>
   return %0 : i32
 }
@@ -57,7 +57,7 @@ func @multidim3(%a : memref<5x6x7xi32>, %i1 : index, %i2 : index, %i3 : index) -
 // CHECK:           %[[VAL_14:.*]] = memref.load %[[VAL_0]]{{\[}}%[[VAL_13]]] : memref<18900xi32>
 // CHECK:           return %[[VAL_14]] : i32
 // CHECK:         }
-func @multidim5(%a : memref<5x6x7x9x10xi32>, %i : index) -> i32 {
+func.func @multidim5(%a : memref<5x6x7x9x10xi32>, %i : index) -> i32 {
   %0 = memref.load %a[%i, %i, %i, %i, %i] : memref<5x6x7x9x10xi32>
   return %0 : i32
 }
@@ -82,7 +82,7 @@ func @multidim5(%a : memref<5x6x7x9x10xi32>, %i : index) -> i32 {
 // CHECK:           %[[VAL_14:.*]] = memref.load %[[VAL_0]]{{\[}}%[[VAL_13]]] : memref<512xi32>
 // CHECK:           return %[[VAL_14]] : i32
 // CHECK:         }
-func @multidim5_p2(%a : memref<2x4x8x2x4xi32>, %i : index) -> i32 {
+func.func @multidim5_p2(%a : memref<2x4x8x2x4xi32>, %i : index) -> i32 {
   %0 = memref.load %a[%i, %i, %i, %i, %i] : memref<2x4x8x2x4xi32>
   return %0 : i32
 }
@@ -93,7 +93,7 @@ func @multidim5_p2(%a : memref<2x4x8x2x4xi32>, %i : index) -> i32 {
 // CHECK:                      %[[VAL_0:.*]]: memref<16xi32>) -> memref<16xi32> {
 // CHECK:           return %[[VAL_0]] : memref<16xi32>
 // CHECK:         }
-func @as_func_ret(%a : memref<4x4xi32>) -> memref<4x4xi32> {
+func.func @as_func_ret(%a : memref<4x4xi32>) -> memref<4x4xi32> {
   return %a : memref<4x4xi32>
 }
 
@@ -103,7 +103,7 @@ func @as_func_ret(%a : memref<4x4xi32>) -> memref<4x4xi32> {
 // CHECK:           %[[VAL_0:.*]] = memref.alloc() : memref<16xi32>
 // CHECK:           return %[[VAL_0]] : memref<16xi32>
 // CHECK:         }
-func @allocs() -> memref<4x4xi32> {
+func.func @allocs() -> memref<4x4xi32> {
   %0 = memref.alloc() : memref<4x4xi32>
   return %0 : memref<4x4xi32>
 }
@@ -126,7 +126,7 @@ func @allocs() -> memref<4x4xi32> {
 // CHECK:           memref.store %[[VAL_10]], %[[VAL_6]]{{\[}}%[[VAL_13]]] : memref<16xi32>
 // CHECK:           return
 // CHECK:         }
-func @across_bbs(%i1 : index, %i2 : index, %c : i1) {
+func.func @across_bbs(%i1 : index, %i2 : index, %c : i1) {
   %0 = memref.alloc() : memref<4x4xi32>
   %1 = memref.alloc() : memref<4x4xi32>
   cf.cond_br %c,
@@ -140,7 +140,7 @@ func @across_bbs(%i1 : index, %i2 : index, %c : i1) {
 
 // -----
 
-func @foo(%0 : memref<4x4xi32>) -> memref<4x4xi32> {
+func.func @foo(%0 : memref<4x4xi32>) -> memref<4x4xi32> {
   return %0 : memref<4x4xi32>
 }
 
@@ -149,7 +149,7 @@ func @foo(%0 : memref<4x4xi32>) -> memref<4x4xi32> {
 // CHECK:           %[[VAL_1:.*]] = call @foo(%[[VAL_0]]) : (memref<16xi32>) -> memref<16xi32>
 // CHECK:           return
 // CHECK:         }
-func @calls() {
+func.func @calls() {
   %0 = memref.alloc() : memref<4x4xi32>
   %1 = call @foo(%0) : (memref<4x4xi32>) -> (memref<4x4xi32>)
   return

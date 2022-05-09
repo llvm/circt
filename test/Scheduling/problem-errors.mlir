@@ -2,7 +2,7 @@
 
 // expected-error@+2 {{Operator type 'foo' has no latency}}
 // expected-error@+1 {{problem check failed}}
-func @no_latency() {
+func.func @no_latency() {
   %0 = arith.constant 0 : i32
   %1 = arith.constant { problemStartTime = 0, opr = "foo" } 1 : i32
   return
@@ -11,7 +11,7 @@ func @no_latency() {
 // -----
 
 // expected-error@+1 {{problem verification failed}}
-func @no_starttime() {
+func.func @no_starttime() {
   %0 = arith.constant { problemStartTime = 0 } 0 : i32
   %1 = arith.constant 1 : i32 // expected-error {{Operation has no start time}}
   return { problemStartTime = 0 }
@@ -21,7 +21,7 @@ func @no_starttime() {
 
 // expected-error@+2 {{Precedence violated for dependence}}
 // expected-error@+1 {{problem verification failed}}
-func @ssa_dep_violated(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
+func.func @ssa_dep_violated(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
   operatortypes = [
     { name = "_0", latency = 0 },
     { name = "_1", latency = 1 },
@@ -37,7 +37,7 @@ func @ssa_dep_violated(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
 
 // expected-error@+2 {{Precedence violated for dependence}}
 // expected-error@+1 {{problem verification failed}}
-func @aux_dep_violated() attributes {
+func.func @aux_dep_violated() attributes {
   auxdeps = [ [0,1], [1,2], [2,3] ]
   } {
   %0 = arith.constant { problemStartTime = 123 } 0 : i32

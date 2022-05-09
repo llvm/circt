@@ -2,27 +2,27 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
 // CHECK-LABEL: @dummy_i1
-func @dummy_i1 (%0 : i1) {
+func.func @dummy_i1 (%0 : i1) {
   return
 }
 
 // CHECK-LABEL: @dummy_i32
-func @dummy_i32 (%0 : i32)  {
+func.func @dummy_i32 (%0 : i32)  {
   return
 }
 
 // CHECK-LABEL: @dummy_time
-func @dummy_time (%0 : !llhd.time) {
+func.func @dummy_time (%0 : !llhd.time) {
   return
 }
 
 // CHECK-LABEL: @dummy_ptr
-func @dummy_ptr(%0 : !llhd.ptr<i32>) {
+func.func @dummy_ptr(%0 : !llhd.ptr<i32>) {
   return
 }
 
 // CHECK-LABEL: @dummy_subsig
-func @dummy_subsig(%0 : !llhd.sig<i10>) {
+func.func @dummy_subsig(%0 : !llhd.sig<i10>) {
   return
 }
 
@@ -62,7 +62,7 @@ llhd.proc @convert_persistent_i1 () -> () {
   %0 = hw.constant 0 : i1
   cf.br ^resume
 ^resume:
-  call @dummy_i1(%0) : (i1) -> ()
+  func.call @dummy_i1(%0) : (i1) -> ()
   cf.br ^resume
 }
 
@@ -103,7 +103,7 @@ llhd.proc @convert_persistent_i32 () -> () {
   %0 = hw.constant 0 : i32
   cf.br ^resume
 ^resume:
-  call @dummy_i32(%0) : (i32) -> ()
+  func.call @dummy_i32(%0) : (i32) -> ()
   cf.br ^resume
 }
 
@@ -143,7 +143,7 @@ llhd.proc @convert_persistent_time () -> () {
   %0 = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   cf.br ^resume
 ^resume:
-  call @dummy_time(%0) : (!llhd.time) -> ()
+  func.call @dummy_time(%0) : (!llhd.time) -> ()
   cf.br ^resume
 }
 
@@ -187,7 +187,7 @@ llhd.proc @convert_persistent_ptr () -> () {
   %1 = llhd.var %0 : i32
   cf.br ^resume
 ^resume:
-  call @dummy_ptr(%1) : (!llhd.ptr<i32>) -> ()
+  func.call @dummy_ptr(%1) : (!llhd.ptr<i32>) -> ()
   cf.br ^resume
 }
 
@@ -258,7 +258,7 @@ llhd.proc @convert_persistent_subsig () -> (%out : !llhd.sig<i32>) {
   %0 = llhd.sig.extract %out from %zero : (!llhd.sig<i32>) -> !llhd.sig<i10>
   cf.br ^resume
 ^resume:
-  call @dummy_subsig(%0) : (!llhd.sig<i10>) -> ()
+  func.call @dummy_subsig(%0) : (!llhd.sig<i10>) -> ()
   cf.br ^resume
 }
 
@@ -306,7 +306,7 @@ llhd.proc @convert_persistent_block_argument () -> () {
 ^argBB(%i : i32):
     cf.br ^end
 ^end:
-    call @dummy_i32(%i) : (i32) -> ()
+    func.call @dummy_i32(%i) : (i32) -> ()
     llhd.halt
 }
 

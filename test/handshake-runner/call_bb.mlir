@@ -2,13 +2,13 @@
 // RUN: circt-opt -lower-std-to-handshake %s | handshake-runner | FileCheck %s
 // CHECK: 763 2996
 module {
-  func @muladd(%1:index, %2:index, %3:index) -> (index) {
+  func.func @muladd(%1:index, %2:index, %3:index) -> (index) {
     %i2 = arith.muli %1, %2 : index
     %i3 = arith.addi %3, %i2 : index
 	 return %i3 : index
   }
 
-  func @main() -> (index, index) {
+  func.func @main() -> (index, index) {
     %c0 = arith.constant 0 : index
     %c101 = arith.constant 101 : index
     %c102 = arith.constant 102 : index

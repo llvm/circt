@@ -3,7 +3,7 @@
 // CHECK-LABEL: @check_shl_folding
 // CHECK-SAME: %[[BASE:.*]]: i4
 // CHECK-SAME: %[[HIDDEN:.*]]: i8
-func @check_shl_folding(%base : i4, %hidden : i8) -> (i4, i4) {
+func.func @check_shl_folding(%base : i4, %hidden : i8) -> (i4, i4) {
   // CHECK-NEXT: %[[NEGSEVEN:.*]] = hw.constant -7 : i4
   %0 = hw.constant 2 : i4
   %1 = hw.constant 4 : i4
@@ -18,7 +18,7 @@ func @check_shl_folding(%base : i4, %hidden : i8) -> (i4, i4) {
 // CHECK-LABEL: @check_shr_folding
 // CHECK-SAME: %[[BASE:.*]]: i4
 // CHECK-SAME: %[[HIDDEN:.*]]: i8
-func @check_shr_folding(%base : i4, %hidden : i8) -> (i4, i4) {
+func.func @check_shr_folding(%base : i4, %hidden : i8) -> (i4, i4) {
   // CHECK-NEXT: %[[NEGSEVEN:.*]] = hw.constant -7 : i4
   %0 = hw.constant 2 : i4
   %1 = hw.constant 4 : i4

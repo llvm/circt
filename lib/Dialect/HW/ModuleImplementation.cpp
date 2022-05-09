@@ -42,7 +42,7 @@ StringAttr module_like_impl::getPortNameAttr(MLIRContext *context,
 ///
 ParseResult module_like_impl::parseFunctionResultList(
     OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs,
+    SmallVectorImpl<DictionaryAttr> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
 
   auto parseElt = [&]() -> ParseResult {
@@ -53,9 +53,14 @@ ParseResult module_like_impl::parseFunctionResultList(
 
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
+
+    NamedAttrList attrs;
     if (parser.parseColonType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(resultAttrs.back()))
+        parser.parseOptionalAttrDict(attrs))
       return failure();
+
+    resultAttrs.back() = attrs.getDictionary(parser.getContext());
+
     return success();
   };
 
@@ -66,18 +71,14 @@ ParseResult module_like_impl::parseFunctionResultList(
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult module_like_impl::parseModuleFunctionSignature(
-    OpAsmParser &parser,
-    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
+    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &args,
     bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs,
+    SmallVectorImpl<DictionaryAttr> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
 
   using namespace mlir::function_interface_impl;
-  bool allowArgAttrs = true;
-  bool allowVariadic = false;
-  if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
-                                argTypes, argAttrs, isVariadic))
+  if (parser.parseArgumentList(args, OpAsmParser::Delimiter::Paren,
+                               /*allowTypes=*/true, /*allowAttrs=*/true))
     return failure();
 
   if (succeeded(parser.parseOptionalArrow()))

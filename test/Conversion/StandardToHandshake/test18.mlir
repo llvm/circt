@@ -15,7 +15,7 @@
 // CHECK:           %[[VAL_11:.*]] = select %[[VAL_9]], %[[VAL_7]]#0, %[[VAL_10]] : index
 // CHECK:           return %[[VAL_11]], %[[VAL_3]]#2 : index, none
 // CHECK:         }
-func @affine_apply_mod(%arg0: index) -> index {
+func.func @affine_apply_mod(%arg0: index) -> index {
     %c42 = arith.constant 42 : index
     %0 = arith.remsi %arg0, %c42 : index
     %c0 = arith.constant 0 : index

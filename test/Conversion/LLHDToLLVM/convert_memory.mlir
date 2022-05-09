@@ -12,7 +12,7 @@
 // CHECK:           llvm.store %[[VAL_1]], %[[VAL_5]] : !llvm.ptr<i32>
 // CHECK:           llvm.return
 // CHECK:         }
-func @lower_var(%i1 : i1, %i32 : i32) {
+func.func @lower_var(%i1 : i1, %i32 : i32) {
   %0 = llhd.var %i1 : i1
   %1 = llhd.var %i32 : i32
   return
@@ -25,7 +25,7 @@ func @lower_var(%i1 : i1, %i32 : i32) {
 // CHECK:           %[[VAL_3:.*]] = llvm.load %[[VAL_1]] : !llvm.ptr<i32>
 // CHECK:           llvm.return
 // CHECK:         }
-func @lower_load(%i1 : !llhd.ptr<i1>, %i32 : !llhd.ptr<i32>) {
+func.func @lower_load(%i1 : !llhd.ptr<i1>, %i32 : !llhd.ptr<i32>) {
   %0 = llhd.load %i1 : !llhd.ptr<i1>
   %1 = llhd.load %i32 : !llhd.ptr<i32>
   return
@@ -40,7 +40,7 @@ func @lower_load(%i1 : !llhd.ptr<i1>, %i32 : !llhd.ptr<i32>) {
 // CHECK:           llvm.store %[[VAL_2]], %[[VAL_3]] : !llvm.ptr<i32>
 // CHECK:           llvm.return
 // CHECK:         }
-func @lower_store(%i1 : i1, %i1Ptr : !llhd.ptr<i1>, %i32 : i32, %i32Ptr : !llhd.ptr<i32>) {
+func.func @lower_store(%i1 : i1, %i1Ptr : !llhd.ptr<i1>, %i32 : i32, %i32Ptr : !llhd.ptr<i32>) {
   llhd.store %i1Ptr, %i1 : !llhd.ptr<i1>
   llhd.store %i32Ptr, %i32 : !llhd.ptr<i32>
   return

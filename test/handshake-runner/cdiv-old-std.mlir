@@ -3,7 +3,7 @@
 // CHECK: 0 2,3,4,5 2,3,4,5 1,1431655763,3,858993455 3,4,5,6 2,3,4,5 2,3,4,5 2,3,4,5 2,3,4,5 0,-1,0,-1
 
 module {
-  func @main(%0: memref<4xi32>,
+  func.func @main(%0: memref<4xi32>,
 			    %2: memref<4xi32>,
 				 %4: memref<4xi32>,
 				 %5: memref<4xi32>,

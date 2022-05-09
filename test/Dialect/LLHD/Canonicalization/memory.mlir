@@ -3,7 +3,7 @@
 // CHECK-LABEL: @check_mem_dce
 // CHECK-SAME: %[[INT:.*]]: i32,
 // CHECK-SAME: %[[INT2:.*]]: i32
-func @check_mem_dce(%int : i32, %int2 : i32) -> i32 {
+func.func @check_mem_dce(%int : i32, %int2 : i32) -> i32 {
   // CHECK-NEXT: %[[VAR:.*]] = llhd.var %[[INT]] : i32
   %0 = llhd.var %int : i32
   %1 = llhd.var %int2 : i32
@@ -23,7 +23,7 @@ func @check_mem_dce(%int : i32, %int2 : i32) -> i32 {
 // CHECK-LABEL: @check_mem_cse
 // CHECK-SAME: %[[INT:.*]]: i32,
 // CHECK-SAME: %[[INT2:.*]]: i32
-func @check_mem_cse(%int : i32, %int2 : i32) {
+func.func @check_mem_cse(%int : i32, %int2 : i32) {
   // CHECK-NEXT: %[[VAR1:.*]] = llhd.var %[[INT]] : i32
   %0 = llhd.var %int : i32
   // CHECK-NEXT: %[[VAR2:.*]] = llhd.var %[[INT2]] : i32

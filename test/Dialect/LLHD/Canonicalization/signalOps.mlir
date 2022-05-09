@@ -5,7 +5,7 @@
 // CHECK-SAME: %[[VAL:.*]]: i32
 // CHECK-SAME: %[[TIME:.*]]: !llhd.time
 // CHECK-SAME: %[[COND:.*]]: i1
-func @drv_folding(%sig: !llhd.sig<i32>, %val: i32, %time: !llhd.time, %cond: i1) {
+func.func @drv_folding(%sig: !llhd.sig<i32>, %val: i32, %time: !llhd.time, %cond: i1) {
   %true = hw.constant 1 : i1
   %false = hw.constant 0 : i1
 

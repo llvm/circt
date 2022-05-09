@@ -54,5 +54,5 @@ hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {write_latenc
 // CHECK-LABEL: hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
 // CHECK-NEXT: hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
 
-// CHECK-LABEL: hw.module.extern @AnonArg(i42)
-hw.module.extern @AnonArg(i42)
+//// C*ECK-LABEL: hw.module.extern @AnonArg(i42)
+//// hw.module.extern @AnonArg(i42)

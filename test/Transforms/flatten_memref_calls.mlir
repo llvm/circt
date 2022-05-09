@@ -10,8 +10,8 @@
 // CHECK:           return
 // CHECK:         }
 module  {
-  func private @foo(memref<30x30xi32>) -> i32
-  func @main() {
+  func.func private @foo(memref<30x30xi32>) -> i32
+  func.func @main() {
     %c0 = arith.constant 0 : index
     %0 = memref.alloca() : memref<30x30xi32>
     %1 = call @foo(%0) : (memref<30x30xi32>) -> i32

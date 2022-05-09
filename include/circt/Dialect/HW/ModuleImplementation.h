@@ -31,16 +31,15 @@ StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
 /// result arguments.
 ParseResult parseModuleFunctionSignature(
     OpAsmParser &parser,
-    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
+    SmallVectorImpl<OpAsmParser::Argument> &args,
     bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs,
+    SmallVectorImpl<DictionaryAttr> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames);
 
 /// Parse a function result list with named results.
 ParseResult parseFunctionResultList(OpAsmParser &parser,
                                     SmallVectorImpl<Type> &resultTypes,
-                                    SmallVectorImpl<NamedAttrList> &resultAttrs,
+                                    SmallVectorImpl<DictionaryAttr> &resultAttrs,
                                     SmallVectorImpl<Attribute> &resultNames);
 
 /// Print a module signature with named results.

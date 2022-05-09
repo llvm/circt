@@ -103,7 +103,7 @@
 // CHECK:           sink %[[VAL_106]] : index
 // CHECK:           return %[[VAL_105]] : none
 // CHECK:         }
-func @imperfectly_nested_loops() {
+func.func @imperfectly_nested_loops() {
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
   %c1 = arith.constant 1 : index

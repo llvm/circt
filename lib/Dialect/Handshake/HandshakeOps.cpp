@@ -532,22 +532,20 @@ LogicalResult FuncOp::verify() {
 /// mlir::function_interface_impl::parseFunctionSignature while getting access
 /// to the parsed SSA names to store as attributes.
 static ParseResult parseFuncOpArgs(
-    OpAsmParser &parser,
-    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &entryArgs,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Attribute> &argNames,
-    SmallVectorImpl<NamedAttrList> &argAttrs, SmallVectorImpl<Type> &resTypes,
-    SmallVectorImpl<NamedAttrList> &resAttrs) {
+    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
+    SmallVectorImpl<Attribute> &argNames, SmallVectorImpl<Type> &resTypes,
+    SmallVectorImpl<DictionaryAttr> &resAttrs) {
   auto *context = parser.getContext();
 
   bool isVariadic;
   if (mlir::function_interface_impl::parseFunctionSignature(
-          parser, /*allowVariadic=*/true, entryArgs, argTypes, argAttrs,
-          isVariadic, resTypes, resAttrs)
+          parser, /*allowVariadic=*/true, entryArgs, isVariadic, resTypes,
+          resAttrs)
           .failed())
     return failure();
 
   llvm::transform(entryArgs, std::back_inserter(argNames), [&](auto arg) {
-    return StringAttr::get(context, arg.name.drop_front());
+    return StringAttr::get(context, arg.ssaName.name.drop_front());
   });
 
   return success();
@@ -628,9 +626,9 @@ void handshake::FuncOp::resolveArgAndResNames() {
 ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
   StringAttr nameAttr;
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> args;
-  SmallVector<Type, 4> argTypes, resTypes;
-  SmallVector<NamedAttrList, 4> argAttributes, resAttributes;
+  SmallVector<OpAsmParser::Argument> args;
+  SmallVector<Type> resTypes;
+  SmallVector<DictionaryAttr> resAttributes;
   SmallVector<Attribute> argNames;
 
   // Parse visibility.
@@ -639,13 +637,16 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes) ||
-      parseFuncOpArgs(parser, args, argTypes, argNames, argAttributes, resTypes,
-                      resAttributes))
+      parseFuncOpArgs(parser, args, argNames, resTypes, resAttributes))
     return failure();
-  mlir::function_interface_impl::addArgAndResultAttrs(
-      builder, result, argAttributes, resAttributes);
+  mlir::function_interface_impl::addArgAndResultAttrs(builder, result, args,
+                                                      resAttributes);
 
   // Set function type
+  SmallVector<Type> argTypes;
+  for (auto arg : args)
+    argTypes.push_back(arg.type);
+
   result.addAttribute(
       handshake::FuncOp::getTypeAttrName(),
       TypeAttr::get(builder.getFunctionType(argTypes, resTypes)));
@@ -665,7 +666,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse region
   auto *body = result.addRegion();
-  return parser.parseRegion(*body, args, argTypes);
+  return parser.parseRegion(*body, args);
 }
 
 void FuncOp::print(OpAsmPrinter &p) {
