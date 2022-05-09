@@ -778,9 +778,9 @@ void EmitterBase::emitTextWithSubstitutions(
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
-      itemOp->emitError("cannot get name for symbol ") << sym;
+      emitError(itemOp, "cannot get name for symbol ") << sym;
     } else {
-      op->emitError("cannot get name for symbol ") << sym;
+      emitError(op, "cannot get name for symbol ") << sym;
     }
     return StringRef("<INVALID>");
   };
