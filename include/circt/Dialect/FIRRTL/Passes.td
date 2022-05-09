@@ -391,9 +391,9 @@ def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
-def RemoveInvalid : Pass<"firrtl-remove-invalid", "firrtl::FModuleOp"> {
-  let summary = "Remove interpretations of invalid values";
-  let constructor = "circt::firrtl::createRemoveInvalidPass()";
+def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
+  let summary = "Perform SFC Compatibility fixes";
+  let constructor = "circt::firrtl::createSFCCompatPass()";
 }
 
 def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
@@ -416,6 +416,35 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
     looking for a situation where the read/write is the complement of the write/read.
   }];
   let constructor = "circt::firrtl::createInferReadWritePass()";
+}
+
+def InjectDUTHierarchy : Pass<"firrtl-inject-dut-hier", "firrtl::CircuitOp"> {
+  let summary = "Add a level of hierarchy outside the DUT";
+  let description = [{
+    This pass takes the DUT (as indicated by the presence of a
+    MarkDUTAnnotation) and moves all the contents of it into a new module
+    insided the DUT named by an InjectDUTHierarchyAnnotation.  This pass is
+    intended to be used in conjunction with passes that pull things out of the
+    DUT, e.g., SRAM extraction, to give the extracted modules a new home that is
+    still inside the original DUT.
+  }];
+  let constructor = "circt::firrtl::createInjectDUTHierarchyPass()";
+}
+
+def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
+  let summary = "Move annotated instances upwards in the module hierarchy";
+  let description = [{
+    This pass takes instances in the design annotated with one out of a
+    particular set of annotations and pulls them upwards to a location further
+    up in the module hierarchy.
+
+    The annotations that control the behaviour of this pass are:
+    - `MarkDUTAnnotation`
+    - `ExtractBlackBoxAnnotation`
+    - `ExtractClockGatesFileAnnotation`
+  }];
+  let constructor = "circt::firrtl::createExtractInstancesPass()";
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

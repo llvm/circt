@@ -1,16 +1,20 @@
-//===- RemoveInvalids.cpp - Remove invalid values ---------------*- C++ -*-===//
+//===- SFCCompat.cpp - SFC Compatible Pass ----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// This pass removes invalid values from the circuit.  This is a combination of
-// the Scala FIRRTL Compiler's RemoveRests pass and RemoveValidIf.  This is done
-// to remove two "interpretations" of invalid.  Namely: (1) registers that are
-// initialized to an invalid value (module scoped and looking through wires and
-// connects only) are converted to an unitialized register and (2) invalid
-// values are converted to zero (after rule 1 is applied).
+// This pass makes a number of updates to the circuit that are required to match
+// the behavior of the Scala FIRRTL Compiler (SFC).  This pass removes invalid
+// values from the circuit.  This is a combination of the Scala FIRRTL
+// Compiler's RemoveRests pass and RemoveValidIf.  This is done to remove two
+// "interpretations" of invalid.  Namely: (1) registers that are initialized to
+// an invalid value (module scoped and looking through wires and connects only)
+// are converted to an unitialized register and (2) invalid values are converted
+// to zero (after rule 1 is applied).  Additionally, this pass checks and
+// disallows async reset registers that are not driven with a constant when
+// looking through wires, connects, and nodes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,78 +31,14 @@
 using namespace circt;
 using namespace firrtl;
 
-struct RemoveInvalidPass : public RemoveInvalidBase<RemoveInvalidPass> {
+struct SFCCompatPass : public SFCCompatBase<SFCCompatPass> {
   void runOnOperation() override;
 };
 
-// Returns true if this value is invalidated.  This requires that a value is
-// only ever driven once.  This is guaranteed if this runs after the
-// `ExpandWhens` pass .
-static bool isInvalid(Value val) {
-
-  // Update `val` to the source of the connection driving `thisVal`.  This walks
-  // backwards across users to find the first connection and updates `val` to
-  // the source.  This assumes that only one connect is driving `thisVal`, i.e.,
-  // this pass runs after `ExpandWhens`.
-  auto updateVal = [&](Value thisVal) {
-    for (auto *user : thisVal.getUsers()) {
-      if (auto connect = dyn_cast<FConnectLike>(user)) {
-        if (connect.dest() != val)
-          continue;
-        val = connect.src();
-        return;
-      }
-    }
-    val = nullptr;
-    return;
-  };
-
-  while (val) {
-    // The value is a port.
-    if (auto blockArg = val.dyn_cast<BlockArgument>()) {
-      FModuleOp op = cast<FModuleOp>(val.getParentBlock()->getParentOp());
-      auto direction = op.getPortDirection(blockArg.getArgNumber());
-      // Base case: this is an input port and cannot be invalidated in module
-      // scope.
-      if (direction == Direction::In)
-        return false;
-      updateVal(blockArg);
-      continue;
-    }
-
-    auto *op = val.getDefiningOp();
-
-    // The value is an instance port.
-    if (auto inst = dyn_cast<InstanceOp>(op)) {
-      auto resultNo = val.cast<OpResult>().getResultNumber();
-      // An output port of an instance crosses a module boundary.  This is not
-      // invalid within module scope.
-      if (inst.getPortDirection(resultNo) == Direction::Out)
-        return false;
-      updateVal(val);
-      continue;
-    }
-
-    // Base case: we found an invalid value.  We're done, return true.
-    if (isa<InvalidValueOp>(op))
-      return true;
-
-    // Base case: we hit something that is NOT a wire, e.g., a PrimOp.  We're
-    // done, return false.
-    if (!isa<WireOp>(op))
-      return false;
-
-    // Update `val` with the driver of the wire.  If no driver found, `val` will
-    // be set to nullptr and we exit on the next while iteration.
-    updateVal(op->getResult(0));
-  };
-  return false;
-}
-
-void RemoveInvalidPass::runOnOperation() {
+void SFCCompatPass::runOnOperation() {
   LLVM_DEBUG(
-      llvm::dbgs() << "===----- Running RemoveInvalid "
-                      "----------------------------------------------===\n"
+      llvm::dbgs() << "==----- Running SFCCompat "
+                      "---------------------------------------------------===\n"
                    << "Module: '" << getOperation().getName() << "'\n";);
 
   bool madeModifications = false;
@@ -115,7 +55,8 @@ void RemoveInvalidPass::runOnOperation() {
 
     // If the `RegResetOp` has an invalidated initialization, then replace it
     // with a `RegOp`.
-    if (isInvalid(reg.resetValue())) {
+    if (isModuleScopedDrivenBy<InvalidValueOp>(reg.resetValue(), true, false,
+                                               false)) {
       LLVM_DEBUG(llvm::dbgs() << "  - RegResetOp '" << reg.name()
                               << "' will be replaced with a RegOp\n");
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
@@ -126,6 +67,22 @@ void RemoveInvalidPass::runOnOperation() {
       reg.erase();
       madeModifications = true;
     }
+
+    // If the `RegResetOp` has an asynchronous reset and the reset value is not
+    // a module-scoped constant when looking through wires and nodes, then
+    // generate an error.  This implements the SFC's CheckResets pass.
+    if (!reg.resetSignal().getType().isa<AsyncResetType>())
+      continue;
+    if (isModuleScopedDrivenBy<ConstantOp, InvalidValueOp, SpecialConstantOp>(
+            reg.resetValue(), true, true, true))
+      continue;
+    auto resetDriver =
+        getModuleScopedDriver(reg.resetValue(), true, true, true);
+    auto diag = reg.emitOpError()
+                << "has an async reset, but its reset value is not driven with "
+                   "a constant value through wires, nodes, or connects";
+    diag.attachNote(resetDriver.getLoc()) << "reset driver is here";
+    return signalPassFailure();
   }
 
   // Convert all invalid values to zero.
@@ -163,6 +120,6 @@ void RemoveInvalidPass::runOnOperation() {
     return markAllAnalysesPreserved();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createRemoveInvalidPass() {
-  return std::make_unique<RemoveInvalidPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createSFCCompatPass() {
+  return std::make_unique<SFCCompatPass>();
 }

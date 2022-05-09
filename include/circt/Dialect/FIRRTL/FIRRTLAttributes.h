@@ -35,6 +35,9 @@ namespace direction {
 /// input direction.
 inline Direction get(bool isOutput) { return (Direction)isOutput; }
 
+/// Flip a port direction.
+Direction flip(Direction direction);
+
 inline StringRef toString(Direction direction) {
   return direction == Direction::In ? "in" : "out";
 }

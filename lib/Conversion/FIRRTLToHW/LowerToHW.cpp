@@ -261,11 +261,9 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool nonConstAsyncResetValueIsError,
                        InstanceGraph *instanceGraph)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
-        enableAnnotationWarning(enableAnnotationWarning),
-        nonConstAsyncResetValueIsError(nonConstAsyncResetValueIsError) {
+        enableAnnotationWarning(enableAnnotationWarning) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -359,10 +357,6 @@ private:
   // Control access to binds.
   std::mutex bindsMutex;
 
-  /// If true, non-constant reset values of async reset registers are printed as
-  /// errors and cause the pass to abort. Otherwise they are warnings.
-  const bool nonConstAsyncResetValueIsError = true;
-
   // The design-under-test (DUT), if it is found.  This will be set if a
   // "sifive.enterprise.firrtl.MarkDUTAnnotation" exists.
   FModuleLike dut;
@@ -428,7 +422,8 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following will be handled after lowering FModule ops, since
             // they are still needed on the circuit until after lowering
             // FModules.
-            moduleHierAnnoClass, testHarnessHierAnnoClass))
+            moduleHierAnnoClass, testHarnessHierAnnoClass,
+            blackBoxTargetDirAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
@@ -442,9 +437,6 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
-  void setNonConstAsyncResetValueIsError() {
-    nonConstAsyncResetValueIsError = true;
-  }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -471,13 +463,10 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 bool nonConstAsyncResetValueIsError) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
-  if (nonConstAsyncResetValueIsError)
-    pass->setNonConstAsyncResetValueIsError();
   return pass;
 }
 
@@ -504,7 +493,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(circuit, enableAnnotationWarning,
-                             nonConstAsyncResetValueIsError,
                              &getAnalysis<InstanceGraph>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
@@ -993,8 +981,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // If this is in the test harness, make sure it goes to the test directory.
   if (auto testBenchDir = loweringState.getTestBenchDirectory())
-    if (loweringState.isInTestHarness(oldModule))
+    if (loweringState.isInTestHarness(oldModule)) {
       newModule->setAttr("output_file", testBenchDir);
+      newModule->setAttr("firrtl.extract.do_not_extract",
+                         builder.getUnitAttr());
+    }
 
   bool failed = false;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
@@ -1488,7 +1479,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
-  LogicalResult visitStmt(PartialConnectOp op);
   LogicalResult visitStmt(StrictConnectOp op);
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
@@ -2300,10 +2290,14 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
     // is unique in the SymbolTable is non-trivial.
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
+    symName = builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue()));
   }
-
+  if (!symName && !isUselessName(name)) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue()));
+  }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
@@ -2347,6 +2341,11 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName) {
     // name may be empty
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
+  if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());
@@ -2591,15 +2590,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
-    if (!firrtl::isConstant(op.resetValue())) {
-      auto diag = circuitState.nonConstAsyncResetValueIsError
-                      ? op.emitError()
-                      : op.emitWarning();
-      diag << "register with async reset requires constant reset value";
-      diag.attachNote(op.resetValue().getLoc()) << "reset value defined here:";
-      if (circuitState.nonConstAsyncResetValueIsError)
-        return failure();
-    }
     addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal,
                      ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
                      resetSignal, std::function<void()>(), resetFn);
@@ -2790,8 +2780,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
-  auto *oldModule =
-      circuitState.circuitOp.lookupSymbol(oldInstance.moduleName());
+  Operation *oldModule =
+      circuitState.getInstanceGraph()->getReferencedModule(oldInstance);
   auto newModule = circuitState.getNewModule(oldModule);
   if (!newModule) {
     oldInstance->emitOpError("could not find module referenced by instance");
@@ -3428,92 +3418,6 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   return success();
 }
 
-// This will have to handle struct connects at some point.
-LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
-  auto dest = op.dest();
-  // The source can be a different size integer, adjust it as appropriate if
-  // so.
-  auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
-  auto srcVal = getLoweredAndExtOrTruncValue(op.src(), destType);
-  if (!srcVal)
-    return success(isZeroBitFIRRTLType(op.src().getType()) ||
-                   isZeroBitFIRRTLType(destType));
-
-  auto destVal = getPossiblyInoutLoweredValue(dest);
-  if (!destVal)
-    return failure();
-
-  if (!destVal.getType().isa<hw::InOutType>())
-    return op.emitError("destination isn't an inout type");
-
-  auto *definingOp = getFieldRefFromValue(dest).getValue().getDefiningOp();
-
-  // If this is an assignment to a register, then the connect implicitly
-  // happens under the clock that gates the register.
-  if (auto regOp = dyn_cast_or_null<RegOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regOp.clockVal());
-    if (!clockVal)
-      return failure();
-
-    addToAlwaysBlock(clockVal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  // If this is an assignment to a RegReset, then the connect implicitly
-  // happens under the clock and reset that gate the register.
-  if (auto regResetOp = dyn_cast_or_null<RegResetOp>(definingOp)) {
-    Value clockVal = getLoweredValue(regResetOp.clockVal());
-    Value resetSignal = getLoweredValue(regResetOp.resetSignal());
-    if (!clockVal || !resetSignal)
-      return failure();
-
-    auto resetStyle = regResetOp.resetSignal().getType().isa<AsyncResetType>()
-                          ? ::ResetType::AsyncReset
-                          : ::ResetType::SyncReset;
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clockVal, resetStyle,
-                     sv::EventControl::AtPosEdge, resetSignal,
-                     [&]() { builder.create<sv::PAssignOp>(destVal, srcVal); });
-    return success();
-  }
-
-  if (srcVal.getType().isa<hw::ArrayType>() && destType != op.src().getType()) {
-    // If the connection is about array and types do not match, it might be a
-    // connection between vectors with different lengths. For such cases, we
-    // can not use usual assignments. It is necessary to assign each elements
-    // recursively.
-    std::function<void(Value, Value, Type, Type)> recurse = [&](Value dest,
-                                                                Value src,
-                                                                Type dstType,
-                                                                Type srcType) {
-      TypeSwitch<Type>(srcType)
-          .Case<FVectorType>([&](auto srcVectorType) {
-            auto destVectorType = destType.cast<FVectorType>();
-            for (size_t i = 0, e = std::min(srcVectorType.getNumElements(),
-                                            destVectorType.getNumElements());
-                 i != e; ++i) {
-              auto idx =
-                  getOrCreateIntConstant(getBitWidthFromVectorSize(e), i);
-              auto destInOutOp =
-                  builder.create<sv::ArrayIndexInOutOp>(dest, idx);
-              auto srcGetOp = builder.create<hw::ArrayGetOp>(src, idx);
-
-              recurse(destInOutOp, srcGetOp, destVectorType.getElementType(),
-                      srcVectorType.getElementType());
-            }
-          })
-          .Case<IntType>([&](auto) { builder.create<sv::AssignOp>(dest, src); })
-          .Default([&](auto) { llvm_unreachable("must fail before"); });
-    };
-    recurse(destVal, srcVal, destType, op.src().getType());
-
-    return success();
-  }
-
-  builder.create<sv::AssignOp>(destVal, srcVal);
-  return success();
-}
-
 LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   auto dest = op.dest();
   auto srcVal = getLoweredValue(op.src());
@@ -3607,7 +3511,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
-          builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
+          builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
 
       addIfProceduralBlock(ifCond, [&]() {
@@ -3637,7 +3541,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
-          builder.create<sv::VerbatimExprOp>(cond.getType(), "`STOP_COND_");
+          builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.
@@ -3770,11 +3674,11 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
             circuitState.used_ASSERT_VERBOSE_COND = true;
             circuitState.used_STOP_COND = true;
             addIfProceduralBlock(
-                builder.create<sv::VerbatimExprOp>(boolType,
-                                                   "`ASSERT_VERBOSE_COND_"),
+                builder.create<sv::MacroRefExprOp>(boolType,
+                                                   "ASSERT_VERBOSE_COND_"),
                 [&]() { builder.create<sv::ErrorOp>(message, messageOps); });
             addIfProceduralBlock(
-                builder.create<sv::VerbatimExprOp>(boolType, "`STOP_COND_"),
+                builder.create<sv::MacroRefExprOp>(boolType, "STOP_COND_"),
                 [&]() { builder.create<sv::FatalOp>(); });
           });
         });

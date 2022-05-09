@@ -80,3 +80,17 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
     hw.instance "submodule" @AlreadyExtracted(clock: %clock: i1) -> () {doNotPrint = true}
   }
 }
+
+// -----
+
+// Check that we don't extract assertions from a module with "firrtl.extract.do_not_extract" attribute.
+//
+// CHECK-NOT:  hw.module @ModuleInTestHarness_assert
+// CHECK-NOT:  firrtl.extract.do_not_extract
+module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
+  hw.module @ModuleInTestHarness(%clock: i1) -> () attributes {"firrtl.extract.do_not_extract"} {
+    sv.always posedge %clock  {
+      sv.assert %clock, immediate
+    }
+  }
+}

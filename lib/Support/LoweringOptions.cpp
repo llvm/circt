@@ -58,8 +58,7 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowLocalVariables = true;
     } else if (option == "verifLabels") {
       enforceVerifLabels = true;
-    } else if (option.startswith("emittedLineLength=")) {
-      option = option.drop_front(strlen("emittedLineLength="));
+    } else if (option.consume_front("emittedLineLength=")) {
       if (option.getAsInteger(10, emittedLineLength)) {
         errorHandler("expected integer source width");
         emittedLineLength = DEFAULT_LINE_LENGTH;
@@ -68,19 +67,19 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       explicitBitcastAddMul = true;
     } else if (option == "emitReplicatedOpsToHeader") {
       emitReplicatedOpsToHeader = true;
-    } else if (option.startswith("maximumNumberOfTermsPerExpression=")) {
-      option = option.drop_front(strlen("maximumNumberOfTermsPerExpression="));
+    } else if (option.consume_front("maximumNumberOfTermsPerExpression=")) {
       if (option.getAsInteger(10, maximumNumberOfTermsPerExpression)) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
-    } else if (option.startswith("locationInfoStyle=")) {
-      option = option.drop_front(strlen("locationInfoStyle="));
+    } else if (option.consume_front("locationInfoStyle=")) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
       } else {
         errorHandler("expected 'plain' or 'wrapInAtSquareBracket'");
       }
+    } else if (option == "disallowPortDeclSharing") {
+      disallowPortDeclSharing = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -107,6 +106,8 @@ std::string LoweringOptions::toString() const {
     options += "emitReplicatedOpsToHeader,";
   if (locationInfoStyle == LocationInfoStyle::WrapInAtSquareBracket)
     options += "locationInfoStyle=wrapInAtSquareBracket,";
+  if (disallowPortDeclSharing)
+    options += "disallowPortDeclSharing,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
@@ -166,7 +167,9 @@ struct LoweringCLOptions {
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul, "
-          "emitReplicatedOpsToHeader"),
+          "emitReplicatedOpsToHeader, "
+          "locationInfoStyle={plain,wrapInAtSquareBracket}, "
+          "disallowPortDeclSharing"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

@@ -10,15 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Ensure symbol is one of the hw module.* types.  Passes on failed lookup, so
-/// more basic symbol validation can provide more useful error messages.
-def isModuleSymbol : AttrConstraint<
-    CPred<"!::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()) || "
-          "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()))"
-    >, "is module like">;
-
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
@@ -111,6 +102,16 @@ def HWModuleOp : HWModuleOpBase<"module",
     PortInfo getOutputPort(size_t i) {
       return getModuleOutputPort(*this, i);
     }
+
+    /// Inserts a list of output ports into the port list at a specific
+    /// location, shifting all subsequent ports.  Rewrites the output op
+    /// to return the associated values.
+    void insertOutputs(unsigned index,
+                       ArrayRef<std::pair<StringAttr, Value>> outputs);
+
+    /// Appends output ports to the module with the specified names and
+    /// rewrites the output op to return the associated values.
+    void appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs);
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
@@ -283,8 +284,9 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
   let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
 
-def HWModuleGeneratedOp : HWModuleOpBase<"module.generated",
-      [IsolatedFromAbove]> {
+def HWModuleGeneratedOp : HWModuleOpBase<"module.generated", [
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+      IsolatedFromAbove]> {
   let summary = "HW Generated Module";
   let description = [{
     The "hw.module.generated" operation represents a reference to an external
@@ -388,7 +390,7 @@ def InstanceOp : HWOp<"instance", [
   }];
 
   let arguments = (ins StrAttr:$instanceName,
-                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
+                       FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,

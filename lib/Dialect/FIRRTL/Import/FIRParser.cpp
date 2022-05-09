@@ -1555,11 +1555,6 @@ private:
   // the representation simpler and more consistent.
   void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
 
-  /// Connect all elements of two values, emitting attaches or analog values and
-  /// connects for all others. This is useful since it is illegal to connect
-  /// analog values.
-  void connectDebugValue(ImplicitLocOpBuilder &builder, Value dst, Value src);
-
   /// Emit the logic for a partial connect using standard connect.
   void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
 
@@ -1686,50 +1681,6 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
       });
 }
 
-void FIRStmtParser::connectDebugValue(ImplicitLocOpBuilder &builder, Value dst,
-                                      Value src) {
-  auto type = dst.getType().cast<FIRRTLType>();
-  if (!type.containsAnalog()) {
-    builder.create<ConnectOp>(dst, src);
-  } else if (type.isa<AnalogType>()) {
-    builder.create<AttachOp>(SmallVector{dst, src});
-  } else if (auto bundle = type.dyn_cast<BundleType>()) {
-    for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubfieldOp>(dst, i);
-      }
-      auto &srcField = moduleContext.getCachedSubaccess(src, i);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubfieldOp>(src, i);
-      }
-      connectDebugValue(builder, dstField, srcField);
-    }
-  } else if (auto vector = type.dyn_cast<FVectorType>()) {
-    for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubindexOp>(dst, i);
-      }
-      auto &srcField = moduleContext.getCachedSubaccess(src, i);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubindexOp>(src, i);
-      }
-      connectDebugValue(builder, dstField, srcField);
-    }
-  } else {
-    llvm_unreachable("unknown type");
-  }
-}
-
 void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
                                        Value src) {
   auto dstType = dst.getType().cast<FIRRTLType>();
@@ -1778,12 +1729,13 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
     // Partial connect will connect all elements up to the end of the array.
     auto numElements = std::min(dstNumElements, srcNumEelemnts);
     for (size_t i = 0; i != numElements; ++i) {
-      auto &dstField = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstField) {
+      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
+      if (!dstRef) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointAfterValue(dst);
-        dstField = builder.create<SubindexOp>(dst, i);
+        dstRef = builder.create<SubindexOp>(dst, i);
       }
+      auto dstField = dstRef; // copy to ensure not invalidated
       auto &srcField = moduleContext.getCachedSubaccess(src, i);
       if (!srcField) {
         OpBuilder::InsertionGuard guard(builder);
@@ -2793,23 +2745,20 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
 
   locationProcessor.setLoc(loc);
 
-  auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
-  auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
-  if (lhsPType == rhsPType && false) {
-    if (lhsPType.hasUninferredWidth())
-      builder.create<ConnectOp>(lhs, rhs);
-    else
-      builder.create<StrictConnectOp>(lhs, rhs);
-    return success();
-  }
+  auto lhsType = lhs.getType().cast<FIRRTLType>();
+  auto rhsType = rhs.getType().cast<FIRRTLType>();
 
   if (kind == FIRToken::less_equal) {
-    if (!areTypesEquivalent(lhsPType, rhsPType))
+    if (!areTypesEquivalent(lhsType, rhsType))
       return emitError(loc, "cannot connect non-equivalent type ")
-             << rhsPType << " to " << lhsPType;
+             << rhsType << " to " << lhsType;
     emitConnect(builder, lhs, rhs);
   } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
+    if (!areTypesWeaklyEquivalent(lhsType, rhsType))
+      return emitError(loc,
+                       "cannot partially connect non-weakly-equivalent type ")
+             << rhsType << " to " << lhsType;
     emitPartialConnect(builder, lhs, rhs);
   }
   return success();
@@ -3129,8 +3078,6 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   return moduleContext.addSymbolEntry(id, entryID, startTok.getLoc());
 }
 
-static bool isNamed(StringRef id) { return !id.startswith("_"); }
-
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
   auto startTok = consumeToken(FIRToken::kw_node);
@@ -3175,19 +3122,8 @@ ParseResult FIRStmtParser::parseNode() {
                        moduleContext.targetsInModule, initializerType);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto isNamed =
-      !getConstants().options.disableNamePreservation && ::isNamed(id);
-  auto result = builder.create<NodeOp>(initializer.getType(), initializer,
-                                       isNamed ? (Twine("_") + id).str() : id,
+  auto result = builder.create<NodeOp>(initializer.getType(), initializer, id,
                                        annotations, sym);
-  // If the node is named, then add a debug tap.
-  //
-  // TODO: Change this once the FIRRTL spec supports "named" vs. "unnamed"
-  // nodes.
-  if (isNamed)
-    builder.create<NodeOp>(
-        initializer.getType(), result, id, getConstants().emptyArrayAttr,
-        StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3216,26 +3152,7 @@ ParseResult FIRStmtParser::parseWire() {
                        moduleContext.targetsInModule, type);
 
   auto sym = getSymbolIfRequired(annotations, id);
-  auto isNamed =
-      !getConstants().options.disableNamePreservation && ::isNamed(id);
-  auto result = builder.create<WireOp>(
-      type, isNamed ? (Twine("_") + id).str() : id, annotations, sym);
-  // If the wire is named, then add a debug tap.
-  //
-  // TODO: Change this once the FIRRTL spec supports "named" vs. "unnamed"
-  // wires.
-  if (isNamed) {
-    if (type.isPassive())
-      builder.create<NodeOp>(
-          type, result, id, getConstants().emptyArrayAttr,
-          StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
-    else {
-      auto debug = builder.create<WireOp>(
-          type.getPassiveType(), id, getConstants().emptyArrayAttr,
-          StringAttr::get(annotations.getContext(), modNameSpace.newName(id)));
-      connectDebugValue(builder, debug, result);
-    }
-  }
+  auto result = builder.create<WireOp>(type, id, annotations, sym);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3995,9 +3912,20 @@ DoneParsing:
   if (foundUnappliedAnnotations)
     return failure();
 
-  // If the module has an entry point that is not an external module, set the
-  // visibility of all non-main modules to private.
   auto main = circuit.getMainModule();
+  if (!main) {
+    // Give more specific error if no modules defined at all
+    if (circuit.getOps<FModuleLike>().empty()) {
+      return mlir::emitError(circuit.getLoc())
+             << "no modules found, circuit must contain one or more modules";
+    }
+    return mlir::emitError(circuit.getLoc())
+           << "no main module found, circuit '" << circuit.name()
+           << "' must contain a module named '" << circuit.name() << "'";
+  }
+
+  // If the circuit has an entry point that is not an external module, set the
+  // visibility of all non-main modules to private.
   if (isa<FModuleOp>(main)) {
     for (auto mod : circuit.getOps<FModuleLike>()) {
       if (mod != main)

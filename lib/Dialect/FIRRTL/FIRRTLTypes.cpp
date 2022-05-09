@@ -492,6 +492,8 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
                                         BundleType::BundleElement srcElement) {
   if (destElement.name != srcElement.name)
     return false;
+  if (destElement.isFlip != srcElement.isFlip)
+    return false;
 
   return areTypesEquivalent(destElement.type, srcElement.type);
 }

@@ -365,6 +365,14 @@ Value calyx::ComponentOp::getDonePort() {
   return getBlockArgumentWithName("done", *this);
 }
 
+Value calyx::ComponentOp::getClkPort() {
+  return getBlockArgumentWithName("clk", *this);
+}
+
+Value calyx::ComponentOp::getResetPort() {
+  return getBlockArgumentWithName("reset", *this);
+}
+
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
   auto portTypes = getArgumentTypes();
   ArrayAttr portNamesAttr = portNames(), portAttrs = portAttributes();
@@ -731,6 +739,30 @@ LogicalResult WiresOp::verify() {
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
   }
+
+  // Verify that:
+  // - At most one continuous assignment exists for any given value
+  // - A continuously assigned wire has no assignments inside groups.
+  for (auto thisAssignment : getBody()->getOps<AssignOp>()) {
+    // Always assume guarded assignments will not be driven simultaneously. We
+    // liberally assume that guards are mutually exclusive (more elaborate
+    // static and dynamic checking can be performed to validate such cases).
+    if (thisAssignment.guard())
+      continue;
+
+    Value dest = thisAssignment.dest();
+    for (Operation *user : dest.getUsers()) {
+      auto assignUser = dyn_cast<AssignOp>(user);
+      if (!assignUser || assignUser.dest() != dest ||
+          assignUser == thisAssignment)
+        continue;
+
+      return user->emitOpError() << "destination is already continuously "
+                                    "driven. Other assignment is "
+                                 << thisAssignment;
+    }
+  }
+
   return success();
 }
 
@@ -1332,11 +1364,11 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),               // In
+      DictionaryAttr::get(context),   // In
       writeEn.getDictionary(context), // Write enable
       clk.getDictionary(context),     // Clk
       reset.getDictionary(context),   // Reset
-      DictionaryAttr(),               // Out
+      DictionaryAttr::get(context),   // Out
       done.getDictionary(context)     // Done
   };
 }
@@ -1373,7 +1405,7 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   SmallVector<DictionaryAttr> portAttributes;
   MLIRContext *context = getContext();
   for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
-    portAttributes.push_back(DictionaryAttr()); // Addresses
+    portAttributes.push_back(DictionaryAttr::get(context)); // Addresses
 
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
@@ -1381,10 +1413,10 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   writeEn.append("go", isSet);
   clk.append("clk", isSet);
   done.append("done", isSet);
-  portAttributes.append({DictionaryAttr(),               // In
+  portAttributes.append({DictionaryAttr::get(context),   // In
                          writeEn.getDictionary(context), // Write enable
                          clk.getDictionary(context),     // Clk
-                         DictionaryAttr(),               // Out
+                         DictionaryAttr::get(context),   // Out
                          done.getDictionary(context)}    // Done
   );
   return portAttributes;
@@ -1729,9 +1761,9 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
       clk.getDictionary(context),   /* Clk    */
       reset.getDictionary(context), /* Reset  */
       go.getDictionary(context),    /* Go     */
-      DictionaryAttr(),             /* Lhs    */
-      DictionaryAttr(),             /* Rhs    */
-      DictionaryAttr(),             /* Out    */
+      DictionaryAttr::get(context), /* Lhs    */
+      DictionaryAttr::get(context), /* Rhs    */
+      DictionaryAttr::get(context), /* Out    */
       done.getDictionary(context)   /* Done   */
   };
 }
@@ -1765,10 +1797,10 @@ SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
       clk.getDictionary(context),   /* Clk       */
       reset.getDictionary(context), /* Reset     */
       go.getDictionary(context),    /* Go        */
-      DictionaryAttr(),             /* Lhs       */
-      DictionaryAttr(),             /* Rhs       */
-      DictionaryAttr(),             /* Quotient  */
-      DictionaryAttr(),             /* Remainder */
+      DictionaryAttr::get(context), /* Lhs       */
+      DictionaryAttr::get(context), /* Rhs       */
+      DictionaryAttr::get(context), /* Quotient  */
+      DictionaryAttr::get(context), /* Remainder */
       done.getDictionary(context)   /* Done      */
   };
 }
@@ -1801,7 +1833,8 @@ LogicalResult SliceLibOp::verify() {
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
-    return {DictionaryAttr(), DictionaryAttr()};                               \
+    return {DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext())};                                \
   }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
@@ -1818,7 +1851,9 @@ LogicalResult SliceLibOp::verify() {
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }                                                                            \
   SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
-    return {DictionaryAttr(), DictionaryAttr(), DictionaryAttr()};             \
+    return {DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext()),                                 \
+            DictionaryAttr::get(getContext())};                                \
   }
 
 // clang-format off

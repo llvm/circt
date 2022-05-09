@@ -1029,6 +1029,32 @@ LogicalResult HWModuleOp::verify() { return verifyModuleCommon(*this); }
 
 LogicalResult HWModuleExternOp::verify() { return verifyModuleCommon(*this); }
 
+void HWModuleOp::insertOutputs(unsigned index,
+                               ArrayRef<std::pair<StringAttr, Value>> outputs) {
+
+  auto output = cast<OutputOp>(getBodyBlock()->getTerminator());
+  assert(index <= output->getNumOperands() && "invalid output index");
+
+  // Rewrite the port list of the module.
+  SmallVector<std::pair<unsigned, PortInfo>> indexedNewPorts;
+  for (auto &[name, value] : outputs) {
+    PortInfo port;
+    port.name = name;
+    port.direction = PortDirection::OUTPUT;
+    port.type = value.getType();
+    indexedNewPorts.emplace_back(index, port);
+  }
+  insertPorts({}, indexedNewPorts);
+
+  // Rewrite the output op.
+  for (auto &[name, value] : outputs)
+    output->insertOperands(index++, value);
+}
+
+void HWModuleOp::appendOutputs(ArrayRef<std::pair<StringAttr, Value>> outputs) {
+  return insertOutputs(getResultTypes().size(), outputs);
+}
+
 void HWModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                           mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(region, setNameFn);
@@ -1046,11 +1072,11 @@ Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
-LogicalResult HWModuleGeneratedOp::verify() {
-  if (failed(verifyModuleCommon(*this)))
-    return failure();
+LogicalResult
+HWModuleGeneratedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *referencedKind =
+      symbolTable.lookupNearestSymbolFrom(*this, generatorKindAttr());
 
-  auto *referencedKind = getGeneratorKindOp();
   if (referencedKind == nullptr)
     return emitError("Cannot find generator definition '")
            << generatorKind() << "'";
@@ -1072,6 +1098,10 @@ LogicalResult HWModuleGeneratedOp::verify() {
   }
 
   return success();
+}
+
+LogicalResult HWModuleGeneratedOp::verify() {
+  return verifyModuleCommon(*this);
 }
 
 void HWModuleGeneratedOp::getAsmBlockArgumentNames(

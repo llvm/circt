@@ -1,5 +1,7 @@
 // RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
+module attributes {calyx.metadata = ["location1", "location2"]} {
+
 // CHECK: import "primitives/core.futil";
 calyx.program "main" {
   // CHECK-LABEL: component A<"static"=1>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
@@ -174,4 +176,10 @@ calyx.program "main" {
       }
     }
   }
+}
+
+// CHECK-LABEL: metadata #{
+// CHECK-NEXT:  0: location1
+// CHECK-NEXT:  1: location2
+// CHECK-NEXT:  }#
 }

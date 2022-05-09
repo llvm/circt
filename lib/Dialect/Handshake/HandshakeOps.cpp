@@ -23,6 +23,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/SetVector.h"
@@ -228,10 +229,12 @@ void LazyForkOp::build(OpBuilder &builder, OperationState &result,
   // Fork is control-only if it is the no-data output of a ControlMerge or a
   // StartOp
   auto *op = operand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    operand == op->getResult(0))
-                       ? true
-                       : false;
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
+                   operand == op->getResult(0);
+
+  // Alternatively, the control signal could originate from a BlockArgument
+  isControl = isControl || (operand.isa<BlockArgument>() &&
+                            operand.getType().isa<NoneType>());
   sost::addAttributes(result, outputs, type, isControl);
 }
 
@@ -630,6 +633,9 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<NamedAttrList, 4> argAttributes, resAttributes;
   SmallVector<Attribute> argNames;
 
+  // Parse visibility.
+  mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes) ||
@@ -721,12 +727,14 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(dataOperand);
 
   // Branch is control-only if it is the no-data output of a ControlMerge or a
-  // StartOp This holds because Branches are inserted before Forks
+  // StartOp. This holds because Branches are inserted before Forks
   auto *op = dataOperand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    dataOperand == op->getResult(0))
-                       ? true
-                       : false;
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
+                   dataOperand == op->getResult(0);
+
+  // Alternatively, the control signal could originate from a BlockArgument
+  isControl = isControl || (dataOperand.isa<BlockArgument>() &&
+                            dataOperand.getType().isa<NoneType>());
   sost::addAttributes(result, 1, type, isControl);
 }
 
@@ -813,10 +821,9 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
   // Branch is control-only if it is the no-data output of a ControlMerge or a
   // StartOp This holds because Branches are inserted before Forks
   auto *op = dataOperand.getDefiningOp();
-  bool isControl = ((dyn_cast<ControlMergeOp>(op) || dyn_cast<StartOp>(op)) &&
-                    dataOperand == op->getResult(0))
-                       ? true
-                       : false;
+  bool isControl = isa_and_nonnull<ControlMergeOp, StartOp>(op) &&
+                   dataOperand == op->getResult(0);
+
   if (isControl || type.isa<NoneType>())
     result.addAttribute("control", builder.getBoolAttr(true));
 }
@@ -894,7 +901,7 @@ void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
 }
 
 void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
-                                ArrayRef<Value> operands) {
+                                ValueRange operands) {
   result.addOperands(operands);
 }
 
@@ -1173,7 +1180,7 @@ std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
 }
 
 void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
-                             Value memref, ArrayRef<Value> inputs, int ldCount,
+                             Value memref, ValueRange inputs, int ldCount,
                              int stCount, int id) {
   SmallVector<Value> ops;
   ops.push_back(memref);
@@ -1196,7 +1203,7 @@ void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<Value> operands, int outputs, int control_outputs,
+                     ValueRange operands, int outputs, int controlOutputs,
                      bool lsq, int id, Value memref) {
   result.addOperands(operands);
 
@@ -1206,7 +1213,7 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   result.types.append(outputs, memrefType.getElementType());
 
   // Control outputs
-  result.types.append(control_outputs, builder.getNoneType());
+  result.types.append(controlOutputs, builder.getNoneType());
   result.addAttribute("lsq", builder.getBoolAttr(lsq));
   result.addAttribute("memRefType", TypeAttr::get(memrefType));
 
@@ -1217,7 +1224,7 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
   if (!lsq) {
     result.addAttribute("ldCount", builder.getIntegerAttr(i32Type, outputs));
     result.addAttribute(
-        "stCount", builder.getIntegerAttr(i32Type, control_outputs - outputs));
+        "stCount", builder.getIntegerAttr(i32Type, controlOutputs - outputs));
   }
 }
 
@@ -1285,7 +1292,7 @@ std::string handshake::LoadOp::getResultName(unsigned int idx) {
 }
 
 void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
-                              Value memref, ArrayRef<Value> indices) {
+                              Value memref, ValueRange indices) {
   // Address indices
   // result.addOperands(memref);
   result.addOperands(indices);
@@ -1375,7 +1382,7 @@ std::string handshake::StoreOp::getResultName(unsigned int idx) {
 }
 
 void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
-                               Value valueToStore, ArrayRef<Value> indices) {
+                               Value valueToStore, ValueRange indices) {
 
   // Address indices
   result.addOperands(indices);
@@ -1399,7 +1406,7 @@ ParseResult StoreOp::parse(OpAsmParser &parser, OperationState &result) {
 void StoreOp::print(OpAsmPrinter &p) { return printMemoryAccessOp(p, *this); }
 
 void JoinOp::build(OpBuilder &builder, OperationState &result,
-                   ArrayRef<Value> operands) {
+                   ValueRange operands) {
   auto type = builder.getNoneType();
   result.types.push_back(type);
 
@@ -1436,6 +1443,54 @@ LogicalResult InstanceOp::verify() {
            << "last operand must be a control (none-typed) operand.";
 
   return success();
+}
+
+ParseResult UnpackOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand tuple;
+  TupleType type;
+
+  if (parser.parseOperand(tuple) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  if (parser.resolveOperand(tuple, type, result.operands))
+    return failure();
+
+  result.addTypes(type.getTypes());
+
+  return success();
+}
+
+void UnpackOp::print(OpAsmPrinter &p) {
+  p << " " << input();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << input().getType();
+}
+
+ParseResult PackOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
+  llvm::SMLoc allOperandLoc = parser.getCurrentLocation();
+  TupleType type;
+
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+
+  if (parser.resolveOperands(operands, type.getTypes(), allOperandLoc,
+                             result.operands))
+    return failure();
+
+  result.addTypes(type);
+
+  return success();
+}
+
+void PackOp::print(OpAsmPrinter &p) {
+  p << " " << inputs();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << result().getType();
 }
 
 //===----------------------------------------------------------------------===//

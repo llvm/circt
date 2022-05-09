@@ -166,3 +166,72 @@ hw.module @ReadInoutAggregate(%clock: i1) {
   // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, [[READ]][15:0]};
   hw.output
 }
+
+// CHECK-LABEL: DefinedInDifferentBlock
+// CHECK: `ifdef DEF
+// CHECK-NEXT: initial begin
+// CHECK-NEXT:   if (a == b)
+// CHECK-NEXT:     $error("error")
+// DISALLOW: `ifdef DEF
+// DISALLOW-NEXT: initial begin
+// DISALLOW-NEXT:   if (a == b)
+// DISALLOW-NEXT:     $error("error")
+
+hw.module @DefinedInDifferentBlock(%a: i1, %b: i1) {
+  sv.ifdef "DEF" {
+    %0 = comb.icmp eq %a, %b : i1
+    sv.initial {
+      sv.if %0 {
+        sv.error "error"
+      }
+    }
+  }
+  hw.output
+}
+
+// CHECK-LABEL: module TemporaryWireAtDifferentBlock(
+// DISALLOW-LABEL: module TemporaryWireAtDifferentBlock(
+hw.module @TemporaryWireAtDifferentBlock(%a: i1) -> (b: i1) {
+  // Check that %0 and %1 are not inlined.
+  // CHECK:      wire [[GEN1:.+]];
+  // CHECK:      wire [[GEN2:.+]] = [[GEN1]] + [[GEN1]];
+  // CHECK:      if ([[GEN1]])
+  // DISALLOW:   wire [[GEN1:.+]];
+  // DISALLOW:   wire [[GEN2:.+]] = [[GEN1]] + [[GEN1]];
+  // DISALLOW:   if ([[GEN1]])
+  %1 = comb.add %0, %0 : i1
+  sv.initial {
+    sv.if %0 {
+      sv.error "error"
+    }
+  }
+  %0 = comb.shl %a, %a : i1
+  %2 = comb.add %1, %1 : i1
+  hw.output %2 : i1
+}
+
+// CHECK-LABEL: module AggregateInline(
+// DISALLOW-LABEL: module AggregateInline(
+hw.module @AggregateInline(%clock: i1) {
+  %c0_i16 = hw.constant 0 : i16
+  %false = hw.constant false
+  // CHECK: wire [15:0]{{ *}}[[GEN:.+]];
+  // DISALLOW: wire [15:0]{{ *}}[[GEN:.+]];
+
+  %register = sv.reg  : !hw.inout<struct<a: i32>>
+  sv.always posedge %clock  {
+    // %4 can not be inlined because %3 uses %2.
+    %4 = comb.concat %c0_i16, %3 : i16, i16
+    // DISALLOW: register.a <= {16'h0, [[GEN]]};
+    // CHECK: register.a <= {16'h0, [[GEN]]};
+    sv.passign %1, %4 : i32
+  }
+  %1 = sv.struct_field_inout %register["a"] : !hw.inout<struct<a: i32>>
+  %2 = sv.read_inout %1 : !hw.inout<i32>
+  %3 = comb.extract %2 from 0 : (i32) -> i16
+  // DISALLOW: wire [31:0] [[GEN_2:.+]] = register.a;
+  // DISALLOW-NEXT: assign [[GEN]] = [[GEN_2]]
+  // CHECK: wire [31:0] [[GEN_2:.+]] = register.a;
+  // CHECK-NEXT: assign [[GEN]] = [[GEN_2]]
+  hw.output
+}

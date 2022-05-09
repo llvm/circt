@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
+  ExtractInstances.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
   GrandCentralTaps.cpp
@@ -14,6 +15,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferResets.cpp
   InferReadWrite.cpp
   InferWidths.cpp
+  InjectDUTHierarchy.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerTypes.cpp
@@ -22,8 +24,8 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   PrefixModules.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp
-  RemoveInvalid.cpp
   RemoveUnusedPorts.cpp
+  SFCCompat.cpp
   WireDFT.cpp
 
   DEPENDS

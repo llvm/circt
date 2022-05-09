@@ -31,6 +31,9 @@ static bool isAggregate(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    if (!isUselessName(wire.name()))
+      return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 
@@ -258,7 +261,6 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void visitConnect(ConnectOp connect);
   void visitStrictConnect(StrictConnectOp connect);
-  void visitPartialConnect(PartialConnectOp connect);
   void visitOperation(Operation *op);
 
 private:
@@ -605,10 +607,6 @@ void IMConstPropPass::visitStrictConnect(StrictConnectOp connect) {
       << "strictconnect destination is here";
 }
 
-void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
-  partialConnect.emitError("IMConstProp cannot handle partial connect");
-}
-
 /// This method is invoked when an operand of the specified op changes its
 /// lattice value state and when the block containing the operation is first
 /// noticed as being alive.
@@ -621,8 +619,6 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitConnect(connectOp);
   if (auto strictConnectOp = dyn_cast<StrictConnectOp>(op))
     return visitStrictConnect(strictConnectOp);
-  if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
-    return visitPartialConnect(partialConnectOp);
   if (auto regResetOp = dyn_cast<RegResetOp>(op))
     return markRegResetOp(regResetOp);
 
@@ -630,6 +626,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (isa<RegOp>(op))
     return;
   // TODO: Handle 'when' operations.
+
+  // Nodes might not fold since they might have a name, but should prop
+  if (isa<NodeOp>(op)) {
+    mergeLatticeValue(op->getResult(0), op->getOperand(0));
+    return;
+  }
 
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.

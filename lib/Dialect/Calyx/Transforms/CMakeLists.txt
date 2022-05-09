@@ -1,7 +1,9 @@
 add_circt_dialect_library(CIRCTCalyxTransforms
   CompileControl.cpp
   GoInsertion.cpp
+  ClkResetInsertion.cpp
   RemoveGroups.cpp
+  CalyxHelpers.cpp
 
   DEPENDS
   CIRCTCalyxTransformsIncGen

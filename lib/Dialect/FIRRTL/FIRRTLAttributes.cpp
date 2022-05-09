@@ -24,6 +24,16 @@ using namespace firrtl;
 // Utilities related to Direction
 //===----------------------------------------------------------------------===//
 
+Direction direction::flip(Direction direction) {
+  switch (direction) {
+  case Direction::In:
+    return Direction::Out;
+  case Direction::Out:
+    return Direction::In;
+  }
+  llvm_unreachable("unknown direction");
+}
+
 IntegerAttr direction::packAttribute(MLIRContext *context,
                                      ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.

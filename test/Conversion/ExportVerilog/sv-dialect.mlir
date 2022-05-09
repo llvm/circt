@@ -23,8 +23,8 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond & forceWire)
-      %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
+  // CHECK-NEXT:     if ((`PRINTF_COND_) & 1'bx & 1'bz & 1'bz & cond & forceWire)
+      %tmp = sv.macro.ref<"PRINTF_COND_"> : i1
       %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
@@ -1330,13 +1330,12 @@ hw.module @DoNotChainElseIf(%clock: i1, %flag1 : i1, %flag2: i1) {
 }
 
 // CHECK-LABEL: NestedElseIfHoist
-// CHECK: automatic logic        [[FLAG:.*]] = flag2 & flag4;
-// CHECK: automatic logic [31:0] [[ARG:.*]] = arg0 | arg1 | arg2;
+// CHECK: automatic logic [[FLAG:.*]] = flag2 & flag4;
 // CHECK: if (flag1)
 // CHECK: else if ([[FLAG]])
 // CHECK: else if (flag3 & [[FLAG]])
 // CHECK: else
-// CHECK: [[ARG]]
+// CHECK: arg0 | arg1 | arg2
 hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %flag4 : i1, %arg0: i32, %arg1: i32, %arg2: i32) {
   %fd = hw.constant 0x80000002 : i32
 

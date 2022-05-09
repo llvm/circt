@@ -32,6 +32,15 @@ constexpr const char *omirFileAnnoClass =
 constexpr const char *omirTrackerAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRTracker";
 
+constexpr const char *blackBoxTargetDirAnnoClass =
+    "firrtl.transforms.BlackBoxTargetDirAnno";
+constexpr const char *blackBoxResourceFileNameAnnoClass =
+    "firrtl.transforms.BlackBoxResourceFileNameAnno";
+constexpr const char *extractCoverageAnnoClass =
+    "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+constexpr const char *testBenchDirAnnoClass =
+    "sifive.enterprise.firrtl.TestBenchDirAnnotation";
+
 // Grand Central Annotations
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";
@@ -53,6 +62,16 @@ constexpr const char *dutAnnoClass =
     "sifive.enterprise.firrtl.MarkDUTAnnotation";
 constexpr const char *testbenchDirAnnoClass =
     "sifive.enterprise.firrtl.TestBenchDirAnnotation";
+constexpr const char *injectDUTHierarchyAnnoClass =
+    "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation";
+
+// Instance Extraction
+constexpr const char *extractBlackBoxAnnoClass =
+    "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation";
+constexpr const char *extractClockGatesAnnoClass =
+    "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation";
+constexpr const char *extractSeqMemsAnnoClass =
+    "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation";
 
 } // namespace firrtl
 } // namespace circt

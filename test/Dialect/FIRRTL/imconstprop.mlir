@@ -35,7 +35,8 @@ firrtl.circuit "Test" {
     %someWire = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %someWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK-NOT: firrtl.wire
+    // CHECK: %someWire = firrtl.wire 
+    // CHECK: firrtl.connect %someWire, %c0_ui1 
     // CHECK: firrtl.connect %result1, %c0_ui1_0
     firrtl.connect %result1, %someWire : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -44,7 +45,8 @@ firrtl.circuit "Test" {
     %clockWire = firrtl.wire : !firrtl.clock
     firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
 
-    // CHECK-NOT: firrtl.wire
+    // CHECK: %clockWire = firrtl.wire
+    // CHECK: firrtl.connect %clockWire, %c0_clock
     // CHECK: firrtl.connect %result2, %c0_clock
     firrtl.connect %result2, %clockWire : !firrtl.clock, !firrtl.clock
 

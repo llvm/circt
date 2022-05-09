@@ -26,7 +26,7 @@ func private @notModule () {
 }
 
 hw.module @A(%arg0: i1) {
-  // expected-error @+1 {{'hw.instance' op attribute 'moduleName' failed to satisfy constraint: flat symbol reference attribute is module like}}
+  // expected-error @+1 {{symbol reference 'notModule' isn't a module}}
   hw.instance "foo" @notModule(a: %arg0: i1) -> ()
 }
 
@@ -36,6 +36,19 @@ hw.module @A(%arg0: i1) {
   // expected-error @+1 {{Cannot find module definition 'doesNotExist'}}
   hw.instance "b1" @doesNotExist(a: %arg0: i1) -> ()
 }
+
+// -----
+
+hw.generator.schema @S, "Test Schema", ["test"]
+// expected-error @+1 {{Cannot find generator definition 'S2'}}
+hw.module.generated @A, @S2(%arg0: i1) -> (a: i1) attributes { test = 1 }
+
+// -----
+
+hw.module @S() { }
+// expected-error @+1 {{which is not a HWGeneratorSchemaOp}}
+hw.module.generated @A, @S(%arg0: i1) -> (a: i1) attributes { test = 1 }
+
 
 // -----
 

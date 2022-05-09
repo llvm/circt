@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/SCFToCalyx.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -101,6 +102,7 @@ struct WhileOpInterface {
   }
 
   Operation *getOperation() { return impl; }
+  Location getLoc() { return impl->getLoc(); }
 
 private:
   Operation *impl;
@@ -162,6 +164,35 @@ private:
 //===----------------------------------------------------------------------===//
 // Utility functions
 //===----------------------------------------------------------------------===//
+
+/// Returns whether this operation is a leaf node in the Calyx control.
+static bool isControlLeafNode(Operation *op) {
+  // TODO(github.com/llvm/circt/issues/1679): Add Invoke.
+  return isa<calyx::EnableOp>(op);
+}
+
+// Walks the control of this component, and appends source information for leaf
+// nodes. It also appends a position attribute that connects the source location
+// metadata to the corresponding control operation.
+static WalkResult
+getCiderSourceLocationMetadata(calyx::ComponentOp component,
+                               SmallVectorImpl<Attribute> &sourceLocations) {
+  Builder builder(component->getContext());
+  return component.getControlOp().walk([&](Operation *op) {
+    if (!isControlLeafNode(op))
+      return WalkResult::advance();
+
+    std::string sourceLocation;
+    llvm::raw_string_ostream os(sourceLocation);
+    op->getLoc()->print(os);
+    int64_t position = sourceLocations.size();
+    sourceLocations.push_back(
+        StringAttr::get(op->getContext(), sourceLocation));
+
+    op->setAttr("pos", builder.getI64IntegerAttr(position));
+    return WalkResult::advance();
+  });
+}
 
 /// Tries to match a constant value defined by op. If the match was
 /// successful, returns true and binds the constant to 'value'. If unsuccessful,
@@ -318,20 +349,6 @@ public:
   calyx::RegisterOp getReturnReg(unsigned idx) {
     assert(returnRegs.count(idx) && "No register registered for index!");
     return returnRegs[idx];
-  }
-
-  /// Returns an SSA value for an arbitrary precision constant defined within
-  /// compOp. A new constant is created if no constant is found.
-  Value getConstant(PatternRewriter &rewriter, Location loc, int64_t value,
-                    unsigned width) {
-    IRRewriter::InsertionGuard guard(rewriter);
-    Value v;
-    auto it = constants.find(APInt(value, width));
-    if (it == constants.end()) {
-      rewriter.setInsertionPointToStart(compOp.getBody());
-      return v = rewriter.create<hw::ConstantOp>(loc, APInt(value, width));
-    }
-    return it->second;
   }
 
   /// Register 'scheduleable' as being generated through lowering 'block'.
@@ -549,9 +566,6 @@ private:
   /// A mapping from return value indexes to return value registers.
   DenseMap<unsigned, calyx::RegisterOp> returnRegs;
 
-  /// A mapping of currently available constants in this component.
-  DenseMap<APInt, Value> constants;
-
   /// BlockScheduleables is a list of scheduleables that should be
   /// sequentially executed when executing the associated basic block.
   DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
@@ -661,8 +675,9 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   auto loc = inputValue.getLoc();
   rewriter.setInsertionPointToEnd(groupOp.getBody());
   rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
-  rewriter.create<calyx::AssignOp>(loc, reg.write_en(),
-                                   state.getConstant(rewriter, loc, 1, 1));
+  rewriter.create<calyx::AssignOp>(
+      loc, reg.write_en(),
+      createConstant(loc, rewriter, state.getComponentOp(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 }
 
@@ -719,16 +734,6 @@ public:
 private:
   LogicalResult &partialPatternRes;
 };
-
-/// Creates a new register within the component associated to 'compState'.
-static calyx::RegisterOp createReg(ComponentLoweringState &compState,
-                                   PatternRewriter &rewriter, Location loc,
-                                   Twine prefix, size_t width) {
-  IRRewriter::InsertionGuard guard(rewriter);
-  rewriter.setInsertionPointToStart(compState.getComponentOp().getBody());
-  return rewriter.create<calyx::RegisterOp>(loc, (prefix + "_reg").str(),
-                                            width);
-}
 
 //===----------------------------------------------------------------------===//
 // Partial lowering patterns
@@ -927,7 +932,7 @@ private:
     auto groupName = getComponentState().getUniqueName(
         getComponentState().getProgramState().blockName(block));
     return createGroup<TGroupOp>(rewriter, getComponentState().getComponentOp(),
-                                 block->front().getLoc(), groupName);
+                                 op->getLoc(), groupName);
   }
 
   /// buildLibraryBinaryPipeOp will build a TCalyxLibBinaryPipeOp, to
@@ -940,9 +945,9 @@ private:
     Type width = op.getResult().getType();
     // Pass the result from the Operation to the Calyx primitive.
     op.getResult().replaceAllUsesWith(out);
-    auto reg = createReg(getComponentState(), rewriter, op.getLoc(),
-                         getComponentState().getUniqueName(opName),
-                         width.getIntOrFloatBitWidth());
+    auto reg = createRegister(op.getLoc(), rewriter, *getComponent(),
+                              width.getIntOrFloatBitWidth(),
+                              getComponentState().getUniqueName(opName));
     // Operation pipelines are not combinational, so a GroupOp is required.
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, op);
     getComponentState().addBlockScheduleable(op->getBlock(), group);
@@ -955,7 +960,7 @@ private:
     // The write enable port is high when the pipeline is done.
     rewriter.create<calyx::AssignOp>(loc, reg.write_en(), opPipe.done());
     rewriter.create<calyx::AssignOp>(
-        loc, opPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
+        loc, opPipe.go(), createConstant(loc, rewriter, *getComponent(), 1, 1));
     // The group is done when the register write is complete.
     rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 
@@ -1023,9 +1028,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // be aware of when a combinational expression references multiple loaded
     // values from the same memory, and then schedule assignments to temporary
     // registers to get around the structural hazard.
-    auto reg = createReg(getComponentState(), rewriter, loadOp.getLoc(),
-                         getComponentState().getUniqueName("load"),
-                         loadOp.getMemRefType().getElementTypeBitWidth());
+    auto reg = createRegister(loadOp.getLoc(), rewriter, *getComponent(),
+                              loadOp.getMemRefType().getElementTypeBitWidth(),
+                              getComponentState().getUniqueName("load"));
     buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group, reg,
                                      memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
@@ -1050,7 +1055,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       storeOp.getLoc(), memoryInterface.writeData(), storeOp.getValueToStore());
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
-      getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1));
+      createConstant(storeOp.getLoc(), rewriter, *getComponent(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
   return success();
 }
@@ -1136,7 +1141,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
   assert(whileOp);
   WhileOpInterface whileOpInterface(whileOp);
-  yieldOp.getOperands();
+
   auto assignGroup = buildWhileIterArgAssignments(
       rewriter, getComponentState(), yieldOp.getLoc(), whileOpInterface,
       getComponentState().getUniqueName(whileOp) + "_latch",
@@ -1673,8 +1678,8 @@ class BuildWhileGroups : public FuncOpPartialLoweringPattern {
             getComponentState().getUniqueName(whileOp.getOperation()).str() +
             "_arg" + std::to_string(arg.index());
         auto reg =
-            createReg(getComponentState(), rewriter, arg.value().getLoc(), name,
-                      arg.value().getType().getIntOrFloatBitWidth());
+            createRegister(arg.value().getLoc(), rewriter, *getComponent(),
+                           arg.value().getType().getIntOrFloatBitWidth(), name);
         getComponentState().addWhileIterReg(whileOp, reg, arg.index());
         arg.value().replaceAllUsesWith(reg.out());
 
@@ -1731,8 +1736,8 @@ class BuildBBRegs : public FuncOpPartialLoweringPattern {
         unsigned width = argType.getIntOrFloatBitWidth();
         std::string name =
             progState().blockName(block) + "_arg" + std::to_string(arg.index());
-        auto reg = createReg(getComponentState(), rewriter,
-                             arg.value().getLoc(), name, width);
+        auto reg = createRegister(arg.value().getLoc(), rewriter,
+                                  *getComponent(), width, name);
         getComponentState().addBlockArgReg(block, reg, arg.index());
         arg.value().replaceAllUsesWith(reg.out());
       }
@@ -1787,8 +1792,8 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         name += "_register_";
         name += std::to_string(i);
         unsigned width = resultType.getIntOrFloatBitWidth();
-        auto reg = createReg(getComponentState(), rewriter, value.getLoc(),
-                             name, width);
+        auto reg = createRegister(value.getLoc(), rewriter, *getComponent(),
+                                  width, name);
         getComponentState().addPipelineReg(stage, reg, i);
 
         // Note that we do not use replace all uses with here as in BuildBBRegs.
@@ -1953,8 +1958,8 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
       assert(convArgType.isa<IntegerType>() && "unsupported return type");
       unsigned width = convArgType.getIntOrFloatBitWidth();
       std::string name = "ret_arg" + std::to_string(argType.index());
-      auto reg = createReg(getComponentState(), rewriter, funcOp.getLoc(), name,
-                           width);
+      auto reg = createRegister(funcOp.getLoc(), rewriter, *getComponent(),
+                                width, name);
       getComponentState().addReturnReg(reg, argType.index());
 
       rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
@@ -2047,13 +2052,14 @@ private:
     for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
-        rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name());
+        rewriter.create<calyx::EnableOp>(groupPtr->getLoc(),
+                                         groupPtr->sym_name());
       } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
         auto whileCtrlOp =
-            buildWhileCtrlOp(whileOp, whileSchedPtr->initGroups, loc, rewriter);
+            buildWhileCtrlOp(whileOp, whileSchedPtr->initGroups, rewriter);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
         auto whileBodyOp =
             rewriter.create<calyx::SeqOp>(whileOp.getOperation()->getLoc());
@@ -2066,8 +2072,10 @@ private:
 
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileBodyOpBlock);
-        rewriter.create<calyx::EnableOp>(
-            loc, getComponentState().getWhileLatchGroup(whileOp).getName());
+        calyx::GroupOp whileLatchGroup =
+            getComponentState().getWhileLatchGroup(whileOp);
+        rewriter.create<calyx::EnableOp>(whileLatchGroup.getLoc(),
+                                         whileLatchGroup.getName());
 
         if (res.failed())
           return res;
@@ -2076,7 +2084,7 @@ private:
         auto &whileOp = pipeSchedPtr->whileOp;
 
         auto whileCtrlOp =
-            buildWhileCtrlOp(whileOp, pipeSchedPtr->initGroups, loc, rewriter);
+            buildWhileCtrlOp(whileOp, pipeSchedPtr->initGroups, rewriter);
         rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
         auto whileBodyOp =
             rewriter.create<calyx::ParOp>(whileOp.getOperation()->getLoc());
@@ -2087,7 +2095,8 @@ private:
             getComponentState().getBlockScheduleables(whileOp.getBodyBlock());
         for (auto &group : bodyBlockScheduleables)
           if (auto *groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr)
-            rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name());
+            rewriter.create<calyx::EnableOp>(groupPtr->getLoc(),
+                                             groupPtr->sym_name());
           else
             return whileOp.getOperation()->emitError(
                 "Unsupported block schedulable");
@@ -2121,7 +2130,7 @@ private:
     auto preSeqOp = rewriter.create<calyx::SeqOp>(loc);
     rewriter.setInsertionPointToEnd(preSeqOp.getBody());
     for (auto barg : getComponentState().getBlockArgGroups(from, to))
-      rewriter.create<calyx::EnableOp>(loc, barg.sym_name());
+      rewriter.create<calyx::EnableOp>(barg.getLoc(), barg.sym_name());
 
     return buildCFGControl(path, rewriter, parentCtrlBlock, from, to);
   }
@@ -2192,16 +2201,16 @@ private:
 
   calyx::WhileOp buildWhileCtrlOp(WhileOpInterface whileOp,
                                   SmallVector<calyx::GroupOp> initGroups,
-                                  Location loc,
                                   PatternRewriter &rewriter) const {
+    Location loc = whileOp.getLoc();
     /// Insert while iter arg initialization group(s). Emit a
     /// parallel group to assign one or more registers all at once.
     {
       PatternRewriter::InsertionGuard g(rewriter);
       auto parOp = rewriter.create<calyx::ParOp>(loc);
       rewriter.setInsertionPointToStart(parOp.getBody());
-      for (auto group : initGroups)
-        rewriter.create<calyx::EnableOp>(loc, group.getName());
+      for (calyx::GroupOp group : initGroups)
+        rewriter.create<calyx::EnableOp>(group.getLoc(), group.getName());
     }
 
     /// Insert the while op itself.
@@ -2682,6 +2691,19 @@ void SCFToCalyxPass::runOnOperation() {
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();
     return;
+  }
+
+  if (ciderSourceLocationMetadata) {
+    // Debugging information for the Cider debugger.
+    // Reference: https://docs.calyxir.org/debug/cider.html
+    SmallVector<Attribute, 16> sourceLocations;
+    getOperation()->walk([&](calyx::ComponentOp component) {
+      return getCiderSourceLocationMetadata(component, sourceLocations);
+    });
+
+    MLIRContext *context = getOperation()->getContext();
+    getOperation()->setAttr("calyx.metadata",
+                            ArrayAttr::get(context, sourceLocations));
   }
 }
 

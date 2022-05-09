@@ -32,6 +32,20 @@ def RemoveGroups : Pass<"calyx-remove-groups", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createRemoveGroupsPass()";
 }
 
+def ClkInsertion : Pass<"calyx-clk-insertion", "calyx::ComponentOp"> {
+  let summary = "Inserts assignments from component clock to sub-component clock.";
+  let description = "";
+  let dependentDialects = [];
+  let constructor = "circt::calyx::createClkInsertionPass()";
+}
+
+def ResetInsertion : Pass<"calyx-reset-insertion", "calyx::ComponentOp"> {
+  let summary = "Connect component reset to sub-component reset for applicable components.";
+  let description = "";
+  let dependentDialects = [];
+  let constructor = "circt::calyx::createResetInsertionPass()";
+}
+
 def CompileControl : Pass<"calyx-compile-control", "calyx::ComponentOp"> {
   let summary = "Generates latency-insensitive finite state machines to realize control.";
   let description = [{

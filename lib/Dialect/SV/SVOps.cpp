@@ -29,7 +29,8 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
-             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp>(op);
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, MacroRefExprOp>(
+      op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -161,6 +162,15 @@ void VerbatimExprOp::getAsmResultNames(
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+//===----------------------------------------------------------------------===//
+// MacroRefExprOp
+//===----------------------------------------------------------------------===//
+
+void MacroRefExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), ident().getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -809,11 +819,16 @@ LogicalResult CaseOp::verify() {
 /// This ctor allows you to build a CaseZ with some number of cases, getting
 /// a callback for each case.
 void CaseOp::build(OpBuilder &builder, OperationState &result,
-                   CaseStmtType caseStyle, Value cond, size_t numCases,
+                   CaseStmtType caseStyle,
+                   ValidationQualifierTypeEnum validationQualifier, Value cond,
+                   size_t numCases,
                    std::function<CasePattern(size_t)> caseCtor) {
   result.addOperands(cond);
   result.addAttribute("caseStyle",
                       CaseStmtTypeAttr::get(builder.getContext(), caseStyle));
+  result.addAttribute("validationQualifier",
+                      ValidationQualifierTypeEnumAttr::get(
+                          builder.getContext(), validationQualifier));
   SmallVector<Attribute> casePatterns;
 
   OpBuilder::InsertionGuard guard(builder);

@@ -130,6 +130,10 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
       return true;
   }
 
+  // If this is a macro reference without side effects, allow duplication.
+  if (isa<MacroRefExprOp>(op))
+    return true;
+
   return false;
 }
 
@@ -774,9 +778,9 @@ void EmitterBase::emitTextWithSubstitutions(
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
-      itemOp->emitError("cannot get name for symbol ") << sym;
+      emitError(itemOp, "cannot get name for symbol ") << sym;
     } else {
-      op->emitError("cannot get name for symbol ") << sym;
+      emitError(op, "cannot get name for symbol ") << sym;
     }
     return StringRef("<INVALID>");
   };
@@ -1072,6 +1076,9 @@ public:
 
   /// This class keeps track of field name renamings in the module scope.
   FieldNameResolver fieldNameResolver;
+
+  /// This keeps track of assignments folded into wire emissions
+  SmallPtrSet<Operation *, 16> assignsInlined;
 };
 
 } // end anonymous namespace
@@ -1538,6 +1545,7 @@ private:
   SubExprInfo visitSV(VerbatimExprSEOp op) {
     return visitVerbatimExprOp(op, op.symbols());
   }
+  SubExprInfo visitSV(MacroRefExprOp op);
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1975,6 +1983,11 @@ SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitSV(MacroRefExprOp op) {
+  os << "`" << op.ident().getName();
+  return {LowestPrecedence, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitSV(ConstantXOp op) {
   os << op.getWidth() << "'bx";
   return {Unary, IsUnsigned};
@@ -2168,20 +2181,6 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
-/// Checks whether the use block is nested in the definition block through a
-/// chain of ops that do not block the inlining of a definition.
-static bool allowsInlineUses(Block *def, Block *use) {
-  if (def == use)
-    return true;
-
-  // Presently, only `else if` chains allow inlining.
-  auto op = dyn_cast<IfOp>(use->getParentOp());
-  if (op && op.hasElse() && op.getElseBlock() == use && findNestedElseIf(use))
-    return allowsInlineUses(def, op->getBlock());
-
-  return false;
-}
-
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
@@ -2203,23 +2202,9 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (verbatim.string().size() > 32)
       return true;
 
-  auto *opBlock = op->getBlock();
-
-  // If the parent op is not a module op, it is defined locally.
-  bool isLocalDefinition = !isa_and_nonnull<HWModuleOp>(op->getParentOp());
-
-  bool isDuplicatable = isDuplicatableExpression(op);
-
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
-    // If the op is defined locally and the user is in a different block, then
-    // we emit this as an out-of-line declaration into its block and the user
-    // can refer to it unless the operation is duplicatable.
-    if (isLocalDefinition && !isDuplicatable &&
-        !allowsInlineUses(opBlock, user->getBlock()))
-      return true;
-
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     //
@@ -2243,6 +2228,18 @@ static bool isExpressionUnableToInline(Operation *op) {
     }
   }
   return false;
+}
+
+static ConstantOp isSingleConstantAssign(Operation *op) {
+  auto wire = dyn_cast<WireOp>(op);
+  if (!wire)
+    return {};
+  if (!wire->hasOneUse())
+    return {};
+  auto assign = dyn_cast<AssignOp>(*wire->user_begin());
+  if (!assign)
+    return {};
+  return dyn_cast_or_null<ConstantOp>(assign->getOperand(1).getDefiningOp());
 }
 
 /// Return true if this expression should be emitted inline into any statement
@@ -2594,6 +2591,9 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
   if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
+    return success();
+
+  if (emitter.assignsInlined.count(op))
     return success();
 
   SmallPtrSet<Operation *, 8> ops;
@@ -3672,6 +3672,12 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
+    if (auto constOp = isSingleConstantAssign(op)) {
+      os << " = ";
+      emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
+      emitter.assignsInlined.insert(*op->user_begin());
+    }
+
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
     ++numStatementsEmitted;
@@ -4042,16 +4048,19 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
-    // emit them in a list on the same line.
-    while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           stripUnpackedTypes(portType) ==
-               stripUnpackedTypes(portInfo[portIdx].type)) {
-      StringRef name = getPortVerilogName(module, portInfo[portIdx]);
-      // Append this to the running port decl.
-      os << ",\n";
-      os.indent(startOfNamePos) << name;
-      printUnpackedTypePostfix(portInfo[portIdx].type, os);
-      ++portIdx;
+    // emit them in a list one per line.
+    // Optionally skip this behavior when requested by user.
+    if (!state.options.disallowPortDeclSharing) {
+      while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
+             stripUnpackedTypes(portType) ==
+                 stripUnpackedTypes(portInfo[portIdx].type)) {
+        StringRef name = getPortVerilogName(module, portInfo[portIdx]);
+        // Append this to the running port decl.
+        os << ",\n";
+        os.indent(startOfNamePos) << name;
+        printUnpackedTypePostfix(portInfo[portIdx].type, os);
+        ++portIdx;
+      }
     }
 
     if (portIdx != e) {

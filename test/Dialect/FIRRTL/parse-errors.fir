@@ -244,3 +244,16 @@ circuit Issue886:
     input a: UInt<1>
     input b: UInt<42>
     node n = validif(a, b, b)  ; expected-error {{operation requires two operands}}
+
+;// -----
+
+circuit Issue2971: ; expected-error {{no main module}}
+  module NotIssue2971:
+    input in: UInt<1>
+    output out: UInt<1>
+    out <= in
+
+;// -----
+
+circuit NoModules: ; expected-error {{no modules found}}
+   ; nothing

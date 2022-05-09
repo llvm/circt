@@ -50,9 +50,6 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
   // CHECK: firrtl.connect %out, [[DATA]]
   firrtl.connect %out, %ramport_data : !firrtl.uint<1>, !firrtl.uint<1>
 
-  // CHECK: firrtl.partialconnect %out, [[DATA]]
-  firrtl.partialconnect %out, %ramport_data : !firrtl.uint<1>, !firrtl.uint<1>
-
   // TODO: How do you get FileCheck to accept "[[[DATA]]]"?
   // CHECK: firrtl.subaccess %vec{{\[}}[[DATA]]{{\]}} : !firrtl.vector<uint<1>, 2>, !firrtl.uint<1>
   firrtl.subaccess %vec[%ramport_data] : !firrtl.vector<uint<1>, 2>, !firrtl.uint<1>
@@ -88,8 +85,8 @@ firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, i
   firrtl.connect %ramport_data, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.strictconnect [[MASK]], %c1_ui1
-  // CHECK: firrtl.partialconnect [[DATA]], %in
-  firrtl.partialconnect %ramport_data, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect [[DATA]], %in
+  firrtl.connect %ramport_data, %in : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 firrtl.module @InferReadWrite(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
@@ -123,40 +120,6 @@ firrtl.module @InferReadWrite(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8
 
   // CHECK: firrtl.connect %out, [[RDATA]] 
   firrtl.connect %out, %ramport_data : !firrtl.uint<1>, !firrtl.uint<1>
-}
-
-// Check that partial connect properly sets the write mask for the elements which are actually connected.
-firrtl.module @PartialConnectWriteMask(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %data : !firrtl.bundle<c: vector<uint<3>, 2>, a: uint<1>>) {
-  // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data: bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, mask: bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>>
-  // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
-  // CHECK: firrtl.strictconnect [[DATA]], %invalid
-  // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
-  // CHECK: firrtl.strictconnect [[MASK]], %invalid
-  %ram = chirrtl.combmem : !chirrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>
-
-  // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0)
-  // CHECK: firrtl.strictconnect [[A]], %c0_ui1 
-  // CHECK: [[B:%.*]] = firrtl.subfield [[MASK]](1) : (!firrtl.bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>) -> !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect [[B]], %c0_ui1 
-  // CHECK: [[C:%.*]] = firrtl.subfield [[MASK]](2) : (!firrtl.bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>) -> !firrtl.vector<uint<1>, 3>
-  // CHECK: [[C_0:%.*]] = firrtl.subindex [[C]][0] : !firrtl.vector<uint<1>, 3>
-  // CHECK: firrtl.strictconnect [[C_0]], %c0_ui1 
-  // CHECK: [[C_1:%.*]] = firrtl.subindex [[C]][1] : !firrtl.vector<uint<1>, 3>
-  // CHECK: firrtl.strictconnect [[C_1]], %c0_ui1 
-  // CHECK: [[C_2:%.*]] = firrtl.subindex [[C]][2] : !firrtl.vector<uint<1>, 3>
-  // CHECK: firrtl.strictconnect [[C_2]], %c0_ui1 
-  %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, !chirrtl.cmemoryport)
-  chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
-
-  // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0) : (!firrtl.bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>) -> !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect [[A]], %c1_ui1 
-  // CHECK: [[C:%.*]] = firrtl.subfield [[MASK]](2) : (!firrtl.bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>) -> !firrtl.vector<uint<1>, 3>
-  // CHECK: [[C_0:%.*]] = firrtl.subindex [[C]][0] : !firrtl.vector<uint<1>, 3>
-  // CHECK: firrtl.strictconnect [[C_0]], %c1_ui1 
-  // CHECK: [[C_1:%.*]] = firrtl.subindex [[C]][1] : !firrtl.vector<uint<1>, 3>
-  // CHECK: firrtl.strictconnect [[C_1]], %c1_ui1 
-  // CHECK: firrtl.partialconnect [[DATA]], %data
-  firrtl.partialconnect %ramport_data, %data : !firrtl.bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, !firrtl.bundle<c: vector<uint<3>, 2>, a: uint<1>>
 }
 
 firrtl.module @WriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %value: !firrtl.uint<1>) {
@@ -300,15 +263,17 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 }
 
 // When the address line is larger than the size of the address port, the port
-// connection should be made using a partial connect.
+// connection should be made using a truncation and connect.
 firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl.uint<3>, out %out: !firrtl.uint<1>) {
   // CHECK-LABEL: @AddressLargerThanPort
   %mem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<1>, 4>
   %r_data, %r_port = chirrtl.memoryport Infer %mem  {name = "r"} : (!chirrtl.cmemory<uint<1>, 4>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
   // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r(0)
   %addr_node = firrtl.node %addr  : !firrtl.uint<3>
-  // CHECK: firrtl.partialconnect [[ADDR]], %addr_node
+  // CHECK: [[TRUNC:%.+]] = firrtl.tail %addr_node, 1
+  // CHECK: firrtl.connect [[ADDR]], [[TRUNC]]
   chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+  // CHECK: firrtl.connect
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
 }
 

@@ -45,7 +45,6 @@ std::unique_ptr<mlir::Pass> createInlinerPass();
 
 std::unique_ptr<mlir::Pass> createInferReadWritePass();
 
-
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass>
@@ -87,10 +86,15 @@ createGrandCentralSignalMappingsPass(StringRef outputFilename = "",
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
-std::unique_ptr<mlir::Pass> createRemoveInvalidPass();
+std::unique_ptr<mlir::Pass> createSFCCompatPass();
 
 std::unique_ptr<mlir::Pass>
 createMergeConnectionsPass(bool enableAggressiveMerging = false);
+
+std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
+
+std::unique_ptr<mlir::Pass> createExtractInstancesPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

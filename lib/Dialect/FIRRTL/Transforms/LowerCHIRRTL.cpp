@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/CHIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/LLVM.h"
@@ -45,7 +46,6 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
   void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(StrictConnectOp op);
-  void visitStmt(PartialConnectOp op);
   void visitUnhandledOp(Operation *op);
 
   // Chain the CHIRRTL visitor to the FIRRTL visitor.
@@ -84,10 +84,6 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
 
   template <typename OpType, typename... T>
   void cloneSubindexOpForMemory(OpType op, Value input, T... operands);
-
-  void emitPartialConnectMask(
-      ImplicitLocOpBuilder &builder, Type destType, Type srcType,
-      llvm::function_ref<Value(ImplicitLocOpBuilder &)> getSubAccess);
 
   void runOnOperation() override;
 
@@ -261,12 +257,6 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
         } else {
           element.mode |= MemDirAttr::Read;
         }
-      } else if (auto partialConnectOp = dyn_cast<PartialConnectOp>(user)) {
-        if (use.get() == partialConnectOp.dest()) {
-          element.mode |= MemDirAttr::Write;
-        } else {
-          element.mode |= MemDirAttr::Read;
-        }
       } else {
         // Every other use of a memory is a read operation.
         element.mode |= MemDirAttr::Read;
@@ -381,14 +371,14 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
-    // Initialization at the MemoryPortOp.  Connect the address port using a
-    // partialconnect if the address driver is larger than the port width.
+    // Initialization at the MemoryPortOp.  Use helper to connect if the
+    // address driver is larger than the port width.
     auto addressLHS = address.getType().cast<FIRRTLType>().getPassiveType();
     auto addressRHS =
         cmemoryPortAccess.index().getType().cast<FIRRTLType>().getPassiveType();
     if (addressLHS != addressRHS && addressLHS.getBitWidthOrSentinel() >= 0 &&
         addressLHS.getBitWidthOrSentinel() < addressRHS.getBitWidthOrSentinel())
-      portBuilder.create<PartialConnectOp>(address, cmemoryPortAccess.index());
+      emitConnect(portBuilder, address, cmemoryPortAccess.index());
     else
       mkConnect(portBuilder, address, cmemoryPortAccess.index());
     // Sequential+Read ports have a more complicated "enable inference".
@@ -459,10 +449,6 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
                 if (cmemoryPortAccess.index() == connectOp.dest())
                   return !dyn_cast_or_null<InvalidValueOp>(
                       connectOp.src().getDefiningOp());
-              } else if (auto pConnectOp = dyn_cast<PartialConnectOp>(op)) {
-                if (cmemoryPortAccess.index() == pConnectOp.dest())
-                  return !dyn_cast_or_null<InvalidValueOp>(
-                      pConnectOp.src().getDefiningOp());
               }
               return false;
             });
@@ -551,103 +537,6 @@ void LowerCHIRRTLPass::visitStmt(StrictConnectOp connect) {
   if (readIt != rdataValues.end()) {
     auto newSource = readIt->second;
     connect.srcMutable().assign(newSource);
-  }
-}
-
-/// This will find which fields of an aggregate type are connected by a partial
-/// connect and connect the same field of the mask to 1. This function is
-/// recursive over the types of the destination and source of the partial
-/// connect. This uses lambdas to lazily emit subfield operations on the mask
-/// only when there is a valid pair-wise connection point.
-void LowerCHIRRTLPass::emitPartialConnectMask(
-    ImplicitLocOpBuilder &builder, Type destType, Type srcType,
-    llvm::function_ref<Value(ImplicitLocOpBuilder &)> getSubaccess) {
-  if (auto destBundle = destType.dyn_cast<BundleType>()) {
-    // Partial connect will connect together any two fields with the same name.
-    // The verifier will have checked that the fields have the same type.
-    auto srcBundle = srcType.cast<BundleType>();
-    auto end = destBundle.getNumElements();
-    for (unsigned destIndex = 0; destIndex < end; ++destIndex) {
-      // Try to find a field with the same name in the srcType.
-      auto fieldName = destBundle.getElements()[destIndex].name.getValue();
-      auto srcIndex = srcBundle.getElementIndex(fieldName);
-      if (!srcIndex)
-        continue;
-      auto &destElt = destBundle.getElements()[destIndex];
-      auto &srcElt = srcBundle.getElements()[*srcIndex];
-
-      // Call back to lazily create the subfield op on the mask.
-      Value subfield = nullptr;
-      auto lazySubfield = [&](ImplicitLocOpBuilder &builder) {
-        if (!subfield)
-          subfield =
-              builder.create<SubfieldOp>(getSubaccess(builder), destIndex);
-        return subfield;
-      };
-
-      // Recursively handle the connection point.
-      emitPartialConnectMask(builder, destElt.type, srcElt.type, lazySubfield);
-    }
-  } else if (auto destVector = destType.dyn_cast<FVectorType>()) {
-    // Partial connect will connect all elements of the vectors together up to
-    // the length of the shorter vector.  This needs to recurse for each pair of
-    // connected elements.
-    auto srcVector = srcType.dyn_cast<FVectorType>();
-    auto destEltType = destVector.getElementType();
-    auto srcEltType = srcVector.getElementType();
-    auto end =
-        std::min(destVector.getNumElements(), srcVector.getNumElements());
-
-    for (unsigned i = 0; i < end; i++) {
-      // Call back to lazily create the subindex op on the mask.
-      Value subindex = nullptr;
-      auto lazySubindex = [&](ImplicitLocOpBuilder builder) {
-        if (!subindex)
-          subindex = builder.create<SubindexOp>(getSubaccess(builder), i);
-        return subindex;
-      };
-
-      // Recursively handle the connection point.
-      emitPartialConnectMask(builder, destEltType, srcEltType, lazySubindex);
-    }
-  } else {
-    // Connect the mask to 1, forcing the creation of any required subfield and
-    // subindex operations.
-    mkConnect(builder, getSubaccess(builder), getConst(1));
-  }
-}
-
-void LowerCHIRRTLPass::visitStmt(PartialConnectOp partialConnect) {
-  // Check if we are writing to a memory and, if we are, replace the
-  // destination.
-  auto writeIt = wdataValues.find(partialConnect.dest());
-  if (writeIt != wdataValues.end()) {
-    auto writeData = writeIt->second;
-
-    // Update the destination to use the new memory.
-    partialConnect.destMutable().assign(writeData.data);
-
-    // Handle the partial connect write mask.  This only sets the mask
-    // for the elements which are connected by the partial connect.
-    ImplicitLocOpBuilder builder(partialConnect.getLoc(), partialConnect);
-    emitPartialConnectMask(
-        builder, partialConnect.dest().getType(),
-        partialConnect.src().getType(),
-        [&](ImplicitLocOpBuilder &builder) { return writeData.mask; });
-
-    // Only ReadWrite memories have a write mode, so this field can sometimes be
-    // null.
-    if (writeData.mode)
-      mkConnect(builder, writeData.mode, getConst(1));
-  }
-
-  // Check if we are reading from a memory and, if we are, replace the
-  // source.
-  auto readIt = rdataValues.find(partialConnect.src());
-  if (readIt != rdataValues.end()) {
-    auto newSource = readIt->second;
-    // Update the source to use the new memory.
-    partialConnect.srcMutable().assign(newSource);
   }
 }
 

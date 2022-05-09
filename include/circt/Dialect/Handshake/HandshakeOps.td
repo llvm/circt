@@ -12,6 +12,7 @@
 
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/BuiltinTypes.td"
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
@@ -137,7 +138,6 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
       $_state.addTypes(module.getResultTypes());
-      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
@@ -199,7 +199,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
   let arguments = (ins Variadic<AnyType> : $operands, NoneType : $control);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
 
   let hasVerifier = 1;
   let assemblyFormat = [{ operands attr-dict `:` qualified(type(operands)) }];
@@ -679,7 +679,7 @@ def MemoryOp : Handshake_Op<"memory", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "ArrayRef<Value>":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
+      ins "ValueRange":$operands, "int":$outputs, "int":$control_outputs, "bool":$lsq,
       "int":$id, "Value":$memref)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $inputs `)` attr-dict `:` $memRefType `,` functional-type($inputs, $outputs)";
@@ -719,7 +719,7 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ldCount, "int":$stCount,
+      ins "Value":$memref, "ValueRange":$inputs, "int":$ldCount, "int":$stCount,
       "int":$id)>
   ];
   let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` qualified(type($memref)) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
@@ -751,7 +751,7 @@ def LoadOp : Handshake_Op<"load", [
   let arguments = (ins Variadic<AnyType>:$addresses, AnyType:$data, NoneType:$ctrl);
   let results = (outs AnyType:$dataResult, Variadic<AnyType>:$addressResults);
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Value":$memref, "ArrayRef<Value>":$indices)>];
+  let builders = [OpBuilder<(ins "Value":$memref, "ValueRange":$indices)>];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -784,7 +784,7 @@ def StoreOp : Handshake_Op<"store", [
   let results = (outs AnyType:$dataResult, Variadic<AnyType>:$addressResult);
 
   let builders =
-      [OpBuilder<(ins "Value":$valueToStore, "ArrayRef<Value>":$indices)>];
+      [OpBuilder<(ins "Value":$valueToStore, "ValueRange":$indices)>];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
@@ -807,9 +807,73 @@ def JoinOp : Handshake_Op<"join", [
   let results = (outs NoneType : $result);
 
   let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
+  let builders = [OpBuilder<(ins "ValueRange":$operands)>];
   let hasCustomAssemblyFormat = 1;
 }
 
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
+
+// TODO(Dinistro): add support for this in the handshake-runner
+def UnpackOp : Handshake_Op<"unpack", [
+  TypesMatchWith<"result types match element types of 'tuple'",
+                     "input", "results",
+                     "$_self.cast<TupleType>().getTypes()">
+]> {
+  let summary = "unpacks a tuple";
+  let description = [{
+    The `unpack` operation assigns each value of a tuple to a separate
+    value for further processing. The number of results corresponds
+    to the number of tuple elements.
+    Similar to `fork`, each output is distributed as soon as the corresponding
+    successor is ready.
+
+    Example:
+    ```mlir
+    %a, %b = handshake.unpack %tuple {attributes} : tuple<i32, i64>
+    ```
+  }];
+
+  let arguments = (ins Builtin_Tuple:$input);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let builders = [OpBuilder<(ins "Value":$input), [{
+    $_state.addOperands(input);
+
+    TupleType type = input.getType().dyn_cast_or_null<TupleType>();
+    assert(type && "expect unpack to have a 'TupleType' operand");
+    $_state.addTypes(type.getTypes());
+  }]>];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def PackOp : Handshake_Op<"pack", [
+  TypesMatchWith<"input types match element types of 'tuple'",
+                   "result", "inputs",
+                   "$_self.cast<TupleType>().getTypes()">
+]> {
+
+  let summary = "packs a tuple";
+  let description = [{
+    The `pack` operation constructs a tuple from separate values.
+    The number of operands corresponds to the number of tuple elements.
+    Similar to `join`, the output is ready when all inputs are ready.
+
+    Example:
+    ```mlir
+    %tuple = handshake.pack %a, %b {attributes} : tuple<i32, i64>
+    ```
+    }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs Builtin_Tuple:$result);
+
+  let builders = [OpBuilder<
+    (ins "ValueRange":$operands), [{
+      $_state.addOperands(operands);
+      $_state.addTypes(TupleType::get($_builder.getContext(), operands.getTypes()));
+  }]>];
+
+  let hasCustomAssemblyFormat = 1;
+}

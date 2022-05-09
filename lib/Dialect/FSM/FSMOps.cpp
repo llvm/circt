@@ -22,14 +22,39 @@ using namespace fsm;
 // MachineOp
 //===----------------------------------------------------------------------===//
 
+// Returns all states that are unreachable from the initial state.
+static SmallVector<StateOp> unreachableStates(MachineOp machine) {
+  SetVector<StateOp> reachableStates;
+  SmallVector<StateOp, 4> queue;
+  queue.push_back(machine.getInitialStateOp());
+  while (!queue.empty()) {
+    auto *state = queue.begin();
+    queue.erase(state);
+    if (reachableStates.contains(*state))
+      continue;
+    reachableStates.insert(*state);
+    llvm::copy(state->getNextStates(), std::back_inserter(queue));
+  }
+
+  // Get the difference between reachable states and all states in the machine.
+  auto allStates = machine.getOps<StateOp>();
+  SmallVector<StateOp> unreachableStates;
+  std::set_difference(allStates.begin(), allStates.end(),
+                      reachableStates.begin(), reachableStates.end(),
+                      std::back_inserter(unreachableStates));
+  return unreachableStates;
+}
+
 void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
-                      Type stateType, FunctionType type,
-                      ArrayRef<NamedAttribute> attrs,
+                      StringRef initialStateName, Type stateType,
+                      FunctionType type, ArrayRef<NamedAttribute> attrs,
                       ArrayRef<DictionaryAttr> argAttrs) {
   state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
                      builder.getStringAttr(name));
   state.addAttribute("stateType", TypeAttr::get(stateType));
   state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  state.addAttribute("initialStateName",
+                     StringAttr::get(state.getContext(), initialStateName));
   state.attributes.append(attrs.begin(), attrs.end());
   state.addRegion();
 
@@ -40,8 +65,10 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                                                 /*resultAttrs=*/llvm::None);
 }
 
-/// Get the default state of the machine.
-StateOp MachineOp::getDefaultState() { return *getOps<StateOp>().begin(); }
+/// Get the initial state of the machine.
+StateOp MachineOp::getInitialStateOp() {
+  return dyn_cast_or_null<StateOp>(lookupSymbol(initialState()));
+}
 
 /// Get the port information of the machine.
 void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
@@ -115,6 +142,18 @@ LogicalResult MachineOp::verify() {
   if (!llvm::hasSingleElement(*this))
     return emitOpError("must only have a single block");
 
+  // Verify that the initial state exists
+  if (!getInitialStateOp())
+    return emitOpError("initial state '" + initialState() +
+                       "' was not defined in the machine");
+
+  return success();
+}
+
+LogicalResult MachineOp::canonicalize(MachineOp op, PatternRewriter &rewriter) {
+  // Remove any unreachable states.
+  for (auto unreachable : unreachableStates(op))
+    rewriter.eraseOp(unreachable);
   return success();
 }
 
@@ -198,6 +237,15 @@ LogicalResult HWInstanceOp::verify() { return verifyCallerTypes(*this); }
 // StateOp
 //===----------------------------------------------------------------------===//
 
+SetVector<StateOp> StateOp::getNextStates() {
+  SmallVector<StateOp> nextStates;
+  llvm::transform(
+      transitions().getOps<TransitionOp>(),
+      std::inserter(nextStates, nextStates.begin()),
+      [](TransitionOp transition) { return transition.getNextState(); });
+  return SetVector<StateOp>(nextStates.begin(), nextStates.end());
+}
+
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   bool hasAlwaysTakenTransition = false;
   SmallVector<TransitionOp, 4> transitionsToErase;
@@ -250,6 +298,9 @@ StateOp TransitionOp::getNextState() {
 }
 
 bool TransitionOp::isAlwaysTaken() {
+  if (!hasGuard())
+    return true;
+
   auto guardReturn = getGuardReturn();
   if (guardReturn.getNumOperands() == 0)
     return true;
@@ -263,24 +314,26 @@ bool TransitionOp::isAlwaysTaken() {
 
 LogicalResult TransitionOp::canonicalize(TransitionOp op,
                                          PatternRewriter &rewriter) {
-  auto guardReturn = op.getGuardReturn();
-  if (guardReturn.getNumOperands() == 1)
-    if (auto constantOp = guardReturn.getOperand(0)
-                              .getDefiningOp<mlir::arith::ConstantOp>()) {
-      // Simplify when the guard region returns a constant value.
-      if (constantOp.getValue().cast<BoolAttr>().getValue()) {
-        // Replace the original return op with a new one without any operands
-        // if the constant is TRUE.
-        rewriter.setInsertionPoint(guardReturn);
-        rewriter.create<fsm::ReturnOp>(guardReturn.getLoc());
-        rewriter.eraseOp(guardReturn);
-      } else {
-        // Erase the whole transition op if the constant is FALSE, because the
-        // transition will never be taken.
-        rewriter.eraseOp(op);
+  if (op.hasGuard()) {
+    auto guardReturn = op.getGuardReturn();
+    if (guardReturn.getNumOperands() == 1)
+      if (auto constantOp = guardReturn.getOperand(0)
+                                .getDefiningOp<mlir::arith::ConstantOp>()) {
+        // Simplify when the guard region returns a constant value.
+        if (constantOp.getValue().cast<BoolAttr>().getValue()) {
+          // Replace the original return op with a new one without any operands
+          // if the constant is TRUE.
+          rewriter.setInsertionPoint(guardReturn);
+          rewriter.create<fsm::ReturnOp>(guardReturn.getLoc());
+          rewriter.eraseOp(guardReturn);
+        } else {
+          // Erase the whole transition op if the constant is FALSE, because the
+          // transition will never be taken.
+          rewriter.eraseOp(op);
+        }
+        return success();
       }
-      return success();
-    }
+  }
 
   return failure();
 }
@@ -291,7 +344,7 @@ LogicalResult TransitionOp::verify() {
            << nextState() << "`";
 
   // Verify the action region.
-  if (action().front().getTerminator()->getNumOperands() != 0)
+  if (hasAction() && action().front().getTerminator()->getNumOperands() != 0)
     return emitOpError("action region must not return any value");
 
   // Verify the transition is located in the correct region.
