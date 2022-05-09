@@ -526,7 +526,6 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  // SmallVector<OpAsmParser::UnresolvedOperand> ports;
   SmallVector<mlir::OpAsmParser::Argument> ports;
 
   SmallVector<Type> portTypes;
