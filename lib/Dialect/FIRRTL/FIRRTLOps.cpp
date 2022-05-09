@@ -1922,6 +1922,24 @@ Value MemOp::getPortNamed(StringAttr name) {
   return Value();
 }
 
+static Value trackValueThroughAnoymousWires(Value value) {
+  auto wire = value.getDefiningOp<WireOp>();
+  // If the value is not a wire, return the value.
+  if (!wire)
+    return value;
+
+  // If the wire has a symbol, return the wire.
+  if (wire.inner_sym() && !wire.inner_sym().getValue().empty())
+    return value;
+
+  for (auto *c : value.getUsers())
+    if (auto connect = dyn_cast<FConnectLike>(c))
+      if (connect.dest() == value)
+        return trackValueThroughAnoymousWires(connect.src());
+
+  return nullptr;
+}
+
 // Extract all the relevant attributes from the MemOp and return the FirMemory.
 FirMemory MemOp::getSummary() {
   auto op = *this;
@@ -1944,8 +1962,9 @@ FirMemory MemOp::getSummary() {
         for (auto *b : clockPort.getUsers()) {
           if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
-              auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
+              auto result = clockToLeader.insert(
+                  {trackValueThroughAnoymousWires(connect.src()),
+                   numWritePorts});
               if (result.second) {
                 writeClockIDs.push_back(numWritePorts);
               } else {
