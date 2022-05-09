@@ -94,7 +94,7 @@
 // CHECK:           sink %[[VAL_96]] : index
 // CHECK:           return %[[VAL_95]] : none
 // CHECK:         }
-func @imperfectly_nested_loops() {
+func.func @imperfectly_nested_loops() {
 ^bb0:
   cf.br ^bb1
 ^bb1:	// pred: ^bb0

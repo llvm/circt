@@ -445,16 +445,17 @@ void ComponentOp::print(OpAsmPrinter &p) {
 /// port names to `attrName`.
 static ParseResult
 parsePortDefList(OpAsmParser &parser, OperationState &result,
-                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                 SmallVectorImpl<OpAsmParser::Argument> &ports,
                  SmallVectorImpl<Type> &portTypes,
                  SmallVectorImpl<NamedAttrList> &portAttrs) {
   auto parsePort = [&]() -> ParseResult {
-    OpAsmParser::UnresolvedOperand port;
+    OpAsmParser::Argument port;
     Type portType;
     // Expect each port to have the form `%<ssa-name> : <type>`.
-    if (parser.parseRegionArgument(port) || parser.parseColon() ||
+    if (parser.parseArgument(port) || parser.parseColon() ||
         parser.parseType(portType))
       return failure();
+    port.type = portType;
     ports.push_back(port);
     portTypes.push_back(portType);
 
@@ -472,9 +473,9 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
 /// Parses the signature of a Calyx component.
 static ParseResult
 parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                        SmallVectorImpl<OpAsmParser::Argument> &ports,
                         SmallVectorImpl<Type> &portTypes) {
-  SmallVector<OpAsmParser::UnresolvedOperand> inPorts, outPorts;
+  SmallVector<OpAsmParser::Argument> inPorts, outPorts;
   SmallVector<Type> inPortTypes, outPortTypes;
   SmallVector<NamedAttrList> portAttributes;
 
@@ -490,7 +491,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   // just inferred from the SSA names of the component.
   SmallVector<Attribute> portNames;
   auto getPortName = [context](const auto &port) -> StringAttr {
-    StringRef name = port.name;
+    StringRef name = port.ssaName.name;
     if (name.startswith("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
@@ -525,7 +526,8 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  SmallVector<OpAsmParser::UnresolvedOperand> ports;
+  SmallVector<mlir::OpAsmParser::Argument> ports;
+
   SmallVector<Type> portTypes;
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
@@ -537,7 +539,7 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  if (parser.parseRegion(*body, ports, portTypes))
+  if (parser.parseRegion(*body, ports))
     return failure();
 
   if (body->empty())

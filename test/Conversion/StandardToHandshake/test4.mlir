@@ -34,7 +34,7 @@
 // CHECK:           sink %[[VAL_25]] : i32
 // CHECK:           return %[[VAL_13]], %[[VAL_16]], %[[VAL_4]] : f32, i32, none
 // CHECK:         }
-func @ops(f32, f32, i32, i32) -> (f32, i32) {
+func.func @ops(f32, f32, i32, i32) -> (f32, i32) {
 ^bb0(%arg0: f32, %arg1: f32, %arg2: i32, %arg3: i32):
   %0 = arith.subf %arg0, %arg1: f32
   %1 = arith.subi %arg2, %arg3: i32

@@ -7,13 +7,13 @@
 // into entities.
 
 // CHECK-NOT: func
-func @simple() -> i32 {
+func.func @simple() -> i32 {
   %0 = hw.constant 5 : i32
   return %0 : i32
 }
 
 // CHECK-NOT: func
-func @complex(%flag : i1) -> i32 {
+func.func @complex(%flag : i1) -> i32 {
   cf.cond_br %flag, ^bb1, ^bb2
 ^bb1:
   %0 = hw.constant 5 : i32
@@ -29,7 +29,7 @@ llhd.entity @check_entity_inline() -> (%out : !llhd.sig<i32>) {
   // CHECK-NEXT: %{{.*}} = llhd.constant_time
   // CHECK-NEXT: llhd.drv
   // CHECK-NEXT: }
-  %1 = call @simple() : () -> i32
+  %1 = func.call @simple() : () -> i32
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.drv %out, %1 after %time : !llhd.sig<i32>
 }
@@ -50,7 +50,7 @@ llhd.proc @check_proc_inline(%arg : !llhd.sig<i1>) -> (%out : !llhd.sig<i32>) {
   // CHECK-NEXT: llhd.halt
   // CHECK-NEXT: }
   %0 = llhd.prb %arg : !llhd.sig<i1>
-  %1 = call @complex(%0) : (i1) -> i32
+  %1 = func.call @complex(%0) : (i1) -> i32
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.drv %out, %1 after %time : !llhd.sig<i32>
   llhd.halt

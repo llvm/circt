@@ -9,7 +9,7 @@
 // CHECK:           return %[[VAL_4]], %[[VAL_1]] : i32, none
 // CHECK:         }
 
-func @foo(%arg0 : i32) -> i32 {
+func.func @foo(%arg0 : i32) -> i32 {
   %c1_i32 = arith.constant 1 : i32
   %0 = arith.addi %arg0, %c1_i32 : i32
   return %0 : i32

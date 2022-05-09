@@ -851,7 +851,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 /// will populate `entryArgs`.
 static ParseResult
 parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
-                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &entryArgs,
+                 SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
                  SmallVectorImpl<Direction> &portDirections,
                  SmallVectorImpl<Attribute> &portNames,
                  SmallVectorImpl<Attribute> &portTypes,
@@ -870,17 +870,19 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 
     // Parse the port name.
     if (hasSSAIdentifiers) {
-      OpAsmParser::UnresolvedOperand arg;
-      if (parser.parseRegionArgument(arg))
+      OpAsmParser::Argument arg;
+      if (parser.parseArgument(arg))
         return failure();
       entryArgs.push_back(arg);
       // The name of an argument is of the form "%42" or "%id", and since
       // parsing succeeded, we know it always has one character.
-      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-      if (isdigit(arg.name[1]))
+      assert(arg.ssaName.name.size() > 1 && arg.ssaName.name[0] == '%' &&
+             "Unknown MLIR name");
+      if (isdigit(arg.ssaName.name[1]))
         portNames.push_back(StringAttr::get(context, ""));
       else
-        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+        portNames.push_back(
+            StringAttr::get(context, arg.ssaName.name.drop_front()));
     } else {
       std::string portName;
       if (parser.parseKeywordOrString(&portName))
@@ -893,6 +895,9 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     if (parser.parseColonType(portType))
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
+
+    if (hasSSAIdentifiers)
+      entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
     StringAttr portSym;
@@ -1053,7 +1058,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   result.addAttribute("parameters", builder.getArrayAttr(parameters));
 
   // Parse the module ports.
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
+  SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -1114,15 +1119,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   auto *body = result.addRegion();
 
   if (hasSSAIdentifiers) {
-    // Collect block argument types.
-    SmallVector<Type, 4> argTypes;
-    if (!entryArgs.empty())
-      llvm::transform(portTypes, std::back_inserter(argTypes),
-                      [](Attribute typeAttr) -> Type {
-                        return typeAttr.cast<TypeAttr>().getValue();
-                      });
-
-    if (parser.parseRegion(*body, entryArgs, argTypes))
+    if (parser.parseRegion(*body, entryArgs))
       return failure();
     if (body->empty())
       body->push_back(new Block());
@@ -1505,7 +1502,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   std::string name;
   StringAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
+  SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -2005,17 +2002,6 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
-/// Infer the return types of this operation.
-LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
-                                       Optional<Location> loc,
-                                       ValueRange operands,
-                                       DictionaryAttr attrs,
-                                       mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &results) {
-  results.push_back(operands[0].getType());
-  return success();
-}
-
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
 }
@@ -2502,7 +2488,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand index;
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
+  SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
   Type indexType, elemType;
 
   if (parser.parseOperand(index) || parser.parseComma() ||

@@ -3,7 +3,7 @@
 // CHECK: 0
 
 module {
-  func @main() -> index {
+  func.func @main() -> index {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c4 = arith.constant 4 : index

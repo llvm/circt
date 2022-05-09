@@ -535,7 +535,7 @@ hw.module @concat_fold_3(%arg0: i1) -> (result: i8) {
 
 // CHECK-LABEL: hw.module @concat_fold_4
 hw.module @concat_fold_4(%arg0: i3) -> (result: i5) {
-  // CHECK-NEXT: %0 = comb.extract %arg0 from 2 : (i3) -> i1 
+  // CHECK-NEXT: %0 = comb.extract %arg0 from 2 : (i3) -> i1
   %0 = comb.extract %arg0 from 2 : (i3) -> (i1)
   // CHECK-NEXT: %1 = comb.replicate %0 : (i1) -> i2
   %1 = comb.concat %0, %0, %arg0 : i1, i1, i3
@@ -578,7 +578,7 @@ hw.module @concat_fold7(%arg0: i5) -> (result: i20) {
 hw.module @concat_fold8(%arg0: i5, %arg1: i3) -> (r0: i28, r1: i28, r2: i13) {
   %0 = comb.replicate %arg0 : (i5) -> i20
 
-  // CHECK-NEXT: %0 = comb.replicate %arg0 : (i5) -> i25 
+  // CHECK-NEXT: %0 = comb.replicate %arg0 : (i5) -> i25
   // CHECK-NEXT: %1 = comb.concat %arg1, %0 : i3, i25
   %1 = comb.concat %arg1, %arg0, %0 : i3, i5, i20
 
@@ -840,7 +840,7 @@ hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (result: i12) {
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
-// CHECK-NEXT:   %1 = comb.replicate %0 : (i1) -> i2 
+// CHECK-NEXT:   %1 = comb.replicate %0 : (i1) -> i2
 // CHECK-NEXT:   %2 = comb.extract %arg0 from 2 : (i12) -> i10
 // CHECK-NEXT:   %3 = comb.concat %1, %2 : i2, i10
 // CHECK-NEXT:   hw.output %3
@@ -1036,8 +1036,8 @@ hw.module @wire5() -> () {
 hw.module @replicate(%arg0: i7) -> (r1: i9, r2: i7) {
   %c2 = hw.constant 2 : i3
   %r1 = comb.replicate %c2 : (i3) -> i9
-  
-// CHECK-NEXT: %c146_i9 = hw.constant 146 : i9 
+
+// CHECK-NEXT: %c146_i9 = hw.constant 146 : i9
   %r2 = comb.replicate %arg0 : (i7) -> i7
 
 // CHECK-NEXT:  hw.output %c146_i9, %arg0
@@ -1287,10 +1287,10 @@ hw.module @foo() {
 }
 
 // CHECK-LABEL:  hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (data: i32) {
-// CHECK-NEXT:    %mem0.0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1("": %clock: i1, "": %en: i1, "": %addr: i1) -> ("": i32)
+// CHECK-NEXT:    %mem0.0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1(x: %clock: i1, y: %en: i1, z: %addr: i1) -> ("": i32)
 // CHECK-NEXT:    hw.output %mem0.0 : i32
 // CHECK-NEXT:  }
-hw.module.extern @FIRRTLMem_1_0_0_32_1_0_1_1(i1, i1, i1) -> ("": i32)
+hw.module.extern @FIRRTLMem_1_0_0_32_1_0_1_1(%x: i1, %y: i1, %z: i1) -> ("": i32)
 hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (data: i32) {
   %.load0.clk.wire = sv.wire  : !hw.inout<i1>
   %0 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
@@ -1298,7 +1298,7 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (data: i32) {
   %1 = sv.read_inout %.load0.en.wire : !hw.inout<i1>
   %.load0.addr.wire = sv.wire  : !hw.inout<i1>
   %2 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
-  %mem0.ro_data_0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1("": %0: i1, "": %1: i1, "": %2: i1) -> ("": i32)
+  %mem0.ro_data_0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1("x": %0: i1, "y": %1: i1, "z": %2: i1) -> ("": i32)
   %3 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
   sv.assign %.load0.clk.wire, %clock : i1
   %4 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>

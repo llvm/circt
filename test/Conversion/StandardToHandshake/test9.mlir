@@ -82,7 +82,7 @@
 // CHECK:           sink %[[VAL_79]] : index
 // CHECK:           return %[[VAL_78]] : none
 // CHECK:         }
-func @affine_dma_wait(%arg0: index) {
+func.func @affine_dma_wait(%arg0: index) {
   %0 = memref.alloc() : memref<1xi32>
   %c64 = arith.constant 64 : index
   %c0 = arith.constant 0 : index

@@ -110,7 +110,7 @@
 // CHECK:           sink %[[VAL_107]] : index
 // CHECK:           return %[[VAL_106]] : none
 // CHECK:         }
-func @affine_dma_start(%arg0: index) {
+func.func @affine_dma_start(%arg0: index) {
   %0 = memref.alloc() : memref<100xf32>
   %1 = memref.alloc() : memref<100xf32, 2>
   %2 = memref.alloc() : memref<1xi32>

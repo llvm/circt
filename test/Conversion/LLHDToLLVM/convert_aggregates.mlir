@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
 // CHECK-LABEL: llvm.func @convertBitcast
-func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo: i32, bar: i32>) {
+func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo: i32, bar: i32>) {
 
   // CHECK-NEXT: %[[ONE1:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[A1:.*]] = llvm.alloca %[[ONE1]] x i32 {alignment = 4 : i64} : (i32) -> !llvm.ptr<i32>
@@ -28,7 +28,7 @@ func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo
 }
 
 // CHECK-LABEL: llvm.func @convertArray
-func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
+func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
 
   // CHECK-NEXT: %[[ZERO:.*]] = llvm.mlir.constant(0 : i32) : i32
   // CHECK-NEXT: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
@@ -59,12 +59,12 @@ func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>) {
   // CHECK-NEXT: %[[E4:.*]] = llvm.extractvalue %arg1[1 : i32] : !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.insertvalue %[[E4]], %[[I3]][3 : i32] : !llvm.array<4 x i32>
   %2 = hw.array_concat %arg1, %arg1 : !hw.array<2xi32>, !hw.array<2xi32>
-  
+
   return
 }
 
 // CHECK-LABEL: llvm.func @convertStruct
-func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>) {
+func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>) {
   // CHECK-NEXT: llvm.extractvalue %arg1[1 : i32] : !llvm.struct<(i8, i32)>
   %0 = hw.struct_extract %arg1["foo"] : !hw.struct<foo: i32, bar: i8>
 
