@@ -313,7 +313,7 @@ firrtl.circuit "ExtractClockGatesTestHarnessOnly" attributes {annotations = [{cl
 
 // Mixed ClockGate extraction should only extract clock gates in the DUT
 // CHECK: firrtl.circuit "ExtractClockGatesMixed"
-firrtl.circuit "ExtractClockGatesMixed"  attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"}]} {
+firrtl.circuit "ExtractClockGatesMixed" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"}]} {
   firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
   // CHECK-LABEL: firrtl.module private @Child
   firrtl.module private @Child(in %clock: !firrtl.clock, in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>, in %en: !firrtl.uint<1>) {
@@ -358,5 +358,79 @@ firrtl.circuit "ExtractClockGatesMixed"  attributes {annotations = [{class = "si
   // CHECK-SAME: #hw.innerNameRef<@DUTModule::@inst>
   // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesMixed::@ckg1>
   // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesMixed::@ckg2>
+  // CHECK-SAME: ]
+}
+
+//===----------------------------------------------------------------------===//
+// ExtractClockGates Composed
+//===----------------------------------------------------------------------===//
+
+// CHECK: firrtl.circuit "ExtractClockGatesComposed"
+firrtl.circuit "ExtractClockGatesComposed" attributes {annotations = [
+  {class = "sifive.enterprise.firrtl.ExtractClockGatesFileAnnotation", filename = "ClockGates.txt"},
+  {class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}
+]} {
+  firrtl.extmodule private @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.memmodule @mem_ext() attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  firrtl.module private @DUTModule(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    firrtl.instance mem_ext @mem_ext()
+    %gate_in, %gate_en, %gate_out = firrtl.instance gate @EICG_wrapper(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.connect %gate_in, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %gate_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @ExtractClockGatesComposed
+  firrtl.module @ExtractClockGatesComposed(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK: firrtl.instance gate sym [[CKG_SYM:@.+]] @EICG_wrapper
+    // CHECK: firrtl.instance mem_ext sym [[MEM_SYM:@.+]] @mem_ext
+    %dut_clock, %dut_en = firrtl.instance dut @DUTModule(in clock: !firrtl.clock, in en: !firrtl.uint<1>)
+    firrtl.connect %dut_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %dut_en, %en : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK: sv.verbatim "
+  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
+  // CHECK-SAME: symbols = [
+  // CHECK-SAME: @DUTModule
+  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesComposed::[[CKG_SYM]]>
+  // CHECK-SAME: ]
+  // CHECK: sv.verbatim "
+  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}\0A
+  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
+  // CHECK-SAME: symbols = [
+  // CHECK-SAME: @DUTModule
+  // CHECK-SAME: #hw.innerNameRef<@ExtractClockGatesComposed::[[MEM_SYM]]>
+  // CHECK-SAME: ]
+}
+
+//===----------------------------------------------------------------------===//
+// ExtractSeqMems Simple2
+//===----------------------------------------------------------------------===//
+
+// CHECK: firrtl.circuit "ExtractSeqMemsSimple2"
+firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation", filename = "SeqMems.txt"}]} {
+  firrtl.memmodule @mem_ext() attributes {dataWidth = 8 : ui32, depth = 8 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
+  // CHECK-LABEL: firrtl.module @mem
+  firrtl.module @mem() {
+    // CHECK-NOT: firrtl.instance mem_ext @mem_ext
+    firrtl.instance mem_ext @mem_ext()
+  }
+  // CHECK-LABEL: firrtl.module private @DUTModule
+  firrtl.module private @DUTModule() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    // CHECK-NEXT: firrtl.instance mem sym [[MEM_SYM:@.+]] @mem
+    firrtl.instance mem @mem()
+  }
+  // CHECK-LABEL: firrtl.module @ExtractSeqMemsSimple2
+  firrtl.module @ExtractSeqMemsSimple2() {
+    firrtl.instance dut @DUTModule()
+    // CHECK-NEXT: firrtl.instance dut sym [[DUT_SYM:@.+]] @DUTModule
+    // CHECK-NEXT: firrtl.instance mem_ext sym [[MEM_EXT_SYM:@.+]] @mem_ext
+  }
+  // CHECK: sv.verbatim "
+  // CHECK-SAME{LITERAL}: mem_wiring_0 -> {{0}}.{{1}}.{{2}}\0A
+  // CHECK-SAME: output_file = #hw.output_file<"SeqMems.txt", excludeFromFileList>
+  // CHECK-SAME: symbols = [
+  // CHECK-SAME: @DUTModule
+  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[MEM_SYM]]>
+  // CHECK-SAME: #hw.innerNameRef<@ExtractSeqMemsSimple2::[[MEM_EXT_SYM]]>
   // CHECK-SAME: ]
 }

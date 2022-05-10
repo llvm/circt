@@ -363,6 +363,35 @@ void ExtractInstancesPass::collectAnnos() {
       }
     }
   }
+
+  // If memory extraction is requested, find instances of `FMemModuleOp` and
+  // mark them as to be extracted.
+  // somewhat configurable.
+  if (!memoryFileName.empty()) {
+    for (auto module : circuit.getOps<FMemModuleOp>()) {
+      LLVM_DEBUG(llvm::dbgs() << "Memory `" << module.moduleName() << "`\n");
+      if (!dutModules.contains(module)) {
+        LLVM_DEBUG(llvm::dbgs() << "- Ignored (outside DUT)\n");
+        continue;
+      }
+
+      ExtractionInfo info;
+      info.traceFilename = memoryFileName;
+      info.prefix = "mem_wiring"; // TODO: Don't hardcode this
+      info.wrapperModule = memoryWrapperModule;
+      info.stopAtDUT = !info.wrapperModule.empty();
+      for (auto *instRecord :
+           instanceGraph->lookup(cast<hw::HWModuleLike>(*module))->uses()) {
+        if (auto inst = dyn_cast<InstanceOp>(*instRecord->getInstance())) {
+          LLVM_DEBUG(llvm::dbgs()
+                     << "- Marking `"
+                     << inst->getParentOfType<FModuleLike>().moduleName() << "."
+                     << inst.name() << "`\n");
+          extractionWorklist.push_back({inst, info});
+        }
+      }
+    }
+  }
 }
 
 /// Process an extraction annotation on an instance into a corresponding
