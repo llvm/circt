@@ -19,6 +19,8 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -82,8 +84,7 @@ void debugArg(const std::string &head, mlir::Value op, const Any &value,
   }
 }
 
-Any readValueWithType(mlir::Type type, std::string in) {
-  std::stringstream arg(in);
+Any readValueWithType(mlir::Type type, std::stringstream &arg) {
   if (type.isIndex()) {
     int64_t x;
     arg >> x;
@@ -106,22 +107,52 @@ Any readValueWithType(mlir::Type type, std::string in) {
     arg >> x;
     APFloat aparg(x);
     return aparg;
+  } else if (auto tupleType = type.dyn_cast<TupleType>()) {
+    char tmp;
+    arg >> tmp;
+    assert(tmp == '(' && "tuple should start with '('");
+    std::vector<Any> values;
+    unsigned size = tupleType.getTypes().size();
+    values.reserve(size);
+    // Parse element by element
+    for (unsigned i = 0; i < size; ++i) {
+      values.push_back(readValueWithType(tupleType.getType(i), arg));
+      // Consumes either the ',' or the ')'
+      arg >> tmp;
+    }
+    assert(tmp == ')' && "tuple should end with ')'");
+    assert(
+        values.size() == tupleType.getTypes().size() &&
+        "expected the number of tuple elements to match with the tuple type");
+    return values;
   } else {
     assert(false && "unknown argument type!");
     return {};
   }
 }
 
-std::string printAnyValueWithType(mlir::Type type, Any &value) {
-  std::stringstream out;
+Any readValueWithType(mlir::Type type, std::string in) {
+  std::stringstream stream(in);
+  return readValueWithType(type, stream);
+}
+
+void printAnyValueWithType(llvm::raw_ostream &out, mlir::Type type,
+                           Any &value) {
   if (type.isa<mlir::IntegerType>() || type.isa<mlir::IndexType>()) {
     out << any_cast<APInt>(value).getSExtValue();
-    return out.str();
   } else if (type.isa<mlir::FloatType>()) {
     out << any_cast<APFloat>(value).convertToDouble();
-    return out.str();
   } else if (type.isa<mlir::NoneType>()) {
-    return "none";
+    out << "none";
+  } else if (auto tupleType = type.dyn_cast<mlir::TupleType>()) {
+    auto values = any_cast<std::vector<llvm::Any>>(value);
+    out << "(";
+    llvm::interleaveComma(llvm::zip(tupleType.getTypes(), values), out,
+                          [&](auto pair) {
+                            auto [type, value] = pair;
+                            return printAnyValueWithType(out, type, value);
+                          });
+    out << ")";
   } else {
     llvm_unreachable("Unknown result type!");
   }
@@ -1003,7 +1034,8 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   double time = 0.0;
   for (unsigned i = 0; i < results.size(); ++i) {
     mlir::Type t = ftype.getResult(i);
-    outs() << printAnyValueWithType(t, results[i]) << " ";
+    printAnyValueWithType(outs(), t, results[i]);
+    outs() << " ";
     time = std::max(resultTimes[i], time);
   }
   // Go back through the arguments and output any memrefs.
@@ -1017,7 +1049,7 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
       for (int j = 0; j < memreftype.getNumElements(); ++j) {
         if (j != 0)
           outs() << ",";
-        outs() << printAnyValueWithType(elementType, store[buffer][j]);
+        printAnyValueWithType(outs(), elementType, store[buffer][j]);
       }
       outs() << " ";
     }

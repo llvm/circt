@@ -2,7 +2,7 @@
 
 // expected-error@+2 {{problem is infeasible}}
 // expected-error@+1 {{scheduling failed}}
-func @cyclic_graph() attributes {
+func.func @cyclic_graph() attributes {
   auxdeps = [ [0,1], [1,2], [2,3], [3,1] ]
   } {
   %0 = arith.constant 0 : i32

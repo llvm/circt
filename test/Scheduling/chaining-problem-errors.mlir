@@ -2,7 +2,7 @@
 
 // expected-error@+2 {{Missing delays}}
 // expected-error@+1 {{problem check failed}}
-func @missing_delay() attributes {
+func.func @missing_delay() attributes {
   operatortypes = [
     { name = "foo", latency = 0}
   ]} {
@@ -13,7 +13,7 @@ func @missing_delay() attributes {
 
 // expected-error@+2 {{Negative delays}}
 // expected-error@+1 {{problem check failed}}
-func @negative_delay() attributes {
+func.func @negative_delay() attributes {
   operatortypes = [
     { name = "foo", latency = 0, incdelay = -1.0, outdelay = -1.0}
   ]} {
@@ -24,7 +24,7 @@ func @negative_delay() attributes {
 
 // expected-error@+2 {{Incoming & outgoing delay must be equal for zero-latency operator type}}
 // expected-error@+1 {{problem check failed}}
-func @inc_out_mismatch() attributes {
+func.func @inc_out_mismatch() attributes {
   cycletime = 10.0, operatortypes = [
     { name = "foo", latency = 0, incdelay = 1.0, outdelay = 2.0}
   ]} {
@@ -34,7 +34,7 @@ func @inc_out_mismatch() attributes {
 // -----
 
 // expected-error@+1 {{problem verification failed}}
-func @no_stic() {
+func.func @no_stic() {
   // expected-error@+1 {{Operation has no non-negative start time in cycle}}
   return { problemStartTime = 0 }
 }
@@ -43,7 +43,7 @@ func @no_stic() {
 
 // expected-error@+2 {{Precedence violated in cycle 0}}
 // expected-error@+1 {{problem verification failed}}
-func @precedence1(%arg0 : i32, %arg1 : i32) attributes {
+func.func @precedence1(%arg0 : i32, %arg1 : i32) attributes {
   operatortypes = [
     { name = "add", latency = 0, incdelay = 1.0, outdelay = 1.0}
   ] } {
@@ -56,7 +56,7 @@ func @precedence1(%arg0 : i32, %arg1 : i32) attributes {
 
 // expected-error@+2 {{Precedence violated in cycle 3}}
 // expected-error@+1 {{problem verification failed}}
-func @precedence2(%arg0 : i32, %arg1 : i32) attributes {
+func.func @precedence2(%arg0 : i32, %arg1 : i32) attributes {
   operatortypes = [
    { name = "add", latency = 0, incdelay = 1.0, outdelay = 1.0},
    { name = "mul", latency = 3, incdelay = 2.5, outdelay = 3.75}

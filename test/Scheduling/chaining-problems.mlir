@@ -2,7 +2,7 @@
 // RUN: circt-opt %s -test-simplex-scheduler=with=ChainingProblem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
 
 // SIMPLEX-LABEL: adder_chain
-func @adder_chain(%arg0 : i32, %arg1 : i32) -> i32 attributes {
+func.func @adder_chain(%arg0 : i32, %arg1 : i32) -> i32 attributes {
   cycletime = 5.0, // only evaluated for scheduler test; ignored by the problem test!
   operatortypes = [
    { name = "add", latency = 0, incdelay = 2.34, outdelay = 2.34}
@@ -18,7 +18,7 @@ func @adder_chain(%arg0 : i32, %arg1 : i32) -> i32 attributes {
 }
 
 // SIMPLEX-LABEL: multi_cycle
-func @multi_cycle(%arg0 : i32, %arg1 : i32) -> i32 attributes {
+func.func @multi_cycle(%arg0 : i32, %arg1 : i32) -> i32 attributes {
   cycletime = 5.0, // only evaluated for scheduler test; ignored by the problem test!
   operatortypes = [
    { name = "add", latency = 0, incdelay = 2.34, outdelay = 2.34},

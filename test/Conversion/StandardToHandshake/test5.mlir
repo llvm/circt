@@ -21,7 +21,7 @@
 // CHECK:           %[[VAL_8]] = br %[[VAL_17]] : i32
 // CHECK:           return %[[VAL_12]], %[[VAL_9]] : i32, none
 // CHECK:         }
-func @dfs_block_order() -> (i32) {
+func.func @dfs_block_order() -> (i32) {
   %0 = arith.constant 42 : i32
   cf.br ^bb2
 ^bb1:

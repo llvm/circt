@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-func @test1(%arg0: memref<?xi32>) -> i32 {
+func.func @test1(%arg0: memref<?xi32>) -> i32 {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   %c10 = arith.constant 10 : index
@@ -33,7 +33,7 @@ func @test1(%arg0: memref<?xi32>) -> i32 {
   return %0 : i32
 }
 
-func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
+func.func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   %c3 = arith.constant 3 : index
@@ -67,14 +67,14 @@ func @test2(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
     } : i1, index, i32
     staticlogic.pipeline.stage start = 5 when %3#0  {
       memref.store %3#2, %arg1[%3#1] : memref<?xi32>
-      staticlogic.pipeline.register 
+      staticlogic.pipeline.register
     }
     staticlogic.pipeline.terminator iter_args(%0#0), results() : (index) -> ()
   }
   return
 }
 
-func @test3(%arg0: memref<?xi32>) {
+func.func @test3(%arg0: memref<?xi32>) {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   %c10 = arith.constant 10 : index
@@ -105,14 +105,14 @@ func @test3(%arg0: memref<?xi32>) {
     } : i32
     staticlogic.pipeline.stage start = 2 {
       memref.store %4, %0[%c0] : memref<1xi32>
-      staticlogic.pipeline.register 
+      staticlogic.pipeline.register
     }
     staticlogic.pipeline.terminator iter_args(%3#0), results() : (index) -> ()
   }
   return
 }
 
-func @test4(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
+func.func @test4(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   %c10 = arith.constant 10 : index
@@ -141,14 +141,14 @@ func @test4(%arg0: memref<?xi32>, %arg1: memref<?xi32>) {
     } : index, i32
     staticlogic.pipeline.stage start = 4 {
       memref.store %2#1, %arg0[%2#0] : memref<?xi32>
-      staticlogic.pipeline.register 
+      staticlogic.pipeline.register
     }
     staticlogic.pipeline.terminator iter_args(%0#0), results() : (index) -> ()
   }
   return
 }
 
-func @test5(%arg0: memref<?xi32>) {
+func.func @test5(%arg0: memref<?xi32>) {
   %c1 = arith.constant 1 : index
   %c2 = arith.constant 2 : index
   %c10 = arith.constant 10 : index
@@ -174,14 +174,14 @@ func @test5(%arg0: memref<?xi32>) {
     staticlogic.pipeline.stage start = 2 {
       %2 = arith.addi %0, %1#0 : i32
       memref.store %2, %arg0[%arg1] : memref<?xi32>
-      staticlogic.pipeline.register 
+      staticlogic.pipeline.register
     }
     staticlogic.pipeline.terminator iter_args(%1#1), results() : (index) -> ()
   }
   return
 }
 
-func @trip_count_attr() {
+func.func @trip_count_attr() {
   %false = arith.constant 0 : i1
   // CHECK: staticlogic.pipeline.while II = 1 trip_count = 3
   staticlogic.pipeline.while II = 1 trip_count = 3 iter_args(%arg0 = %false) : (i1) -> () {

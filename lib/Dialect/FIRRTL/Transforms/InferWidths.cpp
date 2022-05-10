@@ -1082,6 +1082,11 @@ public:
   /// non-aggregate.
   Expr *declareVar(FIRRTLType type, Location loc);
 
+  /// Assign the constraint expressions of the fields in the `result` argument
+  /// as the max of expressions in the `rhs` and `lhs` arguments. Both fields
+  /// must be the same type.
+  void maximumOfTypes(Value result, Value rhs, Value lhs);
+
   /// Constrain the value "larger" to be greater than or equal to "smaller".
   /// These may be aggregate values. This is used for regular connects.
   void constrainTypes(Value larger, Value smaller);
@@ -1399,10 +1404,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<MuxPrimOp>([&](auto op) {
         auto sel = getExpr(op.sel());
         constrainTypes(sel, solver.known(1));
-        auto high = getExpr(op.high());
-        auto low = getExpr(op.low());
-        auto e = solver.max(high, low);
-        setExpr(op.getResult(), e);
+        maximumOfTypes(op.getResult(), op.high(), op.low());
       })
 
       // Handle the various connect statements that imply a type constraint.
@@ -1547,6 +1549,37 @@ void InferenceMapping::declareVars(Value value, Location loc) {
     }
   };
   declare(ftype);
+}
+
+/// Assign the constraint expressions of the fields in the `result` argument as
+/// the max of expressions in the `rhs` and `lhs` arguments. Both fields must be
+/// the same type.
+void InferenceMapping::maximumOfTypes(Value result, Value rhs, Value lhs) {
+  // Recurse to every leaf element and set larger >= smaller.
+  auto fieldID = 0;
+  std::function<void(FIRRTLType)> maximize = [&](FIRRTLType type) {
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
+      fieldID++;
+      for (auto &element : bundleType.getElements())
+        maximize(element.type);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      fieldID++;
+      auto save = fieldID;
+      // Skip 0 length vectors.
+      if (vecType.getNumElements() > 0)
+        maximize(vecType.getElementType());
+      fieldID = save + vecType.getMaxFieldID();
+    } else if (type.isGround()) {
+      auto *e = solver.max(getExpr(FieldRef(rhs, fieldID)),
+                           getExpr(FieldRef(lhs, fieldID)));
+      setExpr(FieldRef(result, fieldID), e);
+      fieldID++;
+    } else {
+      llvm_unreachable("Unknown type inside a bundle!");
+    }
+  };
+  auto type = result.getType().cast<FIRRTLType>();
+  maximize(type);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater

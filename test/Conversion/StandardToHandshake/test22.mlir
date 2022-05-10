@@ -204,7 +204,7 @@
 // CHECK:           sink %[[VAL_220]] : index
 // CHECK:           return %[[VAL_219]] : none
 // CHECK:         }
-func @if_for() {
+func.func @if_for() {
   %c0 = arith.constant 0 : index
   %c-1 = arith.constant -1 : index
   %1 = arith.muli %c-1, %c-1 : index

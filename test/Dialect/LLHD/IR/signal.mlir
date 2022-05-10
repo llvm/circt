@@ -23,7 +23,7 @@ llhd.entity @checkSigInst () -> () {
 }
 
 // CHECK-LABEL: checkPrb
-func @checkPrb(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<!hw.array<3xi8>>, %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>) {
+func.func @checkPrb(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<!hw.array<3xi8>>, %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>) {
   // CHECK: %{{.*}} = llhd.prb %arg0 : !llhd.sig<i1>
   %0 = llhd.prb %arg0 : !llhd.sig<i1>
   // CHECK-NEXT: %{{.*}} = llhd.prb %arg1 : !llhd.sig<i64>
@@ -37,7 +37,7 @@ func @checkPrb(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<
 }
 
 // CHECK-LABEL: checkOutput
-func @checkOutput(%arg0: i32, %arg1: !llhd.time) {
+func.func @checkOutput(%arg0: i32, %arg1: !llhd.time) {
   // CHECK-NEXT: %{{.+}} = llhd.output %arg0 after %arg1 : i32
   %0 = llhd.output %arg0 after %arg1 : i32
   // CHECK-NEXT: %{{.+}} = llhd.output "sigName" %arg0 after %arg1 : i32
@@ -47,11 +47,11 @@ func @checkOutput(%arg0: i32, %arg1: !llhd.time) {
 }
 
 // CHECK-LABEL: checkDrv
-func @checkDrv(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : i1,
+func.func @checkDrv(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : i1,
     %arg3 : i64, %arg4 : !llhd.time, %arg5 : !llhd.sig<!hw.array<3xi8>>,
     %arg6 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>,
     %arg7 : !hw.array<3xi8>, %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>) {
-      
+
   // CHECK-NEXT: llhd.drv %arg0, %arg2 after %arg4 : !llhd.sig<i1>
   llhd.drv %arg0, %arg2 after %arg4 : !llhd.sig<i1>
   // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 : !llhd.sig<i64>

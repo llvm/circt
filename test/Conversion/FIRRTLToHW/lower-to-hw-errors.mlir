@@ -10,7 +10,7 @@
 
 firrtl.circuit "OperandTypeIsFIRRTL" {
   firrtl.module @OperandTypeIsFIRRTL() { }
-  func.func @Test() {
+    func.func @Test() {
     // expected-error @+1 {{Found unhandled FIRRTL operation 'firrtl.constant'}}
     %a = firrtl.constant 0 : !firrtl.uint<1>
     return

@@ -48,7 +48,7 @@
 // CHECK:           sink %[[VAL_48]] : index
 // CHECK:           return %[[VAL_47]] : none
 // CHECK:         }
-  func @nested_ifs() {
+  func.func @nested_ifs() {
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %1 = arith.muli %c0, %c-1 : index

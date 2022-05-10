@@ -1,7 +1,7 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: func @UnitTypes(
-func @UnitTypes(
+func.func @UnitTypes(
   // CHECK-SAME: %arg0: !moore.void
   // CHECK-SAME: %arg1: !moore.string
   // CHECK-SAME: %arg2: !moore.chandle
@@ -13,7 +13,7 @@ func @UnitTypes(
 ) { return }
 
 // CHECK-LABEL: func @IntTypes(
-func @IntTypes(
+func.func @IntTypes(
   // CHECK-SAME: %arg0: !moore.bit
   // CHECK-SAME: %arg1: !moore.logic
   // CHECK-SAME: %arg2: !moore.reg
@@ -71,7 +71,7 @@ func @IntTypes(
 ) { return }
 
 // CHECK-LABEL: func @RealTypes(
-func @RealTypes(
+func.func @RealTypes(
   // CHECK-SAME: %arg0: !moore.shortreal
   // CHECK-SAME: %arg1: !moore.real
   // CHECK-SAME: %arg2: !moore.realtime
@@ -81,7 +81,7 @@ func @RealTypes(
 ) { return }
 
 // CHECK-LABEL: func @EnumType(
-func @EnumType(
+func.func @EnumType(
   // CHECK-SAME: %arg0: !moore.enum<loc("foo.sv":42:9001)>
   // CHECK-SAME: %arg1: !moore.enum<int, loc("foo.sv":42:9001)>
   // CHECK-SAME: %arg2: !moore.enum<"Foo", loc("foo.sv":42:9001)>
@@ -93,7 +93,7 @@ func @EnumType(
 ) { return }
 
 // CHECK-LABEL: func @IndirectTypes(
-func @IndirectTypes(
+func.func @IndirectTypes(
   // CHECK-SAME: %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>
   // CHECK-SAME: %arg1: !moore.packed<ref<bit, loc("foo.sv":42:9001)>>
   %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>,
@@ -109,7 +109,7 @@ func @IndirectTypes(
 ) { return }
 
 // CHECK-LABEL: func @DimTypes(
-func @DimTypes(
+func.func @DimTypes(
   // CHECK-SAME: %arg0: !moore.packed<unsized<bit>>,
   // CHECK-SAME: %arg1: !moore.packed<range<bit, 4:-5>>,
   %arg0: !moore.packed<unsized<bit>>,
@@ -133,7 +133,7 @@ func @DimTypes(
 }
 
 // CHECK-LABEL: func @StructTypes(
-func @StructTypes(
+func.func @StructTypes(
   // CHECK-SAME: %arg0: !moore.packed<struct<{}, loc("foo.sv":42:9001)>>
   // CHECK-SAME: %arg1: !moore.packed<struct<"Foo", {}, loc("foo.sv":42:9001)>>
   // CHECK-SAME: %arg2: !moore.packed<struct<unsigned, {}, loc("foo.sv":42:9001)>>

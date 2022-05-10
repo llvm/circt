@@ -449,6 +449,9 @@ private:
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
+  hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
+                                      Block *topLevelModule,
+                                      CircuitLoweringState &loweringState);
 
   LogicalResult lowerModuleBody(FModuleOp oldModule,
                                 CircuitLoweringState &loweringState);
@@ -521,11 +524,16 @@ void FIRRTLModuleLowering::runOnOperation() {
           modulesToProcess.push_back(module);
         })
         .Case<FExtModuleOp>([&](auto extModule) {
-          auto loweredExtMod = lowerExtModule(extModule, topLevelModule, state);
-          if (!loweredExtMod)
+          auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
+          if (!loweredMod)
             return signalPassFailure();
-
-          state.oldToNewModuleMap[&op] = loweredExtMod;
+          state.oldToNewModuleMap[&op] = loweredMod;
+        })
+        .Case<FMemModuleOp>([&](auto memModule) {
+          auto loweredMod = lowerMemModule(memModule, topLevelModule, state);
+          if (!loweredMod)
+            return signalPassFailure();
+          state.oldToNewModuleMap[&op] = loweredMod;
         })
         .Case<NonLocalAnchor>([&](auto nla) {
           // Just drop it.
@@ -944,6 +952,26 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
+  return newModule;
+}
+
+hw::HWModuleExternOp
+FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
+                                     Block *topLevelModule,
+                                     CircuitLoweringState &loweringState) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+    return {};
+
+  // Build the new hw.module op.
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  auto newModule = builder.create<hw::HWModuleExternOp>(
+      oldModule.getLoc(), oldModule.moduleNameAttr(), ports,
+      oldModule.moduleNameAttr());
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;

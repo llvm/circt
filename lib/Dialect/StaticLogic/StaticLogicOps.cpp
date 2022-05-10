@@ -44,7 +44,8 @@ ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
   }
 
   // Parse iter_args assignment list.
-  SmallVector<OpAsmParser::UnresolvedOperand> regionArgs, operands;
+  SmallVector<OpAsmParser::Argument> regionArgs;
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
   if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
     if (parser.parseAssignmentList(regionArgs, operands))
       return failure();
@@ -59,19 +60,22 @@ ParseResult PipelineWhileOp::parse(OpAsmParser &parser,
   result.addTypes(type.getResults());
 
   // Resolve iter_args operands.
-  for (auto [operand, type] : llvm::zip(operands, type.getInputs()))
+  for (auto [regionArg, operand, type] :
+       llvm::zip(regionArgs, operands, type.getInputs())) {
+    regionArg.type = type;
     if (parser.resolveOperand(operand, type, result.operands))
       return failure();
+  }
 
   // Parse condition region.
   Region *condition = result.addRegion();
-  parser.parseRegion(*condition, regionArgs, type.getInputs());
+  parser.parseRegion(*condition, regionArgs);
 
   // Parse stages region.
   if (parser.parseKeyword("do"))
     return failure();
   Region *stages = result.addRegion();
-  parser.parseRegion(*stages, regionArgs, type.getInputs());
+  parser.parseRegion(*stages, regionArgs);
 
   return success();
 }

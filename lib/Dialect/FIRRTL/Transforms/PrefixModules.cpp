@@ -91,9 +91,11 @@ static StringRef getPrefix(Operation *module) {
 /// duplicated and each module will have one prefix applied.
 namespace {
 class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
+  void removeDeadAnnotations(StringAttr moduleName, Operation *op);
   void renameModuleBody(std::string prefix, FModuleOp module);
   void renameModule(FModuleOp module);
   void renameExtModule(FExtModuleOp extModule);
+  void renameMemModule(FMemModuleOp memModule);
   void runOnOperation() override;
 
   /// Mutate Grand Central Interface definitions (an Annotation on the circuit)
@@ -121,6 +123,41 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
 };
 } // namespace
 
+/// When a module is cloned, it carries with it all non-local annotations. This
+/// function will remove all non-local annotations from the clone with a path
+/// that doesn't match.
+void PrefixModulesPass::removeDeadAnnotations(StringAttr moduleName,
+                                              Operation *op) {
+  // A predicate to check if an annotation can be removed. If there is a
+  // reference to a NLA, the NLA should either contain this module in its path,
+  // if its an InstanceOp. Else, it must exist at the leaf of the NLA. Otherwise
+  // the NLA reference can be removed, since its a spurious annotation, result
+  // of cloning the original module.
+  auto canRemoveAnno = [&](Annotation anno, Operation *op) -> bool {
+    auto nla = anno.getMember("circt.nonlocal");
+    if (!nla)
+      return false;
+    auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
+    auto nlaOp = nlaTable->getNLA(nlaName);
+    if (!nlaOp) {
+      op->emitError("cannot find NonLocalAnchor :" + nlaName.getValue());
+      signalPassFailure();
+      return false;
+    }
+
+    bool isValid = false;
+    if (isa<InstanceOp>(op))
+      isValid = nlaOp.hasModule(moduleName);
+    else
+      isValid = nlaOp.leafMod() == moduleName;
+    return !isValid;
+  };
+  AnnotationSet::removePortAnnotations(
+      op, std::bind(canRemoveAnno, std::placeholders::_2, op));
+  AnnotationSet::removeAnnotations(
+      op, std::bind(canRemoveAnno, std::placeholders::_1, op));
+}
+
 /// Applies the prefix to the module.  This will update the required prefixes of
 /// any referenced module in the prefix map.
 void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
@@ -139,40 +176,16 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
   if (!prefix.empty())
     anythingChanged = true;
   StringAttr thisMod = module.getNameAttr();
-  // A predicate to check if an annotation can be removed. If there is a
-  // refernece to a NLA, the NLA should either contain this module in its path,
-  // if its an InstanceOp. Else, it must exist at the leaf of the NLA. Otherwise
-  // the NLA reference can be removed, since its a spurious annotation, result
-  // of cloning the original module.
-  auto canRemoveAnno = [&](Annotation anno, Operation *op) -> bool {
-    auto nla = anno.getMember("circt.nonlocal");
-    if (!nla)
-      return false;
-    auto nlaName = nla.cast<FlatSymbolRefAttr>().getAttr();
-    auto nlaOp = nlaTable->getNLA(nlaName);
-    if (!nlaOp) {
-      op->emitError("cannot find NonLocalAnchor :" + nlaName.getValue());
-      return true;
-    }
 
-    bool isValid = false;
-    if (isa<InstanceOp>(op))
-      isValid = nlaOp.hasModule(thisMod);
-    else
-      isValid = nlaOp.leafMod() == thisMod;
-    return !isValid;
-  };
   // Remove spurious NLA references from the module ports and the module itself.
   // Some of the NLA references become invalid after a module is cloned, based
-  // on the instnace.
-  AnnotationSet::removePortAnnotations(
-      module, std::bind(canRemoveAnno, std::placeholders::_2, module));
-  AnnotationSet::removeAnnotations(
-      module, std::bind(canRemoveAnno, std::placeholders::_1, module));
+  // on the instance.
+  removeDeadAnnotations(thisMod, module);
+
   module.body().walk([&](Operation *op) {
     // Remove spurious NLA references either on a leaf op, or the InstanceOp.
-    AnnotationSet::removeAnnotations(
-        op, std::bind(canRemoveAnno, std::placeholders::_1, op));
+    removeDeadAnnotations(thisMod, op);
+
     if (auto memOp = dyn_cast<MemOp>(op)) {
       // Memories will be turned into modules and should be prefixed.
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
@@ -346,6 +359,29 @@ void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
   applyPrefixToNameAndDefName(extModule, prefixes.front());
 }
 
+/// Apply prefixes from the `prefixMap` to a memory module.
+void PrefixModulesPass::renameMemModule(FMemModuleOp memModule) {
+  // Lookup prefixes for this module.  If none exist, bail out.
+  auto &prefixes = prefixMap[memModule.getName()];
+  if (prefixes.empty())
+    return;
+
+  OpBuilder builder(memModule);
+  builder.setInsertionPointAfter(memModule);
+
+  // Duplicate the external module if there is more than one prefix.
+  auto originalName = memModule.getName();
+  for (auto &prefix : llvm::drop_begin(prefixes)) {
+    auto duplicate = cast<FMemModuleOp>(builder.clone(*memModule));
+    duplicate.setName((prefix + originalName).str());
+    removeDeadAnnotations(duplicate.getNameAttr(), duplicate);
+  }
+
+  // Update the original module with a new prefix.
+  memModule.setName((prefixes.front() + originalName).str());
+  removeDeadAnnotations(memModule.getNameAttr(), memModule);
+}
+
 /// Mutate circuit-level annotations to add prefix information to Grand Central
 /// (SystemVerilog) interfaces.  Add a "prefix" field to each interface
 /// definition (an annotation with class "AugmentedBundleType") that holds the
@@ -419,6 +455,8 @@ void PrefixModulesPass::runOnOperation() {
         renameModule(module);
       if (auto extModule = dyn_cast<FExtModuleOp>(*node->getModule()))
         renameExtModule(extModule);
+      if (auto memModule = dyn_cast<FMemModuleOp>(*node->getModule()))
+        renameMemModule(memModule);
     }
   }
 

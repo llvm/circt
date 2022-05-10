@@ -3,7 +3,7 @@
 
 // SIMPLEX-LABEL: canis14_fig2
 // SIMPLEX-SAME: simplexInitiationInterval = 4
-func @canis14_fig2() attributes {
+func.func @canis14_fig2() attributes {
   problemInitiationInterval = 3,
   auxdeps = [ [3,0,1], [3,4] ],
   operatortypes = [
@@ -21,7 +21,7 @@ func @canis14_fig2() attributes {
 
 // SIMPLEX-LABEL: minII_feasible
 // SIMPLEX-SAME: simplexInitiationInterval = 4
-func @minII_feasible() attributes {
+func.func @minII_feasible() attributes {
   problemInitiationInterval = 3,
   auxdeps = [ [6,1,5], [5,2,3], [6,7] ],
   operatortypes = [
@@ -44,7 +44,7 @@ func @minII_feasible() attributes {
 
 // SIMPLEX-LABEL: minII_infeasible
 // SIMPLEX-SAME: simplexInitiationInterval = 4
-func @minII_infeasible() -> i32 attributes {
+func.func @minII_infeasible() -> i32 attributes {
   problemInitiationInterval = 4,
   auxdeps = [ [0,1], [5,1,1] ],
   operatortypes = [

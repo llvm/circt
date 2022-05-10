@@ -6,7 +6,7 @@
 // CHECK:           %[[VAL_2:.*]] = merge %[[VAL_0]] : i32
 // CHECK:           return %[[VAL_2]], %[[VAL_1]] : i32, none
 // CHECK:         }
-func @bar(%0 : i32) -> i32 {
+func.func @bar(%0 : i32) -> i32 {
   return %0 : i32
 }
 
@@ -19,7 +19,7 @@ func @bar(%0 : i32) -> i32 {
 // CHECK:           sink %[[VAL_4]]#1 : none
 // CHECK:           return %[[VAL_4]]#0, %[[VAL_3]]#1 : i32, none
 // CHECK:         }
-func @foo(%0 : i32) -> i32 {
+func.func @foo(%0 : i32) -> i32 {
   %a1 = call @bar(%0) : (i32) -> i32
   return %a1 : i32
 }
@@ -29,13 +29,13 @@ func @foo(%0 : i32) -> i32 {
 // Branching control flow with calls in each branch.
 
 // CHECK-LABEL:   handshake.func @add(
-func @add(%arg0 : i32, %arg1: i32) -> i32 {
+func.func @add(%arg0 : i32, %arg1: i32) -> i32 {
   %0 = arith.addi %arg0, %arg1 : i32
   return %0 : i32
 }
 
 // CHECK-LABEL:   handshake.func @sub(
-func @sub(%arg0 : i32, %arg1: i32) -> i32 {
+func.func @sub(%arg0 : i32, %arg1: i32) -> i32 {
   %0 = arith.subi %arg0, %arg1 : i32
   return %0 : i32
 }
@@ -70,7 +70,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_32:.*]] = mux %[[VAL_31]] {{\[}}%[[VAL_29]], %[[VAL_21]]] : index, i32
 // CHECK:           return %[[VAL_32]], %[[VAL_30]] : i32, none
 // CHECK:         }
-func @main(%arg0 : i32, %arg1 : i32, %cond : i1) -> i32 {
+func.func @main(%arg0 : i32, %arg1 : i32, %cond : i1) -> i32 {
   cf.cond_br %cond, ^bb1, ^bb2
 ^bb1:
   %0 = call @add(%arg0, %arg1) : (i32, i32) -> i32

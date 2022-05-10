@@ -814,8 +814,9 @@ def JoinOp : Handshake_Op<"join", [
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
 
-// TODO(Dinistro): add support for this in the handshake-runner
 def UnpackOp : Handshake_Op<"unpack", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
   TypesMatchWith<"result types match element types of 'tuple'",
                      "input", "results",
                      "$_self.cast<TupleType>().getTypes()">
@@ -849,6 +850,8 @@ def UnpackOp : Handshake_Op<"unpack", [
 }
 
 def PackOp : Handshake_Op<"pack", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
   TypesMatchWith<"input types match element types of 'tuple'",
                    "result", "inputs",
                    "$_self.cast<TupleType>().getTypes()">

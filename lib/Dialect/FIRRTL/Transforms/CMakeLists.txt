@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
+  AddSeqMemPorts.cpp
   BlackBoxMemory.cpp
   BlackBoxReader.cpp
   CheckCombCycles.cpp
@@ -18,6 +19,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InjectDUTHierarchy.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerMemory.cpp
   LowerTypes.cpp
   MergeConnections.cpp
   MemToRegOfVec.cpp
