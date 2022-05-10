@@ -580,6 +580,8 @@ firrtl.circuit "WireShouldDominate" {
   }
 }
 
+// -----
+
 // Local node as async reset should be moved before all its uses if its input
 // value dominates the target location in the module.
 firrtl.circuit "MovableNodeShouldDominate" {
@@ -594,6 +596,8 @@ firrtl.circuit "MovableNodeShouldDominate" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
   }
 }
+
+// -----
 
 // Local node as async reset should be replaced by a wire and moved before all
 // its uses if its input value does not dominate the target location in the
@@ -611,6 +615,8 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
     // CHECK-NEXT: firrtl.strictconnect %localReset, %0
   }
 }
+
+// -----
 
 // Move of local async resets should work across blocks.
 firrtl.circuit "MoveAcrossBlocks1" {
@@ -636,6 +642,8 @@ firrtl.circuit "MoveAcrossBlocks1" {
   }
 }
 
+// -----
+
 firrtl.circuit "MoveAcrossBlocks2" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks2
   firrtl.module @MoveAcrossBlocks2(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
@@ -659,6 +667,8 @@ firrtl.circuit "MoveAcrossBlocks2" {
   }
 }
 
+// -----
+
 firrtl.circuit "MoveAcrossBlocks3" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks3
   firrtl.module @MoveAcrossBlocks3(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
@@ -677,6 +687,8 @@ firrtl.circuit "MoveAcrossBlocks3" {
     // CHECK-NEXT: }
   }
 }
+
+// -----
 
 firrtl.circuit "MoveAcrossBlocks4" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks4
@@ -697,6 +709,8 @@ firrtl.circuit "MoveAcrossBlocks4" {
   }
 }
 
+// -----
+
 firrtl.circuit "SubAccess" {
   firrtl.module @SubAccess(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
     // CHECK-LABEL: firrtl.module @SubAccess
@@ -715,6 +729,8 @@ firrtl.circuit "SubAccess" {
   }
 }
 
+// -----
+
 // This is a regression check to ensure that a zero-width register gets a proper
 // reset value.
 // CHECK-LABEL: firrtl.module @ZeroWidthRegister
@@ -726,6 +742,8 @@ firrtl.circuit "ZeroWidthRegister" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]]
   }
 }
+
+// -----
 
 // Check that unaffected fields ("data") are not being affected by width
 // inference. See https://github.com/llvm/circt/issues/2857.
@@ -740,6 +758,9 @@ firrtl.circuit "ZeroLengthVectorInBundle1"  {
     // CHECK-NEXT: firrtl.strictconnect %0, %invalid : !firrtl.vector<uint<1>, 0>
   }
 }
+
+// -----
+
 // CHECK-LABEL: firrtl.module @ZeroLengthVectorInBundle2
 firrtl.circuit "ZeroLengthVectorInBundle2"  {
   firrtl.module @ZeroLengthVectorInBundle2(out %out: !firrtl.bundle<resets: vector<bundle<a: reset>, 0>, data flip: uint<3>>) {
@@ -749,5 +770,33 @@ firrtl.circuit "ZeroLengthVectorInBundle2"  {
     // CHECK-NEXT: %0 = firrtl.subfield %out(0) : (!firrtl.bundle<resets: vector<bundle<a: uint<1>>, 0>, data flip: uint<3>>) -> !firrtl.vector<bundle<a: uint<1>>, 0>
     // CHECK-NEXT: %invalid = firrtl.invalidvalue : !firrtl.vector<bundle<a: uint<1>>, 0>
     // CHECK-NEXT: firrtl.strictconnect %0, %invalid : !firrtl.vector<bundle<a: uint<1>>, 0>
+  }
+}
+
+// -----
+
+// Resets nested underneath a zero-length vector should infer to `UInt<1>`.
+// CHECK-LABEL: firrtl.module @ZeroVecBundle
+// CHECK-SAME: in %a: !firrtl.vector<bundle<x: uint<1>>, 0>
+// CHECK-SAME: out %b: !firrtl.vector<bundle<x: uint<1>>, 0>
+firrtl.circuit "ZeroVecBundle"  {
+  firrtl.module @ZeroVecBundle(in %a: !firrtl.vector<bundle<x: uint<1>>, 0>, out %b: !firrtl.vector<bundle<x: reset>, 0>) {
+    %w = firrtl.wire : !firrtl.vector<bundle<x: reset>, 0>
+    firrtl.connect %b, %w : !firrtl.vector<bundle<x: reset>, 0>, !firrtl.vector<bundle<x: reset>, 0>
+    // CHECK-NEXT: %w = firrtl.wire : !firrtl.vector<bundle<x: uint<1>>, 0>
+    // CHECK-NEXT: firrtl.connect %b, %w : !firrtl.vector<bundle<x: uint<1>>, 0>, !firrtl.vector<bundle<x: uint<1>>, 0>
+  }
+}
+
+// -----
+
+// Resets directly in a zero-length vector should infer to `UInt<1>`.
+// CHECK-LABEL: firrtl.module @ZeroVec
+// CHECK-SAME: in %a: !firrtl.bundle<x: vector<uint<1>, 0>>
+// CHECK-SAME: out %b: !firrtl.bundle<x: vector<uint<1>, 0>>
+firrtl.circuit "ZeroVec"  {
+  firrtl.module @ZeroVec(in %a: !firrtl.bundle<x: vector<reset, 0>>, out %b: !firrtl.bundle<x: vector<reset, 0>>) {
+    firrtl.connect %b, %a : !firrtl.bundle<x: vector<reset, 0>>, !firrtl.bundle<x: vector<reset, 0>>
+    // CHECK-NEXT: firrtl.connect %b, %a : !firrtl.bundle<x: vector<uint<1>, 0>>, !firrtl.bundle<x: vector<uint<1>, 0>>
   }
 }

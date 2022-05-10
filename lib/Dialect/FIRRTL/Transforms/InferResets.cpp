@@ -610,6 +610,38 @@ static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
   return 0;
 }
 
+// If a field is pointing to a child of a zero-length vector, it is useless.
+static bool isUselessVec(FIRRTLType oldType, unsigned fieldID) {
+  if (oldType.isGround()) {
+    assert(fieldID == 0);
+    return false;
+  }
+
+  // If this is a bundle type, recurse.
+  if (auto bundleType = oldType.dyn_cast<BundleType>()) {
+    unsigned index = getIndexForFieldID(bundleType, fieldID);
+    return isUselessVec(bundleType.getElementType(index),
+                        fieldID - getFieldID(bundleType, index));
+  }
+
+  // If this is a vector type, check if it is zero length.  Anything in a
+  // zero-length vector is useless.
+  if (auto vectorType = oldType.dyn_cast<FVectorType>()) {
+    if (vectorType.getNumElements() == 0)
+      return true;
+    return isUselessVec(vectorType.getElementType(),
+                        fieldID - getFieldID(vectorType));
+  }
+
+  return false;
+}
+
+// If a field is pointing to a child of a zero-length vector, it is useless.
+static bool isUselessVec(FieldRef field) {
+  auto oldType = field.getValue().getType().cast<FIRRTLType>();
+  return isUselessVec(oldType, field.getFieldID());
+}
+
 static bool getDeclName(Value value, SmallString<32> &string) {
   if (auto arg = value.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
@@ -916,7 +948,8 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
       ++asyncDrives;
     else if (signal.type.isa<UIntType>())
       ++syncDrives;
-    else if (isa_and_nonnull<InvalidValueOp>(
+    else if (isUselessVec(signal.field) ||
+             isa_and_nonnull<InvalidValueOp>(
                  signal.field.getValue().getDefiningOp()))
       ++invalidDrives;
   }
