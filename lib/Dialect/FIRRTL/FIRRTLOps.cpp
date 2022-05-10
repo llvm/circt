@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -1942,7 +1943,9 @@ FirMemory MemOp::getSummary() {
           if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
               auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
+                  clockToLeader.insert({circt::firrtl::getModuleScopedDriver(
+                                            connect.src(), true, true, true),
+                                        numWritePorts});
               if (result.second) {
                 writeClockIDs.push_back(numWritePorts);
               } else {

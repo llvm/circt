@@ -1152,14 +1152,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @MemoryWritePortBehavior
   firrtl.module private @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
     // This memory has both write ports driven by the same clock.  It should be
-    // lowered to an "aa" memory.
+    // lowered to an "aa" memory. Even if the clock is passed via different wires,
+    // we should identify the clocks to be same.
     //
     // CHECK: hw.instance "aa_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
     %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    firrtl.connect %clk_aa_w0, %clock1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %clk_aa_w1, %clock1 : !firrtl.clock, !firrtl.clock
+    %cwire1 = firrtl.wire : !firrtl.clock
+    %cwire2 = firrtl.wire : !firrtl.clock
+    firrtl.connect %cwire1, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %cwire2, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w0, %cwire1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w1, %cwire2 : !firrtl.clock, !firrtl.clock
 
     // This memory has different clocks for each write port.  It should be
     // lowered to an "ab" memory.
@@ -1174,10 +1179,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // This memory is the same as the first memory, but a node is used to alias
     // the second write port clock (e.g., this could be due to a dont touch
     // annotation blocking this from being optimized away).  This should be
-    // lowered to an "ab" memory even though it is trivially convertible to an
-    // "aa" memory.
+    // lowered to an "aa" since they are identical.
     //
-    // CHECK: hw.instance "ab_node_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab
+    // CHECK: hw.instance "ab_node_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
     %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
