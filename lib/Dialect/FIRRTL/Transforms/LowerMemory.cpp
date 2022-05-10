@@ -14,10 +14,12 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/Dominance.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Parallel.h"
 #include <optional>
 #include <set>
@@ -91,7 +93,8 @@ struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
                                     bool shouldDedup);
   FModuleOp createWrapperModule(MemOp op, const FirMemory &summary,
                                 bool shouldDedup);
-  void emitMemoryInstance(MemOp op, FModuleOp module, const FirMemory &summary);
+  InstanceOp emitMemoryInstance(MemOp op, FModuleOp module,
+                                const FirMemory &summary);
   void lowerMemory(MemOp mem, const FirMemory &summary, bool shouldDedup);
   LogicalResult runOnModule(FModuleOp module, bool shouldDedup);
   void runOnOperation() override;
@@ -196,38 +199,87 @@ LowerMemoryPass::getOrCreateMemModule(MemOp op, const FirMemory &summary,
   return module;
 }
 
-FModuleOp LowerMemoryPass::createWrapperModule(MemOp op,
-                                               const FirMemory &summary,
-                                               bool shouldDedup) {
-
+void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
+                                  bool shouldDedup) {
+  auto *context = &getContext();
   auto ports = getMemoryModulePorts(summary);
 
   // Get a non-colliding name for the memory module, and update the summary.
-  auto newName = circuitNamespace.newName(op.name());
-  auto moduleName = StringAttr::get(&getContext(), newName);
+  auto newName = circuitNamespace.newName(mem.name());
+  auto wrapperName = StringAttr::get(&getContext(), newName);
 
   // Create the wrapper module, inserting it into the bottom of the circuit.
   auto b = OpBuilder::atBlockEnd(getOperation().getBody());
-  auto module =
-      b.create<FModuleOp>(op->getLoc(), moduleName, ports, op.annotations());
+  auto wrapper = b.create<FModuleOp>(mem->getLoc(), wrapperName, ports);
 
   // Create an instance of the external memory module. The instance has the
   // same name as the target module.
-  auto memModule = getOrCreateMemModule(op, summary, ports, shouldDedup);
-  b.setInsertionPointToStart(module.getBody());
-  auto inst =
-      b.create<InstanceOp>(op->getLoc(), memModule, memModule.moduleName());
+  auto memModule = getOrCreateMemModule(mem, summary, ports, shouldDedup);
+  b.setInsertionPointToStart(wrapper.getBody());
+
+  auto memInst =
+      b.create<InstanceOp>(mem->getLoc(), memModule, memModule.moduleName(),
+                           mem.annotations().getValue());
 
   // Wire all the ports together.
   for (auto [dst, src] :
-       llvm::zip(module.getBody()->getArguments(), inst.getResults())) {
-    if (module.getPortDirection(dst.getArgNumber()) == Direction::Out)
-      b.create<StrictConnectOp>(op->getLoc(), dst, src);
+       llvm::zip(wrapper.getBody()->getArguments(), memInst.getResults())) {
+    if (wrapper.getPortDirection(dst.getArgNumber()) == Direction::Out)
+      b.create<StrictConnectOp>(mem->getLoc(), dst, src);
     else
-      b.create<StrictConnectOp>(op->getLoc(), src, dst);
+      b.create<StrictConnectOp>(mem->getLoc(), src, dst);
   }
 
-  return module;
+  // Create an instance of the wrapper memory module, which will replace the
+  // original mem op.
+  auto inst = emitMemoryInstance(mem, wrapper, summary);
+
+  // We fixup the annotations here. We will be copying all annotations on to the
+  // module op, so we have to fix up the NLA to have the module as the leaf
+  // element.  We also have to make sure that the instance op has all the needed
+  // breadcrumb annotations.
+
+  auto leafSym = memModule.moduleNameAttr();
+  auto leafAttr = hw::InnerRefAttr::get(wrapper.moduleNameAttr(), leafSym);
+
+  // NLAs that we have already processed.
+  SmallPtrSet<Attribute, 8> processedNLAs;
+  // List of breadcrumbs to go on the wrapper intance.
+  SmallVector<Attribute> breadcrumbs;
+  // Half-created single breadcrumb.
+  auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
+  SmallVector<NamedAttribute> breadcrumb;
+  breadcrumb.emplace_back(nonlocalAttr, nonlocalAttr);
+  breadcrumb.emplace_back(StringAttr::get(context, "class"), nonlocalAttr);
+
+  for (auto anno : AnnotationSet(mem)) {
+    // We're only looking for non-local annotations.
+    auto nlaSym = anno.getMember<FlatSymbolRefAttr>(nonlocalAttr);
+    if (!nlaSym)
+      continue;
+    // If we have already seen this NLA, don't re-process it.
+    if (!processedNLAs.insert(nlaSym).second)
+      continue;
+
+    // Add this NLA to the list of breadcrumbs for the wrapper instance.
+    breadcrumb[0].setValue(nlaSym);
+    breadcrumbs.push_back(DictionaryAttr::getWithSorted(context, breadcrumb));
+
+    // Update the NLA path to have the additional wrapper module.
+    auto nla = dyn_cast<NonLocalAnchor>(symbolTable->lookup(nlaSym.getAttr()));
+    auto namepath = nla.namepath().getValue();
+    SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
+    newNamepath.push_back(leafAttr);
+    nla.namepathAttr(ArrayAttr::get(context, newNamepath));
+  }
+
+  // Attach the breadcrumbs to the instance op.
+  if (breadcrumbs.size()) {
+    AnnotationSet(breadcrumbs, context).applyToOperation(inst);
+    memInst.inner_symAttr(leafSym);
+  }
+
+  mem->erase();
 }
 
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
@@ -246,39 +298,13 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   return accesses;
 }
 
-void LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
-                                         const FirMemory &summary) {
+InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
+                                               const FirMemory &summary) {
   OpBuilder builder(op);
   auto *context = &getContext();
   auto memName = op.name();
   if (memName.empty())
     memName = "mem";
-
-  // We fixup the annotations here. We will be copying all annotations on to the
-  // module op, so we have to fix up the NLA to have the module as the leaf
-  // element.  We also have to make sure that the instance op has all the needed
-  // breadcrumb annotations.
-  SmallVector<Attribute> breadcrumbs;
-  auto nonlocalAttr = StringAttr::get(context, "circt.nonlocal");
-  SmallVector<NamedAttribute> breadcrumb;
-  breadcrumb.emplace_back(nonlocalAttr, nonlocalAttr);
-  breadcrumb.emplace_back(StringAttr::get(context, "class"), nonlocalAttr);
-  for (auto anno : AnnotationSet(module)) {
-    // Add the breadcrumb to the list of instance annotations.
-    auto nlaSym = anno.getMember<FlatSymbolRefAttr>(nonlocalAttr);
-    if (!nlaSym)
-      continue;
-    breadcrumb[0].setValue(nlaSym);
-    breadcrumbs.push_back(DictionaryAttr::getWithSorted(context, breadcrumb));
-
-    // Update the leaf of the NLA to refer to the module.
-    auto nla = dyn_cast<NonLocalAnchor>(symbolTable->lookup(nlaSym.getAttr()));
-    assert(nla && "annotations references non-existant nla");
-    auto oldNamepath = nla.namepath().getValue();
-    SmallVector<Attribute> namepath(oldNamepath.begin(), oldNamepath.end());
-    namepath.push_back(FlatSymbolRefAttr::get(module.moduleNameAttr()));
-    nla.namepathAttr(ArrayAttr::get(context, namepath));
-  }
 
   // Process each port in turn.
   SmallVector<Type, 8> portTypes;
@@ -417,7 +443,7 @@ void LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   // TODO: how do we lower port annotations?
   auto inst = builder.create<InstanceOp>(
       op.getLoc(), portTypes, module.getNameAttr(), summary.getFirMemoryName(),
-      portDirections, portNames, breadcrumbs,
+      portDirections, portNames, /*annotations=*/ArrayRef<Attribute>(),
       /*portAnnotations=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,
       op.inner_symAttr());
 
@@ -426,13 +452,8 @@ void LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
     subfield->getResult(0).replaceAllUsesWith(inst.getResult(result));
     subfield->erase();
   }
-  op->erase();
-}
 
-void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
-                                  bool shouldDedup) {
-  auto module = createWrapperModule(mem, summary, shouldDedup);
-  emitMemoryInstance(mem, module, summary);
+  return inst;
 }
 
 LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
