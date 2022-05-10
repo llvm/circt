@@ -200,9 +200,11 @@ struct llvm::GraphTraits<circt::fsm::FSMStateNode *> {
                             decltype(&getNextState)>;
 
   static NodeRef getEntryNode(NodeRef node) { return node; }
+  // NOLINTNEXTLINE(readability-identifier-naming)
   static ChildIteratorType child_begin(NodeRef node) {
     return {node->begin(), &getNextState};
   }
+  // NOLINTNEXTLINE(readability-identifier-naming)
   static ChildIteratorType child_end(NodeRef node) {
     return {node->end(), &getNextState};
   }
