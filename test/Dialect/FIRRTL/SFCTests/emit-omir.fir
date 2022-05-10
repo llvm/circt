@@ -80,11 +80,13 @@ circuit Foo : %[[
     mem shortint :
         data-type => UInt<42>
         depth => 8
-        read-latency => 0
+        read-latency => 1
         write-latency => 1
-        reader => port
+        writer => writePort
+        reader => readPort
         read-under-write => undefined
-    shortint.port is invalid
+    shortint.writePort is invalid
+    shortint.readPort is invalid
 
 ; CHECK-LABEL: FILE "omir.json"
 
@@ -132,7 +134,7 @@ circuit Foo : %[[
 
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "finalPath"
-; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/parameter_2:Bar/shortint_ext:{{[^"]+}}"
+; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/parameter_2:Bar/shortint_1:{{[^"]+}}"
 
 ; CHECK:       "id": "OMID:4"
 ; CHECK:       "name": "containingModule"

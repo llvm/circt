@@ -22,6 +22,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
 #include <functional>
+#include <mlir/IR/BuiltinAttributes.h>
 
 #define DEBUG_TYPE "omir"
 
@@ -385,9 +386,15 @@ void EmitOMIRPass::runOnOperation() {
 void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   auto *context = &getContext();
   auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
+  Operation *op = tracker.op;
+
+  // Get the name of the operation.
+  auto opName = tracker.op->getAttrOfType<StringAttr>("name");
+  if (!opName)
+    opName = tracker.op->getAttrOfType<StringAttr>("sym_name");
+  assert(opName && "operation must have a name");
 
   // Pick a name for the NLA that doesn't collide with anything.
-  auto opName = tracker.op->getAttrOfType<StringAttr>("name");
   auto nlaName = circuitNamespace->newName("omir_nla_" + opName.getValue());
 
   // Assemble the NLA annotation to be put on all the operations participating
@@ -398,30 +405,37 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       builder.getNamedAttr("class", StringAttr::get(context, "circt.nonlocal")),
   });
 
+  // Find the parent module of this operation.  If this operation is itself
+  // a module, it is its own parent.
+  Operation *parentModule;
+  if (isa<FModuleLike>(op))
+    parentModule = op;
+  else
+    parentModule = op->getParentOfType<FModuleOp>();
+
+  // Find the root module which is the start of the NLA.
+  Operation *rootModule;
+  if (tracker.nla)
+    rootModule = instanceGraph->lookup(tracker.nla.root())->getModule();
+  else
+    rootModule = parentModule;
+
   // Get all the paths instantiating this module. If there is an NLA already
   // attached to this tracker, we use it as a base to disambiguate the path to
   // the memory.
-  Operation *mod;
-  if (tracker.nla)
-    mod = instanceGraph->lookup(tracker.nla.root())->getModule();
-  else
-    mod = tracker.op->getParentOfType<FModuleOp>();
-
-  // Get all the paths instantiating this module.
-  auto paths = instancePaths->getAbsolutePaths(mod);
+  auto paths = instancePaths->getAbsolutePaths(rootModule);
   if (paths.empty()) {
-    tracker.op->emitError("OMIR node targets uninstantiated component `")
+    op->emitError("OMIR node targets uninstantiated component `")
         << opName.getValue() << "`";
     anyFailures = true;
     return;
   }
   if (paths.size() > 1) {
-    auto diag = tracker.op->emitError("OMIR node targets ambiguous component `")
+    auto diag = op->emitError("OMIR node targets ambiguous component `")
                 << opName.getValue() << "`";
-    diag.attachNote(tracker.op->getLoc())
-        << "may refer to the following paths:";
+    diag.attachNote(op->getLoc()) << "may refer to the following paths:";
     for (auto path : paths)
-      formatInstancePath(diag.attachNote(tracker.op->getLoc()) << "- ", path);
+      formatInstancePath(diag.attachNote(op->getLoc()) << "- ", path);
     anyFailures = true;
     return;
   }
@@ -455,10 +469,14 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       addToPath((*it)->getInstance(), ref.getName());
     }
   }
-  // Add the op itself.
-  namepath.push_back(hw::InnerRefAttr::getFromOperation(
-      tracker.op, opName,
-      tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
+  // Add the op itself. We can tell that the op is a module if it is its own
+  // parent.
+  if (op == parentModule)
+    namepath.push_back(FlatSymbolRefAttr::get(opName));
+  else
+    namepath.push_back(hw::InnerRefAttr::getFromOperation(
+        tracker.op, opName,
+        tracker.op->getParentOfType<FModuleOp>().getNameAttr()));
 
   // Add the NLA to the tracker and mark it to be deleted later.
   tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
