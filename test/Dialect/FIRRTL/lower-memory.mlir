@@ -1,32 +1,34 @@
 // RUN: circt-opt -firrtl-lower-memory %s | FileCheck %s
 
 // Test basic lowering of the three port types.
-// CHECK-LABEL: firrtl.circuit "Simple"
-firrtl.circuit "Simple" {
-firrtl.module @Simple() {
-  %MWrite_write = firrtl.mem Undefined {depth = 12 : i64, name = "MWrite", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-  // CHECK: firrtl.instance MWrite  @MWrite(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+// CHECK-LABEL: firrtl.circuit "ReadWrite" {
+firrtl.circuit "ReadWrite" {
+firrtl.module @ReadWrite() {
   %MReadWrite_readwrite = firrtl.mem Undefined {depth = 12 : i64, name = "MReadWrite", portNames = ["readwrite"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
   // CHECK: firrtl.instance MReadWrite  @MReadWrite(in RW0_addr: !firrtl.uint<4>, in RW0_en: !firrtl.uint<1>, in RW0_clk: !firrtl.clock, in RW0_wmode: !firrtl.uint<1>, in RW0_wdata: !firrtl.uint<42>, out RW0_rdata: !firrtl.uint<42>)
-  // SeqMems need at least 1 write port, but this is primarily testing the Read port.
+}
+// CHECK: firrtl.module @MReadWrite
+// CHECK:   firrtl.instance MReadWrite_ext  @MReadWrite_ext
+// CHECK:   firrtl.strictconnect %MReadWrite_ext_RW0_addr, %RW0_addr
+// CHECK:   firrtl.strictconnect %RW0_rdata, %MReadWrite_ext_RW0_rdata
+// CHECK: }
+}
+
+// CHECK-LABEL: firrtl.circuit "Write"
+firrtl.circuit "Write" {
+firrtl.module @Write() {
+  %MWrite_write = firrtl.mem Undefined {depth = 12 : i64, name = "MWrite", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  // CHECK: firrtl.instance MWrite  @MWrite(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
+}
+}
+
+// SeqMems need at least 1 write port, but this is primarily testing the Read
+// port.
+firrtl.circuit "Read" {
+firrtl.module @Read() {
   %MRead_read, %MRead_write = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance MRead  @MRead(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.uint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
 }
-
-// Check that the attached metadata is correct:
-
-// CHECK: firrtl.module @MWrite
-// CHECK-NEXT: firrtl.instance MWrite_ext  @MWrite_ext
-// CHECK: firrtl.memmodule @MWrite_ext
-// CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-
-// CHECK: firrtl.module @MReadWrite
-// CHECK-NEXT: firrtl.instance MReadWrite_ext  @MReadWrite_ext
-// CHECK: firrtl.memmodule @MReadWrite_ext
-// CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
-
-// CHECK: firrtl.module @MRead
-// CHECK-NEXT: firrtl.instance MRead_ext  @MRead_ext
 // CHECK: firrtl.memmodule @MRead_ext
 // CHECK-SAME: {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 1 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, writeLatency = 1 : ui32}
 }

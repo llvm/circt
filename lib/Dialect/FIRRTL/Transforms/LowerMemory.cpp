@@ -215,7 +215,17 @@ FModuleOp LowerMemoryPass::createWrapperModule(MemOp op,
   // same name as the target module.
   auto memModule = getOrCreateMemModule(op, summary, ports, shouldDedup);
   b.setInsertionPointToStart(module.getBody());
-  b.create<InstanceOp>(op->getLoc(), memModule, memModule.moduleName());
+  auto inst =
+      b.create<InstanceOp>(op->getLoc(), memModule, memModule.moduleName());
+
+  // Wire all the ports together.
+  for (auto [dst, src] :
+       llvm::zip(module.getBody()->getArguments(), inst.getResults())) {
+    if (module.getPortDirection(dst.getArgNumber()) == Direction::Out)
+      b.create<StrictConnectOp>(op->getLoc(), dst, src);
+    else
+      b.create<StrictConnectOp>(op->getLoc(), src, dst);
+  }
 
   return module;
 }
