@@ -163,6 +163,11 @@ static cl::opt<bool> expandWhens("expand-whens",
                                  cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    addSeqMemPorts("add-seqmem-ports",
+                   cl::desc("add user defined ports to sequential memories"),
+                   cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
     blackBoxMemory("blackbox-memory",
                    cl::desc("Create a black box for all memory operations"),
                    cl::init(false), cl::cat(mainCategory));
@@ -558,6 +563,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       pm.nest<firrtl::CircuitOp>().addPass(
           firrtl::createRemoveUnusedPortsPass());
   }
+
+  if (addSeqMemPorts)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
