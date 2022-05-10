@@ -453,7 +453,9 @@ void ExtractInstancesPass::extractInstances() {
         inst->getParentOfType<FModuleLike>().moduleNameAttr();
 
   while (!extractionWorklist.empty()) {
-    auto [inst, info] = extractionWorklist.pop_back_val();
+    InstanceOp inst;
+    ExtractionInfo info;
+    std::tie(inst, info) = extractionWorklist.pop_back_val();
     auto parent = inst->getParentOfType<FModuleOp>();
 
     // Figure out the wiring prefix to use for this instance. If we are supposed
@@ -538,10 +540,22 @@ void ExtractInstancesPass::extractInstances() {
         oldParentInst.getResult(portIdx).replaceAllUsesWith(
             newParentInst.getResult(portIdx));
 
-      // Add the moved instance and hook it up to the added ports.
-      ImplicitLocOpBuilder builder(inst.getLoc(), newParentInst);
+      // Clone the existing instance and remove it from its current parent, such
+      // that we can insert it at its extracted location.
       auto newInst = inst.cloneAndInsertPorts({});
       newInst->remove();
+
+      // Ensure that the `inner_sym` of the instance is unique within the parent
+      // module we're extracting it to.
+      if (auto instSym = inst.inner_symAttr()) {
+        auto newName =
+            getModuleNamespace(newParent).newName(instSym.getValue());
+        if (newName != instSym.getValue())
+          newInst.inner_symAttr(StringAttr::get(&getContext(), newName));
+      }
+
+      // Add the moved instance and hook it up to the added ports.
+      ImplicitLocOpBuilder builder(inst.getLoc(), newParentInst);
       builder.setInsertionPointAfter(newParentInst);
       builder.insert(newInst);
       for (unsigned portIdx = 0; portIdx < numInstPorts; ++portIdx) {
@@ -597,11 +611,37 @@ void ExtractInstancesPass::extractInstances() {
           if (!innerRef)
             continue;
           if (innerRef.getModule() == parent.moduleNameAttr() &&
-              innerRef.getName() == newInst.inner_symAttr())
+              innerRef.getName() == inst.inner_symAttr())
             break;
         }
-        assert(nlaIdx < nlaLen && "instance not found in its own NLA");
+
+        // Handle the case where the instance no longer shows up in the NLA's
+        // path. This usually happens if the instance is extracted into multiple
+        // parents (because the current parent module is multiply instantiated).
+        // In that case NLAs that were specific to one instance may have been
+        // moved when we arrive at the second instance, and the NLA is already
+        // updated.
+        if (nlaIdx >= nlaLen) {
+          LLVM_DEBUG(llvm::dbgs() << "    - Instance no longer in path\n");
+          return true;
+        }
         LLVM_DEBUG(llvm::dbgs() << "    - Position " << nlaIdx << "\n");
+
+        // Handle the case where the NLA's path doesn't go through the
+        // instance's new parent module, which happens if the current parent
+        // module is multiply instantiated. In that case, we only move over NLAs
+        // that actually affect the instance through the new parent module.
+        if (nlaIdx > 0) {
+          auto innerRef = nlaPath[nlaIdx - 1].dyn_cast<InnerRefAttr>();
+          if (innerRef &&
+              !(innerRef.getModule() == newParent.moduleNameAttr() &&
+                innerRef.getName() == newParentInst.inner_symAttr())) {
+            LLVM_DEBUG(llvm::dbgs()
+                       << "    - Ignored since NLA parent " << innerRef
+                       << " does not pass through extraction parent\n");
+            return true;
+          }
+        }
 
         // Since we're moving the instance out of its parent module, this NLA
         // will no longer pass through that parent module. Mark it to be removed
@@ -668,11 +708,13 @@ void ExtractInstancesPass::extractInstances() {
         // the `nlaIdx` points at `OldParent::BB`. To make our lives easier,
         // since we know that `nlaIdx` is a `InnerRefAttr`, we'll modify
         // `OldParent::BB` to be `NewParent::BB` and delete `NewParent::X`.
-        LLVM_DEBUG(llvm::dbgs() << "    - Merging " << nlaPath[nlaIdx - 1]
-                                << " and " << nlaPath[nlaIdx] << "\n");
-        nlaPath[nlaIdx] = InnerRefAttr::get(
+        auto newInnerRef = InnerRefAttr::get(
             nlaPath[nlaIdx - 1].cast<InnerRefAttr>().getModule(),
-            nlaPath[nlaIdx].cast<InnerRefAttr>().getName());
+            newInst.inner_symAttr());
+        LLVM_DEBUG(llvm::dbgs()
+                   << "    - Replacing " << nlaPath[nlaIdx - 1] << " and "
+                   << nlaPath[nlaIdx] << " with " << newInnerRef << "\n");
+        nlaPath[nlaIdx] = newInnerRef;
         nlaPath.erase(nlaPath.begin() + nlaIdx - 1);
         nla.namepathAttr(builder.getArrayAttr(nlaPath));
         LLVM_DEBUG(llvm::dbgs() << "    - Modified to " << nla << "\n");
