@@ -46,6 +46,19 @@ def ResetInsertion : Pass<"calyx-reset-insertion", "calyx::ComponentOp"> {
   let constructor = "circt::calyx::createResetInsertionPass()";
 }
 
+def GroupInvariantCodeMotion : Pass<"calyx-gicm", "calyx::ComponentOp"> {
+  let summary = "Lift group-invariant operations to wire-scope.";
+  let description = [{
+    This pass performs GICM (group-invariant code motion) of operations which are
+    deemed to be invariant of the group which they are placed in. In practice,
+    this amounts to anything which is not a `calyx.group_done/assign/group_go`
+    operation.
+    GICM'd operations are lifted to wire-scope.
+  }];
+  let dependentDialects = [];
+  let constructor = "circt::calyx::createGroupInvariantCodeMotionPass()";
+}
+
 def CompileControl : Pass<"calyx-compile-control", "calyx::ComponentOp"> {
   let summary = "Generates latency-insensitive finite state machines to realize control.";
   let description = [{
