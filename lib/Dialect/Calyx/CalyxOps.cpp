@@ -831,9 +831,9 @@ LogicalResult CombGroupOp::verify() {
 // GroupOp
 //===----------------------------------------------------------------------===//
 GroupGoOp GroupOp::getGoOp() {
-  auto body = this->getBody();
-  auto opIt = body->getOps<GroupGoOp>().begin();
-  return *opIt;
+  auto goOps = getBody()->getOps<GroupGoOp>();
+  size_t nOps = std::distance(goOps.begin(), goOps.end());
+  return nOps ? *goOps.begin() : GroupGoOp();
 }
 
 GroupDoneOp GroupOp::getDoneOp() {
