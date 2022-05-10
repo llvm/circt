@@ -1,0 +1,6 @@
+[
+  {
+    "class": "firrtl.passes.InlineAnnotation",
+    "target": "~Top|Foo"
+  }
+]
