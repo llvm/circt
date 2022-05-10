@@ -443,16 +443,17 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  Operation *module = instanceGraph->getReferencedModule(instance);
+  Operation *op = instanceGraph->getReferencedModule(instance);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
-  if (auto extModule = dyn_cast<FExtModuleOp>(module)) {
+  if (!isa<FModuleOp>(op)) {
+    auto module = dyn_cast<FModuleLike>(op);
     for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
          ++resultNo) {
       auto portVal = instance.getResult(resultNo);
       // If this is an input to the extmodule, we can ignore it.
-      if (extModule.getPortDirection(resultNo) == Direction::In)
+      if (module.getPortDirection(resultNo) == Direction::In)
         continue;
 
       // Otherwise this is a result from it or an inout, mark it as overdefined.
@@ -462,7 +463,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 
   // Otherwise this is a defined module.
-  auto fModule = cast<FModuleOp>(module);
+  auto fModule = cast<FModuleOp>(op);
   markBlockExecutable(fModule.getBody());
 
   // Ok, it is a normal internal module reference.  Populate

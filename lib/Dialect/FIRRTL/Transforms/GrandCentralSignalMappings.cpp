@@ -376,9 +376,9 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
         continue;
       }
       extmodules.json.push_back(*extModule);
-      continue;
+    } else if (auto *module = dyn_cast<FModuleOp>(&op)) {
+      modules.push_back(*module);
     }
-    modules.push_back(cast<FModuleOp>(op));
   }
 
   auto reduce = [](const Result &acc, Result result) -> Result {
