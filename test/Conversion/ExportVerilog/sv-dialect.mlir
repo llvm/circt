@@ -117,9 +117,11 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.if %cond {
       %c42 = hw.constant 42 : i8
       %add = comb.add %val, %c42 : i8
+      %sub_inner = comb.sub %val, %c42 : i8
+      %sub = comb.sub %sub_inner, %c42 : i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", 8'(val + 8'h2A));
-      sv.fwrite %fd, "Inlined! %x\n"(%add) : i8
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(val - 8'h2A - 8'h2A));
+      sv.fwrite %fd, "Inlined! %x %x\n"(%add, %sub) : i8, i8
     }
 
     // begin/end required here to avoid else-confusion.
