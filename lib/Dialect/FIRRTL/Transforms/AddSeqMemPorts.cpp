@@ -205,7 +205,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   SmallVector<Value> values;
 
   // The base index to use when adding ports to the current module.
-  size_t firstPortIndex = module.getNumPorts();
+  unsigned firstPortIndex = module.getNumPorts();
 
   for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
     // We cannot add extra ports to a regular memory op.
