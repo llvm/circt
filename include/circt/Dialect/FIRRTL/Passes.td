@@ -469,4 +469,19 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
+def MemToRegOfVec : Pass<"mem-to-regofvec", "firrtl::FModuleOp"> {
+  let summary = "Convert the memory to a Register vector";
+  let description = [{
+    This pass generates the logic to implement a memory using Registers.
+  }];
+  let options = [
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
+                "false",
+    "ignore the read enable signal, instead of assigning X on read disable">
+   ];
+  let constructor = "circt::firrtl::createMemToRegOfVecPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

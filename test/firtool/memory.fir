@@ -1,26 +1,25 @@
 ; RUN: firtool %s --format=fir  --ir-sv | FileCheck %s
-; RUN: firtool %s --format=fir  --ir-sv --ignore-read-enable-mem | FileCheck --check-prefix=READ %s
 
 circuit Qux:
   module Qux:
     input clock: Clock
-    input rAddr: UInt<4>
+    input rAddr: UInt<2>
     input rEn: UInt<1>
     output rData: UInt<8>
-    input wAddr: UInt<4>
+    input wAddr: UInt<2>
     input wEn: UInt<1>
     input wMask: UInt<1>
     input wData: UInt<8>
     input rwEn: UInt<1>
     input rwMode: UInt<1>
-    input rwAddr: UInt<4>
+    input rwAddr: UInt<2>
     input rwMask: UInt<1>
     input rwDataIn: UInt<8>
     output rwDataOut: UInt<8>
 
     mem memory:
       data-type => UInt<8>
-      depth => 16
+      depth => 4
       reader => r
       writer => w
       readwriter => rw
@@ -54,87 +53,30 @@ circuit Qux:
     rwDataOut <= memory.rw.rdata
 
 
-; READ-LABEL:  hw.module @memory_ext
-; READ:    %[[vtrue:.+]] = hw.constant true
-; READ:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
-; READ-NEXT:    %[[v2:.+]] = sv.reg {{.+}} : !hw.inout<i4>
-; READ-NEXT:    sv.always posedge %R0_clk {
-; READ-NEXT:      sv.if %R0_en {
-; READ-NEXT:        sv.passign %[[v2]], %R0_addr : i4
-; READ-NEXT:      }
-; READ-NEXT:    }
-; READ-NEXT:    %[[v3:.+]] = sv.read_inout %[[v2]] : !hw.inout<i4>
-; READ-NEXT:    %[[v4:.+]] = sv.array_index_inout %[[vMemory]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
-; READ-NEXT:    %[[v6:.+]] = sv.read_inout %[[v4]] : !hw.inout<i8>
-; READ:    hw.output %[[v6]]
 
-; CHECK:  hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
-; CHECK:  hw.module @memory_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i8, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8) -> (R0_data: i8, RW0_rdata: i8) {
-; CHECK:    %[[vtrue:.+]] = hw.constant true
-; CHECK-NEXT:    %[[vMemory:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
-; CHECK-NEXT:    %[[v0:.+]] = sv.reg sym @[[v0_sym:.+]] : !hw.inout<i1>
-; CHECK-NEXT:    %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i1>
-; CHECK-NEXT:    %[[v2:.+]] = sv.reg sym @[[v2_sym:.+]] : !hw.inout<i4>
-; CHECK-NEXT:    sv.always posedge %R0_clk {
-; CHECK-NEXT:      sv.passign %[[v0]], %R0_en : i1
-; CHECK-NEXT:      sv.passign %[[v2]], %R0_addr : i4
-; CHECK-NEXT:    }
-; CHECK-NEXT:    %[[v3:.+]] = sv.read_inout %[[v2]] : !hw.inout<i4>
-; CHECK-NEXT:    %[[v4:.+]] = sv.array_index_inout %[[vMemory]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
-; CHECK-NEXT:    %[[v5:.+]] = sv.read_inout %[[v4]] : !hw.inout<i8>
-; CHECK-NEXT:    %[[vx_i8:.+]] = sv.constantX : i8
-; CHECK-NEXT:    %[[v6:.+]] = comb.mux %[[v1]], %[[v5]], %[[vx_i8]] : i8
-; CHECK-NEXT:    %[[v7:.+]] = comb.xor %RW0_wmode, %true : i1
-; CHECK-NEXT:    %[[v8:.+]] = comb.and %RW0_en, %[[v7]] : i1
-; CHECK-NEXT:    %[[v9:.+]] = sv.array_index_inout %[[vMemory]][%RW0_addr] : !hw.inout<uarray<16xi8>>, i4
-; CHECK-NEXT:    %[[v10:.+]] = sv.read_inout %[[v9]] : !hw.inout<i8>
-; CHECK-NEXT:    %[[v11:.+]] = comb.mux %[[v8]], %[[v10]], %[[vx_i8]] : i8
-; CHECK-NEXT:    sv.always posedge %RW0_clk {
-; CHECK-NEXT:      %[[vv12:.+]] = comb.and %RW0_en, %RW0_wmode : i1
-; CHECK-NEXT:      sv.if %[[vv12]]  {
-; CHECK-NEXT:        sv.passign %[[v9]], %RW0_wdata : i8
-; CHECK-NEXT:      }
-; CHECK-NEXT:    }
-; CHECK-NEXT:    sv.always posedge %W0_clk {
-; CHECK-NEXT:      sv.if %W0_en  {
-; CHECK-NEXT:        %[[v13:.+]] = sv.array_index_inout %[[vMemory]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
-; CHECK-NEXT:        sv.passign %[[v13]], %W0_data : i8
-; CHECK-NEXT:      }
-; CHECK-NEXT:    }
-; CHECK-NEXT:    sv.ifdef "SYNTHESIS" {
-; CHECK-NEXT:    } else {
-; CHECK-NEXT:      sv.ifdef "RANDOMIZE_MEM_INIT" {
-; CHECK-NEXT:        sv.verbatim "integer [[INITVAR:.+]];\0A" {{.+}}
-; CHECK-NEXT:        %[[_RANDOM_MEM:.+]] = sv.reg sym @[[_RANDOM_MEM_SYM:.+]] : !hw.inout<i32>
-; CHECK-NEXT:      }
-; CHECK-NEXT:      sv.ifdef "RANDOMIZE_REG_INIT" {
-; CHECK-NEXT:        %[[RAND_1:.+]] = sv.reg sym @[[RAND_1_sym:[a-zA-Z0-9_]+]] : !hw.inout<i32>
-; CHECK-NEXT:      }
-; CHECK-NEXT:      sv.initial {
-; CHECK-NEXT:        sv.verbatim "`INIT_RANDOM_PROLOG_"
-; CHECK-NEXT:        sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
-; CHECK-NEXT:        sv.verbatim "for ([[INITVAR]] = 0; [[INITVAR]] < 16; [[INITVAR]] = [[INITVAR]] + 1) begin\0A
-; CHECK-SAME{LITERAL}:   {{0}} = {`RANDOM};\0A
-; CHECK-SAME:            Memory[[[INITVAR]]] =
-; CHECK-SAME{LITERAL}:     {{0}}[7:0];\0Aend"
-; CHECK-SAME:          symbols = [#hw.innerNameRef<@memory_ext::@[[_RANDOM_MEM_SYM]]>]}
-; CHECK-NEXT:        }
-; CHECK-NEXT:        sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
-; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {`RANDOM};"
-; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[RAND_1_sym]]>]}
-; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {{1}}[0];"
-; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[v0_sym]]>, #hw.innerNameRef<@memory_ext::@[[RAND_1_sym]]>]}
-; CHECK-NEXT{LITERAL}:sv.verbatim "{{0}} = {{1}}[4:1];"
-; CHECK-SAME:          {symbols = [#hw.innerNameRef<@memory_ext::@[[v2_sym]]>, #hw.innerNameRef<@memory_ext::@[[RAND_1_sym]]>]}
-; CHECK-NEXT:        }
-; CHECK-NEXT:      }
-; CHECK-NEXT:    }
-; CHECK-NEXT:    hw.output %[[v6]], %[[v11]] : i8, i8
-; CHECK-NEXT:  }
-; CHECK-NEXT:  hw.module @Qux(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i1, %wData: i8, %rwEn: i1, %rwMode: i1, %rwAddr: i4, %rwMask: i1, %rwDataIn: i8) -> (rData: i8, rwDataOut: i8) {
-; CHECK-NEXT:    %0 = comb.and %rwEn, %rwMask : i1
-; CHECK-NEXT:    %1 = comb.and %wEn, %wMask : i1
-; CHECK-NEXT:    %memory_ext.R0_data, %memory_ext.RW0_rdata = hw.instance "memory_ext" @memory_ext(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, RW0_addr: %rwAddr: i4, RW0_en: %0: i1, RW0_clk: %clock: i1, RW0_wmode: %rwMode: i1, RW0_wdata: %rwDataIn: i8, W0_addr: %wAddr: i4, W0_en: %1: i1, W0_clk: %clock: i1, W0_data: %wData: i8) -> (R0_data: i8, RW0_rdata: i8)
-; CHECK-NEXT:    hw.output %memory_ext.R0_data, %memory_ext.RW0_rdata : i8, i8
-; CHECK-NEXT:  }
-; CHECK-NEXT:}
+;CHECK-LABEL: hw.module @Qux
+;CHECK:    %[[memory_r_data:.+]] = sv.wire sym @__Qux__memory_r_data  : !hw.inout<i8>
+;CHECK:    %[[v0:.+]] = sv.read_inout %[[memory_r_data]]
+;CHECK:    %[[memory_0:.+]] = sv.reg
+;CHECK:    %[[memory_1:.+]] = sv.reg
+;CHECK:    %[[memory_2:.+]] = sv.reg
+;CHECK:    %[[memory_3:.+]] = sv.reg
+;CHECK:    %[[en:.+]] = sv.reg
+;CHECK:    %[[addr:.+]] = sv.reg
+;CHECK:    %[[v5:.+]] = sv.read_inout %[[addr]]
+;CHECK:    %[[v6:.+]] = hw.array_create
+;CHECK:    %[[v7:.+]] = hw.array_get %[[v6]][%[[v5]]]
+;CHECK:    sv.assign %[[memory_r_data]], %[[v7]] : i8
+;CHECK:    %[[memory_rw_rdata:.+]] = sv.wire sym @__Qux__memory_rw_rdata  : !hw.inout<i8>
+;CHECK:    %[[v8:.+]] = sv.read_inout %memory_rw_rdata : !hw.inout<i8>
+;CHECK:    %[[v9:.+]] = hw.array_get %[[v6]][%rwAddr] : !hw.array<4xi8>
+;CHECK:    sv.assign %[[memory_rw_rdata]], %[[v9]] : i8
+;CHECK:    sv.always posedge %clock {
+;CHECK-NEXT:      sv.passign %[[en]], %rEn : i1
+;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
+;CHECK-NEXT:      sv.passign %[[memory_0]]
+;CHECK-NEXT:      sv.passign %[[memory_1]]
+;CHECK-NEXT:      sv.passign %[[memory_2]]
+;CHECK-NEXT:      sv.passign %[[memory_3]]
+;CHECK-NEXT:    }
+;CHECK:    hw.output %[[v0]], %[[v8]]

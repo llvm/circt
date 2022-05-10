@@ -1653,6 +1653,10 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
   // Handle reset-less registers.
   if (auto regOp = dyn_cast<RegOp>(op)) {
+    if (AnnotationSet::removeAnnotations(
+            regOp, "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec"))
+      return;
+
     LLVM_DEBUG(llvm::dbgs() << "- Adding async reset to " << regOp << "\n");
     auto zero = createZeroValue(builder, regOp.getType());
     auto newRegOp = builder.create<RegResetOp>(

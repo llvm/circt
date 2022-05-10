@@ -522,6 +522,8 @@ firrtl.circuit "FullAsyncNested" {
     firrtl.connect %inst_io_in, %io_in : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %io_out_REG = firrtl.regreset %clock, %reset, %c0_ui8
     %io_out_REG = firrtl.reg %clock : !firrtl.uint<8>
+    // CHECK: %io_out_REG_NO = firrtl.reg %clock : !firrtl.uint<8>
+    %io_out_REG_NO = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec"}]}: !firrtl.uint<8>
     firrtl.connect %io_out_REG, %io_in : !firrtl.uint<8>, !firrtl.uint<8>
     %0 = firrtl.add %io_out_REG, %inst_io_out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
     %1 = firrtl.bits %0 7 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<8>

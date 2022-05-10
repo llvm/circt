@@ -216,6 +216,11 @@ static cl::opt<bool>
                      cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    memToRegOfVec("mem-to-regofvec",
+                  cl::desc("run the memToRegOfVec transform pass on firrtl"),
+                  cl::init(true));
+
+static cl::opt<bool>
     prefixModules("prefix-modules",
                   cl::desc("prefix modules with NestedPrefixAnnotation"),
                   cl::init(true), cl::cat(mainCategory));
@@ -486,6 +491,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
+  if (memToRegOfVec)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());

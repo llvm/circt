@@ -22,6 +22,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerMemory.cpp
   LowerTypes.cpp
   MergeConnections.cpp
+  MemToRegOfVec.cpp
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
