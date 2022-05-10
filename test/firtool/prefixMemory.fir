@@ -1,5 +1,5 @@
-; RUN: firtool %s --format=fir --repl-seq-mem --repl-seq-mem-file="dummy" --ir-fir | FileCheck %s 
-; RUN: firtool %s --format=fir  --repl-seq-mem --repl-seq-mem-file="dummy" --ir-sv | FileCheck --check-prefix=HW %s
+; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s 
+; RUN: firtool %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck --check-prefix=HW %s
 
 circuit Foo : %[[
   {
@@ -112,9 +112,11 @@ circuit Foo : %[[
     readData <= _readData_T
 
 ; CHECK-LABEL:  firrtl.module private @prefix1_Bar
-; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = 4294967294 : ui32, modName = "prefix1_mem_ext", name = "prefix1_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
+; CHECK:          firrtl.instance mem @prefix1_mem
 ; CHECK-LABEL:  firrtl.module private @prefix2_Baz
-; CHECK:        = firrtl.mem Undefined  {depth = 8 : i64, groupID = 4294967293 : ui32, modName = "prefix2_mem_ext", name = "prefix2_mem", portNames = ["MPORT", "readData_MPORT"], readLatency = 1 : i32, writeLatency = 1 : i32}
+; CHECK:          firrtl.instance mem @prefix2_mem
+; CHECK:        firrtl.memmodule @prefix1_mem
+; CHECK:        firrtl.memmodule @prefix2_mem
 
-; HW-LABEL:  hw.module.extern @prefix2_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
-; HW-LABEL:  hw.module.extern @prefix1_mem_ext(%R0_addr: i3, %R0_en: i1, %R0_clk: i1, %W0_addr: i3, %W0_en: i1, %W0_clk: i1, %W0_data: i1) -> (R0_data: i1)
+; HW-LABEL: hw.module.extern @prefix1_mem
+; HW-LABEL: hw.module.extern @prefix2_mem

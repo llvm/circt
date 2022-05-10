@@ -92,12 +92,17 @@ public:
     // Try different suffixes until we get a collision-free one.
     tryName.clear();
     name.toVector(tryName); // toStringRef may leave tryName unfilled
-
-    // Indexes less than nextIndex[tryName] are lready used, so skip them.
-    // Indexes larger than nextIndex[tryName] may be used in another name.
-    size_t &i = nextIndex[tryName];
     tryName.push_back('_');
     size_t baseLength = tryName.size();
+
+    // Get the initial number to start from.  Since `:` is not a valid character
+    // in a verilog identifier, we use it separate the name and suffix.
+    tryName.push_back(':');
+    suffix.toVector(tryName);
+
+    // Indexes less than nextIndex[tryName] are already used, so skip them.
+    // Indexes larger than nextIndex[tryName] may be used in another name.
+    size_t &i = nextIndex[tryName];
     do {
       tryName.resize(baseLength);
       Twine(i++).toVector(tryName); // append integer to tryName
