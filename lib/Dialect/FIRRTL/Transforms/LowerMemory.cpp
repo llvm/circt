@@ -117,44 +117,41 @@ LowerMemoryPass::getMemoryModulePorts(const FirMemory &mem) {
   FIRRTLType addrType =
       UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
   FIRRTLType clockType = ClockType::get(context);
+  Location loc = UnknownLoc::get(context);
+  AnnotationSet annotations = AnnotationSet(context);
 
   SmallVector<PortInfo> ports;
+  auto addPort = [&](const Twine &name, FIRRTLType type, Direction direction) {
+    auto nameAttr = StringAttr::get(context, name);
+    ports.push_back({nameAttr, type, direction, {}, loc, annotations});
+  };
+
   auto makePortCommon = [&](StringRef prefix, size_t idx, FIRRTLType addrType) {
-    ports.push_back({StringAttr::get(context, prefix + Twine(idx) + "_addr"),
-                     addrType, Direction::In});
-    ports.push_back({StringAttr::get(context, prefix + Twine(idx) + "_en"),
-                     u1Type, Direction::In});
-    ports.push_back({StringAttr::get(context, prefix + Twine(idx) + "_clk"),
-                     clockType, Direction::In});
+    addPort(prefix + Twine(idx) + "_addr", addrType, Direction::In);
+    addPort(prefix + Twine(idx) + "_en", u1Type, Direction::In);
+    addPort(prefix + Twine(idx) + "_clk", clockType, Direction::In);
   };
 
   for (size_t i = 0, e = mem.numReadPorts; i != e; ++i) {
     makePortCommon("R", i, addrType);
-    ports.push_back({StringAttr::get(context, "R" + Twine(i) + "_data"),
-                     dataType, Direction::Out});
+    addPort("R" + Twine(i) + "_data", dataType, Direction::Out);
   }
   for (size_t i = 0, e = mem.numReadWritePorts; i != e; ++i) {
     makePortCommon("RW", i, addrType);
-    ports.push_back({StringAttr::get(context, "RW" + Twine(i) + "_wmode"),
-                     u1Type, Direction::In});
-    ports.push_back({StringAttr::get(context, "RW" + Twine(i) + "_wdata"),
-                     dataType, Direction::In});
-    ports.push_back({StringAttr::get(context, "RW" + Twine(i) + "_rdata"),
-                     dataType, Direction::Out});
+    addPort("RW" + Twine(i) + "_wmode", u1Type, Direction::In);
+    addPort("RW" + Twine(i) + "_wdata", dataType, Direction::In);
+    addPort("RW" + Twine(i) + "_rdata", dataType, Direction::Out);
     // Ignore mask port, if maskBits =1
     if (mem.isMasked)
-      ports.push_back({StringAttr::get(context, "RW" + Twine(i) + "_wmask"),
-                       maskType, Direction::In});
+      addPort("RW" + Twine(i) + "_wmask", maskType, Direction::In);
   }
 
   for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
     makePortCommon("W", i, addrType);
-    ports.push_back({StringAttr::get(context, "W" + Twine(i) + "_data"),
-                     dataType, Direction::In});
+    addPort("W" + Twine(i) + "_data", dataType, Direction::In);
     // Ignore mask port, if maskBits =1
     if (mem.isMasked)
-      ports.push_back({StringAttr::get(context, "W" + Twine(i) + "_mask"),
-                       maskType, Direction::In});
+      addPort("W" + Twine(i) + "_mask", maskType, Direction::In);
   }
 
   return ports;
