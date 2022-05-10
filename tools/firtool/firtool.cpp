@@ -157,7 +157,7 @@ static cl::opt<bool> imconstprop(
 // new memory lowering pipeline.
 static cl::opt<bool> lowerMemory("lower-memory",
                                  cl::desc("run the lower-memory pass"),
-                                 cl::init(false), cl::cat(mainCategory));
+                                 cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     lowerTypes("lower-types",
@@ -504,9 +504,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (wireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
-
-  if (prefixModules)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
