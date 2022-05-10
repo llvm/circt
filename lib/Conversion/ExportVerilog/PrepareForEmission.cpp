@@ -94,13 +94,6 @@ static void lowerBoundInstance(InstanceOp op) {
   }
 }
 
-static bool onlyUseIsAssign(Value v) {
-  if (!v.hasOneUse())
-    return false;
-  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
-    return false;
-  return true;
-}
 
 // Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
@@ -115,22 +108,28 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    if (onlyUseIsAssign(result))
-      continue;
-
+    Value newWire;
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
         continue;
+      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
+        newWire = assign.dest();
+        // NOTE: Erase the assign op to simplify the implementation. We will
+        // re-create the same assignment at the end.
+        assign.erase();
+      }
     }
 
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextResultNo - 1);
+    if (!newWire) {
+      nameTmp.resize(namePrefixSize);
+      if (port.name)
+        nameTmp += port.name.getValue().str();
+      else
+        nameTmp += std::to_string(nextResultNo - 1);
+      newWire = builder.create<WireOp>(result.getType(), nameTmp);
+    }
 
-    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
       OpOperand &use = *result.getUses().begin();
