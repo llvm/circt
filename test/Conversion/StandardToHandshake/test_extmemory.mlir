@@ -11,7 +11,7 @@
 // CHECK:           %[[VAL_8:.*]], %[[VAL_3]] = load {{\[}}%[[VAL_7]]] %[[VAL_2]]#0, %[[VAL_4]]#0 : index, i32
 // CHECK:           return %[[VAL_8]], %[[VAL_6]] : i32, none
 // CHECK:         }
-func @main(%mem : memref<4xi32>) -> i32 {
+func.func @main(%mem : memref<4xi32>) -> i32 {
   %idx = arith.constant 0 : index
   %0 = memref.load %mem[%idx] : memref<4xi32>
   return %0 : i32

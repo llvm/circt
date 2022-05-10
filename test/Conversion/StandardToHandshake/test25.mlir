@@ -21,7 +21,7 @@
 // CHECK:           sink %[[VAL_18]] : index
 // CHECK:           return %[[VAL_17]] : none
 // CHECK:         }
-  func @if_else() {
+  func.func @if_else() {
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %1 = arith.muli %c0, %c-1 : index

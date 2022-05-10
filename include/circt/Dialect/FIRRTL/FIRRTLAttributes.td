@@ -26,7 +26,7 @@ def AnnotationArrayAttr: ArrayAttrBase<
             "[&](::mlir::Attribute attr) { return attr.isa<"
             "::mlir::DictionaryAttr,"
             "::circt::firrtl::SubAnnotationAttr>();})">]>,
-    ""> {
+    "all elements must be DictionaryAttr or SubAnnotationAttr"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 

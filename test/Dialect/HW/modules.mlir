@@ -53,6 +53,3 @@ hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_l
 hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
 // CHECK-LABEL: hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
 // CHECK-NEXT: hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
-
-// CHECK-LABEL: hw.module.extern @AnonArg(i42)
-hw.module.extern @AnonArg(i42)

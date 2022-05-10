@@ -41,7 +41,7 @@ llhd.proc @check_simple() -> () {
 // CHECK:           %[[VAL_1:.*]] = llhd.var %[[VAL_0]] : i32
 // CHECK:           return %[[VAL_1]] : !llhd.ptr<i32>
 // CHECK:         }
-func @allocate_mem() -> !llhd.ptr<i32> {
+func.func @allocate_mem() -> !llhd.ptr<i32> {
   %c = hw.constant 0 : i32
   %ptr = llhd.var %c : i32
   return %ptr : !llhd.ptr<i32>
@@ -50,7 +50,7 @@ func @allocate_mem() -> !llhd.ptr<i32> {
 // CHECK-LABEL:   llhd.proc @pointer_returned_from_call() -> () {
 // CHECK:           %[[ALLSET:.*]] = hw.constant -1 : i32
 // CHECK:           %[[VAL_0:.*]] = hw.constant true
-// CHECK:           %[[VAL_1:.*]] = call @allocate_mem() : () -> !llhd.ptr<i32>
+// CHECK:           %[[VAL_1:.*]] = func.call @allocate_mem() : () -> !llhd.ptr<i32>
 // CHECK:           cf.cond_br %[[VAL_0]], ^bb1, ^bb2
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_2:.*]] = hw.constant 6 : i32
@@ -68,7 +68,7 @@ func @allocate_mem() -> !llhd.ptr<i32> {
 llhd.proc @pointer_returned_from_call() -> () {
   %allset = hw.constant -1 : i32
   %cond = hw.constant 1 : i1
-  %ptr = call @allocate_mem() : () -> !llhd.ptr<i32>
+  %ptr = func.call @allocate_mem() : () -> !llhd.ptr<i32>
   cf.cond_br %cond, ^bb1, ^bb2
 ^bb1:
   %c6 = hw.constant 6 : i32
@@ -90,7 +90,7 @@ llhd.proc @pointer_returned_from_call() -> () {
 // CHECK:           llhd.store %[[VAL_0]], %[[VAL_1]] : !llhd.ptr<i32>
 // CHECK:           return
 // CHECK:         }
-func @store_something(%ptr : !llhd.ptr<i32>) {
+func.func @store_something(%ptr : !llhd.ptr<i32>) {
   %c = hw.constant 0 : i32
   llhd.store %ptr, %c : !llhd.ptr<i32>
   return
@@ -121,7 +121,7 @@ llhd.proc @pointer_passed_to_function() -> () {
   %ptr = llhd.var %c5 : i32
   cf.cond_br %cond, ^bb1, ^bb2
 ^bb1:
-  call @store_something(%ptr) : (!llhd.ptr<i32>) -> ()
+  func.call @store_something(%ptr) : (!llhd.ptr<i32>) -> ()
   cf.br ^bb3
 ^bb2:
   %c7 = hw.constant 7 : i32

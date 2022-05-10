@@ -85,11 +85,11 @@ firrtl.circuit "InstanceInput2"   {
 firrtl.circuit "acrossWire"   {
   // CHECK-LABEL: firrtl.module @acrossWire
   firrtl.module @acrossWire(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
-    %z = firrtl.wire  : !firrtl.uint<1>
-    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+    %_z = firrtl.wire  : !firrtl.uint<1>
+    firrtl.connect %y, %_z : !firrtl.uint<1>, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.mux(%x, %c0_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %_z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C2:.+]] = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %y, %[[C2]] : !firrtl.uint<1>
   }
@@ -141,12 +141,12 @@ firrtl.circuit "divFold"   {
 firrtl.circuit "padConstWire"   {
   // CHECK-LABEL: firrtl.module @padConstWire
   firrtl.module @padConstWire(out %z: !firrtl.uint<16>) {
-    %w_a = firrtl.wire  : !firrtl.uint<8>
-    %w_b = firrtl.wire  : !firrtl.uint<8>
+    %_w_a = firrtl.wire  : !firrtl.uint<8>
+    %_w_b = firrtl.wire  : !firrtl.uint<8>
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-    firrtl.connect %w_a, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
-    firrtl.connect %w_b, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
-    %0 = firrtl.cat %w_a, %w_b : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+    firrtl.connect %_w_a, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
+    firrtl.connect %_w_b, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
+    %0 = firrtl.cat %_w_a, %_w_b : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[C6:.+]] = firrtl.constant 771 : !firrtl.uint<16>
     // CHECK-NEXT: firrtl.strictconnect %z, %[[C6]] : !firrtl.uint<16>
@@ -173,13 +173,13 @@ firrtl.circuit "padConstReg"   {
 firrtl.circuit "padZeroReg"   {
   // CHECK-LABEL: firrtl.module @padZeroReg
   firrtl.module @padZeroReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
-      %r = firrtl.reg %clock  :  !firrtl.uint<8>
+      %_r = firrtl.reg %clock  :  !firrtl.uint<8>
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-      %0 = firrtl.or %r, %c0_ui1 : (!firrtl.uint<8>, !firrtl.uint<1>) -> !firrtl.uint<8>
-      firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+      %0 = firrtl.or %_r, %c0_ui1 : (!firrtl.uint<8>, !firrtl.uint<1>) -> !firrtl.uint<8>
+      firrtl.connect %_r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
       %c171_ui8 = firrtl.constant 171 : !firrtl.uint<8>
-      %n = firrtl.node %c171_ui8  : !firrtl.uint<8>
-      %1 = firrtl.cat %n, %r : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+      %_n = firrtl.node %c171_ui8  : !firrtl.uint<8>
+      %1 = firrtl.cat %_n, %_r : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
       firrtl.connect %z, %1 : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[TMP:.+]] = firrtl.constant 43776 : !firrtl.uint<16>
     // CHECK-NEXT: firrtl.strictconnect %z, %[[TMP]] : !firrtl.uint<16>
@@ -352,10 +352,10 @@ firrtl.circuit "TailTester"   {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c23_ui5 = firrtl.constant 23 : !firrtl.uint<5>
     %0 = firrtl.add %c0_ui1, %c23_ui5 : (!firrtl.uint<1>, !firrtl.uint<5>) -> !firrtl.uint<6>
-    %temp = firrtl.node %0  : !firrtl.uint<6>
-    %1 = firrtl.head %temp, 3 : (!firrtl.uint<6>) -> !firrtl.uint<3>
-    %head_temp = firrtl.node %1  : !firrtl.uint<3>
-    %2 = firrtl.tail %head_temp, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    %_temp = firrtl.node %0  : !firrtl.uint<6>
+    %1 = firrtl.head %_temp, 3 : (!firrtl.uint<6>) -> !firrtl.uint<3>
+    %_head_temp = firrtl.node %1  : !firrtl.uint<3>
+    %2 = firrtl.tail %_head_temp, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[C18:.+]] = firrtl.constant 0
     // CHECK:  firrtl.strictconnect %out, %[[C18]]
@@ -369,10 +369,10 @@ firrtl.circuit "TailTester2"   {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c23_ui5 = firrtl.constant 23 : !firrtl.uint<5>
     %0 = firrtl.add %c0_ui1, %c23_ui5 : (!firrtl.uint<1>, !firrtl.uint<5>) -> !firrtl.uint<6>
-    %temp = firrtl.node %0  : !firrtl.uint<6>
-    %1 = firrtl.tail %temp, 1 : (!firrtl.uint<6>) -> !firrtl.uint<5>
-    %tail_temp = firrtl.node %1  : !firrtl.uint<5>
-    %2 = firrtl.tail %tail_temp, 4 : (!firrtl.uint<5>) -> !firrtl.uint<1>
+    %_temp = firrtl.node %0  : !firrtl.uint<6>
+    %1 = firrtl.tail %_temp, 1 : (!firrtl.uint<6>) -> !firrtl.uint<5>
+    %_tail_temp = firrtl.node %1  : !firrtl.uint<5>
+    %2 = firrtl.tail %_tail_temp, 4 : (!firrtl.uint<5>) -> !firrtl.uint<1>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[C21:.+]] = firrtl.constant 1
     // CHECK:  firrtl.strictconnect %out, %[[C21]]
@@ -385,8 +385,8 @@ firrtl.circuit "ZeroWidthAdd"   {
   firrtl.module @ZeroWidthAdd(in %x: !firrtl.uint<0>, out %y: !firrtl.uint<7>) {
     %c0_ui9 = firrtl.constant 0 : !firrtl.uint<9>
     %0 = firrtl.add %x, %c0_ui9 : (!firrtl.uint<0>, !firrtl.uint<9>) -> !firrtl.uint<10>
-    %temp = firrtl.node %0  : !firrtl.uint<10>
-    %1 = firrtl.cat %temp, %temp : (!firrtl.uint<10>, !firrtl.uint<10>) -> !firrtl.uint<20>
+    %_temp = firrtl.node %0  : !firrtl.uint<10>
+    %1 = firrtl.cat %_temp, %_temp : (!firrtl.uint<10>, !firrtl.uint<10>) -> !firrtl.uint<20>
     %2 = firrtl.tail %1, 13 : (!firrtl.uint<20>) -> !firrtl.uint<7>
     firrtl.connect %y, %2 : !firrtl.uint<7>, !firrtl.uint<7>
     // CHECK:  %[[C20:.+]] = firrtl.constant 0

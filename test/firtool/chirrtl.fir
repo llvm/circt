@@ -1,4 +1,4 @@
-; RUN: firtool -blackbox-memory -remove-unused-ports=false -verilog %s | FileCheck %s
+; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" -remove-unused-ports=false -verilog %s | FileCheck %s
 
 ; This is testing that CHIRRTL enable inference is working as intended.  If the
 ; no-op wires and nodes are not optimized away, then both ports should always
@@ -13,19 +13,19 @@ circuit test:
     output out0: UInt<8>
     output out1: UInt<8>
 
-    ; CHECK: testmem testmem (
     smem testmem : UInt<8>[16]
 
-    ; CHECK: .testport0_en   (1'h1),
     node _T_0 = addr
     when p:
       read mport testport0 = testmem[_T_0], clock
     out0 <= testport0
 
-    ; CHECK: .testport1_en   (1'h1),
     wire _T_1: UInt<4>
     _T_1 <= addr
     when p:
       read mport testport1 = testmem[_T_1], clock
     out1 <= testport1
+  ; No write to the memory, initialized with invalid, hence optimized away.
+  ; CHECK: assign out0 = 8'h0;
+  ; CHECK: assign out1 = 8'h0;
 

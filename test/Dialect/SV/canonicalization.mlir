@@ -11,7 +11,7 @@
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
-func @if_dead_condition(%arg0: i1) {
+func.func @if_dead_condition(%arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
 
   sv.always posedge %arg0 {
@@ -58,7 +58,7 @@ func @if_dead_condition(%arg0: i1) {
 // CHECK-NOT:     sv.initial
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
-func @empy_op(%arg0: i1) {
+func.func @empy_op(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {}
     sv.if %arg0 {} else {}
@@ -83,7 +83,7 @@ func @empy_op(%arg0: i1) {
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
-func @invert_if(%arg0: i1) {
+func.func @invert_if(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {
     } else {
@@ -103,7 +103,7 @@ func @invert_if(%arg0: i1) {
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
-func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
+func.func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
   %r = sv.reg  : !hw.inout<i2>
   %1 = sv.read_inout %r : !hw.inout<i2>
   %0 = comb.mux %c, %data, %1 : i2
@@ -125,7 +125,7 @@ func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
 // CHECK-NEXT:    }
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
-func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
+func.func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
   %r = sv.reg  : !hw.inout<i2>
   %r2 = sv.reg  : !hw.inout<i2>
   %r3 = sv.reg sym @r3 : !hw.inout<i2>

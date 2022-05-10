@@ -31,6 +31,9 @@ static bool isAggregate(Operation *op) {
 
 /// Return true if this is a wire or register we're allowed to delete.
 static bool isDeletableWireOrReg(Operation *op) {
+  if (auto wire = dyn_cast<WireOp>(op))
+    if (!isUselessName(wire.name()))
+      return false;
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 
@@ -440,16 +443,17 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  Operation *module = instanceGraph->getReferencedModule(instance);
+  Operation *op = instanceGraph->getReferencedModule(instance);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
-  if (auto extModule = dyn_cast<FExtModuleOp>(module)) {
+  if (!isa<FModuleOp>(op)) {
+    auto module = dyn_cast<FModuleLike>(op);
     for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
          ++resultNo) {
       auto portVal = instance.getResult(resultNo);
       // If this is an input to the extmodule, we can ignore it.
-      if (extModule.getPortDirection(resultNo) == Direction::In)
+      if (module.getPortDirection(resultNo) == Direction::In)
         continue;
 
       // Otherwise this is a result from it or an inout, mark it as overdefined.
@@ -459,7 +463,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   }
 
   // Otherwise this is a defined module.
-  auto fModule = cast<FModuleOp>(module);
+  auto fModule = cast<FModuleOp>(op);
   markBlockExecutable(fModule.getBody());
 
   // Ok, it is a normal internal module reference.  Populate
@@ -623,6 +627,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (isa<RegOp>(op))
     return;
   // TODO: Handle 'when' operations.
+
+  // Nodes might not fold since they might have a name, but should prop
+  if (isa<NodeOp>(op)) {
+    mergeLatticeValue(op->getResult(0), op->getOperand(0));
+    return;
+  }
 
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.

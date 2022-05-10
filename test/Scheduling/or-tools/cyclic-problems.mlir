@@ -3,7 +3,7 @@
 
 // LP-LABEL: cyclic
 // LP-SAME: lpInitiationInterval = 2
-func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
+func.func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
   auxdeps = [ [4,1,1], [4,2,2] ],
   operatortypes = [ { name = "_0", latency = 0 }, { name = "_2", latency = 2 } ]
   } {
@@ -19,7 +19,7 @@ func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
 
 // LP-LABEL: mobility
 // LP-SAME: lpInitiationInterval = 3
-func @mobility() attributes {
+func.func @mobility() attributes {
   auxdeps = [
     [0,1], [0,2], [1,3], [2,3],
     [3,4], [3,5], [4,6], [5,6],
@@ -40,7 +40,7 @@ func @mobility() attributes {
 
 // LP-LABEL: interleaved_cycles
 // LP-SAME: lpInitiationInterval = 4
-func @interleaved_cycles() attributes {
+func.func @interleaved_cycles() attributes {
   auxdeps = [
     [0,1], [0,2], [1,3], [2,3],
     [3,4], [4,7], [3,5], [5,6], [6,7],
@@ -66,7 +66,7 @@ func @interleaved_cycles() attributes {
 
 // LP-LABEL: self_arc
 // LP-SAME: lpInitiationInterval = 3
-func @self_arc() -> i32 attributes {
+func.func @self_arc() -> i32 attributes {
   auxdeps = [ [1,1,1] ],
   operatortypes = [ { name = "_3", latency = 3 } ]
   } {

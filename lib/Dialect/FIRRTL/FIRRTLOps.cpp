@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -442,25 +443,31 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
 }
 
 /// This function can extract information about ports from a module and an
-/// extmodule.
-SmallVector<PortInfo> FExtModuleOp::getPorts() {
+/// extmodule or genmodule.
+static SmallVector<PortInfo> getPorts(FModuleLike module) {
   // FExtModuleOp's don't have block arguments or locations for their ports.
-  auto loc = getLoc();
-
+  auto loc = module->getLoc();
   SmallVector<PortInfo> results;
-  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
-    results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
-                       getPortSymbolAttr(i), loc,
-                       AnnotationSet::forPort(*this, i)});
+  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
+    results.push_back({module.getPortNameAttr(i), module.getPortType(i),
+                       module.getPortDirection(i), module.getPortSymbolAttr(i),
+                       loc, AnnotationSet::forPort(module, i)});
   }
   return results;
+}
+
+SmallVector<PortInfo> FExtModuleOp::getPorts() {
+  return ::getPorts(cast<FModuleLike>((Operation *)*this));
+}
+
+SmallVector<PortInfo> FMemModuleOp::getPorts() {
+  return ::getPorts(cast<FModuleLike>((Operation *)*this));
 }
 
 // Return the port with the specified name.
 BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBody()->getArgument(portNumber);
 }
-
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
@@ -506,6 +513,89 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       ++oldIdx;
     }
   };
+  for (auto &pair : llvm::enumerate(ports)) {
+    auto idx = pair.value().first;
+    auto &port = pair.value().second;
+    auto newIdx = pair.index();
+    migrateOldPorts(idx);
+    newDirections.push_back(port.direction);
+    newNames.push_back(port.name);
+    newTypes.push_back(TypeAttr::get(port.type));
+    auto annos = port.annotations.getArrayAttr();
+    newAnnos.push_back(annos ? annos : emptyArray);
+    newSyms.push_back(port.sym ? port.sym : emptyString);
+    // Block arguments are inserted one at a time, so for each argument we
+    // insert we have to increase the index by 1.
+    body->insertArgument(idx + newIdx, port.type, port.loc);
+  }
+  migrateOldPorts(oldNumArgs);
+
+  // The lack of *any* port annotations is represented by an empty
+  // `portAnnotations` array as a shorthand.
+  if (llvm::all_of(newAnnos, [](Attribute attr) {
+        return attr.cast<ArrayAttr>().empty();
+      }))
+    newAnnos.clear();
+
+  // The lack of *any* port symbol is represented by an empty `portSyms` array
+  // as a shorthand.
+  if (llvm::all_of(newSyms, [](Attribute attr) {
+        return attr.cast<StringAttr>().getValue().empty();
+      }))
+    newSyms.clear();
+
+  // Apply these changed markers.
+  (*this)->setAttr("portDirections",
+                   direction::packAttribute(getContext(), newDirections));
+  (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
+  (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
+  (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
+  (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newSyms));
+}
+
+/// Inserts the given ports. The insertion indices are expected to be in order.
+/// Insertion occurs in-order, such that ports with the same insertion index
+/// appear in the module in the same order they appeared in the list.
+void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  if (ports.empty())
+    return;
+  unsigned oldNumArgs = getNumPorts();
+  unsigned newNumArgs = oldNumArgs + ports.size();
+
+  // Add direction markers and names for new ports.
+  SmallVector<Direction> existingDirections =
+      direction::unpackAttribute(this->getPortDirectionsAttr());
+  ArrayRef<Attribute> existingNames = this->getPortNames();
+  ArrayRef<Attribute> existingTypes = this->getPortTypes();
+  assert(existingDirections.size() == oldNumArgs);
+  assert(existingNames.size() == oldNumArgs);
+  assert(existingTypes.size() == oldNumArgs);
+
+  SmallVector<Direction> newDirections;
+  SmallVector<Attribute> newNames;
+  SmallVector<Attribute> newTypes;
+  SmallVector<Attribute> newAnnos;
+  SmallVector<Attribute> newSyms;
+  newDirections.reserve(newNumArgs);
+  newNames.reserve(newNumArgs);
+  newTypes.reserve(newNumArgs);
+  newAnnos.reserve(newNumArgs);
+  newSyms.reserve(newNumArgs);
+
+  auto emptyArray = ArrayAttr::get(getContext(), {});
+  auto emptyString = StringAttr::get(getContext(), "");
+
+  unsigned oldIdx = 0;
+  auto migrateOldPorts = [&](unsigned untilOldIdx) {
+    while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
+      newDirections.push_back(existingDirections[oldIdx]);
+      newNames.push_back(existingNames[oldIdx]);
+      newTypes.push_back(existingTypes[oldIdx]);
+      newAnnos.push_back(getAnnotationsAttrForPort(oldIdx));
+      newSyms.push_back(getPortSymbolAttr(oldIdx));
+      ++oldIdx;
+    }
+  };
   for (auto &port : ports) {
     migrateOldPorts(port.first);
     newDirections.push_back(port.second.direction);
@@ -514,7 +604,6 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     auto annos = port.second.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.second.sym ? port.second.sym : emptyString);
-    body->insertArgument(port.first, port.second.type, port.second.loc);
   }
   migrateOldPorts(oldNumArgs);
 
@@ -658,6 +747,30 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("parameters", builder.getArrayAttr({}));
 }
 
+void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
+                         StringAttr name, ArrayRef<PortInfo> ports,
+                         uint32_t numReadPorts, uint32_t numWritePorts,
+                         uint32_t numReadWritePorts, uint32_t dataWidth,
+                         uint32_t maskBits, uint32_t readLatency,
+                         uint32_t writeLatency, uint64_t depth,
+                         ArrayAttr annotations) {
+  auto *context = builder.getContext();
+  buildModule(builder, result, name, ports, annotations);
+  auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
+  auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
+  result.addAttribute("numReadPorts", IntegerAttr::get(ui32Type, numReadPorts));
+  result.addAttribute("numWritePorts",
+                      IntegerAttr::get(ui32Type, numWritePorts));
+  result.addAttribute("numReadWritePorts",
+                      IntegerAttr::get(ui32Type, numReadWritePorts));
+  result.addAttribute("dataWidth", IntegerAttr::get(ui32Type, dataWidth));
+  result.addAttribute("maskBits", IntegerAttr::get(ui32Type, maskBits));
+  result.addAttribute("readLatency", IntegerAttr::get(ui32Type, readLatency));
+  result.addAttribute("writeLatency", IntegerAttr::get(ui32Type, writeLatency));
+  result.addAttribute("depth", IntegerAttr::get(ui64Type, depth));
+  result.addAttribute("extraPorts", ArrayAttr::get(context, {}));
+}
+
 /// Print a list of module ports in the following form:
 ///   in x: !firrtl.uint<1> [{class = "DontTouch}], out "_port": !firrtl.uint<2>
 ///
@@ -739,7 +852,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 /// will populate `entryArgs`.
 static ParseResult
 parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
-                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &entryArgs,
+                 SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
                  SmallVectorImpl<Direction> &portDirections,
                  SmallVectorImpl<Attribute> &portNames,
                  SmallVectorImpl<Attribute> &portTypes,
@@ -758,17 +871,19 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 
     // Parse the port name.
     if (hasSSAIdentifiers) {
-      OpAsmParser::UnresolvedOperand arg;
-      if (parser.parseRegionArgument(arg))
+      OpAsmParser::Argument arg;
+      if (parser.parseArgument(arg))
         return failure();
       entryArgs.push_back(arg);
       // The name of an argument is of the form "%42" or "%id", and since
       // parsing succeeded, we know it always has one character.
-      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-      if (isdigit(arg.name[1]))
+      assert(arg.ssaName.name.size() > 1 && arg.ssaName.name[0] == '%' &&
+             "Unknown MLIR name");
+      if (isdigit(arg.ssaName.name[1]))
         portNames.push_back(StringAttr::get(context, ""));
       else
-        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+        portNames.push_back(
+            StringAttr::get(context, arg.ssaName.name.drop_front()));
     } else {
       std::string portName;
       if (parser.parseKeywordOrString(&portName))
@@ -781,6 +896,9 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     if (parser.parseColonType(portType))
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
+
+    if (hasSSAIdentifiers)
+      entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
     StringAttr portSym;
@@ -871,6 +989,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
 void FExtModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
 
+void FMemModuleOp::print(OpAsmPrinter &p) { printFModuleLikeOp(p, *this); }
+
 void FModuleOp::print(OpAsmPrinter &p) {
   printFModuleLikeOp(p, *this);
 
@@ -939,7 +1059,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   result.addAttribute("parameters", builder.getArrayAttr(parameters));
 
   // Parse the module ports.
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
+  SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -1000,15 +1120,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   auto *body = result.addRegion();
 
   if (hasSSAIdentifiers) {
-    // Collect block argument types.
-    SmallVector<Type, 4> argTypes;
-    if (!entryArgs.empty())
-      llvm::transform(portTypes, std::back_inserter(argTypes),
-                      [](Attribute typeAttr) -> Type {
-                        return typeAttr.cast<TypeAttr>().getValue();
-                      });
-
-    if (parser.parseRegion(*body, entryArgs, argTypes))
+    if (parser.parseRegion(*body, entryArgs))
       return failure();
     if (body->empty())
       body->push_back(new Block());
@@ -1021,6 +1133,10 @@ ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+}
+
+ParseResult FMemModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
@@ -1052,6 +1168,11 @@ void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
 }
 
 void FExtModuleOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void FMemModuleOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
@@ -1382,7 +1503,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   std::string name;
   StringAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
+  SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -1822,7 +1943,9 @@ FirMemory MemOp::getSummary() {
           if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
               auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
+                  clockToLeader.insert({circt::firrtl::getModuleScopedDriver(
+                                            connect.src(), true, true, true),
+                                        numWritePorts});
               if (result.second) {
                 writeClockIDs.push_back(numWritePorts);
               } else {
@@ -1838,11 +1961,12 @@ FirMemory MemOp::getSummary() {
       ++numReadWritePorts;
   }
 
-  auto width = op.getDataType().getBitWidthOrSentinel();
-  if (width <= 0) {
+  auto widthV = getBitWidth(op.getDataType());
+  size_t width = 0;
+  if (widthV.hasValue())
+    width = widthV.getValue();
+  else
     op.emitError("'firrtl.mem' should have simple type and known width");
-    width = 0;
-  }
   uint32_t groupID = 0;
   if (auto gID = op.groupIDAttr())
     groupID = gID.getUInt();
@@ -1881,17 +2005,6 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
-
-/// Infer the return types of this operation.
-LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
-                                       Optional<Location> loc,
-                                       ValueRange operands,
-                                       DictionaryAttr attrs,
-                                       mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &results) {
-  results.push_back(operands[0].getType());
-  return success();
-}
 
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
@@ -2379,7 +2492,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand index;
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
+  SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
   Type indexType, elemType;
 
   if (parser.parseOperand(index) || parser.parseComma() ||

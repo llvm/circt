@@ -47,7 +47,7 @@
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0 : i32, %arg1 : i32) -> i32 {
+  func.func @main(%arg0 : i32, %arg1 : i32) -> i32 {
     %0 = arith.cmpi slt, %arg0, %arg1 : i32
     cf.cond_br %0, ^bb1, ^bb2
   ^bb1:
@@ -170,7 +170,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
+  func.func @main(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
     %cst = arith.constant 0 : i32
     %0:3 = scf.while (%arg3 = %arg0, %arg4 = %cst, %arg5 = %cst) : (i32, i32, i32) -> (i32, i32, i32) {
       %1 = arith.cmpi slt, %arg3, %arg1 : i32
@@ -305,7 +305,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
+  func.func @main(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
     %cst = arith.constant 0 : i32
     %0:3 = scf.while (%arg3 = %arg0, %arg4 = %cst, %arg5 = %cst) : (i32, i32, i32) -> (i32, i32, i32) {
       %1 = arith.cmpi slt, %arg3, %arg1 : i32
@@ -381,7 +381,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 {
+  func.func @main(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 {
     %0 = arith.addi %a0, %a1 : i32
     %1 = arith.addi %0, %a1 : i32
     %b = arith.cmpi uge, %1, %a2 : i32

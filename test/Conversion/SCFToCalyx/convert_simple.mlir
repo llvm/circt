@@ -31,7 +31,7 @@
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%a0 : i32, %a1 : i32) -> i32 {
+  func.func @main(%a0 : i32, %a1 : i32) -> i32 {
     %0 = arith.addi %a0, %a1 : i32
     %1 = arith.shli %0, %a0 : i32
     %2 = arith.subi %1, %0 : i32
@@ -70,7 +70,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%a0 : i32, %a1 : i32) -> (i32, i32) {
+  func.func @main(%a0 : i32, %a1 : i32) -> (i32, i32) {
     return %a0, %a1 : i32, i32
   }
 }
@@ -78,7 +78,7 @@ module {
 // -----
 
 module {
-  func @main(%a0 : i32, %a1 : i32) -> i32 {
+  func.func @main(%a0 : i32, %a1 : i32) -> i32 {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.right = %in1 : i32
@@ -95,7 +95,7 @@ module {
 // -----
 
 module {
-  func @main(%a0 : i32, %a1 : i32) -> i32 {
+  func.func @main(%a0 : i32, %a1 : i32) -> i32 {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_div_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_div_pipe_0.right = %in1 : i32
@@ -112,7 +112,7 @@ module {
 // -----
 
 module {
-  func @main(%a0 : i32, %a1 : i32) -> i32 {
+  func.func @main(%a0 : i32, %a1 : i32) -> i32 {
 // CHECK:       calyx.group @bb0_0  {
 // CHECK-DAG:    calyx.assign %std_div_pipe_0.left = %in0 : i32
 // CHECK-DAG:    calyx.assign %std_div_pipe_0.right = %in1 : i32
@@ -143,7 +143,7 @@ module {
 // CHECK-DAG:      calyx.group_done %0 ? %true : i1
 // CHECK-NEXT: }
 module {
-  func @main(%a0 : i32) -> (i32, i32, i32, i32, i32) {
+  func.func @main(%a0 : i32) -> (i32, i32, i32, i32, i32) {
     return %a0, %a0, %a0, %a0, %a0 : i32, i32, i32, i32, i32
   }
 }

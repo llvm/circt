@@ -354,6 +354,19 @@ firrtl.circuit "Foo" {
     firrtl.connect %1, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
   }
 
+  // see https://github.com/llvm/circt/issues/3070
+  // CHECK-LABEL: @MuxBundle
+  firrtl.module @MuxBundleOperands(in %a: !firrtl.bundle<a: uint<8>>, in %p: !firrtl.uint<1>, out %c: !firrtl.bundle<a: uint>) {
+    // CHECK: %w = firrtl.wire  : !firrtl.bundle<a: uint<8>>
+    %w = firrtl.wire  : !firrtl.bundle<a: uint>
+    %0 = firrtl.subfield %w(0) : (!firrtl.bundle<a: uint>) -> !firrtl.uint
+    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
+    firrtl.connect %0, %1 : !firrtl.uint, !firrtl.uint<8>
+    // CHECK: %2 = firrtl.mux(%p, %a, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>) -> !firrtl.bundle<a: uint<8>>
+    %2 = firrtl.mux(%p, %a, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint>) -> !firrtl.bundle<a: uint>
+    firrtl.connect %c, %2 : !firrtl.bundle<a: uint>, !firrtl.bundle<a: uint>
+  }
+
   // CHECK-LABEL: @ShlShrOp
   firrtl.module @ShlShrOp() {
     // CHECK: %0 = firrtl.shl {{.*}} -> !firrtl.uint<8>

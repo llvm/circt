@@ -30,6 +30,12 @@
 namespace circt {
 namespace firrtl {
 
+// is the name useless?
+bool isUselessName(circt::StringRef name);
+
+// works for regs, nodes, and wires
+bool isUselessName(Operation *op);
+
 /// Return true if the specified operation is a firrtl expression.
 bool isExpression(Operation *op);
 

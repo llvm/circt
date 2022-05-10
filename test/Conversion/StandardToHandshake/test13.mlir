@@ -104,7 +104,7 @@
 // CHECK:           sink %[[VAL_107]] : index
 // CHECK:           return %[[VAL_106]] : none
 // CHECK:         }
-func @affine_apply_loops_shorthand(%arg0: index) {
+func.func @affine_apply_loops_shorthand(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
   cf.br ^bb1(%c0 : index)

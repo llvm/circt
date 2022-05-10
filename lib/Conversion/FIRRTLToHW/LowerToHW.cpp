@@ -449,6 +449,9 @@ private:
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
+  hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
+                                      Block *topLevelModule,
+                                      CircuitLoweringState &loweringState);
 
   LogicalResult lowerModuleBody(FModuleOp oldModule,
                                 CircuitLoweringState &loweringState);
@@ -521,11 +524,16 @@ void FIRRTLModuleLowering::runOnOperation() {
           modulesToProcess.push_back(module);
         })
         .Case<FExtModuleOp>([&](auto extModule) {
-          auto loweredExtMod = lowerExtModule(extModule, topLevelModule, state);
-          if (!loweredExtMod)
+          auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
+          if (!loweredMod)
             return signalPassFailure();
-
-          state.oldToNewModuleMap[&op] = loweredExtMod;
+          state.oldToNewModuleMap[&op] = loweredMod;
+        })
+        .Case<FMemModuleOp>([&](auto memModule) {
+          auto loweredMod = lowerMemModule(memModule, topLevelModule, state);
+          if (!loweredMod)
+            return signalPassFailure();
+          state.oldToNewModuleMap[&op] = loweredMod;
         })
         .Case<NonLocalAnchor>([&](auto nla) {
           // Just drop it.
@@ -949,6 +957,26 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   return newModule;
 }
 
+hw::HWModuleExternOp
+FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
+                                     Block *topLevelModule,
+                                     CircuitLoweringState &loweringState) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+    return {};
+
+  // Build the new hw.module op.
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  auto newModule = builder.create<hw::HWModuleExternOp>(
+      oldModule.getLoc(), oldModule.moduleNameAttr(), ports,
+      oldModule.moduleNameAttr());
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
+  return newModule;
+}
+
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
 /// hw.module, then deleting the old one.
 hw::HWModuleOp
@@ -981,8 +1009,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // If this is in the test harness, make sure it goes to the test directory.
   if (auto testBenchDir = loweringState.getTestBenchDirectory())
-    if (loweringState.isInTestHarness(oldModule))
+    if (loweringState.isInTestHarness(oldModule)) {
       newModule->setAttr("output_file", testBenchDir);
+      newModule->setAttr("firrtl.extract.do_not_extract",
+                         builder.getUnitAttr());
+    }
 
   bool failed = false;
   // Remove ForceNameAnnotations by generating verilogNames on instances.
@@ -2287,10 +2318,14 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     // Prepend the name of the module to make the symbol name unique in the
     // symbol table, it is already unique in the module. Checking if the name
     // is unique in the SymbolTable is non-trivial.
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    name.getValue());
+    symName = builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue()));
   }
-
+  if (!symName && !isUselessName(name)) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(moduleNamespace.newName(
+        Twine("__") + moduleName + Twine("__") + name.getValue()));
+  }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
@@ -2334,6 +2369,11 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
           op, "firrtl.transforms.DontTouchAnnotation") &&
       !symName) {
     // name may be empty
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
+  if (!symName && !isUselessName(name)) {
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
                                     name.getValue());

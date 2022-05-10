@@ -41,7 +41,7 @@
 // CHECK:           sink %[[VAL_33]] : index
 // CHECK:           return %[[VAL_1]]#17 : none
 // CHECK:         }
-func @affine_applies() {
+func.func @affine_applies() {
     %c0 = arith.constant 0 : index
     %c101 = arith.constant 101 : index
     %c102 = arith.constant 102 : index

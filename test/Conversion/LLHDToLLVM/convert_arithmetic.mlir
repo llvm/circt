@@ -2,7 +2,7 @@
 // RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
 
 // CHECK-LABEL:   llvm.func @convertArithmetic
-func @convertArithmetic(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
+func.func @convertArithmetic(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
     // CHECK: %[[R0:.*]] = llvm.add %arg0, %arg1 : i32
     // CHECK: %[[R1:.*]] = llvm.add %[[R0]], %arg2 : i32
     %0 = comb.add %arg0, %arg1, %arg2 : i32
@@ -28,7 +28,7 @@ func @convertArithmetic(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
 }
 
 // CHECK-LABEL:   llvm.func @convertRelational
-func @convertRelational(%arg0: i32, %arg1: i32) {
+func.func @convertRelational(%arg0: i32, %arg1: i32) {
     // CHECK: llvm.icmp "eq" %arg0, %arg1 : i32
     %0 = comb.icmp eq %arg0, %arg1 : i32
     // CHECK: llvm.icmp "ne" %arg0, %arg1 : i32

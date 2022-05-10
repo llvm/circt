@@ -168,7 +168,8 @@ def ComponentOp : CalyxOp<"component", [
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
-    SymbolTable /* contains GroupInterface names. */
+    SymbolTable /* contains GroupInterface names. */,
+    RegionKindInterface
   ]> {
   let summary = "Calyx Wires";
   let description = [{
@@ -190,6 +191,12 @@ def WiresOp : CalyxContainer<"wires", [
       region->push_back(new Block());
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
   let hasVerifier = 1;
 }
 

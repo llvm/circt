@@ -496,15 +496,20 @@ SuccessorOperands llhd::WaitOp::getSuccessorOperands(unsigned index) {
 /// respectively.
 static ParseResult
 parseArgumentList(OpAsmParser &parser,
-                  SmallVectorImpl<OpAsmParser::UnresolvedOperand> &args,
+                  SmallVectorImpl<OpAsmParser::Argument> &args,
                   SmallVectorImpl<Type> &argTypes) {
   auto parseElt = [&]() -> ParseResult {
-    OpAsmParser::UnresolvedOperand argument;
+    OpAsmParser::Argument argument;
     Type argType;
-    if (succeeded(parser.parseOptionalRegionArgument(argument))) {
-      if (!argument.name.empty() && succeeded(parser.parseColonType(argType))) {
-        args.push_back(argument);
-        argTypes.push_back(argType);
+    auto optArg = parser.parseOptionalArgument(argument);
+    if (optArg.hasValue()) {
+      if (succeeded(optArg.getValue())) {
+        if (!argument.ssaName.name.empty() &&
+            succeeded(parser.parseColonType(argType))) {
+          args.push_back(argument);
+          argTypes.push_back(argType);
+          args.back().type = argType;
+        }
       }
     }
     return success();
@@ -518,7 +523,7 @@ parseArgumentList(OpAsmParser &parser,
 /// (%arg0 : T0, %arg1 : T1, <...>) -> (%out0 : T0, %out1 : T1, <...>)
 static ParseResult
 parseEntitySignature(OpAsmParser &parser, OperationState &result,
-                     SmallVectorImpl<OpAsmParser::UnresolvedOperand> &args,
+                     SmallVectorImpl<OpAsmParser::Argument> &args,
                      SmallVectorImpl<Type> &argTypes) {
   if (parseArgumentList(parser, args, argTypes))
     return failure();
@@ -533,7 +538,7 @@ parseEntitySignature(OpAsmParser &parser, OperationState &result,
 
 ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr entityName;
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> args;
+  SmallVector<OpAsmParser::Argument, 4> args;
   SmallVector<Type, 4> argTypes;
 
   if (parser.parseSymbolName(entityName, SymbolTable::getSymbolAttrName(),
@@ -550,7 +555,7 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(type));
 
   auto &body = *result.addRegion();
-  if (parser.parseRegion(body, args, argTypes))
+  if (parser.parseRegion(body, args))
     return failure();
   if (body.empty())
     body.push_back(std::make_unique<Block>().release());
@@ -711,9 +716,9 @@ LogicalResult llhd::ProcOp::verify() {
   return success();
 }
 
-static ParseResult parseProcArgumentList(
-    OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
-    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &argNames) {
+static ParseResult
+parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
+                      SmallVectorImpl<OpAsmParser::Argument> &argNames) {
   if (parser.parseLParen())
     return failure();
 
@@ -724,26 +729,30 @@ static ParseResult parseProcArgumentList(
     llvm::SMLoc loc = parser.getCurrentLocation();
 
     // Parse argument name if present.
-    OpAsmParser::UnresolvedOperand argument;
+    OpAsmParser::Argument argument;
     Type argumentType;
-    if (succeeded(parser.parseOptionalRegionArgument(argument)) &&
-        !argument.name.empty()) {
-      // Reject this if the preceding argument was missing a name.
-      if (argNames.empty() && !argTypes.empty())
-        return parser.emitError(loc, "expected type instead of SSA identifier");
-      argNames.push_back(argument);
+    auto optArg = parser.parseOptionalArgument(argument);
+    if (optArg.hasValue()) {
+      if (succeeded(optArg.getValue())) {
+        // Reject this if the preceding argument was missing a name.
+        if (argNames.empty() && !argTypes.empty())
+          return parser.emitError(loc,
+                                  "expected type instead of SSA identifier");
+        argNames.push_back(argument);
 
-      if (parser.parseColonType(argumentType))
+        if (parser.parseColonType(argumentType))
+          return failure();
+      } else if (!argNames.empty()) {
+        // Reject this if the preceding argument had a name.
+        return parser.emitError(loc, "expected SSA identifier");
+      } else if (parser.parseType(argumentType)) {
         return failure();
-    } else if (!argNames.empty()) {
-      // Reject this if the preceding argument had a name.
-      return parser.emitError(loc, "expected SSA identifier");
-    } else if (parser.parseType(argumentType)) {
-      return failure();
+      }
     }
 
     // Add the argument type.
     argTypes.push_back(argumentType);
+    argNames.back().type = argumentType;
 
     return success();
   };
@@ -768,7 +777,7 @@ static ParseResult parseProcArgumentList(
 
 ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
   StringAttr procName;
-  SmallVector<OpAsmParser::UnresolvedOperand, 8> argNames;
+  SmallVector<OpAsmParser::Argument, 8> argNames;
   SmallVector<Type, 8> argTypes;
   Builder &builder = parser.getBuilder();
 
@@ -791,8 +800,7 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  parser.parseRegion(*body, argNames,
-                     argNames.empty() ? ArrayRef<Type>() : argTypes);
+  parser.parseRegion(*body, argNames);
 
   return success();
 }

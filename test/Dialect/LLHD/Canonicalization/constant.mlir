@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: @const_hoisting
 // CHECK-SAME: %[[SIG:.*]]: !llhd.sig<i32>
-func @const_hoisting(%sig : !llhd.sig<i32>) {
+func.func @const_hoisting(%sig : !llhd.sig<i32>) {
   // CHECK-DAG: %[[C0:.*]] = hw.constant -1 : i32
   // CHECK-DAG: %[[TIME:.*]] = llhd.constant_time <1ns, 0d, 0e>
   // CHECK-NEXT: cf.br ^[[BB:.*]]

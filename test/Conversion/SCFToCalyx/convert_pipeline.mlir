@@ -34,7 +34,7 @@
 // CHECK-NEXT:        } {bound = 10 : i64}
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-func @minimal() {
+func.func @minimal() {
   %c0_i64 = arith.constant 0 : i64
   %c10_i64 = arith.constant 10 : i64
   %c1_i64 = arith.constant 1 : i64
@@ -158,7 +158,7 @@ func @minimal() {
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
-func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
+func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   %c0_i32 = arith.constant 0 : i32
   %c0 = arith.constant 0 : index
   %c64 = arith.constant 64 : index

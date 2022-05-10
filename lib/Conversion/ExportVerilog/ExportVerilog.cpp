@@ -845,9 +845,9 @@ void EmitterBase::emitTextWithSubstitutions(
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
-      itemOp->emitError("cannot get name for symbol ") << sym;
+      emitError(itemOp, "cannot get name for symbol ") << sym;
     } else {
-      op->emitError("cannot get name for symbol ") << sym;
+      emitError(op, "cannot get name for symbol ") << sym;
     }
     return StringRef("<INVALID>");
   };
@@ -1143,6 +1143,9 @@ public:
 
   /// This class keeps track of field name renamings in the module scope.
   FieldNameResolver fieldNameResolver;
+
+  /// This keeps track of assignments folded into wire emissions
+  SmallPtrSet<Operation *, 16> assignsInlined;
 };
 
 } // end anonymous namespace
@@ -2264,6 +2267,85 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
+/// Return true if we are unable to ever inline the specified operation.  This
+/// happens because not all Verilog expressions are composable, notably you
+/// can only use bit selects like x[4:6] on simple expressions, you cannot use
+/// expressions in the sensitivity list of always blocks, etc.
+static bool isExpressionUnableToInline(Operation *op) {
+  if (auto cast = dyn_cast<BitcastOp>(op))
+    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
+                          op->getLoc()))
+      // Bitcasts rely on the type being assigned to, so we cannot inline.
+      return true;
+
+  // StructCreateOp needs to be assigning to a named temporary so that types
+  // are inferred properly by verilog
+  if (isa<StructCreateOp>(op))
+    return true;
+
+  // Verbatim with a long string should be emitted as an out-of-line declration.
+  if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
+    if (verbatim.string().size() > 32)
+      return true;
+
+  // Scan the users of the operation to see if any of them need this to be
+  // emitted out-of-line.
+  for (auto user : op->getUsers()) {
+    // Verilog bit selection is required by the standard to be:
+    // "a vector, packed array, packed structure, parameter or concatenation".
+    //
+    // It cannot be an arbitrary expression, e.g. this is invalid:
+    //     assign bar = {{a}, {b}, {c}, {d}}[idx];
+    //
+    // To handle these, we push the subexpression into a temporary.
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp>(user))
+      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
+
+    // Always blocks must have a name in their sensitivity list, not an expr.
+    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
+      // Anything other than a read of a wire must be out of line.
+      if (auto read = dyn_cast<ReadInOutOp>(op))
+        if (read.input().getDefiningOp<WireOp>() ||
+            read.input().getDefiningOp<RegOp>())
+          continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+static ConstantOp isSingleConstantAssign(Operation *op) {
+  auto wire = dyn_cast<WireOp>(op);
+  if (!wire)
+    return {};
+  if (!wire->hasOneUse())
+    return {};
+  auto assign = dyn_cast<AssignOp>(*wire->user_begin());
+  if (!assign)
+    return {};
+  return dyn_cast_or_null<ConstantOp>(assign->getOperand(1).getDefiningOp());
+}
+
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+static bool isExpressionEmittedInline(Operation *op) {
+  // Never create a temporary which is only going to be assigned to an output
+  // port.
+  if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
+    return true;
+
+  // If this operation has multiple uses, we can't generally inline it unless
+  // the op is duplicatable.
+  if (!op->getResult(0).hasOneUse() && !isDuplicatableExpression(op))
+    return false;
+
+  // If it isn't structurally possible to inline this expression, emit it out
+  // of line.
+  return !isExpressionUnableToInline(op);
+}
+
 namespace {
 class NameCollector {
 public:
@@ -2595,6 +2677,9 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
   if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
+    return success();
+
+  if (emitter.assignsInlined.count(op))
     return success();
 
   SmallPtrSet<Operation *, 8> ops;
@@ -3673,6 +3758,12 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
+    if (auto constOp = isSingleConstantAssign(op)) {
+      os << " = ";
+      emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
+      emitter.assignsInlined.insert(*op->user_begin());
+    }
+
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
     ++numStatementsEmitted;
@@ -4043,16 +4134,19 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     ++portIdx;
 
     // If we have any more ports with the same types and the same direction,
-    // emit them in a list on the same line.
-    while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
-           stripUnpackedTypes(portType) ==
-               stripUnpackedTypes(portInfo[portIdx].type)) {
-      StringRef name = getPortVerilogName(module, portInfo[portIdx]);
-      // Append this to the running port decl.
-      os << ",\n";
-      os.indent(startOfNamePos) << name;
-      printUnpackedTypePostfix(portInfo[portIdx].type, os);
-      ++portIdx;
+    // emit them in a list one per line.
+    // Optionally skip this behavior when requested by user.
+    if (!state.options.disallowPortDeclSharing) {
+      while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
+             stripUnpackedTypes(portType) ==
+                 stripUnpackedTypes(portInfo[portIdx].type)) {
+        StringRef name = getPortVerilogName(module, portInfo[portIdx]);
+        // Append this to the running port decl.
+        os << ",\n";
+        os.indent(startOfNamePos) << name;
+        printUnpackedTypePostfix(portInfo[portIdx].type, os);
+        ++portIdx;
+      }
     }
 
     if (portIdx != e) {

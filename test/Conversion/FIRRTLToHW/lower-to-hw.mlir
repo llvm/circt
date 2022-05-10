@@ -77,9 +77,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
 
     // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
-    // CHECK: %out5 = sv.wire : !hw.inout<i4>
+    // CHECK: %out5 = sv.wire sym @__Simple__out5 : !hw.inout<i4>
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
-    %out5 = firrtl.wire : !firrtl.uint<4>
+    %out5 = firrtl.wire sym @__Simple__out5 : !firrtl.uint<4>
     // CHECK: sv.wire sym @__Simple{{.*}}
     // CHECK: sv.wire sym @__Simple{{.*}}
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
@@ -88,7 +88,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: sv.wire sym @__Simple__dntnode
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
-    // CHECK: %clockWire = sv.wire  : !hw.inout<i1>
+    // CHECK: %clockWire = sv.wire
     // CHECK: sv.assign %clockWire, %false : i1
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
     %clockWire = firrtl.wire : !firrtl.clock
@@ -205,9 +205,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
-    // Nodes with names but no attribute are just dropped.
+    // Nodes with names become wires.
+    // CHECK-NEXT: %n1 = sv.wire
+    // CHECK-NEXT: sv.assign %n1, %in2
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
-
+    
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
     %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
@@ -632,7 +634,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @issue314
   firrtl.module private @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
     // CHECK: %c0_i38 = hw.constant 0 : i38
-    // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
+    // CHECK: %tmp48 = sv.wire
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : i38, i27
@@ -1110,7 +1112,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @Force
   firrtl.module private @Force(in %in: !firrtl.uint<42>) {
-    // CHECK: %out = sv.wire : !hw.inout<i42>
+    // CHECK: %out = sv.wire
     // CHECK: sv.initial {
     // CHECK:   sv.force %out, %in : i42
     // CHECK: }
@@ -1150,14 +1152,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @MemoryWritePortBehavior
   firrtl.module private @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
     // This memory has both write ports driven by the same clock.  It should be
-    // lowered to an "aa" memory.
+    // lowered to an "aa" memory. Even if the clock is passed via different wires,
+    // we should identify the clocks to be same.
     //
     // CHECK: hw.instance "aa_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
     %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    firrtl.connect %clk_aa_w0, %clock1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %clk_aa_w1, %clock1 : !firrtl.clock, !firrtl.clock
+    %cwire1 = firrtl.wire : !firrtl.clock
+    %cwire2 = firrtl.wire : !firrtl.clock
+    firrtl.connect %cwire1, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %cwire2, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w0, %cwire1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w1, %cwire2 : !firrtl.clock, !firrtl.clock
 
     // This memory has different clocks for each write port.  It should be
     // lowered to an "ab" memory.
@@ -1172,10 +1179,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // This memory is the same as the first memory, but a node is used to alias
     // the second write port clock (e.g., this could be due to a dont touch
     // annotation blocking this from being optimized away).  This should be
-    // lowered to an "ab" memory even though it is trivially convertible to an
-    // "aa" memory.
+    // lowered to an "aa" since they are identical.
     //
-    // CHECK: hw.instance "ab_node_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab
+    // CHECK: hw.instance "ab_node_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
     %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
@@ -1413,7 +1419,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
     firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %c-2_i2 = hw.constant -2 : i2
-    // CHECK-NEXT: %.b.output = sv.wire  : !hw.inout<array<3xi1>>
+    // CHECK-NEXT: %.b.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
     // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%c-2_i2] : !hw.inout<array<3xi1>>, i2
     // CHECK-NEXT: %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>
@@ -1435,7 +1441,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:      %true = hw.constant true
-    // CHECK-NEXT: %.a.output = sv.wire  : !hw.inout<struct<a: i1>>
+    // CHECK-NEXT: %.a.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.a.output : !hw.inout<struct<a: i1>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.a.output["a"] : !hw.inout<struct<a: i1>>
     // CHECK-NEXT: sv.assign %1, %true : i1
@@ -1448,7 +1454,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: bundle<c: uint<1>>>) -> !firrtl.bundle<c: uint<1>>
     %2 = firrtl.subfield %1(0) : (!firrtl.bundle<c: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %2, %in : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK:      %.sink.output = sv.wire  : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
+    // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.sink.output["a"] : !hw.inout<struct<a: !hw.struct<b: !hw.struct<c: i1>>>>
     // CHECK-NEXT: %2 = sv.struct_field_inout %1["b"] : !hw.inout<struct<b: !hw.struct<c: i1>>>
@@ -1497,7 +1503,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %0 = firrtl.subfield %sink(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
     %1 = firrtl.subfield %source(0) : (!firrtl.bundle<a: bundle<b: uint<1>>>) -> !firrtl.bundle<b: uint<1>>
     firrtl.connect %0, %1 : !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>
-    // CHECK:      %.sink.output = sv.wire  : !hw.inout<struct<a: !hw.struct<b: i1>>>
+    // CHECK:      %.sink.output = sv.wire
     // CHECK-NEXT: %0 = sv.read_inout %.sink.output : !hw.inout<struct<a: !hw.struct<b: i1>>>
     // CHECK-NEXT: %1 = sv.struct_field_inout %.sink.output["a"] : !hw.inout<struct<a: !hw.struct<b: i1>>>
     // CHECK-NEXT: %2 = hw.struct_extract %source["a"] : !hw.struct<a: !hw.struct<b: i1>>

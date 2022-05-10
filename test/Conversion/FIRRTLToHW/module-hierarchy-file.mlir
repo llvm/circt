@@ -54,3 +54,24 @@ firrtl.circuit "MyDUT" {
   firrtl.module @MyDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 }
+
+// -----
+
+// Check that "firrtl.extract.do_not_extract" is added to modules in test harness.
+firrtl.circuit "MyTestHarness" attributes {annotations = [ {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"}]}
+{
+  // CHECK-LABEL: hw.module private @MyDUT() {
+  firrtl.module private @MyDUT() attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+
+  // CHECK-LABEL: hw.module private @Testbench
+  // CHECK-SAME:  firrtl.extract.do_not_extract
+  firrtl.module private @Testbench() {}
+
+  // CHECK-LABEL: hw.module @MyTestHarness
+  // CHECK-SAME:  firrtl.extract.do_not_extract
+  firrtl.module @MyTestHarness() {
+    firrtl.instance myDUT @MyDUT()
+    firrtl.instance myTestBench @Testbench()
+  }
+}

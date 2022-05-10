@@ -1,7 +1,7 @@
 // RUN: circt-opt -convert-affine-to-staticlogic %s | FileCheck %s
 
 // CHECK-LABEL: func @minimal
-func @minimal(%arg0 : memref<10xindex>) {
+func.func @minimal(%arg0 : memref<10xindex>) {
   // Setup constants.
   // CHECK: %[[LB:.+]] = arith.constant 0 : [[ITER_TYPE:.+]]
   // CHECK: %[[UB:.+]] = arith.constant [[TRIP_COUNT:.+]] : [[ITER_TYPE]]
@@ -30,7 +30,7 @@ func @minimal(%arg0 : memref<10xindex>) {
 }
 
 // CHECK-LABEL: func @dot
-func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
+func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
   // Pipeline boilerplate checked above, just check the stages computations.
 
   // First stage.

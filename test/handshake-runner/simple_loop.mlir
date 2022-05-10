@@ -3,7 +3,7 @@
 // RUN: handshake-runner %s | FileCheck %s
 // CHECK: 42
 module {
-  func @main() -> index {
+  func.func @main() -> index {
     %c1 = arith.constant 1 : index
     %c42 = arith.constant 42 : index
     %c1_0 = arith.constant 1 : index

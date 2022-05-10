@@ -32,7 +32,7 @@ llvm.func @convert_const() {
 // CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_9]][3 : i32] : !llvm.array<4 x i32>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_array(%ci1 : i1, %ci32 : i32) {
+func.func @convert_array(%ci1 : i1, %ci32 : i32) {
   %0 = hw.array_create %ci1, %ci1, %ci1 : i1
   %1 = hw.array_create %ci32, %ci32, %ci32, %ci32 : i32
 
@@ -49,7 +49,7 @@ func @convert_array(%ci1 : i1, %ci32 : i32) {
 // CHECK:           %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_5]][2 : i32] : !llvm.struct<(i3, i2, i1)>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_tuple(%ci1 : i1, %ci2 : i2, %ci3 : i3) {
+func.func @convert_tuple(%ci1 : i1, %ci2 : i2, %ci3 : i3) {
   %0 = hw.struct_create (%ci1, %ci2, %ci3) : !hw.struct<foo: i1, bar: i2, baz: i3>
 
   return

@@ -387,6 +387,13 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       // modules.
       if (isBound(rtlmod))
         continue;
+
+      // In the module is in test harness, we don't have to extract from it.
+      if (rtlmod->hasAttr("firrtl.extract.do_not_extract")) {
+        rtlmod->removeAttr("firrtl.extract.do_not_extract");
+        continue;
+      }
+
       doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
       doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
       doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);

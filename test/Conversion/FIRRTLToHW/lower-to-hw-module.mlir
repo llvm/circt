@@ -100,11 +100,11 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: %.outB.output = sv.wire : !hw.inout<i4>
+    // CHECK: %.outB.output = sv.wire sym @__PortMadness__.outB.output : !hw.inout<i4>
     // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
-    // CHECK: [[OUTC:%.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTC:%.+]] = sv.wire sym @__PortMadness__.outC.output : !hw.inout<i4>
     // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTD:%.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTD:%.+]] = sv.wire sym @__PortMadness__.outD.output : !hw.inout<i4>
     // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Normal
@@ -254,7 +254,11 @@ firrtl.circuit "Simple" {
     %result = firrtl.instance fpga @bar740(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
-
+  
+  // Memory modules are lowered to plain external modules.
+  // CHECK: hw.module.extern @MRead_ext(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42) attributes {verilogName = "MRead_ext"}
+  firrtl.memmodule @MRead_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.uint<1>, out R0_data: !firrtl.uint<42>) attributes {dataWidth = 42 : ui32, depth = 12 : ui64, extraPorts = [], maskBits = 0 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, writeLatency = 1 : ui32}
+  
   // The following operations should be passed through without an error.
   // CHECK: sv.interface @SVInterface
   sv.interface @SVInterface { }

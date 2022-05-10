@@ -96,7 +96,7 @@ hw.module @bar(%clk: i1, %rst_n: i1) {
 }
 
 // Software-style instantiation and triggering.
-func @qux() {
+func.func @qux() {
   %foo_inst = fsm.instance "foo_inst" @foo
   %in0 = arith.constant true
   %out0 = fsm.trigger %foo_inst(%in0) : (i1) -> i1

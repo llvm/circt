@@ -29,7 +29,7 @@ circuit Top :
       read-under-write => undefined
     always.w.clk <= clock
     always.w.en <= UInt<1>(1)
-    always.w.addr <= UInt<1>(0)
+    always.w.addr <= io.in
     always.w.data <= io.in
     always.w.mask <= UInt<1>(1)
 
@@ -85,6 +85,6 @@ circuit Top :
 ; CHECK: module MemTap_2_impl_0(
 ; CHECK:   output  _1,
 ; CHECK:           _0);
-; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_ext.Memory[1];
-; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_ext.Memory[0];
+; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_1;
+; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_0;
 ; CHECK: endmodule

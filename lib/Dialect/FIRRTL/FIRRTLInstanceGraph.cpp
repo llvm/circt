@@ -26,7 +26,7 @@ InstanceGraph::InstanceGraph(Operation *operation)
 }
 
 ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Operation *op) {
-  assert((isa<FModuleOp, FExtModuleOp>(op))); // extra parens makes parser smile
+  assert(isa<FModuleLike>(op));
 
   // If we have reached the circuit root, we're done.
   if (op == instanceGraph.getTopLevelNode()->getModule()) {

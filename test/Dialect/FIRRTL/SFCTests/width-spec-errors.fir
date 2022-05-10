@@ -1,4 +1,4 @@
-; RUN: firtool --disable-name-preservation --split-input-file --verify-diagnostics %s
+; RUN: firtool --split-input-file --verify-diagnostics %s
 ; Tests extracted from:
 ; - test/scala/firrtlTests/WidthSpec.scala
 

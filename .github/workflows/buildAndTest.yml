@@ -181,6 +181,7 @@ jobs:
           mkdir configure_unified
           cd configure_unified
           cmake ../llvm/llvm \
+            -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_TARGETS_TO_BUILD=host \

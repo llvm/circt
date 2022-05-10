@@ -106,11 +106,6 @@ static cl::opt<bool> disableAnnotationsUnknown(
     cl::desc("Ignore unknown annotations when parsing"), cl::init(false),
     cl::cat(mainCategory));
 
-static cl::opt<bool> disableNamePreservation(
-    "disable-name-preservation",
-    cl::desc("Don't generate debug taps for named FIRRTL wires and nodes"),
-    cl::init(false), cl::cat(mainCategory));
-
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
@@ -158,6 +153,12 @@ static cl::opt<bool> imconstprop(
         "Enable intermodule constant propagation and dead code elimination"),
     cl::init(true), cl::cat(mainCategory));
 
+// TODO: this pass is temporarily off by default, while we migrate over to the
+// new memory lowering pipeline.
+static cl::opt<bool> lowerMemory("lower-memory",
+                                 cl::desc("run the lower-memory pass"),
+                                 cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     lowerTypes("lower-types",
                cl::desc("run the lower-types pass within lower-to-hw"),
@@ -166,6 +167,11 @@ static cl::opt<bool>
 static cl::opt<bool> expandWhens("expand-whens",
                                  cl::desc("disable the expand-whens pass"),
                                  cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    addSeqMemPorts("add-seqmem-ports",
+                   cl::desc("add user defined ports to sequential memories"),
+                   cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     blackBoxMemory("blackbox-memory",
@@ -208,6 +214,11 @@ static cl::opt<bool>
     extractInstances("extract-instances",
                      cl::desc("extract black boxes, seq mems, and clock gates"),
                      cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    memToRegOfVec("mem-to-regofvec",
+                  cl::desc("run the memToRegOfVec transform pass on firrtl"),
+                  cl::init(true));
 
 static cl::opt<bool>
     prefixModules("prefix-modules",
@@ -303,6 +314,13 @@ static cl::list<std::string> inputOMIRFilenames(
 static cl::opt<std::string>
     omirOutFile("output-omir", cl::desc("file name for the output omir"),
                 cl::init(""), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    mlirOutFile("output-final-mlir",
+                cl::desc("Optional file name to output the final MLIR into, in "
+                         "addition to the output requested by -o"),
+                cl::init(""), cl::value_desc("filename"),
+                cl::cat(mainCategory));
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
@@ -420,7 +438,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     options.ignoreInfoLocators = ignoreFIRLocations;
     options.rawAnnotations = newAnno;
     options.numAnnotationFiles = numAnnotationFiles;
-    options.disableNamePreservation = disableNamePreservation;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -475,6 +492,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
+  if (memToRegOfVec)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
+
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
@@ -520,11 +541,20 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
 
+  if (lowerMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
+
+  if (prefixModules)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
+
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+
+  if (extractInstances)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
   // Run passes to resolve Grand Central features.  This should run before
   // BlackBoxReader because Grand Central needs to inform BlackBoxReader where
@@ -555,8 +585,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
           firrtl::createRemoveUnusedPortsPass());
   }
 
-  if (extractInstances)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
+  if (addSeqMemPorts)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
@@ -658,6 +688,19 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       outputFormat == OutputIRSV || outputFormat == OutputIRVerilog) {
     auto outputTimer = ts.nest("Print .mlir output");
     module->print(outputFile.getValue()->os());
+  }
+
+  // If requested, print the final MLIR into mlirOutFile.
+  if (!mlirOutFile.empty()) {
+    std::string mlirOutError;
+    auto mlirFile = openOutputFile(mlirOutFile, &mlirOutError);
+    if (!mlirFile) {
+      llvm::errs() << mlirOutError;
+      return failure();
+    }
+
+    module->print(mlirFile->os());
+    mlirFile->keep();
   }
 
   // We intentionally "leak" the Module into the MLIRContext instead of

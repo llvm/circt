@@ -11,7 +11,7 @@ llhd.entity @test1() -> () {
 }
 
 // CHECK-LABEL: func @Expressions
-func @Expressions(%a: !moore.bit, %b: !moore.logic, %c: !moore.packed<range<bit, 4:0>>) {
+func.func @Expressions(%a: !moore.bit, %b: !moore.logic, %c: !moore.packed<range<bit, 4:0>>) {
   // CHECK: %0 = moore.mir.concat
   // CHECK: %1 = moore.mir.concat
   %0 = moore.mir.concat %a, %a : (!moore.bit, !moore.bit) -> !moore.packed<range<bit, 1:0>>

@@ -100,6 +100,11 @@ struct LoweringOptions {
     Plain,                // Default.
     WrapInAtSquareBracket // Wrap location info in @[..].
   } locationInfoStyle = Plain;
+
+  /// If true, every port is declared separately
+  /// (each includes direction and type (e.g., `input [3:0]`)).
+  /// When false (default), ports share declarations when possible.
+  bool disallowPortDeclSharing = false;
 };
 
 /// Register commandline options for the verilog emitter.

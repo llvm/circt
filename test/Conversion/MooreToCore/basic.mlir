@@ -14,14 +14,14 @@ llhd.entity @test1() -> () {
 
 // CHECK-LABEL: func @FuncArgsAndReturns
 // CHECK-SAME: (%arg0: i8, %arg1: i32, %arg2: i1) -> i8
-func @FuncArgsAndReturns(%arg0: !moore.byte, %arg1: !moore.int, %arg2: !moore.bit) -> !moore.byte {
+func.func @FuncArgsAndReturns(%arg0: !moore.byte, %arg1: !moore.int, %arg2: !moore.bit) -> !moore.byte {
   // CHECK-NEXT: return %arg0 : i8
   return %arg0 : !moore.byte
 }
 
 // CHECK-LABEL: func @ControlFlow
 // CHECK-SAME: (%arg0: i32, %arg1: i1)
-func @ControlFlow(%arg0: !moore.int, %arg1: i1) {
+func.func @ControlFlow(%arg0: !moore.int, %arg1: i1) {
   // CHECK-NEXT:   cf.br ^bb1(%arg0 : i32)
   // CHECK-NEXT: ^bb1(%0: i32):
   // CHECK-NEXT:   cf.cond_br %arg1, ^bb1(%0 : i32), ^bb2(%arg0 : i32)
@@ -36,7 +36,7 @@ func @ControlFlow(%arg0: !moore.int, %arg1: i1) {
 
 // CHECK-LABEL: func @Calls
 // CHECK-SAME: (%arg0: i8, %arg1: i32, %arg2: i1) -> i8
-func @Calls(%arg0: !moore.byte, %arg1: !moore.int, %arg2: !moore.bit) -> !moore.byte {
+func.func @Calls(%arg0: !moore.byte, %arg1: !moore.int, %arg2: !moore.bit) -> !moore.byte {
   // CHECK-NEXT: %true =
   // CHECK-NEXT: call @ControlFlow(%arg1, %true) : (i32, i1) -> ()
   // CHECK-NEXT: [[TMP:%.+]] = call @FuncArgsAndReturns(%arg0, %arg1, %arg2) : (i8, i32, i1) -> i8
@@ -48,7 +48,7 @@ func @Calls(%arg0: !moore.byte, %arg1: !moore.int, %arg2: !moore.bit) -> !moore.
 }
 
 // CHECK-LABEL: func @UnrealizedConversionCast
-func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
+func.func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
   // CHECK-NEXT: [[TMP:%.+]] = comb.concat %arg0, %arg0 : i8, i8
   // CHECK-NEXT: return [[TMP]] : i16
   %0 = builtin.unrealized_conversion_cast %arg0 : !moore.byte to i8
@@ -58,7 +58,7 @@ func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
 }
 
 // CHECK-LABEL: func @Expressions
-func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.packed<range<bit, 5:0>>, %arg3: !moore.packed<range<bit<signed>, 4:0>>) {
+func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.packed<range<bit, 5:0>>, %arg3: !moore.packed<range<bit<signed>, 4:0>>) {
   // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
   // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
   %0 = moore.mir.concat %arg0, %arg0 : (!moore.bit, !moore.bit) -> !moore.packed<range<bit, 1:0>>

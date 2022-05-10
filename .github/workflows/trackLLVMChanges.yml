@@ -5,7 +5,7 @@ on:
     # 10:00 AM UTC is 3AM Pacific Time
     - cron: '0 10 * * *'
   # Run this workflow on pull requests which change this workflow
-  pull_request: 
+  pull_request:
     paths:
       - .github/workflows/trackLLVMChanges.yml
   workflow_dispatch:
@@ -50,7 +50,7 @@ jobs:
           cd llvm
           echo "::set-output name=sha::$(git rev-parse HEAD)"
           cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
-      
+
       - name: Build latest LLVM commit
         id: build-latest-llvm-commit
         continue-on-error: true
@@ -60,7 +60,7 @@ jobs:
           git checkout --detach origin/main
           echo "::set-output name=sha::$(git rev-parse HEAD)"
           cmake --build ../build --config Debug --target check-circt -- -j$(nproc)
-      
+
       - name: Bisect commits
         if: steps.build-latest-llvm-commit.outcome != 'success'
         run: |
