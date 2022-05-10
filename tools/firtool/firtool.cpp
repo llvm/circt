@@ -153,6 +153,12 @@ static cl::opt<bool> imconstprop(
         "Enable intermodule constant propagation and dead code elimination"),
     cl::init(true), cl::cat(mainCategory));
 
+// TODO: this pass is temporarily off by default, while we migrate over to the
+// new memory lowering pipeline.
+static cl::opt<bool> lowerMemory("lower-memory",
+                                 cl::desc("run the lower-memory pass"),
+                                 cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     lowerTypes("lower-types",
                cl::desc("run the lower-types pass within lower-to-hw"),
@@ -525,6 +531,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inferMemReadWrite)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
+
+  if (lowerMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
+
+  if (prefixModules)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());

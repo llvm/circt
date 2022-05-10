@@ -157,6 +157,14 @@ def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createFlattenMemoryPass()";
 }
 
+def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
+  let summary = "Lower memories to generated modules";
+  let description = [{
+    This pass lowers FIRRTL memory operations to generated modules.
+  }];
+  let constructor = "circt::firrtl::createLowerMemoryPass()";
+}
+
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
   let summary = "Wires test enables to clock gates for DFT infrastructure";
   let description = [{

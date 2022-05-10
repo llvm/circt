@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InjectDUTHierarchy.cpp
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
+  LowerMemory.cpp
   LowerTypes.cpp
   MergeConnections.cpp
   ModuleInliner.cpp
