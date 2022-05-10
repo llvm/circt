@@ -213,30 +213,34 @@ firrtl.circuit "inferUnmaskedMemory" {
   }
 }
 
-// Check that annotations are copied over to the module.
+// Check that annotations are copied over to the instance.
 // CHECK-LABEL: firrtl.circuit "Annotations"
 firrtl.circuit "Annotations" {
 firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-  // Annotations do not get copied to the instance.
-  // CHECK: firrtl.instance mem0  @mem0
+  // No annotations copied to this instance.
+  // CHECK: irrtl.instance mem0  @mem0
   %mem0_write = firrtl.mem Undefined {annotations = [{class = "test"}], depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 }
 // CHECK: firrtl.module @mem0
-// CHECK-SAME: attributes {annotations = [{class = "test"}]}
+// CHECK-NEXT: firrtl.instance mem0_ext  {annotations = [{class = "test"}]} @mem0_ex
 }
 
-// Check that annotations are copied over to the module.
+// Check that annotations are copied over to the instance.
 // CHECK-LABEL: firrtl.circuit "NonLocalAnnotation"
 firrtl.circuit "NonLocalAnnotation" {
-// CHECK:       [#hw.innerNameRef<@NonLocalAnnotation::@dut>, #hw.innerNameRef<@DUT::@sym>, @mem0]
+// CHECK:       [#hw.innerNameRef<@NonLocalAnnotation::@dut>, #hw.innerNameRef<@DUT::@sym>, #hw.innerNameRef<@mem0::@mem0_ext>]
 firrtl.nla @nla [#hw.innerNameRef<@NonLocalAnnotation::@dut>, #hw.innerNameRef<@DUT::@sym>]
-firrtl.module @NonLocalAnnotation() {
+// CHECK: firrtl.module @NonLocalAnnotation()
+firrtl.module @NonLocalAnnotation()  {
   firrtl.instance dut sym @dut {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @DUT()
 }
+// CHECK: firrtl.module @DUT()
 firrtl.module @DUT() {
-  // CHECK: firrtl.instance mem0 sym @sym  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @mem0
-  %mem0_write = firrtl.mem sym @sym Undefined {annotations = [{circt.nonlocal = @nla, class = "test"}], depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+  // CHECK: firrtl.instance mem0 sym @sym {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @mem0
+  %mem0_write = firrtl.mem sym @sym Undefined {annotations = [{circt.nonlocal = @nla, class = "test0"}, {circt.nonlocal = @nla, class = "test2"}], depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 }
+
 // CHECK: firrtl.module @mem0
-// CHECK-SAME: attributes {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+// CHECK:   firrtl.instance mem0_ext sym @mem0_ext  {annotations = [{circt.nonlocal = @nla, class = "test0"}, {circt.nonlocal = @nla, class = "test2"}]} @mem0_ext
+// CHECK: }
 }
