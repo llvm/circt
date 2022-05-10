@@ -7,9 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass performs GICM (group-invariant code motion) of operations which are
-// deemed to be invariant of the group which they are placed in. In practice,
-// this amounts to anything which is not a `calyx.group_done/assign/group_go`
-// operation.
+// deemed to be invariant of the group in which they are placed.
 //
 //===----------------------------------------------------------------------===//
 

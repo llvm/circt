@@ -50,7 +50,7 @@ def GroupInvariantCodeMotion : Pass<"calyx-gicm", "calyx::ComponentOp"> {
   let summary = "Lift group-invariant operations to wire-scope.";
   let description = [{
     This pass performs GICM (group-invariant code motion) of operations which are
-    deemed to be invariant of the group which they are placed in. In practice,
+    deemed to be invariant of the group in which they are placed. In practice,
     this amounts to anything which is not a `calyx.group_done/assign/group_go`
     operation. GICM'd operations are lifted to wire-scope.
 
