@@ -33,30 +33,38 @@ static const char metadataDirectoryAnnoClass[] =
 
 namespace {
 
-// TODO: Move this to firrtl/utility
-StringAttr getOrAddInnerSym(Operation *op) {
-  auto attr = op->getAttrOfType<StringAttr>("inner_sym");
-  if (attr)
-    return attr;
-  ModuleNamespace modNamespace(op->getParentOfType<FModuleOp>());
-  auto name = modNamespace.newName("s_");
-  attr = StringAttr::get(op->getContext(), name);
-  op->setAttr("inner_sym", attr);
-  return attr;
-}
-
 class CreateSiFiveMetadataPass
     : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
   LogicalResult emitRetimeModulesMetadata();
   LogicalResult emitSitestBlackboxMetadata();
   LogicalResult emitMemoryMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
+  }
+  // TODO: Move this to firrtl/utility
+  StringAttr getOrAddInnerSym(Operation *op) {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr)
+      return attr;
+    auto name = getModuleNamespace(op->getParentOfType<FModuleOp>())
+                    .newName("metadata_sym");
+    attr = StringAttr::get(op->getContext(), name);
+    op->setAttr("inner_sym", attr);
+    return attr;
+  }
   void runOnOperation() override;
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
   // The design under test module.
   FModuleOp dutMod;
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,

@@ -163,12 +163,12 @@ firrtl.circuit "top" {
     // CHECK-SAME: {\22module_name\22:\22{{[{][{]4[}][}]}}\22,\22depth\22:20,\22width\22:5,\22masked\22:false,\22read\22:false,\22write\22:true,\22readwrite\22:false,\22extra_ports\22:[]
     // CHECK-SAME: \22hierarchy\22:[\22{{[{][{]5[}][}]}}.{{[{][{]6[}][}]}}.{{[{][{]7[}][}]}}\22]}]" 
     // CHECK-SAME: {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>
-    // CHECK-SAME: symbols = [@head_ext, @top, #hw.innerNameRef<@top::@s__0>, #hw.innerNameRef<@Mem1::@s_>, @head_0_ext, @top, #hw.innerNameRef<@top::@s__1>, #hw.innerNameRef<@Mem2::@s_>]}
+    // CHECK-SAME: symbols = [@head_ext, @top, #hw.innerNameRef<@top::@metadata_sym_0>, #hw.innerNameRef<@Mem1::@metadata_sym>, @head_0_ext, @top, #hw.innerNameRef<@top::@metadata_sym_1>, #hw.innerNameRef<@Mem2::@metadata_sym>]}
     // CHECK: sv.verbatim "[{\22module_name\22:\22{{[{][{]0[}][}]}}\22,\22depth\22:16,\22width\22:8,\22masked\22:false,\22read\22:true,\22write\22:false,\22readwrite\22:true,\22extra_ports\22:[]
     // CHECK-SAME: \22hierarchy\22:[\22{{[{][{]3[}][}]}}.{{[{][{]4[}][}]}}.{{[{][{]5[}][}]}}\22]},
     // CHECK-SAME: {\22module_name\22:\22{{[{][{]6[}][}]}}\22,\22depth\22:20,\22width\22:5,\22masked\22:false,\22read\22:true,\22write\22:true,\22readwrite\22:false,\22extra_ports\22:[],
     // CHECK-SAME: \22hierarchy\22:[\22{{[{][{]9[}][}]}}.{{[{][{]10[}][}]}}.{{[{][{]11[}][}]}}\22]}]"
-    // CHECK-SAME: output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = [@memory_ext, @top, #hw.innerNameRef<@top::@s_>, @DUT, #hw.innerNameRef<@DUT::@s_>, #hw.innerNameRef<@Mem::@s_>, @dumm_ext, @top, #hw.innerNameRef<@top::@s_>, @DUT, #hw.innerNameRef<@DUT::@s_>, #hw.innerNameRef<@Mem::@s__0>]}
+    // CHECK-SAME: output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = [@memory_ext, @top, #hw.innerNameRef<@top::@metadata_sym>, @DUT, #hw.innerNameRef<@DUT::@metadata_sym>, #hw.innerNameRef<@Mem::@metadata_sym>, @dumm_ext, @top, #hw.innerNameRef<@top::@metadata_sym>, @DUT, #hw.innerNameRef<@DUT::@metadata_sym>, #hw.innerNameRef<@Mem::@metadata_sym_0>]}
     // CHECK: sv.verbatim "name {{[{][{]0[}][}]}} depth 16 width 8 ports rw\0Aname {{[{][{]1[}][}]}} depth 20 width 5 ports write,read
     // CHECK-SAME: \0Aname {{[{][{]2[}][}]}} depth 20 width 5 ports write\0Aname {{[{][{]3[}][}]}} depth 20 width 5 ports write\0A"
     // CHECK-SAME: {output_file = #hw.output_file<"\22metadata/dut.conf\22", excludeFromFileList>, symbols = [@memory_ext, @dumm_ext, @head_ext, @head_0_ext]}
