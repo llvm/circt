@@ -1,10 +1,9 @@
 ; RUN: firtool %s --format=fir  --ir-sv | FileCheck %s
 
 circuit Qux: %[[{
-   "class":"sifive.enterprise.firrtl.MarkDUTAnnotation" ,
+    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Qux|Qux"
-     }]]
-
+  }]]
   module Qux: 
     input clock: Clock
     input rAddr: UInt<2>

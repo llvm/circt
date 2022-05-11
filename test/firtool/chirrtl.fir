@@ -6,10 +6,9 @@
 ; then they won't be enabled.
 
 circuit test: %[[{
-   "class":"sifive.enterprise.firrtl.MarkDUTAnnotation" ,
+    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~test|test"
-     }]]
-
+  }]]
   module test:
     input p: UInt<1>
     input addr: UInt<4>
