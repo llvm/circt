@@ -174,9 +174,6 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ComponentOp.";
-  if (!op->hasAttr("instanceName"))
-    return op->emitOpError() << "does not have an instanceName attribute.";
-
   return success();
 }
 
@@ -1046,11 +1043,10 @@ LogicalResult calyx::verifyGroupInterface(Operation *op) {
 /// <instance-name>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
-  assert(isa<CellInterface>(op) && "must implement the Cell interface");
+  auto cellInterface = dyn_cast<CellInterface>(op);
+  assert(cellInterface && "must implement the Cell interface");
 
-  auto instanceName =
-      op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
-  std::string prefix = instanceName.str() + ".";
+  std::string prefix = cellInterface.instanceName().str() + ".";
   for (size_t i = 0, e = portNames.size(); i != e; ++i)
     setNameFn(op->getResult(i), prefix + portNames[i].str());
 }
@@ -1200,21 +1196,6 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
            << "cannot reference the entry-point component: '" << entryPointName
            << "'.";
 
-  // Verify there are no other instances with this name.
-  auto component = instance->getParentOfType<ComponentOp>();
-  StringAttr name =
-      StringAttr::get(instance.getContext(), instance.instanceName());
-  Optional<SymbolTable::UseRange> componentUseRange =
-      SymbolTable::getSymbolUses(name, component.getRegion());
-  if (componentUseRange.hasValue() &&
-      llvm::any_of(componentUseRange.getValue(),
-                   [&](SymbolTable::SymbolUse use) {
-                     return use.getUser() != instance;
-                   }))
-    return instance.emitOpError()
-           << "with instance symbol: '" << name.getValue()
-           << "' is already a symbol for another instance.";
-
   // Verify the instance result ports with those of its referenced component.
   SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
   size_t numPorts = componentPorts.size();
@@ -1247,7 +1228,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                        << "', which does not exist.";
 
   Operation *shadowedComponentName =
-      symbolTable.lookupNearestSymbolFrom(program, instanceNameAttr());
+      symbolTable.lookupNearestSymbolFrom(program, sym_nameAttr());
   if (shadowedComponentName != nullptr)
     return emitError() << "instance symbol: '" << instanceName()
                        << "' is already a symbol for another component.";
@@ -1427,8 +1408,8 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("instanceName", FlatSymbolRefAttr::get(
-                                         builder.getContext(), instanceName));
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));

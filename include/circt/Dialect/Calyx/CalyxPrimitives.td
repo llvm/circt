@@ -13,8 +13,8 @@
 /// Base class for Calyx primitives.
 class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
   CalyxCell<mnemonic, traits> {
-    let assemblyFormat = "$instanceName attr-dict `:` qualified(type(results))";
-    let arguments = (ins FlatSymbolRefAttr:$instanceName);
+    let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
+    let arguments = (ins SymbolNameAttr:$sym_name);
     let skipDefaultBuilders = 1;
 }
 
@@ -36,14 +36,14 @@ def RegisterOp : CalyxPrimitive<"register", [
   }];
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let builders = [
-    OpBuilder<(ins "StringRef":$instanceName, "size_t":$width), [{
-      $_state.addAttribute("instanceName", FlatSymbolRefAttr::get($_builder.getContext(), instanceName));
+    OpBuilder<(ins "StringRef":$sym_name, "size_t":$width), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
       Type i1Type = $_builder.getI1Type();
       Type widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>,
-    OpBuilder<(ins "StringRef":$instanceName, "Type":$type), [{
-      $_state.addAttribute("instanceName", FlatSymbolRefAttr::get($_builder.getContext(), instanceName));
+    OpBuilder<(ins "StringRef":$sym_name, "Type":$type), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
       Type i1Type = $_builder.getI1Type();
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
@@ -75,7 +75,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   }];
 
   let arguments = (ins
-    FlatSymbolRefAttr:$instanceName,
+    SymbolNameAttr:$sym_name,
     I64Attr:$width,
     ArrayAttr:$sizes,
     ArrayAttr:$addrSizes
@@ -86,14 +86,14 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   );
 
   let assemblyFormat = [{
-    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
+    $sym_name ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` qualified(type($results))
   }];
 
   let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins
-      "StringRef":$instanceName,
+      "StringRef":$sym_name,
       "int64_t":$width,
       "ArrayRef<int64_t>":$sizes,
       "ArrayRef<int64_t>":$addrSizes
@@ -139,12 +139,10 @@ class CalyxLibraryOp<string mnemonic, list<Trait> traits = []> :
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$instanceName);
+  let arguments = (ins SymbolNameAttr:$sym_name);
   let builders = [
-    OpBuilder<(ins "StringRef":$instanceName, "::mlir::TypeRange":$resultTypes), [{
-      $_state.addAttribute("instanceName",
-        FlatSymbolRefAttr::get($_builder.getContext(), instanceName)
-      );
+    OpBuilder<(ins "StringRef":$sym_name, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), $_builder.getStringAttr(sym_name));
       $_state.addTypes(resultTypes);
     }]>
   ];

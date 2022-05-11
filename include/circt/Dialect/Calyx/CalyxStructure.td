@@ -219,13 +219,13 @@ def InstanceOp : CalyxCell<"instance", [
   }];
 
   let arguments = (ins
-    FlatSymbolRefAttr:$instanceName,
+    SymbolNameAttr:$sym_name,
     FlatSymbolRefAttr:$componentName
   );
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName `of` $componentName attr-dict (`:` qualified(type($results))^)?
+    $sym_name `of` $componentName attr-dict (`:` qualified(type($results))^)?
   }];
 }
 
