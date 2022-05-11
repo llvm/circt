@@ -53,7 +53,6 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       });
     }
 
-    std::vector<FModuleLike> ops;
     mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
                           [&](Operation *op) {
                             if (auto mod = dyn_cast<FModuleOp>(op))
