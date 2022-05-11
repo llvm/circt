@@ -1413,6 +1413,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<1xi1>
   }
 
+  // CHECK-LABEL: hw.module private @SubAccess
+  firrtl.module private @SubAccess(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
+    %r1 = firrtl.reg %clock  : !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 1>
+    %0 = firrtl.subaccess %a[%x] : !firrtl.vector<vector<uint<1>, 1>, 1>, !firrtl.uint<1>
+    %1 = firrtl.subaccess %0[%y] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
+    firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    // CHECK:      %2 = hw.array_get %a[%x] : !hw.array<1xarray<1xi1>>
+    // CHECK-NEXT: %3 = hw.array_get %2[%y] : !hw.array<1xi1>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r1, %3 : i1
+    // CHECK-NEXT:   sv.passign %r2, %2 : !hw.array<1xi1>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<1xi1>
+  }
+
   // CHECK-LABEL: hw.module private @SubindexDestination
   firrtl.module private @SubindexDestination(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
     %0 = firrtl.subindex %b[2] : !firrtl.vector<uint<1>, 3>
@@ -1423,6 +1442,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
     // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%c-2_i2] : !hw.inout<array<3xi1>>, i2
     // CHECK-NEXT: %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>
+    // CHECK-NEXT: sv.assign %1, %2 : i1
+    // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
+  }
+
+  // CHECK-LABEL: hw.module private @SubAccessDestination
+  firrtl.module private @SubAccessDestination(in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
+    %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+    %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+    firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: %.b.output = sv.wire
+    // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
+    // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%x] : !hw.inout<array<3xi1>>, i2
+    // CHECK-NEXT: %2 = hw.array_get %a[%y] : !hw.array<3xi1>
     // CHECK-NEXT: sv.assign %1, %2 : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
   }

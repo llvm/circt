@@ -1393,6 +1393,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SpecialConstantOp op);
   LogicalResult visitExpr(SubindexOp op);
+  LogicalResult visitExpr(SubaccessOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -2267,6 +2268,25 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
     return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, iIdx);
   // Otherwise, hw::ArrayGetOp
   return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
+  Value value = getPossiblyInoutLoweredValue(op.input());
+  Value valueIdx = getLoweredValue(op.index());
+  if (!resultType || !value || !valueIdx) {
+    op.emitError() << "input lowering failed";
+    return failure();
+  }
+
+  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
+  if (value.getType().isa<sv::InOutType>())
+    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, valueIdx);
+  // Otherwise, hw::ArrayGetOp
+  return setLoweringTo<hw::ArrayGetOp>(op, value, valueIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
