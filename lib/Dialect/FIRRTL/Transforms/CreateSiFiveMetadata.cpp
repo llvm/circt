@@ -117,11 +117,12 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         symbol = hw::InnerRefAttr::get(
             op->getParentOfType<FModuleOp>().moduleNameAttr(),
             getOrAddInnerSym(op));
-      
-      auto [it, inserted] = symbolIndices.try_emplace(symbol, jsonSymbols.size());
+
+      auto [it, inserted] =
+          symbolIndices.try_emplace(symbol, jsonSymbols.size());
       if (inserted)
         jsonSymbols.push_back(symbol);
-      
+
       SmallString<8> str;
       ("{{" + Twine(it->second) + "}}").toVector(str);
       return str;
