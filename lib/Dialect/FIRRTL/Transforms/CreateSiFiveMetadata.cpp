@@ -32,18 +32,39 @@ static const char metadataDirectoryAnnoClass[] =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
 
 namespace {
+
 class CreateSiFiveMetadataPass
     : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
   LogicalResult emitRetimeModulesMetadata();
   LogicalResult emitSitestBlackboxMetadata();
   LogicalResult emitMemoryMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
+  }
+  // TODO: Move this to firrtl/utility
+  StringAttr getOrAddInnerSym(Operation *op) {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr)
+      return attr;
+    auto name = getModuleNamespace(op->getParentOfType<FModuleOp>())
+                    .newName("metadata_sym");
+    attr = StringAttr::get(op->getContext(), name);
+    op->setAttr("inner_sym", attr);
+    return attr;
+  }
   void runOnOperation() override;
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
   // The design under test module.
   FModuleOp dutMod;
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
@@ -71,7 +92,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // memmory conf file.
   auto createMemMetadata = [&](FMemModuleOp mem,
                                llvm::json::OStream &jsonStream,
-                               std::string &seqMemConfStr) {
+                               std::string &seqMemConfStr,
+                               SmallVectorImpl<Attribute> &jsonSymbols,
+                               SmallVectorImpl<Attribute> &seqMemSymbols) {
     // Get the memory data width.
     auto width = mem.dataWidth();
     // Metadata needs to be printed for memories which are candidates for
@@ -85,6 +108,25 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
           (mem.numReadPorts() <= 1) && width > 0))
       return;
 
+    SmallDenseMap<Attribute, unsigned> symbolIndices;
+    auto addSymbolToVerbatimOp = [&](Operation *op) -> SmallString<8> {
+      Attribute symbol;
+      if (auto module = dyn_cast<FModuleLike>(op))
+        symbol = FlatSymbolRefAttr::get(module.moduleNameAttr());
+      else
+        symbol = hw::InnerRefAttr::get(
+            op->getParentOfType<FModuleOp>().moduleNameAttr(),
+            getOrAddInnerSym(op));
+
+      auto [it, inserted] =
+          symbolIndices.try_emplace(symbol, jsonSymbols.size());
+      if (inserted)
+        jsonSymbols.push_back(symbol);
+
+      SmallString<8> str;
+      ("{{" + Twine(it->second) + "}}").toVector(str);
+      return str;
+    };
     // Compute the mask granularity.
     auto isMasked = mem.isMasked();
     auto maskGran = width / mem.maskBits();
@@ -103,16 +145,19 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       portStr = "mrw";
     else if (mem.numReadWritePorts())
       portStr = "rw";
-    auto memExtName = mem.getName();
+    auto memExtSym = FlatSymbolRefAttr::get(SymbolTable::getSymbolName(mem));
+    auto symId = seqMemSymbols.size();
+    seqMemSymbols.push_back(memExtSym);
+
     auto maskGranStr =
         !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
-    seqMemConfStr = (StringRef(seqMemConfStr) + "name " + memExtName +
-                     " depth " + Twine(mem.depth()) + " width " + Twine(width) +
-                     " ports " + portStr + maskGranStr + "\n")
+    seqMemConfStr = (StringRef(seqMemConfStr) + "name {{" + Twine(symId) +
+                     "}}" + " depth " + Twine(mem.depth()) + " width " +
+                     Twine(width) + " ports " + portStr + maskGranStr + "\n")
                         .str();
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
-      jsonStream.attribute("module_name", memExtName);
+      jsonStream.attribute("module_name", addSymbolToVerbatimOp(mem));
       jsonStream.attribute("depth", (int64_t)mem.depth());
       jsonStream.attribute("width", (int64_t)width);
       jsonStream.attribute("masked", isMasked);
@@ -145,12 +190,12 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             continue;
           const InstanceOp &inst = p.front();
           std::string hierName =
-              inst->getParentOfType<FModuleOp>().getName().str();
+              addSymbolToVerbatimOp(inst->getParentOfType<FModuleOp>()).c_str();
           for (InstanceOp inst : p) {
             auto parentModule = inst->getParentOfType<FModuleOp>();
             if (dutMod == parentModule)
-              hierName = parentModule.getName().str();
-            hierName = hierName + "." + inst.name().str();
+              hierName = addSymbolToVerbatimOp(parentModule).c_str();
+            hierName = hierName + "." + addSymbolToVerbatimOp(inst).c_str();
           }
           hierNames.push_back(hierName);
           jsonStream.value(hierName);
@@ -176,15 +221,20 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   llvm::json::OStream dutJson(dutOs);
 
   std::string seqMemConfStr;
+  SmallVector<Attribute, 8> seqMemSymbols;
+  SmallVector<Attribute, 8> jsonSymbols;
   dutJson.array([&] {
     for (auto &dutM : dutMems)
-      createMemMetadata(dutM, dutJson, seqMemConfStr);
+      createMemMetadata(dutM, dutJson, seqMemConfStr, jsonSymbols,
+                        seqMemSymbols);
   });
+  SmallVector<Attribute, 8> jsonSymbolsTB;
   testBenchJson.array([&] {
     // The tbConfStr is populated here, but unused, it will not be printed to
     // file.
     for (auto &tbM : tbMems)
-      createMemMetadata(tbM, testBenchJson, seqMemConfStr);
+      createMemMetadata(tbM, testBenchJson, seqMemConfStr, jsonSymbolsTB,
+                        seqMemSymbols);
   });
 
   auto *context = &getContext();
@@ -199,17 +249,20 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // Use unknown loc to avoid printing the location in the metadata files.
   auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
                                                      testBenchJsonBuffer);
+  tbVerbatimOp.symbolsAttr(ArrayAttr::get(context, jsonSymbolsTB));
   auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
       context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
   tbVerbatimOp->setAttr("output_file", fileAttr);
   auto dutVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
+  dutVerbatimOp.symbolsAttr(ArrayAttr::get(context, jsonSymbols));
   fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
       context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
   dutVerbatimOp->setAttr("output_file", fileAttr);
 
   auto confVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
+  confVerbatimOp.symbolsAttr(ArrayAttr::get(context, seqMemSymbols));
   if (replSeqMemFile.empty()) {
     circuitOp->emitError("metadata emission failed, the option "
                          "`-repl-seq-mem-file=<filename>` is mandatory for "

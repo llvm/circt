@@ -112,9 +112,9 @@ circuit Foo : %[[
     readData <= _readData_T
 
 ; CHECK-LABEL:  firrtl.module private @prefix1_Bar
-; CHECK:          firrtl.instance mem @prefix1_mem
+; CHECK:          firrtl.instance mem sym @metadata_sym @prefix1_mem
 ; CHECK-LABEL:  firrtl.module private @prefix2_Baz
-; CHECK:          firrtl.instance mem @prefix2_mem
+; CHECK:          firrtl.instance mem sym @metadata_sym @prefix2_mem
 ; CHECK:        firrtl.memmodule @prefix1_mem
 ; CHECK:        firrtl.memmodule @prefix2_mem
 
