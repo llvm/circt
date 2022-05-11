@@ -208,10 +208,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Nodes with names become wires.
     // CHECK-NEXT: %n1 = sv.wire
     // CHECK-NEXT: sv.assign %n1, %in2
+    // CHECK-NEXT: sv.read_inout %n1
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
     
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
+    // CHECK-NEXT: sv.read_inout %n2
     %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
@@ -219,6 +221,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: [[WIRE:%n3]] = sv.wire sym @nodeSym : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
+    // CHECK-NEXT: sv.read_inout [[WIRE]]
     %n3 = firrtl.node sym @nodeSym %in2 : !firrtl.uint<2>
 
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : i1, i2
