@@ -1035,6 +1035,8 @@ public:
   bool visitHandshake(SinkOp op);
   bool visitHandshake(SourceOp op);
   bool visitHandshake(handshake::StoreOp op);
+  bool visitHandshake(PackOp op);
+  bool visitHandshake(UnpackOp op);
 
   bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
                       ValueVector *output);
@@ -2824,6 +2826,58 @@ bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
   rewriter.create<ConnectOp>(insertLoc, memoryDataReady, outputDataReady);
 
   return true;
+}
+
+/// Please refer to test_pack_unpack.mlir test case.
+bool HandshakeBuilder::visitHandshake(PackOp op) {
+  ValueVector tuple = portList.back();
+  Value tupleData = tuple[2];
+
+  auto bundleType = tupleData.getType().dyn_cast<BundleType>();
+
+  // Create subfields for each bundle element
+  ValueVector elements;
+  for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i)
+    elements.push_back(rewriter.create<SubfieldOp>(insertLoc, tupleData, i));
+
+  // Collect all input ports.
+  SmallVector<ValueVector *, 4> inputs;
+  for (unsigned i = 0, e = portList.size() - 1; i < e; ++i)
+    inputs.push_back(&portList[i]);
+
+  // Connect each input to the corresponding part of the output bundle
+  for (auto [element, input] : llvm::zip(elements, inputs))
+    rewriter.create<ConnectOp>(insertLoc, element, (*input)[2]);
+
+  return buildJoinLogic(inputs, &tuple);
+}
+
+/// Please refer to test_pack_unpack.mlir test case.
+bool HandshakeBuilder::visitHandshake(UnpackOp op) {
+  ValueVector tuple = portList[0];
+  Value tupleData = tuple[2];
+  unsigned portNum = portList.size();
+
+  auto bundleType = tupleData.getType().dyn_cast<BundleType>();
+
+  // Create subfields for each bundle element
+  ValueVector elements;
+  for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i)
+    elements.push_back(rewriter.create<SubfieldOp>(insertLoc, tupleData, i));
+
+  // Collect all output ports.
+  SmallVector<ValueVector *, 4> outputs;
+  for (int i = 1, e = portNum - 2; i < e; ++i)
+    outputs.push_back(&portList[i]);
+
+  // Connect each bundle element to the corresponding output
+  for (auto &&[element, output] : llvm::zip(elements, outputs))
+    rewriter.create<ConnectOp>(insertLoc, (*output)[2], element);
+
+  auto clock = portList[portNum - 2][0];
+  auto reset = portList[portNum - 1][0];
+
+  return buildForkLogic(&tuple, outputs, clock, reset, true);
 }
 
 //===----------------------------------------------------------------------===//

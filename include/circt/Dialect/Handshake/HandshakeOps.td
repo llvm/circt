@@ -815,7 +815,7 @@ def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
 
 def UnpackOp : Handshake_Op<"unpack", [
-  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  HasClock, DeclareOpInterfaceMethods<ExecutableOpInterface>,
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   TypesMatchWith<"result types match element types of 'tuple'",
                      "input", "results",
