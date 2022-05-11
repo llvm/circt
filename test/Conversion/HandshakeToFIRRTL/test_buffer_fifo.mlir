@@ -24,3 +24,11 @@ handshake.func @test_fifo_nonetype(%arg0: none, %arg1: none, ...) -> (none, none
   %0 = buffer [3] fifo %arg0 : none
   return %0, %arg1 : none, none
 }
+
+// -----
+// CHECK: firrtl.module @innerFIFO_1_tuple_ui32_ui32
+// CHECK: firrtl.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_1slots_fifo
+handshake.func @test_buffer_tuple_fifo(%t: tuple<i32, i32>, %arg0: none, ...) -> (tuple<i32, i32>, none) attributes {argNames = ["t", "inCtrl"], resNames = ["out0", "outCtrl"]} {
+  %0 = buffer [1] fifo %t : tuple<i32, i32>
+  return %0, %arg0 : tuple<i32, i32>, none
+}

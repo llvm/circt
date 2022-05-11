@@ -20,7 +20,9 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <set>
@@ -75,6 +77,15 @@ static FIRRTLType getFIRRTLType(Type type) {
         // Currently we consider index type as 64-bits unsigned integer.
         unsigned width = indexType.kInternalStorageBitWidth;
         return UIntType::get(context, width);
+      })
+      .Case<TupleType>([&](TupleType tupleType) -> FIRRTLType {
+        using BundleElement = BundleType::BundleElement;
+        llvm::SmallVector<BundleElement> elements;
+        for (auto it : llvm::enumerate(tupleType.getTypes()))
+          elements.emplace_back(BundleElement(
+              StringAttr::get(context, llvm::formatv("field{0}", it.index())),
+              false, getFIRRTLType(it.value())));
+        return BundleType::get(elements, context);
       })
       .Default([&](Type) { return FIRRTLType(); });
 }
@@ -244,6 +255,7 @@ static FIRRTLType getMemrefBundleType(ConversionPatternRewriter &rewriter,
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
                               Location insertLoc, OpBuilder &builder) {
+  assert(opType.isa<IntType>() && "can only create constants from IntTypes");
   if (auto intOpType = opType.dyn_cast<firrtl::IntType>()) {
     auto type = builder.getIntegerType(intOpType.getWidthOrSentinel(),
                                        intOpType.isSigned());
@@ -254,14 +266,46 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
   return Value();
 }
 
-static Type getHandshakeBundleDataType(BundleType bundle) {
-  if (auto dataType = bundle.getElementType("data")) {
-    auto intType = dataType.cast<firrtl::IntType>();
-    return IntegerType::get(bundle.getContext(), intType.getWidthOrSentinel(),
+/// Creates a Value that has an assigned zero value. For bundles, this
+/// corresponds to assigning zero to each element recursively.
+static Value createZeroDataConst(FIRRTLType dataType, Location insertLoc,
+                                 OpBuilder &builder) {
+  return TypeSwitch<Type, Value>(dataType)
+      .Case<IntType>([&](auto dataType) {
+        return createConstantOp(dataType,
+                                APInt(dataType.getBitWidthOrSentinel(), 0),
+                                insertLoc, builder);
+      })
+      .Case<BundleType>([&](auto bundleType) {
+        auto width = circt::firrtl::getBitWidth(bundleType);
+        assert(width && "width must be inferred");
+        auto zero =
+            builder.create<firrtl::ConstantOp>(insertLoc, APSInt(*width, 0));
+        return builder.create<BitCastOp>(insertLoc, bundleType, zero);
+      })
+      .Default([&](Type) -> Value { llvm_unreachable("Unknown type"); });
+}
+
+/// Transforms a FIRRTL data-carrying type to a builtin type.
+static Type getBundleElementType(Type type) {
+  if (auto intType = type.dyn_cast<firrtl::IntType>())
+    return IntegerType::get(type.getContext(), intType.getWidthOrSentinel(),
                             intType.isSigned() ? IntegerType::Signed
                                                : IntegerType::Unsigned);
-  } else
-    return NoneType::get(bundle.getContext());
+  auto bundleType = type.cast<BundleType>();
+  SmallVector<Type> elementTypes;
+  for (auto element : bundleType.getElements())
+    elementTypes.push_back(getBundleElementType(element.type));
+  return TupleType::get(type.getContext(), elementTypes);
+}
+
+/// Extracts the data-carrying type of bundle. This function assumes that the
+/// bundle represents a handshaked input, therefore it looks at the data
+/// element.
+static Type getHandshakeBundleDataType(BundleType bundle) {
+  if (auto dataType = bundle.getElementType("data"))
+    return getBundleElementType(dataType);
+  return NoneType::get(bundle.getContext());
 }
 
 /// Extracts the type of the data-carrying type of opType. If opType is a
@@ -316,6 +360,10 @@ static std::string getTypeName(Location loc, Type type) {
       typeName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
     else
       typeName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+  } else if (auto tupleType = type.dyn_cast<TupleType>()) {
+    typeName += "_tuple";
+    for (auto elementType : tupleType.getTypes())
+      typeName += getTypeName(loc, elementType);
   }
   // FIRRTL types
   else if (type.isa<SIntType, UIntType>()) {
@@ -325,6 +373,10 @@ static std::string getTypeName(Location loc, Type type) {
       auto uintType = type.cast<UIntType>();
       typeName += "_ui" + std::to_string(uintType.getWidthOrSentinel());
     }
+  } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+    typeName += "_tuple";
+    for (auto element : bundleType.getElements())
+      typeName += getTypeName(loc, element.type);
   } else
     emitError(loc) << "unsupported data type '" << type << "'";
 
@@ -1845,9 +1897,8 @@ void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
     auto ctrlDataRegWire =
         rewriter.create<WireOp>(insertLoc, dataType, "ctrlDataRegWire");
 
-    auto ctrlZeroConst =
-        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
-                         insertLoc, rewriter);
+    auto ctrlZeroConst = createZeroDataConst(dataType, insertLoc, rewriter);
+
     auto ctrlDataReg = rewriter.create<RegResetOp>(
         insertLoc, dataType, clock, reset, ctrlZeroConst, "ctrlDataReg");
 
@@ -1897,6 +1948,20 @@ void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
     auto dataRegMux = rewriter.create<MuxPrimOp>(
         insertLoc, dataType, emptyOrReady, predData, dataReg);
     rewriter.create<ConnectOp>(insertLoc, dataReg, dataRegMux);
+  }
+}
+
+/// Connects src to all elements of dest recursively. If dest isn't a bundle
+/// type, a normal connection is created.
+static void connectSrcToAllElements(ImplicitLocOpBuilder &builder, Value dest,
+                                    Value src) {
+  if (auto bundleType = dest.getType().dyn_cast<BundleType>()) {
+    for (int i = 0, e = bundleType.getNumElements(); i < e; ++i) {
+      auto field = builder.create<SubfieldOp>(dest, i);
+      connectSrcToAllElements(builder, field, src);
+    }
+  } else {
+    builder.create<ConnectOp>(dest, src);
   }
 }
 
@@ -2088,9 +2153,9 @@ FModuleOp buildInnerFIFO(CircuitOp circuit, StringRef moduleName,
     auto writeMask = builder.create<SubfieldOp>(
         writeBundle, writeType.getElementIndex("mask").getValue());
 
-    // Since we are not storing bundles in the memory, we can assume the mask is
-    // a single bit.
-    builder.create<ConnectOp>(writeMask, writeEn);
+    // We might be storing bundles. Therefore, we have to ensure that writeEn is
+    // connected to all elements of the mask.
+    connectSrcToAllElements(builder, writeMask, writeEn);
   }
 
   // Next-state tail register; tail <- writeEn ? tail + 1 % depth : tail
@@ -2270,9 +2335,8 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
     auto inputData = inputSubfields[2];
 
     dataType = inputData.getType().cast<FIRRTLType>();
-    zeroDataConst =
-        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
-                         insertLoc, rewriter);
+
+    zeroDataConst = createZeroDataConst(dataType, insertLoc, rewriter);
     currentData = inputData;
   }
 
@@ -2292,10 +2356,13 @@ bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
     // Create registers for data signal.
     Value dataReg = nullptr;
     Value initValue = zeroDataConst;
-    if (isInitialized)
+    if (isInitialized) {
+      assert(dataType.isa<IntType>() &&
+             "initial values are only supported for integer buffers");
       initValue = createConstantOp(
           dataType, APInt(dataType.getBitWidthOrSentinel(), initValues[i]),
           insertLoc, rewriter);
+    }
     if (!isControl)
       dataReg =
           rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,

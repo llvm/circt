@@ -139,3 +139,15 @@ handshake.func @test_buffer_init(%arg0: index, %arg1: none, ...) -> (index, none
   %0 = buffer [1] seq %arg0 {initValues=[42]} : index
   return %0, %arg1 : index, none
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.module @handshake_buffer_in_tuple_ui32_ui32_out_tuple_ui32_ui32_2slots_seq(
+// CHECK: %[[VALUE:.*]] = firrtl.constant 0 : !firrtl.sint<64>
+// CHECK: %[[ZERO_BUNDLE:.*]] = firrtl.bitcast %[[VALUE]] : (!firrtl.sint<64>) -> !firrtl.bundle<field0: uint<32>, field1: uint<32>>
+// CHECK: %dataReg0 = firrtl.regreset %{{.*}}, %{{.*}}, %[[ZERO_BUNDLE]]  : !firrtl.uint<1>, !firrtl.bundle<field0: uint<32>, field1: uint<32>>, !firrtl.bundle<field0: uint<32>, field1: uint<32>>
+
+handshake.func @test_buffer_tuple_seq(%t: tuple<i32, i32>, %arg0: none, ...) -> (tuple<i32, i32>, none) {
+  %0 = buffer [2] seq %t : tuple<i32, i32>
+  return %0, %arg0 : tuple<i32, i32>, none
+}
