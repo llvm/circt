@@ -381,10 +381,19 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       emitConnect(portBuilder, address, cmemoryPortAccess.index());
     else
       mkConnect(portBuilder, address, cmemoryPortAccess.index());
+
     // Sequential+Read ports have a more complicated "enable inference".
-    // Everything else sets the enable to true.
-    if (!(portKind == MemOp::PortKind::Read && isSequential))
+    auto useEnableInference = isSequential && portKind == MemOp::PortKind::Read;
+    auto *addressOp = cmemoryPortAccess.index().getDefiningOp();
+    // If the address value is not something with a "name", then we do not use
+    // enable inference.
+    useEnableInference &=
+        !addressOp || isa<WireOp, NodeOp, RegOp, RegResetOp>(addressOp);
+
+    // Most memory ports just tie their enable line to one.
+    if (!useEnableInference)
       mkConnect(portBuilder, enable, getConst(1));
+
     mkConnect(portBuilder, clock, cmemoryPortAccess.clock());
 
     if (portKind == MemOp::PortKind::Read) {
@@ -426,7 +435,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     // enable high when the memport is declared. This is higly questionable
     // logic that is easily defeated. This behaviour depends on the kind of
     // operation used as the memport index.
-    if (portKind == MemOp::PortKind::Read && isSequential) {
+    if (useEnableInference) {
       auto *indexOp = cmemoryPortAccess.index().getDefiningOp();
       bool success = false;
       if (!indexOp) {

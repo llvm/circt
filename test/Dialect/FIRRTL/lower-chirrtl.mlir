@@ -260,6 +260,20 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
     chirrtl.memoryport.access %ramport_port[%n], %clock : !chirrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
     firrtl.connect %v, %ramport_data : !firrtl.uint<32>, !firrtl.uint<32>
   }
+}  
+
+// When the address is not something with a name, including a subfield of an
+// aggregate, we do not perform regular enable inference.
+// CHECK-LABEL: firrtl.module @EnableInference2
+firrtl.module @EnableInference2(in %clock: !firrtl.clock, in %io: !firrtl.bundle<addr: uint<3>>, out %out: !firrtl.uint<8>) {
+  %0 = firrtl.subfield %io(0) : (!firrtl.bundle<addr: uint<3>>) -> !firrtl.uint<3>
+  %mem = chirrtl.seqmem Undefined  : !chirrtl.cmemory<uint<8>, 8>
+  %read_data, %read_port = chirrtl.memoryport Infer %mem  {name = "read"} : (!chirrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !chirrtl.cmemoryport)
+  chirrtl.memoryport.access %read_port[%0], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+  firrtl.connect %out, %read_data : !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: [[EN:%.*]] = firrtl.subfield %mem_read(1)
+  // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
+  // CHECK: firrtl.strictconnect [[EN]], %c1_ui1
 }
 
 // When the address line is larger than the size of the address port, the port
