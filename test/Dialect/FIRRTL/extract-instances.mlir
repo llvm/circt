@@ -3,6 +3,7 @@
 // Tests extracted from:
 // - test/scala/firrtl/ExtractBlackBoxes.scala
 // - test/scala/firrtl/ExtractClockGates.scala
+// - test/scala/firrtl/ExtractSeqMems.scala
 
 //===----------------------------------------------------------------------===//
 // ExtractBlackBoxes Simple
