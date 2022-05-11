@@ -434,3 +434,63 @@ firrtl.circuit "ExtractSeqMemsSimple2" attributes {annotations = [{class = "sifi
   // CHECK-SAME: #hw.innerNameRef<@ExtractSeqMemsSimple2::[[MEM_EXT_SYM]]>
   // CHECK-SAME: ]
 }
+
+//===----------------------------------------------------------------------===//
+// Conflicting Instance Symbols
+// https://github.com/llvm/circt/issues/3089
+//===----------------------------------------------------------------------===//
+
+// CHECK: firrtl.circuit "InstSymConflict"
+firrtl.circuit "InstSymConflict" {
+  // CHECK-NOT: firrtl.nla @nla_1
+  // CHECK-NOT: firrtl.nla @nla_2
+  firrtl.nla @nla_1 [
+    #hw.innerNameRef<@InstSymConflict::@dut>,
+    #hw.innerNameRef<@DUTModule::@mod1>,
+    #hw.innerNameRef<@BBWrapper::@bb>
+  ]
+  firrtl.nla @nla_2 [
+    #hw.innerNameRef<@InstSymConflict::@dut>,
+    #hw.innerNameRef<@DUTModule::@mod2>,
+    #hw.innerNameRef<@BBWrapper::@bb>
+  ]
+  firrtl.extmodule private @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>) attributes {defname = "MyBlackBox"}
+  firrtl.module private @BBWrapper(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %bb_in, %bb_out = firrtl.instance bb sym @bb {annotations = [
+        {class = "sifive.enterprise.firrtl.ExtractBlackBoxAnnotation", filename = "BlackBoxes.txt", prefix = "bb"},
+        {circt.nonlocal = @nla_1, class = "DummyA"},
+        {circt.nonlocal = @nla_2, class = "DummyB"}
+      ]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.strictconnect %bb_in, %in : !firrtl.uint<8>
+    firrtl.strictconnect %out, %bb_out : !firrtl.uint<8>
+  }
+  firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
+    %mod1_in, %mod1_out = firrtl.instance mod1 sym @mod1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %mod2_in, %mod2_out = firrtl.instance mod2 sym @mod2 {annotations = [{circt.nonlocal = @nla_2, class = "circt.nonlocal"}]} @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.strictconnect %mod1_in, %in : !firrtl.uint<8>
+    firrtl.strictconnect %mod2_in, %mod1_out : !firrtl.uint<8>
+    firrtl.strictconnect %out, %mod2_out : !firrtl.uint<8>
+  }
+  // CHECK-LABEL: firrtl.module @InstSymConflict
+  firrtl.module @InstSymConflict(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // CHECK-NEXT: firrtl.instance dut sym @dut @DUTModule
+    // CHECK: firrtl.instance bb sym @bb {annotations = [{class = "DummyB"}]} @MyBlackBox
+    // CHECK: firrtl.instance bb sym @bb_0 {annotations = [{class = "DummyA"}]} @MyBlackBox
+    %dut_in, %dut_out = firrtl.instance dut sym @dut {annotations = [
+        {circt.nonlocal = @nla_1, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_2, class = "circt.nonlocal"}
+      ]} @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.strictconnect %dut_in, %in : !firrtl.uint<8>
+    firrtl.strictconnect %out, %dut_out : !firrtl.uint<8>
+  }
+  // CHECK: sv.verbatim "
+  // CHECK-SAME{LITERAL}: bb_1 -> {{0}}.{{1}}.{{2}}\0A
+  // CHECK-SAME{LITERAL}: bb_0 -> {{0}}.{{3}}.{{4}}\0A
+  // CHECK-SAME: symbols = [
+  // CHECK-SAME: @DUTModule
+  // CHECK-SAME: #hw.innerNameRef<@DUTModule::@mod1>
+  // CHECK-SAME: #hw.innerNameRef<@InstSymConflict::@bb_0>
+  // CHECK-SAME: #hw.innerNameRef<@DUTModule::@mod2>
+  // CHECK-SAME: #hw.innerNameRef<@InstSymConflict::@bb>
+  // CHECK-SAME: ]
+}
