@@ -41,8 +41,9 @@ calyx.program "main" {
   }
   calyx.component @main(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
-    // expected-error @+1 {{'calyx.instance' op with instance symbol: 'c' is already a symbol for another instance.}}
+    // expected-note @+1 {{see existing symbol definition here}}
     calyx.instance @c of @foo : i1, i1, i1, i1
+    // expected-error @+1 {{redefinition of symbol named 'c'}}
     calyx.instance @c of @foo : i1, i1, i1, i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
