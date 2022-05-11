@@ -3484,12 +3484,14 @@ bool NonLocalAnchor::updateModuleAndInnerRef(
     if (auto innerRef = element.dyn_cast<hw::InnerRefAttr>()) {
       if (innerRef.getModule() != oldMod)
         continue;
+      auto symName = innerRef.getName();
       // Since the module got updated, the old innerRef symbol inside oldMod
       // should also be updated to the new symbol inside the newMod.
-      auto to = innerSymRenameMap.find(innerRef.getName());
-      assert(to != innerSymRenameMap.end() && "should have been renamed");
+      auto to = innerSymRenameMap.find(symName);
+      if (to != innerSymRenameMap.end())
+        symName = to->second;
       updateMade = true;
-      element = hw::InnerRefAttr::get(newMod, to->second);
+      element = hw::InnerRefAttr::get(newMod, symName);
       break;
     }
     if (element != fromRef)
