@@ -108,27 +108,23 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    Value newWire;
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
         continue;
       if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
-        newWire = assign.dest();
-        // NOTE: Erase the assign op to simplify the implementation. We will
-        // re-create the same assignment at the end.
-        assign.erase();
+        // Move assign op after instance to resolve cyclic dependencies.
+        assign->moveAfter(op);
+        continue;
       }
     }
 
-    if (!newWire) {
-      nameTmp.resize(namePrefixSize);
-      if (port.name)
-        nameTmp += port.name.getValue().str();
-      else
-        nameTmp += std::to_string(nextResultNo - 1);
-      newWire = builder.create<WireOp>(result.getType(), nameTmp);
-    }
+    nameTmp.resize(namePrefixSize);
+    if (port.name)
+      nameTmp += port.name.getValue().str();
+    else
+      nameTmp += std::to_string(nextResultNo - 1);
+    Value newWire = builder.create<WireOp>(result.getType(), nameTmp);
 
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
