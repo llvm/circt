@@ -1535,7 +1535,8 @@ public:
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan,
                 /*signRequirement*/ NoRequirement,
-                /*isSelfDeterminedUnsignedValue*/ false);
+                /*isSelfDeterminedUnsignedValue*/ false,
+                /*isTopLevelExpression*/ true);
 
     // Emitted expression might break the line length constraint so align it
     // here.
@@ -1557,7 +1558,8 @@ private:
   /// known to be have "self determined" width, allowing us to omit extensions.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprSignRequirement signReq = NoRequirement,
-                          bool isSelfDeterminedUnsignedValue = false);
+                          bool isSelfDeterminedUnsignedValue = false,
+                          bool isTopLevelExpression = false);
 
   void formatOutBuffer();
 
@@ -1862,7 +1864,8 @@ static Value isZeroExtension(Value value) {
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
                                      SubExprSignRequirement signRequirement,
-                                     bool isSelfDeterminedUnsignedValue) {
+                                     bool isSelfDeterminedUnsignedValue,
+                                     bool isTopLevelExpression) {
   // If this is a self-determined unsigned value, look through any inline zero
   // extensions.  This occurs on the RHS of a shift operation for example.
   if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {
@@ -1899,12 +1902,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   signPreference = signRequirement;
 
   bool bitCastAdded = false;
-  if (state.options.explicitBitcastAddMul && isa<AddOp, MulOp>(op))
-    if (auto inType =
-            (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
-      os << inType.getWidth() << "'(";
-      bitCastAdded = true;
-    }
+  if (state.options.explicitBitcastAddMul)
+    if (isa<AddOp, MulOp>(op) || (isTopLevelExpression && isa<SubOp>(op)))
+      if (auto inType =
+              (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
+        os << inType.getWidth() << "'(";
+        bitCastAdded = true;
+      }
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
   auto expInfo = dispatchCombinationalVisitor(exp.getDefiningOp());
