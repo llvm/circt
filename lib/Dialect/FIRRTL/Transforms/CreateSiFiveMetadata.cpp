@@ -33,7 +33,7 @@ static const char metadataDirectoryAnnoClass[] =
 
 namespace {
 
-  // TODO: Move this to firrtl/utility
+// TODO: Move this to firrtl/utility
 StringAttr getOrAddInnerSym(Operation *op) {
   auto attr = op->getAttrOfType<StringAttr>("inner_sym");
   if (attr)
