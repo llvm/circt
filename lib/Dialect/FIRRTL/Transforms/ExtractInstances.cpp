@@ -181,7 +181,6 @@ void ExtractInstancesPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "\n");
   if (!anythingChanged)
     markAllAnalysesPreserved();
-  markAnalysesPreserved<InstanceGraph>();
 }
 
 static bool isAnnoInteresting(Annotation anno) {
