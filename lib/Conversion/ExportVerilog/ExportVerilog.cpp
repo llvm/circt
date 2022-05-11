@@ -2275,17 +2275,17 @@ static std::pair<ConstantOp, AssignOp> isSingleConstantAssign(Operation *op) {
   if (!wire)
     return {};
   ConstantOp con;
-  AssignOp assop;
-  for (auto user : wire->getUsers()) {
+  AssignOp assignOp;
+  for (auto *user : wire->getUsers()) {
     auto assign = dyn_cast<AssignOp>(*user);
-    if (assign && assop)
+    if (assign && assignOp)
       return {};
-    assop = assign;
+    assignOp = assign;
   }
-  if (!assop)
+  if (!assignOp)
     return {};
   return std::make_pair(
-      dyn_cast_or_null<ConstantOp>(assop.src().getDefiningOp()), assop);
+      dyn_cast_or_null<ConstantOp>(assignOp.src().getDefiningOp()), assignOp);
 }
 
 namespace {
@@ -3700,11 +3700,11 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
-    auto [constOp, assOp] = isSingleConstantAssign(op);
+    auto [constOp, assignOp] = isSingleConstantAssign(op);
     if (constOp) {
       os << " = ";
       emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
-      emitter.assignsInlined.insert(assOp);
+      emitter.assignsInlined.insert(assignOp);
     }
 
     os << ';';
