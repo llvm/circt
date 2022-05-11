@@ -52,20 +52,11 @@ void NLATable::insert(NonLocalAnchor nla) {
 
 void NLATable::erase(NonLocalAnchor nla) {
   symToOp.erase(nla.sym_nameAttr());
-  auto removeNLAfromList = [&](SmallVector<NonLocalAnchor, 4> &nlaList) {
-    for (auto it = nlaList.begin(), e = nlaList.end(); it != e; ++it) {
-      if (*it != nla)
-        continue;
-      nlaList.erase(it);
-      break;
-    }
-  };
-  for (auto ent : nla.namepath()) {
-    if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>()) {
-      removeNLAfromList(nodeMap[mod.getAttr()]);
-    } else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
-      removeNLAfromList(nodeMap[inr.getModule()]);
-  }
+  for (auto ent : nla.namepath())
+    if (auto mod = ent.dyn_cast<FlatSymbolRefAttr>())
+      llvm::erase_value(nodeMap[mod.getAttr()], nla);
+    else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
+      llvm::erase_value(nodeMap[inr.getModule()], nla);
 }
 
 void NLATable::renameModule(StringAttr oldModName, StringAttr newModName) {
@@ -86,16 +77,8 @@ void NLATable::renameModule(StringAttr oldModName, StringAttr newModName) {
 void NLATable::renameModuleAndInnerRef(
     StringAttr newModName, StringAttr oldModName,
     const DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
-  if (newModName == oldModName)
-    return;
-  auto op = symToOp.find(oldModName);
-  if (op == symToOp.end())
-    return;
-  auto iter = nodeMap.find(oldModName);
-  if (iter == nodeMap.end())
-    return;
 
-  for (auto nla : iter->second) {
+  for (auto nla : lookup(oldModName)) {
     nla.updateModuleAndInnerRef(oldModName, newModName, innerSymRenameMap);
     nodeMap[newModName].push_back(nla);
   }

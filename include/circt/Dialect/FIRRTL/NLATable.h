@@ -48,6 +48,7 @@ public:
 
   /// Remove the NLA from the analysis.
   void erase(NonLocalAnchor nlaOp);
+
   //===-------------------------------------------------------------------------
   // Methods to keep an NLATable up to date.
   //
