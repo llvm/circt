@@ -29,6 +29,8 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
+static const char excludeMemToRegClass[] =
+    "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec";
 struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   MemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable)
       : replSeqMem(replSeqMem), ignoreReadEnable(ignoreReadEnable){};
@@ -64,6 +66,8 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     mod.getBody()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
+      if (AnnotationSet::removeAnnotations(memOp, excludeMemToRegClass))
+        return;
 
       auto firMem = memOp.getSummary();
       // Ignore if the memory is candidate for macro replacement.
