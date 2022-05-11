@@ -904,6 +904,35 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       portWiring.push_back(std::move(wiring));
       return;
     }
+    // This handles the case when the memtap is on a MemOp, which shouldn't have
+    // the PortID attribute. Lookup the op without the portID key.
+    if (auto *op = tappedOps.lookup({key.first, {}})) {
+
+      // Extract the memory location we're supposed to access.
+      auto word = portAnno.anno.getMember<IntegerAttr>("portID");
+      if (!word) {
+        blackBox.extModule.emitError("MemTapAnnotation annotation on port ")
+            << portName << " missing \"word\" attribute";
+        signalPassFailure();
+        return;
+      }
+      // Formulate a hierarchical reference into the memory.
+      // CAVEAT: This just assumes that the memory will map to something that
+      // can be indexed in the final Verilog. If the memory gets turned into
+      // an instance of some sort, we lack the information necessary to go in
+      // and access individual elements of it. This will break horribly since
+      // we generate memory impls out-of-line already, and memories coming
+      // from an external generator are even worse. This needs a special node
+      // in the IR that can properly inject the memory array on emission.
+      if (!nla)
+        wiring.prefices =
+            instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+      wiring.target = PortWiring::Target(op);
+      ("Memory[" + Twine(word.getValue().getLimitedValue()) + "]")
+          .toVector(wiring.suffix);
+      portWiring.push_back(std::move(wiring));
+      return;
+    }
     blackBox.extModule.emitOpError(
         "MemTapAnnotation annotation was not scattered to "
         "an operation: ")

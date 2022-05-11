@@ -3,10 +3,7 @@
 ; - github.com/sifive/$internal:
 ;   - src/test/scala/grandcentral/DataTapsTest.scala
 
-circuit Top : %[[{
-    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
-    "target": "~Top|Child"
-  }]]
+circuit Top :
   extmodule BlackBox :
     input in : UInt<1>
     output out : UInt<1>
@@ -88,6 +85,6 @@ circuit Top : %[[{
 ; CHECK: module MemTap_2_impl_0(
 ; CHECK:   output  _1,
 ; CHECK:           _0);
-; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_1;
-; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_0;
+; CHECK:   assign _1 = Top.unsigned_0.signed_0.always_ext.Memory[1];
+; CHECK:   assign _0 = Top.unsigned_0.signed_0.always_ext.Memory[0];
 ; CHECK: endmodule
