@@ -23,6 +23,7 @@
 
 namespace circt {
 namespace hw {
+class ConstantOp;
 class InstanceOp;
 class HWSymbolCache;
 class InnerRefAttr;
