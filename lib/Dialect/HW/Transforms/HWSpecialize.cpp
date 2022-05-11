@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/SymUniquer.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
@@ -46,14 +47,8 @@ static std::string generateModuleName(SymbolCache &symbolCache,
     name += "_" + paramAttr.getName().str() + "_" + std::to_string(paramValue);
   }
 
-  // Uniqueness check
-  int uniqueCntr = 0;
-  std::string uniqueName = name;
-  auto *ctx = moduleOp.getContext();
-  while (symbolCache.getDefinition(StringAttr::get(ctx, uniqueName)))
-    uniqueName = name + "_" + std::to_string(uniqueCntr++);
-
-  return uniqueName;
+  SymbolUniquer uniquer(moduleOp.getContext(), &symbolCache);
+  return uniquer.getUniqueName(name);
 }
 
 // Returns true if any operand or result of 'op' is parametric.
