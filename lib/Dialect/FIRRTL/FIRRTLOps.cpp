@@ -1979,12 +1979,12 @@ FirMemory MemOp::getSummary() {
       clocks.append(Twine((char)(a + 'a')).str());
     modName = StringAttr::get(
         op->getContext(),
-        llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}",
-                      numReadPorts, numWritePorts, numReadWritePorts,
-                      (size_t)width, op.depth(), op.readLatency(),
-                      op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
-                      (unsigned)hw::WUW::PortOrder,
-                      clocks.empty() ? "" : "_" + clocks));
+        llvm::formatv(
+            "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}_{10}{11}",
+            numReadPorts, numWritePorts, numReadWritePorts, (size_t)width,
+            op.depth(), op.readLatency(), op.writeLatency(), op.getMaskBits(),
+            (size_t)op.ruw(), (unsigned)hw::WUW::PortOrder, groupID,
+            clocks.empty() ? "" : "_" + clocks));
   }
   return {numReadPorts,         numWritePorts,    numReadWritePorts,
           (size_t)width,        op.depth(),       op.readLatency(),
