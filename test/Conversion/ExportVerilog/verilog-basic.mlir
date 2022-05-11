@@ -298,6 +298,20 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   hw.output %0, %3, %4, %5, %7 : i1, i1, i1, i1, i2
 }
 
+// CHECK-LABEL: module SimpleConstPrint(
+// CHECK-NEXT:    input  [3:0] in4,
+// CHECK-NEXT:    output [3:0] out4);
+// CHECK:  wire [3:0] w = 4'h1;
+// CHECK:  assign out4 = in4 + w;
+// CHECK-NEXT: endmodule
+hw.module @SimpleConstPrint(%in4: i4) -> (out4: i4) {
+  %w = sv.wire : !hw.inout<i4>
+  %c1_i4 = hw.constant 1 : i4
+  sv.assign %w, %c1_i4 : i4
+  %1 = comb.add %in4, %c1_i4 : i4
+  hw.output %1 : i4
+}
+
 hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}
 hw.module.extern @AParameterizedExtModule<CFG: none>(%in: i8) -> (out: i1)
 
