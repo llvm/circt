@@ -493,7 +493,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
   if (memToRegOfVec)
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+    pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
 
   if (inferResets)

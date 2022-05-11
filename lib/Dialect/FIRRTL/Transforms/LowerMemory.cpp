@@ -474,7 +474,7 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp module, bool shouldDedup) {
     if (!((summary.readLatency == 1 && summary.writeLatency == 1) &&
           (summary.numWritePorts + summary.numReadWritePorts == 1) &&
           (summary.numReadPorts <= 1) && summary.dataWidth > 0))
-      return op->emitError("only seqmems are supported by LowerMemory");
+      continue;
 
     lowerMemory(op, summary, shouldDedup);
   }

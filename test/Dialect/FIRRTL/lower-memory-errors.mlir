@@ -9,13 +9,3 @@ firrtl.module @SInt() {
 }
 }
 
-// -----
-
-// LowerMemory only supports seqmems.  All other memories should have been
-// lowered by now. The following memory is a combmem with readLatency=1.
-firrtl.circuit "CombMem" {
-firrtl.module @CombMem() {
-  // expected-error@below {{only seqmems are supported by LowerMemory}}
-  %MRead_read = firrtl.mem Undefined {depth = 12 : i64, name = "MRead", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-}
-}
