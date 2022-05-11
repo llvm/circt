@@ -12,11 +12,14 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -26,14 +29,45 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
+static const char excludeMemToRegClass[] =
+    "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec";
 struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
   MemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable)
       : replSeqMem(replSeqMem), ignoreReadEnable(ignoreReadEnable){};
+
   void runOnOperation() override {
-    LLVM_DEBUG(llvm::dbgs() << "\n Running MemToRegOfVecPass on module:"
-                            << getOperation().getName());
-    getOperation().getBody()->walk([&](MemOp memOp) {
+    auto circtOp = getOperation();
+    static const char dutAnnoClass[] =
+        "sifive.enterprise.firrtl.MarkDUTAnnotation";
+    DenseSet<Operation *> dutModuleSet;
+
+    auto *body = circtOp.getBody();
+
+    // Find the device under test and create a set of all modules underneath it.
+    auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
+      return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
+    });
+    if (it != body->end()) {
+      auto &instanceGraph = getAnalysis<InstanceGraph>();
+      auto *node = instanceGraph.lookup(&(*it));
+      llvm::for_each(llvm::depth_first(node), [&](hw::InstanceGraphNode *node) {
+        dutModuleSet.insert(node->getModule());
+      });
+    }
+
+    mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
+                          [&](Operation *op) {
+                            if (auto mod = dyn_cast<FModuleOp>(op))
+                              runOnModule(mod);
+                          });
+  }
+
+  void runOnModule(FModuleOp mod) {
+
+    mod.getBody()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
+      if (AnnotationSet::removeAnnotations(memOp, excludeMemToRegClass))
+        return;
 
       auto firMem = memOp.getSummary();
       // Ignore if the memory is candidate for macro replacement.
@@ -52,7 +86,6 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
       memOp.erase();
     });
   }
-
   Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages, Value clock,
                           Value pipeInput, StringRef name, Value gate = {}) {
     if (!stages)

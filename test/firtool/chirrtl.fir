@@ -5,7 +5,10 @@
 ; be enabled.  If they are accidentally removed before the lower-chirrtl pass,
 ; then they won't be enabled.
 
-circuit test:
+circuit test: %[[{
+    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
+    "target":"~test|test"
+  }]]
   module test:
     input p: UInt<1>
     input addr: UInt<4>

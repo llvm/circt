@@ -3,12 +3,16 @@
 ; Temporary wires should not be introduced by type lowering, and if they are,
 ; they should be cleaned up by canonicalize.
 
-; CHECK-LABEL: firrtl.module @Issue794(in %clock: !firrtl.clock,
+; CHECK-LABEL: firrtl.module @Issue794
+; CHECK-SAME: (in %clock: !firrtl.clock,
 ; CHECK:       %[[memory_0:.+]] = firrtl.reg %clock  : !firrtl.uint<8>
 ; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
 ; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
 ; CHECK:       firrtl.strictconnect %[[memory_0]], %[[v22:.+]]
-circuit Issue794:
+circuit Issue794: %[[{
+    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
+    "target":"~Issue794|Issue794"
+  }]]
   module Issue794:
     input clock: Clock
     input rAddr: UInt<2>

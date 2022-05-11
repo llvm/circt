@@ -3,7 +3,10 @@
 ; - github.com/sifive/$internal:
 ;   - src/test/scala/grandcentral/DataTapsTest.scala
 
-circuit Top :
+circuit Top : %[[{
+    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
+    "target": "~Top|Child"
+  }]]
   extmodule BlackBox :
     input in : UInt<1>
     output out : UInt<1>
