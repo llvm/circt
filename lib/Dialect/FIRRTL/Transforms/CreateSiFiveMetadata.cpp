@@ -110,24 +110,20 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
     SmallDenseMap<Attribute, unsigned> symbolIndices;
     auto addSymbolToVerbatimOp = [&](Operation *op) -> SmallString<8> {
-      unsigned id;
       Attribute symbol;
-      if (isa<FModuleLike>(op))
-        symbol = FlatSymbolRefAttr::get((SymbolTable::getSymbolName(op)));
+      if (auto module = dyn_cast<FModuleLike>(op))
+        symbol = FlatSymbolRefAttr::get(module.moduleNameAttr());
       else
         symbol = hw::InnerRefAttr::get(
-            SymbolTable::getSymbolName(op->getParentOfType<FModuleOp>()),
+            op->getParentOfType<FModuleOp>().moduleNameAttr(),
             getOrAddInnerSym(op));
-      auto it = symbolIndices.find(symbol);
-      if (it != symbolIndices.end()) {
-        id = it->second;
-      } else {
-        id = jsonSymbols.size();
+      
+      auto [it, inserted] = symbolIndices.try_emplace(symbol, jsonSymbols.size());
+      if (inserted)
         jsonSymbols.push_back(symbol);
-        symbolIndices.insert({symbol, id});
-      }
+      
       SmallString<8> str;
-      ("{{" + Twine(id) + "}}").toVector(str);
+      ("{{" + Twine(it->second) + "}}").toVector(str);
       return str;
     };
     // Compute the mask granularity.
