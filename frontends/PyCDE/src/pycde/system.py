@@ -7,7 +7,7 @@ from pycde.devicedb import (EntityExtern, PlacementDB, PrimitiveDB,
 
 from .module import _SpecializedModule
 from .pycde_types import types
-from .instance import Instance, InstanceHierarchy
+from .instance import NonRootInstance, InstanceHierarchyRoot
 
 from circt.dialects import hw, msft
 
@@ -62,7 +62,7 @@ class System:
     self._op_cache: _OpCache = _OpCache(self.mod)
 
     self._generate_queue = []
-    self._instance_roots: dict[_SpecializedModule, InstanceHierarchy] = {}
+    self._instance_roots: dict[_SpecializedModule, InstanceHierarchyRoot] = {}
 
     self._placedb: PlacementDB = None
     self.files: Set[str] = set()
@@ -167,10 +167,10 @@ class System:
         i += 1
     return len(self._generate_queue)
 
-  def get_instance(self, mod_cls: object) -> InstanceHierarchy:
+  def get_instance(self, mod_cls: object) -> InstanceHierarchyRoot:
     mod = mod_cls._pycde_mod
     if mod not in self._instance_roots:
-      self._instance_roots[mod] = InstanceHierarchy(mod, self)
+      self._instance_roots[mod] = InstanceHierarchyRoot(mod, self)
     return self._instance_roots[mod]
 
   def run_passes(self, partition=False):
@@ -222,8 +222,8 @@ class _OpCache:
     self._symbol_modules: dict[str, _SpecializedModule] = {}
 
     self._instance_hier_cache: dict[str, msft.InstanceHierarchyOp] = None
-    self._instance_hier_obj_cache: dict[str, InstanceHierarchy] = {}
-    self._instance_cache: dict[Instance, msft.DynamicInstanceOp] = {}
+    self._instance_hier_obj_cache: dict[str, InstanceHierarchyRoot] = {}
+    self._instance_cache: dict[NonRootInstance, msft.DynamicInstanceOp] = {}
 
     self._module_inside_sym_cache: Dict[ir.Operation, Dict[ir.Attribute,
                                                            ir.Operation]] = {}
@@ -310,7 +310,7 @@ class _OpCache:
           self._instance_hier_cache[op.top_module_ref] = op
 
   def create_instance_hier_op(
-      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
+      self, inst_hier: InstanceHierarchyRoot) -> msft.InstanceHierarchyOp:
     """Create an instance hierarchy op 'inst_hier' and add it to the cache.
     Assert if one already exists in the cache."""
 
@@ -329,7 +329,7 @@ class _OpCache:
     return hier_op
 
   def get_instance_hier_op(
-      self, inst_hier: InstanceHierarchy) -> msft.InstanceHierarchyOp:
+      self, inst_hier: InstanceHierarchyRoot) -> msft.InstanceHierarchyOp:
     """Lookup an instance hierarchy op in the cache. None if not found."""
 
     self._build_instance_hier_cache()
@@ -337,7 +337,8 @@ class _OpCache:
         self.get_module_symbol(inst_hier.inside_of))
     return self._instance_hier_cache.get(root_mod_symbol, None)
 
-  def create_or_get_dyn_inst(self, inst: Instance) -> msft.DynamicInstanceOp:
+  def create_or_get_dyn_inst(self,
+                             inst: NonRootInstance) -> msft.DynamicInstanceOp:
     """Get the dynamic instance op corresponding to 'inst'. Returns 'None' if
     the instance doesn't have a static op in the IR."""
 
@@ -366,7 +367,7 @@ class _OpCache:
 
     return self._instance_cache[inst]
 
-  def get_or_create_inst_from_op(self, op: ir.OpView) -> pi.InstanceLike:
+  def get_or_create_inst_from_op(self, op: ir.OpView) -> pi.Instance:
     """Descend the Python instance hierarchy from the CIRCT IR, returning the
     Python Instance corresponding to 'op'."""
 
@@ -375,7 +376,7 @@ class _OpCache:
     if isinstance(op, msft.DynamicInstanceOp):
       parent_inst = self.get_or_create_inst_from_op(op.operation.parent.opview)
       instance_ref = hw.InnerRefAttr(op.instanceRef)
-      return parent_inst.children()[instance_ref.name]
+      return parent_inst._children()[instance_ref.name]
     raise TypeError(
         "Can only resolve from InstanceHierarchyOp or DynamicInstanceOp")
 

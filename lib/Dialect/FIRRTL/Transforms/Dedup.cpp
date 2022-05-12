@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -33,19 +34,6 @@
 using namespace circt;
 using namespace firrtl;
 using hw::InnerRefAttr;
-
-/// This stores a mapping from a module name to every NLA that it particiapates
-/// in.
-using NLAMap = DenseMap<Attribute, std::vector<NonLocalAnchor>>;
-
-NLAMap createNLAMap(CircuitOp circuit) {
-  NLAMap nlaMap;
-  for (auto nla : circuit.getBody()->getOps<NonLocalAnchor>()) {
-    for (size_t i = 0, e = nla.namepath().size(); i != e; ++i)
-      nlaMap[nla.modPart(i)].push_back(nla);
-  }
-  return nlaMap;
-}
 
 //===----------------------------------------------------------------------===//
 // Hashing
@@ -560,9 +548,10 @@ struct Deduper {
   using RenameMap = DenseMap<StringAttr, StringAttr>;
 
   Deduper(InstanceGraph &instanceGraph, SymbolTable &symbolTable,
-          NLAMap &nlaMap, CircuitOp circuit)
+          NLATable *nlaTable, CircuitOp circuit)
       : context(circuit->getContext()), instanceGraph(instanceGraph),
-        symbolTable(symbolTable), nlaMap(nlaMap), nlaBlock(circuit.getBody()),
+        symbolTable(symbolTable), nlaTable(nlaTable),
+        nlaBlock(circuit.getBody()),
         nonLocalString(StringAttr::get(context, "circt.nonlocal")),
         classString(StringAttr::get(context, "class")) {}
 
@@ -676,9 +665,7 @@ private:
       auto nlaName = nla.getNameAttr();
       auto nlaRef = FlatSymbolRefAttr::get(nlaName);
       nlas.push_back(nlaRef);
-      // Make sure we update the NLAMap if the toModule gets deduped later.
-      nlaMap[toModuleName].push_back(nla);
-      nlaMap[parent.getNameAttr()].push_back(nla);
+      nlaTable->insert(nla);
       targetMap[nlaName] = to;
       // Update the instance breadcrumbs.
       auto nonLocalClass = NamedAttribute(classString, nonLocalString);
@@ -740,30 +727,6 @@ private:
     }
   }
 
-  /// This finds all NLAs which contain the "from" module, and renames any
-  /// reference to the "to" module.
-  void renameModuleInNLA(DenseMap<StringAttr, StringAttr> &renameMap,
-                         StringAttr toName, StringAttr fromName,
-                         NonLocalAnchor nla) {
-    auto fromRef = FlatSymbolRefAttr::get(fromName);
-    SmallVector<Attribute> namepath;
-    for (auto element : nla.namepath()) {
-      if (auto innerRef = element.dyn_cast<InnerRefAttr>()) {
-        if (innerRef.getModule() == fromName) {
-          auto to = renameMap[innerRef.getName()];
-          assert(to && "should have been renamed");
-          namepath.push_back(InnerRefAttr::get(toName, to));
-        } else
-          namepath.push_back(element);
-      } else if (element == fromRef) {
-        namepath.push_back(FlatSymbolRefAttr::get(toName));
-      } else {
-        namepath.push_back(element);
-      }
-    }
-    nla.namepathAttr(ArrayAttr::get(context, namepath));
-  }
-
   /// This erases the NLA op, all breadcrumb trails, and removes the NLA from
   /// every module's NLA map, but it does not delete the NLA reference from
   /// the target operation's annotations.
@@ -776,7 +739,6 @@ private:
     for (auto attr : namepath.drop_back()) {
       auto innerRef = attr.cast<InnerRefAttr>();
       auto moduleName = innerRef.getModule();
-      llvm::erase_value(nlaMap[moduleName], nla);
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph.lookup(moduleName);
       auto targetInstanceName = innerRef.getName();
@@ -793,9 +755,9 @@ private:
       instAnnos.applyToOperation(inst);
     }
     // Erase the NLA from the leaf module's nlaMap.
-    llvm::erase_value(nlaMap[nla.leafMod()], nla);
     targetMap.erase(nla.getNameAttr());
-    nla->erase();
+    nlaTable->erase(nla);
+    symbolTable.erase(nla);
   }
 
   /// Process all NLAs referencing the "from" module to point to the "to"
@@ -806,11 +768,10 @@ private:
     auto fromName = fromModule.getNameAttr();
     // Create a copy of the current NLAs. We will be pushing and removing
     // NLAs from this op as we go.
-    auto nlas = nlaMap[fromModule.getNameAttr()];
+    auto nlas = nlaTable->lookup(fromModule.getNameAttr()).vec();
+    // Change the NLA to target the toModule.
+    nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
     for (auto nla : nlas) {
-      // Change the NLA to target the toModule.
-      if (toModule != fromModule)
-        renameModuleInNLA(renameMap, toName, fromName, nla);
       auto elements = nla.namepath().getValue();
       // If we don't need to add more context, we're done here.
       if (nla.root() != toName)
@@ -858,8 +819,7 @@ private:
   // "toName".
   void rewriteExtModuleNLAs(RenameMap &renameMap, StringAttr toName,
                             StringAttr fromName) {
-    for (auto nla : nlaMap[fromName])
-      renameModuleInNLA(renameMap, toName, fromName, nla);
+    nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
   }
 
   /// Take an annotation, and update it to be a non-local annotation.  If the
@@ -1099,9 +1059,8 @@ private:
   InstanceGraph &instanceGraph;
   SymbolTable &symbolTable;
 
-  // This maps a module name to all NLAs it participates in. This is used to
-  // fixup any NLAs when a module is deduped.
-  NLAMap &nlaMap;
+  /// Cached nla table analysis.
+  NLATable *nlaTable = nullptr;
 
   /// We insert all NLAs to the beginning of this block.
   Block *nlaBlock;
@@ -1246,9 +1205,9 @@ class DedupPass : public DedupBase<DedupPass> {
     auto *context = &getContext();
     auto circuit = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
+    auto *nlaTable = &getAnalysis<NLATable>();
     SymbolTable symbolTable(circuit);
-    NLAMap nlaMap = createNLAMap(circuit);
-    Deduper deduper(instanceGraph, symbolTable, nlaMap, circuit);
+    Deduper deduper(instanceGraph, symbolTable, nlaTable, circuit);
     StructuralHasher hasher(&getContext());
     Equivalence equiv(context, instanceGraph);
     auto anythingChanged = false;

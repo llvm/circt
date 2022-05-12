@@ -72,12 +72,12 @@ class AppIDIndex(list):
 
   @property
   def apply_attributes_visitor(self):
-    from .instance import Instance
+    from .instance import NonRootInstance
 
-    def _visit(idx, inst: Instance):
+    def _visit(idx, inst: NonRootInstance):
       attrs = idx.lookup(inst.appid)
       attrs._used = True
       for attr in attrs:
-        inst._attach_attribute(attr)
+        inst.attach_attribute(attr)
 
     return lambda i, idx=self: _visit(idx, i)
