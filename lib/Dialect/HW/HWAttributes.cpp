@@ -577,10 +577,9 @@ static Attribute simplifyShrS(SmallVector<Attribute, 4> &operands) {
 static Attribute simplifyDivU(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x/1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
     if (rhs.getValue().isOne())
       return operands[0];
-  }
 
   return foldBinaryOp(operands, [](auto a, auto b) { return a.udiv(b); });
 }
@@ -588,10 +587,9 @@ static Attribute simplifyDivU(SmallVector<Attribute, 4> &operands) {
 static Attribute simplifyDivS(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x/1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
     if (rhs.getValue().isOne())
       return operands[0];
-  }
 
   return foldBinaryOp(operands, [](auto a, auto b) { return a.sdiv(b); });
 }
@@ -599,10 +597,9 @@ static Attribute simplifyDivS(SmallVector<Attribute, 4> &operands) {
 static Attribute simplifyModU(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x%1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
     if (rhs.getValue().isOne())
       return IntegerAttr::get(rhs.getType(), 0);
-  }
 
   return foldBinaryOp(operands, [](auto a, auto b) { return a.urem(b); });
 }
@@ -610,10 +607,9 @@ static Attribute simplifyModU(SmallVector<Attribute, 4> &operands) {
 static Attribute simplifyModS(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x%1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
     if (rhs.getValue().isOne())
       return IntegerAttr::get(rhs.getType(), 0);
-  }
 
   return foldBinaryOp(operands, [](auto a, auto b) { return a.srem(b); });
 }
