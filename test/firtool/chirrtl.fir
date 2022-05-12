@@ -8,6 +8,9 @@
 circuit test: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~test|test"
+  }, 
+  {
+    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
   module test:
     input p: UInt<1>

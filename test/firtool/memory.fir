@@ -3,6 +3,9 @@
 circuit Qux: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Qux|Qux"
+  }, 
+  {
+    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
   module Qux: 
     input clock: Clock
