@@ -56,7 +56,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
                                     NoTerminator, HasParent<"CircuitOp">,
                                     DeclareOpInterfaceMethods<FModuleLike>,
                                     DeclareOpInterfaceMethods<HWModuleLike>,
-                                    OpAsmOpInterface]> {
+                                    OpAsmOpInterface, InnerSymbolTable]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given

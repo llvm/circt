@@ -276,3 +276,35 @@ def FConnectLike : OpInterface<"FConnectLike"> {
     "Value", "src", (ins)>,
   ];
 }
+
+def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
+  let description = [{
+    This interface describes an operation that may define an
+    `inner_sym`.  An `inner_sym` operation resides 
+    in arbitrarily-nested regions of a region that define a
+    `InnerSymbolTable`.
+    Inner Symbols are different from normal symbols due to 
+    MLIR symbol table resolution rules.  Specifically normal
+    symbols are resolved by first going up to the closest
+    parent symbol table and resolving from there (recursing
+    down for complex symbol paths).  In FIRRTL and SV, modules
+    define a symbol in a circuit or std.module symbol table.
+    For instances to be able to resolve the modules they
+    instantiate, the symbol use in an instance must resolve 
+    in the top-level symbol table.  If a module were a
+    symbol table, modules would try to resolve from their
+    own module, never seeing other modules.
+    The second problem arrises from nesting.  Symbols defining 
+    ops must be immediate children of a symbol table.  FIRRTL
+    and SV operations which define a inner_sym are grandchildren,
+    at least, of a symbol table and may be much further nested.
+    Lastly, ports need to define inner_sym, something not allowed
+    by normal symbols.
+  }];
+
+  let cppNamespace = "::circt::firrtl";
+    let methods = [];
+
+}
+
+def InnerSymbolTable : NativeOpTrait<"InnerSymbolTable">;
