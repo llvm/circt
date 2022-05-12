@@ -689,20 +689,22 @@ hw.module @out_of_order_multi_result() -> (b: i1, c: i2) {
 
 hw.module.extern @single_result() -> (res: i3)
 // CHECK-LABEL: module instance_result_reuse_wires(
-hw.module @instance_result_reuse_wires() -> (b: i3) {
+hw.module @instance_result_reuse_wires() -> (b: i3, c: i3) {
   // CHECK:       wire {{.*}} some_wire;
   // CHECK-EMPTY:
   // CHECK-NEXT:  single_result b1 (
   // CHECK-NEXT:  .res (some_wire)
   // CHECK-NEXT:  );
   // CHECK-NEXT:  assign b = some_wire;
+  // CHECK-NEXT:  assign c = some_wire + some_wire;
   %some_wire = sv.wire : !hw.inout<i3>
   %read = sv.read_inout %some_wire : !hw.inout<i3>
 
   %out1 = hw.instance "b1" @single_result() -> (res: i3)
   sv.assign %some_wire, %out1 : i3
+  %add = comb.add %out1, %out1 : i3
 
-  hw.output %read : i3
+  hw.output %read, %add : i3, i3
 }
 
 

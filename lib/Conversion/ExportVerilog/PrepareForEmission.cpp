@@ -94,6 +94,47 @@ static void lowerBoundInstance(InstanceOp op) {
   }
 }
 
+/// If exactly one use of this op result is an assign, replace the other uses
+/// with a read from the assigned wire or reg. Return such assign if exists.
+/// This assumes the preconditions for doing so are met: op must be an
+/// expression in a non-procedural region.
+static sv::AssignOp reuseExistingInOut(OpResult op) {
+  // Try to collect a single assign and all the other uses of op.
+  sv::AssignOp assign;
+  SmallVector<OpOperand *> uses;
+
+  // Look at each use.
+  for (OpOperand &use : op.getUses()) {
+    // If it's an assign, try to save it.
+    if (auto assignUse = dyn_cast<AssignOp>(use.getOwner())) {
+      // If there are multiple assigns, bail out.
+      if (assign)
+        return {};
+
+      // Remember this assign for later.
+      assign = assignUse;
+      continue;
+    }
+
+    // If not an assign, remember this use for later.
+    uses.push_back(&use);
+  }
+
+  // If we didn't find anything, bail out.
+  if (!assign)
+    return {};
+  if (uses.empty())
+    return assign;
+
+  // Replace all saved uses with a read from the assigned destination.
+  ImplicitLocOpBuilder builder(assign.dest().getLoc(), op.getContext());
+  for (OpOperand *use : uses) {
+    builder.setInsertionPoint(use->getOwner());
+    auto read = builder.create<ReadInOutOp>(assign.dest());
+    use->set(read);
+  }
+  return assign;
+}
 
 // Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
@@ -112,11 +153,12 @@ static void lowerInstanceResults(InstanceOp op) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
         continue;
-      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
-        // Move assign op after instance to resolve cyclic dependencies.
-        assign->moveAfter(op);
-        continue;
-      }
+    }
+
+    if (auto assign = reuseExistingInOut(result.cast<OpResult>())) {
+      // Move assign op after instance to resolve cyclic dependencies.
+      assign->moveAfter(op);
+      continue;
     }
 
     nameTmp.resize(namePrefixSize);
@@ -372,44 +414,6 @@ static bool isMovableDeclaration(Operation *op) {
          op->getNumOperands() == 0;
 }
 
-/// If exactly one use of this op is an assign, replace the other uses with a
-/// read from the assigned wire or reg. This assumes the preconditions for doing
-/// so are met: op must be an expression in a non-procedural region.
-static void reuseExistingInOut(Operation *op) {
-  // Try to collect a single assign and all the other uses of op.
-  sv::AssignOp assign;
-  SmallVector<OpOperand *> uses;
-
-  // Look at each use.
-  for (OpOperand &use : op->getUses()) {
-    // If it's an assign, try to save it.
-    if (auto assignUse = dyn_cast<AssignOp>(use.getOwner())) {
-      // If there are multiple assigns, bail out.
-      if (assign)
-        return;
-
-      // Remember this assign for later.
-      assign = assignUse;
-      continue;
-    }
-
-    // If not an assign, remember this use for later.
-    uses.push_back(&use);
-  }
-
-  // If we didn't find anything, bail out.
-  if (!assign || uses.empty())
-    return;
-
-  // Replace all saved uses with a read from the assigned destination.
-  ImplicitLocOpBuilder builder(assign.dest().getLoc(), op->getContext());
-  for (OpOperand *use : uses) {
-    builder.setInsertionPoint(use->getOwner());
-    auto read = builder.create<ReadInOutOp>(assign.dest());
-    use->set(read);
-  }
-}
-
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
@@ -567,8 +571,11 @@ void ExportVerilog::prepareHWModule(Block &block,
     // Try to anticipate expressions that ExportVerilog may spill to a temporary
     // inout, and re-use an existing inout when possible. This is legal when op
     // is an expression in a non-procedural region.
-    if (!isProceduralRegion && isVerilogExpression(&op))
-      reuseExistingInOut(&op);
+    if (!isProceduralRegion && isVerilogExpression(&op)) {
+      assert(op.getNumResults() == 1 &&
+             "verilog expression must have single result");
+      (void)reuseExistingInOut(op.getResult(0));
+    }
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
