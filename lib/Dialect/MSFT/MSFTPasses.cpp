@@ -489,6 +489,8 @@ void ExportTclPass::runOnOperation() {
   DenseSet<SymbolRefAttr> refsUsed;
   patterns.insert<RemovePhysOpLowering<PDPhysLocationOp>>(ctxt, refsUsed);
   patterns.insert<RemovePhysOpLowering<PDPhysRegionOp>>(ctxt, refsUsed);
+  patterns.insert<RemovePhysOpLowering<DynamicInstanceVerbatimAttrOp>>(
+      ctxt, refsUsed);
   patterns.insert<RemoveOpLowering<DeclPhysicalRegionOp>>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();

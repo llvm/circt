@@ -10,7 +10,7 @@ from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
 
-from pycde.instance import InstanceDoesNotExistError
+from pycde.instance import InstanceDoesNotExistError, InstanceLike
 
 
 @pycde.externmodule
@@ -78,9 +78,11 @@ test_inst.walk(lambda inst: print(inst))
 print("=== Placements")
 
 
-def place_inst(inst):
+def place_inst(inst: InstanceLike):
   if inst.name == "UnParameterized_1":
     inst.place(PrimitiveType.M20K, 39, 25, 0, "memory|bank")
+  if [i.name for i in inst.path] == ["UnParameterized", "Nothing"]:
+    inst.add_named_attribute("FOO", "TRUE")
 
 
 t.get_instance(Test).walk(place_inst)
@@ -168,6 +170,7 @@ t.print()
 # OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
 # OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
 # OUTPUT-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing
+# OUTPUT-DAG:  set_instance_assignment -name FOO TRUE -to $parent|UnParameterized|Nothing
 # OUTPUT-NOT:  set_location_assignment
 # OUTPUT-NEXT: }
 t.emit_outputs()

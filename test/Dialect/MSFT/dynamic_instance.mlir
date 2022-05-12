@@ -7,6 +7,7 @@ msft.instance.hierarchy @deeper {
     msft.instance.dynamic @shallow::@leaf {
       msft.instance.dynamic @leaf::@module {
         msft.pd.location M20K x: 15 y: 9 n: 3 path: "memBank2"
+        msft.instance.verb_attr name: "RESERVE_PLACE_REGION" value: "OFF" path: "memBank2"
       }
     }
   }
@@ -65,6 +66,8 @@ msft.module @deeper {} () -> () {
   msft.instance @branch @shallow()  : () -> ()
   msft.instance @leaf @leaf() : () -> ()
   // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|module_0|memBank2
+  // TCL: set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|branch|leaf|module_0|memBank2
+
   msft.output
 }
 
