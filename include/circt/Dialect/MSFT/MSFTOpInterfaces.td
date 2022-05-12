@@ -24,14 +24,23 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
       }],
       /*retTy=*/"void",
       /*methodName=*/"setGlobalRef",
-      /*args=*/(ins "::circt::hw::GlobalRefOp":$ref)
+      /*args=*/(ins "::circt::hw::GlobalRefOp":$ref),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{
+        $_op.refAttr(FlatSymbolRefAttr::get(ref));
+      }]
     >,
     InterfaceMethod<
       /*desc=*/[{
         Get the symbol of the GlobalRefOp to which this op is referring.
       }],
       /*retTy=*/"FlatSymbolRefAttr",
-      /*methodName=*/"getGlobalRefSym"
+      /*methodName=*/"getGlobalRefSym",
+      /*args=*/(ins),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{
+        return $_op.refAttr();
+      }]
     >
   ];
 }

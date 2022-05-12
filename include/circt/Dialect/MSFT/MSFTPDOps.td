@@ -108,3 +108,22 @@ def DynamicInstanceOp : MSFTOp<"instance.dynamic",
     ::mlir::ArrayAttr globalRefPath();
   }];
 }
+
+def DynamicInstanceVerbatimAttrOp : MSFTOp<
+    "instance.verb_attr", [DeclareOpInterfaceMethods<DynInstDataOpInterface>]> {
+  let summary = "Specify an arbitrary attribute attached to a dynamic instance";
+  let description = [{
+    Allows a user to specify a custom attribute name and value which is attached
+    to a dynamic instance.
+
+    For Quartus tcl, translates to:
+      set_instance_assignment -name $name $value -to $parent|<instance_path>
+  }];
+
+  let arguments = (ins StrAttr:$name, StrAttr:$value,
+                       OptionalAttr<StrAttr>:$subPath,
+                       OptionalAttr<FlatSymbolRefAttr>:$ref);
+  let assemblyFormat = [{
+    ($ref^)? `name` `:` $name `value` `:` $value (`path` `:` $subPath^)? attr-dict
+  }];
+}

@@ -112,6 +112,20 @@ class Instance:
     else:
       assert False
 
+  def add_named_attribute(self,
+                          name: str,
+                          value: str,
+                          subPath: Union[str, list[str]] = None):
+    """Add an arbitrary named attribute to this instance."""
+    if isinstance(subPath, list):
+      subPath = "|".join(subPath)
+    with self._get_ip():
+      msft.DynamicInstanceVerbatimAttrOp(
+          name=ir.StringAttr.get(name),
+          value=ir.StringAttr.get(value),
+          subPath=None if subPath is None else ir.StringAttr.get(subPath),
+          ref=None)
+
   def place(self,
             devtype: msft.PrimitiveType,
             x: int,

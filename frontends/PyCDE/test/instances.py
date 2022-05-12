@@ -81,6 +81,8 @@ print("=== Placements")
 def place_inst(inst: Instance):
   if inst.name == "UnParameterized_1":
     inst.place(PrimitiveType.M20K, 39, 25, 0, "memory|bank")
+  if inst.path_names == ["UnParameterized", "Nothing"]:
+    inst.add_named_attribute("FOO", "TRUE")
 
 
 t.get_instance(Test).walk(place_inst)
@@ -104,6 +106,8 @@ t.createdb()
 
 test_inst["UnParameterized"].attach_attribute(
     placement(["memory", "bank"], PrimitiveType.M20K, 15, 25, 0))
+test_inst["UnParameterized"].add_named_attribute("FOO", "OFF",
+                                                 ["memory", "bank"])
 test_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 25, 0)
 
 test_inst.walk(lambda inst: print(inst, inst.locations))
@@ -165,7 +169,9 @@ t.print()
 # OUTPUT-NOT:  set_location_assignment M20K_X40_Y40
 # OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
 # OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
+# OUTPUT-DAG:  set_instance_assignment -name FOO OFF -to $parent|UnParameterized|memory|bank
 # OUTPUT-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing
+# OUTPUT-DAG:  set_instance_assignment -name FOO TRUE -to $parent|UnParameterized|Nothing
 # OUTPUT-NOT:  set_location_assignment
 # OUTPUT-NEXT: }
 t.emit_outputs()
