@@ -555,10 +555,9 @@ static Attribute simplifyShl(SmallVector<Attribute, 4> &operands) {
 static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x >> 0`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
     if (rhs.getValue().isZero())
       return operands[0];
-  }
 
   return foldBinaryOp(operands, [](auto a, auto b) { return a.lshr(b); });
 }
@@ -566,10 +565,9 @@ static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
 static Attribute simplifyShrS(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x >> 0`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
     if (rhs.getValue().isZero())
       return operands[0];
-  }
 
   return foldBinaryOp(operands, [](auto a, auto b) { return a.ashr(b); });
 }
