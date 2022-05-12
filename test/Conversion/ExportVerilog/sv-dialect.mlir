@@ -1396,6 +1396,27 @@ hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
   hw.output %0 : i1
 }
 
+// See https://github.com/verilator/verilator/issues/3405.
+// CHECK-LABEL: Verilator3405
+// CHECK-DAG: wire [[GEN0:.+]];
+// CHECK-DAG: wire [[GEN1:.+]];
+// CHECK-DAG: assign [[GEN0]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK-DAG: assign [[GEN1]] = {{.+}} | {{.+}} | {{.+}}
+// CHECK: assign out = {[[GEN1]], [[GEN0]]}
+hw.module @Verilator3405(
+  %0: i1, %1: i1, %2: i1, %3: i1, %4: i1, %5: i1, %6: i1, %7: i1, %8: i1,
+  %9: i1, %10: i1, %11: i1, %12: i1, %13: i1, %14: i1, %15: i1, %16: i1,
+  %17: i1, %18: i1, %19: i1, %20: i1, %21: i1, %22: i1) -> (out: i2) {
+
+  %lhs = comb.or %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10 : i1
+  %rhs = comb.or %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21 : i1
+
+  %out = comb.concat %lhs, %rhs : i1, i1
+
+  hw.output %out : i2
+}
+
+
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>
