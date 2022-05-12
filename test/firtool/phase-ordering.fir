@@ -12,6 +12,9 @@
 circuit Issue794: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Issue794|Issue794"
+  }, 
+  {
+    "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
   module Issue794:
     input clock: Clock

@@ -39,8 +39,12 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     auto circtOp = getOperation();
     static const char dutAnnoClass[] =
         "sifive.enterprise.firrtl.MarkDUTAnnotation";
+    static const char mem2regAnno[] =
+        "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$";
     DenseSet<Operation *> dutModuleSet;
 
+    if (!AnnotationSet::removeAnnotations(circtOp, mem2regAnno))
+      return;
     auto *body = circtOp.getBody();
 
     // Find the device under test and create a set of all modules underneath it.

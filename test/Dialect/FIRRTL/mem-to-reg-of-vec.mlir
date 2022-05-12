@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(mem-to-regofvec)' %s | FileCheck  %s
 
-firrtl.circuit "Mem" {
+firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @Mem() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
     %mem_read, %mem_write = firrtl.mem Undefined  {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
   }
@@ -33,7 +33,7 @@ firrtl.circuit "Mem" {
 
 }
 
-firrtl.circuit  "GCTModule" {
+firrtl.circuit  "GCTModule" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @GCTModule() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
     %rf_read, %rf_write = firrtl.mem Undefined  {annotations = [#firrtl.subAnno<fieldID = 1, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 1 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 1, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 2, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 2 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 2, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 3, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 3 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 3, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 4, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 4 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 4, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 5, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 5 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 5, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 6, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 6 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 6, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 7, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 7, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 8, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 8 : i64, type = "source"}>, #firrtl.subAnno<fieldID = 8, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 1, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 2, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 3, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 4, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 5, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 6, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 7, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 8, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 1, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 2, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 3, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 4, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 5, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 6, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 7, {class = "firrtl.transforms.DontTouchAnnotation"}>, #firrtl.subAnno<fieldID = 8, {class = "firrtl.transforms.DontTouchAnnotation"}>], depth = 8 : i64, name = "rf", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
       // CHECK-LABEL: firrtl.module public @GCTModule()
@@ -41,7 +41,7 @@ firrtl.circuit  "GCTModule" {
   }
 }
  
-firrtl.circuit "WriteMask" {
+firrtl.circuit "WriteMask" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @WriteMask() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
     %mem_read, %mem_write = firrtl.mem Undefined  {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 2>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>
     // CHECK-LABEL: firrtl.module public @WriteMask()
@@ -71,7 +71,7 @@ firrtl.circuit "WriteMask" {
   }
 }
 	
-firrtl.circuit "MemTap" {
+firrtl.circuit "MemTap" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @MemTap() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
 		%rf_MPORT, %rf_io_rdata_0_MPORT, %rf_io_rdata_1_MPORT = firrtl.mem sym @rf Undefined  {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 11 : i64}], depth = 4 : i64, name = "rf", portNames = ["MPORT", "io_rdata_0_MPORT", "io_rdata_1_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<32>>
     // CHECK-LABEL: firrtl.module public @MemTap()
