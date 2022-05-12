@@ -449,6 +449,9 @@ private:
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
                                       CircuitLoweringState &loweringState);
+  hw::HWModuleExternOp lowerMemModule(FMemModuleOp oldModule,
+                                      Block *topLevelModule,
+                                      CircuitLoweringState &loweringState);
 
   LogicalResult lowerModuleBody(FModuleOp oldModule,
                                 CircuitLoweringState &loweringState);
@@ -521,11 +524,16 @@ void FIRRTLModuleLowering::runOnOperation() {
           modulesToProcess.push_back(module);
         })
         .Case<FExtModuleOp>([&](auto extModule) {
-          auto loweredExtMod = lowerExtModule(extModule, topLevelModule, state);
-          if (!loweredExtMod)
+          auto loweredMod = lowerExtModule(extModule, topLevelModule, state);
+          if (!loweredMod)
             return signalPassFailure();
-
-          state.oldToNewModuleMap[&op] = loweredExtMod;
+          state.oldToNewModuleMap[&op] = loweredMod;
+        })
+        .Case<FMemModuleOp>([&](auto memModule) {
+          auto loweredMod = lowerMemModule(memModule, topLevelModule, state);
+          if (!loweredMod)
+            return signalPassFailure();
+          state.oldToNewModuleMap[&op] = loweredMod;
         })
         .Case<NonLocalAnchor>([&](auto nla) {
           // Just drop it.
@@ -949,6 +957,26 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   return newModule;
 }
 
+hw::HWModuleExternOp
+FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
+                                     Block *topLevelModule,
+                                     CircuitLoweringState &loweringState) {
+  // Map the ports over, lowering their types as we go.
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
+    return {};
+
+  // Build the new hw.module op.
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  auto newModule = builder.create<hw::HWModuleExternOp>(
+      oldModule.getLoc(), oldModule.moduleNameAttr(), ports,
+      oldModule.moduleNameAttr());
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
+  return newModule;
+}
+
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
 /// hw.module, then deleting the old one.
 hw::HWModuleOp
@@ -1365,6 +1393,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SpecialConstantOp op);
   LogicalResult visitExpr(SubindexOp op);
+  LogicalResult visitExpr(SubaccessOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -2241,6 +2270,25 @@ LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
   return setLoweringTo<hw::ArrayGetOp>(op, value, iIdx);
 }
 
+LogicalResult FIRRTLLowering::visitExpr(SubaccessOp op) {
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
+  Value value = getPossiblyInoutLoweredValue(op.input());
+  Value valueIdx = getLoweredValue(op.index());
+  if (!resultType || !value || !valueIdx) {
+    op.emitError() << "input lowering failed";
+    return failure();
+  }
+
+  // If the value has an inout type, we need to lower to ArrayIndexInOutOp.
+  if (value.getType().isa<sv::InOutType>())
+    return setLoweringTo<sv::ArrayIndexInOutOp>(op, value, valueIdx);
+  // Otherwise, hw::ArrayGetOp
+  return setLoweringTo<hw::ArrayGetOp>(op, value, valueIdx);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave
   // invalid subfield accesses
@@ -2354,6 +2402,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
+    operand = builder.create<sv::ReadInOutOp>(wire);
   }
 
   return setLowering(op, operand);

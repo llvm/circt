@@ -88,7 +88,7 @@
 // CHECK:           sink %[[VAL_89]] : index
 // CHECK:           return %[[VAL_88]] : none
 // CHECK:         }
-func @affine_load(%arg0: index) {
+func.func @affine_load(%arg0: index) {
   %0 = memref.alloc() : memref<10xf32>
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index

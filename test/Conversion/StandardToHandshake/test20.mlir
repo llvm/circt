@@ -67,7 +67,7 @@
 // CHECK:           sink %[[VAL_65]] : index
 // CHECK:           return %[[VAL_64]] : none
 // CHECK:         }
-func @min_reduction_tree(%arg0: index) {
+func.func @min_reduction_tree(%arg0: index) {
   %c0 = arith.constant 0 : index
   %0 = arith.cmpi slt, %arg0, %arg0 : index
   %1 = arith.select %0, %arg0, %arg0 : index

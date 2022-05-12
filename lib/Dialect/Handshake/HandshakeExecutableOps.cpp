@@ -453,5 +453,38 @@ void ForkOp::execute(std::vector<llvm::Any> &ins,
     out = ins[0];
 }
 
+bool UnpackOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                          llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
+                          llvm::DenseMap<mlir::Value, double> &timeMap,
+                          std::vector<std::vector<llvm::Any>> & /*store*/,
+                          std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+}
+
+void UnpackOp::execute(std::vector<llvm::Any> &ins,
+                       std::vector<llvm::Any> &outs) {
+  auto ins0Vec = llvm::any_cast<std::vector<llvm::Any>>(ins[0]);
+  assert(ins0Vec.size() == getNumResults() &&
+         "expected that the number of tuple elements matches the number of "
+         "outputs");
+  for (auto [in, out] : llvm::zip(ins0Vec, outs))
+    out = in;
+}
+
+bool PackOp::tryExecute(llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+                        llvm::DenseMap<unsigned, unsigned> & /*memoryMap*/,
+                        llvm::DenseMap<mlir::Value, double> &timeMap,
+                        std::vector<std::vector<llvm::Any>> & /*store*/,
+                        std::vector<mlir::Value> &scheduleList) {
+  return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+}
+
+void PackOp::execute(std::vector<llvm::Any> &ins,
+                     std::vector<llvm::Any> &outs) {
+  assert(ins.size() == getNumOperands() &&
+         "expected that the number inputs match the number of tuple elements");
+  outs[0] = ins;
+}
+
 } // namespace handshake
 } // namespace circt

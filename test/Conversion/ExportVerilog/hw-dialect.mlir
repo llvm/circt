@@ -687,6 +687,24 @@ hw.module @out_of_order_multi_result() -> (b: i1, c: i2) {
   hw.output %b, %c : i1, i2
 }
 
+hw.module.extern @single_result() -> (res: i3)
+// CHECK-LABEL: module instance_result_reuse_wires(
+hw.module @instance_result_reuse_wires() -> (b: i3) {
+  // CHECK:       wire {{.*}} some_wire;
+  // CHECK-EMPTY:
+  // CHECK-NEXT:  single_result b1 (
+  // CHECK-NEXT:  .res (some_wire)
+  // CHECK-NEXT:  );
+  // CHECK-NEXT:  assign b = some_wire;
+  %some_wire = sv.wire : !hw.inout<i3>
+  %read = sv.read_inout %some_wire : !hw.inout<i3>
+
+  %out1 = hw.instance "b1" @single_result() -> (res: i3)
+  sv.assign %some_wire, %out1 : i3
+
+  hw.output %read : i3
+}
+
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (c: i3, d: i4)
 hw.module @InternalDestMod(%a: i1, %b: i3) {}
@@ -957,6 +975,27 @@ hw.module @replicate(%arg0: i7, %arg1: i1) -> (r1: i21, r2: i9, r3: i16, r4: i16
   %r4 = comb.replicate %2 : (i8) -> i16
 
   hw.output %r1, %r2, %r3, %r4 : i21, i9, i16, i16
+}
+
+// CHECK-LABEL: module addParenthesesToSuccessiveOperators
+hw.module @addParenthesesToSuccessiveOperators(%a: i4, %b: i1, %c: i4) -> (o1:i1, o2:i1, o3:i1) {
+  %one4 = hw.constant -1 : i4
+  %zero4 = hw.constant 0 : i4
+  // CHECK: wire [[GEN:.+]] = &c;
+
+  %0 = comb.icmp eq %a, %one4 : i4
+  %and = comb.and %b, %0 : i1
+  // CHECK-NEXT: assign o1 = b & (&a);
+
+  %1 = comb.icmp ne %a, %zero4 : i4
+  %or = comb.or %b, %1 : i1
+  // CHECK-NEXT: assign o2 = b | (|a);
+
+  %3 = comb.icmp eq %c, %one4 : i4
+  %multiuse = comb.and %3, %3 : i1
+  // CHECK-NEXT: assign o3 = [[GEN]] & [[GEN]];
+
+  hw.output %and, %or, %multiuse : i1, i1, i1
 }
 
 // CHECK-LABEL: module parameters

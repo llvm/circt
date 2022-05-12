@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -allow-unregistered-dialect | FileCheck %s
 
-func @test_time_type() {
+func.func @test_time_type() {
   // CHECK: %[[CONST:.*]] = "time_result"() : () -> !llhd.time
   %0 = "time_result"() : () -> !llhd.time
   // CHECK-NEXT: "time_const_arg"(%[[CONST]]) : (!llhd.time) -> ()
@@ -8,7 +8,7 @@ func @test_time_type() {
   return
 }
 
-func @test_time_attr() {
+func.func @test_time_attr() {
   "time_attr"() {
     // CHECK: time0 = #llhd.time<1ns, 0d, 0e>
     time0 = #llhd.time<1ns, 0d, 0e> : !llhd.time,

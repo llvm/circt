@@ -56,7 +56,7 @@
 // CHECK:           sink %[[VAL_56]] : index
 // CHECK:           return %[[VAL_55]] : none
 // CHECK:         }
-func @test() {
+func.func @test() {
   %10 = memref.alloc() : memref<10xf32>
   %c0 = arith.constant 0 : index
   %c10 = arith.constant 10 : index

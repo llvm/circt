@@ -1,27 +1,27 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-func private @test_extract(%arg0: i4) {
+func.func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %a = comb.extract %arg0 from 6 : (i4) -> i3
 }
 
 // -----
 
-func private @test_extract(%arg0: i4) {
+func.func private @test_extract(%arg0: i4) {
   // expected-error @+1 {{'comb.extract' op from bit too large for input}}
   %b = comb.extract %arg0 from 2 : (i4) -> i3
 }
 
 // -----
 
-func private @test_and() {
+func.func private @test_and() {
   // expected-error @+1 {{'comb.and' op expected 1 or more operands}}
   %b = comb.and : i111
 }
 
 // -----
 
-func private @notModule () {
+func.func private @notModule () {
   return
 }
 
@@ -58,12 +58,12 @@ hw.module @A() -> ("": i1) { }
 // -----
 
 // expected-error @+1 {{expected non-function type}}
-func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
+func.func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
 
 // -----
 
 // expected-error @+1 {{invalid element for hw.inout type}}
-func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
+func.func private @invalidInout(%arg0: !hw.inout<tensor<*xf32>>) { }
 
 // -----
 

@@ -10,7 +10,7 @@ from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
 
-from pycde.instance import InstanceDoesNotExistError
+from pycde.instance import InstanceDoesNotExistError, Instance
 
 
 @pycde.externmodule
@@ -78,19 +78,12 @@ test_inst.walk(lambda inst: print(inst))
 print("=== Placements")
 
 
-def place_inst(inst):
+def place_inst(inst: Instance):
   if inst.name == "UnParameterized_1":
     inst.place(PrimitiveType.M20K, 39, 25, 0, "memory|bank")
 
 
 t.get_instance(Test).walk(place_inst)
-
-instance_attrs = pycde.AppIDIndex()
-loc = placement(["memory", "bank"], PrimitiveType.M20K, 15, 25, 0)
-instance_attrs.lookup(pycde.AppID("UnParameterized")).add_attribute(loc)
-loc = placement("", PrimitiveType.DSP, 39, 25, 0)
-instance_attrs.lookup(pycde.AppID("UnParameterized",
-                                  "Nothing")).add_attribute(loc)
 
 # TODO: Add back physical region support
 
@@ -108,7 +101,10 @@ instance_attrs.lookup(pycde.AppID("UnParameterized",
 
 test_inst = t.get_instance(Test)
 t.createdb()
-test_inst.walk(instance_attrs.apply_attributes_visitor)
+
+test_inst["UnParameterized"].attach_attribute(
+    placement(["memory", "bank"], PrimitiveType.M20K, 15, 25, 0))
+test_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 25, 0)
 
 test_inst.walk(lambda inst: print(inst, inst.locations))
 # CHECK: <instance: []> []
@@ -123,13 +119,15 @@ test_inst.walk(lambda inst: print(inst, inst.locations))
 # entity_extern = t.create_entity_extern("tag")
 # test_inst.placedb.reserve_location(reserved_loc, entity_extern)
 
-# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0> has (<instance: [UnParameterized, Nothing]>, None)
-print(f"{loc[1]} has {t.placedb.get_instance_at(loc[1])}")
+# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0> has ['UnParameterized', 'Nothing']
+loc = PhysLocation(PrimitiveType.DSP, 39, 25, 0)
+print(f"{loc} has {t.placedb.get_instance_at(loc)[0].path_names}")
 
 assert t.placedb.get_instance_at(PhysLocation(PrimitiveType.M20K, 0, 0,
                                               0)) is None
 # assert test_inst.placedb.get_instance_at(reserved_loc) is not None
 
+instance_attrs = pycde.AppIDIndex()
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
 assert (len(instance_attrs.find_unused()) == 1)
@@ -146,7 +144,7 @@ test_inst.walk(lambda inst: print(inst, inst.locations))
 # CHECK: <instance: [UnParameterized_1, Nothing]> []
 
 # CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0> has (<instance: [UnParameterized, Nothing]>, None)
-print(f"{loc[1]} has {t.placedb.get_instance_at(loc[1])}")
+print(f"{loc} has {t.placedb.get_instance_at(loc)}")
 
 print("=== Pre-pass mlir dump")
 t.print()

@@ -1,6 +1,6 @@
 // REQUIRES: ieee-sim
 // UNSUPPORTED: ieee-sim-iverilog
-// RUN: circt-opt %s --lower-std-to-handshake \ 
+// RUN: circt-opt %s --lower-std-to-handshake \
 // RUN:   --canonicalize='top-down=true region-simplify=true' \
 // RUN:   --handshake-materialize-forks-sinks --canonicalize \
 // RUN:   --handshake-insert-buffers=strategy=all --lower-handshake-to-firrtl | \
@@ -9,7 +9,7 @@
 // CHECK: Result={{.*}}448704
 
 module {
-  func @top() -> i32 {
+  func.func @top() -> i32 {
     %c123_i32 = arith.constant 123 : i32
     %c456_i32 = arith.constant 456 : i32
     %c0_i32 = arith.constant 0 : i32

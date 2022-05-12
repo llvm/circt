@@ -9,7 +9,7 @@
 // CHECK-SAME: %[[SIGARRAY2:.*]]: !llhd.sig<!hw.array<2xi8>>
 // CHECK-SAME: %[[ARRAY4:.*]]: !hw.array<4xi8>
 // CHECK-SAME: %[[ARRAY2:.*]]: !hw.array<2xi8>
-func @check_bitwise(%a : i64, %c : i8,
+func.func @check_bitwise(%a : i64, %c : i8,
     %sig1 : !llhd.sig<i32>, %sig2 : !llhd.sig<i4>,
     %sigarray4: !llhd.sig<!hw.array<4xi8>>, %sigarray2: !llhd.sig<!hw.array<2xi8>>,
     %array4: !hw.array<4xi8>, %array2: !hw.array<2xi8>) {

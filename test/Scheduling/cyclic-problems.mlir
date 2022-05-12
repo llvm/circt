@@ -3,7 +3,7 @@
 
 // SIMPLEX-LABEL: cyclic
 // SIMPLEX-SAME: simplexInitiationInterval = 2
-func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
+func.func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
   problemInitiationInterval = 2,
   auxdeps = [ [4,1,1], [4,2,2] ],
   operatortypes = [ { name = "_0", latency = 0 }, { name = "_2", latency = 2 } ]
@@ -24,7 +24,7 @@ func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
 
 // SIMPLEX-LABEL: mobility
 // SIMPLEX-SAME: simplexInitiationInterval = 3
-func @mobility() attributes {
+func.func @mobility() attributes {
   problemInitiationInterval = 3,
   auxdeps = [
     [0,1], [0,2], [1,3], [2,3],
@@ -51,7 +51,7 @@ func @mobility() attributes {
 
 // SIMPLEX-LABEL: interleaved_cycles
 // SIMPLEX-SAME: simplexInitiationInterval = 4
-func @interleaved_cycles() attributes {
+func.func @interleaved_cycles() attributes {
   problemInitiationInterval = 4,
   auxdeps = [
     [0,1], [0,2], [1,3], [2,3],
@@ -87,7 +87,7 @@ func @interleaved_cycles() attributes {
 
 // SIMPLEX-LABEL: self_arc
 // SIMPLEX-SAME: simplexInitiationInterval = 3
-func @self_arc() -> i32 attributes {
+func.func @self_arc() -> i32 attributes {
   problemInitiationInterval = 3,
   auxdeps = [ [1,1,1] ],
   operatortypes = [ { name = "_3", latency = 3 } ]

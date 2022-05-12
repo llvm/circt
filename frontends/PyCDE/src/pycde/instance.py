@@ -12,14 +12,15 @@ from circt.dialects import msft
 import mlir.ir as ir
 
 
-class InstanceLike:
+class Instance:
   """Parent class for anything which should be walked and can contain PD ops."""
   from .module import _SpecializedModule
 
   __slots__ = ["inside_of", "tgt_mod", "root", "_child_cache", "_op_cache"]
 
   def __init__(self, inside_of: _SpecializedModule,
-               tgt_mod: Optional[_SpecializedModule], root: InstanceHierarchy):
+               tgt_mod: Optional[_SpecializedModule],
+               root: InstanceHierarchyRoot):
     """
     Construct a new instance. Since the terminology can be confusing:
     - inside_of: the module which contains this instance (e.g. the instantiation
@@ -32,11 +33,11 @@ class InstanceLike:
     self.inside_of = inside_of
     self.tgt_mod = tgt_mod
     self.root = root
-    self._child_cache: Dict[ir.StringAttr, Instance] = None
+    self._child_cache: Dict[ir.StringAttr, NonRootInstance] = None
     self._op_cache = root.system._op_cache
 
-  def _create_instance(self, parent: Instance,
-                       static_op: ir.Operation) -> Instance:
+  def _create_instance(self, parent: NonRootInstance,
+                       static_op: ir.Operation) -> NonRootInstance:
     """Create a new `Instance` which is a child of `parent` in the instance
     hierarchy and corresponds to the given static operation. The static
     operation need not be a module instantiation."""
@@ -45,11 +46,11 @@ class InstanceLike:
     tgt_mod = None
     if isinstance(static_op, msft.InstanceOp):
       tgt_mod = self._op_cache.get_symbol_module(static_op.moduleName)
-    inst = Instance(parent,
-                    instance_sym=sym_name,
-                    inside_of=self.tgt_mod,
-                    tgt_mod=tgt_mod,
-                    root=self.root)
+    inst = NonRootInstance(parent,
+                           instance_sym=sym_name,
+                           inside_of=self.tgt_mod,
+                           tgt_mod=tgt_mod,
+                           root=self.root)
     return inst
 
   def _get_ip(self) -> ir.InsertionPoint:
@@ -68,8 +69,9 @@ class InstanceLike:
   def appid(self) -> AppID:
     return AppID(*[i.name for i in self.path])
 
-  def children(self) -> Dict[str, Instance]:
-    """Return a list of this instances children. Cache said list."""
+  def _children(self) -> Dict[ir.StringAttr, NonRootInstance]:
+    """Return a dict of MLIR StringAttr this instances' children. Cache said
+    list."""
     if self._child_cache is not None:
       return self._child_cache
     symbols_in_mod = self._op_cache.get_sym_ops_in_module(self.tgt_mod)
@@ -81,13 +83,27 @@ class InstanceLike:
     self._child_cache = children
     return children
 
+  @property
+  def children(self) -> Dict[str, NonRootInstance]:
+    """Return a dict of python strings to this instances' children."""
+    return {ir.StringAttr(key).value: inst for (key, inst) in self._children}
+
+  def __getitem__(self, child_name: str) -> NonRootInstance:
+    """Get a child instance."""
+    return self._children()[ir.StringAttr.get(child_name)]
+
   def walk(self, callback):
     """Descend the instance hierarchy, calling back on each instance."""
     callback(self)
-    for child in self.children().values():
+    for child in self._children().values():
       child.walk(callback)
 
-  def _attach_attribute(self, attr):
+  @property
+  def path_names(self):
+    """A list of instance names representing the instance path."""
+    return [i.name for i in self.path]
+
+  def attach_attribute(self, attr):
     import pycde.devicedb as devdb
 
     assert isinstance(attr, tuple), "Only (subpath, loc) are supported"
@@ -129,7 +145,7 @@ class InstanceLike:
     ]
 
 
-class Instance(InstanceLike):
+class NonRootInstance(Instance):
   """Represents a _specific_ instance, unique in a design. This is in contrast
   to a module instantiation within another module."""
 
@@ -137,9 +153,10 @@ class Instance(InstanceLike):
 
   __slots__ = ["parent", "symbol"]
 
-  def __init__(self, parent: Instance, instance_sym: ir.Attribute,
+  def __init__(self, parent: NonRootInstance, instance_sym: ir.Attribute,
                inside_of: _SpecializedModule,
-               tgt_mod: Optional[_SpecializedModule], root: InstanceHierarchy):
+               tgt_mod: Optional[_SpecializedModule],
+               root: InstanceHierarchyRoot):
     super().__init__(inside_of, tgt_mod, root)
     self.parent = parent
     self.symbol = instance_sym
@@ -153,7 +170,7 @@ class Instance(InstanceLike):
     return op
 
   @property
-  def path(self) -> list[Instance]:
+  def path(self) -> list[NonRootInstance]:
     return self.parent.path + [self]
 
   @property
@@ -161,7 +178,7 @@ class Instance(InstanceLike):
     return ir.StringAttr(self.symbol).value
 
 
-class InstanceHierarchy(InstanceLike):
+class InstanceHierarchyRoot(Instance):
   """
   A root of an instance hierarchy starting at top-level 'module'. Different from
   an `Instance` since the base cases differ, and doesn't have an instance symbol

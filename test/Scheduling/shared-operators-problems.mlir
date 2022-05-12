@@ -2,7 +2,7 @@
 // RUN: circt-opt %s -test-simplex-scheduler=with=SharedOperatorsProblem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
 
 // SIMPLEX-LABEL: full_load
-func @full_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {
+func.func @full_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {
   operatortypes = [
     { name = "add", latency = 3, limit = 1 },
     { name = "_0", latency = 0 }
@@ -19,7 +19,7 @@ func @full_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32
 }
 
 // SIMPLEX-LABEL: partial_load
-func @partial_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {
+func.func @partial_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {
   operatortypes = [
     { name = "add", latency = 3, limit = 3},
     { name = "_0", latency = 0 }
@@ -36,7 +36,7 @@ func @partial_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : 
 }
 
 // SIMPLEX-LABEL: multiple
-func @multiple(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {
+func.func @multiple(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32) -> i32 attributes {
   operatortypes = [
     { name = "slowAdd", latency = 3, limit = 2},
     { name = "fastAdd", latency = 1, limit = 1},

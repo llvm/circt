@@ -117,9 +117,11 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     sv.if %cond {
       %c42 = hw.constant 42 : i8
       %add = comb.add %val, %c42 : i8
+      %sub_inner = comb.sub %val, %c42 : i8
+      %sub = comb.sub %sub_inner, %c42 : i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x\n", 8'(val + 8'h2A));
-      sv.fwrite %fd, "Inlined! %x\n"(%add) : i8
+      // CHECK-NEXT: $fwrite(32'h80000002, "Inlined! %x %x\n", 8'(val + 8'h2A), 8'(val - 8'h2A - 8'h2A));
+      sv.fwrite %fd, "Inlined! %x %x\n"(%add, %sub) : i8, i8
     }
 
     // begin/end required here to avoid else-confusion.
@@ -1360,6 +1362,38 @@ hw.module @NestedElseIfHoist(%clock: i1, %flag1 : i1, %flag2: i1, %flag3: i1, %f
   }
 
   hw.output
+}
+
+// CHECK-LABEL: ReuseExistingInOut
+// CHECK: input {{.+}},
+// CHECK:        [[INPUT:[:alnum:]+]],
+// CHECK: output [[OUTPUT:.+]])
+hw.module @ReuseExistingInOut(%clock: i1, %a: i1) -> (out1: i1) {
+  %expr1 = comb.or %a, %a : i1
+  %expr2 = comb.and %a, %a : i1
+
+  // CHECK: wire [[WIRE1:.+]];
+  // CHECK: wire [[WIRE2:.+]];
+  // CHECK: reg  [[REG:.+]];
+  %mywire = sv.wire : !hw.inout<i1>
+  %otherwire = sv.wire : !hw.inout<i1>
+  %myreg = sv.reg : !hw.inout<i1>
+
+  // CHECK: assign [[WIRE1]] = [[INPUT]] | [[INPUT]];
+  sv.assign %mywire, %expr1 : i1
+
+  sv.always posedge %clock {
+    // CHECK: [[REG]] <= [[WIRE1]];
+    sv.passign %myreg, %expr1 : i1
+  }
+
+  %0 = comb.or %a, %expr2 : i1
+
+  // CHECK: assign [[WIRE2]] = [[INPUT]] & [[INPUT]];
+  sv.assign %otherwire, %expr2 : i1
+
+  // CHECK: assign [[OUTPUT]] = [[INPUT]] | [[WIRE2]];
+  hw.output %0 : i1
 }
 
 hw.module @bindInMod() {

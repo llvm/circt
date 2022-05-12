@@ -23,7 +23,7 @@
 // CHECK:           %[[VAL_19:.*]] = select %[[VAL_11]]#0, %[[VAL_18]], %[[VAL_17]] : index
 // CHECK:           return %[[VAL_19]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
-func @affine_apply_ceildiv(%arg0: index) -> index {
+func.func @affine_apply_ceildiv(%arg0: index) -> index {
     %c42 = arith.constant 42 : index
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index

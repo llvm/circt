@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -851,7 +852,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 /// will populate `entryArgs`.
 static ParseResult
 parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
-                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &entryArgs,
+                 SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
                  SmallVectorImpl<Direction> &portDirections,
                  SmallVectorImpl<Attribute> &portNames,
                  SmallVectorImpl<Attribute> &portTypes,
@@ -870,17 +871,19 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 
     // Parse the port name.
     if (hasSSAIdentifiers) {
-      OpAsmParser::UnresolvedOperand arg;
-      if (parser.parseRegionArgument(arg))
+      OpAsmParser::Argument arg;
+      if (parser.parseArgument(arg))
         return failure();
       entryArgs.push_back(arg);
       // The name of an argument is of the form "%42" or "%id", and since
       // parsing succeeded, we know it always has one character.
-      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-      if (isdigit(arg.name[1]))
+      assert(arg.ssaName.name.size() > 1 && arg.ssaName.name[0] == '%' &&
+             "Unknown MLIR name");
+      if (isdigit(arg.ssaName.name[1]))
         portNames.push_back(StringAttr::get(context, ""));
       else
-        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+        portNames.push_back(
+            StringAttr::get(context, arg.ssaName.name.drop_front()));
     } else {
       std::string portName;
       if (parser.parseKeywordOrString(&portName))
@@ -893,6 +896,9 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     if (parser.parseColonType(portType))
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
+
+    if (hasSSAIdentifiers)
+      entryArgs.back().type = portType;
 
     // Parse the optional port symbol.
     StringAttr portSym;
@@ -1053,7 +1059,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   result.addAttribute("parameters", builder.getArrayAttr(parameters));
 
   // Parse the module ports.
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
+  SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -1114,15 +1120,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   auto *body = result.addRegion();
 
   if (hasSSAIdentifiers) {
-    // Collect block argument types.
-    SmallVector<Type, 4> argTypes;
-    if (!entryArgs.empty())
-      llvm::transform(portTypes, std::back_inserter(argTypes),
-                      [](Attribute typeAttr) -> Type {
-                        return typeAttr.cast<TypeAttr>().getValue();
-                      });
-
-    if (parser.parseRegion(*body, entryArgs, argTypes))
+    if (parser.parseRegion(*body, entryArgs))
       return failure();
     if (body->empty())
       body->push_back(new Block());
@@ -1505,7 +1503,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   std::string name;
   StringAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
-  SmallVector<OpAsmParser::UnresolvedOperand> entryArgs;
+  SmallVector<OpAsmParser::Argument> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
@@ -1945,7 +1943,9 @@ FirMemory MemOp::getSummary() {
           if (auto connect = dyn_cast<FConnectLike>(b)) {
             if (connect.dest() == clockPort) {
               auto result =
-                  clockToLeader.insert({connect.src(), numWritePorts});
+                  clockToLeader.insert({circt::firrtl::getModuleScopedDriver(
+                                            connect.src(), true, true, true),
+                                        numWritePorts});
               if (result.second) {
                 writeClockIDs.push_back(numWritePorts);
               } else {
@@ -1961,11 +1961,12 @@ FirMemory MemOp::getSummary() {
       ++numReadWritePorts;
   }
 
-  auto width = op.getDataType().getBitWidthOrSentinel();
-  if (width <= 0) {
+  auto widthV = getBitWidth(op.getDataType());
+  size_t width = 0;
+  if (widthV.hasValue())
+    width = widthV.getValue();
+  else
     op.emitError("'firrtl.mem' should have simple type and known width");
-    width = 0;
-  }
   uint32_t groupID = 0;
   if (auto gID = op.groupIDAttr())
     groupID = gID.getUInt();
@@ -1978,12 +1979,12 @@ FirMemory MemOp::getSummary() {
       clocks.append(Twine((char)(a + 'a')).str());
     modName = StringAttr::get(
         op->getContext(),
-        llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}",
-                      numReadPorts, numWritePorts, numReadWritePorts,
-                      (size_t)width, op.depth(), op.readLatency(),
-                      op.writeLatency(), op.getMaskBits(), (size_t)op.ruw(),
-                      (unsigned)hw::WUW::PortOrder,
-                      clocks.empty() ? "" : "_" + clocks));
+        llvm::formatv(
+            "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}_{10}{11}",
+            numReadPorts, numWritePorts, numReadWritePorts, (size_t)width,
+            op.depth(), op.readLatency(), op.writeLatency(), op.getMaskBits(),
+            (size_t)op.ruw(), (unsigned)hw::WUW::PortOrder, groupID,
+            clocks.empty() ? "" : "_" + clocks));
   }
   return {numReadPorts,         numWritePorts,    numReadWritePorts,
           (size_t)width,        op.depth(),       op.readLatency(),
@@ -2004,17 +2005,6 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
-
-/// Infer the return types of this operation.
-LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
-                                       Optional<Location> loc,
-                                       ValueRange operands,
-                                       DictionaryAttr attrs,
-                                       mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &results) {
-  results.push_back(operands[0].getType());
-  return success();
-}
 
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), name());
@@ -2502,7 +2492,7 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand index;
-  llvm::SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
+  SmallVector<OpAsmParser::UnresolvedOperand, 16> inputs;
   Type indexType, elemType;
 
   if (parser.parseOperand(index) || parser.parseComma() ||
@@ -3479,6 +3469,40 @@ bool NonLocalAnchor::updateModule(StringAttr oldMod, StringAttr newMod) {
   }
   if (updateMade)
     namepathAttr(ArrayAttr::get(getContext(), newPath));
+  return updateMade;
+}
+
+bool NonLocalAnchor::updateModuleAndInnerRef(
+    StringAttr oldMod, StringAttr newMod,
+    const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
+  auto fromRef = FlatSymbolRefAttr::get(oldMod);
+
+  auto namepathNew = namepath().getValue().vec();
+  bool updateMade = false;
+  // Break from the loop if the module is found, since it can occur only once.
+  for (auto &element : namepathNew) {
+    if (auto innerRef = element.dyn_cast<hw::InnerRefAttr>()) {
+      if (innerRef.getModule() != oldMod)
+        continue;
+      auto symName = innerRef.getName();
+      // Since the module got updated, the old innerRef symbol inside oldMod
+      // should also be updated to the new symbol inside the newMod.
+      auto to = innerSymRenameMap.find(symName);
+      if (to != innerSymRenameMap.end())
+        symName = to->second;
+      updateMade = true;
+      element = hw::InnerRefAttr::get(newMod, symName);
+      break;
+    }
+    if (element != fromRef)
+      continue;
+
+    updateMade = true;
+    element = FlatSymbolRefAttr::get(newMod);
+    break;
+  }
+  if (updateMade)
+    namepathAttr(ArrayAttr::get(getContext(), namepathNew));
   return updateMade;
 }
 

@@ -56,7 +56,7 @@
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main() {
+  func.func @main() {
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c64 = arith.constant 64 : index
@@ -124,7 +124,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0 : i32) -> i32 {
+  func.func @main(%arg0 : i32) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : i32
@@ -182,7 +182,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0 : i32) -> i32 {
+  func.func @main(%arg0 : i32) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : i32
@@ -246,7 +246,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0 : i6) -> i32 {
+  func.func @main(%arg0 : i6) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
     %c1 = arith.constant 1 : index
     %arg0_idx =  arith.index_cast %arg0 : i6 to index
@@ -287,7 +287,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%i : index) -> i32 {
+  func.func @main(%i : index) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
     %1 = memref.load %0[%i] : memref<64xi32>
     return %1 : i32
@@ -322,7 +322,7 @@ module {
 // CHECH-NEXT:   }
 // CHECH-NEXT: }
 module {
-  func @main(%i : i8) -> index {
+  func.func @main(%i : i8) -> index {
     %0 = arith.index_cast %i : i8 to index
     return %0 : index
   }
@@ -355,7 +355,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%arg0 : i32, %mem0 : memref<8xi32>, %i : index) {
+  func.func @main(%arg0 : i32, %mem0 : memref<8xi32>, %i : index) {
     memref.store %arg0, %mem0[%i] : memref<8xi32>
     return
   }
@@ -390,7 +390,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%i : index, %mem0 : memref<8xi32>) -> i32 {
+  func.func @main(%i : index, %mem0 : memref<8xi32>) -> i32 {
     %0 = memref.load %mem0[%i] : memref<8xi32>
     return %0 : i32
   }
@@ -447,7 +447,7 @@ module {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 module {
-  func @main(%i0 : index, %i1 : index, %mem0 : memref<8xi32>) -> (i32, i32) {
+  func.func @main(%i0 : index, %i1 : index, %mem0 : memref<8xi32>) -> (i32, i32) {
     %0 = memref.load %mem0[%i0] : memref<8xi32>
     %1 = memref.load %mem0[%i1] : memref<8xi32>
     return %0, %1 : i32, i32
@@ -473,7 +473,7 @@ module {
 // CHECK-NEXT:        calyx.group_done %mem_0.done : i1
 // CHECK-NEXT:      }
 module {
-  func @main(%i : index) -> i32 {
+  func.func @main(%i : index) -> i32 {
     %c1_32 = arith.constant 1 : i32
     %0 = memref.alloc() : memref<1xi32>
     %1 = memref.load %0[%i] : memref<1xi32>
@@ -488,7 +488,7 @@ module {
 
 // CHECK: calyx.std_slice {{.*}} i32, i6
 module {
-  func @main(%mem : memref<33xi32>) -> i32 {
+  func.func @main(%mem : memref<33xi32>) -> i32 {
     %c0 = arith.constant 0 : index
     %0 = memref.load %mem[%c0] : memref<33xi32>
     return %0 : i32
@@ -505,7 +505,7 @@ module {
 // CHECK-DAG:           calyx.assign %mem_0.addr0 = %std_slice_3.out : i1
 // CHECK-DAG:           calyx.assign %mem_0.addr1 = %std_slice_2.out : i1
 module {
-  func @main() {
+  func.func @main() {
     %c1_32 = arith.constant 1 : i32
     %i = arith.constant 0 : index
     %0 = memref.alloc() : memref<1x1x1x1xi32>

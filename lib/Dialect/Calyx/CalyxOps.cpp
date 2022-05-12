@@ -174,9 +174,6 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ", expected ComponentOp.";
-  if (!op->hasAttr("instanceName"))
-    return op->emitOpError() << "does not have an instanceName attribute.";
-
   return success();
 }
 
@@ -445,16 +442,17 @@ void ComponentOp::print(OpAsmPrinter &p) {
 /// port names to `attrName`.
 static ParseResult
 parsePortDefList(OpAsmParser &parser, OperationState &result,
-                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                 SmallVectorImpl<OpAsmParser::Argument> &ports,
                  SmallVectorImpl<Type> &portTypes,
                  SmallVectorImpl<NamedAttrList> &portAttrs) {
   auto parsePort = [&]() -> ParseResult {
-    OpAsmParser::UnresolvedOperand port;
+    OpAsmParser::Argument port;
     Type portType;
     // Expect each port to have the form `%<ssa-name> : <type>`.
-    if (parser.parseRegionArgument(port) || parser.parseColon() ||
+    if (parser.parseArgument(port) || parser.parseColon() ||
         parser.parseType(portType))
       return failure();
+    port.type = portType;
     ports.push_back(port);
     portTypes.push_back(portType);
 
@@ -472,9 +470,9 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
 /// Parses the signature of a Calyx component.
 static ParseResult
 parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::UnresolvedOperand> &ports,
+                        SmallVectorImpl<OpAsmParser::Argument> &ports,
                         SmallVectorImpl<Type> &portTypes) {
-  SmallVector<OpAsmParser::UnresolvedOperand> inPorts, outPorts;
+  SmallVector<OpAsmParser::Argument> inPorts, outPorts;
   SmallVector<Type> inPortTypes, outPortTypes;
   SmallVector<NamedAttrList> portAttributes;
 
@@ -490,7 +488,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   // just inferred from the SSA names of the component.
   SmallVector<Attribute> portNames;
   auto getPortName = [context](const auto &port) -> StringAttr {
-    StringRef name = port.name;
+    StringRef name = port.ssaName.name;
     if (name.startswith("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
@@ -525,7 +523,8 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  SmallVector<OpAsmParser::UnresolvedOperand> ports;
+  SmallVector<mlir::OpAsmParser::Argument> ports;
+
   SmallVector<Type> portTypes;
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
@@ -537,7 +536,7 @@ ParseResult ComponentOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  if (parser.parseRegion(*body, ports, portTypes))
+  if (parser.parseRegion(*body, ports))
     return failure();
 
   if (body->empty())
@@ -829,9 +828,9 @@ LogicalResult CombGroupOp::verify() {
 // GroupOp
 //===----------------------------------------------------------------------===//
 GroupGoOp GroupOp::getGoOp() {
-  auto body = this->getBody();
-  auto opIt = body->getOps<GroupGoOp>().begin();
-  return *opIt;
+  auto goOps = getBody()->getOps<GroupGoOp>();
+  size_t nOps = std::distance(goOps.begin(), goOps.end());
+  return nOps ? *goOps.begin() : GroupGoOp();
 }
 
 GroupDoneOp GroupOp::getDoneOp() {
@@ -1044,11 +1043,10 @@ LogicalResult calyx::verifyGroupInterface(Operation *op) {
 /// <instance-name>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
-  assert(isa<CellInterface>(op) && "must implement the Cell interface");
+  auto cellInterface = dyn_cast<CellInterface>(op);
+  assert(cellInterface && "must implement the Cell interface");
 
-  auto instanceName =
-      op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
-  std::string prefix = instanceName.str() + ".";
+  std::string prefix = cellInterface.instanceName().str() + ".";
   for (size_t i = 0, e = portNames.size(); i != e; ++i)
     setNameFn(op->getResult(i), prefix + portNames[i].str());
 }
@@ -1198,21 +1196,6 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
            << "cannot reference the entry-point component: '" << entryPointName
            << "'.";
 
-  // Verify there are no other instances with this name.
-  auto component = instance->getParentOfType<ComponentOp>();
-  StringAttr name =
-      StringAttr::get(instance.getContext(), instance.instanceName());
-  Optional<SymbolTable::UseRange> componentUseRange =
-      SymbolTable::getSymbolUses(name, component.getRegion());
-  if (componentUseRange.hasValue() &&
-      llvm::any_of(componentUseRange.getValue(),
-                   [&](SymbolTable::SymbolUse use) {
-                     return use.getUser() != instance;
-                   }))
-    return instance.emitOpError()
-           << "with instance symbol: '" << name.getValue()
-           << "' is already a symbol for another instance.";
-
   // Verify the instance result ports with those of its referenced component.
   SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
   size_t numPorts = componentPorts.size();
@@ -1245,7 +1228,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                        << "', which does not exist.";
 
   Operation *shadowedComponentName =
-      symbolTable.lookupNearestSymbolFrom(program, instanceNameAttr());
+      symbolTable.lookupNearestSymbolFrom(program, sym_nameAttr());
   if (shadowedComponentName != nullptr)
     return emitError() << "instance symbol: '" << instanceName()
                        << "' is already a symbol for another component.";
@@ -1425,8 +1408,8 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      StringRef instanceName, int64_t width,
                      ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("instanceName", FlatSymbolRefAttr::get(
-                                         builder.getContext(), instanceName));
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));

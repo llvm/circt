@@ -32,19 +32,39 @@ static const char metadataDirectoryAnnoClass[] =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
 
 namespace {
+
 class CreateSiFiveMetadataPass
     : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
   LogicalResult emitRetimeModulesMetadata();
   LogicalResult emitSitestBlackboxMetadata();
   LogicalResult emitMemoryMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
+  /// Get the cached namespace for a module.
+  ModuleNamespace &getModuleNamespace(FModuleLike module) {
+    auto it = moduleNamespaces.find(module);
+    if (it != moduleNamespaces.end())
+      return it->second;
+    return moduleNamespaces.insert({module, ModuleNamespace(module)})
+        .first->second;
+  }
+  // TODO: Move this to firrtl/utility
+  StringAttr getOrAddInnerSym(Operation *op) {
+    auto attr = op->getAttrOfType<StringAttr>("inner_sym");
+    if (attr)
+      return attr;
+    auto name = getModuleNamespace(op->getParentOfType<FModuleOp>())
+                    .newName("metadata_sym");
+    attr = StringAttr::get(op->getContext(), name);
+    op->setAttr("inner_sym", attr);
+    return attr;
+  }
   void runOnOperation() override;
-  void renameMemory(CircuitOp circuitOp);
 
   // The set of all modules underneath the design under test module.
   DenseSet<Operation *> dutModuleSet;
   // The design under test module.
   FModuleOp dutMod;
+  DenseMap<Operation *, ModuleNamespace> moduleNamespaces;
 
 public:
   CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
@@ -56,46 +76,11 @@ public:
 };
 } // end anonymous namespace
 
-void CreateSiFiveMetadataPass::renameMemory(CircuitOp circuitOp) {
-  CircuitNamespace circuitNamespace(circuitOp);
-  SmallVector<MemOp> memOpList;
-  std::map<FirMemory, StringAttr> memNameMap;
-  auto *ctxt = circuitOp.getContext();
-  auto modNameAttr = StringAttr::get(ctxt, "modName");
-  // This is a random number to start the groupIDs at, large enough to not
-  // conflict with existing IDs.
-  // TODO: Move this logic out of this pass.
-  uint32_t baseGroupID = std::numeric_limits<uint32_t>::max();
-  for (auto mod : circuitOp.getOps<FModuleOp>()) {
-    bool isTestHarness = !dutModuleSet.contains(mod);
-    for (auto memOp : mod.getBody()->getOps<MemOp>()) {
-      if (isTestHarness)
-        memOp.groupIDAttr(IntegerAttr::get(
-            IntegerType::get(ctxt, 32, IntegerType::Unsigned), --baseGroupID));
-
-      memOpList.push_back(memOp);
-      auto firMem = memOp.getSummary();
-      auto insert = memNameMap.find(firMem);
-      if (insert == memNameMap.end()) {
-        auto name = memOp->getAttrOfType<StringAttr>("name");
-        auto modName = circuitNamespace.newName(name.getValue(), "_ext");
-        name = StringAttr::get(ctxt, modName);
-        memOp->setAttr(modNameAttr, name);
-        memNameMap[firMem] = name;
-      } else
-        memOp->setAttr(modNameAttr, insert->second);
-    }
-  }
-}
-
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
 LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   if (!replSeqMem)
     return success();
-
-  // Lambda to get the number of read, write and read-write ports corresponding
-  // to a MemOp.
 
   CircuitOp circuitOp = getOperation();
   // The instance graph analysis will be required to print the hierarchy names
@@ -105,123 +90,151 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // This lambda, writes to the given Json stream all the relevant memory
   // attributes. Also adds the memory attrbutes to the string for creating the
   // memmory conf file.
-  auto createMemMetadata = [&](SmallVector<MemOp> &memList,
+  auto createMemMetadata = [&](FMemModuleOp mem,
                                llvm::json::OStream &jsonStream,
-                               std::string &seqMemConfStr) {
-    if (memList.empty())
-      return;
-    // All the MemOp in the memList refer to the same FIRRTL memory. So just get
-    // the summary for the first MemoOp
-    auto memSummary = (*memList.begin()).getSummary();
+                               std::string &seqMemConfStr,
+                               SmallVectorImpl<Attribute> &jsonSymbols,
+                               SmallVectorImpl<Attribute> &seqMemSymbols) {
     // Get the memory data width.
-    auto width = memSummary.dataWidth;
+    auto width = mem.dataWidth();
     // Metadata needs to be printed for memories which are candidates for
     // macro replacement. The requirements for macro replacement::
     // 1. read latency and write latency of one.
     // 2. only one readwrite port or write port.
     // 3. zero or one read port.
     // 4. undefined read-under-write behavior.
-    if (!((memSummary.readLatency == 1 && memSummary.writeLatency == 1) &&
-          (memSummary.numWritePorts + memSummary.numReadWritePorts == 1) &&
-          (memSummary.numReadPorts <= 1) && width > 0))
+    if (!((mem.readLatency() == 1 && mem.writeLatency() == 1) &&
+          (mem.numWritePorts() + mem.numReadWritePorts() == 1) &&
+          (mem.numReadPorts() <= 1) && width > 0))
       return;
 
+    SmallDenseMap<Attribute, unsigned> symbolIndices;
+    auto addSymbolToVerbatimOp = [&](Operation *op) -> SmallString<8> {
+      Attribute symbol;
+      if (auto module = dyn_cast<FModuleLike>(op))
+        symbol = FlatSymbolRefAttr::get(module.moduleNameAttr());
+      else
+        symbol = hw::InnerRefAttr::get(
+            op->getParentOfType<FModuleOp>().moduleNameAttr(),
+            getOrAddInnerSym(op));
+
+      auto [it, inserted] =
+          symbolIndices.try_emplace(symbol, jsonSymbols.size());
+      if (inserted)
+        jsonSymbols.push_back(symbol);
+
+      SmallString<8> str;
+      ("{{" + Twine(it->second) + "}}").toVector(str);
+      return str;
+    };
     // Compute the mask granularity.
-    auto maskGran = width / memSummary.maskBits;
+    auto isMasked = mem.isMasked();
+    auto maskGran = width / mem.maskBits();
     // Now create the config string for the memory.
     std::string portStr;
-    if (memSummary.numWritePorts && memSummary.isMasked)
+    if (mem.numWritePorts() && isMasked)
       portStr += "mwrite";
-    else if (memSummary.numWritePorts)
+    else if (mem.numWritePorts())
       portStr += "write";
-    if (memSummary.numReadPorts) {
+    if (mem.numReadPorts()) {
       if (!portStr.empty())
         portStr += ",";
       portStr += "read";
     }
-    if (memSummary.numReadWritePorts && memSummary.isMasked)
+    if (mem.numReadWritePorts() && isMasked)
       portStr = "mrw";
-    else if (memSummary.numReadWritePorts)
+    else if (mem.numReadWritePorts())
       portStr = "rw";
-    auto memExtName = memSummary.getFirMemoryName().str();
+    auto memExtSym = FlatSymbolRefAttr::get(SymbolTable::getSymbolName(mem));
+    auto symId = seqMemSymbols.size();
+    seqMemSymbols.push_back(memExtSym);
+
     auto maskGranStr =
-        !memSummary.isMasked ? "" : " mask_gran " + std::to_string(maskGran);
-    seqMemConfStr += "name " + memExtName + " depth " +
-                     std::to_string(memSummary.depth) + " width " +
-                     std::to_string(width) + " ports " + portStr + maskGranStr +
-                     "\n";
+        !isMasked ? "" : " mask_gran " + std::to_string(maskGran);
+    seqMemConfStr = (StringRef(seqMemConfStr) + "name {{" + Twine(symId) +
+                     "}}" + " depth " + Twine(mem.depth()) + " width " +
+                     Twine(width) + " ports " + portStr + maskGranStr + "\n")
+                        .str();
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
-      jsonStream.attribute("module_name", memExtName);
-      jsonStream.attribute("depth", (int64_t)memSummary.depth);
+      jsonStream.attribute("module_name", addSymbolToVerbatimOp(mem));
+      jsonStream.attribute("depth", (int64_t)mem.depth());
       jsonStream.attribute("width", (int64_t)width);
-      jsonStream.attribute("masked", memSummary.isMasked);
-      jsonStream.attribute("read", memSummary.numReadPorts > 0);
-      jsonStream.attribute("write", memSummary.numWritePorts > 0);
-      jsonStream.attribute("readwrite", memSummary.numReadWritePorts > 0);
-      if (memSummary.isMasked)
+      jsonStream.attribute("masked", isMasked);
+      jsonStream.attribute("read", mem.numReadPorts() > 0);
+      jsonStream.attribute("write", mem.numWritePorts() > 0);
+      jsonStream.attribute("readwrite", mem.numReadWritePorts() > 0);
+      if (isMasked)
         jsonStream.attribute("mask_granularity", (int64_t)maskGran);
-      jsonStream.attributeArray("extra_ports", [&] {});
+      jsonStream.attributeArray("extra_ports", [&] {
+        for (auto attr : mem.extraPorts()) {
+          jsonStream.object([&] {
+            auto port = attr.cast<DictionaryAttr>();
+            auto name = port.getAs<StringAttr>("name").getValue();
+            jsonStream.attribute("name", name);
+            auto direction = port.getAs<StringAttr>("direction").getValue();
+            jsonStream.attribute("direction", direction);
+            auto width = port.getAs<IntegerAttr>("width").getUInt();
+            jsonStream.attribute("width", width);
+          });
+        }
+      });
       // Record all the hierarchy names.
       SmallVector<std::string> hierNames;
       jsonStream.attributeArray("hierarchy", [&] {
-        for (auto memOp : memList) {
-          // Get the absolute path for the parent memory, to create the
-          // hierarchy names.
-          auto paths = instancePathCache.getAbsolutePaths(
-              memOp->getParentOfType<FModuleOp>());
-          for (auto p : paths) {
-            if (p.empty())
-              continue;
-            const InstanceOp &x = p.front();
-            std::string hierName =
-                x->getParentOfType<FModuleOp>().getName().str();
-            for (InstanceOp inst : p) {
-              // If we see the DUT module on the way to the memory op, then
-              // reset the hierarchical name from the DUT module to match SFC.
-              auto parentModule = inst->getParentOfType<FModuleOp>();
-              if (dutMod == parentModule)
-                hierName = parentModule.getName().str();
-              hierName = hierName + "." + inst.name().str();
-            }
-            hierName = hierName + "." + memOp.name().str();
-            hierNames.push_back(hierName);
-            jsonStream.value(hierName);
+        // Get the absolute path for the parent memory, to create the
+        // hierarchy names.
+        auto paths = instancePathCache.getAbsolutePaths(mem);
+        for (auto p : paths) {
+          if (p.empty())
+            continue;
+          const InstanceOp &inst = p.front();
+          std::string hierName =
+              addSymbolToVerbatimOp(inst->getParentOfType<FModuleOp>()).c_str();
+          for (InstanceOp inst : p) {
+            auto parentModule = inst->getParentOfType<FModuleOp>();
+            if (dutMod == parentModule)
+              hierName = addSymbolToVerbatimOp(parentModule).c_str();
+            hierName = hierName + "." + addSymbolToVerbatimOp(inst).c_str();
           }
+          hierNames.push_back(hierName);
+          jsonStream.value(hierName);
         }
       });
     });
   };
+
+  SmallVector<FMemModuleOp> dutMems;
+  SmallVector<FMemModuleOp> tbMems;
+  for (auto mod : circuitOp.getOps<FMemModuleOp>()) {
+    if (dutModuleSet.contains(mod))
+      dutMems.push_back(mod);
+    else
+      tbMems.push_back(mod);
+  }
+
   std::string testBenchJsonBuffer;
   llvm::raw_string_ostream testBenchOs(testBenchJsonBuffer);
   llvm::json::OStream testBenchJson(testBenchOs);
   std::string dutJsonBuffer;
   llvm::raw_string_ostream dutOs(dutJsonBuffer);
   llvm::json::OStream dutJson(dutOs);
-  llvm::StringMap<SmallVector<MemOp>> dutMems;
-  llvm::StringMap<SmallVector<MemOp>> tbMems;
 
-  for (auto mod : circuitOp.getOps<FModuleOp>()) {
-    bool isDut = dutModuleSet.contains(mod);
-    for (auto memOp : mod.getBody()->getOps<MemOp>()) {
-      auto firMem = memOp.getSummary();
-      auto name = firMem.getFirMemoryName();
-      if (isDut)
-        dutMems[name].push_back(memOp);
-      else
-        tbMems[name].push_back(memOp);
-    }
-  }
   std::string seqMemConfStr;
+  SmallVector<Attribute, 8> seqMemSymbols;
+  SmallVector<Attribute, 8> jsonSymbols;
   dutJson.array([&] {
     for (auto &dutM : dutMems)
-      createMemMetadata(dutM.second, dutJson, seqMemConfStr);
+      createMemMetadata(dutM, dutJson, seqMemConfStr, jsonSymbols,
+                        seqMemSymbols);
   });
+  SmallVector<Attribute, 8> jsonSymbolsTB;
   testBenchJson.array([&] {
     // The tbConfStr is populated here, but unused, it will not be printed to
     // file.
     for (auto &tbM : tbMems)
-      createMemMetadata(tbM.second, testBenchJson, seqMemConfStr);
+      createMemMetadata(tbM, testBenchJson, seqMemConfStr, jsonSymbolsTB,
+                        seqMemSymbols);
   });
 
   auto *context = &getContext();
@@ -236,17 +249,20 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // Use unknown loc to avoid printing the location in the metadata files.
   auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
                                                      testBenchJsonBuffer);
+  tbVerbatimOp.symbolsAttr(ArrayAttr::get(context, jsonSymbolsTB));
   auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
       context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
   tbVerbatimOp->setAttr("output_file", fileAttr);
   auto dutVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
+  dutVerbatimOp.symbolsAttr(ArrayAttr::get(context, jsonSymbols));
   fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
       context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
   dutVerbatimOp->setAttr("output_file", fileAttr);
 
   auto confVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
+  confVerbatimOp.symbolsAttr(ArrayAttr::get(context, seqMemSymbols));
   if (replSeqMemFile.empty()) {
     circuitOp->emitError("metadata emission failed, the option "
                          "`-repl-seq-mem-file=<filename>` is mandatory for "
@@ -260,6 +276,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
   return success();
 }
+
 /// This will search for a target annotation and remove it from the operation.
 /// If the annotation has a filename, it will be returned in the output
 /// argument.  If the annotation is missing the filename member, or if more than
@@ -487,7 +504,6 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
-  renameMemory(circuitOp);
 
   if (failed(emitRetimeModulesMetadata()) ||
       failed(emitSitestBlackboxMetadata()) || failed(emitMemoryMetadata()))

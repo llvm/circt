@@ -18,7 +18,7 @@
 // CHECK:           sink %[[VAL_15]] : index
 // CHECK:           return %[[VAL_14]] : none
 // CHECK:         }
-  func @if_only() {
+  func.func @if_only() {
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %1 = arith.muli %c0, %c-1 : index

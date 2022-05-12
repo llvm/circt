@@ -100,6 +100,20 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInlinerPass()";
 }
 
+def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
+  let summary = "Add extra ports to memory modules";
+  let description = [{
+    This pass looks for `AddSeqMemPortAnnotation` annotations and adds extra
+    ports to memories.  It will emit metadata based if the
+    `AddSeqMemPortsFileAnnotation` annotation is specified.
+
+    This pass requires that FIRRTL MemOps have been lowered to modules to add
+    the extra ports.
+  }];
+  let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+}
+
 def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   let summary = "Replace all FIRRTL memories with an external module black box.";
   let description = [{
@@ -141,6 +155,14 @@ def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
     appropriate bitcasts to access the data.
   }];
   let constructor = "circt::firrtl::createFlattenMemoryPass()";
+}
+
+def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
+  let summary = "Lower memories to generated modules";
+  let description = [{
+    This pass lowers FIRRTL memory operations to generated modules.
+  }];
+  let constructor = "circt::firrtl::createLowerMemoryPass()";
 }
 
 def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
@@ -445,6 +467,21 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createExtractInstancesPass()";
   let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+}
+
+def MemToRegOfVec : Pass<"mem-to-regofvec", "firrtl::CircuitOp"> {
+  let summary = "Convert the memory to a Register vector";
+  let description = [{
+    This pass generates the logic to implement a memory using Registers.
+  }];
+  let options = [
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">,
+    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
+                "false",
+    "ignore the read enable signal, instead of assigning X on read disable">
+   ];
+  let constructor = "circt::firrtl::createMemToRegOfVecPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

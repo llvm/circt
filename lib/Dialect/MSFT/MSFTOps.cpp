@@ -402,10 +402,8 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
   auto loc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> entryArgs;
-  SmallVector<NamedAttrList, 4> argAttrs;
-  SmallVector<NamedAttrList, 4> resultAttrs;
-  SmallVector<Type, 4> argTypes;
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<DictionaryAttr, 4> resultAttrs;
   SmallVector<Type, 4> resultTypes;
   auto &builder = parser.getBuilder();
 
@@ -425,12 +423,14 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
   if (hw::module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames))
+          parser, entryArgs, isVariadic, resultTypes, resultAttrs, resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
+  SmallVector<Type> argTypes;
+  for (auto arg : entryArgs)
+    argTypes.push_back(arg.type);
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
@@ -452,25 +452,20 @@ ParseResult MSFTModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!entryArgs.empty()) {
     for (auto &arg : entryArgs)
       argNames.push_back(
-          hw::module_like_impl::getPortNameAttr(context, arg.name));
-  } else if (!argTypes.empty()) {
-    // The parser returns empty names in a special way.
-    argNames.assign(argTypes.size(), StringAttr::get(context, ""));
+          hw::module_like_impl::getPortNameAttr(context, arg.ssaName.name));
   }
 
   result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
 
-  assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the module arguments.
-  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
 
   // Parse the optional module body.
-  auto regionSuccess = parser.parseOptionalRegion(
-      *result.addRegion(), entryArgs,
-      entryArgs.empty() ? ArrayRef<Type>() : argTypes);
+  auto regionSuccess =
+      parser.parseOptionalRegion(*result.addRegion(), entryArgs);
   if (regionSuccess.hasValue() && failed(*regionSuccess))
     return failure();
 
@@ -650,10 +645,8 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
 
   auto loc = parser.getCurrentLocation();
 
-  SmallVector<OpAsmParser::UnresolvedOperand, 4> entryArgs;
-  SmallVector<NamedAttrList, 4> argAttrs;
-  SmallVector<NamedAttrList, 4> resultAttrs;
-  SmallVector<Type, 4> argTypes;
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  SmallVector<DictionaryAttr, 4> resultAttrs;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
@@ -669,14 +662,18 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
   SmallVector<Attribute> resultNames;
   if (parseParameterList(parser, parameters) ||
       hw::module_like_impl::parseModuleFunctionSignature(
-          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames) ||
+          parser, entryArgs, isVariadic, resultTypes, resultAttrs,
+          resultNames) ||
       // If function attributes are present, parse them.
       parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
+  SmallVector<Type> argTypes;
+  for (auto arg : entryArgs)
+    argTypes.push_back(arg.type);
+
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
@@ -694,10 +691,7 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
   if (!entryArgs.empty()) {
     for (auto &arg : entryArgs)
       argNames.push_back(
-          hw::module_like_impl::getPortNameAttr(context, arg.name));
-  } else if (!argTypes.empty()) {
-    // The parser returns empty names in a special way.
-    argNames.assign(argTypes.size(), StringAttr::get(context, ""));
+          hw::module_like_impl::getPortNameAttr(context, arg.ssaName.name));
   }
 
   // An explicit `argNames` attribute overrides the MLIR names.  This is how
@@ -709,11 +703,10 @@ ParseResult MSFTModuleExternOp::parse(OpAsmParser &parser,
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("parameters", ArrayAttr::get(context, parameters));
 
-  assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+  addArgAndResultAttrs(builder, result, entryArgs, resultAttrs);
 
   // Extern modules carry an empty region to work with HWModuleImplementation.h.
   result.addRegion();
@@ -857,10 +850,22 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
   result.addOperands(operands);
 
   Type peOutputType;
-  SmallVector<OpAsmParser::UnresolvedOperand> peArgs;
-  if (parser.parseKeyword("pe") ||
-      parser.parseOperandList(peArgs, 2, AsmParser::Delimiter::Paren) ||
-      parser.parseArrow() || parser.parseLParen() ||
+  SmallVector<OpAsmParser::Argument> peArgs;
+  if (parser.parseKeyword("pe")) {
+    return failure();
+  }
+  llvm::SMLoc peLoc = parser.getCurrentLocation();
+  if (parser.parseArgumentList(peArgs, AsmParser::Delimiter::Paren)) {
+    return failure();
+  }
+  if (peArgs.size() != 2) {
+    return parser.emitError(peLoc, "expected two operands");
+  }
+
+  peArgs[0].type = rowType;
+  peArgs[1].type = columnType;
+
+  if (parser.parseArrow() || parser.parseLParen() ||
       parser.parseType(peOutputType) || parser.parseRParen())
     return failure();
 
@@ -868,9 +873,12 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
       hw::ArrayType::get(peOutputType, numColumns), numRows)});
 
   Region *pe = result.addRegion();
-  llvm::SMLoc peLoc = parser.getCurrentLocation();
-  if (parser.parseRegion(*pe, peArgs, {rowType, columnType}))
+
+  peLoc = parser.getCurrentLocation();
+
+  if (parser.parseRegion(*pe, peArgs))
     return failure();
+
   if (pe->getBlocks().size() != 1)
     return parser.emitError(peLoc, "expected one block for the PE");
   Operation *peTerm = pe->getBlocks().front().getTerminator();

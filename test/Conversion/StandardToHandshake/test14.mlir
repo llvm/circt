@@ -78,7 +78,7 @@
 // CHECK:           sink %[[VAL_77]] : index
 // CHECK:           return %[[VAL_76]] : none
 // CHECK:         }
-func @affine_store(%arg0: index) {
+func.func @affine_store(%arg0: index) {
   %0 = memref.alloc() : memref<10xf32>
   %cst = arith.constant 1.100000e+01 : f32
   %c0 = arith.constant 0 : index

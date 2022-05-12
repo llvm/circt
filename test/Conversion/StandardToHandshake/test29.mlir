@@ -19,7 +19,7 @@
 // CHECK:           sink %[[VAL_15]] : i32
 // CHECK:           return %[[VAL_12]] : none
 // CHECK:         }
-func @load_store(%0 : memref<4xi32>, %1 : index) {
+func.func @load_store(%0 : memref<4xi32>, %1 : index) {
   %c1 = arith.constant 11 : i32
   memref.store %c1, %0[%1] : memref<4xi32>
   %3 = memref.load %0[%1] : memref<4xi32>

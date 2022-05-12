@@ -8,7 +8,7 @@
 // CHECK:           %[[VAL_7:.*]] = select %[[VAL_4]], %[[VAL_6]], %[[VAL_5]] : i32
 // CHECK:           return %[[VAL_7]], %[[VAL_3]] : i32, none
 // CHECK:         }
-func @main(%c : i1, %a : i32, %b : i32) -> i32 {
+func.func @main(%c : i1, %a : i32, %b : i32) -> i32 {
   %0 = arith.select %c, %a, %b : i32
   return %0 : i32
 }
@@ -19,5 +19,5 @@ func @main(%c : i1, %a : i32, %b : i32) -> i32 {
 
 // CHECK-LABEL: handshake.func private @foo(i32, i32, none, ...) -> (i32, none)
 module {
-  func private @foo(%a:i32, %b: i32) -> i32
+  func.func private @foo(%a:i32, %b: i32) -> i32
 }

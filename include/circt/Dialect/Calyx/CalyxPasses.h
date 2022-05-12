@@ -26,6 +26,7 @@ std::unique_ptr<mlir::Pass> createGoInsertionPass();
 std::unique_ptr<mlir::Pass> createRemoveGroupsPass();
 std::unique_ptr<mlir::Pass> createClkInsertionPass();
 std::unique_ptr<mlir::Pass> createResetInsertionPass();
+std::unique_ptr<mlir::Pass> createGroupInvariantCodeMotionPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

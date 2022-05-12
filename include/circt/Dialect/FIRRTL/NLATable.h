@@ -43,6 +43,12 @@ public:
   /// Resolve a symbol to a Module
   FModuleLike getModule(StringAttr name);
 
+  /// Insert a new NLA.
+  void insert(NonLocalAnchor nlaOp);
+
+  /// Remove the NLA from the analysis.
+  void erase(NonLocalAnchor nlaOp);
+
   //===-------------------------------------------------------------------------
   // Methods to keep an NLATable up to date.
   //
@@ -67,6 +73,14 @@ public:
   // Rename a module, this updates the name to module tracking and the name to
   // NLA tracking.
   void renameModule(StringAttr oldModName, StringAttr newModName);
+
+  // Replace the module oldModName with newModName in the namepath of any NLA.
+  // Since the module is being updated, the symbols inside the module should
+  // also be renamed. Use the rename map to update the inner_sym names in the
+  // namepath.
+  void renameModuleAndInnerRef(
+      StringAttr newModName, StringAttr oldModName,
+      const DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
 
 private:
   NLATable(const NLATable &) = delete;

@@ -43,7 +43,7 @@
 // CHECK:           sink %[[VAL_44]] : index
 // CHECK:           return %[[VAL_43]] : none
 // CHECK:         }
-func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
+func.func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
     %c0 = arith.constant 0 : index
     %c-1 = arith.constant -1 : index
     %1 = arith.muli %c0, %c-1 : index

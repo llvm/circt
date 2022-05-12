@@ -538,6 +538,73 @@ static bool isOkToBitSelectFrom(Value v) {
   return false;
 }
 
+/// Return true if we are unable to ever inline the specified operation.  This
+/// happens because not all Verilog expressions are composable, notably you
+/// can only use bit selects like x[4:6] on simple expressions, you cannot use
+/// expressions in the sensitivity list of always blocks, etc.
+static bool isExpressionUnableToInline(Operation *op) {
+  if (auto cast = dyn_cast<BitcastOp>(op))
+    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
+                          op->getLoc()))
+      // Bitcasts rely on the type being assigned to, so we cannot inline.
+      return true;
+
+  // StructCreateOp needs to be assigning to a named temporary so that types
+  // are inferred properly by verilog
+  if (isa<StructCreateOp>(op))
+    return true;
+
+  // Verbatim with a long string should be emitted as an out-of-line declration.
+  if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
+    if (verbatim.string().size() > 32)
+      return true;
+
+  // Scan the users of the operation to see if any of them need this to be
+  // emitted out-of-line.
+  for (auto *user : op->getUsers()) {
+    // Verilog bit selection is required by the standard to be:
+    // "a vector, packed array, packed structure, parameter or concatenation".
+    //
+    // It cannot be an arbitrary expression, e.g. this is invalid:
+    //     assign bar = {{a}, {b}, {c}, {d}}[idx];
+    //
+    // To handle these, we push the subexpression into a temporary.
+    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp>(user))
+      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
+          !isOkToBitSelectFrom(op->getResult(0)))
+        return true;
+
+    // Always blocks must have a name in their sensitivity list, not an expr.
+    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
+      // Anything other than a read of a wire must be out of line.
+      if (auto read = dyn_cast<ReadInOutOp>(op))
+        if (read.input().getDefiningOp<WireOp>() ||
+            read.input().getDefiningOp<RegOp>())
+          continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Return true if this expression should be emitted inline into any statement
+/// that uses it.
+static bool isExpressionEmittedInline(Operation *op) {
+  // Never create a temporary which is only going to be assigned to an output
+  // port.
+  if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
+    return true;
+
+  // If this operation has multiple uses, we can't generally inline it unless
+  // the op is duplicatable.
+  if (!op->getResult(0).hasOneUse() && !isDuplicatableExpression(op))
+    return false;
+
+  // If it isn't structurally possible to inline this expression, emit it out
+  // of line.
+  return !isExpressionUnableToInline(op);
+}
+
 /// Find a nested IfOp in an else block that can be printed as `else if`
 /// instead of nesting it into a new `begin` - `end` block.  The block must
 /// contain a single IfOp and optionally expressions which can be hoisted out.
@@ -1468,7 +1535,8 @@ public:
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan,
                 /*signRequirement*/ NoRequirement,
-                /*isSelfDeterminedUnsignedValue*/ false);
+                /*isSelfDeterminedUnsignedValue*/ false,
+                /*isTopLevelExpression*/ true);
 
     // Emitted expression might break the line length constraint so align it
     // here.
@@ -1490,7 +1558,8 @@ private:
   /// known to be have "self determined" width, allowing us to omit extensions.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprSignRequirement signReq = NoRequirement,
-                          bool isSelfDeterminedUnsignedValue = false);
+                          bool isSelfDeterminedUnsignedValue = false,
+                          bool isTopLevelExpression = false);
 
   void formatOutBuffer();
 
@@ -1678,6 +1747,22 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
+  // Introduce extra parentheses to specific patterns of expressions.
+  // If op is "AndOp", and rhs is Reduction And, the output is like `a & &b`.
+  // This is syntactically valid but some tool produces LINT warnings. Also it
+  // would be confusing for users to read such expressions.
+  bool emitRhsParentheses = false;
+  if (auto rhsICmp = op->getOperand(1).getDefiningOp<ICmpOp>()) {
+    if ((rhsICmp.isEqualAllOnes() && isa<AndOp>(op)) ||
+        (rhsICmp.isNotEqualZero() && isa<OrOp>(op))) {
+      if (isExpressionEmittedInline(rhsICmp)) {
+        os << '(';
+        emitRhsParentheses = true;
+        rhsPrec = LowestPrecedence;
+      }
+    }
+  }
+
   // If the RHS operand has self-determined width and always treated as
   // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
   // a shift operation.
@@ -1689,6 +1774,8 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
 
   auto rhsInfo = emitSubExpr(op->getOperand(1), rhsPrec, operandSignReq,
                              rhsIsUnsignedValueWithSelfDeterminedWidth);
+  if (emitRhsParentheses)
+    os << ')';
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1777,7 +1864,8 @@ static Value isZeroExtension(Value value) {
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
                                      SubExprSignRequirement signRequirement,
-                                     bool isSelfDeterminedUnsignedValue) {
+                                     bool isSelfDeterminedUnsignedValue,
+                                     bool isTopLevelExpression) {
   // If this is a self-determined unsigned value, look through any inline zero
   // extensions.  This occurs on the RHS of a shift operation for example.
   if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {
@@ -1814,12 +1902,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   signPreference = signRequirement;
 
   bool bitCastAdded = false;
-  if (state.options.explicitBitcastAddMul && isa<AddOp, MulOp>(op))
-    if (auto inType =
-            (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
-      os << inType.getWidth() << "'(";
-      bitCastAdded = true;
-    }
+  if (state.options.explicitBitcastAddMul)
+    if (isa<AddOp, MulOp>(op) || (isTopLevelExpression && isa<SubOp>(op)))
+      if (auto inType =
+              (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
+        os << inType.getWidth() << "'(";
+        bitCastAdded = true;
+      }
   // Okay, this is an expression we should emit inline.  Do this through our
   // visitor.
   auto expInfo = dispatchCombinationalVisitor(exp.getDefiningOp());
@@ -2181,83 +2270,22 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 // NameCollector
 //===----------------------------------------------------------------------===//
 
-/// Return true if we are unable to ever inline the specified operation.  This
-/// happens because not all Verilog expressions are composable, notably you
-/// can only use bit selects like x[4:6] on simple expressions, you cannot use
-/// expressions in the sensitivity list of always blocks, etc.
-static bool isExpressionUnableToInline(Operation *op) {
-  if (auto cast = dyn_cast<BitcastOp>(op))
-    if (!haveMatchingDims(cast.input().getType(), cast.result().getType(),
-                          op->getLoc()))
-      // Bitcasts rely on the type being assigned to, so we cannot inline.
-      return true;
-
-  // StructCreateOp needs to be assigning to a named temporary so that types
-  // are inferred properly by verilog
-  if (isa<StructCreateOp>(op))
-    return true;
-
-  // Verbatim with a long string should be emitted as an out-of-line declration.
-  if (auto verbatim = dyn_cast<VerbatimExprOp>(op))
-    if (verbatim.string().size() > 32)
-      return true;
-
-  // Scan the users of the operation to see if any of them need this to be
-  // emitted out-of-line.
-  for (auto user : op->getUsers()) {
-    // Verilog bit selection is required by the standard to be:
-    // "a vector, packed array, packed structure, parameter or concatenation".
-    //
-    // It cannot be an arbitrary expression, e.g. this is invalid:
-    //     assign bar = {{a}, {b}, {c}, {d}}[idx];
-    //
-    // To handle these, we push the subexpression into a temporary.
-    if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp>(user))
-      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
-          !isOkToBitSelectFrom(op->getResult(0)))
-        return true;
-
-    // Always blocks must have a name in their sensitivity list, not an expr.
-    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
-      // Anything other than a read of a wire must be out of line.
-      if (auto read = dyn_cast<ReadInOutOp>(op))
-        if (read.input().getDefiningOp<WireOp>() ||
-            read.input().getDefiningOp<RegOp>())
-          continue;
-      return true;
-    }
-  }
-  return false;
-}
-
-static ConstantOp isSingleConstantAssign(Operation *op) {
+static std::pair<ConstantOp, AssignOp> isSingleConstantAssign(Operation *op) {
   auto wire = dyn_cast<WireOp>(op);
   if (!wire)
     return {};
-  if (!wire->hasOneUse())
+  ConstantOp con;
+  AssignOp assignOp;
+  for (auto *user : wire->getUsers()) {
+    auto assign = dyn_cast<AssignOp>(*user);
+    if (assign && assignOp)
+      return {};
+    assignOp = assign;
+  }
+  if (!assignOp)
     return {};
-  auto assign = dyn_cast<AssignOp>(*wire->user_begin());
-  if (!assign)
-    return {};
-  return dyn_cast_or_null<ConstantOp>(assign->getOperand(1).getDefiningOp());
-}
-
-/// Return true if this expression should be emitted inline into any statement
-/// that uses it.
-static bool isExpressionEmittedInline(Operation *op) {
-  // Never create a temporary which is only going to be assigned to an output
-  // port.
-  if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
-    return true;
-
-  // If this operation has multiple uses, we can't generally inline it unless
-  // the op is duplicatable.
-  if (!op->getResult(0).hasOneUse() && !isDuplicatableExpression(op))
-    return false;
-
-  // If it isn't structurally possible to inline this expression, emit it out
-  // of line.
-  return !isExpressionUnableToInline(op);
+  return std::make_pair(
+      dyn_cast_or_null<ConstantOp>(assignOp.src().getDefiningOp()), assignOp);
 }
 
 namespace {
@@ -3672,10 +3700,11 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
-    if (auto constOp = isSingleConstantAssign(op)) {
+    auto [constOp, assignOp] = isSingleConstantAssign(op);
+    if (constOp) {
       os << " = ";
       emitExpression(constOp, opsForLocation, ForceEmitMultiUse);
-      emitter.assignsInlined.insert(*op->user_begin());
+      emitter.assignsInlined.insert(assignOp);
     }
 
     os << ';';

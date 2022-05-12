@@ -29,7 +29,7 @@ circuit Top :
       read-under-write => undefined
     always.w.clk <= clock
     always.w.en <= UInt<1>(1)
-    always.w.addr <= UInt<1>(0)
+    always.w.addr <= io.in
     always.w.data <= io.in
     always.w.mask <= UInt<1>(1)
 

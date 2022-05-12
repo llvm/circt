@@ -12,7 +12,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // This memory has two write ports where both write ports are driven by the
   // same clock.
   //
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_0_aa,
   // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
@@ -23,7 +23,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // This memory is the same as the above memory, but each write port is driven
   // by a different clock.
   //
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_0_ab,
   // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
@@ -31,14 +31,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   //
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_0_1_1,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_0_1_1_0,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i1, %R0_en: i1, %R0_clk: i1) -> (R0_data: i32)
   // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 32 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32,
   // CHECK-SAME: width = 32 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_0_1,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_0_1_0,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
@@ -49,9 +49,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK:    hw.module.generated @tbMemoryKind1_ext, @FIRRTLMem
   // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8)
 
-  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a,
+  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_0_a,
   // CHECK-SAME:  @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40)
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_0_a,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32,
@@ -208,10 +208,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Nodes with names become wires.
     // CHECK-NEXT: %n1 = sv.wire
     // CHECK-NEXT: sv.assign %n1, %in2
+    // CHECK-NEXT: sv.read_inout %n1
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
     
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
+    // CHECK-NEXT: sv.read_inout %n2
     %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
@@ -219,6 +221,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: [[WIRE:%n3]] = sv.wire sym @nodeSym : !hw.inout<i2>
     // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
+    // CHECK-NEXT: sv.read_inout [[WIRE]]
     %n3 = firrtl.node sym @nodeSym %in2 : !firrtl.uint<2>
 
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : i1, i2
@@ -862,7 +865,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
   // CHECK: %[[v2:.+]] = comb.and %inpred, %true : i1
-  // CHECK: %_M_ext.R0_data, %_M_ext.RW0_rdata = hw.instance "_M_ext" @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %0: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %1: i42, W0_addr: %c0_i4_1: i4, W0_en: %[[v2]]: i1, W0_clk: %clock2: i1, W0_data: %indata: i42) -> (R0_data: i42, RW0_rdata: i42)
+  // CHECK: %_M_ext.R0_data, %_M_ext.RW0_rdata = hw.instance "_M_ext" @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_0_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %0: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %1: i42, W0_addr: %c0_i4_1: i4, W0_en: %[[v2]]: i1, W0_clk: %clock2: i1, W0_data: %indata: i42) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK: hw.output %_M_ext.R0_data, %_M_ext.RW0_rdata : i42, i42
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.sint<42>
@@ -911,7 +914,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-    // CHECK: %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata = hw.instance "_M_mask_ext" @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
+    // CHECK: %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata = hw.instance "_M_mask_ext" @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_0_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
     // CHECK: hw.output %_M_mask_ext.R0_data, %_M_mask_ext.RW0_rdata : i40, i40
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.sint<40>
@@ -954,7 +957,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
-    // CHECK:  %_M_ext.R0_data = hw.instance "_M_ext" @FIRRTLMem_1_0_0_42_12_0_1_0_0_1(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
+    // CHECK:  %_M_ext.R0_data = hw.instance "_M_ext" @FIRRTLMem_1_0_0_42_12_0_1_0_0_1_0(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     // Read port.
     %6 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
@@ -1037,7 +1040,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @MemDepth1
   firrtl.module private @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
                            in %addr: !firrtl.uint<1>, out %data: !firrtl.uint<32>) {
-    // CHECK: %mem0_ext.R0_data = hw.instance "mem0_ext" @FIRRTLMem_1_0_0_32_1_0_1_0_1_1(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
+    // CHECK: %mem0_ext.R0_data = hw.instance "mem0_ext" @FIRRTLMem_1_0_0_32_1_0_1_0_1_1_0(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
     // CHECK: hw.output %mem0_ext.R0_data : i32
     %mem0_load0 = firrtl.mem Old {depth = 1 : i64, name = "mem0", portNames = ["load0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     %0 = firrtl.subfield %mem0_load0(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.clock
@@ -1152,19 +1155,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module private @MemoryWritePortBehavior
   firrtl.module private @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
     // This memory has both write ports driven by the same clock.  It should be
-    // lowered to an "aa" memory.
+    // lowered to an "aa" memory. Even if the clock is passed via different wires,
+    // we should identify the clocks to be same.
     //
-    // CHECK: hw.instance "aa_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
+    // CHECK: hw.instance "aa_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_0_aa
     %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
-    firrtl.connect %clk_aa_w0, %clock1 : !firrtl.clock, !firrtl.clock
-    firrtl.connect %clk_aa_w1, %clock1 : !firrtl.clock, !firrtl.clock
+    %cwire1 = firrtl.wire : !firrtl.clock
+    %cwire2 = firrtl.wire : !firrtl.clock
+    firrtl.connect %cwire1, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %cwire2, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w0, %cwire1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w1, %cwire2 : !firrtl.clock, !firrtl.clock
 
     // This memory has different clocks for each write port.  It should be
     // lowered to an "ab" memory.
     //
-    // CHECK: hw.instance "ab_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab
+    // CHECK: hw.instance "ab_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_0_ab
     %memory_ab_w0, %memory_ab_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_ab_w0 = firrtl.subfield %memory_ab_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_ab_w1 = firrtl.subfield %memory_ab_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
@@ -1174,10 +1182,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // This memory is the same as the first memory, but a node is used to alias
     // the second write port clock (e.g., this could be due to a dont touch
     // annotation blocking this from being optimized away).  This should be
-    // lowered to an "ab" memory even though it is trivially convertible to an
-    // "aa" memory.
+    // lowered to an "aa" since they are identical.
     //
-    // CHECK: hw.instance "ab_node_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab
+    // CHECK: hw.instance "ab_node_ext" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_0_aa
     %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
@@ -1409,6 +1416,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<1xi1>
   }
 
+  // CHECK-LABEL: hw.module private @SubAccess
+  firrtl.module private @SubAccess(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
+    %r1 = firrtl.reg %clock  : !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 1>
+    %0 = firrtl.subaccess %a[%x] : !firrtl.vector<vector<uint<1>, 1>, 1>, !firrtl.uint<1>
+    %1 = firrtl.subaccess %0[%y] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
+    firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    // CHECK:      %2 = hw.array_get %a[%x] : !hw.array<1xarray<1xi1>>
+    // CHECK-NEXT: %3 = hw.array_get %2[%y] : !hw.array<1xi1>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r1, %3 : i1
+    // CHECK-NEXT:   sv.passign %r2, %2 : !hw.array<1xi1>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<1xi1>
+  }
+
   // CHECK-LABEL: hw.module private @SubindexDestination
   firrtl.module private @SubindexDestination(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
     %0 = firrtl.subindex %b[2] : !firrtl.vector<uint<1>, 3>
@@ -1419,6 +1445,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
     // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%c-2_i2] : !hw.inout<array<3xi1>>, i2
     // CHECK-NEXT: %2 = hw.array_get %a[%c-2_i2] : !hw.array<3xi1>
+    // CHECK-NEXT: sv.assign %1, %2 : i1
+    // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
+  }
+
+  // CHECK-LABEL: hw.module private @SubAccessDestination
+  firrtl.module private @SubAccessDestination(in %x: !firrtl.uint<2>, in %y: !firrtl.uint<2>, in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 3>, out %b: !firrtl.vector<uint<1>, 3>) {
+    %0 = firrtl.subaccess %b[%x] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+    %1 = firrtl.subaccess %a[%y] : !firrtl.vector<uint<1>, 3>, !firrtl.uint<2>
+    firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: %.b.output = sv.wire
+    // CHECK-NEXT: %0 = sv.read_inout %.b.output : !hw.inout<array<3xi1>>
+    // CHECK-NEXT: %1 = sv.array_index_inout %.b.output[%x] : !hw.inout<array<3xi1>>, i2
+    // CHECK-NEXT: %2 = hw.array_get %a[%y] : !hw.array<3xi1>
     // CHECK-NEXT: sv.assign %1, %2 : i1
     // CHECK-NEXT: hw.output %0 : !hw.array<3xi1>
   }

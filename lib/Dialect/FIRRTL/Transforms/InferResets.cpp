@@ -610,6 +610,38 @@ static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
   return 0;
 }
 
+// If a field is pointing to a child of a zero-length vector, it is useless.
+static bool isUselessVec(FIRRTLType oldType, unsigned fieldID) {
+  if (oldType.isGround()) {
+    assert(fieldID == 0);
+    return false;
+  }
+
+  // If this is a bundle type, recurse.
+  if (auto bundleType = oldType.dyn_cast<BundleType>()) {
+    unsigned index = getIndexForFieldID(bundleType, fieldID);
+    return isUselessVec(bundleType.getElementType(index),
+                        fieldID - getFieldID(bundleType, index));
+  }
+
+  // If this is a vector type, check if it is zero length.  Anything in a
+  // zero-length vector is useless.
+  if (auto vectorType = oldType.dyn_cast<FVectorType>()) {
+    if (vectorType.getNumElements() == 0)
+      return true;
+    return isUselessVec(vectorType.getElementType(),
+                        fieldID - getFieldID(vectorType));
+  }
+
+  return false;
+}
+
+// If a field is pointing to a child of a zero-length vector, it is useless.
+static bool isUselessVec(FieldRef field) {
+  auto oldType = field.getValue().getType().cast<FIRRTLType>();
+  return isUselessVec(oldType, field.getFieldID());
+}
+
 static bool getDeclName(Value value, SmallString<32> &string) {
   if (auto arg = value.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
@@ -916,7 +948,8 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
       ++asyncDrives;
     else if (signal.type.isa<UIntType>())
       ++syncDrives;
-    else if (isa_and_nonnull<InvalidValueOp>(
+    else if (isUselessVec(signal.field) ||
+             isa_and_nonnull<InvalidValueOp>(
                  signal.field.getValue().getDefiningOp()))
       ++invalidDrives;
   }
@@ -1653,6 +1686,10 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
   // Handle reset-less registers.
   if (auto regOp = dyn_cast<RegOp>(op)) {
+    if (AnnotationSet::removeAnnotations(
+            regOp, "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec"))
+      return;
+
     LLVM_DEBUG(llvm::dbgs() << "- Adding async reset to " << regOp << "\n");
     auto zero = createZeroValue(builder, regOp.getType());
     auto newRegOp = builder.create<RegResetOp>(
@@ -1677,13 +1714,19 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     }
     LLVM_DEBUG(llvm::dbgs() << "- Updating reset of " << regOp << "\n");
 
+    auto reset = regOp.resetSignal();
+    auto value = regOp.resetValue();
+
     // If we arrive here, the register has a sync reset. In order to add an
     // async reset, we have to move the sync reset into a mux in front of the
     // register.
-    insertResetMux(builder, regOp, regOp.resetSignal(), regOp.resetValue());
-    builder.setInsertionPoint(regOp);
+    insertResetMux(builder, regOp, reset, value);
+    builder.setInsertionPointAfterValue(regOp);
+    auto mux = builder.create<MuxPrimOp>(reset, value, regOp);
+    builder.create<ConnectOp>(regOp, mux);
 
     // Replace the existing reset with the async reset.
+    builder.setInsertionPoint(regOp);
     auto zero = createZeroValue(builder, regOp.getType());
     regOp.resetSignalMutable().assign(actualReset);
     regOp.resetValueMutable().assign(zero);

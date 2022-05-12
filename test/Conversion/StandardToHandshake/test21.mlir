@@ -129,7 +129,7 @@
 // CHECK:           sink %[[VAL_133]] : index
 // CHECK:           return %[[VAL_132]] : none
 // CHECK:         }
-func @loop_min_max(%arg0: index) {
+func.func @loop_min_max(%arg0: index) {
   %c0 = arith.constant 0 : index
   %c42 = arith.constant 42 : index
   %c1 = arith.constant 1 : index

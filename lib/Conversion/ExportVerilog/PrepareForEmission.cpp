@@ -94,13 +94,6 @@ static void lowerBoundInstance(InstanceOp op) {
   }
 }
 
-static bool onlyUseIsAssign(Value v) {
-  if (!v.hasOneUse())
-    return false;
-  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
-    return false;
-  return true;
-}
 
 // Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
@@ -115,13 +108,15 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    if (onlyUseIsAssign(result))
-      continue;
-
     if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
       if (dyn_cast_or_null<OutputOp>(use.getOwner()))
         continue;
+      if (auto assign = dyn_cast_or_null<AssignOp>(use.getOwner())) {
+        // Move assign op after instance to resolve cyclic dependencies.
+        assign->moveAfter(op);
+        continue;
+      }
     }
 
     nameTmp.resize(namePrefixSize);
@@ -129,8 +124,8 @@ static void lowerInstanceResults(InstanceOp op) {
       nameTmp += port.name.getValue().str();
     else
       nameTmp += std::to_string(nextResultNo - 1);
+    Value newWire = builder.create<WireOp>(result.getType(), nameTmp);
 
-    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
     while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
       OpOperand &use = *result.getUses().begin();
@@ -377,6 +372,44 @@ static bool isMovableDeclaration(Operation *op) {
          op->getNumOperands() == 0;
 }
 
+/// If exactly one use of this op is an assign, replace the other uses with a
+/// read from the assigned wire or reg. This assumes the preconditions for doing
+/// so are met: op must be an expression in a non-procedural region.
+static void reuseExistingInOut(Operation *op) {
+  // Try to collect a single assign and all the other uses of op.
+  sv::AssignOp assign;
+  SmallVector<OpOperand *> uses;
+
+  // Look at each use.
+  for (OpOperand &use : op->getUses()) {
+    // If it's an assign, try to save it.
+    if (auto assignUse = dyn_cast<AssignOp>(use.getOwner())) {
+      // If there are multiple assigns, bail out.
+      if (assign)
+        return;
+
+      // Remember this assign for later.
+      assign = assignUse;
+      continue;
+    }
+
+    // If not an assign, remember this use for later.
+    uses.push_back(&use);
+  }
+
+  // If we didn't find anything, bail out.
+  if (!assign || uses.empty())
+    return;
+
+  // Replace all saved uses with a read from the assigned destination.
+  ImplicitLocOpBuilder builder(assign.dest().getLoc(), op->getContext());
+  for (OpOperand *use : uses) {
+    builder.setInsertionPoint(use->getOwner());
+    auto read = builder.create<ReadInOutOp>(assign.dest());
+    use->set(read);
+  }
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block,
@@ -530,6 +563,12 @@ void ExportVerilog::prepareHWModule(Block &block,
         }
       }
     }
+
+    // Try to anticipate expressions that ExportVerilog may spill to a temporary
+    // inout, and re-use an existing inout when possible. This is legal when op
+    // is an expression in a non-procedural region.
+    if (!isProceduralRegion && isVerilogExpression(&op))
+      reuseExistingInOut(&op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues

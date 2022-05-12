@@ -369,39 +369,45 @@ firrtl.circuit "Top" {
 
     // Existing sync reset is moved to mux.
     // CHECK: %reg3 = firrtl.regreset %clock, %extraReset, %c0_ui8
-    // CHECK: %0 = firrtl.mux(%init, %c1_ui8, %in)
-    // CHECK: firrtl.connect %reg3, %0
+    // CHECK: %0 = firrtl.mux(%init, %c1_ui8, %reg3)
+    // CHECK: %1 = firrtl.mux(%init, %c1_ui8, %in)
+    // CHECK: firrtl.connect %reg3, %1
     %reg3 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %reg3, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Factoring of sync reset into mux works through subfield op.
-    // CHECK: %reg4 = firrtl.regreset %clock, %extraReset, %1
-    // CHECK: %3 = firrtl.subfield %reset4(0)
-    // CHECK: %4 = firrtl.subfield %reg4(0)
-    // CHECK: %5 = firrtl.mux(%init, %3, %in)
-    // CHECK: firrtl.connect %4, %5
+    // CHECK: %reg4 = firrtl.regreset %clock, %extraReset, %2
+    // CHECK: %4 = firrtl.mux(%init, %reset4, %reg4)
+    // CHECK: %5 = firrtl.subfield %reset4(0)
+    // CHECK: %6 = firrtl.subfield %reg4(0)
+    // CHECK: %7 = firrtl.mux(%init, %5, %in)
+    // CHECK: firrtl.connect %6, %7
     %reset4 = firrtl.wire : !firrtl.bundle<a: uint<8>>
     %reg4 = firrtl.regreset %clock, %init, %reset4 : !firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>
     %0 = firrtl.subfield %reg4(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
     firrtl.connect %0, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Factoring of sync reset into mux works through subindex op.
-    // CHECK: %reg5 = firrtl.regreset %clock, %extraReset, %6
-    // CHECK: %8 = firrtl.subindex %reset5[0]
-    // CHECK: %9 = firrtl.subindex %reg5[0]
-    // CHECK: %10 = firrtl.mux(%init, %8, %in)
-    // CHECK: firrtl.connect %9, %10
+    // CHECK: %reg5 = firrtl.regreset %clock, %extraReset, %8
+    // CHECK: %10 = firrtl.mux(%init, %reset5, %reg5)
+    // CHECK: firrtl.connect %reg5, %10
+    // CHECK: %11 = firrtl.subindex %reset5[0]
+    // CHECK: %12 = firrtl.subindex %reg5[0]
+    // CHECK: %13 = firrtl.mux(%init, %11, %in)
+    // CHECK: firrtl.connect %12, %13
     %reset5 = firrtl.wire : !firrtl.vector<uint<8>, 1>
     %reg5 = firrtl.regreset %clock, %init, %reset5 : !firrtl.uint<1>, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
     %1 = firrtl.subindex %reg5[0] : !firrtl.vector<uint<8>, 1>
     firrtl.connect %1, %in : !firrtl.uint<8>, !firrtl.uint<8>
 
     // Factoring of sync reset into mux works through subaccess op.
-    // CHECK: %reg6 = firrtl.regreset %clock, %extraReset, %11
-    // CHECK: %13 = firrtl.subaccess %reset6[%in]
-    // CHECK: %14 = firrtl.subaccess %reg6[%in]
-    // CHECK: %15 = firrtl.mux(%init, %13, %in)
-    // CHECK: firrtl.connect %14, %15
+    // CHECK: %reg6 = firrtl.regreset %clock, %extraReset, %14 
+    // CHECK: %16 = firrtl.mux(%init, %reset6, %reg6)
+    // CHECK: firrtl.connect %reg6, %16
+    // CHECK: %17 = firrtl.subaccess %reset6[%in]
+    // CHECK: %18 = firrtl.subaccess %reg6[%in]
+    // CHECK: %19 = firrtl.mux(%init, %17, %in)
+    // CHECK: firrtl.connect %18, %19
     %reset6 = firrtl.wire : !firrtl.vector<uint<8>, 1>
     %reg6 = firrtl.regreset %clock, %init, %reset6 : !firrtl.uint<1>, !firrtl.vector<uint<8>, 1>, !firrtl.vector<uint<8>, 1>
     %2 = firrtl.subaccess %reg6[%in] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<8>
@@ -409,8 +415,8 @@ firrtl.circuit "Top" {
 
     // Subfields that are never assigned to should not leave unused reset
     // subfields behind.
-    // CHECK-NOT: %16 = firrtl.subfield %reset4(0)
-    // CHECK: %16 = firrtl.subfield %reg4(0)
+    // CHECK-NOT: firrtl.subfield %reset4(0)
+    // CHECK: %20 = firrtl.subfield %reg4(0)
     %3 = firrtl.subfield %reg4(0) : (!firrtl.bundle<a: uint<8>>) -> !firrtl.uint<8>
   }
 }
@@ -516,6 +522,8 @@ firrtl.circuit "FullAsyncNested" {
     firrtl.connect %inst_io_in, %io_in : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %io_out_REG = firrtl.regreset %clock, %reset, %c0_ui8
     %io_out_REG = firrtl.reg %clock : !firrtl.uint<8>
+    // CHECK: %io_out_REG_NO = firrtl.reg %clock : !firrtl.uint<8>
+    %io_out_REG_NO = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.firrtl.ExcludeMemFromMemToRegOfVec"}]}: !firrtl.uint<8>
     firrtl.connect %io_out_REG, %io_in : !firrtl.uint<8>, !firrtl.uint<8>
     %0 = firrtl.add %io_out_REG, %inst_io_out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
     %1 = firrtl.bits %0 7 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<8>
@@ -572,6 +580,8 @@ firrtl.circuit "WireShouldDominate" {
   }
 }
 
+// -----
+
 // Local node as async reset should be moved before all its uses if its input
 // value dominates the target location in the module.
 firrtl.circuit "MovableNodeShouldDominate" {
@@ -586,6 +596,8 @@ firrtl.circuit "MovableNodeShouldDominate" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
   }
 }
+
+// -----
 
 // Local node as async reset should be replaced by a wire and moved before all
 // its uses if its input value does not dominate the target location in the
@@ -603,6 +615,8 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
     // CHECK-NEXT: firrtl.strictconnect %localReset, %0
   }
 }
+
+// -----
 
 // Move of local async resets should work across blocks.
 firrtl.circuit "MoveAcrossBlocks1" {
@@ -628,6 +642,8 @@ firrtl.circuit "MoveAcrossBlocks1" {
   }
 }
 
+// -----
+
 firrtl.circuit "MoveAcrossBlocks2" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks2
   firrtl.module @MoveAcrossBlocks2(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
@@ -651,6 +667,8 @@ firrtl.circuit "MoveAcrossBlocks2" {
   }
 }
 
+// -----
+
 firrtl.circuit "MoveAcrossBlocks3" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks3
   firrtl.module @MoveAcrossBlocks3(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
@@ -669,6 +687,8 @@ firrtl.circuit "MoveAcrossBlocks3" {
     // CHECK-NEXT: }
   }
 }
+
+// -----
 
 firrtl.circuit "MoveAcrossBlocks4" {
   // CHECK-LABEL: firrtl.module @MoveAcrossBlocks4
@@ -689,6 +709,8 @@ firrtl.circuit "MoveAcrossBlocks4" {
   }
 }
 
+// -----
+
 firrtl.circuit "SubAccess" {
   firrtl.module @SubAccess(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
     // CHECK-LABEL: firrtl.module @SubAccess
@@ -699,11 +721,15 @@ firrtl.circuit "SubAccess" {
     %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     firrtl.strictconnect %2, %in : !firrtl.uint<8>
     // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT: %0 = firrtl.mux(%init, %c1_ui2, %reg6)
+    // CHECK: firrtl.connect %reg6, %0
     // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     // CHECK-NEXT:  firrtl.strictconnect %[[v0]], %in : !firrtl.uint<8>
 
   }
 }
+
+// -----
 
 // This is a regression check to ensure that a zero-width register gets a proper
 // reset value.
@@ -716,6 +742,8 @@ firrtl.circuit "ZeroWidthRegister" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %reset, [[TMP]]
   }
 }
+
+// -----
 
 // Check that unaffected fields ("data") are not being affected by width
 // inference. See https://github.com/llvm/circt/issues/2857.
@@ -730,6 +758,9 @@ firrtl.circuit "ZeroLengthVectorInBundle1"  {
     // CHECK-NEXT: firrtl.strictconnect %0, %invalid : !firrtl.vector<uint<1>, 0>
   }
 }
+
+// -----
+
 // CHECK-LABEL: firrtl.module @ZeroLengthVectorInBundle2
 firrtl.circuit "ZeroLengthVectorInBundle2"  {
   firrtl.module @ZeroLengthVectorInBundle2(out %out: !firrtl.bundle<resets: vector<bundle<a: reset>, 0>, data flip: uint<3>>) {
@@ -739,5 +770,33 @@ firrtl.circuit "ZeroLengthVectorInBundle2"  {
     // CHECK-NEXT: %0 = firrtl.subfield %out(0) : (!firrtl.bundle<resets: vector<bundle<a: uint<1>>, 0>, data flip: uint<3>>) -> !firrtl.vector<bundle<a: uint<1>>, 0>
     // CHECK-NEXT: %invalid = firrtl.invalidvalue : !firrtl.vector<bundle<a: uint<1>>, 0>
     // CHECK-NEXT: firrtl.strictconnect %0, %invalid : !firrtl.vector<bundle<a: uint<1>>, 0>
+  }
+}
+
+// -----
+
+// Resets nested underneath a zero-length vector should infer to `UInt<1>`.
+// CHECK-LABEL: firrtl.module @ZeroVecBundle
+// CHECK-SAME: in %a: !firrtl.vector<bundle<x: uint<1>>, 0>
+// CHECK-SAME: out %b: !firrtl.vector<bundle<x: uint<1>>, 0>
+firrtl.circuit "ZeroVecBundle"  {
+  firrtl.module @ZeroVecBundle(in %a: !firrtl.vector<bundle<x: uint<1>>, 0>, out %b: !firrtl.vector<bundle<x: reset>, 0>) {
+    %w = firrtl.wire : !firrtl.vector<bundle<x: reset>, 0>
+    firrtl.connect %b, %w : !firrtl.vector<bundle<x: reset>, 0>, !firrtl.vector<bundle<x: reset>, 0>
+    // CHECK-NEXT: %w = firrtl.wire : !firrtl.vector<bundle<x: uint<1>>, 0>
+    // CHECK-NEXT: firrtl.connect %b, %w : !firrtl.vector<bundle<x: uint<1>>, 0>, !firrtl.vector<bundle<x: uint<1>>, 0>
+  }
+}
+
+// -----
+
+// Resets directly in a zero-length vector should infer to `UInt<1>`.
+// CHECK-LABEL: firrtl.module @ZeroVec
+// CHECK-SAME: in %a: !firrtl.bundle<x: vector<uint<1>, 0>>
+// CHECK-SAME: out %b: !firrtl.bundle<x: vector<uint<1>, 0>>
+firrtl.circuit "ZeroVec"  {
+  firrtl.module @ZeroVec(in %a: !firrtl.bundle<x: vector<reset, 0>>, out %b: !firrtl.bundle<x: vector<reset, 0>>) {
+    firrtl.connect %b, %a : !firrtl.bundle<x: vector<reset, 0>>, !firrtl.bundle<x: vector<reset, 0>>
+    // CHECK-NEXT: firrtl.connect %b, %a : !firrtl.bundle<x: vector<uint<1>, 0>>, !firrtl.bundle<x: vector<uint<1>, 0>>
   }
 }

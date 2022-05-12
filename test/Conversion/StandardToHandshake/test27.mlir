@@ -44,7 +44,7 @@
 // CHECK:           sink %[[VAL_42]] : index
 // CHECK:           return %[[VAL_41]] : none
 // CHECK:         }
-func @simple_loop() {
+func.func @simple_loop() {
 ^bb0:
   cf.br ^bb1
 ^bb1:	// pred: ^bb0

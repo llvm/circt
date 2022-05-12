@@ -153,6 +153,12 @@ static cl::opt<bool> imconstprop(
         "Enable intermodule constant propagation and dead code elimination"),
     cl::init(true), cl::cat(mainCategory));
 
+// TODO: this pass is temporarily off by default, while we migrate over to the
+// new memory lowering pipeline.
+static cl::opt<bool> lowerMemory("lower-memory",
+                                 cl::desc("run the lower-memory pass"),
+                                 cl::init(true), cl::cat(mainCategory));
+
 static cl::opt<bool>
     lowerTypes("lower-types",
                cl::desc("run the lower-types pass within lower-to-hw"),
@@ -161,6 +167,11 @@ static cl::opt<bool>
 static cl::opt<bool> expandWhens("expand-whens",
                                  cl::desc("disable the expand-whens pass"),
                                  cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    addSeqMemPorts("add-seqmem-ports",
+                   cl::desc("add user defined ports to sequential memories"),
+                   cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     blackBoxMemory("blackbox-memory",
@@ -203,6 +214,11 @@ static cl::opt<bool>
     extractInstances("extract-instances",
                      cl::desc("extract black boxes, seq mems, and clock gates"),
                      cl::init(true), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    memToRegOfVec("mem-to-regofvec",
+                  cl::desc("run the memToRegOfVec transform pass on firrtl"),
+                  cl::init(true));
 
 static cl::opt<bool>
     prefixModules("prefix-modules",
@@ -476,6 +492,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
+  if (memToRegOfVec)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createMemToRegOfVecPass(replSeqMem, ignoreReadEnableMem));
+
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
@@ -484,9 +504,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (wireDFT)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
-
-  if (prefixModules)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
@@ -520,6 +537,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inferMemReadWrite)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createInferReadWritePass());
+
+  if (lowerMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerMemoryPass());
+
+  if (prefixModules)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
@@ -558,6 +581,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       pm.nest<firrtl::CircuitOp>().addPass(
           firrtl::createRemoveUnusedPortsPass());
   }
+
+  if (addSeqMemPorts)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
