@@ -333,6 +333,14 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                  std::move(elseCtor));
 }
 
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
+                              MacroIdentAttr cond,
+                              std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  IfDefOp::build(builder, result, cond, std::move(thenCtor),
+                 std::move(elseCtor));
+}
+
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
                                               PatternRewriter &rewriter) {
   return canonicalizeIfDefLike(op, rewriter);
