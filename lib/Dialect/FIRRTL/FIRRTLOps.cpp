@@ -3472,40 +3472,6 @@ bool NonLocalAnchor::updateModule(StringAttr oldMod, StringAttr newMod) {
   return updateMade;
 }
 
-bool NonLocalAnchor::updateModuleAndInnerRef(
-    StringAttr oldMod, StringAttr newMod,
-    const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
-  auto fromRef = FlatSymbolRefAttr::get(oldMod);
-
-  auto namepathNew = namepath().getValue().vec();
-  bool updateMade = false;
-  // Break from the loop if the module is found, since it can occur only once.
-  for (auto &element : namepathNew) {
-    if (auto innerRef = element.dyn_cast<hw::InnerRefAttr>()) {
-      if (innerRef.getModule() != oldMod)
-        continue;
-      auto symName = innerRef.getName();
-      // Since the module got updated, the old innerRef symbol inside oldMod
-      // should also be updated to the new symbol inside the newMod.
-      auto to = innerSymRenameMap.find(symName);
-      if (to != innerSymRenameMap.end())
-        symName = to->second;
-      updateMade = true;
-      element = hw::InnerRefAttr::get(newMod, symName);
-      break;
-    }
-    if (element != fromRef)
-      continue;
-
-    updateMade = true;
-    element = FlatSymbolRefAttr::get(newMod);
-    break;
-  }
-  if (updateMade)
-    namepathAttr(ArrayAttr::get(getContext(), namepathNew));
-  return updateMade;
-}
-
 bool NonLocalAnchor::truncateAtModule(StringAttr atMod, bool includeMod) {
   SmallVector<Attribute, 4> newPath;
   bool updateMade = false;
