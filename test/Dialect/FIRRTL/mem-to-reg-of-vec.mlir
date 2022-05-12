@@ -4,7 +4,8 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
   firrtl.module public @Mem() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
     %mem_read, %mem_write = firrtl.mem Undefined  {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
   }
-    // CHECK-LABEL: firrtl.module public @Mem(
+    // CHECK-LABEL: firrtl.circuit "Mem" {
+    // CHECK: firrtl.module public @Mem(
     // CHECK:         %mem_read = firrtl.wire  : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
     // CHECK:         %[[v0:.+]] = firrtl.subfield %mem_read(0)
     // CHECK:         %[[v1:.+]] = firrtl.subfield %mem_read(1)
@@ -31,6 +32,13 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
     // CHECK:         }
 
 
+}
+
+firrtl.circuit "Mem_Ignore" {
+  firrtl.module public @Mem_Ignore() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
+    %mem_read, %mem_write = firrtl.mem Undefined  {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK: %mem_read, %mem_write = firrtl.mem Undefined  {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+  }
 }
 
 firrtl.circuit  "GCTModule" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
