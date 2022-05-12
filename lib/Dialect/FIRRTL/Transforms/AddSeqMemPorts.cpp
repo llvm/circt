@@ -208,10 +208,6 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module) {
   unsigned firstPortIndex = module.getNumPorts();
 
   for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
-    // We cannot add extra ports to a regular memory op.
-    if (auto mem = dyn_cast<MemOp>(op))
-      return mem->emitError("memories should have been lowered to modules");
-
     if (auto inst = dyn_cast<InstanceOp>(op)) {
       auto submodule = instanceGraph->getReferencedModule(inst);
       auto &subMemInfo = memInfoMap[submodule];
