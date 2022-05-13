@@ -17,9 +17,7 @@ declare_mlir_python_sources(PyCDESources
     pycde/dialects/hw.py
     pycde/dialects/comb.py
     pycde/support.py
-    pycde/appid.py
     pycde/module.py
-    pycde/attributes.py
     pycde/constructs.py
     pycde/system.py
     pycde/devicedb.py

@@ -5,8 +5,6 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, Union
 
-from .appid import AppID
-
 from circt.dialects import msft
 
 import mlir.ir as ir
@@ -65,10 +63,6 @@ class Instance:
     path_names = [i.name for i in self.path]
     return "<instance: [" + ", ".join(path_names) + "]>"
 
-  @property
-  def appid(self) -> AppID:
-    return AppID(*[i.name for i in self.path])
-
   def _children(self) -> Dict[ir.StringAttr, NonRootInstance]:
     """Return a dict of MLIR StringAttr this instances' children. Cache said
     list."""
@@ -86,7 +80,7 @@ class Instance:
   @property
   def children(self) -> Dict[str, NonRootInstance]:
     """Return a dict of python strings to this instances' children."""
-    return {ir.StringAttr(key).value: inst for (key, inst) in self._children}
+    return {ir.StringAttr(key).value: inst for (key, inst) in self._children()}
 
   def __getitem__(self, child_name: str) -> NonRootInstance:
     """Get a child instance."""
@@ -102,15 +96,6 @@ class Instance:
   def path_names(self):
     """A list of instance names representing the instance path."""
     return [i.name for i in self.path]
-
-  def attach_attribute(self, attr):
-    import pycde.devicedb as devdb
-
-    assert isinstance(attr, tuple), "Only (subpath, loc) are supported"
-    if isinstance(attr[1], devdb.PhysLocation):
-      self.root.system.placedb.place(self, attr[1], attr[0])
-    else:
-      assert False
 
   def add_named_attribute(self,
                           name: str,

@@ -5,7 +5,6 @@
 import pycde
 import pycde.dialects.hw
 
-from pycde.attributes import placement
 from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
@@ -104,8 +103,8 @@ t.get_instance(Test).walk(place_inst)
 test_inst = t.get_instance(Test)
 t.createdb()
 
-test_inst["UnParameterized"].attach_attribute(
-    placement(["memory", "bank"], PrimitiveType.M20K, 15, 25, 0))
+test_inst["UnParameterized"].place(PrimitiveType.M20K, 15, 25, 0,
+                                   ["memory", "bank"])
 test_inst["UnParameterized"].add_named_attribute("FOO", "OFF",
                                                  ["memory", "bank"])
 test_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 25, 0)
@@ -130,11 +129,6 @@ print(f"{loc} has {t.placedb.get_instance_at(loc)[0].path_names}")
 assert t.placedb.get_instance_at(PhysLocation(PrimitiveType.M20K, 0, 0,
                                               0)) is None
 # assert test_inst.placedb.get_instance_at(reserved_loc) is not None
-
-instance_attrs = pycde.AppIDIndex()
-assert instance_attrs.find_unused() is None
-instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
-assert (len(instance_attrs.find_unused()) == 1)
 
 # CHECK-LABEL: === Force-clean all the caches and test rebuilds
 print("=== Force-clean all the caches and test rebuilds")

@@ -24,7 +24,7 @@ class PhysLocation:
                prim_type: Union[str, PrimitiveType],
                x: int,
                y: int,
-               num: Optional[int] = None):
+               num: Optional[int] = 0):
 
     if isinstance(prim_type, str):
       prim_type = getattr(PrimitiveType, prim_type)

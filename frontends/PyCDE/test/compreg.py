@@ -6,7 +6,6 @@
 import pycde
 from pycde import types, module, Input, Output
 
-from pycde.attributes import placement
 from pycde.devicedb import PrimitiveType
 from pycde.dialects import seq
 from pycde.module import generator
@@ -30,16 +29,12 @@ class CompReg:
     ports.output = compreg
 
 
-appid = pycde.AppIDIndex()
-loc = placement([], PrimitiveType.FF, 0, 0, 0)
-appid.lookup(pycde.AppID("reg")).add_attribute(loc)
-
 mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])
 mod.print()
 mod.generate()
 top_inst = mod.get_instance(CompReg)
 mod.createdb()
-top_inst.walk(appid.apply_attributes_visitor)
+top_inst["reg"].place(PrimitiveType.FF, 0, 0, 0)
 mod.print()
 mod.emit_outputs()
 
