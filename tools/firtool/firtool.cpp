@@ -550,6 +550,13 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
+  if (addSeqMemPorts)
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
+
+  if (emitMetadata)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+
   if (extractInstances)
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createExtractInstancesPass());
 
@@ -581,13 +588,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       pm.nest<firrtl::CircuitOp>().addPass(
           firrtl::createRemoveUnusedPortsPass());
   }
-
-  if (addSeqMemPorts)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
-
-  if (emitMetadata)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
-        replSeqMem, replSeqMemCircuit, replSeqMemFile));
 
   if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(
