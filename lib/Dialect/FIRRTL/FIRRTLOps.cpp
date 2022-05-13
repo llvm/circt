@@ -3476,6 +3476,8 @@ bool NonLocalAnchor::updateModuleAndInnerRef(
     StringAttr oldMod, StringAttr newMod,
     const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
   auto fromRef = FlatSymbolRefAttr::get(oldMod);
+  if (oldMod == newMod)
+    return false;
 
   auto namepathNew = namepath().getValue().vec();
   bool updateMade = false;

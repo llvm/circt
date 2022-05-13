@@ -78,6 +78,8 @@ void NLATable::renameModuleAndInnerRef(
     StringAttr newModName, StringAttr oldModName,
     const DenseMap<StringAttr, StringAttr> &innerSymRenameMap) {
 
+  if (newModName == oldModName)
+    return;
   for (auto nla : lookup(oldModName)) {
     nla.updateModuleAndInnerRef(oldModName, newModName, innerSymRenameMap);
     nodeMap[newModName].push_back(nla);
