@@ -2578,7 +2578,10 @@ void FIRRTLLowering::initializeRegister(
         // Merge if op if their reset values are same.
         auto &op = asyncRegPostRandomizationIfOp[{block, resetSignal}];
         if (!op)
-          op = builder.create<sv::IfOp>(resetSignal, [&]() {});
+          builder.create<sv::IfDefProceduralOp>("RANDOMIZE", [&] {
+            op = builder.create<sv::IfOp>(resetSignal, [&]() {});
+          });
+
         runWithInsertionPointAtEndOfBlock(
             [&]() { builder.create<sv::BPAssignOp>(reg, resetValue); },
             op.thenRegion());
