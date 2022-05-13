@@ -273,10 +273,9 @@ void HWSpecializePass::runOnOperation() {
                  llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
       parametersUsers;
 
-  // Maintain a symbol cache for fast looking during module specialization.
-  MutableSymbolCache sc;
+  // Maintain a symbol cache for fast lookup during module specialization.
+  SymbolCache sc;
   sc.addDefinitions(module);
-  sc.freeze();
 
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
@@ -307,9 +306,7 @@ void HWSpecializePass::runOnOperation() {
       }
 
       // Extend the symbol cache with the newly created module.
-      sc.unfreeze();
       sc.addDefinition(specializedModule.getNameAttr(), specializedModule);
-      sc.freeze();
 
       // Rewrite instances of the specialized module to the specialized
       // module.

@@ -722,7 +722,7 @@ public:
   explicit VerilogEmitterState(ModuleOp designOp,
                                const SharedEmitterState &shared,
                                const LoweringOptions &options,
-                               const SymbolCache &symbolCache,
+                               const HWSymbolCache &symbolCache,
                                const GlobalNameTable &globalNames,
                                raw_ostream &os)
       : designOp(designOp), shared(shared), options(options),
@@ -737,7 +737,7 @@ public:
   const LoweringOptions &options;
 
   /// This is a cache of various information about the IR, in frozen state.
-  const SymbolCache &symbolCache;
+  const HWSymbolCache &symbolCache;
 
   /// This tracks global names where the Verilog name needs to be different than
   /// the IR name.
@@ -831,7 +831,7 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  auto namify = [&](Attribute sym, SymbolCache::Item item) {
+  auto namify = [&](Attribute sym, HWSymbolCache::Item item) {
     // CAVEAT: These accesses can reach into other modules through inner name
     // references, which are currently being processed. Do not add those remote
     // operations to this module's `names`, which is reserved for things named
@@ -905,8 +905,8 @@ void EmitterBase::emitTextWithSubstitutions(
           if (auto *symOp = state.symbolCache.getDefinition(fsym))
             symVerilogName = namify(sym, symOp);
         } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
-          auto symOp =
-              state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+          auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
+                                                            isym.getName());
           symVerilogName = namify(sym, symOp);
         }
         os << symVerilogName;
@@ -4138,7 +4138,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addDefinition(moduleOp.getNameAttr(), name, op);
+        symbolCache.addInnerDefinition(moduleOp.getNameAttr(), name, op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
@@ -4149,13 +4149,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
         if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
-                                    moduleOp, p);
+          symbolCache.addInnerDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+                                         moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
         if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
-                                    moduleOp, p + numArgs);
+          symbolCache.addInnerDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+                                         moduleOp, p + numArgs);
   };
 
   SmallString<32> outputPath;

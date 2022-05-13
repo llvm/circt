@@ -523,7 +523,7 @@ def BindOp : SVOp<"bind",
   ];
   let extraClassDeclaration = [{
     /// Lookup the instance for the bind.  This returns null on invalid IR.
-    hw::InstanceOp getReferencedInstance(const hw::SymbolCache *cache = nullptr);
+    hw::InstanceOp getReferencedInstance(const hw::HWSymbolCache *cache = nullptr);
   }];
 }
 
@@ -540,7 +540,7 @@ def BindInterfaceOp : SVOp<"bind.interface",
   let assemblyFormat = "$instance attr-dict";
   let extraClassDeclaration = [{
     sv::InterfaceInstanceOp
-    getReferencedInstance(const hw::SymbolCache *cache = nullptr);
+    getReferencedInstance(const hw::HWSymbolCache *cache = nullptr);
   }];
 }
 

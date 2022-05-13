@@ -1136,7 +1136,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
+Operation *InstanceOp::getReferencedModule(const HWSymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(moduleNameAttr()))
       return result;

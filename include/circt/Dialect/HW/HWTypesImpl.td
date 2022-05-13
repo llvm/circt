@@ -187,6 +187,6 @@ def TypeAliasType : HWType<"TypeAlias"> {
   let extraClassDeclaration = [{
     /// Return the Typedecl referenced by this TypeAlias, given the module to
     /// look in.  This returns null when the IR is malformed.
-    TypedeclOp getTypeDecl(const SymbolCache &cache);
+    TypedeclOp getTypeDecl(const HWSymbolCache &cache);
   }];
 }
