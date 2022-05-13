@@ -131,11 +131,6 @@ assert t.placedb.get_instance_at(PhysLocation(PrimitiveType.M20K, 0, 0,
                                               0)) is None
 # assert test_inst.placedb.get_instance_at(reserved_loc) is not None
 
-instance_attrs = pycde.AppIDIndex()
-assert instance_attrs.find_unused() is None
-instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
-assert (len(instance_attrs.find_unused()) == 1)
-
 # CHECK-LABEL: === Force-clean all the caches and test rebuilds
 print("=== Force-clean all the caches and test rebuilds")
 t._op_cache.release_ops()
