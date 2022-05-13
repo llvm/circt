@@ -787,9 +787,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {`RANDOM};" {symbols = [#hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
     // CHECK-NEXT:       sv.verbatim "{{[{][{]0[}][}]}} = {{[{][{]1[}][}]}};" {symbols = [#hw.innerNameRef<@InitReg1::@[[reg3_sym]]>, #hw.innerNameRef<@InitReg1::@[[RANDOM_3_SYM]]>]}
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     sv.if %reset {
-    // CHECK-NEXT:       sv.bpassign %reg, %c0_i32 : i32
-    // CHECK-NEXT:       sv.bpassign %reg3, %c1_i32 : i32
+    // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE"  {
+    // CHECK-NEXT:       sv.if %reset {
+    // CHECK-NEXT:         sv.bpassign %reg, %c0_i32 : i32
+    // CHECK-NEXT:         sv.bpassign %reg3, %c1_i32 : i32
+    // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
