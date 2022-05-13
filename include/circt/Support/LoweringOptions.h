@@ -81,8 +81,15 @@ struct LoweringOptions {
   /// statements to be labeled.
   bool enforceVerifLabels = false;
 
+  /// This is the maximum number of terms in an expression before that
+  /// expression spills a wire.
   enum { DEFAULT_TERM_LIMIT = 256 };
   unsigned maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
+
+  /// This is the maximum number of terms in an expression used in a concat
+  /// before that expression spills a wire.
+  enum { DEFAULT_CONCAT_TERM_LIMIT = 10 };
+  unsigned maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
 
   /// This is the target width of lines in an emitted Verilog source file in
   /// columns.

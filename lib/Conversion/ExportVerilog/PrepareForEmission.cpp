@@ -51,13 +51,30 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
   auto isAssign = [](Operation *op) {
     return isa<AssignOp, PAssignOp, BPAssignOp, OutputOp>(op);
   };
+  auto isConcat = [](Operation *op) { return isa<ConcatOp>(op); };
+
+  if (!isVerilogExpression(&op))
+    return false;
 
   // If there are more than the maximum number of terms in this single result
   // expression, and it hasn't already been spilled, this should spill.
-  return isVerilogExpression(&op) &&
-         op.getNumOperands() > options.maximumNumberOfTermsPerExpression &&
-         op.getNumResults() == 1 &&
-         llvm::none_of(op.getResult(0).getUsers(), isAssign);
+  if (op.getNumOperands() > options.maximumNumberOfTermsPerExpression &&
+      op.getNumResults() == 1 &&
+      llvm::none_of(op.getResult(0).getUsers(), isAssign))
+    return true;
+
+  // Work around Verilator #3405. Large expressions inside a concat is worst
+  // case O(n^2) in a certain Verilator optimization, and can effectively hang
+  // Verilator on large designs. Verilator 4.224+ works around this by having a
+  // hard limit on its recursion. Here we break large expressions inside concats
+  // according to a configurable limit to work around the same issue.
+  // See https://github.com/verilator/verilator/issues/3405.
+  if (op.getNumOperands() > options.maximumNumberOfTermsInConcat &&
+      op.getNumResults() == 1 &&
+      llvm::any_of(op.getResult(0).getUsers(), isConcat))
+    return true;
+
+  return false;
 }
 
 // Given an invisible instance, make sure all inputs are driven from

@@ -72,6 +72,11 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
         errorHandler("expected integer source width");
         maximumNumberOfTermsPerExpression = DEFAULT_TERM_LIMIT;
       }
+    } else if (option.consume_front("maximumNumberOfTermsInConcat=")) {
+      if (option.getAsInteger(10, maximumNumberOfTermsInConcat)) {
+        errorHandler("expected integer source width");
+        maximumNumberOfTermsInConcat = DEFAULT_CONCAT_TERM_LIMIT;
+      }
     } else if (option.consume_front("locationInfoStyle=")) {
       if (auto style = parseLocationInfoStyle(option)) {
         locationInfoStyle = *style;
@@ -114,6 +119,9 @@ std::string LoweringOptions::toString() const {
   if (maximumNumberOfTermsPerExpression != DEFAULT_TERM_LIMIT)
     options += "maximumNumberOfTermsPerExpression=" +
                std::to_string(maximumNumberOfTermsPerExpression) + ',';
+  if (maximumNumberOfTermsInConcat != DEFAULT_CONCAT_TERM_LIMIT)
+    options += "maximumNumberOfTermsInConcat=" +
+               std::to_string(maximumNumberOfTermsInConcat) + ',';
 
   // Remove a trailing comma if present.
   if (!options.empty()) {
@@ -166,7 +174,8 @@ struct LoweringCLOptions {
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
           "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
-          "maximumNumberOfTermsPerExpression=<n>, explicitBitcastAddMul, "
+          "maximumNumberOfTermsPerExpression=<n>, "
+          "maximumNumberOfTermsInConcat=<n>, explicitBitcastAddMul, "
           "emitReplicatedOpsToHeader, "
           "locationInfoStyle={plain,wrapInAtSquareBracket}, "
           "disallowPortDeclSharing"),
