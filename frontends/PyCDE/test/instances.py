@@ -5,7 +5,6 @@
 import pycde
 import pycde.dialects.hw
 
-from pycde.attributes import placement
 from pycde.devicedb import (PhysLocation, PrimitiveDB, PrimitiveType)
 
 import sys
@@ -104,8 +103,8 @@ t.get_instance(Test).walk(place_inst)
 test_inst = t.get_instance(Test)
 t.createdb()
 
-test_inst["UnParameterized"].attach_attribute(
-    placement(["memory", "bank"], PrimitiveType.M20K, 15, 25, 0))
+test_inst["UnParameterized"].place(PrimitiveType.M20K, 15, 25, 0,
+                                   ["memory", "bank"])
 test_inst["UnParameterized"].add_named_attribute("FOO", "OFF",
                                                  ["memory", "bank"])
 test_inst["UnParameterized"]["Nothing"].place(PrimitiveType.DSP, 39, 25, 0)

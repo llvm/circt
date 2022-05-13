@@ -6,7 +6,6 @@
 import pycde
 from pycde import types, module, Input, Output
 
-from pycde.attributes import placement
 from pycde.devicedb import PrimitiveType
 from pycde.dialects import seq
 from pycde.module import generator

@@ -97,15 +97,6 @@ class Instance:
     """A list of instance names representing the instance path."""
     return [i.name for i in self.path]
 
-  def attach_attribute(self, attr):
-    import pycde.devicedb as devdb
-
-    assert isinstance(attr, tuple), "Only (subpath, loc) are supported"
-    if isinstance(attr[1], devdb.PhysLocation):
-      self.root.system.placedb.place(self, attr[1], attr[0])
-    else:
-      assert False
-
   def add_named_attribute(self,
                           name: str,
                           value: str,
