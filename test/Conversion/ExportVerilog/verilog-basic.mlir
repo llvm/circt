@@ -302,7 +302,7 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
 // CHECK-NEXT:    input  [3:0] in4,
 // CHECK-NEXT:    output [3:0] out4);
 // CHECK:  wire [3:0] w = 4'h1;
-// CHECK:  assign out4 = in4 + w;
+// CHECK:  assign out4 = in4 + 4'h1;
 // CHECK-NEXT: endmodule
 hw.module @SimpleConstPrint(%in4: i4) -> (out4: i4) {
   %w = sv.wire : !hw.inout<i4>
@@ -310,6 +310,25 @@ hw.module @SimpleConstPrint(%in4: i4) -> (out4: i4) {
   sv.assign %w, %c1_i4 : i4
   %1 = comb.add %in4, %c1_i4 : i4
   hw.output %1 : i4
+}
+
+// Use constants, don't fold them into wires
+// CHECK-LABEL: module SimpleConstPrintReset(
+// CHECK:  q <= 4'h1;
+hw.module @SimpleConstPrintReset(%clock: i1, %reset: i1, %in4: i4) -> () {
+  %w = sv.wire : !hw.inout<i4>
+  %q = sv.reg : !hw.inout<i4>
+  %c1_i4 = hw.constant 1 : i4
+  sv.assign %w, %c1_i4 : i4
+  sv.always posedge %clock, posedge %reset {
+    sv.if %reset {
+        sv.passign %q, %c1_i4 : i4
+      } else {
+        sv.passign %q, %in4 : i4
+      }
+    }
+    hw.output
+
 }
 
 hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}

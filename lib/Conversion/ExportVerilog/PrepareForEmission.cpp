@@ -94,7 +94,6 @@ static void lowerBoundInstance(InstanceOp op) {
   }
 }
 
-
 // Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
@@ -400,6 +399,10 @@ static void reuseExistingInOut(Operation *op) {
   // If we didn't find anything, bail out.
   if (!assign || uses.empty())
     return;
+
+  if (auto cop = assign.src().getDefiningOp())
+    if (isa<ConstantOp>(cop))
+      return;
 
   // Replace all saved uses with a read from the assigned destination.
   ImplicitLocOpBuilder builder(assign.dest().getLoc(), op->getContext());
