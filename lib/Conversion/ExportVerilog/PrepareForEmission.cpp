@@ -417,7 +417,7 @@ static void reuseExistingInOut(Operation *op) {
   if (!assign || uses.empty())
     return;
 
-  if (auto cop = assign.src().getDefiningOp())
+  if (auto *cop = assign.src().getDefiningOp())
     if (isa<ConstantOp>(cop))
       return;
 
