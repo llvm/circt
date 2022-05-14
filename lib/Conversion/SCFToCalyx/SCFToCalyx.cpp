@@ -330,7 +330,7 @@ public:
     operationToGroup[op] = group;
   }
 
-  /// Returns the group registered for this non-pipelined value, and Optional
+  /// Returns the group registered for this non-pipelined value, and None
   /// otherwise.
   template <typename TGroupOp = calyx::GroupInterface>
   Optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
@@ -587,7 +587,9 @@ private:
   /// A mapping between SSA values and the groups which assign them.
   DenseMap<Value, calyx::GroupInterface> valueGroupAssigns;
 
-  /// A mapping between operations and the group to which it was assigned.
+  /// A mapping between operations and the group to which it was assigned. This
+  /// is used for specific corner cases, such as pipeline stages that may not
+  /// actually pipeline any values.
   DenseMap<Operation *, calyx::GroupInterface> operationToGroup;
 
   /// A mapping from return value indexes to return value registers.
