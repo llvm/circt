@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "FIRAnnotations.h"
 #include "FIRLexer.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -3775,6 +3776,13 @@ ParseResult FIRCircuitParser::parseCircuit(
   annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
                                getConstants().targetSet);
   circuit->setAttr("annotations", annotations);
+  // Get annotations that are supposed to be specially handled by the
+  // LowerAnnotations pass.
+  if (getConstants().annotationMap.count(rawAnnotations)) {
+    auto extraAnnos = getConstants().annotationMap.lookup(rawAnnotations);
+    circuit->setAttr(rawAnnotations, extraAnnos);
+  }
+
   parseAnnotationTimer.stop();
 
   // A timer to get execution time of module parsing.
@@ -3844,6 +3852,9 @@ DoneParsing:
   bool foundUnappliedAnnotations = false;
   for (auto &entry : getConstants().annotationMap) {
     if (getConstants().targetSet.contains(entry.getKey()))
+      continue;
+
+    if (entry.getKey() == rawAnnotations)
       continue;
 
     foundUnappliedAnnotations = true;
