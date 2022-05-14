@@ -114,10 +114,6 @@ struct LoopScheduleable {
   /// The group(s) to schedule before the while operation These groups should
   /// set the initial value(s) of the loop init_args register(s).
   SmallVector<calyx::GroupOp> initGroups;
-
-  /// A mapping from stage to a set of groups that need to be scheduled, but do
-  /// not need to pipeline any values.
-  /// DenseMap<int64_t, SmallVector<calyx::GroupOp>> stageToNoPipelineGroups;
 };
 
 struct WhileScheduleable : LoopScheduleable {};
@@ -638,7 +634,7 @@ private:
   /// A mapping between the source funcOp result indices and the corresponding
   /// output port indices of this componentOp.
   DenseMap<unsigned, unsigned> funcOpResultMapping;
-}; // namespace circt
+};
 
 /// ProgramLoweringState handles the current state of lowering of a Calyx
 /// program. It is mainly used as a key/value store for recording information
@@ -940,8 +936,6 @@ private:
       rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
                                        op->getOperand(dstOp.index()));
 
-    for (Value port : opInputPorts)
-      getComponentState().registerEvaluatingGroup(port, group);
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
       getComponentState().registerEvaluatingGroup(res.value(), group);
@@ -1090,7 +1084,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, *getComponent(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
-  
+
   getComponentState().registerNonPipelineOperations(storeOp, group);
 
   return success();
@@ -1863,16 +1857,31 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
                                  PatternRewriter &rewriter) const {
     // Collect pipeline registers for stage.
     auto pipelineRegisters = getComponentState().getPipelineRegs(stage);
-
-    // Collect group names for the prologue or epilogue.
-    SmallVector<StringAttr> prologueGroups;
-    SmallVector<StringAttr> epilogueGroups;
-
     // Get the number of pipeline stages in the stages block, excluding the
     // terminator. The verifier guarantees there is at least one stage followed
     // by a terminator.
     size_t numStages = whileOp.getStagesBlock().getOperations().size() - 1;
     assert(numStages > 0);
+
+    // Collect group names for the prologue or epilogue.
+    SmallVector<StringAttr> prologueGroups, epilogueGroups;
+
+    auto updatePrologueAndEpilogue = [&](calyx::GroupOp group) {
+      // Mark the group for scheduling in the pipeline's block.
+      getComponentState().addBlockScheduleable(stage->getBlock(), group);
+
+      // Add the group to the prologue or epilogue for this stage as
+      // necessary. The goal is to fill the pipeline so it will be in steady
+      // state after the prologue, and drain the pipeline from steady state in
+      // the epilogue. Every stage but the last should have its groups in the
+      // prologue, and every stage but the first should have its groups in the
+      // epilogue.
+      unsigned stageNumber = stage.getStageNumber();
+      if (stageNumber < numStages - 1)
+        prologueGroups.push_back(group.sym_nameAttr());
+      if (stageNumber > 0)
+        epilogueGroups.push_back(group.sym_nameAttr());
+    };
 
     MutableArrayRef<OpOperand> operands =
         stage.getBodyBlock().getTerminator()->getOpOperands();
@@ -1881,30 +1890,19 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     if (isStageWithNoPipelinedValues) {
       // Covers the case where there are no values that need to be passed
       // through to the next stage, e.g., some intermediary store.
-      for (auto &&op : stage.getBodyBlock()) {
-        // Find an operand that has been registered to an evaluating group.
+      auto it = llvm::find_if(stage.getBodyBlock(), [&](auto &op) {
         Optional<calyx::GroupOp> group =
-        getComponentState().getNonPipelinedGroupFrom<calyx::GroupOp>(&op);
+            getComponentState().getNonPipelinedGroupFrom<calyx::GroupOp>(&op);
+
         if (!group.hasValue())
-          continue;
+          return false;
 
-        // Mark the group for scheduling in the pipeline's block.
-        getComponentState().addBlockScheduleable(stage->getBlock(), *group);
+        updatePrologueAndEpilogue(*group);
+        return true;
+      });
 
-        // Add the group to the prologue or epilogue for this stage as
-        // necessary. The goal is to fill the pipeline so it will be in steady
-        // state after the prologue, and drain the pipeline from steady state in
-        // the epilogue. Every stage but the last should have its groups in the
-        // prologue, and every stage but the first should have its groups in the
-        // epilogue.
-        unsigned stageNumber = stage.getStageNumber();
-        if (stageNumber < numStages - 1)
-          prologueGroups.push_back(group->sym_nameAttr());
-        if (stageNumber > 0)
-          epilogueGroups.push_back(group->sym_nameAttr());
-
-        break;
-      }
+      if (it == stage.getBodyBlock().end())
+        return failure();
     }
 
     for (auto &operand : operands) {
@@ -1934,19 +1932,7 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       // Replace the stage result uses with the register out.
       stage.getResult(i).replaceAllUsesWith(pipelineRegister.out());
 
-      // Mark the group for scheduling in the pipeline's block.
-      getComponentState().addBlockScheduleable(stage->getBlock(), group);
-
-      // Add the group to the prologue or epilogue for this stage as necessary.
-      // The goal is to fill the pipeline so it will be in steady state after
-      // the prologue, and drain the pipeline from steady state in the epilogue.
-      // Every stage but the last should have its groups in the prologue, and
-      // every stage but the first should have its groups in the epilogue.
-      unsigned stageNumber = stage.getStageNumber();
-      if (stageNumber < numStages - 1)
-        prologueGroups.push_back(group.sym_nameAttr());
-      if (stageNumber > 0)
-        epilogueGroups.push_back(group.sym_nameAttr());
+      updatePrologueAndEpilogue(group);
     }
 
     // Append the stage to the prologue or epilogue list of stages if any groups
@@ -2607,7 +2593,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&... args) {
+                      PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -2616,7 +2602,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&... args) {
+                        PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
