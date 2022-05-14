@@ -193,9 +193,9 @@ func.func @dot(%arg0: memref<64xi32>, %arg1: memref<64xi32>) -> i32 {
 
 // CHECK:       calyx.component @store({{.+}}, {{.+}}, {{.+}}, %[[MEM1_DONE:.+]]: i1 {mem = {id = 1 : i32, tag = "done"}}, {{.+}}) -> ({{.+}}, %[[MEM1_WRITE_DATA:.+]]: i32 {mem = {id = 1 : i32, tag = "write_data"}}, %[[MEM1_ADDR0:.+]]: i2 {mem = {addr_idx = 0 : i32, id = 1 : i32, tag = "addr"}}, %[[MEM1_WRITE_EN:.+]]: i1 {mem = {id = 1 : i32, tag = "write_en"}}, {{.+}}) {
 // CHECK-DAG:     %[[SLICE0_IN:.+]], %[[SLICE0_OUT:.+]] = calyx.std_slice @std_slice_0
-// CHECK-DAG:     %[[S0_REG0_IN:.+]], %[[S0_REG0_EN:.+]], {{.+}}, {{.+}}, %[[S0_REG0_OUT:.+]], %[[S0_REG0_DONE:.+]] = calyx.register @stage_0_register_0_reg
-// CHECK-DAG:     %[[ITER_ARG0_IN:.+]], %[[ITER_ARG0_EN:.+]], {{.+}}, {{.+}}, %[[ITER_ARG0_OUT:.+]], %[[ITER_ARG0_DONE:.+]] = calyx.register @while_0_arg0_reg
-// CHECK-DAG:     %[[LT_LEFT:.+]], %[[LT_RIGHT:.+]], %[[LT_OUT:.+]] = calyx.std_lt
+// CHECK-DAG:     {{.+}}, {{.+}}, {{.+}}, {{.+}}, %[[S0_REG0_OUT:.+]], {{.+}} = calyx.register @stage_0_register_0_reg
+// CHECK-DAG:     {{.+}}, {{.+}}, {{.+}}, {{.+}}, %[[ITER_ARG0_OUT:.+]], {{.+}} = calyx.register @while_0_arg0_reg
+// CHECK-DAG:     {{.+}}, {{.+}}, %[[LT_OUT:.+]] = calyx.std_lt
 // CHECK-DAG:     %[[TRUE:.+]] = hw.constant true
 
 // CHECK:       calyx.group @[[INIT_GROUP:.+]] {
