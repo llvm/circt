@@ -2210,7 +2210,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   // dominance.
   OpBuilder::InsertPoint savedIP;
 
-  auto parentOp = builder.getInsertionBlock()->getParentOp();
+  auto *parentOp = builder.getInsertionBlock()->getParentOp();
   if (!isa<FModuleOp>(parentOp)) {
     savedIP = builder.saveInsertionPoint();
     while (!isa<FModuleOp>(parentOp)) {
@@ -3786,7 +3786,7 @@ ParseResult FIRCircuitParser::parseCircuit(
         return failure();
 
     // Deal with the annotation file if one was specified
-    for (auto annotationsBuf : annotationsBufs)
+    for (auto *annotationsBuf : annotationsBufs)
       if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
                                annotationsBuf->getBuffer(), rawAnno))
         return failure();
@@ -3813,7 +3813,7 @@ ParseResult FIRCircuitParser::parseCircuit(
         return failure();
 
     // Deal with the annotation file if one was specified
-    for (auto annotationsBuf : annotationsBufs)
+    for (auto *annotationsBuf : annotationsBufs)
       if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
                             annotationsBuf->getBuffer(), nlaNumber))
         return failure();
