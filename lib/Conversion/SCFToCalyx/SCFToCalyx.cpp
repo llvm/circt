@@ -114,6 +114,10 @@ struct LoopScheduleable {
   /// The group(s) to schedule before the while operation These groups should
   /// set the initial value(s) of the loop init_args register(s).
   SmallVector<calyx::GroupOp> initGroups;
+
+  /// A mapping from stage to a set of groups that need to be scheduled, but do
+  /// not need to pipeline any values.
+  /// DenseMap<int64_t, SmallVector<calyx::GroupOp>> stageToNoPipelineGroups;
 };
 
 struct WhileScheduleable : LoopScheduleable {};
@@ -321,6 +325,30 @@ public:
   /// Register value v as being evaluated when scheduling group.
   void registerEvaluatingGroup(Value v, calyx::GroupInterface group) {
     valueGroupAssigns[v] = group;
+  }
+
+  /// Registers operations that may be used in a pipeline, but does not produce
+  /// a value to be used in a further stage.
+  void registerNonPipelineOperations(Operation *op,
+                                     calyx::GroupInterface group) {
+    operationToGroup[op] = group;
+  }
+
+  /// Returns the group registered for this non-pipelined value, and Optional
+  /// otherwise.
+  template <typename TGroupOp = calyx::GroupInterface>
+  Optional<TGroupOp> getNonPipelinedGroupFrom(Operation *op) {
+    auto it = operationToGroup.find(op);
+    if (it == operationToGroup.end())
+      return None;
+
+    if constexpr (std::is_same<TGroupOp, calyx::GroupInterface>::value)
+      return it->second;
+    else {
+      auto group = dyn_cast<TGroupOp>(it->second.getOperation());
+      assert(group && "Actual group type differed from expected group type");
+      return group;
+    }
   }
 
   /// Return the group which evaluates the value v. Optionally, caller may
@@ -563,6 +591,9 @@ private:
   /// A mapping between SSA values and the groups which assign them.
   DenseMap<Value, calyx::GroupInterface> valueGroupAssigns;
 
+  /// A mapping between operations and the group to which it was assigned.
+  DenseMap<Operation *, calyx::GroupInterface> operationToGroup;
+
   /// A mapping from return value indexes to return value registers.
   DenseMap<unsigned, calyx::RegisterOp> returnRegs;
 
@@ -607,7 +638,7 @@ private:
   /// A mapping between the source funcOp result indices and the corresponding
   /// output port indices of this componentOp.
   DenseMap<unsigned, unsigned> funcOpResultMapping;
-};
+}; // namespace circt
 
 /// ProgramLoweringState handles the current state of lowering of a Calyx
 /// program. It is mainly used as a key/value store for recording information
@@ -909,6 +940,8 @@ private:
       rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
                                        op->getOperand(dstOp.index()));
 
+    for (Value port : opInputPorts)
+      getComponentState().registerEvaluatingGroup(port, group);
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
       getComponentState().registerEvaluatingGroup(res.value(), group);
@@ -929,7 +962,7 @@ private:
   template <typename TGroupOp>
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
-    auto groupName = getComponentState().getUniqueName(
+    std::string groupName = getComponentState().getUniqueName(
         getComponentState().getProgramState().blockName(block));
     return createGroup<TGroupOp>(rewriter, getComponentState().getComponentOp(),
                                  op->getLoc(), groupName);
@@ -1057,6 +1090,9 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, *getComponent(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
+  
+  getComponentState().registerNonPipelineOperations(storeOp, group);
+
   return success();
 }
 
@@ -1768,15 +1804,14 @@ class BuildPipelineRegs : public FuncOpPartialLoweringPattern {
         Value stageResult = stage.getResult(i);
         bool isIterArg = false;
         for (auto &use : stageResult.getUses()) {
+          unsigned operandNo = use.getOperandNumber();
           if (auto term =
-                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner())) {
-            if (use.getOperandNumber() < term.iter_args().size()) {
-              WhileOpInterface whileOp(stage->getParentOp());
-              auto reg = getComponentState().getWhileIterReg(
-                  whileOp, use.getOperandNumber());
-              getComponentState().addPipelineReg(stage, reg, i);
-              isIterArg = true;
-            }
+                  dyn_cast<staticlogic::PipelineTerminatorOp>(use.getOwner());
+              term && operandNo < term.iter_args().size()) {
+            WhileOpInterface whileOp(stage->getParentOp());
+            auto reg = getComponentState().getWhileIterReg(whileOp, operandNo);
+            getComponentState().addPipelineReg(stage, reg, i);
+            isIterArg = true;
           }
         }
         if (isIterArg)
@@ -1815,9 +1850,10 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     for (auto pipeline : funcOp.getOps<staticlogic::PipelineWhileOp>())
       for (auto stage :
-           pipeline.getStagesBlock().getOps<staticlogic::PipelineStageOp>())
+           pipeline.getStagesBlock().getOps<staticlogic::PipelineStageOp>()) {
         if (failed(buildStageGroups(pipeline, stage, rewriter)))
           return failure();
+      }
 
     return success();
   }
@@ -1838,9 +1874,40 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
     size_t numStages = whileOp.getStagesBlock().getOperations().size() - 1;
     assert(numStages > 0);
 
-    // For each registered stage result value.
-    for (auto &operand :
-         stage.getBodyBlock().getTerminator()->getOpOperands()) {
+    MutableArrayRef<OpOperand> operands =
+        stage.getBodyBlock().getTerminator()->getOpOperands();
+    bool isStageWithNoPipelinedValues =
+        operands.empty() && !stage.getBodyBlock().empty();
+    if (isStageWithNoPipelinedValues) {
+      // Covers the case where there are no values that need to be passed
+      // through to the next stage, e.g., some intermediary store.
+      for (auto &&op : stage.getBodyBlock()) {
+        // Find an operand that has been registered to an evaluating group.
+        Optional<calyx::GroupOp> group =
+        getComponentState().getNonPipelinedGroupFrom<calyx::GroupOp>(&op);
+        if (!group.hasValue())
+          continue;
+
+        // Mark the group for scheduling in the pipeline's block.
+        getComponentState().addBlockScheduleable(stage->getBlock(), *group);
+
+        // Add the group to the prologue or epilogue for this stage as
+        // necessary. The goal is to fill the pipeline so it will be in steady
+        // state after the prologue, and drain the pipeline from steady state in
+        // the epilogue. Every stage but the last should have its groups in the
+        // prologue, and every stage but the first should have its groups in the
+        // epilogue.
+        unsigned stageNumber = stage.getStageNumber();
+        if (stageNumber < numStages - 1)
+          prologueGroups.push_back(group->sym_nameAttr());
+        if (stageNumber > 0)
+          epilogueGroups.push_back(group->sym_nameAttr());
+
+        break;
+      }
+    }
+
+    for (auto &operand : operands) {
       unsigned i = operand.getOperandNumber();
       Value value = operand.get();
 
@@ -1848,7 +1915,8 @@ class BuildPipelineGroups : public FuncOpPartialLoweringPattern {
       auto pipelineRegister = pipelineRegisters[i];
 
       // Get the evaluating group for that value.
-      auto evaluatingGroup = getComponentState().getEvaluatingGroup(value);
+      calyx::GroupInterface evaluatingGroup =
+          getComponentState().getEvaluatingGroup(value);
 
       // Remember the final group for this stage result.
       calyx::GroupOp group;
@@ -2539,7 +2607,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -2548,7 +2616,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
