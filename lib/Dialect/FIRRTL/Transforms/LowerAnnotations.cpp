@@ -177,7 +177,8 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef rawPath,
 
   auto tokens = tokenizePath(path);
   if (!tokens) {
-    state.circuit->emitError("Cannot tokenize annotation path ") << rawPath;
+    mlir::emitError(state.circuit.getLoc())
+        << "Cannot tokenize annotation path " << rawPath;
     return {};
   }
 
@@ -191,13 +192,13 @@ static Optional<AnnoPathValue> stdResolve(DictionaryAttr anno,
                                           ApplyState &state) {
   auto target = anno.getNamed("target");
   if (!target) {
-    state.circuit.emitError("No target field in annotation ") << anno;
+    mlir::emitError(state.circuit.getLoc())
+        << "No target field in annotation " << anno;
     return {};
   }
   if (!target->getValue().isa<StringAttr>()) {
-    state.circuit.emitError(
-        "Target field in annotation doesn't contain string ")
-        << anno;
+    mlir::emitError(state.circuit.getLoc())
+        << "Target field in annotation doesn't contain string " << anno;
     return {};
   }
   return stdResolveImpl(target->getValue().cast<StringAttr>().getValue(),
@@ -323,17 +324,19 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
     return state.circuit.emitError("Annotation without a class: ") << anno;
 
   // See if we handle the class
-  auto record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
+  auto *record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
   if (!record)
-    return state.circuit.emitWarning("Unhandled annotation: ") << anno;
+    return mlir::emitWarning(state.circuit.getLoc())
+           << "Unhandled annotation: " << anno;
 
   // Try to apply the annotation
   auto target = record->resolver(anno, state);
   if (!target)
-    return state.circuit.emitError("Unable to resolve target of annotation: ")
-           << anno;
+    return mlir::emitError(state.circuit.getLoc())
+           << "Unable to resolve target of annotation: " << anno;
   if (record->applier(*target, anno, state).failed())
-    return state.circuit.emitError("Unable to apply annotation: ") << anno;
+    return mlir::emitError(state.circuit.getLoc())
+           << "Unable to apply annotation: " << anno;
   return success();
 }
 
