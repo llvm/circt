@@ -218,6 +218,13 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     /// Return true if any update is made.
     bool updateModule(StringAttr oldMod, StringAttr newMod);
 
+    /// Replace the oldMod module with newMod module in the namepath of the NLA.
+    /// Since the module is being updated, the symbols inside the module should
+    /// also be renamed. Use the rename Map to update the corresponding 
+    /// inner_sym names in the namepath. Return true if any update is made.
+    bool updateModuleAndInnerRef(StringAttr oldMod, StringAttr newMod,
+         const llvm::DenseMap<StringAttr, StringAttr> &innerSymRenameMap);
+
     /// Truncate the namepath for this NLA, at atMod module.
     /// If includeMod is false, drop atMod and beyond, else include it and drop
     /// everything after it.
