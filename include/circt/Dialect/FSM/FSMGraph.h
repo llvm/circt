@@ -259,7 +259,14 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
       return "";
 
     std::string attrs = "label=\"";
-    attrs += circt::fsm::detail::dotSafeDumpOps(transition.guard().getOps());
+    attrs += circt::fsm::detail::dotSafeDumpOps(llvm::make_filter_range(
+        transition.guard().getOps(), [](mlir::Operation &op) {
+          // Ignore implicit fsm.return/fsm.output operations with no operands.
+          if (isa<circt::fsm::ReturnOp, circt::fsm::OutputOp>(op))
+            return op.getNumOperands() != 0;
+
+          return true;
+        }));
     attrs += "\"";
     return attrs;
   }
