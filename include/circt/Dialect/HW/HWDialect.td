@@ -15,6 +15,7 @@
 
 def HWDialect : Dialect {
   let name = "hw";
+  let cppNamespace = "::circt::hw";
 
   let summary = "Types and operations for the hardware dialect";
   let description = [{
@@ -23,8 +24,8 @@ def HWDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
-  let useDefaultAttributePrinterParser = 0;
-  let cppNamespace = "::circt::hw";
+  let useDefaultTypePrinterParser = 1;
+
   let extraClassDeclaration = [{
     /// Register all HW types.
     void registerTypes();

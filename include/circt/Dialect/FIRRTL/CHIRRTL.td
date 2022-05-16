@@ -24,13 +24,16 @@ include "mlir/IR/SymbolInterfaces.td"
 
 def CHIRRTLDialect : Dialect {
   let name = "chirrtl";
+  let cppNamespace = "::circt::chirrtl";
+
   let summary = "Types and operations for the chirrtl dialect";
   let description = [{
     This dialect defines the `chirrtl` dialect, which contains high-level
     memory defintions which can be lowered to FIRRTL.
   }];
   let dependentDialects = ["circt::firrtl::FIRRTLDialect"];
-  let cppNamespace = "::circt::chirrtl";
+
+  let useDefaultTypePrinterParser = 1;
 }
 
 //===----------------------------------------------------------------------===//

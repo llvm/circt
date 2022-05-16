@@ -530,8 +530,9 @@ parseEntitySignature(OpAsmParser &parser, OperationState &result,
   // create the integer attribute with the number of inputs.
   IntegerAttr insAttr = parser.getBuilder().getI64IntegerAttr(args.size());
   result.addAttribute("ins", insAttr);
-  if (parser.parseArrow() || parseArgumentList(parser, args, argTypes))
-    return failure();
+  if (succeeded(parser.parseOptionalArrow()))
+    if (parseArgumentList(parser, args, argTypes))
+      return failure();
 
   return success();
 }
@@ -545,7 +546,8 @@ ParseResult llhd::EntityOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  parseEntitySignature(parser, result, args, argTypes);
+  if (parseEntitySignature(parser, result, args, argTypes))
+    return failure();
 
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
@@ -769,7 +771,8 @@ parseProcArgumentList(OpAsmParser &parser, SmallVectorImpl<Type> &argTypes,
           succeeded(parser.parseOptionalComma()))
         return parser.emitError(loc, "variadic arguments are not allowed");
     } while (succeeded(parser.parseOptionalComma()));
-    parser.parseRParen();
+    if (parser.parseRParen())
+      return failure();
   }
 
   return success();
@@ -800,7 +803,8 @@ ParseResult llhd::ProcOp::parse(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  parser.parseRegion(*body, argNames);
+  if (parser.parseRegion(*body, argNames))
+    return failure();
 
   return success();
 }

@@ -144,12 +144,12 @@ firrtl.module @TestInvalidAttr() {
 
   // CHECK: firrtl.constant 42 : !firrtl.uint<8>
   %x = firrtl.constant 42 : !firrtl.uint<8> {
-    // CHECK-SAME: {test.thing1 = #firrtl.invalidvalue<!firrtl.clock>,
-    test.thing1 = #firrtl.invalidvalue<!firrtl.clock>,
-    // CHECK-SAME: test.thing2 = #firrtl.invalidvalue<!firrtl.sint<3>>,
-    test.thing2 = #firrtl.invalidvalue<!firrtl.sint<3>>,
-    // CHECK-SAME: test.thing3 = #firrtl.invalidvalue<!firrtl.uint>}
-    test.thing3 = #firrtl.invalidvalue<!firrtl.uint>
+    // CHECK-SAME: {test.thing1 = #firrtl.invalidvalue : !firrtl.clock,
+    test.thing1 = #firrtl.invalidvalue : !firrtl.clock,
+    // CHECK-SAME: test.thing2 = #firrtl.invalidvalue : !firrtl.sint<3>,
+    test.thing2 = #firrtl.invalidvalue : !firrtl.sint<3>,
+    // CHECK-SAME: test.thing3 = #firrtl.invalidvalue : !firrtl.uint}
+    test.thing3 = #firrtl.invalidvalue : !firrtl.uint
   }
 }
 

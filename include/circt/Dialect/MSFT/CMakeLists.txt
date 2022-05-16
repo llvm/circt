@@ -7,7 +7,7 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect(MSFT msft)
-add_circt_doc(MSFT -gen-dialect-doc MSFT Dialects/)
+add_circt_dialect_doc(MSFT msft)
 
 set(LLVM_TARGET_DEFINITIONS MSFT.td)
 mlir_tablegen(MSFTEnums.h.inc -gen-enum-decls)
@@ -22,6 +22,6 @@ mlir_tablegen(MSFTOpInterfaces.cpp.inc -gen-op-interface-defs)
 
 add_public_tablegen_target(MLIRMSFTExtraIncGen)
 
-add_circt_doc(MSFT -gen-pass-doc MSFTPasses ./)
+add_circt_doc(MSFT MSFTPasses -gen-pass-doc)
 
 add_dependencies(circt-headers MLIRMSFTExtraIncGen)

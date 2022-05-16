@@ -1,5 +1,5 @@
 add_circt_dialect(Comb comb)
-add_circt_doc(Comb  -gen-dialect-doc Comb Dialects/)
+add_circt_dialect_doc(Comb comb)
 
 set(LLVM_TARGET_DEFINITIONS Comb.td)
 mlir_tablegen(CombEnums.h.inc -gen-enum-decls)

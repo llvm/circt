@@ -632,7 +632,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute> argNames;
 
   // Parse visibility.
-  mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse signature
   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
@@ -953,7 +953,8 @@ void SourceOp::build(OpBuilder &builder, OperationState &result) {
 }
 
 ParseResult SourceOp::parse(OpAsmParser &parser, OperationState &result) {
-  parser.parseOptionalAttrDict(result.attributes);
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
   setupSourceOp(result);
   return success();
 }

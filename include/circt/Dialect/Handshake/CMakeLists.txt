@@ -1,5 +1,5 @@
 add_circt_dialect(Handshake handshake)
-add_circt_doc(Handshake -gen-dialect-doc Handshake Dialects/)
+add_circt_dialect_doc(Handshake handshake)
 add_circt_interface(HandshakeInterfaces)
 
 set(LLVM_TARGET_DEFINITIONS Handshake.td)
@@ -27,5 +27,5 @@ add_dependencies(circt-headers MLIRHandshakeCanonicalizationIncGen)
 set(LLVM_TARGET_DEFINITIONS HandshakePasses.td)
 mlir_tablegen(HandshakePasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTHandshakeTransformsIncGen)
-add_circt_doc(HandshakePasses -gen-pass-doc HandshakePasses ./)
+add_circt_doc(HandshakePasses HandshakePasses -gen-pass-doc)
 add_dependencies(circt-headers CIRCTHandshakeTransformsIncGen)

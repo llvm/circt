@@ -25,6 +25,7 @@ include "mlir/Pass/PassBase.td"
 
 def MSFTDialect : Dialect {
   let name = "msft";
+  let cppNamespace = "::circt::msft";
 
   let summary = "Microsoft internal support dialect";
   let description = [{
@@ -34,7 +35,8 @@ def MSFTDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
-  let cppNamespace = "::circt::msft";
+  let useDefaultAttributePrinterParser = 1;
+
   let extraClassDeclaration = [{
     /// Register all MSFT attributes.
     void registerAttributes();

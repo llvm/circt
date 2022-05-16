@@ -21,11 +21,14 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def ESI_Dialect : Dialect {
   let name = "esi";
   let cppNamespace = "::circt::esi";
+
+  let hasConstantMaterializer = 1;
+  let useDefaultTypePrinterParser = 1;
+
   let extraClassDeclaration = [{
     /// Register all ESI types.
     void registerTypes();
   }];
-  let hasConstantMaterializer = 1;
 }
 
 class ESI_Op<string mnemonic, list<Trait> traits = []> :

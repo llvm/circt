@@ -1,5 +1,5 @@
 add_circt_dialect(LLHD llhd)
-add_circt_doc(LLHD -gen-dialect-doc LLHD Dialects/)
+add_circt_dialect_doc(LLHD llhd)
 
 set(LLVM_TARGET_DEFINITIONS LLHD.td)
 mlir_tablegen(LLHDEnums.h.inc -gen-enum-decls)

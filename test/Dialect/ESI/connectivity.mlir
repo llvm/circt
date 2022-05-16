@@ -11,7 +11,7 @@ hw.module @Reciever(%a: !esi.channel<i1>) {
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1
 }
-!FooStruct = type !hw.struct<a: si4, b: !hw.array<3 x ui4>>
+!FooStruct = !hw.struct<a: si4, b: !hw.array<3 x ui4>>
 hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
   %rdy = arith.constant 1 : i1
   // Recieve bits.
