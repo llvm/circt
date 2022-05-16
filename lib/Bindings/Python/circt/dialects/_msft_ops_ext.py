@@ -32,7 +32,7 @@ class InstanceBuilder(support.NamedValueOpView):
       parameters = _hw_ext.create_parameters(parameters, module)
     else:
       parameters = []
-    post_args = [_ir.ArrayAttr.get(parameters), target_design_partition]
+    post_args = []
     results = module.type.results
 
     super().__init__(
@@ -41,6 +41,8 @@ class InstanceBuilder(support.NamedValueOpView):
         input_port_mapping,
         pre_args,
         post_args,
+        parameters=_ir.ArrayAttr.get(parameters),
+        targetDesignPartition=target_design_partition,
         loc=loc,
         ip=ip,
     )

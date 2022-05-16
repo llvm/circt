@@ -62,7 +62,7 @@ class InstanceBuilder(support.NamedValueOpView):
     post_args = [
         ArrayAttr.get([StringAttr.get(x) for x in self.operand_names()]),
         ArrayAttr.get([StringAttr.get(x) for x in self.result_names()]),
-        ArrayAttr.get(inst_param_array), sym_name
+        ArrayAttr.get(inst_param_array)
     ]
     if results is None:
       results = module.type.results
@@ -86,6 +86,7 @@ class InstanceBuilder(support.NamedValueOpView):
                      pre_args,
                      post_args,
                      needs_result_type=True,
+                     inner_sym=sym_name,
                      loc=loc,
                      ip=ip)
 
