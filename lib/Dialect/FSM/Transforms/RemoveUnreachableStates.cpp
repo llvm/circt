@@ -46,6 +46,34 @@ static SmallVector<StateOp> unreachableStates(MachineOp machine) {
   return unreachableStates;
 }
 
+// Removes any transition to the provided 'unreachableState' within the
+// 'machine'. It is expected that any transition with references the
+// 'unreachableState' is similarly unreachable.
+static LogicalResult
+removeTransitionsToState(MachineOp machine, ArrayRef<StateOp> unreachableStates,
+                         StateOp unreachableState) {
+  auto stateUses = SymbolTable::getSymbolUses(unreachableState, machine);
+  if (stateUses.hasValue()) {
+    for (auto use : stateUses.getValue()) {
+      Operation *user = use.getUser();
+      auto transition = dyn_cast<TransitionOp>(user);
+      if (!transition)
+        return user->emitOpError()
+               << "unreachable state '" << unreachableState.getName()
+               << "' referenced by something else than a "
+                  "transition op. "
+               << "This is unhandled behaviour - erroring out";
+
+      assert(llvm::find(unreachableStates,
+                        transition->getParentOfType<StateOp>()) !=
+                 unreachableStates.end() &&
+             "unreachable state referenced by some state which is reachable?");
+      transition.erase();
+    }
+  }
+  return success();
+}
+
 struct RemoveUnreachableStatesPass
     : public RemoveUnreachableStatesBase<RemoveUnreachableStatesPass> {
   void runOnOperation() override {
@@ -57,28 +85,10 @@ struct RemoveUnreachableStatesPass
       // transitions which reference them. This occurs when there is some
       // strongly connected set of states which are all unreachable from the
       // entry state.
-      auto stateUses = SymbolTable::getSymbolUses(unreachable, machine);
-      if (stateUses.hasValue()) {
-        for (auto use : stateUses.getValue()) {
-          Operation *user = use.getUser();
-          auto transition = dyn_cast<TransitionOp>(user);
-          if (!transition) {
-            user->emitOpError()
-                << "Unreachable state '" << unreachable.getName()
-                << "' referenced by something else than a "
-                   "transition op. "
-                << "This is unhandled behaviour - erroring out";
-            signalPassFailure();
-            return;
-          }
-
-          assert(
-              llvm::find(unreachables,
-                         transition->getParentOfType<StateOp>()) !=
-                  unreachables.end() &&
-              "unreachable state referenced by some state which is reachable?");
-          transition.erase();
-        }
+      if (failed(
+              removeTransitionsToState(machine, unreachables, unreachable))) {
+        signalPassFailure();
+        return;
       }
       unreachable.erase();
     }
