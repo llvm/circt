@@ -1364,6 +1364,35 @@ LogicalResult AliasOp::verify() {
 // PAssignOp
 //===----------------------------------------------------------------------===//
 
+// If v is mux op, conditionally assign mux's true and false values to the
+// register.
+static void transformMuxToIf(Value v, Value reg, PatternRewriter &rewriter) {
+  auto mux = v.getDefiningOp<comb::MuxOp>();
+  // If the value is not mux, create a procedural assignment unless the value is
+  // not a read from the register.
+  if (!mux) {
+    auto read = v.getDefiningOp<sv::ReadInOutOp>();
+    if (read && read.input() == reg)
+      return;
+    rewriter.create<PAssignOp>(v.getLoc(), reg, v);
+    return;
+  }
+
+  // Don't create `if` block if the false value is a read from the register.
+  auto falseValue = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
+  if (falseValue && falseValue.input() == reg) {
+    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
+      transformMuxToIf(mux.trueValue(), reg, rewriter);
+    });
+    return;
+  }
+
+  rewriter.create<sv::IfOp>(
+      mux.getLoc(), mux.cond(),
+      [&]() { transformMuxToIf(mux.trueValue(), reg, rewriter); },
+      [&]() { transformMuxToIf(mux.falseValue(), reg, rewriter); });
+}
+
 // reg s <= cond ? val : s simplification.
 // Don't assign a register's value to itself, conditionally assign the new value
 // instead.
@@ -1374,16 +1403,6 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
   auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
   if (!reg)
-    return failure();
-
-  bool trueBranch; // did we find the register on the true branch?
-  auto tvread = mux.trueValue().getDefiningOp<sv::ReadInOutOp>();
-  auto fvread = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
-  if (tvread && reg == tvread.input().getDefiningOp<sv::RegOp>())
-    trueBranch = true;
-  else if (fvread && reg == fvread.input().getDefiningOp<sv::RegOp>())
-    trueBranch = false;
-  else
     return failure();
 
   // Check that this is the only write of the register
@@ -1398,18 +1417,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   // Replace a non-blocking procedural assign in a procedural region with a
   // conditional procedural assign.  We've ensured that this is the only write
   // of the register.
-  if (trueBranch) {
-    auto cond = comb::createOrFoldNot(mux.getLoc(), mux.cond(), rewriter);
-    rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
-    });
-  } else {
-    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
-    });
-  }
-
-  // Remove the wire.
+  transformMuxToIf(mux, reg, rewriter);
   rewriter.eraseOp(op);
   return success();
 }

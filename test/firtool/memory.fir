@@ -80,9 +80,33 @@ circuit Qux: %[[{
 ;CHECK:    sv.always posedge %clock {
 ;CHECK-NEXT:      sv.passign %[[en]], %rEn : i1
 ;CHECK-NEXT:      sv.passign %[[addr]], %rAddr : i2
-;CHECK-NEXT:      sv.passign %[[memory_0]]
-;CHECK-NEXT:      sv.passign %[[memory_1]]
-;CHECK-NEXT:      sv.passign %[[memory_2]]
-;CHECK-NEXT:      sv.passign %[[memory_3]]
+;CHECK-NEXT:      sv.if {{.*}} {
+;CHECK-NEXT:        sv.passign %[[memory_0]]
+;CHECK-NEXT:      } else {
+;CHECK-NEXT:        sv.if {{.*}} {
+;CHECK-NEXT:          sv.passign %[[memory_0]]
+;CHECK-NEXT:        }
+;CHECK-NEXT:      }
+;CHECK-NEXT:      sv.if {{.*}} {
+;CHECK-NEXT:        sv.passign %[[memory_1]]
+;CHECK-NEXT:      } else {
+;CHECK-NEXT:        sv.if {{.*}} {
+;CHECK-NEXT:          sv.passign %[[memory_1]]
+;CHECK-NEXT:        }
+;CHECK-NEXT:      }
+;CHECK-NEXT:      sv.if {{.*}} {
+;CHECK-NEXT:        sv.passign %[[memory_2]]
+;CHECK-NEXT:      } else {
+;CHECK-NEXT:        sv.if {{.*}} {
+;CHECK-NEXT:          sv.passign %[[memory_2]]
+;CHECK-NEXT:        }
+;CHECK-NEXT:      }
+;CHECK-NEXT:      sv.if {{.*}} {
+;CHECK-NEXT:        sv.passign %[[memory_3]]
+;CHECK-NEXT:      } else {
+;CHECK-NEXT:        sv.if {{.*}} {
+;CHECK-NEXT:          sv.passign %[[memory_3]]
+;CHECK-NEXT:        }
+;CHECK-NEXT:      }
 ;CHECK-NEXT:    }
 ;CHECK:    hw.output %[[v0]], %[[v8]]

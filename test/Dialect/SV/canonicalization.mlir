@@ -94,23 +94,27 @@ func.func @invert_if(%arg0: i1) {
   return
 }
 
-// CHECK-LABEL: func @mux_to_cond_assign_f
+// CHECK-LABEL: hw.module @mux_to_cond_assign_f
 // CHECK-NEXT:    %r = sv.reg  : !hw.inout<i2>
-// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
-// CHECK-NEXT:      sv.if %arg1  {
-// CHECK-NEXT:        sv.passign %r, %arg2 : i2
+// CHECK-NEXT:    sv.alwaysff(posedge %clock)  {
+// CHECK-NEXT:      sv.if %c2 {
+// CHECK-NEXT:        sv.passign %r, %data2 : i2
+// CHECK-NEXT:      } else {
+// CHECK-NEXT:        sv.if %c1  {
+// CHECK-NEXT:          sv.passign %r, %data1 : i2
+// CHECK-NEXT:        }
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
-// CHECK-NEXT:    return
+// CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
-func.func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
+hw.module @mux_to_cond_assign_f(%clock: i1, %c1: i1, %c2: i1, %data1: i2, %data2: i2) {
   %r = sv.reg  : !hw.inout<i2>
   %1 = sv.read_inout %r : !hw.inout<i2>
-  %0 = comb.mux %c, %data, %1 : i2
+  %0 = comb.mux %c1, %data1, %1 : i2
+  %2 = comb.mux %c2, %data2, %0 : i2
   sv.alwaysff(posedge %clock)  {
-    sv.passign %r, %0 : i2
+    sv.passign %r, %2 : i2
   }
-  return
 }
 
 // CHECK-LABEL: func @mux_to_cond_assign_t
@@ -135,6 +139,21 @@ func.func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
     sv.passign %r, %0 : i2
   }
   return
+}
+
+// Check that assignments are not changed to if.
+// CHECK-LABEL: hw.module @mux_to_cond_assign_not_allowed
+// CHECK-NOT:     sv.if
+hw.module @mux_to_cond_assign_not_allowed(%clock: i1, %c1: i1, %data1: i2) {
+  %r = sv.reg  : !hw.inout<i2>
+  %1 = sv.read_inout %r : !hw.inout<i2>
+  %0 = comb.mux %c1, %data1, %1 : i2
+  sv.alwaysff(posedge %clock)  {
+    sv.passign %r, %0 : i2
+  }
+  sv.initial {
+    sv.passign %r, %0 : i2
+  }
 }
 
 // CHECK-LABEL; @immediate_assert_canonicalization
