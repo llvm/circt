@@ -1767,13 +1767,16 @@ void GrandCentralPass::runOnOperation() {
   }
 
   // Garbage collect dead NLAs.
+  auto symTable = getSymbolTable();
   for (auto &op :
        llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
 
     // Remove NLA operations.
     if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
-      if (deadNLAs.count(nla.sym_nameAttr()))
+      if (deadNLAs.count(nla.sym_nameAttr())) {
         nlaTable->erase(nla);
+        symTable.erase(nla);
+      }
       continue;
     }
 

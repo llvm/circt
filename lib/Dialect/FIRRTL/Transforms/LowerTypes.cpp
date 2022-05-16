@@ -1301,8 +1301,6 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
   std::vector<FModuleLike> ops;
-  // Map of name of the NonLocalAnchor to the operation.
-  // DenseMap<StringAttr, Operation *> nlaMap;
   // Symbol Table
   SymbolTable symTbl(getOperation());
   // Cached attr
@@ -1473,6 +1471,7 @@ void LowerTypesPass::runOnOperation() {
     auto nla = cast<NonLocalAnchor>(nlaOp);
     updateNamepath(nla, nla.getNameAttr(), true);
     nlaTable->erase(nla);
+    symTbl.erase(nla);
   }
 }
 
