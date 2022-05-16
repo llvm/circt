@@ -40,8 +40,8 @@ public:
   };
 
   // Add inner names, which might be ports
-  void addInnerDefinition(mlir::StringAttr modSymbol, mlir::StringAttr name,
-                          mlir::Operation *op, size_t port = ~0ULL) {
+  void addDefinition(mlir::StringAttr modSymbol, mlir::StringAttr name,
+                     mlir::Operation *op, size_t port = ~0ULL) {
     auto key = InnerRefAttr::get(modSymbol, name);
     symbolCache.try_emplace(key, op, port);
   }

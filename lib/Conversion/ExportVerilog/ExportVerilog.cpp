@@ -4138,7 +4138,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       // Populate the symbolCache with all operations that can define a symbol.
       if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addInnerDefinition(moduleOp.getNameAttr(), name, op);
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name, op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
@@ -4149,12 +4149,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     for (size_t p = 0; p != numArgs; ++p)
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
         if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addInnerDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
                                          moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
         if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
-          symbolCache.addInnerDefinition(moduleOp.getNameAttr(), sym.getAttr(),
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
                                          moduleOp, p + numArgs);
   };
 
