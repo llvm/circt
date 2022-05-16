@@ -95,7 +95,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
                 {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"},
                 {"five":null,"target":"~Foo|Foo/bar:Bar>d.qux"},
                 {"four":null,"target":"Foo.Foo.bar.c"}
-                
+
                 ]]
   module Bar:
     input a: UInt<1>
@@ -106,11 +106,11 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     inst bar of Bar
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@d>] 
+    ; CHECK: firrtl.nla @nla_2 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@d>]
     ; CHECK: firrtl.nla @nla_1 [#hw.innerNameRef<@Foo::@bar>, #hw.innerNameRef<@Bar::@b>]
     ; CHECK: firrtl.module private @Bar
     ; CHECK-SAME: sym @b [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
-    ; CHECK-NEXT:  %d = firrtl.wire sym @d  
+    ; CHECK-NEXT:  %d = firrtl.wire sym @d
     ; CHECK-SAME: {annotations = [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_2, five}>]}
     ; CHECK-SAME: : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
@@ -397,7 +397,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     input reset : UInt<1>
     input clock : Clock
 
-    ; CHECK: %_T_0 = firrtl.wire sym @_T_0  
+    ; CHECK: %_T_0 = firrtl.wire sym @_T_0
     wire _T_0 : UInt<1>
     ; CHECK: %_T_1 = firrtl.node sym @_T_1 %_T_0
     node _T_1 = _T_0
