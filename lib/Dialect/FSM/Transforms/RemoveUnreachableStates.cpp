@@ -11,9 +11,13 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FSM/FSMPasses.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 
+using namespace mlir;
 using namespace circt;
 using namespace fsm;
 
@@ -45,9 +49,39 @@ static SmallVector<StateOp> unreachableStates(MachineOp machine) {
 struct RemoveUnreachableStatesPass
     : public RemoveUnreachableStatesBase<RemoveUnreachableStatesPass> {
   void runOnOperation() override {
+    auto machine = getOperation();
     // Erase any unreachable state ops.
-    for (auto unreachable : unreachableStates(getOperation()))
+    auto unreachables = unreachableStates(machine);
+    for (auto unreachable : unreachables) {
+      // To safely delete the unreachable states, we first need to delete any
+      // transitions which reference them. This occurs when there is some
+      // strongly connected set of states which are all unreachable from the
+      // entry state.
+      auto stateUses = SymbolTable::getSymbolUses(unreachable, machine);
+      if (stateUses.hasValue()) {
+        for (auto use : stateUses.getValue()) {
+          Operation *user = use.getUser();
+          auto transition = dyn_cast<TransitionOp>(user);
+          if (!transition) {
+            user->emitOpError()
+                << "Unreachable state '" << unreachable.getName()
+                << "' referenced by something else than a "
+                   "transition op. "
+                << "This is unhandled behaviour - erroring out";
+            signalPassFailure();
+            return;
+          }
+
+          assert(
+              llvm::find(unreachables,
+                         transition->getParentOfType<StateOp>()) !=
+                  unreachables.end() &&
+              "unreachable state referenced by some state which is reachable?");
+          transition.erase();
+        }
+      }
       unreachable.erase();
+    }
   }
 };
 } // end anonymous namespace
