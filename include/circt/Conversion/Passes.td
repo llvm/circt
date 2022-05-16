@@ -106,7 +106,7 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createCalyxToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "sv::SVDialect"];
+                           "seq::SeqDialect", "sv::SVDialect"];
 }
 
 //===----------------------------------------------------------------------===//
