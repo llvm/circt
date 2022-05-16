@@ -4150,12 +4150,12 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
         if (auto sym = argAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
-                                         moduleOp, p);
+                                    moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
       for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
         if (auto sym = resultAttr.getValue().dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getAttr(),
-                                         moduleOp, p + numArgs);
+                                    moduleOp, p + numArgs);
   };
 
   SmallString<32> outputPath;
