@@ -67,6 +67,17 @@ static std::string dotSafeDumpOps(TOpRange ops) {
   return dump;
 }
 
+// Dumps a range of operations to a string.
+template <typename TOpRange>
+static std::string dumpOps(TOpRange ops) {
+  std::string dump;
+  llvm::raw_string_ostream ss(dump);
+  llvm::interleave(
+      ops, ss, [&](mlir::Operation &op) { op.print(ss); }, "\n");
+
+  return dump;
+}
+
 } // namespace detail
 
 class FSMStateNode;
@@ -244,8 +255,7 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
   static std::string getNodeDescription(circt::fsm::FSMStateNode *node,
                                         circt::fsm::FSMGraph *) {
     // The description of the node is the dump of its Output region.
-    return circt::fsm::detail::dotSafeDumpOps(
-        node->getState().output().getOps());
+    return circt::fsm::detail::dumpOps(node->getState().output().getOps());
   }
 
   template <typename Iterator>
@@ -278,8 +288,10 @@ struct llvm::DOTGraphTraits<circt::fsm::FSMGraph *>
 
     os << "variables [shape=record,label=\"Variables|";
     os << circt::fsm::detail::dotSafeDumpOps(llvm::make_filter_range(
-        graph->getMachine().getOps(),
-        [](mlir::Operation &op) { return !isa<circt::fsm::StateOp>(&op); }));
+        graph->getMachine().getOps(), [](mlir::Operation &op) {
+          // Filter state ops; these are printed as separate nodes in the graph.
+          return !isa<circt::fsm::StateOp>(&op);
+        }));
     os << "\"]";
   }
 };
