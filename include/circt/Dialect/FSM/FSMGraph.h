@@ -48,7 +48,7 @@ static void escape(std::string &str, const char *c, bool noEscape = false) {
   if (!noEscape)
     replacement = R"(\)" + replacement;
   str = std::regex_replace(str, std::regex(c), replacement);
-};
+}
 
 // Dumps a range of operations to a string in a format suitable for embedding
 // inside a .dot edge/node label.
