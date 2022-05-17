@@ -43,17 +43,12 @@ public:
   }
 
   /// Lookup a definition for 'symbol' in the cache.
-  mlir::Operation *getDefinition(mlir::Attribute symbol) const {
-    return lookup(symbol);
-  }
+  virtual mlir::Operation *getDefinition(mlir::Attribute symbol) const = 0;
 
   /// Lookup a definition for 'symbol' in the cache.
   mlir::Operation *getDefinition(mlir::FlatSymbolRefAttr symbol) const {
-    return lookup(symbol.getAttr());
+    return getDefinition(symbol.getAttr());
   }
-
-protected:
-  virtual mlir::Operation *lookup(mlir::Attribute attr) const = 0;
 };
 
 /// Default symbol cache implementation; stores associations between names
@@ -68,13 +63,16 @@ public:
     symbolCache.try_emplace(key, op);
   }
 
-protected:
-  mlir::Operation *lookup(mlir::Attribute attr) const override {
+  // Pull in getDefinition(mlir::FlatSymbolRefAttr symbol)
+  using SymbolCacheBase::getDefinition;
+  mlir::Operation *getDefinition(mlir::Attribute attr) const override {
     auto it = symbolCache.find(attr);
     if (it == symbolCache.end())
       return nullptr;
     return it->second;
   }
+
+protected:
 
   /// This stores a lookup table from symbol attribute to the operation
   /// that defines it.

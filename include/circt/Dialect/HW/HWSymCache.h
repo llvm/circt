@@ -51,6 +51,17 @@ public:
     symbolCache.try_emplace(key, op);
   }
 
+  // Pull in getDefinition(mlir::FlatSymbolRefAttr symbol)
+  using SymbolCacheBase::getDefinition;
+  mlir::Operation *getDefinition(mlir::Attribute attr) const override {
+    assert(isFrozen && "cannot read from this cache until it is frozen");
+    auto it = symbolCache.find(attr);
+    if (it == symbolCache.end())
+      return nullptr;
+    assert(!it->second.hasPort() && "Module names should never be ports");
+    return it->second.getOp();
+  }
+
   HWSymbolCache::Item getInnerDefinition(mlir::StringAttr modSymbol,
                                          mlir::StringAttr name) const {
     return lookupInner(InnerRefAttr::get(modSymbol, name));
@@ -68,15 +79,6 @@ private:
     assert(isFrozen && "cannot read from this cache until it is frozen");
     auto it = symbolCache.find(attr);
     return it == symbolCache.end() ? Item{nullptr, ~0ULL} : it->second;
-  }
-
-  mlir::Operation *lookup(mlir::Attribute attr) const override {
-    assert(isFrozen && "cannot read from this cache until it is frozen");
-    auto it = symbolCache.find(attr);
-    if (it == symbolCache.end())
-      return nullptr;
-    assert(!it->second.hasPort() && "Module names should never be ports");
-    return it->second.getOp();
   }
 
   bool isFrozen = false;
