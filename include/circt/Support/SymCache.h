@@ -68,7 +68,6 @@ public:
   }
 
 protected:
-
   /// This stores a lookup table from symbol attribute to the operation
   /// that defines it.
   llvm::DenseMap<mlir::Attribute, mlir::Operation *> symbolCache;
