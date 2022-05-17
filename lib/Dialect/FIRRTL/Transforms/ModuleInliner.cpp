@@ -733,6 +733,10 @@ void Inliner::flattenInstances(FModuleOp module) {
     // in.  This needs to happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
     DenseSet<NonLocalAnchor> instNLAs;
+    // To estimate the NLAs that this instance participates in, get the NLAs
+    // that are common between the parent module and the target module. This
+    // computes the set of NLAs that an instance participates in, instead of
+    // recording them with the instance op in the IR.
     nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
     for (auto targetNLA : instNLAs)
       nlaMap[targetNLA.sym_nameAttr()].flattenModule(target);
@@ -1086,6 +1090,7 @@ class InlinerPass : public InlinerBase<InlinerPass> {
     inliner.run();
     LLVM_DEBUG(llvm::dbgs() << "===--------------------------------------------"
                                "------------------------------===\n");
+    markAnalysesPreserved<NLATable>();
   }
 };
 } // namespace
