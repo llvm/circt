@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -115,8 +116,6 @@ private:
 
   /// Whether any errors have occurred in the current `runOnOperation`.
   bool anyFailures;
-  /// Analyses for the current operation; only valid within `runOnOperation`.
-  SymbolTable *symtbl;
   CircuitNamespace *circuitNamespace;
   InstanceGraph *instanceGraph;
   InstancePathCache *instancePaths;
@@ -136,6 +135,9 @@ private:
   DenseSet<Operation *> tempSymInstances;
   /// The Design Under Test module.
   StringAttr dutModuleName;
+
+  /// Cached NLA table analysis.
+  NLATable *nlaTable;
 };
 } // namespace
 
@@ -177,7 +179,6 @@ static IntegerAttr isOMSRAM(Attribute &node) {
 void EmitOMIRPass::runOnOperation() {
   MLIRContext *context = &getContext();
   anyFailures = false;
-  symtbl = nullptr;
   circuitNamespace = nullptr;
   instanceGraph = nullptr;
   instancePaths = nullptr;
@@ -247,11 +248,10 @@ void EmitOMIRPass::runOnOperation() {
     return;
   }
   // Establish some of the analyses we need throughout the pass.
-  SymbolTable currentSymtbl(circuitOp);
   CircuitNamespace currentCircuitNamespace(circuitOp);
   InstanceGraph &currentInstanceGraph = getAnalysis<InstanceGraph>();
+  nlaTable = &getAnalysis<NLATable>();
   InstancePathCache currentInstancePaths(currentInstanceGraph);
-  symtbl = &currentSymtbl;
   circuitNamespace = &currentCircuitNamespace;
   instanceGraph = &currentInstanceGraph;
   instancePaths = &currentInstancePaths;
@@ -286,7 +286,7 @@ void EmitOMIRPass::runOnOperation() {
         return true;
       }
       if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        auto *tmp = symtbl->lookup(nlaSym.getAttr());
+        auto tmp = nlaTable->getNLA(nlaSym.getAttr());
         if (!tmp) {
           op->emitError("missing annotation ") << nlaSym.getValue();
           anyFailures = true;
@@ -344,7 +344,8 @@ void EmitOMIRPass::runOnOperation() {
         instsToModify.insert(it->second);
       }
     }
-    symtbl->erase(nla);
+    nlaTable->erase(nla);
+    nla.erase();
   }
 
   for (auto instOp : instsToModify) {
@@ -377,6 +378,8 @@ void EmitOMIRPass::runOnOperation() {
       context, *outputFilename, /*excludeFromFilelist=*/true, false);
   verbatimOp->setAttr("output_file", fileAttr);
   verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
+
+  markAnalysesPreserved<NLATable>();
 }
 
 /// Make a tracker absolute by adding an NLA to it which starts at the root
@@ -464,7 +467,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
                                                builder.getStringAttr(nlaName),
                                                builder.getArrayAttr(namepath));
-  symtbl->insert(tracker.nla);
+  nlaTable->addNLA(tracker.nla);
 
   removeTempNLAs.push_back(tracker.nla);
 }
@@ -813,7 +816,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
         instName = {};
       }
 
-      Operation *module = symtbl->lookup(modName);
+      Operation *module = nlaTable->getModule(modName);
       assert(module);
       if (notFirst)
         target.push_back('/');

@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -261,9 +262,9 @@ struct CircuitLoweringState {
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       InstanceGraph *instanceGraph)
+                       InstanceGraph *instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
-        enableAnnotationWarning(enableAnnotationWarning) {
+        enableAnnotationWarning(enableAnnotationWarning), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -275,9 +276,7 @@ struct CircuitLoweringState {
     }
 
     for (auto &op : *circuitOp.getBody()) {
-      if (auto nla = dyn_cast<NonLocalAnchor>(op))
-        nlaMap[nla.sym_nameAttr()] = nla;
-      else if (auto module = dyn_cast<FModuleLike>(op))
+      if (auto module = dyn_cast<FModuleLike>(op))
         if (AnnotationSet::removeAnnotations(module, dutAnnoClass))
           dut = module;
     }
@@ -372,8 +371,8 @@ private:
   /// applicable).
   DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
 
-  /// Map of symbol name to NonLocalAnchor op.
-  llvm::DenseMap<Attribute, NonLocalAnchor> nlaMap;
+  /// Cached nla table analysis.
+  NLATable *nlaTable = nullptr;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -496,7 +495,8 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(circuit, enableAnnotationWarning,
-                             &getAnalysis<InstanceGraph>());
+                             &getAnalysis<InstanceGraph>(),
+                             &getAnalysis<NLATable>());
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
@@ -1037,7 +1037,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       return false;
     }
 
-    auto nla = loweringState.nlaMap.lookup(sym.getAttr());
+    auto nla = loweringState.nlaTable->getNLA(sym.getAttr());
     // The non-local anchor must exist.
     //
     // TODO: handle this with annotation verification.
