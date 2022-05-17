@@ -1445,7 +1445,7 @@ static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
 hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
-    auto result = cache->getDefinition(instance());
+    auto result = cache->getInnerDefinition(instance());
     return cast<hw::InstanceOp>(result.getOp());
   }
 
@@ -1497,7 +1497,7 @@ sv::InterfaceInstanceOp
 BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
-    auto result = cache->getDefinition(instance());
+    auto result = cache->getInnerDefinition(instance());
     return cast<sv::InterfaceInstanceOp>(result.getOp());
   }
 

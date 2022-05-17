@@ -905,8 +905,8 @@ void EmitterBase::emitTextWithSubstitutions(
           if (auto *symOp = state.symbolCache.getDefinition(fsym))
             symVerilogName = namify(sym, symOp);
         } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
-          auto symOp =
-              state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+          auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
+                                                            isym.getName());
           symVerilogName = namify(sym, symOp);
         }
         os << symVerilogName;

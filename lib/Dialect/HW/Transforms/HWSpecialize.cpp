@@ -35,7 +35,7 @@ using InstanceParameters = llvm::DenseMap<hw::HWModuleOp, ArrayAttr>;
 
 // Generates a module name by composing the name of 'moduleOp' and the set of
 // provided 'parameters'.
-static std::string generateModuleName(HWSymbolCache &symbolCache,
+static std::string generateModuleName(SymbolCache &symbolCache,
                                       hw::HWModuleOp moduleOp,
                                       ArrayAttr parameters) {
   assert(parameters.size() != 0);
@@ -194,7 +194,7 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
 // 4. Any references to module parameters have been replaced with the
 // parameter value.
 static LogicalResult specializeModule(OpBuilder builder, ArrayAttr parameters,
-                                      HWSymbolCache &sc, HWModuleOp source,
+                                      SymbolCache &sc, HWModuleOp source,
                                       HWModuleOp &target) {
   auto *ctx = builder.getContext();
   // Update the types of the source module ports based on evaluating any
@@ -273,10 +273,9 @@ void HWSpecializePass::runOnOperation() {
                  llvm::DenseMap<ArrayAttr, llvm::SmallVector<hw::InstanceOp>>>
       parametersUsers;
 
-  // Maintain a symbol cache for fast looking during module specialization.
-  MutableSymbolCache sc;
+  // Maintain a symbol cache for fast lookup during module specialization.
+  SymbolCache sc;
   sc.addDefinitions(module);
-  sc.freeze();
 
   for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
     for (auto instanceOp : hwModule.getOps<hw::InstanceOp>()) {
@@ -307,9 +306,7 @@ void HWSpecializePass::runOnOperation() {
       }
 
       // Extend the symbol cache with the newly created module.
-      sc.unfreeze();
       sc.addDefinition(specializedModule.getNameAttr(), specializedModule);
-      sc.freeze();
 
       // Rewrite instances of the specialized module to the specialized
       // module.

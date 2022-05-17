@@ -13,15 +13,12 @@
 #ifndef CIRCT_DIALECT_MSFT_EXPORTTCL_H
 #define CIRCT_DIALECT_MSFT_EXPORTTCL_H
 
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
-namespace hw {
-class HWSymbolCache;
-} // namespace hw
-
 namespace msft {
 class MSFTModuleOp;
 

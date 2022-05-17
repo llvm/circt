@@ -323,10 +323,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
 
   hw::HWSymbolCache symCache;
-  for (auto &op : topLevelModule->getOperations())
-    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-      if (auto name = symOp.getNameAttr())
-        symCache.addDefinition(name, symOp);
+  symCache.addDefinitions(top);
   symCache.freeze();
 
   // Symbols not in the cache will only be fore instances added by an extract

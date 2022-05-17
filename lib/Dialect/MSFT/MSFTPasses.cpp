@@ -8,13 +8,13 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOpInterfaces.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/SymCache.h"
 
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -73,22 +73,22 @@ struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
 
   // Cache the top-level symbols. Insert the new ones we're creating for new
   // global ref ops.
-  hw::MutableSymbolCache topSyms;
+  SymbolCache topSyms;
 
   // In order to be efficient, cache the "symbols" in each module.
-  DenseMap<MSFTModuleOp, hw::HWSymbolCache> perModSyms;
+  DenseMap<MSFTModuleOp, SymbolCache> perModSyms;
   // Accessor for `perModSyms` which lazily constructs each cache.
-  const hw::HWSymbolCache &getSyms(MSFTModuleOp mod);
+  const SymbolCache &getSyms(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
-const hw::HWSymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
+const SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
   auto symsFound = perModSyms.find(mod);
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
 
   // Build the cache.
-  hw::HWSymbolCache &syms = perModSyms[mod];
+  SymbolCache &syms = perModSyms[mod];
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
       return;
@@ -96,7 +96,6 @@ const hw::HWSymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
             op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
       syms.addDefinition(name, op);
   });
-  syms.freeze();
   return syms;
 }
 
@@ -124,9 +123,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
     auto refAttr = hw::GlobalRefAttr::get(ref);
 
     // Add the new symbol to the symbol cache.
-    topSyms.unfreeze();
     topSyms.addDefinition(refSym, ref);
-    topSyms.freeze();
 
     // For each level of `globalRef`, find the static operation which needs a
     // back reference to the global ref which is replacing us.
@@ -134,7 +131,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
     for (auto innerRef : globalRefPath.getAsRange<hw::InnerRefAttr>()) {
       MSFTModuleOp mod =
           cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
-      const hw::HWSymbolCache &modSyms = getSyms(mod);
+      const SymbolCache &modSyms = getSyms(mod);
       Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
       if (!tgtOp) {
         symNotFound = true;
@@ -179,7 +176,6 @@ void LowerInstancesPass::runOnOperation() {
 
   // Populate the top level symbol cache.
   topSyms.addDefinitions(top);
-  topSyms.freeze();
 
   size_t numFailed = 0;
   OpBuilder builder(ctxt);
@@ -519,7 +515,7 @@ std::unique_ptr<Pass> createExportTclPass() {
 namespace {
 struct PassCommon {
 protected:
-  hw::HWSymbolCache topLevelSyms;
+  SymbolCache topLevelSyms;
   DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
   LogicalResult verifyInstances(ModuleOp topMod);
@@ -663,7 +659,6 @@ void PartitionPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   ctxt = outerMod.getContext();
   topLevelSyms.addDefinitions(outerMod);
-  topLevelSyms.freeze();
   if (failed(verifyInstances(outerMod))) {
     signalPassFailure();
     return;
@@ -878,7 +873,7 @@ static void setEntityName(Operation *op, Twine name) {
 }
 
 /// Try to get a "good" name for the given Value.
-static StringRef getValueName(Value v, const hw::HWSymbolCache &syms,
+static StringRef getValueName(Value v, const SymbolCache &syms,
                               std::string &buff) {
   Operation *defOp = v.getDefiningOp();
   if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
@@ -911,7 +906,7 @@ static StringRef getValueName(Value v, const hw::HWSymbolCache &syms,
 }
 
 /// Heuristics to get the output name.
-static StringRef getResultName(OpResult res, const hw::HWSymbolCache &syms,
+static StringRef getResultName(OpResult res, const SymbolCache &syms,
                                std::string &buff) {
 
   StringRef valName = getValueName(res, syms, buff);
@@ -927,7 +922,7 @@ static StringRef getResultName(OpResult res, const hw::HWSymbolCache &syms,
 }
 
 /// Heuristics to get the input name.
-static StringRef getOperandName(OpOperand &oper, const hw::HWSymbolCache &syms,
+static StringRef getOperandName(OpOperand &oper, const SymbolCache &syms,
                                 std::string &buff) {
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {
@@ -1426,7 +1421,6 @@ struct WireCleanupPass : public WireCleanupBase<WireCleanupPass>, PassCommon {
 void WireCleanupPass::runOnOperation() {
   ModuleOp topMod = getOperation();
   topLevelSyms.addDefinitions(topMod);
-  topLevelSyms.freeze();
   if (failed(verifyInstances(topMod))) {
     signalPassFailure();
     return;
