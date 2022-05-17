@@ -1473,6 +1473,7 @@ void LowerTypesPass::runOnOperation() {
     nlaTable->erase(nla);
     symTbl.erase(nla);
   }
+  markAnalysesPreserved<NLATable>();
 }
 
 /// This is the pass constructor.

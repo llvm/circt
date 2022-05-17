@@ -1800,6 +1800,7 @@ void GrandCentralPass::runOnOperation() {
   // annotations.
   if (removalError)
     return signalPassFailure();
+  markAnalysesPreserved<NLATable>();
 }
 
 StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
