@@ -92,7 +92,7 @@ struct Literal {
 
 /// Necessary information to wire up a port with tapped data or memory location.
 struct PortWiring {
-  using Target = hw::SymbolCache::Item;
+  using Target = hw::HWSymbolCache::Item;
 
   unsigned portNum;
   /// The different instance paths that lead to this port. If the NLA field is

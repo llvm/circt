@@ -322,7 +322,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   auto coverBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
 
-  hw::SymbolCache symCache;
+  hw::HWSymbolCache symCache;
   for (auto &op : topLevelModule->getOperations())
     if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
       if (auto name = symOp.getNameAttr())

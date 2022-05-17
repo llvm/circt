@@ -1055,7 +1055,7 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
 /// Lookup the op for the modport declaration.  This returns null on invalid
 /// IR.
 InterfaceModportOp
-GetModportOp::getReferencedDecl(const hw::SymbolCache &cache) {
+GetModportOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
   return dyn_cast_or_null<InterfaceModportOp>(cache.getDefinition(fieldAttr()));
 }
 
@@ -1074,7 +1074,7 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
 /// Lookup the op for the signal declaration.  This returns null on invalid
 /// IR.
 InterfaceSignalOp
-ReadInterfaceSignalOp::getReferencedDecl(const hw::SymbolCache &cache) {
+ReadInterfaceSignalOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
   return dyn_cast_or_null<InterfaceSignalOp>(
       cache.getDefinition(signalNameAttr()));
 }
@@ -1116,7 +1116,7 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
 }
 
 Operation *
-InterfaceInstanceOp::getReferencedInterface(const hw::SymbolCache *cache) {
+InterfaceInstanceOp::getReferencedInterface(const hw::HWSymbolCache *cache) {
   FlatSymbolRefAttr interface = getInterfaceType().getInterface();
   if (cache)
     if (auto *result = cache->getDefinition(interface))
@@ -1442,7 +1442,7 @@ static Op findInstanceSymbolInBlock(StringAttr name, Block *body) {
   return {};
 }
 
-hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
+hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
     auto result = cache->getDefinition(instance());
@@ -1494,7 +1494,7 @@ void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
 //===----------------------------------------------------------------------===//
 
 sv::InterfaceInstanceOp
-BindInterfaceOp::getReferencedInstance(const hw::SymbolCache *cache) {
+BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
   if (cache) {
     auto result = cache->getDefinition(instance());

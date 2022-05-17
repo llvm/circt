@@ -722,7 +722,7 @@ public:
   explicit VerilogEmitterState(ModuleOp designOp,
                                const SharedEmitterState &shared,
                                const LoweringOptions &options,
-                               const SymbolCache &symbolCache,
+                               const HWSymbolCache &symbolCache,
                                const GlobalNameTable &globalNames,
                                raw_ostream &os)
       : designOp(designOp), shared(shared), options(options),
@@ -737,7 +737,7 @@ public:
   const LoweringOptions &options;
 
   /// This is a cache of various information about the IR, in frozen state.
-  const SymbolCache &symbolCache;
+  const HWSymbolCache &symbolCache;
 
   /// This tracks global names where the Verilog name needs to be different than
   /// the IR name.
@@ -831,7 +831,7 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  auto namify = [&](Attribute sym, SymbolCache::Item item) {
+  auto namify = [&](Attribute sym, HWSymbolCache::Item item) {
     // CAVEAT: These accesses can reach into other modules through inner name
     // references, which are currently being processed. Do not add those remote
     // operations to this module's `names`, which is reserved for things named

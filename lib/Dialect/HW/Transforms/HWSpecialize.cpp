@@ -35,7 +35,7 @@ using InstanceParameters = llvm::DenseMap<hw::HWModuleOp, ArrayAttr>;
 
 // Generates a module name by composing the name of 'moduleOp' and the set of
 // provided 'parameters'.
-static std::string generateModuleName(SymbolCache &symbolCache,
+static std::string generateModuleName(HWSymbolCache &symbolCache,
                                       hw::HWModuleOp moduleOp,
                                       ArrayAttr parameters) {
   assert(parameters.size() != 0);
@@ -194,7 +194,7 @@ static void populateTypeConversion(Location loc, TypeConverter &typeConverter,
 // 4. Any references to module parameters have been replaced with the
 // parameter value.
 static LogicalResult specializeModule(OpBuilder builder, ArrayAttr parameters,
-                                      SymbolCache &sc, HWModuleOp source,
+                                      HWSymbolCache &sc, HWModuleOp source,
                                       HWModuleOp &target) {
   auto *ctx = builder.getContext();
   // Update the types of the source module ports based on evaluating any

@@ -221,7 +221,7 @@ struct SharedEmitterState {
 
   /// A cache of symbol -> defining ops built once and used by each of the
   /// verilog module emitters.  This is built at "gatherFiles" time.
-  hw::SymbolCache symbolCache;
+  hw::HWSymbolCache symbolCache;
 
   // Emitter options extracted from the top-level module.
   const LoweringOptions &options;
