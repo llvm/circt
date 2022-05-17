@@ -23,7 +23,7 @@ namespace circt {
 /// working with the IR more efficient.
 class SymbolCacheBase {
 public:
-  virtual ~SymbolCacheBase() {}
+  virtual ~SymbolCacheBase();
 
   /// Defines 'op' as associated with the 'symbol' in the cache.
   virtual void addDefinition(mlir::Attribute symbol, mlir::Operation *op) = 0;
@@ -35,12 +35,7 @@ public:
 
   /// Populate the symbol cache with all symbol-defining operations within the
   /// 'top' operation.
-  void addDefinitions(mlir::Operation *top) {
-    for (auto &region : top->getRegions())
-      for (auto &block : region.getBlocks())
-        for (auto symOp : block.getOps<mlir::SymbolOpInterface>())
-          addSymbol(symOp);
-  }
+  void addDefinitions(mlir::Operation *top);
 
   /// Lookup a definition for 'symbol' in the cache.
   virtual mlir::Operation *getDefinition(mlir::Attribute symbol) const = 0;
