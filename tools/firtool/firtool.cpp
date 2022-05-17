@@ -436,7 +436,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
-    options.rawAnnotations = newAnno;
     options.numAnnotationFiles = numAnnotationFiles;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {

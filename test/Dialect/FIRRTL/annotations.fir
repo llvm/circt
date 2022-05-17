@@ -1213,3 +1213,27 @@ circuit memportAnno: %[[
 ; CHECK:        firrtl.nla @nla_1 [#hw.innerNameRef<@memportAnno::@foo>, #hw.innerNameRef<@Foo::@memory>]
 ; CHECK:        %memory_w = firrtl.mem sym @memory Undefined  {depth = 16 : i64, name = "memory", portAnnotations
 ; CHECK-SAME:   [{circt.nonlocal = @nla_1, class = "test"}]
+
+; // -----
+; Test that a circuit with annotations that are supposed to be bypassed by
+; parsing/scattering are properly moved onto the circuit under a
+; "rawAnnotations" attribute.
+circuit RawAnnotations: %[[
+  {
+    "class":"circt.test"
+  },
+  {
+    "class":"circt.testNT"
+  },
+  {
+    "class":"circt.missing"
+  }
+]]
+  module RawAnnotations:
+    wire x: UInt<1>
+
+    ; CHECK-LABEL: firrtl.circuit "RawAnnotations"
+    ; CHECK-SAME:    rawAnnotations = [
+    ; CHECK-SAME:      "circt.test"
+    ; Check-SAME:      "circt.testNT"
+    ; Check-SAME:      "circt.missing"

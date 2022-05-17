@@ -14,6 +14,7 @@
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -177,7 +178,7 @@ splitAndAppendTarget(NamedAttrList &annotation, StringRef target,
 /// Return an input \p target string in canonical form.  This converts a Legacy
 /// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
 /// subfield/subindex references are preserved.
-static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
+static llvm::Optional<std::string> oldCanonicalizeTarget(StringRef target) {
 
   if (target.empty())
     return {};
@@ -379,7 +380,7 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       p.field("target").report("target must be a string type");
       return {};
     }
-    auto canonTargetStr = canonicalizeTarget(maybeTargetStr.getValue());
+    auto canonTargetStr = oldCanonicalizeTarget(maybeTargetStr.getValue());
     if (!canonTargetStr) {
       p.field("target").report("invalid target string");
       return {};
@@ -411,6 +412,26 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                "array of something else.");
       return false;
     }
+
+    // If the annotation has a class name which matches an annotation which the
+    // LowerAnnotations pass knows about, then defer its processing.
+    if (auto *clazz = object->get("class")) {
+      auto classString = clazz->getAsString();
+      if (classString && isAnnoClassLowered(classString.getValue())) {
+        NamedAttrList metadata;
+        for (auto field : *object) {
+          if (auto value = convertJSONToAttribute(context, field.second, p)) {
+            metadata.append(field.first, value);
+            continue;
+          }
+          return false;
+        }
+        mutableAnnotationMap[rawAnnotations].push_back(
+            DictionaryAttr::get(context, metadata));
+        continue;
+      }
+    }
+
     // Find and remove the "target" field from the Annotation object if it
     // exists.  In the FIRRTL Dialect, the target will be implicitly specified
     // based on where the attribute is applied.
@@ -956,7 +977,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
           tracker.append(
               "id", IntegerAttr::get(IntegerType::get(ctx, 64), annotationID));
 
-          auto canonTarget = canonicalizeTarget(value);
+          auto canonTarget = oldCanonicalizeTarget(value);
           if (!canonTarget)
             return None;
 
@@ -1317,7 +1338,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           tryGetAs<StringAttr>(dict, dict, "blackBox", loc, clazz);
       if (!blackBoxAttr)
         return false;
-      auto target = canonicalizeTarget(blackBoxAttr.getValue());
+      auto target = oldCanonicalizeTarget(blackBoxAttr.getValue());
       if (!target)
         return false;
       newAnnotations[target.getValue()].push_back(
@@ -1343,7 +1364,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             tryGetAs<StringAttr>(bDict, dict, "portName", loc, clazz, path);
         if (!portNameAttr)
           return false;
-        auto maybePortTarget = canonicalizeTarget(portNameAttr.getValue());
+        auto maybePortTarget = oldCanonicalizeTarget(portNameAttr.getValue());
         if (!maybePortTarget)
           return false;
         auto portPair =
@@ -1363,7 +1384,7 @@ bool circt::firrtl::scatterCustomAnnotations(
               tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
           if (!sourceAttr)
             return false;
-          auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
+          auto maybeSourceTarget = oldCanonicalizeTarget(sourceAttr.getValue());
           if (!maybeSourceTarget)
             return false;
           auto NLATargets = expandNonLocal(*maybeSourceTarget);
@@ -1412,7 +1433,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           module.append("internalPath", internalPathAttr);
           module.append("portID", portID);
-          auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+          auto moduleTarget = oldCanonicalizeTarget(moduleAttr.getValue());
           if (!moduleTarget)
             return false;
           newAnnotations[moduleTarget.getValue()].push_back(
@@ -1468,7 +1489,7 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto sourceAttr = tryGetAs<StringAttr>(dict, dict, "source", loc, clazz);
       if (!sourceAttr)
         return false;
-      auto target = canonicalizeTarget(sourceAttr.getValue());
+      auto target = oldCanonicalizeTarget(sourceAttr.getValue());
       if (!target)
         return false;
       attrs.append(dict.getNamed("class").getValue());
@@ -1494,7 +1515,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         foo.append("id", id);
         foo.append("portID",
                    IntegerAttr::get(IntegerType::get(context, 64), i));
-        auto canonTarget = canonicalizeTarget(tap.getValue());
+        auto canonTarget = oldCanonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
         auto NLATargets = expandNonLocal(*canonTarget);
@@ -1618,7 +1639,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         // Build the two annotations.
         for (auto pair : std::array{std::make_pair(localAttr, true),
                                     std::make_pair(remoteAttr, false)}) {
-          auto canonTarget = canonicalizeTarget(pair.first.getValue());
+          auto canonTarget = oldCanonicalizeTarget(pair.first.getValue());
           if (!canonTarget)
             return false;
 
@@ -1752,7 +1773,7 @@ bool circt::firrtl::scatterCustomAnnotations(
               << "annotation:" << dict << "\n";
           return false;
         }
-        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        auto canonTarget = oldCanonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
         auto nlaTargets = expandNonLocal(*canonTarget);
@@ -1778,7 +1799,7 @@ bool circt::firrtl::scatterCustomAnnotations(
               << "annotation:" << dict << "\n";
           return false;
         }
-        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        auto canonTarget = oldCanonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
         auto nlaTargets = expandNonLocal(*canonTarget);

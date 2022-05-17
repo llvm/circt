@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
@@ -296,6 +297,10 @@ static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
   return nullptr;
 }
 
+bool firrtl::isAnnoClassLowered(StringRef className) {
+  return annotationRecords.count(className);
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -344,8 +349,19 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
 void LowerAnnotationsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);
+
+  // Grab the annotations from a non-standard attribute called "rawAnnotations".
+  // This is a temporary location for all annotations that are earmarked for
+  // processing by this pass as we migrate annotations from being handled by
+  // FIRAnnotations/FIRParser into this pass.  While we do this, this pass is
+  // not supposed to touch _other_ annotations to enable this pass to be run
+  // after FIRAnnotations/FIRParser.
+  auto annotations = circuit->getAttrOfType<ArrayAttr>(rawAnnotations);
+  if (!annotations)
+    return;
+
   // Grab the annotations.
-  for (auto anno : circuit.annotations())
+  for (auto anno : annotations)
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
   // Clear the annotations.
   circuit.annotationsAttr(ArrayAttr::get(circuit.getContext(), {}));
