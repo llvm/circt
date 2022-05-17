@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -130,9 +131,10 @@ public:
   /// MutableNLA in any way after calling this method may result in crashes.
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
-  NonLocalAnchor applyUpdates() {
+  NonLocalAnchor applyUpdates(NLATable &nlaTable) {
     // Delete an NLA which is either dead or has been made local.
     if (isLocal() || isDead()) {
+      nlaTable.erase(nla);
       nla.erase();
       return nullptr;
     }
@@ -194,7 +196,8 @@ public:
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
       last = writeBack(root.getModule(), root.getName());
-
+    nlaTable.insert(last);
+    nlaTable.erase(nla);
     nla.erase();
     return last;
   }
@@ -404,7 +407,7 @@ namespace {
 class Inliner {
 public:
   /// Initialize the inliner to run on this circuit.
-  Inliner(CircuitOp circuit);
+  Inliner(CircuitOp circuit, NLATable &nlaTable);
 
   /// Run the inliner.
   void run();
@@ -484,6 +487,8 @@ private:
   /// This is used to distinguish if a non-local annotation applies to the
   /// current instance or not.
   SmallVector<std::pair<Attribute, Attribute>> currentPath;
+
+  NLATable &nlaTable;
 };
 } // namespace
 
@@ -717,23 +722,24 @@ void Inliner::flattenInstances(FModuleOp module) {
       continue;
 
     // If its not a regular module we can't inline it. Mark is as live.
-    auto *module = symbolTable.lookup(instance.moduleName());
-    auto target = dyn_cast<FModuleOp>(module);
+    auto *targetModule = symbolTable.lookup(instance.moduleName());
+    auto target = dyn_cast<FModuleOp>(targetModule);
     if (!target) {
-      liveModules.insert(module);
+      liveModules.insert(targetModule);
       continue;
     }
 
     // Preorder update of any non-local annotations this instance participates
     // in.  This needs to happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
-    AnnotationSet annotations(instance);
-    for (auto anno : annotations) {
-      if (anno.isClass("circt.nonlocal")) {
-        auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        nlaMap[sym.getAttr()].flattenModule(target);
-      }
-    }
+    DenseSet<NonLocalAnchor> instNLAs;
+    // To estimate the NLAs that this instance participates in, get the NLAs
+    // that are common between the parent module and the target module. This
+    // computes the set of NLAs that an instance participates in, instead of
+    // recording them with the instance op in the IR.
+    nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
+    for (auto targetNLA : instNLAs)
+      nlaMap[targetNLA.sym_nameAttr()].flattenModule(target);
 
     // Add any NLAs which start at this instance to the localSymbols set.
     // Anything in this set will be made local during the recursive flattenInto
@@ -798,15 +804,14 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
     // in.  This needs ot happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
     auto toBeFlattened = shouldFlatten(target);
-    AnnotationSet annotations(instance);
-    for (auto anno : annotations) {
-      if (anno.isClass("circt.nonlocal")) {
-        auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (toBeFlattened)
-          nlaMap[sym.getAttr()].flattenModule(target);
-        else
-          nlaMap[sym.getAttr()].inlineModule(target);
-      }
+    DenseSet<NonLocalAnchor> instNLAs;
+    nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
+    for (auto targetNLA : instNLAs) {
+      auto sym = targetNLA.sym_nameAttr();
+      if (toBeFlattened)
+        nlaMap[sym].flattenModule(target);
+      else
+        nlaMap[sym].inlineModule(target);
     }
 
     currentPath.emplace_back(moduleName, instance.inner_symAttr());
@@ -875,15 +880,14 @@ void Inliner::inlineInstances(FModuleOp parent) {
     // in.  This needs ot happen _before_ visiting modules so that internal
     // non-local annotations can be deleted if they are now local.
     auto toBeFlattened = shouldFlatten(target);
-    AnnotationSet annotations(instance);
-    for (auto anno : annotations) {
-      if (anno.isClass("circt.nonlocal")) {
-        auto sym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal");
-        if (toBeFlattened)
-          nlaMap[sym.getAttr()].flattenModule(target);
-        else
-          nlaMap[sym.getAttr()].inlineModule(target);
-      }
+    DenseSet<NonLocalAnchor> instNLAs;
+    nlaTable.commonNLAs(moduleName, target.getNameAttr(), instNLAs);
+    for (auto targetNLA : instNLAs) {
+      auto sym = targetNLA.sym_nameAttr();
+      if (toBeFlattened)
+        nlaMap[sym].flattenModule(target);
+      else
+        nlaMap[sym].inlineModule(target);
     }
 
     currentPath.emplace_back(moduleName, instance.inner_symAttr());
@@ -924,8 +928,9 @@ void Inliner::inlineInstances(FModuleOp parent) {
   }
 }
 
-Inliner::Inliner(CircuitOp circuit)
-    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
+Inliner::Inliner(CircuitOp circuit, NLATable &nlaTable)
+    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit),
+      nlaTable(nlaTable) {}
 
 void Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
@@ -993,7 +998,7 @@ void Inliner::run() {
 
   // Writeback all NLAs to MLIR.
   for (auto &nla : nlaMap)
-    nla.getSecond().applyUpdates();
+    nla.getSecond().applyUpdates(nlaTable);
 
   // Garbage collect any annotations which are now dead.  Duplicate annotations
   // which are now split.
@@ -1080,10 +1085,12 @@ class InlinerPass : public InlinerBase<InlinerPass> {
     LLVM_DEBUG(llvm::dbgs()
                << "===- Running Module Inliner Pass "
                   "--------------------------------------------===\n");
-    Inliner inliner(getOperation());
+    auto *nlaTable = &getAnalysis<NLATable>();
+    Inliner inliner(getOperation(), *nlaTable);
     inliner.run();
     LLVM_DEBUG(llvm::dbgs() << "===--------------------------------------------"
                                "------------------------------===\n");
+    markAnalysesPreserved<NLATable>();
   }
 };
 } // namespace

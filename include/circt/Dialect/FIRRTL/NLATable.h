@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/iterator.h"
 
 namespace circt {
@@ -48,6 +49,21 @@ public:
 
   /// Remove the NLA from the analysis.
   void erase(NonLocalAnchor nlaOp);
+
+  /// Compute the NLAs that are common between the two modules, \p mod1 and \p
+  /// mod2 and insert them into the set \p common.
+  ///  The set of NLAs that an instance op participates in is the set of common
+  ///  NLAs between the parent module and the instance target. This can be used
+  ///  to get the set of NLAs that an InstanceOp participates in, instead of
+  ///  recording them on the op in the IR.
+  void commonNLAs(StringAttr mod1, StringAttr mod2,
+                  DenseSet<NonLocalAnchor> &common) {
+    auto mod1NLAs = lookup(mod1);
+    auto mod2NLAs = lookup(mod2);
+    common.insert(mod1NLAs.begin(), mod1NLAs.end());
+    DenseSet<NonLocalAnchor> set2(mod2NLAs.begin(), mod2NLAs.end());
+    llvm::set_intersect(common, set2);
+  }
 
   //===-------------------------------------------------------------------------
   // Methods to keep an NLATable up to date.
