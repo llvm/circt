@@ -487,7 +487,7 @@ void TypeAliasType::print(AsmPrinter &p) const {
 
 /// Return the Typedecl referenced by this TypeAlias, given the module to look
 /// in.  This returns null when the IR is malformed.
-TypedeclOp TypeAliasType::getTypeDecl(const SymbolCache &cache) {
+TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   SymbolRefAttr ref = getRef();
   auto typeScope = ::dyn_cast_or_null<TypeScopeOp>(
       cache.getDefinition(ref.getRootReference()));

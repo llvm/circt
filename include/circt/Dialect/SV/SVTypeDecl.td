@@ -228,7 +228,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance"> {
 
     /// Lookup the interface that this is an instance of.  This returns null on
     /// invalid IR.
-    Operation *getReferencedInterface(const hw::SymbolCache *cache = nullptr);
+    Operation *getReferencedInterface(const hw::HWSymbolCache *cache = nullptr);
 
 
     //===------------------------------------------------------------------===//
@@ -269,7 +269,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Lookup the op for the modport declaration.  This returns null on invalid
     /// IR.
-    InterfaceModportOp getReferencedDecl(const hw::SymbolCache &cache);
+    InterfaceModportOp getReferencedDecl(const hw::HWSymbolCache &cache);
   }];
 }
 
@@ -333,7 +333,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let extraClassDeclaration = [{
     /// Lookup the op for the signal declaration.  This returns null on invalid
     /// IR.
-    InterfaceSignalOp getReferencedDecl(const hw::SymbolCache &cache);
+    InterfaceSignalOp getReferencedDecl(const hw::HWSymbolCache &cache);
   }];
 
   let hasVerifier = 1;

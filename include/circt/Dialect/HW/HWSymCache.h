@@ -25,7 +25,7 @@ namespace hw {
 /// which it is "write only" and then the "using" phase which is read-only (and
 /// thus can be used by multiple threads).  The
 /// "freeze" method transitions between the two states.
-class SymbolCache {
+class HWSymbolCache {
 public:
   class Item {
   public:
@@ -120,7 +120,7 @@ private:
 /// Unlike SymbolCache, the MutableSymbolCache is not thread safe, and the
 /// caller is expected to perform synchronization if used in a multithreaded
 /// context.
-class MutableSymbolCache : public SymbolCache {
+class MutableSymbolCache : public HWSymbolCache {
 public:
   /// Mark the cache as unfrozen, allowing for mutation. Caller should ensure
   /// that the cache is no longer being read from after unfreezing occurs.

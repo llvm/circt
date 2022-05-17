@@ -22,7 +22,7 @@
 
 namespace circt {
 namespace hw {
-class SymbolCache;
+class HWSymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;
 namespace detail {

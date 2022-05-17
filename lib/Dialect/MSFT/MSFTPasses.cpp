@@ -76,19 +76,19 @@ struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
   hw::MutableSymbolCache topSyms;
 
   // In order to be efficient, cache the "symbols" in each module.
-  DenseMap<MSFTModuleOp, hw::SymbolCache> perModSyms;
+  DenseMap<MSFTModuleOp, hw::HWSymbolCache> perModSyms;
   // Accessor for `perModSyms` which lazily constructs each cache.
-  const hw::SymbolCache &getSyms(MSFTModuleOp mod);
+  const hw::HWSymbolCache &getSyms(MSFTModuleOp mod);
 };
 } // anonymous namespace
 
-const hw::SymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
+const hw::HWSymbolCache &LowerInstancesPass::getSyms(MSFTModuleOp mod) {
   auto symsFound = perModSyms.find(mod);
   if (symsFound != perModSyms.end())
     return symsFound->getSecond();
 
   // Build the cache.
-  hw::SymbolCache &syms = perModSyms[mod];
+  hw::HWSymbolCache &syms = perModSyms[mod];
   mod.walk([&syms, mod](Operation *op) {
     if (op == mod)
       return;
@@ -134,7 +134,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst, OpBuilder &b) {
     for (auto innerRef : globalRefPath.getAsRange<hw::InnerRefAttr>()) {
       MSFTModuleOp mod =
           cast<MSFTModuleOp>(topSyms.getDefinition(innerRef.getModule()));
-      const hw::SymbolCache &modSyms = getSyms(mod);
+      const hw::HWSymbolCache &modSyms = getSyms(mod);
       Operation *tgtOp = modSyms.getDefinition(innerRef.getName());
       if (!tgtOp) {
         symNotFound = true;
@@ -519,7 +519,7 @@ std::unique_ptr<Pass> createExportTclPass() {
 namespace {
 struct PassCommon {
 protected:
-  hw::SymbolCache topLevelSyms;
+  hw::HWSymbolCache topLevelSyms;
   DenseMap<MSFTModuleOp, SmallVector<InstanceOp, 1>> moduleInstantiations;
 
   LogicalResult verifyInstances(ModuleOp topMod);
@@ -878,7 +878,7 @@ static void setEntityName(Operation *op, Twine name) {
 }
 
 /// Try to get a "good" name for the given Value.
-static StringRef getValueName(Value v, const hw::SymbolCache &syms,
+static StringRef getValueName(Value v, const hw::HWSymbolCache &syms,
                               std::string &buff) {
   Operation *defOp = v.getDefiningOp();
   if (auto inst = dyn_cast_or_null<InstanceOp>(defOp)) {
@@ -911,7 +911,7 @@ static StringRef getValueName(Value v, const hw::SymbolCache &syms,
 }
 
 /// Heuristics to get the output name.
-static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
+static StringRef getResultName(OpResult res, const hw::HWSymbolCache &syms,
                                std::string &buff) {
 
   StringRef valName = getValueName(res, syms, buff);
@@ -927,7 +927,7 @@ static StringRef getResultName(OpResult res, const hw::SymbolCache &syms,
 }
 
 /// Heuristics to get the input name.
-static StringRef getOperandName(OpOperand &oper, const hw::SymbolCache &syms,
+static StringRef getOperandName(OpOperand &oper, const hw::HWSymbolCache &syms,
                                 std::string &buff) {
   Operation *op = oper.getOwner();
   if (auto inst = dyn_cast<InstanceOp>(op)) {

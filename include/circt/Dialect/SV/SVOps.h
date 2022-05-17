@@ -24,7 +24,7 @@
 namespace circt {
 namespace hw {
 class InstanceOp;
-class SymbolCache;
+class HWSymbolCache;
 class InnerRefAttr;
 } // namespace hw
 

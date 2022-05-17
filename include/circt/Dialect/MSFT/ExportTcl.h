@@ -19,7 +19,7 @@
 
 namespace circt {
 namespace hw {
-class SymbolCache;
+class HWSymbolCache;
 } // namespace hw
 
 namespace msft {
@@ -38,7 +38,7 @@ private:
   mlir::ModuleOp topLevel;
 
   bool populated;
-  hw::SymbolCache topLevelSymbols;
+  hw::HWSymbolCache topLevelSymbols;
   DenseMap<Operation *, SmallVector<DynInstDataOpInterface, 0>> tclOpsForMod;
 
   LogicalResult populate();
