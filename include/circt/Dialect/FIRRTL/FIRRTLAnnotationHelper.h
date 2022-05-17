@@ -75,6 +75,10 @@ Optional<AnnoPathValue> resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
 Optional<AnnoPathValue> resolvePath(StringRef rawPath, CircuitOp circuit,
                                     SymbolTable &symTbl);
 
+/// Return true if an Annotation's class name is handled by the LowerAnnotations
+/// pass.
+bool isAnnoClassLowered(StringRef className);
+
 } // namespace firrtl
 } // namespace circt
 

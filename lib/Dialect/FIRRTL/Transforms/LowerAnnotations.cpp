@@ -297,6 +297,10 @@ static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
   return nullptr;
 }
 
+bool firrtl::isAnnoClassLowered(StringRef className) {
+  return annotationRecords.count(className);
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
