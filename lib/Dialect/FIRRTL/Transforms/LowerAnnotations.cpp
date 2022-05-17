@@ -32,32 +32,6 @@ using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
 
-namespace {
-
-/// State threaded through functions for resolving and applying annotations.
-struct ApplyState {
-  using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
-  ApplyState(CircuitOp circuit, SymbolTable &symTbl,
-             AddToWorklistFn addToWorklistFn)
-      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn) {}
-
-  CircuitOp circuit;
-  SymbolTable &symTbl;
-  AddToWorklistFn addToWorklistFn;
-
-  ModuleNamespace &getNamespace(FModuleLike module) {
-    auto &ptr = namespaces[module];
-    if (!ptr)
-      ptr = std::make_unique<ModuleNamespace>(module);
-    return *ptr;
-  }
-
-private:
-  DenseMap<Operation *, std::unique_ptr<ModuleNamespace>> namespaces;
-};
-
-} // namespace
-
 /// Get annotations or an empty set of annotations.
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))

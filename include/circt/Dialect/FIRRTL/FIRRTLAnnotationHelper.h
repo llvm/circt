@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLANNOTATIONHELPER_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 
 namespace circt {
 namespace firrtl {
@@ -78,6 +79,28 @@ Optional<AnnoPathValue> resolvePath(StringRef rawPath, CircuitOp circuit,
 /// Return true if an Annotation's class name is handled by the LowerAnnotations
 /// pass.
 bool isAnnoClassLowered(StringRef className);
+
+/// State threaded through functions for resolving and applying annotations.
+struct ApplyState {
+  using AddToWorklistFn = llvm::function_ref<void(DictionaryAttr)>;
+  ApplyState(CircuitOp circuit, SymbolTable &symTbl,
+             AddToWorklistFn addToWorklistFn)
+      : circuit(circuit), symTbl(symTbl), addToWorklistFn(addToWorklistFn) {}
+
+  CircuitOp circuit;
+  SymbolTable &symTbl;
+  AddToWorklistFn addToWorklistFn;
+
+  ModuleNamespace &getNamespace(FModuleLike module) {
+    auto &ptr = namespaces[module];
+    if (!ptr)
+      ptr = std::make_unique<ModuleNamespace>(module);
+    return *ptr;
+  }
+
+private:
+  DenseMap<Operation *, std::unique_ptr<ModuleNamespace>> namespaces;
+};
 
 } // namespace firrtl
 } // namespace circt
