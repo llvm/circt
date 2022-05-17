@@ -33,6 +33,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -1300,8 +1301,6 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
   std::vector<FModuleLike> ops;
-  // Map of name of the NonLocalAnchor to the operation.
-  DenseMap<StringAttr, Operation *> nlaMap;
   // Symbol Table
   SymbolTable symTbl(getOperation());
   // Cached attr
@@ -1312,10 +1311,8 @@ void LowerTypesPass::runOnOperation() {
     // Creating a map of all ops in the circt, but only modules are relevant.
     if (auto module = dyn_cast<FModuleLike>(op))
       ops.push_back(module);
-    // Record the NonLocalAnchor and its name.
-    if (auto nla = dyn_cast<NonLocalAnchor>(op))
-      nlaMap[nla.sym_nameAttr()] = nla;
   });
+  auto *nlaTable = &getAnalysis<NLATable>();
 
   // Lower each module and return a list of Nlas which need to be updated with
   // the new symbol names.
@@ -1432,10 +1429,9 @@ void LowerTypesPass::runOnOperation() {
     // if we have already processed the NLA once. nlaToNewSymList can have
     // duplicate entries for an NLA, since an NLA can be reused by multiple
     // bundle subfields.
-    auto iter = nlaMap.find(nlaName);
-    if (iter == nlaMap.end())
+    auto nla = nlaTable->getNLA(nlaName);
+    if (!nla)
       continue;
-    auto nla = cast<NonLocalAnchor>(iter->second);
     // Update the final element, which must be an InnerRefAttr.
     if (nlaToSym.newSym) {
       auto namepath = nla.namepath();
@@ -1451,6 +1447,7 @@ void LowerTypesPass::runOnOperation() {
         auto newNLAop = theBuilder.create<NonLocalAnchor>(
             circtNamespace.newName(nlaName.getValue()), newPath);
         updateNamepath(newNLAop, nlaName, false);
+        nlaTable->insert(newNLAop);
       } else
         nla.namepathAttr(newPath);
     } else if (nlaName != prevNLA)
@@ -1473,8 +1470,10 @@ void LowerTypesPass::runOnOperation() {
     // references to the nla from the InstanceOps and erase the NLA.
     auto nla = cast<NonLocalAnchor>(nlaOp);
     updateNamepath(nla, nla.getNameAttr(), true);
-    nla->erase();
+    nlaTable->erase(nla);
+    symTbl.erase(nla);
   }
+  markAnalysesPreserved<NLATable>();
 }
 
 /// This is the pass constructor.

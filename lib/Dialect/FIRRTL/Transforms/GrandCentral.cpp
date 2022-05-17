@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -569,8 +570,7 @@ private:
   /// based on a PrefixInterfacesAnnotation.
   StringRef interfacePrefix;
 
-  /// Map of NLA symbol to NLA.
-  DenseMap<StringAttr, NonLocalAnchor> nlaMap;
+  NLATable *nlaTable;
 
   /// The set of NLAs that are dead after this pass.  These will be removed
   /// before the pass finishes.
@@ -795,7 +795,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         auto [fieldRef, sym] = leafMap.lookup(ground.getID());
         NonLocalAnchor nla;
         if (sym)
-          nla = nlaMap[sym.getAttr()];
+          nla = nlaTable->getNLA(sym.getAttr());
         Value leafValue = fieldRef.getValue();
         unsigned fieldID = fieldRef.getFieldID();
         assert(leafValue && "leafValue not found");
@@ -1322,9 +1322,7 @@ void GrandCentralPass::runOnOperation() {
     }
   };
 
-  /// Populate the NLA map with Symbol -> NLA.
-  for (NonLocalAnchor nla : circuitOp.getBody()->getOps<NonLocalAnchor>())
-    nlaMap.insert({nla.sym_nameAttr(), nla});
+  nlaTable = &getAnalysis<NLATable>();
 
   /// Walk the circuit and extract all information related to scattered
   /// Grand Central annotations.  This is used to populate: (1) the
@@ -1769,13 +1767,16 @@ void GrandCentralPass::runOnOperation() {
   }
 
   // Garbage collect dead NLAs.
+  auto symTable = getSymbolTable();
   for (auto &op :
        llvm::make_early_inc_range(circuitOp.getBody()->getOperations())) {
 
     // Remove NLA operations.
     if (auto nla = dyn_cast<NonLocalAnchor>(op)) {
-      if (deadNLAs.count(nla.sym_nameAttr()))
-        nla.erase();
+      if (deadNLAs.count(nla.sym_nameAttr())) {
+        nlaTable->erase(nla);
+        symTable.erase(nla);
+      }
       continue;
     }
 
@@ -1799,6 +1800,7 @@ void GrandCentralPass::runOnOperation() {
   // annotations.
   if (removalError)
     return signalPassFailure();
+  markAnalysesPreserved<NLATable>();
 }
 
 StringAttr GrandCentralPass::getOrAddInnerSym(Operation *op) {
