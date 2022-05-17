@@ -33,6 +33,7 @@ add_circt_dialect_library(CIRCTMSFT
   CIRCTHW
   CIRCTSeq
   CIRCTSV
-   )
+  CIRCTSupport
+)
 
 add_dependencies(circt-headers MLIRMSFTIncGen)
