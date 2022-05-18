@@ -180,7 +180,7 @@ firrtl.circuit "GCTInterfacePrefix"
   // CHECK-SAME:   name = "FOO_MyView"
   firrtl.module @MyView_companion()
     attributes {annotations = [{
-      class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
       id = 0 : i64,
       name = "MyView",
       type = "companion"}]} {}
@@ -188,7 +188,7 @@ firrtl.circuit "GCTInterfacePrefix"
   // CHECK-SAME:   name = "FOO_MyView"
   firrtl.module @DUT()
     attributes {annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation.parent",
        id = 0 : i64,
        name = "MyView",
        type = "parent"},

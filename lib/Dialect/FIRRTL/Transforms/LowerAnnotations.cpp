@@ -248,6 +248,32 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
 }
 
+/// Apply a DontTouchAnnotation to the circuit.  For almost all operations, this
+/// just adds a symbol.  For CHIRRTL memory ports, this preserves the
+/// annotation.
+static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
+                                    ApplyState &state) {
+
+  // A DontTouchAnnotation is only allowed to be placed on a ReferenceTarget.
+  // If this winds up on a module. then it indicates that the original
+  // annotation was incorrect.
+  if (target.isOpOfType<FModuleOp>()) {
+    mlir::emitError(target.ref.getOp()->getLoc())
+        << "'firrtl.module' op is targeted by a DontTouchAnotation with target "
+        << Annotation(anno).getMember("target")
+        << ", but this annotation must be a reference target";
+    return failure();
+  }
+
+  // If the annotation is on a MemoryPortOp or if the annotation is on part of
+  // an aggregate, then keep the DontTouchAnnotation around.
+  if (isa<chirrtl::MemoryPortOp>(target.ref.getOp()) || target.fieldIdx)
+    return applyWithoutTarget<true>(target, anno, state);
+
+  target.ref.getInnerSym(state.getNamespace(target.ref.getModule()));
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -267,7 +293,15 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
-    {"circt.missing", {tryResolve, applyWithoutTarget<>}}
+    {"circt.missing", {tryResolve, applyWithoutTarget<>}},
+    // Grand Central Views/Interfaces Annotations
+    {serializedViewAnnoClass, {noResolve, applyGCTView}},
+    {viewAnnoClass, {noResolve, applyGCTView}},
+    {companionAnnoClass, {stdResolve, applyWithoutTarget<>}},
+    {parentAnnoClass, {stdResolve, applyWithoutTarget<>}},
+    {augmentedGroundTypeClass, {stdResolve, applyWithoutTarget<true>}},
+    // Miscellaneous Annotations
+    {dontTouchAnnoClass, {stdResolve, applyDontTouch}}
 
 }};
 
@@ -354,13 +388,11 @@ void LowerAnnotationsPass::runOnOperation() {
   // Grab the annotations.
   for (auto anno : annotations)
     worklistAttrs.push_back(anno.cast<DictionaryAttr>());
-  // Clear the annotations.
-  circuit.annotationsAttr(ArrayAttr::get(circuit.getContext(), {}));
   size_t numFailures = 0;
-  ApplyState state{circuit, modules,
-                   [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
-
+  auto addToWorklist = [&](DictionaryAttr anno) {
+    worklistAttrs.push_back(anno);
   };
+  ApplyState state{circuit, modules, addToWorklist};
   LLVM_DEBUG(llvm::dbgs() << "Processing annotations:\n");
   while (!worklistAttrs.empty()) {
     auto attr = worklistAttrs.pop_back_val();

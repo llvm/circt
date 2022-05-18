@@ -290,12 +290,12 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   // If this module contains a Grand Central interface, then also apply renames
   // to that, but only if there are prefixes to apply.
   AnnotationSet annotations(module);
-  if (!annotations.hasAnnotation(
-          "sifive.enterprise.grandcentral.ViewAnnotation"))
+  if (!annotations.hasAnnotation(parentAnnoClass) &&
+      !annotations.hasAnnotation(companionAnnoClass))
     return;
   SmallVector<Attribute> newAnnotations;
   for (auto anno : annotations) {
-    if (!anno.isClass("sifive.enterprise.grandcentral.ViewAnnotation")) {
+    if (!anno.isClass(parentAnnoClass) && !anno.isClass(companionAnnoClass)) {
       newAnnotations.push_back(anno.getDict());
       continue;
     }

@@ -218,7 +218,13 @@ Optional<AnnoPathValue> firrtl::resolveEntities(TokenAnnoTarget path,
   }
 
   // If the reference is pointing to an instance op, we have to move the target
-  // to the module.
+  // to the module.  This is done both because it is logical to have one
+  // representation (this effectively canonicalizes a reference target on an
+  // instance into an instance target) and because the SFC has a pass that does
+  // this conversion.  E.g., this is converting (where "bar" is an instance):
+  //   ~Foo|Foo>bar
+  // Into:
+  //   ~Foo|Foo/bar:Bar
   ArrayRef<TargetToken> component(path.component);
   if (auto instance = dyn_cast<InstanceOp>(ref.getOp())) {
     instances.push_back(instance);

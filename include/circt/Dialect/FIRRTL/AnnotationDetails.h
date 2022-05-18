@@ -52,6 +52,12 @@ constexpr const char *serializedViewAnnoClass =
     "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation";
 constexpr const char *viewAnnoClass =
     "sifive.enterprise.grandcentral.ViewAnnotation";
+constexpr const char *companionAnnoClass =
+    "sifive.enterprise.grandcentral.ViewAnnotation.companion"; // not in SFC
+constexpr const char *parentAnnoClass =
+    "sifive.enterprise.grandcentral.ViewAnnotation.parent"; // not in SFC
+constexpr const char *augmentedGroundTypeClass =
+    "sifive.enterprise.grandcentral.AugmentedGroundType"; // not an annotation
 constexpr const char *dataTapsClass =
     "sifive.enterprise.grandcentral.DataTapsAnnotation";
 constexpr const char *memTapClass =
